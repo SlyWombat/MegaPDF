@@ -85,7 +85,7 @@ Stating what MegaPDF will *not* do is as important as what it will. Out of scope
 
 **Discoverability mechanics:**
 
-- **First-run empty state:** a friendly drop zone — "Drag a PDF here, or click Open" — plus a recent-files list on subsequent launches. No splash screens, no feature tours.
+- **First-run empty state:** a friendly drop zone — "Drag a PDF here, or click Open" — plus a recent-files list on subsequent launches. No feature tours or first-run wizards. The only launch chrome is the branded splash screen, shown for a few seconds while the app initializes (stakeholder decision, 2026-07-08).
 - **Hover affordances:** editable text regions get a faint dotted underline on hover; checkboxes get a light accent-color glow. The document itself teaches the user what is clickable (P1, P2).
 - **Plain-language everywhere.** "Save a copy…" not "Export." "Your signatures" not "Stamp library." Error messages say what happened and what to do next, never show error codes as the primary content.
 

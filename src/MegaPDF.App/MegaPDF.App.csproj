@@ -8,6 +8,8 @@
     <RootNamespace>MegaPDF.App</RootNamespace>
     <AssemblyName>MegaPDF</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Embedded in the exe: shows in Explorer, shortcuts, and installer UI. -->
+    <ApplicationIcon>Assets\megapdf.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
@@ -25,6 +27,12 @@
          needs resources.pri next to the exe to resolve XAML theme resources. -->
     <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Assets\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />

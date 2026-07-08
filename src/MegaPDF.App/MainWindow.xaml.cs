@@ -12,6 +12,7 @@ public sealed partial class MainWindow : Window
     {
         ViewModel = new MainViewModel(this);
         InitializeComponent();
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(MainViewModel.WindowTitle))

@@ -1,4 +1,7 @@
-# MegaPDF
+<p align="center">
+  <img src="assets/branding/logo.svg" alt="MegaPDF" width="440">
+</p>
+<p align="center"><em>Open. Fix. Save. Done.</em></p>
 
 A free, open-source, lightweight PDF editor for Windows 11 — built for people who find Acrobat too bloated and complex.
 

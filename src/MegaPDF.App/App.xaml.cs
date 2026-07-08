@@ -31,9 +31,17 @@ public partial class App : Application
         }
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var splash = new SplashWindow();
+        splash.Activate();
+
+        await Task.Delay(TimeSpan.FromSeconds(2.5));
+
+        // Order matters: the app exits when its last window closes, so the
+        // main window must be up before the splash goes away.
         _window = new MainWindow();
         _window.Activate();
+        splash.Close();
     }
 }
