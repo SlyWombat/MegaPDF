@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="MegaPDF icon: a document completed by a single pen stroke that becomes a checkmark">
+  <defs>
+    <linearGradient id="mpTile" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A5BC4"/>
+      <stop offset="1" stop-color="#0FA8C6"/>
+    </linearGradient>
+    <linearGradient id="mpStroke" x1="90" y1="172" x2="168" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E6FD8"/>
+      <stop offset="1" stop-color="#18B6C8"/>
+    </linearGradient>
+    <radialGradient id="mpSheen" cx="0.22" cy="0.08" r="1.1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="mpPageShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#04213D" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Windows 11 style tile -->
+  <rect width="256" height="256" rx="58" fill="url(#mpTile)"/>
+  <rect width="256" height="256" rx="58" fill="url(#mpSheen)"/>
+
+  <!-- Document with folded corner -->
+  <g filter="url(#mpPageShadow)">
+    <path d="M92 52 H150 L186 88 V190 a14 14 0 0 1 -14 14 H92 a14 14 0 0 1 -14 -14 V66 a14 14 0 0 1 14 -14 Z" fill="#FFFFFF"/>
+    <path d="M150 52 V74 a14 14 0 0 0 14 14 h22 Z" fill="#D6E7F8"/>
+  </g>
+
+  <!-- Text lines -->
+  <g stroke="#C9DCEF" stroke-width="9" stroke-linecap="round">
+    <path d="M96 96 H138"/>
+    <path d="M96 118 H166"/>
+  </g>
+
+  <!-- The one stroke: signature flourish resolving into a checkmark -->
+  <path d="M90 138c-3 6 0 11 6 12c8 2 16 10 26 22L168 104"
+        fill="none" stroke="url(#mpStroke)" stroke-width="12"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

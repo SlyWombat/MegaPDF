@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 168" role="img" aria-label="MegaPDF logo">
+  <defs>
+    <linearGradient id="mplTile" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A5BC4"/>
+      <stop offset="1" stop-color="#0FA8C6"/>
+    </linearGradient>
+    <linearGradient id="mplStroke" x1="90" y1="172" x2="168" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E6FD8"/>
+      <stop offset="1" stop-color="#18B6C8"/>
+    </linearGradient>
+    <radialGradient id="mplSheen" cx="0.22" cy="0.08" r="1.1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="mplWord" x1="352" y1="0" x2="576" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E6FD8"/>
+      <stop offset="1" stop-color="#18B6C8"/>
+    </linearGradient>
+  </defs>
+
+  <style>
+    .mega { fill: #16324F; }
+    @media (prefers-color-scheme: dark) { .mega { fill: #F2F7FC; } }
+  </style>
+
+  <!-- Icon at 128px -->
+  <g transform="translate(20,20) scale(0.5)">
+    <rect width="256" height="256" rx="58" fill="url(#mplTile)"/>
+    <rect width="256" height="256" rx="58" fill="url(#mplSheen)"/>
+    <path d="M92 52 H150 L186 88 V190 a14 14 0 0 1 -14 14 H92 a14 14 0 0 1 -14 -14 V66 a14 14 0 0 1 14 -14 Z" fill="#FFFFFF"/>
+    <path d="M150 52 V74 a14 14 0 0 0 14 14 h22 Z" fill="#D6E7F8"/>
+    <g stroke="#C9DCEF" stroke-width="9" stroke-linecap="round">
+      <path d="M96 96 H138"/>
+      <path d="M96 118 H166"/>
+    </g>
+    <path d="M90 138c-3 6 0 11 6 12c8 2 16 10 26 22L168 104"
+          fill="none" stroke="url(#mplStroke)" stroke-width="12"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="180" y="110" font-family="'Segoe UI Variable Display','Segoe UI',system-ui,sans-serif"
+        font-size="76" font-weight="600" letter-spacing="-2"><tspan class="mega">Mega</tspan><tspan fill="url(#mplWord)">PDF</tspan></text>
+</svg>
