@@ -173,6 +173,28 @@
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     HorizontalAlignment="Center" />
+
+                <StackPanel Spacing="2" Margin="0,20,0,0" Visibility="{x:Bind ViewModel.RecentDocumentsVisibility, Mode=OneWay}">
+                    <TextBlock
+                        Text="RECENT"
+                        FontSize="11"
+                        CharacterSpacing="80"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        HorizontalAlignment="Center"
+                        Margin="0,0,0,6" />
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.RecentDocuments}" HorizontalAlignment="Center">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:RecentDocument">
+                                <HyperlinkButton Click="OnRecentDocumentClicked" HorizontalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE8A5;" FontSize="13" />
+                                        <TextBlock Text="{x:Bind Name}" />
+                                    </StackPanel>
+                                </HyperlinkButton>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
 
             <ScrollViewer

@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
         ViewModel.LoadSignatures();
+        ViewModel.LoadRecentDocuments();
         AppWindow.Closing += OnAppWindowClosing;
         ViewModel.PropertyChanged += (_, e) =>
         {
@@ -368,6 +369,12 @@ public sealed partial class MainWindow : Window
                 Close();
                 break;
         }
+    }
+
+    private async void OnRecentDocumentClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is HyperlinkButton { DataContext: RecentDocument recent })
+            await ViewModel.OpenDocumentAsync(recent.Path);
     }
 
     // --- Signature library & placement (SDD §3.3) ---

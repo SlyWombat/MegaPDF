@@ -34,14 +34,32 @@ public sealed record PageView(
 /// <summary>A library signature shown in the flyout.</summary>
 public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail);
 
+/// <summary>A recent document shown on the empty state.</summary>
+public sealed record RecentDocument(string Name, string Path);
+
 public partial class MainViewModel(Window window) : ObservableObject
 {
     private static readonly IPdfEngine Engine = new PdfiumEngine();
 
     private readonly UndoStack _undoStack = new();
     private readonly RecoveryJournal _journal = new();
+    private readonly RecentFiles _recentFiles = new();
     private IPdfDocument? _document;
     private int _openGeneration;
+
+    /// <summary>Recent documents for the empty state (SDD §2.2), newest first.</summary>
+    public ObservableCollection<RecentDocument> RecentDocuments { get; } = [];
+
+    public Visibility RecentDocumentsVisibility =>
+        !IsDocumentOpen && RecentDocuments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public void LoadRecentDocuments()
+    {
+        RecentDocuments.Clear();
+        foreach (var path in _recentFiles.All)
+            RecentDocuments.Add(new RecentDocument(Path.GetFileName(path), path));
+        OnPropertyChanged(nameof(RecentDocumentsVisibility));
+    }
 
     public ObservableCollection<PageView> Pages { get; } = [];
 
@@ -119,6 +137,9 @@ public partial class MainViewModel(Window window) : ObservableObject
         HasUnsavedChanges = false;
         _undoStack.Clear();
         _journal.BeginSession(path);
+        _recentFiles.Add(path);
+        LoadRecentDocuments();
+        OnPropertyChanged(nameof(RecentDocumentsVisibility));
         Pages.Clear();
         PageCount = doc.PageCount;
         CurrentPage = 1;
