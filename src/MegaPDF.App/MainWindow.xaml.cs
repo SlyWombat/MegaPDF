@@ -46,7 +46,10 @@ public sealed partial class MainWindow : Window
             await ViewModel.OpenDocumentAsync(pdf.Path);
     }
 
-    /// <summary>The document is the interface (SDD §2.2): a click on text starts an in-place edit.</summary>
+    /// <summary>
+    /// The document is the interface (SDD §2.2): what you click determines what happens —
+    /// checkboxes toggle, form fields and body text edit in place, empty space does nothing.
+    /// </summary>
     private async void OnPageTapped(object sender, TappedRoutedEventArgs e)
     {
         if (sender is not Grid pageGrid || pageGrid.DataContext is not PageView pageView)
@@ -59,23 +62,43 @@ public sealed partial class MainWindow : Window
         var position = e.GetPosition(pageGrid);
         var pagePoint = new PdfPoint(position.X * 72 / 96, position.Y * 72 / 96);
 
-        var run = await Task.Run(() => ViewModel.HitTestText(pageView.Index, pagePoint));
-        if (run is null)
-            return; // Clicking empty page space does nothing silently harmful (SDD §3.2 miss behavior).
+        var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
+        switch (hit.Kind)
+        {
+            case PageHitKind.FormCheckbox:
+                await ViewModel.ToggleCheckboxAsync(pageView.Index, hit.Field!);
+                break;
 
-        ShowTextEditor(pageGrid, pageView, run);
+            case PageHitKind.FormTextField:
+            {
+                var field = hit.Field!;
+                ShowInlineEditor(pageGrid, field.Bounds, field.Value, fontSizePoints: 12,
+                    newText => ViewModel.ApplyFormTextAsync(pageView.Index, field, newText));
+                break;
+            }
+
+            case PageHitKind.TextRun:
+            {
+                var run = hit.TextRun!;
+                ShowInlineEditor(pageGrid, run.Bounds, run.Text, run.FontSize,
+                    newText => string.IsNullOrEmpty(newText)
+                        ? Task.CompletedTask
+                        : ViewModel.ApplyTextEditAsync(pageView.Index, run, newText));
+                break;
+            }
+        }
     }
 
-    private void ShowTextEditor(Grid pageGrid, PageView pageView, PdfTextRun run)
+    private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText, double fontSizePoints, Func<string, Task> commit)
     {
         var editor = new TextBox
         {
-            Text = run.Text,
-            FontSize = Math.Max(run.FontSize * 96 / 72, 10),
+            Text = initialText,
+            FontSize = Math.Max(fontSizePoints * 96 / 72, 10),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(run.Bounds.X * 96 / 72 - 6, run.Bounds.Y * 96 / 72 - 8, 0, 0),
-            MinWidth = Math.Max(run.Bounds.Width * 96 / 72 + 28, 140),
+            Margin = new Thickness(bounds.X * 96 / 72 - 6, bounds.Y * 96 / 72 - 8, 0, 0),
+            MinWidth = Math.Max(bounds.Width * 96 / 72 + 28, 140),
             AcceptsReturn = false,
         };
 
@@ -85,7 +108,7 @@ public sealed partial class MainWindow : Window
                 return; // already committed or cancelled
             var newText = editor.Text;
             CloseEditor(pageGrid, editor);
-            await ViewModel.ApplyTextEditAsync(pageView.Index, run, newText);
+            await commit(newText);
         }
 
         editor.KeyDown += async (_, args) =>

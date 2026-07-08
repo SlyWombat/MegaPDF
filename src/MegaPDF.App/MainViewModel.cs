@@ -137,14 +137,36 @@ public partial class MainViewModel(Window window) : ObservableObject
         Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
     }
 
-    /// <summary>Hit-tests a click (page-space points, top-left origin) against body text.</summary>
-    public PdfTextRun? HitTestText(int pageIndex, PdfPoint point)
+    /// <summary>Hit-tests a click (page-space points, top-left origin): form fields, then body text.</summary>
+    public PageHit HitTestPage(int pageIndex, PdfPoint point)
     {
         if (_document is null)
-            return null;
+            return new PageHit(PageHitKind.None);
         using var page = _document.GetPage(pageIndex);
-        var hit = page.HitTest(point);
-        return hit.Kind == PageHitKind.TextRun ? hit.TextRun : null;
+        return page.HitTest(point);
+    }
+
+    public async Task ToggleCheckboxAsync(int pageIndex, PdfFormField field)
+    {
+        if (_document is null)
+            return;
+        await DoEditAsync(new CheckboxToggleOperation(_document, pageIndex, field));
+    }
+
+    public async Task ApplyFormTextAsync(int pageIndex, PdfFormField field, string newValue)
+    {
+        if (_document is null || newValue == field.Value)
+            return;
+        await DoEditAsync(new FormTextEditOperation(_document, pageIndex, field, newValue));
+    }
+
+    private async Task DoEditAsync(IPageEditOperation op)
+    {
+        await Task.Run(() => _undoStack.Do(op));
+        HasUnsavedChanges = true;
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        await RefreshPageAsync(op.PageIndex);
     }
 
     public async Task ApplyTextEditAsync(int pageIndex, PdfTextRun run, string newText)
@@ -236,8 +258,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         HasUnsavedChanges = true;
-        if (op is TextEditOperation textEdit)
-            await RefreshPageAsync(textEdit.PageIndex);
+        if (op is IPageEditOperation pageEdit)
+            await RefreshPageAsync(pageEdit.PageIndex);
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
@@ -248,8 +270,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         HasUnsavedChanges = true;
-        if (op is TextEditOperation textEdit)
-            await RefreshPageAsync(textEdit.PageIndex);
+        if (op is IPageEditOperation pageEdit)
+            await RefreshPageAsync(pageEdit.PageIndex);
     }
 
     private async Task ShowErrorAsync(string title, string message)

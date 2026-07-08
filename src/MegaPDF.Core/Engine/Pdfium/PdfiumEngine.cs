@@ -50,6 +50,7 @@ public sealed class PdfiumEngine : IPdfEngine
 internal sealed class PdfiumDocument : IPdfDocument
 {
     private readonly IntPtr _handle;
+    private readonly PdfiumFormEnvironment _forms;
     private GCHandle _pin;
     private bool _disposed;
 
@@ -57,6 +58,7 @@ internal sealed class PdfiumDocument : IPdfDocument
     {
         _handle = handle;
         _pin = pin;
+        _forms = new PdfiumFormEnvironment(handle);
     }
 
     public int PageCount
@@ -77,7 +79,7 @@ internal sealed class PdfiumDocument : IPdfDocument
             var page = PdfiumNative.FPDF_LoadPage(_handle, pageIndex);
             if (page == IntPtr.Zero)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page {pageIndex} could not be loaded.");
-            return new PdfiumPage(_handle, page, pageIndex);
+            return new PdfiumPage(_handle, _forms.Handle, page, pageIndex);
         }
     }
 
@@ -86,6 +88,9 @@ internal sealed class PdfiumDocument : IPdfDocument
         ThrowIfDisposed();
         lock (PdfiumLibrary.Lock)
         {
+            // Commit any in-progress form-field editing before serializing.
+            PdfiumNative.FORM_ForceToKillFocus(_forms.Handle);
+
             Exception? writeError = null;
 
             int WriteBlock(IntPtr self, IntPtr data, uint size)
@@ -127,7 +132,10 @@ internal sealed class PdfiumDocument : IPdfDocument
             return;
         _disposed = true;
         lock (PdfiumLibrary.Lock)
+        {
+            _forms.Dispose();
             PdfiumNative.FPDF_CloseDocument(_handle);
+        }
         _pin.Free();
     }
 
@@ -137,17 +145,20 @@ internal sealed class PdfiumDocument : IPdfDocument
 internal sealed class PdfiumPage : IPdfPage
 {
     private readonly IntPtr _document;
+    private readonly IntPtr _forms;
     private readonly IntPtr _handle;
     private bool _disposed;
 
-    internal PdfiumPage(IntPtr document, IntPtr handle, int index)
+    internal PdfiumPage(IntPtr document, IntPtr forms, IntPtr handle, int index)
     {
         _document = document;
+        _forms = forms;
         _handle = handle;
         Index = index;
         // Caller (PdfiumDocument.GetPage) holds the lock; Monitor is reentrant.
         lock (PdfiumLibrary.Lock)
         {
+            PdfiumNative.FORM_OnAfterLoadPage(handle, forms);
             Width = PdfiumNative.FPDF_GetPageWidthF(handle);
             Height = PdfiumNative.FPDF_GetPageHeightF(handle);
         }
@@ -171,6 +182,10 @@ internal sealed class PdfiumPage : IPdfPage
                 PdfiumNative.FPDF_RenderPageBitmap(
                     bitmap, _handle, 0, 0, pixelWidth, pixelHeight, rotate: 0,
                     PdfiumNative.FPDF_ANNOT | PdfiumNative.FPDF_LCD_TEXT);
+                // Draw live form-field content (values typed via the form-fill env).
+                PdfiumNative.FPDF_FFLDraw(
+                    _forms, bitmap, _handle, 0, 0, pixelWidth, pixelHeight, 0,
+                    PdfiumNative.FPDF_ANNOT | PdfiumNative.FPDF_LCD_TEXT);
 
                 var stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
                 var buffer = PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
@@ -189,6 +204,19 @@ internal sealed class PdfiumPage : IPdfPage
 
     public PageHit HitTest(PdfPoint point)
     {
+        // Form fields win over body text — they sit on top and are the reliable path.
+        foreach (var field in GetFormFields())
+        {
+            if (!field.Bounds.Contains(point))
+                continue;
+            return field.Kind switch
+            {
+                FormFieldKind.Text => new PageHit(PageHitKind.FormTextField, Field: field),
+                FormFieldKind.Checkbox or FormFieldKind.RadioButton => new PageHit(PageHitKind.FormCheckbox, Field: field),
+                _ => new PageHit(PageHitKind.None),
+            };
+        }
+
         foreach (var run in GetTextRuns())
         {
             if (run.Bounds.Contains(point))
@@ -235,7 +263,63 @@ internal sealed class PdfiumPage : IPdfPage
         }
     }
 
-    public IReadOnlyList<PdfFormField> GetFormFields() => [];
+    public IReadOnlyList<PdfFormField> GetFormFields()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var fields = new List<PdfFormField>();
+            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
+                if (annot == IntPtr.Zero)
+                    continue;
+                try
+                {
+                    if (PdfiumNative.FPDFAnnot_GetSubtype(annot) != PdfiumNative.FPDF_ANNOT_SUBTYPE_WIDGET)
+                        continue;
+
+                    var kind = PdfiumNative.FPDFAnnot_GetFormFieldType(_forms, annot) switch
+                    {
+                        PdfiumNative.FPDF_FORMFIELD_TEXTFIELD => FormFieldKind.Text,
+                        PdfiumNative.FPDF_FORMFIELD_CHECKBOX => FormFieldKind.Checkbox,
+                        PdfiumNative.FPDF_FORMFIELD_RADIOBUTTON => FormFieldKind.RadioButton,
+                        _ => FormFieldKind.Other,
+                    };
+
+                    if (PdfiumNative.FPDFAnnot_GetRect(annot, out var rect) == 0)
+                        continue;
+                    // PDF rect (bottom-left origin) → our top-left page space.
+                    var bounds = new PdfRect(rect.Left, Height - rect.Top, rect.Right - rect.Left, rect.Top - rect.Bottom);
+
+                    var name = ReadUtf16ByteLengthString(
+                        (buffer, length) => PdfiumNative.FPDFAnnot_GetFormFieldName(_forms, annot, buffer, length));
+                    var value = ReadUtf16ByteLengthString(
+                        (buffer, length) => PdfiumNative.FPDFAnnot_GetFormFieldValue(_forms, annot, buffer, length));
+                    var isChecked = kind is FormFieldKind.Checkbox or FormFieldKind.RadioButton
+                        && PdfiumNative.FPDFAnnot_IsChecked(_forms, annot) != 0;
+
+                    fields.Add(new PdfFormField(name, kind, bounds, value, isChecked));
+                }
+                finally
+                {
+                    PdfiumNative.FPDFPage_CloseAnnot(annot);
+                }
+            }
+            return fields;
+        }
+    }
+
+    private static string ReadUtf16ByteLengthString(Func<byte[]?, uint, uint> read)
+    {
+        var lengthInBytes = read(null, 0);
+        if (lengthInBytes <= 2)
+            return "";
+        var buffer = new byte[lengthInBytes];
+        read(buffer, lengthInBytes);
+        return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
+    }
 
     public TextEditOutcome SetTextRunText(PdfTextRun run, string newText)
     {
@@ -434,10 +518,38 @@ internal sealed class PdfiumPage : IPdfPage
             PdfiumNative.FPDFFont_GetFamilyName(font, buffer, lengthInBytes);
         return System.Text.Encoding.UTF8.GetString(buffer, 0, (int)lengthInBytes - 1);
     }
-    public void SetFormFieldValue(PdfFormField field, string value) =>
-        throw new NotSupportedException("Form filling arrives with the edit milestone.");
-    public void ToggleCheckbox(PdfFormField field) =>
-        throw new NotSupportedException("Checkbox toggling arrives with the edit milestone.");
+    public void SetFormFieldValue(PdfFormField field, string value)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            ClickField(field);
+            PdfiumNative.FORM_SelectAllText(_forms, _handle);
+            PdfiumNative.FORM_ReplaceSelection(_forms, _handle, value);
+            PdfiumNative.FORM_ForceToKillFocus(_forms);
+        }
+    }
+
+    public void ToggleCheckbox(PdfFormField field)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            // A simulated click is the same path the Chrome PDF viewer uses:
+            // PDFium updates /V, /AS, and radio-group siblings consistently.
+            ClickField(field);
+            PdfiumNative.FORM_ForceToKillFocus(_forms);
+        }
+    }
+
+    /// <summary>Simulates a primary-button click at the field's center, in PDF user space.</summary>
+    private void ClickField(PdfFormField field)
+    {
+        var center = field.Bounds.Center;
+        var pdfY = Height - center.Y; // back to PDF bottom-left origin
+        PdfiumNative.FORM_OnLButtonDown(_forms, _handle, 0, center.X, pdfY);
+        PdfiumNative.FORM_OnLButtonUp(_forms, _handle, 0, center.X, pdfY);
+    }
     public string AddStampAnnotation(ReadOnlyMemory<byte> pngBytes, PdfRect bounds) =>
         throw new NotSupportedException("Stamps arrive with the signature milestone.");
     public void MoveStampAnnotation(string annotationId, PdfRect newBounds) =>
@@ -451,7 +563,10 @@ internal sealed class PdfiumPage : IPdfPage
             return;
         _disposed = true;
         lock (PdfiumLibrary.Lock)
+        {
+            PdfiumNative.FORM_OnBeforeClosePage(_handle, _forms);
             PdfiumNative.FPDF_ClosePage(_handle);
+        }
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);

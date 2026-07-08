@@ -19,6 +19,29 @@ internal static class SamplePdf
         ]);
     }
 
+    /// <summary>
+    /// One-page PDF with an AcroForm: a text field (FullName, rect 100,600–300,630)
+    /// and a checkbox (Agree, rect 100,500–118,518) with Yes/Off appearance streams.
+    /// </summary>
+    public static byte[] BuildWithForm()
+    {
+        var content = "BT /F1 12 Tf 72 700 Td (Application form) Tj ET\n";
+        var yesAp = "0 G 2 w 4 4 m 14 14 l S 14 4 m 4 14 l S\n";
+        var offAp = "q Q\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 5 0 R >> >> /NeedAppearances true >> >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> /Annots [6 0 R 7 0 R] >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (FullName) /Rect [100 600 300 630] /F 4 /DA (/Helv 12 Tf 0 g) >>\nendobj\n",
+            "7 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Btn /T (Agree) /Rect [100 500 118 518] /F 4 /V /Off /AS /Off /AP << /N << /Yes 8 0 R /Off 9 0 R >> >> >>\nendobj\n",
+            $"8 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 18 18] /Length {yesAp.Length} >>\nstream\n{yesAp}endstream\nendobj\n",
+            $"9 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 18 18] /Length {offAp.Length} >>\nstream\n{offAp}endstream\nendobj\n",
+        ]);
+    }
+
     public static byte[] Assemble(string[] objects)
     {
         var sb = new StringBuilder("%PDF-1.4\n");

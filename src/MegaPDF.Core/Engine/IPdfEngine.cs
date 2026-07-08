@@ -77,7 +77,7 @@ public enum FormFieldKind
     Other,
 }
 
-public sealed record PdfFormField(string Name, FormFieldKind Kind, PdfRect Bounds, string Value);
+public sealed record PdfFormField(string Name, FormFieldKind Kind, PdfRect Bounds, string Value, bool IsChecked = false);
 
 /// <summary>How a body-text edit was performed (SDD §3.1 tiers 1 and 2).</summary>
 public enum TextEditOutcome
