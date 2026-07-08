@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RootNamespace>MegaPDF.App</RootNamespace>
+    <AssemblyName>MegaPDF</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Unpackaged during development; MSIX packaging project comes with the deployment work (SDD §5). -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Use the Windows App SDK's self-contained MSIX/PRI build tasks instead of the
+         Visual Studio-installed ones, so `dotnet build` works without VS present. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <EnablePriGenTooling>false</EnablePriGenTooling>
+    <EnableCoreMrtTooling>false</EnableCoreMrtTooling>
+    <!-- Unpackaged builds skip PRI generation by default, but unpackaged WinUI still
+         needs resources.pri next to the exe to resolve XAML theme resources. -->
+    <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.7.*" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MegaPDF.Core\MegaPDF.Core.csproj" />
+  </ItemGroup>
+
+</Project>
