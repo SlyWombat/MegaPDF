@@ -37,6 +37,6 @@ public sealed partial class MainWindow : Window
         var pdf = items.OfType<StorageFile>()
             .FirstOrDefault(f => f.FileType.Equals(".pdf", StringComparison.OrdinalIgnoreCase));
         if (pdf is not null)
-            ViewModel.OpenDocument(pdf.Path);
+            await ViewModel.OpenDocumentAsync(pdf.Path);
     }
 }

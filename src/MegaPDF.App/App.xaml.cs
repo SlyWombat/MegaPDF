@@ -40,8 +40,18 @@ public partial class App : Application
 
         // Order matters: the app exits when its last window closes, so the
         // main window must be up before the splash goes away.
-        _window = new MainWindow();
-        _window.Activate();
+        var mainWindow = new MainWindow();
+        _window = mainWindow;
+        mainWindow.Activate();
         splash.Close();
+
+        // "Open with MegaPDF" / command-line launch.
+        var commandLine = Environment.GetCommandLineArgs();
+        if (commandLine.Length > 1
+            && commandLine[1].EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+            && File.Exists(commandLine[1]))
+        {
+            await mainWindow.ViewModel.OpenDocumentAsync(Path.GetFullPath(commandLine[1]));
+        }
     }
 }

@@ -1,23 +1,44 @@
+using System.Collections.ObjectModel;
+using System.Runtime.InteropServices.WindowsRuntime;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Core.Editing;
+using MegaPDF.Core.Engine;
+using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Services;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Storage.Pickers;
 
 namespace MegaPDF.App;
 
+/// <summary>One rendered page: bitmap plus display size in DIPs.</summary>
+public sealed record PageView(ImageSource Source, double Width, double Height);
+
 public partial class MainViewModel(Window window) : ObservableObject
 {
+    private static readonly IPdfEngine Engine = new PdfiumEngine();
+
     private readonly UndoStack _undoStack = new();
+    private IPdfDocument? _document;
+    private int _openGeneration;
+
+    public ObservableCollection<PageView> Pages { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility), nameof(PageIndicator))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand))]
     private string? _documentPath;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(SaveButtonLabel))]
     private bool _hasUnsavedChanges;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageIndicator))]
+    private int _pageCount;
 
     public bool IsDocumentOpen => DocumentPath is not null;
 
@@ -30,7 +51,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public string SaveButtonLabel => HasUnsavedChanges ? "Save ●" : "Save";
 
-    public string PageIndicator => IsDocumentOpen ? "Page 1 of 1" : "";
+    public string PageIndicator => PageCount > 0 ? $"Page 1 of {PageCount}" : "";
 
     public Visibility EmptyStateVisibility => IsDocumentOpen ? Visibility.Collapsed : Visibility.Visible;
     public Visibility DocumentVisibility => IsDocumentOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -45,29 +66,115 @@ public partial class MainViewModel(Window window) : ObservableObject
 
         var file = await picker.PickSingleFileAsync();
         if (file is not null)
-            OpenDocument(file.Path);
+            await OpenDocumentAsync(file.Path);
     }
 
-    public void OpenDocument(string path)
+    public async Task OpenDocumentAsync(string path)
     {
+        var generation = ++_openGeneration;
+
+        IPdfDocument doc;
+        try
+        {
+            doc = await Task.Run(() => Engine.Open(path));
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Couldn't open that file", ex.Message);
+            return;
+        }
+
+        if (generation != _openGeneration)
+        {
+            // A newer open superseded this one while it loaded.
+            doc.Dispose();
+            return;
+        }
+
+        _document?.Dispose();
+        _document = doc;
         DocumentPath = path;
         HasUnsavedChanges = false;
         _undoStack.Clear();
+        Pages.Clear();
+        PageCount = doc.PageCount;
+
+        // Render at the monitor's rasterization scale so pages are crisp at 100% zoom.
+        var scale = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+
+        for (var i = 0; i < doc.PageCount && generation == _openGeneration; i++)
+        {
+            var index = i;
+            var (rendered, widthDips, heightDips) = await Task.Run(() =>
+            {
+                using var page = doc.GetPage(index);
+                var wDips = page.Width * 96 / 72;
+                var hDips = page.Height * 96 / 72;
+                var pixels = page.Render((int)(wDips * scale), (int)(hDips * scale));
+                return (pixels, wDips, hDips);
+            });
+
+            if (generation != _openGeneration)
+                return;
+
+            var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
+            using (var pixelStream = bitmap.PixelBuffer.AsStream())
+                pixelStream.Write(rendered.Bgra, 0, rendered.Bgra.Length);
+            bitmap.Invalidate();
+
+            Pages.Add(new PageView(bitmap, widthDips, heightDips));
+        }
     }
 
     private bool CanSave() => IsDocumentOpen;
 
     [RelayCommand(CanExecute = nameof(CanSave))]
-    private void Save()
+    private async Task SaveAsync()
     {
-        // Wired to IDocumentService atomic save once the engine lands (SDD §3.4).
-        HasUnsavedChanges = false;
+        if (_document is null || DocumentPath is null)
+            return;
+
+        var document = _document;
+        var path = DocumentPath;
+        try
+        {
+            // Atomic save protocol (SDD §3.4): temp file in place, flush, swap.
+            await Task.Run(() => AtomicFileWriter.Write(path, stream => document.Save(stream)));
+            HasUnsavedChanges = false;
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Couldn't save", $"{ex.Message}\n\nTry \"Save As\" to save a copy instead.");
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
-    private void SaveAs()
+    private async Task SaveAsAsync()
     {
-        // Wired to the save picker + IDocumentService once the engine lands (SDD §3.4).
+        if (_document is null || DocumentPath is null)
+            return;
+
+        var picker = new FileSavePicker();
+        picker.FileTypeChoices.Add("PDF document", [".pdf"]);
+        picker.SuggestedFileName = $"{Path.GetFileNameWithoutExtension(DocumentPath)} - edited";
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+
+        var file = await picker.PickSaveFileAsync();
+        if (file is null)
+            return;
+
+        var document = _document;
+        try
+        {
+            await Task.Run(() => AtomicFileWriter.Write(file.Path, stream => document.Save(stream)));
+            // The newly saved file becomes the active document (SDD §3.4).
+            DocumentPath = file.Path;
+            HasUnsavedChanges = false;
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Couldn't save", ex.Message);
+        }
     }
 
     private bool CanUndo() => _undoStack.CanUndo;
@@ -87,5 +194,19 @@ public partial class MainViewModel(Window window) : ObservableObject
         _undoStack.Redo();
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task ShowErrorAsync(string title, string message)
+    {
+        if (window.Content?.XamlRoot is not { } xamlRoot)
+            return;
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = message,
+            CloseButtonText = "OK",
+            XamlRoot = xamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 }
