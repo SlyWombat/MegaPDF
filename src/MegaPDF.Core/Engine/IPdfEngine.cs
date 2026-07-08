@@ -80,6 +80,9 @@ public interface IPdfPage : IDisposable
     /// <summary>Reads back a placed image stamp's pixels, e.g. to make removal undoable.</summary>
     StampImage? GetStampImage(string annotationId);
 
+    /// <summary>Moves/resizes a placed image stamp (signature drag/resize, SDD §3.3).</summary>
+    void MoveStampAnnotation(string annotationId, PdfRect newBounds);
+
     /// <summary>All MegaPDF-placed stamps (marks and signatures) on this page.</summary>
     IReadOnlyList<StampInfo> GetStamps();
 

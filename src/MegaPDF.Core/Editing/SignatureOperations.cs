@@ -33,6 +33,33 @@ public sealed class AddSignatureOperation(
             JournalBlob.Pack(bgra), pixelWidth, pixelHeight);
 }
 
+/// <summary>Reversible signature move/resize (drag or corner handle, SDD §3.3).</summary>
+public sealed class MoveSignatureOperation(
+    IPdfDocument document, int pageIndex, string annotationId, PdfRect oldBounds, PdfRect newBounds) : IPageEditOperation
+{
+    public int PageIndex { get; } = pageIndex;
+
+    public string Description => "move signature";
+
+    public void Apply()
+    {
+        using var page = document.GetPage(PageIndex);
+        page.MoveStampAnnotation(annotationId, newBounds);
+    }
+
+    public void Revert()
+    {
+        using var page = document.GetPage(PageIndex);
+        page.MoveStampAnnotation(annotationId, oldBounds);
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse)
+    {
+        var b = inverse ? oldBounds : newBounds;
+        return new MoveStampEntry(PageIndex, annotationId, b.X, b.Y, b.Width, b.Height);
+    }
+}
+
 /// <summary>
 /// Reversible signature removal. The pixels are read back from the document on Apply,
 /// so even signatures placed in an earlier session can be removed and restored.

@@ -64,6 +64,11 @@ public static class JournalReplayer
                     }
                     break;
 
+                case MoveStampEntry move:
+                    page.MoveStampAnnotation(move.StampId, new PdfRect(move.X, move.Y, move.Width, move.Height));
+                    applied++;
+                    break;
+
                 case AddSignatureEntry sig:
                     page.AddImageStamp(
                         JournalBlob.Unpack(sig.PixelsDeflated), sig.PixelWidth, sig.PixelHeight,

@@ -345,6 +345,13 @@ public partial class MainViewModel(Window window) : ObservableObject
         await DoEditAsync(new AddMarkOperation(_document, pageIndex, squareBounds));
     }
 
+    public async Task MoveSignatureAsync(int pageIndex, string annotationId, PdfRect oldBounds, PdfRect newBounds)
+    {
+        if (_document is null || oldBounds == newBounds)
+            return;
+        await DoEditAsync(new MoveSignatureOperation(_document, pageIndex, annotationId, oldBounds, newBounds));
+    }
+
     /// <summary>Removes a MegaPDF stamp — routes by id prefix (mark vs. signature).</summary>
     public async Task RemoveStampAsync(int pageIndex, string annotationId, PdfRect bounds)
     {

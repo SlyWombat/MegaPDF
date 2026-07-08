@@ -830,8 +830,20 @@ internal sealed class PdfiumPage : IPdfPage
                     var obj = PdfiumNative.FPDFAnnot_GetObject(annot, 0);
                     if (obj == IntPtr.Zero)
                         return null;
-                    // GetRenderedBitmap applies the alpha mask and always yields BGRA.
+
+                    // Render at the image's NATIVE pixel size (not its placement size) so
+                    // repeated remove/re-add cycles never lose resolution: temporarily set a
+                    // 1pt-per-pixel matrix, render, then restore the placement matrix.
+                    PdfiumNative.FPDFPageObj_GetMatrix(obj, out var placement);
+                    var nativeMatrix = placement;
+                    if (PdfiumNative.FPDFImageObj_GetImagePixelSize(obj, out var pxWidth, out var pxHeight) != 0
+                        && pxWidth > 0 && pxHeight > 0)
+                    {
+                        nativeMatrix = new PdfiumNative.FS_MATRIX { A = pxWidth, B = 0, C = 0, D = pxHeight, E = 0, F = 0 };
+                    }
+                    PdfiumNative.FPDFPageObj_SetMatrix(obj, ref nativeMatrix);
                     var bitmap = PdfiumNative.FPDFImageObj_GetRenderedBitmap(_document, _handle, obj);
+                    PdfiumNative.FPDFPageObj_SetMatrix(obj, ref placement);
                     if (bitmap == IntPtr.Zero)
                         return null;
                     try
@@ -856,6 +868,21 @@ internal sealed class PdfiumPage : IPdfPage
                 }
             }
             return null;
+        }
+    }
+
+    public void MoveStampAnnotation(string annotationId, PdfRect newBounds)
+    {
+        ThrowIfDisposed();
+        // In-place FPDFAnnot_UpdateObject after SetRect wipes the appearance stream
+        // (verified empirically), so a move is: extract native-resolution pixels,
+        // remove, re-add at the new bounds under the same stable id.
+        lock (PdfiumLibrary.Lock)
+        {
+            var image = GetStampImage(annotationId)
+                ?? throw new InvalidOperationException("Only image stamps (signatures) can be moved.");
+            RemoveStampAnnotation(annotationId);
+            AddImageStamp(image.Bgra, image.PixelWidth, image.PixelHeight, newBounds, annotationId);
         }
     }
 

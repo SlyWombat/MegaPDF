@@ -26,6 +26,20 @@ public sealed partial class MainWindow : Window
         ViewModel.LoadSignatures();
         ViewModel.LoadRecentDocuments();
         AppWindow.Closing += OnAppWindowClosing;
+
+        // Delete removes the selected signature (SDD §3.3).
+        if (Content is UIElement root)
+        {
+            root.PreviewKeyDown += async (_, args) =>
+            {
+                if (args.Key != VirtualKey.Delete || _selection is null || _activeEditor is not null)
+                    return;
+                args.Handled = true;
+                var selection = _selection;
+                Deselect();
+                await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
+            };
+        }
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(MainViewModel.WindowTitle))
@@ -70,6 +84,13 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // A tap outside a selected signature deselects it.
+        if (_selection is not null)
+        {
+            Deselect();
+            return;
+        }
+
         var position = e.GetPosition(pageGrid);
         var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
         var pagePoint = new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint);
@@ -93,8 +114,12 @@ public sealed partial class MainWindow : Window
                 break;
 
             case PageHitKind.StampAnnotation:
-                // Clicking a placed mark or signature removes it (undoable).
-                await ViewModel.RemoveStampAsync(pageView.Index, hit.AnnotationId!, hit.Bounds!.Value);
+                if (hit.AnnotationId!.StartsWith("sig:", StringComparison.Ordinal))
+                    // Signatures select for move/resize/delete (SDD §3.3).
+                    SelectStamp(pageGrid, pageView, hit.AnnotationId, hit.Bounds!.Value);
+                else
+                    // Check marks stay click-to-toggle (SDD §3.2).
+                    await ViewModel.RemoveStampAsync(pageView.Index, hit.AnnotationId, hit.Bounds!.Value);
                 break;
 
             case PageHitKind.FormTextField:
@@ -173,6 +198,129 @@ public sealed partial class MainWindow : Window
             _activeEditor = null;
             _activeEditorCommit = null;
         }
+    }
+
+    // --- Signature selection chrome (SDD §3.3: drag to move, handle to resize, ✕/Delete to remove) ---
+
+    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds);
+
+    private StampSelection? _selection;
+    private Grid? _selectionChrome;
+
+    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds)
+    {
+        Deselect();
+        if (pageGrid is not PageCanvas canvas)
+            return;
+        _selection = new StampSelection(canvas, pageView, annotationId, bounds);
+
+        var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
+        var accent = new Microsoft.UI.Xaml.Media.SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]);
+        var aspect = bounds.Height / bounds.Width;
+
+        var chrome = new Grid
+        {
+            Width = bounds.Width * toDip,
+            Height = bounds.Height * toDip,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(bounds.X * toDip, bounds.Y * toDip, 0, 0),
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY,
+        };
+        chrome.Children.Add(new Border
+        {
+            BorderBrush = accent,
+            BorderThickness = new Thickness(1.5),
+            CornerRadius = new CornerRadius(2),
+        });
+
+        // Corner handle: proportional-only resize (SDD §3.3 — no distortion possible).
+        var handle = new Border
+        {
+            Width = 14,
+            Height = 14,
+            Background = accent,
+            CornerRadius = new CornerRadius(7),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, -7, -7),
+            ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY,
+        };
+        chrome.Children.Add(handle);
+
+        // ✕ chip.
+        var remove = new Button
+        {
+            Content = new FontIcon { Glyph = "", FontSize = 10 },
+            Width = 22,
+            Height = 22,
+            Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -11, -11, 0),
+        };
+        chrome.Children.Add(remove);
+
+        chrome.Tapped += (_, args) => args.Handled = true;
+
+        chrome.ManipulationDelta += (_, args) =>
+        {
+            var m = chrome.Margin;
+            chrome.Margin = new Thickness(m.Left + args.Delta.Translation.X, m.Top + args.Delta.Translation.Y, 0, 0);
+        };
+        chrome.ManipulationCompleted += async (_, _) => await CommitChromeAsync();
+
+        handle.ManipulationDelta += (_, args) =>
+        {
+            args.Handled = true;
+            var newWidth = Math.Max(24, chrome.Width + args.Delta.Translation.X);
+            chrome.Width = newWidth;
+            chrome.Height = newWidth * aspect;
+        };
+        handle.ManipulationCompleted += async (_, args) =>
+        {
+            args.Handled = true;
+            await CommitChromeAsync();
+        };
+
+        remove.Click += async (_, _) =>
+        {
+            var selection = _selection;
+            Deselect();
+            if (selection is not null)
+                await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
+        };
+
+        canvas.Children.Add(chrome);
+        _selectionChrome = chrome;
+    }
+
+    /// <summary>Applies the chrome's current position/size to the document, then deselects.</summary>
+    private async Task CommitChromeAsync()
+    {
+        if (_selection is null || _selectionChrome is null)
+            return;
+        var selection = _selection;
+        var chrome = _selectionChrome;
+
+        var toPoint = 72.0 / 96 / ViewModel.ZoomFactor;
+        var width = chrome.Width * toPoint;
+        var height = chrome.Height * toPoint;
+        var x = Math.Clamp(chrome.Margin.Left * toPoint, 0, Math.Max(0, selection.Page.PointsWidth - width));
+        var y = Math.Clamp(chrome.Margin.Top * toPoint, 0, Math.Max(0, selection.Page.PointsHeight - height));
+
+        Deselect();
+        await ViewModel.MoveSignatureAsync(selection.Page.Index, selection.Id,
+            selection.Bounds, new PdfRect(x, y, width, height));
+    }
+
+    private void Deselect()
+    {
+        if (_selectionChrome is not null)
+            _selection?.Canvas.Children.Remove(_selectionChrome);
+        _selection = null;
+        _selectionChrome = null;
     }
 
     // --- Hover affordances (SDD §2.2: the document teaches what's clickable) ---

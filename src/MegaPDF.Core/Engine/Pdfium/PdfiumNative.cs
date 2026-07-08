@@ -202,6 +202,10 @@ internal static class PdfiumNative
     /// <summary>Renders the image object (masks applied) to a new BGRA bitmap the caller destroys.</summary>
     [DllImport(Dll)] public static extern IntPtr FPDFImageObj_GetRenderedBitmap(IntPtr document, IntPtr page, IntPtr imageObject);
     [DllImport(Dll)] public static extern IntPtr FPDFAnnot_GetObject(IntPtr annot, int index);
+    [DllImport(Dll)] public static extern int FPDFAnnot_UpdateObject(IntPtr annot, IntPtr pageObject);
+    [DllImport(Dll)] public static extern int FPDFImageObj_GetImagePixelSize(IntPtr imageObject, out uint width, out uint height);
+
+    public const int FPDF_PAGEOBJ_IMAGE = 3;
 
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_MoveTo(IntPtr path, float x, float y);

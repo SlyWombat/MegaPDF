@@ -89,6 +89,62 @@ public class SignatureStampTests : IDisposable
     }
 
     [Fact]
+    public void MoveStamp_Relocates_Renders_AndPersists()
+    {
+        var savedPath = Path.Combine(_dir, "moved.pdf");
+        var (bgra, w, h) = TestImage();
+        var newBounds = new PdfRect(300, 600, 120, 40);
+        string id;
+
+        using (var doc = _engine.Open(WritePdf()))
+        {
+            using (var page = doc.GetPage(0))
+            {
+                id = page.AddImageStamp(bgra, w, h, PlacementBounds);
+                page.MoveStampAnnotation(id, newBounds);
+
+                Assert.Equal(PageHitKind.None, page.HitTest(PlacementBounds.Center).Kind);
+                var hit = page.HitTest(newBounds.Center);
+                Assert.Equal(PageHitKind.StampAnnotation, hit.Kind);
+                Assert.Equal(id, hit.AnnotationId);
+
+                var rendered = page.Render(612, 792);
+                Assert.True(HasBluePixel(rendered, 300, 610, 120, 20), "signature should render at the new spot");
+                Assert.False(HasBluePixel(rendered, 100, 430, 180, 30), "old spot should be empty");
+            }
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        Assert.Equal(PageHitKind.StampAnnotation, reopenedPage.HitTest(newBounds.Center).Kind);
+    }
+
+    [Fact]
+    public void MoveOperation_UndoReturnsToOriginalSpot()
+    {
+        var (bgra, w, h) = TestImage();
+        var newBounds = new PdfRect(300, 600, 120, 40);
+        using var doc = _engine.Open(WritePdf());
+        var stack = new UndoStack();
+
+        var place = new AddSignatureOperation(doc, 0, bgra, w, h, PlacementBounds);
+        stack.Do(place);
+        stack.Do(new MoveSignatureOperation(doc, 0, place.CurrentId!, PlacementBounds, newBounds));
+
+        using (var page = doc.GetPage(0))
+            Assert.Equal(PageHitKind.StampAnnotation, page.HitTest(newBounds.Center).Kind);
+
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+        {
+            Assert.Equal(PageHitKind.StampAnnotation, page.HitTest(PlacementBounds.Center).Kind);
+            Assert.Equal(PageHitKind.None, page.HitTest(newBounds.Center).Kind);
+        }
+    }
+
+    [Fact]
     public void SignatureOperations_UndoRedo_PlaceAndRemove()
     {
         var (bgra, w, h) = TestImage();
