@@ -33,8 +33,8 @@
     <path d="M96 118 H166"/>
   </g>
 
-  <!-- The one stroke: signature flourish resolving into a checkmark -->
-  <path d="M90 138c-3 6 0 11 6 12c8 2 16 10 26 22L168 104"
+  <!-- The one stroke: a calligraphic check, curved entry, straight rise -->
+  <path d="M92 148c8 4 18 13 30 24L168 104"
         fill="none" stroke="url(#mpStroke)" stroke-width="12"
         stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

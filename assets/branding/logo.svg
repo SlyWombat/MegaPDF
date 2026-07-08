@@ -33,7 +33,7 @@
       <path d="M96 96 H138"/>
       <path d="M96 118 H166"/>
     </g>
-    <path d="M90 138c-3 6 0 11 6 12c8 2 16 10 26 22L168 104"
+    <path d="M92 148c8 4 18 13 30 24L168 104"
           fill="none" stroke="url(#mplStroke)" stroke-width="12"
           stroke-linecap="round" stroke-linejoin="round"/>
   </g>
