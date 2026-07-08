@@ -277,10 +277,10 @@ internal sealed class PdfiumPage : IPdfPage
 
     private const string StampIdKey = "MegaPDF_Id";
 
-    public string AddCheckMarkStamp(PdfRect squareBounds)
+    public string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null)
     {
         ThrowIfDisposed();
-        var id = Guid.NewGuid().ToString("N");
+        var id = stampId ?? "mark:" + Guid.NewGuid().ToString("N");
 
         // Mark at ~80% of the square, centered (SDD §3.2), in PDF page coordinates.
         var inset = Math.Max(squareBounds.Width, squareBounds.Height) * 0.10;
@@ -680,10 +680,117 @@ internal sealed class PdfiumPage : IPdfPage
         PdfiumNative.FORM_OnLButtonDown(_forms, _handle, 0, center.X, pdfY);
         PdfiumNative.FORM_OnLButtonUp(_forms, _handle, 0, center.X, pdfY);
     }
-    public string AddStampAnnotation(ReadOnlyMemory<byte> pngBytes, PdfRect bounds) =>
-        throw new NotSupportedException("Image stamps arrive with the signature milestone.");
-    public void MoveStampAnnotation(string annotationId, PdfRect newBounds) =>
-        throw new NotSupportedException("Image stamps arrive with the signature milestone.");
+    public string AddImageStamp(ReadOnlyMemory<byte> bgra, int pixelWidth, int pixelHeight, PdfRect bounds, string? stampId = null)
+    {
+        ThrowIfDisposed();
+        if (bgra.Length != pixelWidth * pixelHeight * 4)
+            throw new ArgumentException("BGRA buffer size must be width*height*4.", nameof(bgra));
+
+        var id = stampId ?? "sig:" + Guid.NewGuid().ToString("N");
+        var left = (float)bounds.X;
+        var right = (float)bounds.Right;
+        var top = (float)(Height - bounds.Y);
+        var bottom = (float)(Height - bounds.Bottom);
+
+        lock (PdfiumLibrary.Lock)
+        {
+            using var pixels = bgra.Pin();
+            IntPtr bitmap;
+            unsafe
+            {
+                bitmap = PdfiumNative.FPDFBitmap_CreateEx(
+                    pixelWidth, pixelHeight, PdfiumNative.FPDFBitmap_BGRA, (IntPtr)pixels.Pointer, pixelWidth * 4);
+            }
+            if (bitmap == IntPtr.Zero)
+                throw new InvalidOperationException("Could not wrap the signature image.");
+
+            var annot = IntPtr.Zero;
+            var imageObj = IntPtr.Zero;
+            try
+            {
+                annot = PdfiumNative.FPDFPage_CreateAnnot(_handle, PdfiumNative.FPDF_ANNOT_SUBTYPE_STAMP);
+                if (annot == IntPtr.Zero)
+                    throw new InvalidOperationException("Could not create the signature annotation.");
+
+                var rect = new PdfiumNative.FS_RECTF { Left = left, Top = top, Right = right, Bottom = bottom };
+                PdfiumNative.FPDFAnnot_SetRect(annot, ref rect);
+
+                imageObj = PdfiumNative.FPDFPageObj_NewImageObj(_document);
+                if (imageObj == IntPtr.Zero
+                    || PdfiumNative.FPDFImageObj_SetBitmap([_handle], 1, imageObj, bitmap) == 0)
+                    throw new InvalidOperationException("Could not attach the signature image.");
+
+                // An image object is a unit square; the matrix scales/places it (PDF coords).
+                var matrix = new PdfiumNative.FS_MATRIX
+                {
+                    A = right - left, B = 0, C = 0, D = top - bottom, E = left, F = bottom,
+                };
+                PdfiumNative.FPDFPageObj_SetMatrix(imageObj, ref matrix);
+
+                if (PdfiumNative.FPDFAnnot_AppendObject(annot, imageObj) == 0)
+                    throw new InvalidOperationException("Could not place the signature.");
+                imageObj = IntPtr.Zero; // ownership transferred to the annotation
+
+                PdfiumNative.FPDFAnnot_SetStringValue(annot, StampIdKey, id);
+            }
+            finally
+            {
+                if (imageObj != IntPtr.Zero)
+                    PdfiumNative.FPDFPageObj_Destroy(imageObj);
+                if (annot != IntPtr.Zero)
+                    PdfiumNative.FPDFPage_CloseAnnot(annot);
+                PdfiumNative.FPDFBitmap_Destroy(bitmap);
+            }
+        }
+        return id;
+    }
+
+    public StampImage? GetStampImage(string annotationId)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
+                if (annot == IntPtr.Zero)
+                    continue;
+                try
+                {
+                    if (ReadStampId(annot) != annotationId)
+                        continue;
+                    var obj = PdfiumNative.FPDFAnnot_GetObject(annot, 0);
+                    if (obj == IntPtr.Zero)
+                        return null;
+                    // GetRenderedBitmap applies the alpha mask and always yields BGRA.
+                    var bitmap = PdfiumNative.FPDFImageObj_GetRenderedBitmap(_document, _handle, obj);
+                    if (bitmap == IntPtr.Zero)
+                        return null;
+                    try
+                    {
+                        var width = PdfiumNative.FPDFBitmap_GetWidth(bitmap);
+                        var height = PdfiumNative.FPDFBitmap_GetHeight(bitmap);
+                        var stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
+                        var buffer = PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
+                        var pixels = new byte[width * height * 4];
+                        for (var row = 0; row < height; row++)
+                            Marshal.Copy(buffer + row * stride, pixels, row * width * 4, width * 4);
+                        return new StampImage(pixels, width, height);
+                    }
+                    finally
+                    {
+                        PdfiumNative.FPDFBitmap_Destroy(bitmap);
+                    }
+                }
+                finally
+                {
+                    PdfiumNative.FPDFPage_CloseAnnot(annot);
+                }
+            }
+            return null;
+        }
+    }
 
     public void RemoveStampAnnotation(string annotationId)
     {

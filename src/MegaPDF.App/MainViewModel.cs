@@ -17,6 +17,9 @@ namespace MegaPDF.App;
 /// <summary>One rendered page: bitmap plus display size in DIPs.</summary>
 public sealed record PageView(int Index, ImageSource Source, double Width, double Height);
 
+/// <summary>A library signature shown in the flyout.</summary>
+public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail);
+
 public partial class MainViewModel(Window window) : ObservableObject
 {
     private static readonly IPdfEngine Engine = new PdfiumEngine();
@@ -167,11 +170,93 @@ public partial class MainViewModel(Window window) : ObservableObject
         await DoEditAsync(new AddMarkOperation(_document, pageIndex, squareBounds));
     }
 
-    public async Task RemoveMarkAsync(int pageIndex, string annotationId, PdfRect markBounds)
+    /// <summary>Removes a MegaPDF stamp — routes by id prefix (mark vs. signature).</summary>
+    public async Task RemoveStampAsync(int pageIndex, string annotationId, PdfRect bounds)
     {
         if (_document is null)
             return;
-        await DoEditAsync(new RemoveMarkOperation(_document, pageIndex, annotationId, markBounds));
+        IPageEditOperation op = annotationId.StartsWith("sig:", StringComparison.Ordinal)
+            ? new RemoveSignatureOperation(_document, pageIndex, annotationId, bounds)
+            : new RemoveMarkOperation(_document, pageIndex, annotationId, bounds);
+        await DoEditAsync(op);
+    }
+
+    // --- Signature library & placement (SDD §3.3) ---
+
+    private readonly SignatureLibrary _signatureLibrary = new();
+
+    public ObservableCollection<SignatureItem> Signatures { get; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlacementHintVisibility), nameof(PlacementHint))]
+    private SignatureItem? _pendingSignature;
+
+    public Visibility PlacementHintVisibility => PendingSignature is null ? Visibility.Collapsed : Visibility.Visible;
+    public string PlacementHint => PendingSignature is null ? "" : $"Click on the page to place “{PendingSignature.Name}”";
+
+    public void LoadSignatures()
+    {
+        Signatures.Clear();
+        foreach (var entry in _signatureLibrary.All)
+            Signatures.Add(ToItem(entry));
+    }
+
+    private static SignatureItem ToItem(SignatureEntry entry) =>
+        new(entry.Id, entry.Name, entry.PngPath, new BitmapImage(new Uri(entry.PngPath)));
+
+    public async Task AddSignatureFromImageAsync(SignatureImage image, string name)
+    {
+        try
+        {
+            var png = await SignatureImageProcessor.EncodePngAsync(image);
+            var entry = _signatureLibrary.Add(name, png);
+            Signatures.Add(ToItem(entry));
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Couldn't add that signature", ex.Message);
+        }
+    }
+
+    public void RemoveSignatureFromLibrary(SignatureItem item)
+    {
+        _signatureLibrary.Remove(item.Id);
+        Signatures.Remove(item);
+    }
+
+    public void SelectSignatureForPlacement(SignatureItem item) => PendingSignature = item;
+
+    public void CancelSignaturePlacement() => PendingSignature = null;
+
+    /// <summary>Places the pending signature centered on the clicked point (SDD §3.3: 180pt default width).</summary>
+    public async Task PlacePendingSignatureAsync(int pageIndex, PdfPoint point)
+    {
+        if (_document is null || PendingSignature is null)
+            return;
+        var pending = PendingSignature;
+        PendingSignature = null;
+
+        try
+        {
+            var image = await SignatureImageProcessor.LoadPngAsync(pending.PngPath);
+
+            const double defaultWidthPoints = 180;
+            var width = defaultWidthPoints;
+            var height = width * image.Height / image.Width;
+
+            // Clamp within the page.
+            var pageView = Pages[pageIndex];
+            double pageW = pageView.Width * 72 / 96, pageH = pageView.Height * 72 / 96;
+            var x = Math.Clamp(point.X - width / 2, 0, Math.Max(0, pageW - width));
+            var y = Math.Clamp(point.Y - height / 2, 0, Math.Max(0, pageH - height));
+
+            await DoEditAsync(new AddSignatureOperation(
+                _document, pageIndex, image.Bgra, image.Width, image.Height, new PdfRect(x, y, width, height)));
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Couldn't place the signature", ex.Message);
+        }
     }
 
     private async Task DoEditAsync(IPageEditOperation op)

@@ -83,11 +83,48 @@
                         <TextBlock Text="Signatures" />
                     </StackPanel>
                     <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedLeft">
-                            <StackPanel Spacing="8" MinWidth="240">
+                        <Flyout x:Name="SignaturesFlyout" Placement="BottomEdgeAlignedLeft">
+                            <StackPanel Spacing="8" MinWidth="260">
                                 <TextBlock Text="Your signatures" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock Text="No signatures yet." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <Button Content="Add signature" IsEnabled="False" />
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.Signatures}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="local:SignatureItem">
+                                            <Button
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Margin="0,2"
+                                                Click="OnSignatureClicked">
+                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                    <Border Background="White" CornerRadius="4" Padding="4">
+                                                        <Image Source="{x:Bind Thumbnail}" Height="28" MaxWidth="110" Stretch="Uniform" />
+                                                    </Border>
+                                                    <TextBlock Text="{x:Bind Name}" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                <Button.ContextFlyout>
+                                                    <MenuFlyout>
+                                                        <MenuFlyoutItem Text="Remove from library" Click="OnRemoveSignatureClicked">
+                                                            <MenuFlyoutItem.Icon>
+                                                                <FontIcon Glyph="&#xE74D;" />
+                                                            </MenuFlyoutItem.Icon>
+                                                        </MenuFlyoutItem>
+                                                    </MenuFlyout>
+                                                </Button.ContextFlyout>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Click="OnAddSignatureFromImageClicked" HorizontalAlignment="Stretch">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xEB9F;" FontSize="14" />
+                                        <TextBlock Text="Add from image…" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Click="OnTypeSignatureClicked" HorizontalAlignment="Stretch">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                        <TextBlock Text="Type signature…" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
@@ -164,6 +201,21 @@
                 VerticalAlignment="Bottom"
                 HorizontalAlignment="Center"
                 Margin="24" />
+
+            <InfoBar
+                Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
+                IsOpen="True"
+                Severity="Informational"
+                Message="{x:Bind ViewModel.PlacementHint, Mode=OneWay}"
+                CloseButtonClick="OnCancelPlacementClicked"
+                VerticalAlignment="Top"
+                HorizontalAlignment="Center"
+                Margin="24,12" />
+
+            <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). -->
+            <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <TextBlock x:Name="TypedSignatureText" FontFamily="Segoe Script" FontSize="64" Foreground="Black" Padding="16,8" />
+            </Border>
         </Grid>
     </Grid>
 </Window>

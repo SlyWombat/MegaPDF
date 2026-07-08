@@ -190,6 +190,19 @@ internal static class PdfiumNative
     /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
     [DllImport(Dll)] public static extern uint FPDFAnnot_GetStringValue(IntPtr annot, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen);
 
+    // --- Image stamps (signatures, SDD §3.3) ---
+
+    public const int FPDFBitmap_BGRA = 4;
+
+    [DllImport(Dll)] public static extern IntPtr FPDFBitmap_CreateEx(int width, int height, int format, IntPtr firstScan, int stride);
+    [DllImport(Dll)] public static extern int FPDFBitmap_GetWidth(IntPtr bitmap);
+    [DllImport(Dll)] public static extern int FPDFBitmap_GetHeight(IntPtr bitmap);
+    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_NewImageObj(IntPtr document);
+    [DllImport(Dll)] public static extern int FPDFImageObj_SetBitmap(IntPtr[] pages, int count, IntPtr imageObject, IntPtr bitmap);
+    /// <summary>Renders the image object (masks applied) to a new BGRA bitmap the caller destroys.</summary>
+    [DllImport(Dll)] public static extern IntPtr FPDFImageObj_GetRenderedBitmap(IntPtr document, IntPtr page, IntPtr imageObject);
+    [DllImport(Dll)] public static extern IntPtr FPDFAnnot_GetObject(IntPtr annot, int index);
+
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_MoveTo(IntPtr path, float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_LineTo(IntPtr path, float x, float y);

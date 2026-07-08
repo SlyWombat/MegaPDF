@@ -46,8 +46,12 @@ public interface IPdfPage : IDisposable
     /// </summary>
     IReadOnlyList<PdfRect> DetectCheckboxSquares();
 
-    /// <summary>Places the ✗/✓ mark stamp over a drawn square; returns the stamp id (SDD §3.2).</summary>
-    string AddCheckMarkStamp(PdfRect squareBounds);
+    /// <summary>
+    /// Places the ✗/✓ mark stamp over a drawn square; returns the stamp id (SDD §3.2).
+    /// Pass <paramref name="stampId"/> to restore a previously removed stamp under its
+    /// original id — ids must stay stable across undo/redo cycles.
+    /// </summary>
+    string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null);
 
     /// <summary>Tiered body-text edit — see SDD §3.1. Throws <see cref="TextEditException"/> per tier rules.</summary>
     TextEditOutcome SetTextRunText(PdfTextRun run, string newText);
@@ -55,14 +59,20 @@ public interface IPdfPage : IDisposable
     void SetFormFieldValue(PdfFormField field, string value);
     void ToggleCheckbox(PdfFormField field);
 
-    /// <summary>Places an image stamp annotation (signature or checkbox mark) and returns its id (SDD §3.2, §3.3).</summary>
-    string AddStampAnnotation(ReadOnlyMemory<byte> pngBytes, PdfRect bounds);
-    void MoveStampAnnotation(string annotationId, PdfRect newBounds);
+    /// <summary>Places a BGRA image (alpha respected) as a stamp annotation — a signature (SDD §3.3).</summary>
+    string AddImageStamp(ReadOnlyMemory<byte> bgra, int pixelWidth, int pixelHeight, PdfRect bounds, string? stampId = null);
+
+    /// <summary>Reads back a placed image stamp's pixels, e.g. to make removal undoable.</summary>
+    StampImage? GetStampImage(string annotationId);
+
     void RemoveStampAnnotation(string annotationId);
 }
 
 /// <summary>A rendered page bitmap: 32-bit BGRA, top-down rows.</summary>
 public sealed record RenderedPage(int PixelWidth, int PixelHeight, byte[] Bgra);
+
+/// <summary>Pixels of a placed image stamp (BGRA).</summary>
+public sealed record StampImage(byte[] Bgra, int PixelWidth, int PixelHeight);
 
 public enum PageHitKind
 {

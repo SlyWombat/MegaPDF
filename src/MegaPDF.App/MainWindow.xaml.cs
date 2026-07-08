@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices.WindowsRuntime;
 using MegaPDF.Core.Engine;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,6 +20,7 @@ public sealed partial class MainWindow : Window
         ViewModel = new MainViewModel(this);
         InitializeComponent();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
+        ViewModel.LoadSignatures();
         ViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(MainViewModel.WindowTitle))
@@ -62,6 +64,13 @@ public sealed partial class MainWindow : Window
         var position = e.GetPosition(pageGrid);
         var pagePoint = new PdfPoint(position.X * 72 / 96, position.Y * 72 / 96);
 
+        // Signature placement mode: the next page click stamps the pending signature.
+        if (ViewModel.PendingSignature is not null)
+        {
+            await ViewModel.PlacePendingSignatureAsync(pageView.Index, pagePoint);
+            return;
+        }
+
         var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
         switch (hit.Kind)
         {
@@ -74,8 +83,8 @@ public sealed partial class MainWindow : Window
                 break;
 
             case PageHitKind.StampAnnotation:
-                // Clicking a placed mark removes it — click toggles (SDD §3.2).
-                await ViewModel.RemoveMarkAsync(pageView.Index, hit.AnnotationId!, hit.Bounds!.Value);
+                // Clicking a placed mark or signature removes it (undoable).
+                await ViewModel.RemoveStampAsync(pageView.Index, hit.AnnotationId!, hit.Bounds!.Value);
                 break;
 
             case PageHitKind.FormTextField:
@@ -146,5 +155,74 @@ public sealed partial class MainWindow : Window
         pageGrid.Children.Remove(editor);
         if (_activeEditor == editor)
             _activeEditor = null;
+    }
+
+    // --- Signature library & placement (SDD §3.3) ---
+
+    private void OnSignatureClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: SignatureItem item })
+        {
+            ViewModel.SelectSignatureForPlacement(item);
+            SignaturesFlyout.Hide();
+        }
+    }
+
+    private void OnRemoveSignatureClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem { DataContext: SignatureItem item })
+            ViewModel.RemoveSignatureFromLibrary(item);
+    }
+
+    private void OnCancelPlacementClicked(InfoBar sender, object args) =>
+        ViewModel.CancelSignaturePlacement();
+
+    private async void OnAddSignatureFromImageClicked(object sender, RoutedEventArgs e)
+    {
+        SignaturesFlyout.Hide();
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        picker.FileTypeFilter.Add(".png");
+        picker.FileTypeFilter.Add(".jpg");
+        picker.FileTypeFilter.Add(".jpeg");
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+
+        var file = await picker.PickSingleFileAsync();
+        if (file is null)
+            return;
+
+        var image = await SignatureImageProcessor.LoadAndCleanAsync(file);
+        await ViewModel.AddSignatureFromImageAsync(image, Path.GetFileNameWithoutExtension(file.Name));
+    }
+
+    private async void OnTypeSignatureClicked(object sender, RoutedEventArgs e)
+    {
+        SignaturesFlyout.Hide();
+        var input = new TextBox { PlaceholderText = "Your name", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Script"), FontSize = 24 };
+        var dialog = new ContentDialog
+        {
+            Title = "Type your signature",
+            Content = input,
+            PrimaryButtonText = "Add",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(input.Text))
+            return;
+
+        var image = await RenderTypedSignatureAsync(input.Text.Trim());
+        await ViewModel.AddSignatureFromImageAsync(image, input.Text.Trim());
+    }
+
+    /// <summary>Renders the offscreen Segoe Script TextBlock to BGRA pixels.</summary>
+    private async Task<SignatureImage> RenderTypedSignatureAsync(string text)
+    {
+        TypedSignatureText.Text = text;
+        TypedSignatureHost.UpdateLayout();
+
+        var target = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+        await target.RenderAsync(TypedSignatureHost);
+        var buffer = await target.GetPixelsAsync();
+        return new SignatureImage(buffer.ToArray(), target.PixelWidth, target.PixelHeight);
     }
 }
