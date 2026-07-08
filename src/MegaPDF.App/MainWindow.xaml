@@ -132,6 +132,14 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <Button Command="{x:Bind ViewModel.ZoomOutCommand}" Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom out" />
+                <TextBlock
+                    Text="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}"
+                    VerticalAlignment="Center"
+                    MinWidth="42"
+                    TextAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom in" />
                 <TextBlock
                     Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
                     VerticalAlignment="Center"
@@ -168,9 +176,11 @@
             </StackPanel>
 
             <ScrollViewer
+                x:Name="PagesScroll"
                 Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}"
                 HorizontalScrollBarVisibility="Auto"
-                VerticalScrollBarVisibility="Auto">
+                VerticalScrollBarVisibility="Auto"
+                ViewChanged="OnPagesScrollViewChanged">
                 <ItemsControl ItemsSource="{x:Bind ViewModel.Pages}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -179,15 +189,17 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:PageView">
-                            <Grid
+                            <local:PageCanvas
                                 Width="{x:Bind Width}"
                                 Height="{x:Bind Height}"
                                 Background="White"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
-                                Tapped="OnPageTapped">
+                                Tapped="OnPageTapped"
+                                PointerMoved="OnPagePointerMoved"
+                                PointerExited="OnPagePointerExited">
                                 <Image Source="{x:Bind Source}" Stretch="Uniform" />
-                            </Grid>
+                            </local:PageCanvas>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

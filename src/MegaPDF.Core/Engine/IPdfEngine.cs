@@ -65,6 +65,9 @@ public interface IPdfPage : IDisposable
     /// <summary>Reads back a placed image stamp's pixels, e.g. to make removal undoable.</summary>
     StampImage? GetStampImage(string annotationId);
 
+    /// <summary>All MegaPDF-placed stamps (marks and signatures) on this page.</summary>
+    IReadOnlyList<StampInfo> GetStamps();
+
     void RemoveStampAnnotation(string annotationId);
 }
 
@@ -73,6 +76,9 @@ public sealed record RenderedPage(int PixelWidth, int PixelHeight, byte[] Bgra);
 
 /// <summary>Pixels of a placed image stamp (BGRA).</summary>
 public sealed record StampImage(byte[] Bgra, int PixelWidth, int PixelHeight);
+
+/// <summary>A MegaPDF-placed stamp: id (mark:/sig: prefixed) and bounds in top-left page space.</summary>
+public sealed record StampInfo(string Id, PdfRect Bounds);
 
 public enum PageHitKind
 {

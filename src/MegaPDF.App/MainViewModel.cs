@@ -14,8 +14,11 @@ using Windows.Storage.Pickers;
 
 namespace MegaPDF.App;
 
-/// <summary>One rendered page: bitmap plus display size in DIPs.</summary>
-public sealed record PageView(int Index, ImageSource Source, double Width, double Height);
+/// <summary>A clickable area on a page, cached so hover affordances don't hit the engine.</summary>
+public sealed record InteractiveRegion(PdfRect Bounds, PageHitKind Kind);
+
+/// <summary>One rendered page: bitmap, display size in DIPs, and its interaction map.</summary>
+public sealed record PageView(int Index, ImageSource Source, double Width, double Height, IReadOnlyList<InteractiveRegion> Regions);
 
 /// <summary>A library signature shown in the flyout.</summary>
 public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail);
@@ -43,6 +46,10 @@ public partial class MainViewModel(Window window) : ObservableObject
     [NotifyPropertyChangedFor(nameof(PageIndicator))]
     private int _pageCount;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageIndicator))]
+    private int _currentPage = 1;
+
     public bool IsDocumentOpen => DocumentPath is not null;
 
     public string OpenDocumentName => DocumentPath is null ? "" : Path.GetFileName(DocumentPath);
@@ -54,7 +61,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public string SaveButtonLabel => HasUnsavedChanges ? "Save ●" : "Save";
 
-    public string PageIndicator => PageCount > 0 ? $"Page 1 of {PageCount}" : "";
+    public string PageIndicator => PageCount > 0 ? $"Page {CurrentPage} of {PageCount}" : "";
 
     public Visibility EmptyStateVisibility => IsDocumentOpen ? Visibility.Collapsed : Visibility.Visible;
     public Visibility DocumentVisibility => IsDocumentOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -101,6 +108,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         _undoStack.Clear();
         Pages.Clear();
         PageCount = doc.PageCount;
+        CurrentPage = 1;
 
         for (var i = 0; i < doc.PageCount && generation == _openGeneration; i++)
         {
@@ -113,16 +121,17 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     private async Task<PageView> RenderPageAsync(IPdfDocument doc, int pageIndex)
     {
-        // Render at the monitor's rasterization scale so pages are crisp at 100% zoom.
-        var scale = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
+        // Render at monitor rasterization scale × zoom so pages stay crisp.
+        var scale = (window.Content?.XamlRoot?.RasterizationScale ?? 1.0) * ZoomFactor;
+        var zoom = ZoomFactor;
 
-        var (rendered, widthDips, heightDips) = await Task.Run(() =>
+        var (rendered, widthDips, heightDips, regions) = await Task.Run(() =>
         {
             using var page = doc.GetPage(pageIndex);
-            var wDips = page.Width * 96 / 72;
-            var hDips = page.Height * 96 / 72;
-            var pixels = page.Render((int)(wDips * scale), (int)(hDips * scale));
-            return (pixels, wDips, hDips);
+            var wDips = page.Width * 96 / 72 * zoom;
+            var hDips = page.Height * 96 / 72 * zoom;
+            var pixels = page.Render((int)(page.Width * 96 / 72 * scale), (int)(page.Height * 96 / 72 * scale));
+            return (pixels, wDips, hDips, BuildRegions(page));
         });
 
         var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
@@ -130,7 +139,64 @@ public partial class MainViewModel(Window window) : ObservableObject
             pixelStream.Write(rendered.Bgra, 0, rendered.Bgra.Length);
         bitmap.Invalidate();
 
-        return new PageView(pageIndex, bitmap, widthDips, heightDips);
+        return new PageView(pageIndex, bitmap, widthDips, heightDips, regions);
+    }
+
+    /// <summary>Interaction map in HitTest priority order: stamps, form fields, squares, text.</summary>
+    private static List<InteractiveRegion> BuildRegions(IPdfPage page)
+    {
+        var regions = new List<InteractiveRegion>();
+        foreach (var stamp in page.GetStamps())
+            regions.Add(new InteractiveRegion(stamp.Bounds, PageHitKind.StampAnnotation));
+        foreach (var field in page.GetFormFields())
+        {
+            var kind = field.Kind switch
+            {
+                FormFieldKind.Text => PageHitKind.FormTextField,
+                FormFieldKind.Checkbox or FormFieldKind.RadioButton => PageHitKind.FormCheckbox,
+                _ => PageHitKind.None,
+            };
+            if (kind != PageHitKind.None)
+                regions.Add(new InteractiveRegion(field.Bounds, kind));
+        }
+        foreach (var square in page.DetectCheckboxSquares())
+            regions.Add(new InteractiveRegion(square, PageHitKind.DrawnCheckbox));
+        foreach (var run in page.GetTextRuns())
+            regions.Add(new InteractiveRegion(run.Bounds, PageHitKind.TextRun));
+        return regions;
+    }
+
+    // --- Zoom (SDD §2.2 toolbar) ---
+
+    public const int MinZoom = 50;
+    public const int MaxZoom = 300;
+    private const int ZoomStep = 25;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ZoomLabel))]
+    [NotifyCanExecuteChangedFor(nameof(ZoomInCommand), nameof(ZoomOutCommand))]
+    private int _zoomPercent = 100;
+
+    public double ZoomFactor => ZoomPercent / 100.0;
+    public string ZoomLabel => $"{ZoomPercent}%";
+
+    [RelayCommand(CanExecute = nameof(CanZoomIn))]
+    private async Task ZoomInAsync() => await SetZoomAsync(ZoomPercent + ZoomStep);
+
+    [RelayCommand(CanExecute = nameof(CanZoomOut))]
+    private async Task ZoomOutAsync() => await SetZoomAsync(ZoomPercent - ZoomStep);
+
+    private bool CanZoomIn() => ZoomPercent < MaxZoom;
+    private bool CanZoomOut() => ZoomPercent > MinZoom;
+
+    private async Task SetZoomAsync(int percent)
+    {
+        ZoomPercent = Math.Clamp(percent, MinZoom, MaxZoom);
+        if (_document is null)
+            return;
+        var generation = _openGeneration;
+        for (var i = 0; i < Pages.Count && generation == _openGeneration; i++)
+            await RefreshPageAsync(i);
     }
 
     private async Task RefreshPageAsync(int pageIndex)

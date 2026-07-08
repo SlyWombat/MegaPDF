@@ -324,6 +324,12 @@ internal sealed class PdfiumPage : IPdfPage
         return id;
     }
 
+    public IReadOnlyList<StampInfo> GetStamps()
+    {
+        ThrowIfDisposed();
+        return GetMegaPdfStamps().Select(s => new StampInfo(s.Id, s.Bounds)).ToList();
+    }
+
     /// <summary>All MegaPDF-placed stamps on the page: (id, bounds in top-left space).</summary>
     private List<(string Id, PdfRect Bounds)> GetMegaPdfStamps()
     {
