@@ -12,10 +12,13 @@ public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfT
 
     public string Description => "text edit";
 
+    /// <summary>Set by Apply: whether the edit needed tier-2 font substitution (SDD §3.1).</summary>
+    public TextEditOutcome? LastOutcome { get; private set; }
+
     public void Apply()
     {
         using var page = document.GetPage(PageIndex);
-        page.SetTextRunText(run, newText);
+        LastOutcome = page.SetTextRunText(run, newText);
     }
 
     public void Revert()

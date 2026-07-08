@@ -41,7 +41,7 @@ public interface IPdfPage : IDisposable
     IReadOnlyList<PdfFormField> GetFormFields();
 
     /// <summary>Tiered body-text edit — see SDD §3.1. Throws <see cref="TextEditException"/> per tier rules.</summary>
-    void SetTextRunText(PdfTextRun run, string newText);
+    TextEditOutcome SetTextRunText(PdfTextRun run, string newText);
 
     void SetFormFieldValue(PdfFormField field, string value);
     void ToggleCheckbox(PdfFormField field);
@@ -78,6 +78,16 @@ public enum FormFieldKind
 }
 
 public sealed record PdfFormField(string Name, FormFieldKind Kind, PdfRect Bounds, string Value);
+
+/// <summary>How a body-text edit was performed (SDD §3.1 tiers 1 and 2).</summary>
+public enum TextEditOutcome
+{
+    /// <summary>Tier 1: the document's own font rendered the new text.</summary>
+    EditedInPlace,
+
+    /// <summary>Tier 2: the font couldn't cover the new text; a similar standard font was used.</summary>
+    EditedWithSubstitutedFont,
+}
 
 /// <summary>Why a body-text edit could not be performed (SDD §3.1 tier rules).</summary>
 public sealed class TextEditException(TextEditFailure reason, string message) : Exception(message)

@@ -166,8 +166,13 @@ public partial class MainViewModel(Window window) : ObservableObject
         HasUnsavedChanges = true;
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        // Non-modal, non-blocking notice per SDD §3.1 tier 2.
+        IsFontNoticeOpen = op.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont;
         await RefreshPageAsync(pageIndex);
     }
+
+    [ObservableProperty]
+    private bool _isFontNoticeOpen;
 
     private bool CanSave() => IsDocumentOpen;
 

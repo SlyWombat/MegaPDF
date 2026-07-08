@@ -77,7 +77,7 @@ internal sealed class PdfiumDocument : IPdfDocument
             var page = PdfiumNative.FPDF_LoadPage(_handle, pageIndex);
             if (page == IntPtr.Zero)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page {pageIndex} could not be loaded.");
-            return new PdfiumPage(page, pageIndex);
+            return new PdfiumPage(_handle, page, pageIndex);
         }
     }
 
@@ -136,11 +136,13 @@ internal sealed class PdfiumDocument : IPdfDocument
 
 internal sealed class PdfiumPage : IPdfPage
 {
+    private readonly IntPtr _document;
     private readonly IntPtr _handle;
     private bool _disposed;
 
-    internal PdfiumPage(IntPtr handle, int index)
+    internal PdfiumPage(IntPtr document, IntPtr handle, int index)
     {
+        _document = document;
         _handle = handle;
         Index = index;
         // Caller (PdfiumDocument.GetPage) holds the lock; Monitor is reentrant.
@@ -235,7 +237,7 @@ internal sealed class PdfiumPage : IPdfPage
 
     public IReadOnlyList<PdfFormField> GetFormFields() => [];
 
-    public void SetTextRunText(PdfTextRun run, string newText)
+    public TextEditOutcome SetTextRunText(PdfTextRun run, string newText)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(newText))
@@ -247,12 +249,156 @@ internal sealed class PdfiumPage : IPdfPage
             if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
                 throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
 
-            if (PdfiumNative.FPDFText_SetText(obj, newText) == 0)
-                throw new TextEditException(TextEditFailure.NoUsableFont,
-                    "The document's font could not render the new text.");
+            // Tier 2 (SDD §3.1): a subset-embedded font only contains the glyphs the
+            // document already uses. Setting text with uncovered characters would
+            // silently render notdef boxes, so substitute a standard font instead.
+            if (!NeedsFontSubstitution(obj, newText))
+            {
+                if (PdfiumNative.FPDFText_SetText(obj, newText) != 0)
+                {
+                    GenerateContent();
+                    return TextEditOutcome.EditedInPlace;
+                }
+                // In-place set failed outright — fall through to substitution.
+            }
 
-            if (PdfiumNative.FPDFPage_GenerateContent(_handle) == 0)
-                throw new InvalidOperationException("PDFium failed to regenerate the page content stream.");
+            SubstituteTextObject(obj, run.ObjectIndex, newText);
+            GenerateContent();
+            return TextEditOutcome.EditedWithSubstitutedFont;
+        }
+    }
+
+    private void GenerateContent()
+    {
+        if (PdfiumNative.FPDFPage_GenerateContent(_handle) == 0)
+            throw new InvalidOperationException("PDFium failed to regenerate the page content stream.");
+    }
+
+    /// <summary>True when the object's font is a subset and the new text needs glyphs the document never used.</summary>
+    private bool NeedsFontSubstitution(IntPtr obj, string newText)
+    {
+        var font = PdfiumNative.FPDFTextObj_GetFont(obj);
+        if (font == IntPtr.Zero)
+            return false;
+
+        var baseName = ReadFontName(font, useBaseName: true);
+        if (!IsSubsetFontName(baseName))
+            return false;
+
+        // Approximate the subset's glyph coverage by every character the page draws
+        // with this same font.
+        var coverage = new HashSet<char>();
+        var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
+        try
+        {
+            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var other = PdfiumNative.FPDFPage_GetObject(_handle, i);
+                if (other == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(other) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
+                    continue;
+                var otherFont = PdfiumNative.FPDFTextObj_GetFont(other);
+                if (otherFont == IntPtr.Zero || ReadFontName(otherFont, useBaseName: true) != baseName)
+                    continue;
+                foreach (var c in ReadTextObjectText(other, textPage))
+                    coverage.Add(c);
+            }
+        }
+        finally
+        {
+            if (textPage != IntPtr.Zero)
+                PdfiumNative.FPDFText_ClosePage(textPage);
+        }
+
+        return newText.Any(c => !coverage.Contains(c));
+    }
+
+    internal static bool IsSubsetFontName(string baseName) =>
+        baseName.Length > 7 && baseName[6] == '+' && baseName.Take(6).All(char.IsUpper);
+
+    /// <summary>Maps an original font name to the closest standard-14 face (SDD §3.1 tier 2).</summary>
+    internal static string MapToStandardFont(string originalName)
+    {
+        var name = originalName.ToLowerInvariant();
+        var bold = name.Contains("bold");
+        var italic = name.Contains("italic") || name.Contains("oblique");
+
+        if (name.Contains("courier") || name.Contains("mono"))
+            return (bold, italic) switch
+            {
+                (true, true) => "Courier-BoldOblique",
+                (true, false) => "Courier-Bold",
+                (false, true) => "Courier-Oblique",
+                _ => "Courier",
+            };
+
+        if (name.Contains("times") || (name.Contains("serif") && !name.Contains("sans")))
+            return (bold, italic) switch
+            {
+                (true, true) => "Times-BoldItalic",
+                (true, false) => "Times-Bold",
+                (false, true) => "Times-Italic",
+                _ => "Times-Roman",
+            };
+
+        return (bold, italic) switch
+        {
+            (true, true) => "Helvetica-BoldOblique",
+            (true, false) => "Helvetica-Bold",
+            (false, true) => "Helvetica-Oblique",
+            _ => "Helvetica",
+        };
+    }
+
+    /// <summary>Test hook: runs the tier-2 substitution path unconditionally.</summary>
+    internal void ForceSubstituteForTest(PdfTextRun run, string newText)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, run.ObjectIndex);
+            SubstituteTextObject(obj, run.ObjectIndex, newText);
+            GenerateContent();
+        }
+    }
+
+    /// <summary>Replaces the text object with one using a standard font, preserving index, position, size, and color.</summary>
+    internal void SubstituteTextObject(IntPtr oldObj, int objectIndex, string newText)
+    {
+        PdfiumNative.FPDFTextObj_GetFontSize(oldObj, out var fontSize);
+        var oldFont = PdfiumNative.FPDFTextObj_GetFont(oldObj);
+        var originalName = oldFont != IntPtr.Zero ? ReadFontName(oldFont, useBaseName: false) : "";
+
+        var standardFont = PdfiumNative.FPDFText_LoadStandardFont(_document, MapToStandardFont(originalName));
+        if (standardFont == IntPtr.Zero)
+            throw new TextEditException(TextEditFailure.NoUsableFont, "No substitute font could be loaded.");
+
+        var newObj = PdfiumNative.FPDFPageObj_CreateTextObj(_document, standardFont, fontSize);
+        try
+        {
+            if (newObj == IntPtr.Zero)
+                throw new TextEditException(TextEditFailure.NoUsableFont, "Could not create replacement text.");
+            if (PdfiumNative.FPDFText_SetText(newObj, newText) == 0)
+                throw new TextEditException(TextEditFailure.NoUsableFont,
+                    "The substitute font could not render the new text.");
+
+            if (PdfiumNative.FPDFPageObj_GetMatrix(oldObj, out var matrix) != 0)
+                PdfiumNative.FPDFPageObj_SetMatrix(newObj, ref matrix);
+            if (PdfiumNative.FPDFPageObj_GetFillColor(oldObj, out var r, out var g, out var b, out var a) != 0)
+                PdfiumNative.FPDFPageObj_SetFillColor(newObj, r, g, b, a);
+
+            if (PdfiumNative.FPDFPage_RemoveObject(_handle, oldObj) == 0)
+                throw new InvalidOperationException("Could not remove the original text object.");
+            PdfiumNative.FPDFPageObj_Destroy(oldObj);
+
+            if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, newObj, (nuint)objectIndex) == 0)
+                throw new InvalidOperationException("Could not insert the replacement text object.");
+            newObj = IntPtr.Zero; // ownership transferred to the page
+        }
+        finally
+        {
+            if (newObj != IntPtr.Zero)
+                PdfiumNative.FPDFPageObj_Destroy(newObj);
+            PdfiumNative.FPDFFont_Close(standardFont);
         }
     }
 
@@ -271,13 +417,21 @@ internal sealed class PdfiumPage : IPdfPage
     private static string ReadFontFamily(IntPtr obj)
     {
         var font = PdfiumNative.FPDFTextObj_GetFont(obj);
-        if (font == IntPtr.Zero)
-            return "";
-        var lengthInBytes = PdfiumNative.FPDFFont_GetFamilyName(font, null, 0);
+        return font == IntPtr.Zero ? "" : ReadFontName(font, useBaseName: false);
+    }
+
+    private static string ReadFontName(IntPtr font, bool useBaseName)
+    {
+        var lengthInBytes = useBaseName
+            ? PdfiumNative.FPDFFont_GetBaseFontName(font, null, 0)
+            : PdfiumNative.FPDFFont_GetFamilyName(font, null, 0);
         if (lengthInBytes <= 1)
             return "";
         var buffer = new byte[lengthInBytes];
-        PdfiumNative.FPDFFont_GetFamilyName(font, buffer, lengthInBytes);
+        if (useBaseName)
+            PdfiumNative.FPDFFont_GetBaseFontName(font, buffer, lengthInBytes);
+        else
+            PdfiumNative.FPDFFont_GetFamilyName(font, buffer, lengthInBytes);
         return System.Text.Encoding.UTF8.GetString(buffer, 0, (int)lengthInBytes - 1);
     }
     public void SetFormFieldValue(PdfFormField field, string value) =>

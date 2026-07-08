@@ -155,6 +155,15 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+
+            <InfoBar
+                IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
+                Severity="Informational"
+                Message="This document's font isn't available, so a similar one was used."
+                IsClosable="True"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Center"
+                Margin="24" />
         </Grid>
     </Grid>
 </Window>

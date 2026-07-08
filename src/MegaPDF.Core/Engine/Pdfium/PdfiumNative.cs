@@ -68,6 +68,28 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFText_SetText(IntPtr textObject, [MarshalAs(UnmanagedType.LPWStr)] string text);
     [DllImport(Dll)] public static extern int FPDFPage_GenerateContent(IntPtr page);
 
+    // --- Font substitution (tier 2, SDD §3.1) ---
+
+    /// <summary>Buffer is UTF-8; returns bytes incl. NUL. Subset fonts carry an ABCDEF+ prefix.</summary>
+    [DllImport(Dll)] public static extern nuint FPDFFont_GetBaseFontName(IntPtr font, [Out] byte[]? buffer, nuint length);
+
+    [DllImport(Dll)] public static extern IntPtr FPDFText_LoadStandardFont(IntPtr document, [MarshalAs(UnmanagedType.LPUTF8Str)] string font);
+    [DllImport(Dll)] public static extern void FPDFFont_Close(IntPtr font);
+    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateTextObj(IntPtr document, IntPtr font, float fontSize);
+    [DllImport(Dll)] public static extern int FPDFPage_InsertObjectAtIndex(IntPtr page, IntPtr pageObject, nuint index);
+    [DllImport(Dll)] public static extern int FPDFPage_RemoveObject(IntPtr page, IntPtr pageObject);
+    [DllImport(Dll)] public static extern void FPDFPageObj_Destroy(IntPtr pageObject);
+    [DllImport(Dll)] public static extern int FPDFPageObj_GetMatrix(IntPtr pageObject, out FS_MATRIX matrix);
+    [DllImport(Dll)] public static extern int FPDFPageObj_SetMatrix(IntPtr pageObject, ref FS_MATRIX matrix);
+    [DllImport(Dll)] public static extern int FPDFPageObj_GetFillColor(IntPtr pageObject, out uint r, out uint g, out uint b, out uint a);
+    [DllImport(Dll)] public static extern int FPDFPageObj_SetFillColor(IntPtr pageObject, uint r, uint g, uint b, uint a);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FS_MATRIX
+    {
+        public float A, B, C, D, E, F;
+    }
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int WriteBlockDelegate(IntPtr self, IntPtr data, uint size);
 
