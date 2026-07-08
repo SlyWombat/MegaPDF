@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
         ViewModel.LoadSignatures();
         ViewModel.LoadRecentDocuments();
+        ApplyTheme();
         AppWindow.Closing += OnAppWindowClosing;
 
         // Delete removes the selected signature (SDD §3.3).
@@ -535,6 +536,52 @@ public sealed partial class MainWindow : Window
     {
         if (sender is HyperlinkButton { DataContext: RecentDocument recent })
             await ViewModel.OpenDocumentAsync(recent.Path);
+    }
+
+    // --- Settings flyout ---
+
+    private bool _settingsLoading;
+
+    private void OnSettingsOpening(object sender, object e)
+    {
+        _settingsLoading = true;
+        MarkStyleChoice.SelectedIndex = (int)ViewModel.MarkStyle;
+        ThemeChoice.SelectedIndex = ViewModel.ThemeSetting switch { "Light" => 1, "Dark" => 2, _ => 0 };
+        ReopenToggle.IsOn = ViewModel.ReopenLastFile;
+        _settingsLoading = false;
+    }
+
+    private void OnMarkStyleChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_settingsLoading && MarkStyleChoice.SelectedIndex >= 0)
+            ViewModel.MarkStyle = (Core.Engine.CheckMarkStyle)MarkStyleChoice.SelectedIndex;
+    }
+
+    private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settingsLoading || ThemeChoice.SelectedIndex < 0)
+            return;
+        ViewModel.ThemeSetting = ThemeChoice.SelectedIndex switch { 1 => "Light", 2 => "Dark", _ => "" };
+        ApplyTheme();
+    }
+
+    private void OnReopenToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_settingsLoading)
+            ViewModel.ReopenLastFile = ReopenToggle.IsOn;
+    }
+
+    public void ApplyTheme()
+    {
+        if (Content is FrameworkElement root)
+        {
+            root.RequestedTheme = ViewModel.ThemeSetting switch
+            {
+                "Light" => ElementTheme.Light,
+                "Dark" => ElementTheme.Dark,
+                _ => ElementTheme.Default,
+            };
+        }
     }
 
     // --- Signature library & placement (SDD §3.3) ---

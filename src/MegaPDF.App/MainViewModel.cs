@@ -44,6 +44,29 @@ public partial class MainViewModel(Window window) : ObservableObject
     private readonly UndoStack _undoStack = new();
     private readonly RecoveryJournal _journal = new();
     private readonly RecentFiles _recentFiles = new();
+    private readonly AppSettings _settings = new();
+
+    // --- Settings (SDD §2.2 flyout; deliberately tiny) ---
+
+    public CheckMarkStyle MarkStyle
+    {
+        get => _settings.MarkStyle;
+        set => _settings.MarkStyle = value;
+    }
+
+    public string ThemeSetting
+    {
+        get => _settings.Theme;
+        set => _settings.Theme = value;
+    }
+
+    public bool ReopenLastFile
+    {
+        get => _settings.ReopenLastFile;
+        set => _settings.ReopenLastFile = value;
+    }
+
+    public string? MostRecentDocument => _recentFiles.All.Count > 0 ? _recentFiles.All[0] : null;
     private IPdfDocument? _document;
     private int _openGeneration;
 
@@ -342,7 +365,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     {
         if (_document is null)
             return;
-        await DoEditAsync(new AddMarkOperation(_document, pageIndex, squareBounds));
+        await DoEditAsync(new AddMarkOperation(_document, pageIndex, squareBounds, MarkStyle));
     }
 
     public async Task MoveSignatureAsync(int pageIndex, string annotationId, PdfRect oldBounds, PdfRect newBounds)
@@ -359,7 +382,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
         IPageEditOperation op = annotationId.StartsWith("sig:", StringComparison.Ordinal)
             ? new RemoveSignatureOperation(_document, pageIndex, annotationId, bounds)
-            : new RemoveMarkOperation(_document, pageIndex, annotationId, bounds);
+            : new RemoveMarkOperation(_document, pageIndex, annotationId, bounds, MarkStyle);
         await DoEditAsync(op);
     }
 

@@ -48,7 +48,8 @@ public static class JournalReplayer
                     break;
 
                 case AddMarkEntry mark:
-                    page.AddCheckMarkStamp(new PdfRect(mark.X, mark.Y, mark.Width, mark.Height), mark.StampId);
+                    Enum.TryParse<CheckMarkStyle>(mark.Style, out var style);
+                    page.AddCheckMarkStamp(new PdfRect(mark.X, mark.Y, mark.Width, mark.Height), mark.StampId, style);
                     applied++;
                     break;
 

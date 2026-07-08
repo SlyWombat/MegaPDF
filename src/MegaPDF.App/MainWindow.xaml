@@ -147,8 +147,29 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Button Content="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" ToolTipService.ToolTip="Settings">
                     <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedRight">
-                            <TextBlock Text="Settings coming soon." />
+                        <Flyout Placement="BottomEdgeAlignedRight" Opening="OnSettingsOpening">
+                            <StackPanel Spacing="14" MinWidth="230">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Checkbox mark" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <RadioButtons x:Name="MarkStyleChoice" SelectionChanged="OnMarkStyleChanged">
+                                        <x:String>✗  Cross</x:String>
+                                        <x:String>✓  Check</x:String>
+                                        <x:String>■  Filled square</x:String>
+                                    </RadioButtons>
+                                </StackPanel>
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="Theme" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <RadioButtons x:Name="ThemeChoice" SelectionChanged="OnThemeChanged">
+                                        <x:String>Use system setting</x:String>
+                                        <x:String>Light</x:String>
+                                        <x:String>Dark</x:String>
+                                    </RadioButtons>
+                                </StackPanel>
+                                <ToggleSwitch
+                                    x:Name="ReopenToggle"
+                                    Header="Reopen last file at startup"
+                                    Toggled="OnReopenToggled" />
+                            </StackPanel>
                         </Flyout>
                     </Button.Flyout>
                 </Button>

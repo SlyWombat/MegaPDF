@@ -33,7 +33,7 @@ public sealed record FormTextEntry(int PageIndex, string FieldName, string NewVa
 
 public sealed record CheckToggleEntry(int PageIndex, string FieldName) : JournalEntry(PageIndex);
 
-public sealed record AddMarkEntry(int PageIndex, double X, double Y, double Width, double Height, string StampId) : JournalEntry(PageIndex);
+public sealed record AddMarkEntry(int PageIndex, double X, double Y, double Width, double Height, string StampId, string Style = "Cross") : JournalEntry(PageIndex);
 
 public sealed record RemoveStampEntry(int PageIndex, string StampId) : JournalEntry(PageIndex);
 

@@ -47,11 +47,11 @@ public interface IPdfPage : IDisposable
     IReadOnlyList<PdfRect> DetectCheckboxSquares();
 
     /// <summary>
-    /// Places the ✗/✓ mark stamp over a drawn square; returns the stamp id (SDD §3.2).
+    /// Places the mark stamp over a drawn square; returns the stamp id (SDD §3.2).
     /// Pass <paramref name="stampId"/> to restore a previously removed stamp under its
     /// original id — ids must stay stable across undo/redo cycles.
     /// </summary>
-    string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null);
+    string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null, CheckMarkStyle style = CheckMarkStyle.Cross);
 
     /// <summary>Tiered body-text edit — see SDD §3.1. Throws <see cref="TextEditException"/> per tier rules.</summary>
     TextEditOutcome SetTextRunText(PdfTextRun run, string newText);
@@ -97,6 +97,14 @@ public sealed record StampImage(byte[] Bgra, int PixelWidth, int PixelHeight);
 
 /// <summary>A MegaPDF-placed stamp: id (mark:/sig: prefixed) and bounds in top-left page space.</summary>
 public sealed record StampInfo(string Id, PdfRect Bounds);
+
+/// <summary>Check-mark styles (SDD §3.2 + Appendix B #3: ✗ default, ✓ and regional ■).</summary>
+public enum CheckMarkStyle
+{
+    Cross,
+    Check,
+    FilledSquare,
+}
 
 /// <summary>Opaque handle to a text object removed from its page but kept alive for undo.</summary>
 public sealed class DetachedTextRun

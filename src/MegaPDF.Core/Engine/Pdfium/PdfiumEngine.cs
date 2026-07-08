@@ -277,7 +277,7 @@ internal sealed class PdfiumPage : IPdfPage
 
     private const string StampIdKey = "MegaPDF_Id";
 
-    public string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null)
+    public string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null, CheckMarkStyle style = CheckMarkStyle.Cross)
     {
         ThrowIfDisposed();
         var id = stampId ?? "mark:" + Guid.NewGuid().ToString("N");
@@ -299,14 +299,41 @@ internal sealed class PdfiumPage : IPdfPage
                 var rect = new PdfiumNative.FS_RECTF { Left = left, Top = top, Right = right, Bottom = bottom };
                 PdfiumNative.FPDFAnnot_SetRect(annot, ref rect);
 
-                // The ✗ mark: two strokes across the square (default style, SDD §3.2).
-                var path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
-                PdfiumNative.FPDFPath_LineTo(path, right, top);
-                PdfiumNative.FPDFPath_MoveTo(path, left, top);
-                PdfiumNative.FPDFPath_LineTo(path, right, bottom);
+                // Mark styles per SDD §3.2 / Appendix B #3: ✗ (default), ✓, filled ■.
+                IntPtr path;
+                var fill = 0;
+                var stroke = 1;
+                switch (style)
+                {
+                    case CheckMarkStyle.Check:
+                    {
+                        var width = right - left;
+                        var height = top - bottom;
+                        path = PdfiumNative.FPDFPageObj_CreateNewPath(left, (float)(bottom + height * 0.45));
+                        PdfiumNative.FPDFPath_LineTo(path, (float)(left + width * 0.38), bottom);
+                        PdfiumNative.FPDFPath_LineTo(path, right, top);
+                        break;
+                    }
+                    case CheckMarkStyle.FilledSquare:
+                        path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
+                        PdfiumNative.FPDFPath_LineTo(path, right, bottom);
+                        PdfiumNative.FPDFPath_LineTo(path, right, top);
+                        PdfiumNative.FPDFPath_LineTo(path, left, top);
+                        PdfiumNative.FPDFPath_LineTo(path, left, bottom);
+                        PdfiumNative.FPDFPageObj_SetFillColor(path, 0x20, 0x20, 0x20, 0xFF);
+                        fill = 1; // alternate fill mode
+                        stroke = 0;
+                        break;
+                    default: // Cross
+                        path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
+                        PdfiumNative.FPDFPath_LineTo(path, right, top);
+                        PdfiumNative.FPDFPath_MoveTo(path, left, top);
+                        PdfiumNative.FPDFPath_LineTo(path, right, bottom);
+                        break;
+                }
                 PdfiumNative.FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
                 PdfiumNative.FPDFPageObj_SetStrokeWidth(path, (float)Math.Max(1.2, squareBounds.Width * 0.11));
-                PdfiumNative.FPDFPath_SetDrawMode(path, 0, stroke: 1);
+                PdfiumNative.FPDFPath_SetDrawMode(path, fill, stroke);
 
                 if (PdfiumNative.FPDFAnnot_AppendObject(annot, path) == 0)
                 {

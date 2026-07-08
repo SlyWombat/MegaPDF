@@ -7,7 +7,7 @@ namespace MegaPDF.Core.Editing;
 /// Reversible placement of a ✗ mark on a drawn (non-form) checkbox square (SDD §3.2).
 /// Re-applying after undo creates a fresh annotation, so the id is re-captured each time.
 /// </summary>
-public sealed class AddMarkOperation(IPdfDocument document, int pageIndex, PdfRect squareBounds) : IPageEditOperation
+public sealed class AddMarkOperation(IPdfDocument document, int pageIndex, PdfRect squareBounds, CheckMarkStyle style = CheckMarkStyle.Cross) : IPageEditOperation
 {
     public int PageIndex { get; } = pageIndex;
 
@@ -17,7 +17,7 @@ public sealed class AddMarkOperation(IPdfDocument document, int pageIndex, PdfRe
     {
         using var page = document.GetPage(PageIndex);
         // Reusing the id across undo/redo keeps other operations' references valid.
-        CurrentId = page.AddCheckMarkStamp(squareBounds, CurrentId);
+        CurrentId = page.AddCheckMarkStamp(squareBounds, CurrentId, style);
     }
 
     public void Revert()
@@ -30,11 +30,11 @@ public sealed class AddMarkOperation(IPdfDocument document, int pageIndex, PdfRe
 
     public JournalEntry ToJournalEntry(bool inverse) => inverse
         ? new RemoveStampEntry(PageIndex, CurrentId!)
-        : new AddMarkEntry(PageIndex, squareBounds.X, squareBounds.Y, squareBounds.Width, squareBounds.Height, CurrentId!);
+        : new AddMarkEntry(PageIndex, squareBounds.X, squareBounds.Y, squareBounds.Width, squareBounds.Height, CurrentId!, style.ToString());
 }
 
 /// <summary>Reversible removal of a previously placed mark (clicking a checked box unchecks it).</summary>
-public sealed class RemoveMarkOperation(IPdfDocument document, int pageIndex, string annotationId, PdfRect markBounds) : IPageEditOperation
+public sealed class RemoveMarkOperation(IPdfDocument document, int pageIndex, string annotationId, PdfRect markBounds, CheckMarkStyle style = CheckMarkStyle.Cross) : IPageEditOperation
 {
     public int PageIndex { get; } = pageIndex;
 
@@ -49,7 +49,7 @@ public sealed class RemoveMarkOperation(IPdfDocument document, int pageIndex, st
     public void Revert()
     {
         using var page = document.GetPage(PageIndex);
-        page.AddCheckMarkStamp(EquivalentSquare, annotationId);
+        page.AddCheckMarkStamp(EquivalentSquare, annotationId, style);
     }
 
     /// <summary>
@@ -67,6 +67,6 @@ public sealed class RemoveMarkOperation(IPdfDocument document, int pageIndex, st
     }
 
     public JournalEntry ToJournalEntry(bool inverse) => inverse
-        ? new AddMarkEntry(PageIndex, EquivalentSquare.X, EquivalentSquare.Y, EquivalentSquare.Width, EquivalentSquare.Height, annotationId)
+        ? new AddMarkEntry(PageIndex, EquivalentSquare.X, EquivalentSquare.Y, EquivalentSquare.Width, EquivalentSquare.Height, annotationId, style.ToString())
         : new RemoveStampEntry(PageIndex, annotationId);
 }

@@ -56,5 +56,13 @@ public partial class App : Application
         }
 
         await mainWindow.OfferCrashRecoveryAsync();
+
+        // "Reopen last file" setting (off by default).
+        if (!mainWindow.ViewModel.IsDocumentOpen
+            && mainWindow.ViewModel.ReopenLastFile
+            && mainWindow.ViewModel.MostRecentDocument is { } lastDocument)
+        {
+            await mainWindow.ViewModel.OpenDocumentAsync(lastDocument);
+        }
     }
 }
