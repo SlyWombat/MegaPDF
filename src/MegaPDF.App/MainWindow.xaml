@@ -138,20 +138,20 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                <Button Command="{x:Bind ViewModel.ZoomOutCommand}" Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom out" />
+                <Button Command="{x:Bind ViewModel.ZoomOutCommand}" Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom out" AutomationProperties.Name="Zoom out" />
                 <TextBlock
                     Text="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}"
                     VerticalAlignment="Center"
                     MinWidth="42"
                     TextAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom in" />
+                <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom in" AutomationProperties.Name="Zoom in" />
                 <TextBlock
                     Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
                     VerticalAlignment="Center"
                     Margin="8,0"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Button Content="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" ToolTipService.ToolTip="Settings">
+                <Button Content="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings">
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight" Opening="OnSettingsOpening">
                             <StackPanel Spacing="14" MinWidth="230">
@@ -175,6 +175,10 @@
                                     x:Name="ReopenToggle"
                                     Header="Reopen last file at startup"
                                     Toggled="OnReopenToggled" />
+                                <StackPanel Spacing="2" Margin="0,4,0,0">
+                                    <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock Text="Free &amp; open source · Apache-2.0" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                </StackPanel>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
@@ -229,7 +233,8 @@
                 Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}"
                 HorizontalScrollBarVisibility="Auto"
                 VerticalScrollBarVisibility="Auto"
-                ViewChanged="OnPagesScrollViewChanged">
+                ViewChanged="OnPagesScrollViewChanged"
+                PointerWheelChanged="OnPagesPointerWheel">
                 <ItemsControl ItemsSource="{x:Bind ViewModel.Pages}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

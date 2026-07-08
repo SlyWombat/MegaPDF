@@ -40,6 +40,26 @@ Get-ChildItem (Join-Path $repoRoot "artifacts") -Recurse -Filter *.msix | ForEac
     # Ship our installer next to the package (the generated Add-AppDevPackage.ps1
     # trips over legacy developer-license acquisition on Windows 11).
     Copy-Item (Join-Path $PSScriptRoot "Install-MegaPDF.ps1") $_.DirectoryName -Force
+    Copy-Item (Join-Path $repoRoot "TESTING.md") $_.DirectoryName -Force
     Write-Host "Installer: $($_.FullName)"
-    Write-Host "Install with: powershell -ExecutionPolicy Bypass -File `"$($_.DirectoryName)\Install-MegaPDF.ps1`""
+}
+
+# Distributable zip of the newest package. ONLY our four files — the generated
+# Install.ps1/Add-AppDevPackage.ps1 fail on Windows 11 and must not reach testers.
+$newest = Get-ChildItem (Join-Path $repoRoot "artifacts") -Recurse -Filter *.msix |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($newest) {
+    $version = ($newest.BaseName -replace '^MegaPDF\.App_', '') -replace '_x64$', ''
+    $zip = Join-Path $repoRoot "artifacts\MegaPDF-$version-x64.zip"
+    if (Test-Path $zip) { Remove-Item $zip -Confirm:$false }
+    $files = @(
+        $newest.FullName,
+        (Join-Path $newest.DirectoryName ($newest.BaseName + ".cer")),
+        (Join-Path $newest.DirectoryName "Install-MegaPDF.ps1"),
+        (Join-Path $newest.DirectoryName "TESTING.md")
+    )
+    Compress-Archive -Path $files -DestinationPath $zip
+    Write-Host ""
+    Write-Host "Distributable: $zip"
+    Write-Host "Hand-off: unzip, then right-click Install-MegaPDF.ps1 > Run with PowerShell."
 }

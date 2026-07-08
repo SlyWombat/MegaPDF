@@ -420,6 +420,20 @@ public sealed partial class MainWindow : Window
         _hoverCanvas = canvas;
     }
 
+    private async void OnPagesPointerWheel(object sender, PointerRoutedEventArgs e)
+    {
+        // Ctrl+wheel zooms — the idiom every tester tries first.
+        var ctrl = (e.KeyModifiers & Windows.System.VirtualKeyModifiers.Control) != 0;
+        if (!ctrl)
+            return;
+        e.Handled = true;
+        var delta = e.GetCurrentPoint(PagesScroll).Properties.MouseWheelDelta;
+        if (delta > 0 && ViewModel.ZoomInCommand.CanExecute(null))
+            await ViewModel.ZoomInCommand.ExecuteAsync(null);
+        else if (delta < 0 && ViewModel.ZoomOutCommand.CanExecute(null))
+            await ViewModel.ZoomOutCommand.ExecuteAsync(null);
+    }
+
     // --- Scroll-tracking page indicator ---
 
     private void OnPagesScrollViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
@@ -548,6 +562,8 @@ public sealed partial class MainWindow : Window
         MarkStyleChoice.SelectedIndex = (int)ViewModel.MarkStyle;
         ThemeChoice.SelectedIndex = ViewModel.ThemeSetting switch { "Light" => 1, "Dark" => 2, _ => 0 };
         ReopenToggle.IsOn = ViewModel.ReopenLastFile;
+        var version = typeof(MainWindow).Assembly.GetName().Version;
+        AboutVersion.Text = $"MegaPDF {version?.ToString(3) ?? "dev"}";
         _settingsLoading = false;
     }
 
