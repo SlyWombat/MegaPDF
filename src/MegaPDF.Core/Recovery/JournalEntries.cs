@@ -10,6 +10,8 @@ namespace MegaPDF.Core.Recovery;
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$op")]
 [JsonDerivedType(typeof(TextEditEntry), "text")]
+[JsonDerivedType(typeof(TextDeleteEntry), "textDelete")]
+[JsonDerivedType(typeof(TextRestoreEntry), "textRestore")]
 [JsonDerivedType(typeof(FormTextEntry), "formText")]
 [JsonDerivedType(typeof(CheckToggleEntry), "checkToggle")]
 [JsonDerivedType(typeof(AddMarkEntry), "addMark")]
@@ -18,6 +20,13 @@ namespace MegaPDF.Core.Recovery;
 public abstract record JournalEntry(int PageIndex);
 
 public sealed record TextEditEntry(int PageIndex, int ObjectIndex, string NewText) : JournalEntry(PageIndex);
+
+public sealed record TextDeleteEntry(int PageIndex, int ObjectIndex) : JournalEntry(PageIndex);
+
+/// <summary>Undo-of-delete for replay: recreated with a standard font (best effort).</summary>
+public sealed record TextRestoreEntry(
+    int PageIndex, int ObjectIndex, string Text, string FontName, double FontSize,
+    double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
 
 public sealed record FormTextEntry(int PageIndex, string FieldName, string NewValue) : JournalEntry(PageIndex);
 

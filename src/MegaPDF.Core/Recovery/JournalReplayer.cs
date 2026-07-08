@@ -20,6 +20,17 @@ public static class JournalReplayer
                     applied++;
                     break;
 
+                case TextDeleteEntry delete:
+                    page.DetachTextRun(new PdfTextRun(delete.ObjectIndex, "", default, "", 0));
+                    applied++;
+                    break;
+
+                case TextRestoreEntry restore:
+                    page.InsertTextRun(restore.ObjectIndex, restore.Text, restore.FontName, restore.FontSize,
+                        new PdfRect(restore.X, restore.Y, restore.Width, restore.Height));
+                    applied++;
+                    break;
+
                 case FormTextEntry formText:
                     if (FindField(page, formText.FieldName) is { } field)
                     {

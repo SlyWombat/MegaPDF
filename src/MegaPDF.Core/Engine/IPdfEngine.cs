@@ -56,6 +56,21 @@ public interface IPdfPage : IDisposable
     /// <summary>Tiered body-text edit — see SDD §3.1. Throws <see cref="TextEditException"/> per tier rules.</summary>
     TextEditOutcome SetTextRunText(PdfTextRun run, string newText);
 
+    /// <summary>
+    /// Removes a text run from the page, keeping the native object alive so
+    /// <see cref="RestoreTextRun"/> can put it back byte-identical (undo).
+    /// </summary>
+    DetachedTextRun DetachTextRun(PdfTextRun run);
+
+    /// <summary>Re-inserts a detached run at its original object index.</summary>
+    void RestoreTextRun(DetachedTextRun detached, int objectIndex);
+
+    /// <summary>
+    /// Recreates a deleted run from recorded properties (crash-recovery replay only —
+    /// uses the closest standard font, not the original).
+    /// </summary>
+    void InsertTextRun(int objectIndex, string text, string fontName, double fontSize, PdfRect bounds);
+
     void SetFormFieldValue(PdfFormField field, string value);
     void ToggleCheckbox(PdfFormField field);
 
@@ -79,6 +94,13 @@ public sealed record StampImage(byte[] Bgra, int PixelWidth, int PixelHeight);
 
 /// <summary>A MegaPDF-placed stamp: id (mark:/sig: prefixed) and bounds in top-left page space.</summary>
 public sealed record StampInfo(string Id, PdfRect Bounds);
+
+/// <summary>Opaque handle to a text object removed from its page but kept alive for undo.</summary>
+public sealed class DetachedTextRun
+{
+    internal DetachedTextRun(IntPtr handle) => Handle = handle;
+    internal IntPtr Handle { get; }
+}
 
 public enum PageHitKind
 {

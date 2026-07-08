@@ -12,6 +12,7 @@ namespace MegaPDF.App;
 public sealed partial class MainWindow : Window
 {
     private TextBox? _activeEditor;
+    private Func<Task>? _activeEditorCommit;
 
     public MainViewModel ViewModel { get; }
 
@@ -61,9 +62,13 @@ public sealed partial class MainWindow : Window
         if (sender is not Grid pageGrid || pageGrid.DataContext is not PageView pageView)
             return;
 
-        // A tap while an editor is open just commits it (via LostFocus); don't open another.
-        if (_activeEditor is not null)
+        // A tap outside an open editor commits it. The page canvas isn't focusable,
+        // so LostFocus alone would never fire for clicks on empty page space.
+        if (_activeEditorCommit is { } pendingCommit)
+        {
+            await pendingCommit();
             return;
+        }
 
         var position = e.GetPosition(pageGrid);
         var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
@@ -103,9 +108,10 @@ public sealed partial class MainWindow : Window
             case PageHitKind.TextRun:
             {
                 var run = hit.TextRun!;
+                // Clearing all text means "remove this text" (undoable).
                 ShowInlineEditor(pageGrid, run.Bounds, run.Text, run.FontSize,
-                    newText => string.IsNullOrEmpty(newText)
-                        ? Task.CompletedTask
+                    newText => string.IsNullOrWhiteSpace(newText)
+                        ? ViewModel.DeleteTextAsync(pageView.Index, run)
                         : ViewModel.ApplyTextEditAsync(pageView.Index, run, newText));
                 break;
             }
@@ -135,7 +141,9 @@ public sealed partial class MainWindow : Window
             await commit(newText);
         }
 
-        editor.KeyDown += async (_, args) =>
+        // PreviewKeyDown, not KeyDown: TextBox handles Escape internally (reverting
+        // its text) and marks it handled, so KeyDown never sees it.
+        editor.PreviewKeyDown += async (_, args) =>
         {
             if (args.Key == VirtualKey.Enter)
             {
@@ -152,6 +160,7 @@ public sealed partial class MainWindow : Window
 
         pageGrid.Children.Add(editor);
         _activeEditor = editor;
+        _activeEditorCommit = CommitAsync;
         editor.Focus(FocusState.Programmatic);
         editor.SelectAll();
     }
@@ -160,7 +169,10 @@ public sealed partial class MainWindow : Window
     {
         pageGrid.Children.Remove(editor);
         if (_activeEditor == editor)
+        {
             _activeEditor = null;
+            _activeEditorCommit = null;
+        }
     }
 
     // --- Hover affordances (SDD §2.2: the document teaches what's clickable) ---

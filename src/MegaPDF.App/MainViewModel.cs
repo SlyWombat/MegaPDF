@@ -464,6 +464,14 @@ public partial class MainViewModel(Window window) : ObservableObject
         IsFontNoticeOpen = op.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont;
     }
 
+    /// <summary>Removes a text run entirely (the user cleared it in the inline editor).</summary>
+    public async Task DeleteTextAsync(int pageIndex, PdfTextRun run)
+    {
+        if (_document is null)
+            return;
+        await DoEditAsync(new DeleteTextOperation(_document, pageIndex, run));
+    }
+
     [ObservableProperty]
     private bool _isFontNoticeOpen;
 

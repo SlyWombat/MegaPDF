@@ -494,6 +494,67 @@ internal sealed class PdfiumPage : IPdfPage
             throw new InvalidOperationException("PDFium failed to regenerate the page content stream.");
     }
 
+    public DetachedTextRun DetachTextRun(PdfTextRun run)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, run.ObjectIndex);
+            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
+                throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
+            if (PdfiumNative.FPDFPage_RemoveObject(_handle, obj) == 0)
+                throw new InvalidOperationException("Could not remove the text.");
+            GenerateContent();
+            // Ownership transferred to us; kept alive for a possible undo.
+            return new DetachedTextRun(obj);
+        }
+    }
+
+    public void RestoreTextRun(DetachedTextRun detached, int objectIndex)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, detached.Handle, (nuint)objectIndex) == 0)
+                throw new InvalidOperationException("Could not restore the text.");
+            GenerateContent();
+        }
+    }
+
+    public void InsertTextRun(int objectIndex, string text, string fontName, double fontSize, PdfRect bounds)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var font = PdfiumNative.FPDFText_LoadStandardFont(_document, MapToStandardFont(fontName));
+            if (font == IntPtr.Zero)
+                throw new InvalidOperationException("No substitute font could be loaded.");
+            var obj = PdfiumNative.FPDFPageObj_CreateTextObj(_document, font, (float)fontSize);
+            try
+            {
+                if (obj == IntPtr.Zero || PdfiumNative.FPDFText_SetText(obj, text) == 0)
+                    throw new InvalidOperationException("Could not recreate the text.");
+                var matrix = new PdfiumNative.FS_MATRIX
+                {
+                    A = 1, B = 0, C = 0, D = 1,
+                    E = (float)bounds.X,
+                    F = (float)(Height - bounds.Bottom),
+                };
+                PdfiumNative.FPDFPageObj_SetMatrix(obj, ref matrix);
+                if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, obj, (nuint)objectIndex) == 0)
+                    throw new InvalidOperationException("Could not insert the recreated text.");
+                obj = IntPtr.Zero;
+                GenerateContent();
+            }
+            finally
+            {
+                if (obj != IntPtr.Zero)
+                    PdfiumNative.FPDFPageObj_Destroy(obj);
+                PdfiumNative.FPDFFont_Close(font);
+            }
+        }
+    }
+
     /// <summary>True when the object's font is a subset and the new text needs glyphs the document never used.</summary>
     private bool NeedsFontSubstitution(IntPtr obj, string newText)
     {
