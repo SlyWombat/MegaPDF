@@ -641,6 +641,112 @@ public sealed partial class MainWindow : Window
         await ViewModel.AddSignatureFromImageAsync(image, input.Text.Trim());
     }
 
+    /// <summary>
+    /// Freehand signature drawing (SDD §3.3). WinUI 3 has no InkCanvas, so this is a
+    /// pointer-event stroke canvas: each press starts a rounded polyline, moves extend
+    /// it, release ends it. Works with mouse, touch, and pen.
+    /// </summary>
+    private async void OnDrawSignatureClicked(object sender, RoutedEventArgs e)
+    {
+        SignaturesFlyout.Hide();
+
+        var strokes = new Canvas();
+        var drawHost = new Grid
+        {
+            Width = 460,
+            Height = 180,
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White),
+            CornerRadius = new CornerRadius(4),
+        };
+        drawHost.Children.Add(strokes);
+
+        Microsoft.UI.Xaml.Shapes.Polyline? currentStroke = null;
+        drawHost.PointerPressed += (_, args) =>
+        {
+            drawHost.CapturePointer(args.Pointer);
+            currentStroke = new Microsoft.UI.Xaml.Shapes.Polyline
+            {
+                Stroke = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
+                StrokeThickness = 3,
+                StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Round,
+                StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
+                StrokeEndLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
+            };
+            currentStroke.Points.Add(args.GetCurrentPoint(drawHost).Position);
+            strokes.Children.Add(currentStroke);
+        };
+        drawHost.PointerMoved += (_, args) =>
+        {
+            if (currentStroke is null)
+                return;
+            var point = args.GetCurrentPoint(drawHost).Position;
+            var last = currentStroke.Points[^1];
+            // Light smoothing: skip sub-pixel jitter.
+            if (Math.Abs(point.X - last.X) + Math.Abs(point.Y - last.Y) >= 1.5)
+                currentStroke.Points.Add(point);
+        };
+        drawHost.PointerReleased += (_, args) =>
+        {
+            drawHost.ReleasePointerCapture(args.Pointer);
+            currentStroke = null;
+        };
+        drawHost.PointerCanceled += (_, _) => currentStroke = null;
+
+        var nameInput = new TextBox { PlaceholderText = "Signature name", Text = "My signature" };
+        var clear = new Button { Content = "Clear" };
+        clear.Click += (_, _) => strokes.Children.Clear();
+
+        var content = new StackPanel { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = "Draw with your mouse, finger, or pen.",
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+        });
+        content.Children.Add(drawHost);
+        content.Children.Add(clear);
+        content.Children.Add(nameInput);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Draw your signature",
+            Content = content,
+            PrimaryButtonText = "Add",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+
+        SignatureImage? captured = null;
+        dialog.PrimaryButtonClick += async (_, args) =>
+        {
+            if (strokes.Children.Count == 0)
+            {
+                args.Cancel = true; // nothing drawn yet
+                return;
+            }
+            // Capture while the dialog (and canvas) are still in the visual tree.
+            var deferral = args.GetDeferral();
+            try
+            {
+                var target = new Microsoft.UI.Xaml.Media.Imaging.RenderTargetBitmap();
+                await target.RenderAsync(drawHost);
+                var buffer = await target.GetPixelsAsync();
+                captured = SignatureImageProcessor.Clean(
+                    new SignatureImage(buffer.ToArray(), target.PixelWidth, target.PixelHeight));
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary || captured is null)
+            return;
+
+        var name = string.IsNullOrWhiteSpace(nameInput.Text) ? "My signature" : nameInput.Text.Trim();
+        await ViewModel.AddSignatureFromImageAsync(captured, name);
+    }
+
     /// <summary>Renders the offscreen Segoe Script TextBlock to BGRA pixels.</summary>
     private async Task<SignatureImage> RenderTypedSignatureAsync(string text)
     {

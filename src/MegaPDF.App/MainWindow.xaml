@@ -125,6 +125,12 @@
                                         <TextBlock Text="Type signature…" />
                                     </StackPanel>
                                 </Button>
+                                <Button Click="OnDrawSignatureClicked" HorizontalAlignment="Stretch">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon Glyph="&#xEE56;" FontSize="14" />
+                                        <TextBlock Text="Draw signature…" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>

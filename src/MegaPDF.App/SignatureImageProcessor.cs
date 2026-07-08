@@ -22,9 +22,14 @@ public static class SignatureImageProcessor
             BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight, new BitmapTransform(),
             ExifOrientationMode.RespectExifOrientation, ColorManagementMode.DoNotColorManage);
         var pixels = data.DetachPixelData();
+        return Clean(new SignatureImage(pixels, (int)decoder.PixelWidth, (int)decoder.PixelHeight));
+    }
 
-        RemoveWhiteBackground(pixels);
-        return Trim(pixels, (int)decoder.PixelWidth, (int)decoder.PixelHeight);
+    /// <summary>White background → transparent, then trim to the ink's bounding box.</summary>
+    public static SignatureImage Clean(SignatureImage image)
+    {
+        RemoveWhiteBackground(image.Bgra);
+        return Trim(image.Bgra, image.Width, image.Height);
     }
 
     public static async Task<SignatureImage> LoadPngAsync(string path)
