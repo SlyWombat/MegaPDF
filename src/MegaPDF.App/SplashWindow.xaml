@@ -4,6 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Grid>
-        <Image Source="Assets/SplashScreen.png" Stretch="UniformToFill" />
+        <Image Source="Assets/SplashScreen.scale-200.png" Stretch="UniformToFill" />
     </Grid>
 </Window>

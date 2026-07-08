@@ -15,9 +15,12 @@
     <UseWinUI>true</UseWinUI>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Unpackaged during development; MSIX packaging project comes with the deployment work (SDD §5). -->
-    <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Unpackaged by default for development. Build the MSIX (SDD §5) with:
+         dotnet build -p:Platform=x64 -p:WindowsPackageType=MSIX -p:AppxPackageSigningEnabled=false
+         Package.appxmanifest declares the .pdf association and the full tile/icon set. -->
+    <WindowsPackageType Condition="'$(WindowsPackageType)' == ''">None</WindowsPackageType>
+    <WindowsAppSDKSelfContained Condition="'$(WindowsPackageType)' == 'None'">true</WindowsAppSDKSelfContained>
+    <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">false</AppxPackageSigningEnabled>
     <!-- Use the Windows App SDK's self-contained MSIX/PRI build tasks instead of the
          Visual Studio-installed ones, so `dotnet build` works without VS present. -->
     <EnableMsixTooling>true</EnableMsixTooling>
