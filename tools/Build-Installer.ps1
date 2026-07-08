@@ -36,5 +36,10 @@ dotnet build (Join-Path $repoRoot "src\MegaPDF.App\MegaPDF.App.csproj") `
 
 if ($LASTEXITCODE -ne 0) { throw "Package build failed." }
 
-Get-ChildItem (Join-Path $repoRoot "artifacts") -Recurse -Filter *.msix |
-    ForEach-Object { Write-Host "Installer: $($_.FullName)" }
+Get-ChildItem (Join-Path $repoRoot "artifacts") -Recurse -Filter *.msix | ForEach-Object {
+    # Ship our installer next to the package (the generated Add-AppDevPackage.ps1
+    # trips over legacy developer-license acquisition on Windows 11).
+    Copy-Item (Join-Path $PSScriptRoot "Install-MegaPDF.ps1") $_.DirectoryName -Force
+    Write-Host "Installer: $($_.FullName)"
+    Write-Host "Install with: powershell -ExecutionPolicy Bypass -File `"$($_.DirectoryName)\Install-MegaPDF.ps1`""
+}
