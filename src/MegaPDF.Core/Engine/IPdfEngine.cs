@@ -40,6 +40,15 @@ public interface IPdfPage : IDisposable
     IReadOnlyList<PdfTextRun> GetTextRuns();
     IReadOnlyList<PdfFormField> GetFormFields();
 
+    /// <summary>
+    /// Heuristic detection of drawn (non-form) checkbox squares: small, roughly
+    /// square, stroked-not-filled paths (SDD §3.2). Results in top-left page space.
+    /// </summary>
+    IReadOnlyList<PdfRect> DetectCheckboxSquares();
+
+    /// <summary>Places the ✗/✓ mark stamp over a drawn square; returns the stamp id (SDD §3.2).</summary>
+    string AddCheckMarkStamp(PdfRect squareBounds);
+
     /// <summary>Tiered body-text edit — see SDD §3.1. Throws <see cref="TextEditException"/> per tier rules.</summary>
     TextEditOutcome SetTextRunText(PdfTextRun run, string newText);
 
@@ -61,10 +70,20 @@ public enum PageHitKind
     TextRun,
     FormTextField,
     FormCheckbox,
+
+    /// <summary>A drawn (non-form) square that reads as a checkbox — SDD §3.2.</summary>
+    DrawnCheckbox,
+
+    /// <summary>A MegaPDF-placed stamp (check mark or signature).</summary>
     StampAnnotation,
 }
 
-public sealed record PageHit(PageHitKind Kind, PdfTextRun? TextRun = null, PdfFormField? Field = null, string? AnnotationId = null);
+public sealed record PageHit(
+    PageHitKind Kind,
+    PdfTextRun? TextRun = null,
+    PdfFormField? Field = null,
+    string? AnnotationId = null,
+    PdfRect? Bounds = null);
 
 /// <summary>A contiguous run of body text sharing one font/size/color.</summary>
 public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize);

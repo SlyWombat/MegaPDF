@@ -160,6 +160,20 @@ public partial class MainViewModel(Window window) : ObservableObject
         await DoEditAsync(new FormTextEditOperation(_document, pageIndex, field, newValue));
     }
 
+    public async Task AddMarkAsync(int pageIndex, PdfRect squareBounds)
+    {
+        if (_document is null)
+            return;
+        await DoEditAsync(new AddMarkOperation(_document, pageIndex, squareBounds));
+    }
+
+    public async Task RemoveMarkAsync(int pageIndex, string annotationId, PdfRect markBounds)
+    {
+        if (_document is null)
+            return;
+        await DoEditAsync(new RemoveMarkOperation(_document, pageIndex, annotationId, markBounds));
+    }
+
     private async Task DoEditAsync(IPageEditOperation op)
     {
         await Task.Run(() => _undoStack.Do(op));

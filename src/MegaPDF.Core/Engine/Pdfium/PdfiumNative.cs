@@ -176,6 +176,27 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern uint FPDFAnnot_GetFormFieldValue(IntPtr formHandle, IntPtr annot, [Out] byte[]? buffer, uint buflen);
     [DllImport(Dll)] public static extern int FPDFAnnot_IsChecked(IntPtr formHandle, IntPtr annot);
 
+    // --- Drawn-square detection & mark stamps (SDD §3.2) ---
+
+    public const int FPDF_PAGEOBJ_PATH = 2;
+
+    [DllImport(Dll)] public static extern int FPDFPath_GetDrawMode(IntPtr path, out int fillMode, out int stroke);
+
+    [DllImport(Dll)] public static extern IntPtr FPDFPage_CreateAnnot(IntPtr page, int subtype);
+    [DllImport(Dll)] public static extern int FPDFPage_RemoveAnnot(IntPtr page, int index);
+    [DllImport(Dll)] public static extern int FPDFAnnot_SetRect(IntPtr annot, ref FS_RECTF rect);
+    [DllImport(Dll)] public static extern int FPDFAnnot_AppendObject(IntPtr annot, IntPtr pageObject);
+    [DllImport(Dll)] public static extern int FPDFAnnot_SetStringValue(IntPtr annot, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [MarshalAs(UnmanagedType.LPWStr)] string value);
+    /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
+    [DllImport(Dll)] public static extern uint FPDFAnnot_GetStringValue(IntPtr annot, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen);
+
+    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
+    [DllImport(Dll)] public static extern int FPDFPath_MoveTo(IntPtr path, float x, float y);
+    [DllImport(Dll)] public static extern int FPDFPath_LineTo(IntPtr path, float x, float y);
+    [DllImport(Dll)] public static extern int FPDFPath_SetDrawMode(IntPtr path, int fillMode, int stroke);
+    [DllImport(Dll)] public static extern int FPDFPageObj_SetStrokeColor(IntPtr pageObject, uint r, uint g, uint b, uint a);
+    [DllImport(Dll)] public static extern int FPDFPageObj_SetStrokeWidth(IntPtr pageObject, float width);
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int WriteBlockDelegate(IntPtr self, IntPtr data, uint size);
 

@@ -204,6 +204,13 @@ internal sealed class PdfiumPage : IPdfPage
 
     public PageHit HitTest(PdfPoint point)
     {
+        // Our own stamps sit on top of everything (clicking one removes/selects it).
+        foreach (var (id, bounds) in GetMegaPdfStamps())
+        {
+            if (bounds.Contains(point))
+                return new PageHit(PageHitKind.StampAnnotation, AnnotationId: id, Bounds: bounds);
+        }
+
         // Form fields win over body text — they sit on top and are the reliable path.
         foreach (var field in GetFormFields())
         {
@@ -217,6 +224,12 @@ internal sealed class PdfiumPage : IPdfPage
             };
         }
 
+        foreach (var square in DetectCheckboxSquares())
+        {
+            if (square.Contains(point))
+                return new PageHit(PageHitKind.DrawnCheckbox, Bounds: square);
+        }
+
         foreach (var run in GetTextRuns())
         {
             if (run.Bounds.Contains(point))
@@ -224,6 +237,123 @@ internal sealed class PdfiumPage : IPdfPage
         }
         return new PageHit(PageHitKind.None);
     }
+
+    /// <summary>SDD §3.2 size window for a drawn checkbox, in points.</summary>
+    private const double MinSquareSize = 6;
+    private const double MaxSquareSize = 24;
+
+    public IReadOnlyList<PdfRect> DetectCheckboxSquares()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var squares = new List<PdfRect>();
+            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
+                if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_PATH)
+                    continue;
+                if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
+                    continue;
+
+                double width = right - left, height = top - bottom;
+                // Small, roughly square (bounds include stroke width, so allow slack).
+                if (width is < MinSquareSize or > MaxSquareSize || height is < MinSquareSize or > MaxSquareSize)
+                    continue;
+                if (Math.Abs(width - height) > Math.Max(width, height) * 0.25)
+                    continue;
+                // Checkbox outlines are stroked, not filled — filled squares are
+                // usually decoration (bullets, table shading), per SDD §3.2.
+                if (PdfiumNative.FPDFPath_GetDrawMode(obj, out var fillMode, out var stroke) == 0
+                    || stroke == 0 || fillMode != 0)
+                    continue;
+
+                squares.Add(new PdfRect(left, Height - top, width, height));
+            }
+            return squares;
+        }
+    }
+
+    private const string StampIdKey = "MegaPDF_Id";
+
+    public string AddCheckMarkStamp(PdfRect squareBounds)
+    {
+        ThrowIfDisposed();
+        var id = Guid.NewGuid().ToString("N");
+
+        // Mark at ~80% of the square, centered (SDD §3.2), in PDF page coordinates.
+        var inset = Math.Max(squareBounds.Width, squareBounds.Height) * 0.10;
+        var left = (float)(squareBounds.X + inset);
+        var right = (float)(squareBounds.Right - inset);
+        var top = (float)(Height - squareBounds.Y - inset);
+        var bottom = (float)(Height - squareBounds.Bottom + inset);
+
+        lock (PdfiumLibrary.Lock)
+        {
+            var annot = PdfiumNative.FPDFPage_CreateAnnot(_handle, PdfiumNative.FPDF_ANNOT_SUBTYPE_STAMP);
+            if (annot == IntPtr.Zero)
+                throw new InvalidOperationException("Could not create the mark annotation.");
+            try
+            {
+                var rect = new PdfiumNative.FS_RECTF { Left = left, Top = top, Right = right, Bottom = bottom };
+                PdfiumNative.FPDFAnnot_SetRect(annot, ref rect);
+
+                // The ✗ mark: two strokes across the square (default style, SDD §3.2).
+                var path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
+                PdfiumNative.FPDFPath_LineTo(path, right, top);
+                PdfiumNative.FPDFPath_MoveTo(path, left, top);
+                PdfiumNative.FPDFPath_LineTo(path, right, bottom);
+                PdfiumNative.FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
+                PdfiumNative.FPDFPageObj_SetStrokeWidth(path, (float)Math.Max(1.2, squareBounds.Width * 0.11));
+                PdfiumNative.FPDFPath_SetDrawMode(path, 0, stroke: 1);
+
+                if (PdfiumNative.FPDFAnnot_AppendObject(annot, path) == 0)
+                {
+                    PdfiumNative.FPDFPageObj_Destroy(path);
+                    throw new InvalidOperationException("Could not draw the mark.");
+                }
+
+                PdfiumNative.FPDFAnnot_SetStringValue(annot, StampIdKey, id);
+            }
+            finally
+            {
+                PdfiumNative.FPDFPage_CloseAnnot(annot);
+            }
+        }
+        return id;
+    }
+
+    /// <summary>All MegaPDF-placed stamps on the page: (id, bounds in top-left space).</summary>
+    private List<(string Id, PdfRect Bounds)> GetMegaPdfStamps()
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            var stamps = new List<(string, PdfRect)>();
+            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
+                if (annot == IntPtr.Zero)
+                    continue;
+                try
+                {
+                    var id = ReadStampId(annot);
+                    if (id.Length == 0 || PdfiumNative.FPDFAnnot_GetRect(annot, out var rect) == 0)
+                        continue;
+                    stamps.Add((id, new PdfRect(rect.Left, Height - rect.Top, rect.Right - rect.Left, rect.Top - rect.Bottom)));
+                }
+                finally
+                {
+                    PdfiumNative.FPDFPage_CloseAnnot(annot);
+                }
+            }
+            return stamps;
+        }
+    }
+
+    private static string ReadStampId(IntPtr annot) =>
+        ReadUtf16ByteLengthString((buffer, length) => PdfiumNative.FPDFAnnot_GetStringValue(annot, StampIdKey, buffer, length));
 
     public IReadOnlyList<PdfTextRun> GetTextRuns()
     {
@@ -551,11 +681,32 @@ internal sealed class PdfiumPage : IPdfPage
         PdfiumNative.FORM_OnLButtonUp(_forms, _handle, 0, center.X, pdfY);
     }
     public string AddStampAnnotation(ReadOnlyMemory<byte> pngBytes, PdfRect bounds) =>
-        throw new NotSupportedException("Stamps arrive with the signature milestone.");
+        throw new NotSupportedException("Image stamps arrive with the signature milestone.");
     public void MoveStampAnnotation(string annotationId, PdfRect newBounds) =>
-        throw new NotSupportedException("Stamps arrive with the signature milestone.");
-    public void RemoveStampAnnotation(string annotationId) =>
-        throw new NotSupportedException("Stamps arrive with the signature milestone.");
+        throw new NotSupportedException("Image stamps arrive with the signature milestone.");
+
+    public void RemoveStampAnnotation(string annotationId)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
+                if (annot == IntPtr.Zero)
+                    continue;
+                var matches = ReadStampId(annot) == annotationId;
+                PdfiumNative.FPDFPage_CloseAnnot(annot);
+                if (!matches)
+                    continue;
+                if (PdfiumNative.FPDFPage_RemoveAnnot(_handle, i) == 0)
+                    throw new InvalidOperationException("Could not remove the mark.");
+                return;
+            }
+            throw new KeyNotFoundException($"No MegaPDF stamp with id {annotationId} on page {Index}.");
+        }
+    }
 
     public void Dispose()
     {

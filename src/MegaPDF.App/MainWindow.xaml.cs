@@ -69,6 +69,15 @@ public sealed partial class MainWindow : Window
                 await ViewModel.ToggleCheckboxAsync(pageView.Index, hit.Field!);
                 break;
 
+            case PageHitKind.DrawnCheckbox:
+                await ViewModel.AddMarkAsync(pageView.Index, hit.Bounds!.Value);
+                break;
+
+            case PageHitKind.StampAnnotation:
+                // Clicking a placed mark removes it — click toggles (SDD §3.2).
+                await ViewModel.RemoveMarkAsync(pageView.Index, hit.AnnotationId!, hit.Bounds!.Value);
+                break;
+
             case PageHitKind.FormTextField:
             {
                 var field = hit.Field!;

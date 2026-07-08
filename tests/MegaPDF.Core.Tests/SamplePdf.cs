@@ -42,6 +42,28 @@ internal static class SamplePdf
         ]);
     }
 
+    /// <summary>
+    /// One-page PDF with drawn (non-form) rectangles: an 18pt stroked square at
+    /// 100,500 (a checkbox), a 100x50 stroked box (too big), and a 10pt filled
+    /// square (decoration, not a checkbox).
+    /// </summary>
+    public static byte[] BuildWithDrawnSquares()
+    {
+        var content =
+            "BT /F1 12 Tf 130 504 Td (I agree to the terms) Tj ET\n" +
+            "1 w 100 500 18 18 re S\n" +
+            "1 w 200 400 100 50 re S\n" +
+            "0.8 g 100 300 10 10 re f\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        ]);
+    }
+
     public static byte[] Assemble(string[] objects)
     {
         var sb = new StringBuilder("%PDF-1.4\n");
