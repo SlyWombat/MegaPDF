@@ -14,6 +14,10 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
     public bool CanUndo => _done.Count > 0;
     public bool CanRedo => _undone.Count > 0;
 
+    /// <summary>The operation the next Undo/Redo would act on, or null. Lets callers refresh affected UI.</summary>
+    public IEditOperation? PeekUndo => _done.Count > 0 ? _done[^1] : null;
+    public IEditOperation? PeekRedo => _undone.Count > 0 ? _undone.Peek() : null;
+
     /// <summary>Raised whenever CanUndo/CanRedo may have changed.</summary>
     public event EventHandler? Changed;
 

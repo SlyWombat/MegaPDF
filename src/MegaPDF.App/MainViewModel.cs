@@ -15,7 +15,7 @@ using Windows.Storage.Pickers;
 namespace MegaPDF.App;
 
 /// <summary>One rendered page: bitmap plus display size in DIPs.</summary>
-public sealed record PageView(ImageSource Source, double Width, double Height);
+public sealed record PageView(int Index, ImageSource Source, double Width, double Height);
 
 public partial class MainViewModel(Window window) : ObservableObject
 {
@@ -99,31 +99,74 @@ public partial class MainViewModel(Window window) : ObservableObject
         Pages.Clear();
         PageCount = doc.PageCount;
 
+        for (var i = 0; i < doc.PageCount && generation == _openGeneration; i++)
+        {
+            var pageView = await RenderPageAsync(doc, i);
+            if (generation != _openGeneration)
+                return;
+            Pages.Add(pageView);
+        }
+    }
+
+    private async Task<PageView> RenderPageAsync(IPdfDocument doc, int pageIndex)
+    {
         // Render at the monitor's rasterization scale so pages are crisp at 100% zoom.
         var scale = window.Content?.XamlRoot?.RasterizationScale ?? 1.0;
 
-        for (var i = 0; i < doc.PageCount && generation == _openGeneration; i++)
+        var (rendered, widthDips, heightDips) = await Task.Run(() =>
         {
-            var index = i;
-            var (rendered, widthDips, heightDips) = await Task.Run(() =>
-            {
-                using var page = doc.GetPage(index);
-                var wDips = page.Width * 96 / 72;
-                var hDips = page.Height * 96 / 72;
-                var pixels = page.Render((int)(wDips * scale), (int)(hDips * scale));
-                return (pixels, wDips, hDips);
-            });
+            using var page = doc.GetPage(pageIndex);
+            var wDips = page.Width * 96 / 72;
+            var hDips = page.Height * 96 / 72;
+            var pixels = page.Render((int)(wDips * scale), (int)(hDips * scale));
+            return (pixels, wDips, hDips);
+        });
 
-            if (generation != _openGeneration)
-                return;
+        var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
+        using (var pixelStream = bitmap.PixelBuffer.AsStream())
+            pixelStream.Write(rendered.Bgra, 0, rendered.Bgra.Length);
+        bitmap.Invalidate();
 
-            var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
-            using (var pixelStream = bitmap.PixelBuffer.AsStream())
-                pixelStream.Write(rendered.Bgra, 0, rendered.Bgra.Length);
-            bitmap.Invalidate();
+        return new PageView(pageIndex, bitmap, widthDips, heightDips);
+    }
 
-            Pages.Add(new PageView(bitmap, widthDips, heightDips));
+    private async Task RefreshPageAsync(int pageIndex)
+    {
+        if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
+            return;
+        Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
+    }
+
+    /// <summary>Hit-tests a click (page-space points, top-left origin) against body text.</summary>
+    public PdfTextRun? HitTestText(int pageIndex, PdfPoint point)
+    {
+        if (_document is null)
+            return null;
+        using var page = _document.GetPage(pageIndex);
+        var hit = page.HitTest(point);
+        return hit.Kind == PageHitKind.TextRun ? hit.TextRun : null;
+    }
+
+    public async Task ApplyTextEditAsync(int pageIndex, PdfTextRun run, string newText)
+    {
+        if (_document is null || string.IsNullOrEmpty(newText) || newText == run.Text)
+            return;
+
+        var op = new TextEditOperation(_document, pageIndex, run, newText);
+        try
+        {
+            await Task.Run(() => _undoStack.Do(op));
         }
+        catch (TextEditException ex)
+        {
+            await ShowErrorAsync("Can't edit this text", ex.Message);
+            return;
+        }
+
+        HasUnsavedChanges = true;
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        await RefreshPageAsync(pageIndex);
     }
 
     private bool CanSave() => IsDocumentOpen;
@@ -181,19 +224,27 @@ public partial class MainViewModel(Window window) : ObservableObject
     private bool CanRedo() => _undoStack.CanRedo;
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
-    private void Undo()
+    private async Task UndoAsync()
     {
-        _undoStack.Undo();
+        var op = _undoStack.PeekUndo;
+        await Task.Run(() => _undoStack.Undo());
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        HasUnsavedChanges = true;
+        if (op is TextEditOperation textEdit)
+            await RefreshPageAsync(textEdit.PageIndex);
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
-    private void Redo()
+    private async Task RedoAsync()
     {
-        _undoStack.Redo();
+        var op = _undoStack.PeekRedo;
+        await Task.Run(() => _undoStack.Redo());
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        HasUnsavedChanges = true;
+        if (op is TextEditOperation textEdit)
+            await RefreshPageAsync(textEdit.PageIndex);
     }
 
     private async Task ShowErrorAsync(string title, string message)

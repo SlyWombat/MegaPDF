@@ -45,6 +45,29 @@ internal static class PdfiumNative
 
     [DllImport(Dll)] public static extern int FPDF_SaveAsCopy(IntPtr document, ref FPDF_FILEWRITE fileWrite, uint flags);
 
+    // --- Text extraction & editing (fpdf_edit.h, fpdf_text.h) ---
+
+    public const int FPDF_PAGEOBJ_TEXT = 1;
+
+    [DllImport(Dll)] public static extern IntPtr FPDFText_LoadPage(IntPtr page);
+    [DllImport(Dll)] public static extern void FPDFText_ClosePage(IntPtr textPage);
+
+    [DllImport(Dll)] public static extern int FPDFPage_CountObjects(IntPtr page);
+    [DllImport(Dll)] public static extern IntPtr FPDFPage_GetObject(IntPtr page, int index);
+    [DllImport(Dll)] public static extern int FPDFPageObj_GetType(IntPtr pageObject);
+    [DllImport(Dll)] public static extern int FPDFPageObj_GetBounds(IntPtr pageObject, out float left, out float bottom, out float right, out float top);
+
+    /// <summary>Buffer is UTF-16LE; length in FPDF_WCHARs; returns chars incl. NUL.</summary>
+    [DllImport(Dll)] public static extern uint FPDFTextObj_GetText(IntPtr textObject, IntPtr textPage, [Out] byte[]? buffer, uint length);
+    [DllImport(Dll)] public static extern int FPDFTextObj_GetFontSize(IntPtr textObject, out float size);
+    [DllImport(Dll)] public static extern IntPtr FPDFTextObj_GetFont(IntPtr textObject);
+
+    /// <summary>Buffer is UTF-8; returns bytes incl. NUL.</summary>
+    [DllImport(Dll)] public static extern nuint FPDFFont_GetFamilyName(IntPtr font, [Out] byte[]? buffer, nuint length);
+
+    [DllImport(Dll)] public static extern int FPDFText_SetText(IntPtr textObject, [MarshalAs(UnmanagedType.LPWStr)] string text);
+    [DllImport(Dll)] public static extern int FPDFPage_GenerateContent(IntPtr page);
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int WriteBlockDelegate(IntPtr self, IntPtr data, uint size);
 

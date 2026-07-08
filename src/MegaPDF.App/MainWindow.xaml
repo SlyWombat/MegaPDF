@@ -142,14 +142,15 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="local:PageView">
-                            <Border
+                            <Grid
+                                Width="{x:Bind Width}"
+                                Height="{x:Bind Height}"
                                 Background="White"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
-                                Width="{x:Bind Width}"
-                                Height="{x:Bind Height}">
+                                Tapped="OnPageTapped">
                                 <Image Source="{x:Bind Source}" Stretch="Uniform" />
-                            </Border>
+                            </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
