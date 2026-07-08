@@ -1,0 +1,44 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+# Test results & coverage
+TestResults/
+*.trx
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# MSIX packaging output
+AppPackages/
+BundleArtifacts/
+*.appx
+*.msix
+*.appxbundle
+*.msixbundle
+*.cer
+*.pfx
+
+# Logs and OS cruft
+*.log
+Thumbs.db
+Desktop.ini
