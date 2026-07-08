@@ -35,12 +35,24 @@ tests/MegaPDF.Core.Tests/  Unit tests (engine mocked)
 
 ## Building
 
-Requires the .NET 8 SDK on Windows 11 (or Windows 10 1809+).
+Requires the .NET 8 SDK on Windows 11 (or Windows 10 1809+). No Visual Studio needed.
 
 ```
 dotnet build MegaPDF.sln
 dotnet test MegaPDF.sln
 ```
+
+## Test installer (MSIX)
+
+```
+powershell -File tools\Build-Installer.ps1
+```
+
+This produces a signed, self-contained package under `artifacts\MegaPDF.App_<version>_x64_Test\`
+along with the generated `Install.ps1`. To install: right-click `Install.ps1` → *Run with
+PowerShell* (it trusts the dev certificate — one elevation prompt — then installs). The
+installer registers MegaPDF as an available `.pdf` handler; uninstall cleanly via
+Settings → Apps. Store releases will be signed with a real certificate instead (SDD §5).
 
 ## License
 
