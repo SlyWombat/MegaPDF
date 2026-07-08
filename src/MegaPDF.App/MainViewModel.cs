@@ -18,8 +18,18 @@ namespace MegaPDF.App;
 /// <summary>A clickable area on a page, cached so hover affordances don't hit the engine.</summary>
 public sealed record InteractiveRegion(PdfRect Bounds, PageHitKind Kind);
 
-/// <summary>One rendered page: bitmap, display size in DIPs, and its interaction map.</summary>
-public sealed record PageView(int Index, ImageSource Source, double Width, double Height, IReadOnlyList<InteractiveRegion> Regions);
+/// <summary>
+/// One page slot: geometry is always present; the bitmap and interaction map exist
+/// only while the page is inside the render window (SDD §4.2 virtualization).
+/// </summary>
+public sealed record PageView(
+    int Index,
+    ImageSource? Source,
+    double PointsWidth,
+    double PointsHeight,
+    double Width,
+    double Height,
+    IReadOnlyList<InteractiveRegion> Regions);
 
 /// <summary>A library signature shown in the flyout.</summary>
 public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail);
@@ -113,12 +123,87 @@ public partial class MainViewModel(Window window) : ObservableObject
         PageCount = doc.PageCount;
         CurrentPage = 1;
 
-        for (var i = 0; i < doc.PageCount && generation == _openGeneration; i++)
+        // Fast size-only pass: geometry for every page, no rendering (SDD §4.2).
+        var sizes = await Task.Run(() =>
         {
-            var pageView = await RenderPageAsync(doc, i);
-            if (generation != _openGeneration)
-                return;
-            Pages.Add(pageView);
+            var list = new List<(double W, double H)>(doc.PageCount);
+            for (var i = 0; i < doc.PageCount; i++)
+            {
+                using var page = doc.GetPage(i);
+                list.Add((page.Width, page.Height));
+            }
+            return list;
+        });
+        if (generation != _openGeneration)
+            return;
+
+        for (var i = 0; i < sizes.Count; i++)
+            Pages.Add(Placeholder(i, sizes[i].W, sizes[i].H));
+
+        await UpdateViewportAsync(0, Math.Min(2, PageCount - 1));
+    }
+
+    private PageView Placeholder(int index, double pointsWidth, double pointsHeight) =>
+        new(index, null, pointsWidth, pointsHeight,
+            pointsWidth * 96 / 72 * ZoomFactor, pointsHeight * 96 / 72 * ZoomFactor, []);
+
+    // --- Viewport-window rendering (SDD §4.2: visible pages ± 2, evict the rest) ---
+
+    private const int RenderMargin = 2;
+    private int _viewFirst;
+    private int _viewLast = 2;
+    private bool _viewportUpdateRunning;
+    private bool _viewportDirty;
+
+    public async Task UpdateViewportAsync(int firstVisible, int lastVisible)
+    {
+        if (_document is null || Pages.Count == 0)
+            return;
+        _viewFirst = Math.Clamp(firstVisible, 0, Pages.Count - 1);
+        _viewLast = Math.Clamp(lastVisible, _viewFirst, Pages.Count - 1);
+
+        if (_viewportUpdateRunning)
+        {
+            _viewportDirty = true; // the running loop picks up the new window
+            return;
+        }
+
+        _viewportUpdateRunning = true;
+        try
+        {
+            do
+            {
+                _viewportDirty = false;
+                var generation = _openGeneration;
+                var doc = _document;
+                if (doc is null)
+                    return;
+                var lo = Math.Max(0, _viewFirst - RenderMargin);
+                var hi = Math.Min(Pages.Count - 1, _viewLast + RenderMargin);
+
+                // Evict bitmaps that left the window — memory stays bounded.
+                for (var i = 0; i < Pages.Count; i++)
+                {
+                    if ((i < lo || i > hi) && Pages[i].Source is not null)
+                        Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+                }
+
+                // Render missing pages, nearest-to-viewport-center first.
+                var center = (_viewFirst + _viewLast) / 2;
+                foreach (var i in Enumerable.Range(lo, hi - lo + 1).OrderBy(i => Math.Abs(i - center)))
+                {
+                    if (generation != _openGeneration)
+                        return;
+                    if (Pages[i].Source is null)
+                        Pages[i] = await RenderPageAsync(doc, i);
+                    if (_viewportDirty)
+                        break; // the window moved — restart with the new one
+                }
+            } while (_viewportDirty);
+        }
+        finally
+        {
+            _viewportUpdateRunning = false;
         }
     }
 
@@ -128,13 +213,11 @@ public partial class MainViewModel(Window window) : ObservableObject
         var scale = (window.Content?.XamlRoot?.RasterizationScale ?? 1.0) * ZoomFactor;
         var zoom = ZoomFactor;
 
-        var (rendered, widthDips, heightDips, regions) = await Task.Run(() =>
+        var (rendered, pointsW, pointsH, regions) = await Task.Run(() =>
         {
             using var page = doc.GetPage(pageIndex);
-            var wDips = page.Width * 96 / 72 * zoom;
-            var hDips = page.Height * 96 / 72 * zoom;
             var pixels = page.Render((int)(page.Width * 96 / 72 * scale), (int)(page.Height * 96 / 72 * scale));
-            return (pixels, wDips, hDips, BuildRegions(page));
+            return (pixels, page.Width, page.Height, BuildRegions(page));
         });
 
         var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
@@ -142,7 +225,8 @@ public partial class MainViewModel(Window window) : ObservableObject
             pixelStream.Write(rendered.Bgra, 0, rendered.Bgra.Length);
         bitmap.Invalidate();
 
-        return new PageView(pageIndex, bitmap, widthDips, heightDips, regions);
+        return new PageView(pageIndex, bitmap, pointsW, pointsH,
+            pointsW * 96 / 72 * zoom, pointsH * 96 / 72 * zoom, regions);
     }
 
     /// <summary>Interaction map in HitTest priority order: stamps, form fields, squares, text.</summary>
@@ -197,9 +281,10 @@ public partial class MainViewModel(Window window) : ObservableObject
         ZoomPercent = Math.Clamp(percent, MinZoom, MaxZoom);
         if (_document is null)
             return;
-        var generation = _openGeneration;
-        for (var i = 0; i < Pages.Count && generation == _openGeneration; i++)
-            await RefreshPageAsync(i);
+        // Resize every slot (placeholders included) and re-render just the viewport.
+        for (var i = 0; i < Pages.Count; i++)
+            Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+        await UpdateViewportAsync(_viewFirst, _viewLast);
     }
 
     private async Task RefreshPageAsync(int pageIndex)
@@ -470,9 +555,13 @@ public partial class MainViewModel(Window window) : ObservableObject
             _journal.Record(entry);
 
         HasUnsavedChanges = applied > 0;
-        var generation = _openGeneration;
-        for (var i = 0; i < Pages.Count && generation == _openGeneration; i++)
-            await RefreshPageAsync(i);
+        // Drop any already-rendered bitmaps (they predate the replay) and re-render the viewport.
+        for (var i = 0; i < Pages.Count; i++)
+        {
+            if (Pages[i].Source is not null)
+                Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+        }
+        await UpdateViewportAsync(_viewFirst, _viewLast);
     }
 
     /// <summary>Called when the window closes with the user's consent — nothing left to recover.</summary>

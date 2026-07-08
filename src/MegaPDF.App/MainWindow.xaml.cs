@@ -264,19 +264,32 @@ public sealed partial class MainWindow : Window
     {
         if (ViewModel.Pages.Count == 0)
             return;
-        var midline = PagesScroll.VerticalOffset + PagesScroll.ViewportHeight / 2;
-        double y = 24; // ItemsPanel top padding
+
+        var viewTop = PagesScroll.VerticalOffset;
+        var viewBottom = viewTop + PagesScroll.ViewportHeight;
+        var midline = viewTop + PagesScroll.ViewportHeight / 2;
+
+        var firstVisible = -1;
+        var lastVisible = 0;
+        var currentPage = ViewModel.Pages.Count;
+        var y = 24d; // ItemsPanel top padding
         for (var i = 0; i < ViewModel.Pages.Count; i++)
         {
             var pageHeight = ViewModel.Pages[i].Height;
-            if (midline <= y + pageHeight + 8)
+            if (y + pageHeight >= viewTop && y <= viewBottom)
             {
-                ViewModel.CurrentPage = i + 1;
-                return;
+                if (firstVisible < 0)
+                    firstVisible = i;
+                lastVisible = i;
             }
+            if (midline <= y + pageHeight + 8 && currentPage == ViewModel.Pages.Count)
+                currentPage = i + 1;
             y += pageHeight + 16; // panel spacing
         }
-        ViewModel.CurrentPage = ViewModel.Pages.Count;
+
+        ViewModel.CurrentPage = currentPage;
+        if (firstVisible >= 0)
+            _ = ViewModel.UpdateViewportAsync(firstVisible, lastVisible);
     }
 
     // --- Crash recovery offer (SDD §3.4: one-click restore after an unclean exit) ---
