@@ -12,10 +12,14 @@ learning curve. If you ever feel lost or surprised, that itself is a bug worth r
 ## Install (one time, ~1 minute)
 
 1. Unzip the `MegaPDF-1.0` folder anywhere.
-2. Right-click **`Install-MegaPDF.ps1`** → **Run with PowerShell**.
-3. Accept the one **UAC prompt** — this trusts the test build's signing certificate.
-   (Store releases won't need this step; it's a test-build-only thing.)
-4. MegaPDF appears in the **Start menu**.
+2. Double-click **`Setup.exe`** and follow the prompts.
+3. If Windows shows a blue "Windows protected your PC" screen, click
+   **More info → Run anyway** (this test build isn't Store-signed yet).
+4. Choose **Yes** on the one Windows security prompt.
+5. MegaPDF appears in the **Start menu**.
+
+(If Setup.exe is blocked by company policy, the same install is available by
+right-clicking `Install-MegaPDF.ps1` → Run with PowerShell.)
 
 To uninstall completely: **Settings → Apps → MegaPDF → Uninstall**.
 Note: uninstalling removes your signature library — signatures are stored locally,

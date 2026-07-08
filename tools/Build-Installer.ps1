@@ -44,15 +44,29 @@ Get-ChildItem (Join-Path $repoRoot "artifacts") -Recurse -Filter *.msix | ForEac
     Write-Host "Installer: $($_.FullName)"
 }
 
-# Distributable zip of the newest package. ONLY our four files — the generated
+# Compile Setup.exe with the in-box .NET Framework compiler: ~20KB, no runtime
+# prerequisites, MegaPDF icon, and no visible PowerShell for the person installing.
+$csc = Join-Path $env:WINDIR "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+$setupSource = Join-Path $PSScriptRoot "Setup.cs"
+$icon = Join-Path $repoRoot "src\MegaPDF.App\Assets\megapdf.ico"
+
+# Distributable zip of the newest package. ONLY our files — the generated
 # Install.ps1/Add-AppDevPackage.ps1 fail on Windows 11 and must not reach testers.
 $newest = Get-ChildItem (Join-Path $repoRoot "artifacts") -Recurse -Filter *.msix |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($newest) {
+    $setupExe = Join-Path $newest.DirectoryName "Setup.exe"
+    & $csc /nologo /target:winexe /platform:anycpu ("/out:" + $setupExe) ("/win32icon:" + $icon) `
+        /r:System.dll /r:System.Core.dll /r:System.Windows.Forms.dll $setupSource
+    if ($LASTEXITCODE -ne 0) { throw "Setup.exe compile failed." }
+    $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -eq "CN=MegaPDF Project" } | Select-Object -First 1
+    if ($cert) { Set-AuthenticodeSignature -FilePath $setupExe -Certificate $cert | Out-Null }
+
     $version = ($newest.BaseName -replace '^MegaPDF\.App_', '') -replace '_x64$', ''
     $zip = Join-Path $repoRoot "artifacts\MegaPDF-$version-x64.zip"
     if (Test-Path $zip) { Remove-Item $zip -Confirm:$false }
     $files = @(
+        $setupExe,
         $newest.FullName,
         (Join-Path $newest.DirectoryName ($newest.BaseName + ".cer")),
         (Join-Path $newest.DirectoryName "Install-MegaPDF.ps1"),
@@ -61,5 +75,5 @@ if ($newest) {
     Compress-Archive -Path $files -DestinationPath $zip
     Write-Host ""
     Write-Host "Distributable: $zip"
-    Write-Host "Hand-off: unzip, then right-click Install-MegaPDF.ps1 > Run with PowerShell."
+    Write-Host "Hand-off: unzip, then double-click Setup.exe."
 }
