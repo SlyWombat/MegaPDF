@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Core.Editing;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -28,6 +29,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     private static readonly IPdfEngine Engine = new PdfiumEngine();
 
     private readonly UndoStack _undoStack = new();
+    private readonly RecoveryJournal _journal = new();
     private IPdfDocument? _document;
     private int _openGeneration;
 
@@ -106,6 +108,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         DocumentPath = path;
         HasUnsavedChanges = false;
         _undoStack.Clear();
+        _journal.BeginSession(path);
         Pages.Clear();
         PageCount = doc.PageCount;
         CurrentPage = 1;
@@ -328,6 +331,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     private async Task DoEditAsync(IPageEditOperation op)
     {
         await Task.Run(() => _undoStack.Do(op));
+        _journal.Record(op.ToJournalEntry(inverse: false));
         HasUnsavedChanges = true;
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
@@ -342,7 +346,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         var op = new TextEditOperation(_document, pageIndex, run, newText);
         try
         {
-            await Task.Run(() => _undoStack.Do(op));
+            await DoEditAsync(op);
         }
         catch (TextEditException ex)
         {
@@ -350,12 +354,8 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
         }
 
-        HasUnsavedChanges = true;
-        UndoCommand.NotifyCanExecuteChanged();
-        RedoCommand.NotifyCanExecuteChanged();
         // Non-modal, non-blocking notice per SDD §3.1 tier 2.
         IsFontNoticeOpen = op.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont;
-        await RefreshPageAsync(pageIndex);
     }
 
     [ObservableProperty]
@@ -376,6 +376,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             // Atomic save protocol (SDD §3.4): temp file in place, flush, swap.
             await Task.Run(() => AtomicFileWriter.Write(path, stream => document.Save(stream)));
             HasUnsavedChanges = false;
+            _journal.MarkSaved(path);
         }
         catch (Exception ex)
         {
@@ -405,6 +406,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             // The newly saved file becomes the active document (SDD §3.4).
             DocumentPath = file.Path;
             HasUnsavedChanges = false;
+            _journal.MarkSaved(file.Path);
         }
         catch (Exception ex)
         {
@@ -424,7 +426,10 @@ public partial class MainViewModel(Window window) : ObservableObject
         RedoCommand.NotifyCanExecuteChanged();
         HasUnsavedChanges = true;
         if (op is IPageEditOperation pageEdit)
+        {
+            _journal.Record(pageEdit.ToJournalEntry(inverse: true));
             await RefreshPageAsync(pageEdit.PageIndex);
+        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
@@ -436,8 +441,42 @@ public partial class MainViewModel(Window window) : ObservableObject
         RedoCommand.NotifyCanExecuteChanged();
         HasUnsavedChanges = true;
         if (op is IPageEditOperation pageEdit)
+        {
+            _journal.Record(pageEdit.ToJournalEntry(inverse: false));
             await RefreshPageAsync(pageEdit.PageIndex);
+        }
     }
+
+    // --- Crash recovery (SDD §3.4) ---
+
+    /// <summary>Crashed sessions found on disk, newest first.</summary>
+    public IReadOnlyList<RecoverableSession> FindRecoverableSessions() => _journal.FindRecoverableSessions();
+
+    /// <summary>Reopens the crashed session's document and replays its journal.</summary>
+    public async Task RestoreSessionAsync(RecoverableSession session)
+    {
+        // Load before OpenDocumentAsync — BeginSession truncates this same file.
+        var entries = RecoveryJournal.LoadEntries(session.JournalPath);
+
+        await OpenDocumentAsync(session.DocumentPath);
+        if (_document is null || entries.Count == 0)
+            return;
+
+        var doc = _document;
+        var applied = await Task.Run(() => JournalReplayer.Replay(doc, entries));
+
+        // Re-journal the restored edits so a second crash before save is still covered.
+        foreach (var entry in entries)
+            _journal.Record(entry);
+
+        HasUnsavedChanges = applied > 0;
+        var generation = _openGeneration;
+        for (var i = 0; i < Pages.Count && generation == _openGeneration; i++)
+            await RefreshPageAsync(i);
+    }
+
+    /// <summary>Called when the window closes with the user's consent — nothing left to recover.</summary>
+    public void EndJournalSession() => _journal.EndSession();
 
     private async Task ShowErrorAsync(string title, string message)
     {

@@ -279,12 +279,50 @@ public sealed partial class MainWindow : Window
         ViewModel.CurrentPage = ViewModel.Pages.Count;
     }
 
+    // --- Crash recovery offer (SDD §3.4: one-click restore after an unclean exit) ---
+
+    public async Task OfferCrashRecoveryAsync()
+    {
+        var sessions = ViewModel.FindRecoverableSessions();
+        if (sessions.Count == 0)
+            return;
+        var session = sessions[0];
+
+        // Right after Activate the visual tree may not be loaded yet, and
+        // ContentDialog needs a live XamlRoot.
+        if (Content is FrameworkElement { IsLoaded: false } root)
+        {
+            var loaded = new TaskCompletionSource();
+            root.Loaded += (_, _) => loaded.TrySetResult();
+            await loaded.Task;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "Restore unsaved changes?",
+            Content = $"MegaPDF closed unexpectedly with unsaved changes to {Path.GetFileName(session.DocumentPath)}.",
+            PrimaryButtonText = "Restore",
+            CloseButtonText = "Discard",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            await ViewModel.RestoreSessionAsync(session);
+        else
+            Core.Recovery.RecoveryJournal.Discard(session.JournalPath);
+    }
+
     // --- Unsaved-changes close prompt (SDD §2.2 forgiveness, P3) ---
 
     private void OnAppWindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
         if (_allowClose || !ViewModel.HasUnsavedChanges)
+        {
+            // Consented close — nothing left to recover (SDD §3.4).
+            ViewModel.EndJournalSession();
             return;
+        }
         args.Cancel = true;
         _ = ConfirmCloseAsync();
     }

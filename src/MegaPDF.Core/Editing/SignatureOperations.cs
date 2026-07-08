@@ -1,4 +1,5 @@
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Recovery;
 
 namespace MegaPDF.Core.Editing;
 
@@ -24,6 +25,12 @@ public sealed class AddSignatureOperation(
     }
 
     internal string? CurrentId { get; private set; }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new RemoveStampEntry(PageIndex, CurrentId!)
+        : new AddSignatureEntry(
+            PageIndex, bounds.X, bounds.Y, bounds.Width, bounds.Height, CurrentId!,
+            JournalBlob.Pack(bgra), pixelWidth, pixelHeight);
 }
 
 /// <summary>
@@ -52,4 +59,10 @@ public sealed class RemoveSignatureOperation(IPdfDocument document, int pageInde
         // Restore under the original id so earlier operations still resolve it.
         page.AddImageStamp(_image!.Bgra, _image.PixelWidth, _image.PixelHeight, bounds, annotationId);
     }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new AddSignatureEntry(
+            PageIndex, bounds.X, bounds.Y, bounds.Width, bounds.Height, annotationId,
+            JournalBlob.Pack(_image!.Bgra), _image.PixelWidth, _image.PixelHeight)
+        : new RemoveStampEntry(PageIndex, annotationId);
 }

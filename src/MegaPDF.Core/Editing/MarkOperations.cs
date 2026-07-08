@@ -1,4 +1,5 @@
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Recovery;
 
 namespace MegaPDF.Core.Editing;
 
@@ -26,6 +27,10 @@ public sealed class AddMarkOperation(IPdfDocument document, int pageIndex, PdfRe
     }
 
     internal string? CurrentId { get; private set; }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new RemoveStampEntry(PageIndex, CurrentId!)
+        : new AddMarkEntry(PageIndex, squareBounds.X, squareBounds.Y, squareBounds.Width, squareBounds.Height, CurrentId!);
 }
 
 /// <summary>Reversible removal of a previously placed mark (clicking a checked box unchecks it).</summary>
@@ -44,10 +49,24 @@ public sealed class RemoveMarkOperation(IPdfDocument document, int pageIndex, st
     public void Revert()
     {
         using var page = document.GetPage(PageIndex);
-        // AddCheckMarkStamp insets by 10% of the square; expand the mark rect by the
-        // inverse (12.5%) so the restored mark lands exactly where it was.
-        var grow = Math.Max(markBounds.Width, markBounds.Height) * 0.125;
-        var square = new PdfRect(markBounds.X - grow, markBounds.Y - grow, markBounds.Width + 2 * grow, markBounds.Height + 2 * grow);
-        page.AddCheckMarkStamp(square, annotationId);
+        page.AddCheckMarkStamp(EquivalentSquare, annotationId);
     }
+
+    /// <summary>
+    /// AddCheckMarkStamp insets by 10% of the square; expanding the mark rect by the
+    /// inverse (12.5%) reproduces the original square, so the restored mark lands
+    /// exactly where it was.
+    /// </summary>
+    private PdfRect EquivalentSquare
+    {
+        get
+        {
+            var grow = Math.Max(markBounds.Width, markBounds.Height) * 0.125;
+            return new PdfRect(markBounds.X - grow, markBounds.Y - grow, markBounds.Width + 2 * grow, markBounds.Height + 2 * grow);
+        }
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new AddMarkEntry(PageIndex, EquivalentSquare.X, EquivalentSquare.Y, EquivalentSquare.Width, EquivalentSquare.Height, annotationId)
+        : new RemoveStampEntry(PageIndex, annotationId);
 }

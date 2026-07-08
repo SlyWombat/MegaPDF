@@ -1,4 +1,5 @@
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Recovery;
 
 namespace MegaPDF.Core.Editing;
 
@@ -26,4 +27,7 @@ public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfT
         using var page = document.GetPage(PageIndex);
         page.SetTextRunText(run, run.Text);
     }
+
+    public JournalEntry ToJournalEntry(bool inverse) =>
+        new TextEditEntry(PageIndex, run.ObjectIndex, inverse ? run.Text : newText);
 }

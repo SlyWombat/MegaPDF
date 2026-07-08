@@ -52,6 +52,9 @@ public partial class App : Application
             && File.Exists(commandLine[1]))
         {
             await mainWindow.ViewModel.OpenDocumentAsync(Path.GetFullPath(commandLine[1]));
+            return;
         }
+
+        await mainWindow.OfferCrashRecoveryAsync();
     }
 }
