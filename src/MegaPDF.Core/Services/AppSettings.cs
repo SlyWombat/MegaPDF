@@ -56,6 +56,13 @@ public sealed class AppSettings
         set { _model = _model with { FlattenOnSave = value }; Save(); }
     }
 
+    /// <summary>Startup update check against GitHub releases — on by default.</summary>
+    public bool CheckForUpdates
+    {
+        get => _model.CheckForUpdates;
+        set { _model = _model with { CheckForUpdates = value }; Save(); }
+    }
+
     private Model Load()
     {
         if (!File.Exists(_path))
@@ -86,5 +93,6 @@ public sealed class AppSettings
         public bool ReopenLastFile { get; init; }
         public bool DefaultAppCardShown { get; init; }
         public bool FlattenOnSave { get; init; }
+        public bool CheckForUpdates { get; init; } = true;
     }
 }

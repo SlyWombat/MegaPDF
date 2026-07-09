@@ -225,6 +225,24 @@ The heuristic detector for drawn squares is a differentiating feature — compet
 - Save of a 500-page document completes < 3 s (incremental path).
 - Round-trip (open → no edits → save) preserves all document content and metadata except modification date.
 
+### 3.5 F5 — Printing *(scope amendment, added in 1.4 — 2026-07-09)*
+
+**User story:** *"Ctrl+P, pick my printer, print. Like every other Windows app."*
+
+Printing was originally out of scope; tester demand promoted it. The scope stays
+deliberately minimal (P1):
+
+- **Ctrl+P** or the toolbar Print button opens the **standard Windows print dialog**
+  with a live preview — printer choice, copies, and page ranges come from the system
+  dialog. MegaPDF adds **no print-options UI of its own.**
+- Pages print at 150 DPI raster (crisp for documents; matches the email-quality bar
+  used elsewhere), scaled uniformly to the paper.
+- What you see is what prints: the current in-memory document, including unsaved
+  edits, marks, whiteouts, and signatures.
+
+**Acceptance:** print the persona's filled form to Microsoft Print to PDF; output
+matches the on-screen document page-for-page.
+
 ---
 
 ## 4. Technical Architecture & UI Framework

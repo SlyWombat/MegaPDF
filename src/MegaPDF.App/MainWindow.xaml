@@ -60,6 +60,16 @@
                     </StackPanel>
                 </Button>
 
+                <Button Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" ToolTipService.ToolTip="Print" AutomationProperties.Name="Print">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE749;" FontSize="16" />
+                        <TextBlock Text="Print" />
+                    </StackPanel>
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="P" />
+                    </Button.KeyboardAccelerators>
+                </Button>
+
                 <AppBarSeparator />
 
                 <Button Command="{x:Bind ViewModel.UndoCommand}">
@@ -202,6 +212,10 @@
                                     x:Name="FlattenToggle"
                                     Header="Make marks &amp; signatures permanent when saving"
                                     Toggled="OnFlattenToggled" />
+                                <ToggleSwitch
+                                    x:Name="UpdateCheckToggle"
+                                    Header="Check for updates at startup"
+                                    Toggled="OnUpdateCheckToggled" />
                                 <StackPanel Spacing="2" Margin="0,4,0,0">
                                     <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                     <TextBlock Text="Free &amp; open source · Apache-2.0" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
@@ -316,6 +330,18 @@
                     CloseButtonClick="OnDefaultAppCardClosed">
                     <InfoBar.ActionButton>
                         <Button Content="Choose default apps" Click="OnChooseDefaultAppsClicked" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+                <InfoBar
+                    x:Name="UpdateBar"
+                    Severity="Success"
+                    Message="{x:Bind ViewModel.UpdateMessage, Mode=OneWay}"
+                    IsClosable="True">
+                    <InfoBar.ActionButton>
+                        <Button
+                            x:Name="UpdateActionButton"
+                            Content="{x:Bind ViewModel.UpdateActionLabel, Mode=OneWay}"
+                            Click="OnUpdateActionClicked" />
                     </InfoBar.ActionButton>
                 </InfoBar>
             </StackPanel>

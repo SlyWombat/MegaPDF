@@ -18,11 +18,14 @@ public sealed partial class MainWindow : Window
     public MainViewModel ViewModel { get; }
 
     private bool _allowClose;
+    private readonly PdfPrinter _printer;
 
     public MainWindow()
     {
         ViewModel = new MainViewModel(this);
         InitializeComponent();
+        _printer = new PdfPrinter(this, () => ViewModel.CurrentDocument, () => ViewModel.OpenDocumentName);
+        _printer.Register();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
         ViewModel.LoadSignatures();
         ViewModel.LoadRecentDocuments();
@@ -670,6 +673,58 @@ public sealed partial class MainWindow : Window
             _ = ViewModel.UpdateViewportAsync(firstVisible, lastVisible);
     }
 
+    private async void OnPrintClicked(object sender, RoutedEventArgs e) =>
+        await _printer.ShowPrintUiAsync();
+
+    // --- Startup update check (packaged builds only) ---
+
+    private readonly UpdateChecker _updateChecker = new();
+
+    public async Task CheckForUpdatesAsync()
+    {
+        if (!ViewModel.CheckForUpdates)
+            return;
+        var version = await _updateChecker.CheckAsync();
+        if (version is null)
+            return;
+        ViewModel.UpdateAvailableVersion = version;
+        UpdateBar.IsOpen = true;
+    }
+
+    private async void OnUpdateActionClicked(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.UpdateStaged)
+        {
+            UpdateChecker.RestartNow();
+            return;
+        }
+
+        ViewModel.UpdateDownloading = true;
+        UpdateActionButton.IsEnabled = false;
+        try
+        {
+            await _updateChecker.DownloadAndStageAsync();
+            ViewModel.UpdateStaged = true;
+        }
+        catch (Exception ex)
+        {
+            UpdateBar.IsOpen = false;
+            var dialog = new ContentDialog
+            {
+                Title = "Couldn't update",
+                Content = $"{ex.Message}\n\nYou can download the new version from the MegaPDF releases page instead.",
+                CloseButtonText = "OK",
+                XamlRoot = Content.XamlRoot,
+            };
+            await dialog.ShowAsync();
+        }
+        finally
+        {
+            ViewModel.UpdateDownloading = false;
+            UpdateActionButton.IsEnabled = true;
+        }
+    }
+
     private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>
         await ViewModel.FitWidthAsync(PagesScroll.ViewportWidth);
 
@@ -772,6 +827,7 @@ public sealed partial class MainWindow : Window
         ThemeChoice.SelectedIndex = ViewModel.ThemeSetting switch { "Light" => 1, "Dark" => 2, _ => 0 };
         ReopenToggle.IsOn = ViewModel.ReopenLastFile;
         FlattenToggle.IsOn = ViewModel.FlattenOnSave;
+        UpdateCheckToggle.IsOn = ViewModel.CheckForUpdates;
         var version = typeof(MainWindow).Assembly.GetName().Version;
         AboutVersion.Text = $"MegaPDF {version?.ToString(3) ?? "dev"}";
         _settingsLoading = false;
@@ -801,6 +857,12 @@ public sealed partial class MainWindow : Window
     {
         if (!_settingsLoading)
             ViewModel.FlattenOnSave = FlattenToggle.IsOn;
+    }
+
+    private void OnUpdateCheckToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_settingsLoading)
+            ViewModel.CheckForUpdates = UpdateCheckToggle.IsOn;
     }
 
     public void ApplyTheme()

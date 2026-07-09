@@ -27,6 +27,25 @@ jobs:
       - name: Kill-during-save gate
         run: dotnet test MegaPDF.sln --configuration Release --no-build --filter "FullyQualifiedName~AtomicFileWriter"
 
+      # A PERSISTENT signing identity is required for the in-app update chain:
+      # staged updates only install if the new package's publisher matches the
+      # installed one. Falls back to an ephemeral cert if the secret is absent.
+      - name: Import signing certificate
+        shell: powershell
+        env:
+          PFX_B64: ${{ secrets.SIGNING_CERT_PFX }}
+          PFX_PASS: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          if ($env:PFX_B64) {
+            [IO.File]::WriteAllBytes("signing.pfx", [Convert]::FromBase64String($env:PFX_B64))
+            $password = ConvertTo-SecureString $env:PFX_PASS -AsPlainText -Force
+            Import-PfxCertificate -FilePath signing.pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password | Out-Null
+            Remove-Item signing.pfx
+            Write-Host "Persistent signing certificate imported."
+          } else {
+            Write-Host "No signing secret - an ephemeral certificate will be generated (updates from this build won't chain)."
+          }
+
       - name: Build installer bundle
         shell: powershell
         run: tools\Build-Installer.ps1
@@ -40,5 +59,9 @@ jobs:
       - name: Attach to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*.zip
+          # The zip is the human bundle; the raw .msix is what the in-app
+          # updater downloads directly.
+          files: |
+            artifacts/*.zip
+            artifacts/**/*.msix
           generate_release_notes: true

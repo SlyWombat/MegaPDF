@@ -67,5 +67,8 @@ public partial class App : Application
 
         // First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — once, dismissible forever.
         mainWindow.ViewModel.MaybeShowDefaultAppCard();
+
+        // Quiet startup update check (packaged builds; setting-gated; never blocks).
+        _ = mainWindow.CheckForUpdatesAsync();
     }
 }

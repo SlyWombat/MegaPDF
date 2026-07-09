@@ -52,6 +52,14 @@ scan) to cover it with white. Click a whiteout to select it; ✕ or Delete remov
 whiteout), type, press Enter. The new text behaves like any other text afterwards:
 click it to edit, clear it to delete.
 
+**Print** — the Print button (or Ctrl+P) opens the normal Windows print dialog with a
+preview; pick a printer and print. What you see, including your edits, is what prints.
+
+**Updates** — if a newer version is out, a green bar appears at startup offering Update;
+click it and MegaPDF downloads and installs the new version in the background, then uses
+it next time you open the app (or click Restart now). Turn this off in Settings if you
+prefer. (Only works in the installed app, not a dev build.)
+
 **Shrink for email** — the Shrink button saves a *smaller copy* of the current file
 (pictures reduced to email quality; the original is never touched). Try it on a
 photo-heavy or scanned PDF and check the size difference — and that the copy still

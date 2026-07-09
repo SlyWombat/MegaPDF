@@ -96,6 +96,35 @@ public partial class MainViewModel(Window window) : ObservableObject
     [ObservableProperty]
     private bool _isDefaultAppCardOpen;
 
+    // --- Update bar states: available → downloading → staged (restart) ---
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateMessage), nameof(UpdateActionLabel))]
+    private string? _updateAvailableVersion;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateMessage), nameof(UpdateActionLabel))]
+    private bool _updateDownloading;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UpdateMessage), nameof(UpdateActionLabel))]
+    private bool _updateStaged;
+
+    public bool IsUpdateBarOpen => UpdateAvailableVersion is not null;
+
+    public string UpdateMessage =>
+        UpdateStaged ? $"MegaPDF {UpdateAvailableVersion} is ready — it will be used the next time you open MegaPDF."
+        : UpdateDownloading ? $"Getting MegaPDF {UpdateAvailableVersion}…"
+        : $"A new version of MegaPDF is available ({UpdateAvailableVersion}).";
+
+    public string UpdateActionLabel => UpdateStaged ? "Restart now" : "Update";
+
+    public bool CheckForUpdates
+    {
+        get => _settings.CheckForUpdates;
+        set => _settings.CheckForUpdates = value;
+    }
+
     public void MaybeShowDefaultAppCard()
     {
         if (_settings.DefaultAppCardShown)
@@ -128,9 +157,12 @@ public partial class MainViewModel(Window window) : ObservableObject
     public ObservableCollection<PageView> Pages { get; } = [];
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility), nameof(IsDocumentOpen))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand))]
     private string? _documentPath;
+
+    /// <summary>The live document — printing renders what's on screen, unsaved edits included.</summary>
+    internal IPdfDocument? CurrentDocument => _document;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(SaveButtonLabel))]
