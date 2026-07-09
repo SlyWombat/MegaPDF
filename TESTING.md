@@ -45,6 +45,13 @@ photo/scan (white background is removed automatically). Then click the signature
 click the page to place it. Click a placed signature to select it: drag to move,
 drag the round corner handle to resize, ✕ or Delete key to remove.
 
+**Whiteout** — the Whiteout button, then drag across anything (text, images, even a
+scan) to cover it with white. Click a whiteout to select it; ✕ or Delete removes it.
+
+**Add text** — the Add text button, then click anywhere (including on top of a
+whiteout), type, press Enter. The new text behaves like any other text afterwards:
+click it to edit, clear it to delete.
+
 **Saving** — Ctrl+S overwrites; Save As makes a copy. Close with unsaved changes and
 you should always be asked. After saving, open the file in Edge or Adobe to confirm
 your edits look right there too.

@@ -37,6 +37,15 @@ public sealed partial class MainWindow : Window
         {
             root.PreviewKeyDown += async (_, args) =>
             {
+                // Esc cancels any placement mode first.
+                if (args.Key == VirtualKey.Escape && _activeEditor is null
+                    && (ViewModel.PendingSignature is not null || ViewModel.IsWhiteoutMode || ViewModel.IsTextBoxMode))
+                {
+                    args.Handled = true;
+                    ViewModel.CancelPlacementModes();
+                    return;
+                }
+
                 if (_selection is null || _activeEditor is not null)
                     return;
 
@@ -45,7 +54,7 @@ public sealed partial class MainWindow : Window
                     args.Handled = true;
                     var selection = _selection;
                     Deselect();
-                    await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
+                    await RemoveSelectedAsync(selection);
                     return;
                 }
                 if (args.Key == VirtualKey.Escape)
@@ -121,6 +130,12 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        if (_suppressNextTap)
+        {
+            _suppressNextTap = false;
+            return;
+        }
+
         var position = e.GetPosition(pageGrid);
         var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
         var pagePoint = new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint);
@@ -129,6 +144,17 @@ public sealed partial class MainWindow : Window
         if (ViewModel.PendingSignature is not null)
         {
             await ViewModel.PlacePendingSignatureAsync(pageView.Index, pagePoint);
+            return;
+        }
+
+        // Text-box mode: the click chooses where the new text goes (SDD-style inline editor).
+        if (ViewModel.IsTextBoxMode)
+        {
+            ViewModel.CancelPlacementModes();
+            ShowInlineEditor(pageGrid, new PdfRect(pagePoint.X, pagePoint.Y, 0, 12), "", 12,
+                newText => string.IsNullOrWhiteSpace(newText)
+                    ? Task.CompletedTask
+                    : ViewModel.AddTextBoxAsync(pageView.Index, pagePoint, newText));
             return;
         }
 
@@ -150,6 +176,11 @@ public sealed partial class MainWindow : Window
                 else
                     // Check marks stay click-to-toggle (SDD §3.2).
                     await ViewModel.RemoveStampAsync(pageView.Index, hit.AnnotationId, hit.Bounds!.Value);
+                break;
+
+            case PageHitKind.Whiteout:
+                // Select with a remove-only chrome (redraw to reposition).
+                SelectStamp(pageGrid, pageView, $"whiteout:{hit.ObjectIndex}", hit.Bounds!.Value, movable: false);
                 break;
 
             case PageHitKind.FormTextField:
@@ -240,17 +271,17 @@ public sealed partial class MainWindow : Window
 
     // --- Signature selection chrome (SDD §3.3: drag to move, handle to resize, ✕/Delete to remove) ---
 
-    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds);
+    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable);
 
     private StampSelection? _selection;
     private Grid? _selectionChrome;
 
-    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds)
+    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds, bool movable = true)
     {
         Deselect();
         if (pageGrid is not PageCanvas canvas)
             return;
-        _selection = new StampSelection(canvas, pageView, annotationId, bounds);
+        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable);
 
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var accent = new Microsoft.UI.Xaml.Media.SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]);
@@ -264,8 +295,9 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(bounds.X * toDip, bounds.Y * toDip, 0, 0),
             Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
-            ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY,
         };
+        if (movable)
+            chrome.ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY;
         chrome.Children.Add(new Border
         {
             BorderBrush = accent,
@@ -284,6 +316,7 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, -7, -7),
             ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY,
+            Visibility = movable ? Visibility.Visible : Visibility.Collapsed,
         };
         chrome.Children.Add(handle);
 
@@ -327,11 +360,21 @@ public sealed partial class MainWindow : Window
             var selection = _selection;
             Deselect();
             if (selection is not null)
-                await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
+                await RemoveSelectedAsync(selection);
         };
 
         canvas.Children.Add(chrome);
         _selectionChrome = chrome;
+    }
+
+    /// <summary>✕ chip / Delete key: whiteouts and stamps remove through different operations.</summary>
+    private async Task RemoveSelectedAsync(StampSelection selection)
+    {
+        if (selection.Id.StartsWith("whiteout:", StringComparison.Ordinal))
+            await ViewModel.RemoveWhiteoutAsync(selection.Page.Index,
+                int.Parse(selection.Id.AsSpan("whiteout:".Length)), selection.Bounds);
+        else
+            await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
     }
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _nudgeTimer;
@@ -339,7 +382,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Arrow-key nudge: move the chrome immediately, commit after a quiet moment.</summary>
     private void NudgeSelection(double dxPoints, double dyPoints)
     {
-        if (_selectionChrome is null)
+        if (_selectionChrome is null || _selection is not { Movable: true })
             return;
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var margin = _selectionChrome.Margin;
@@ -419,10 +462,75 @@ public sealed partial class MainWindow : Window
     private FrameworkElement? _hoverOverlay;
     private PageCanvas? _hoverCanvas;
 
+    // --- Whiteout drag placement ---
+
+    private bool _suppressNextTap;
+    private PageCanvas? _whiteoutCanvas;
+    private Border? _whiteoutPreview;
+    private Windows.Foundation.Point _whiteoutStart;
+
+    private void OnPagePointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (!ViewModel.IsWhiteoutMode || sender is not PageCanvas canvas)
+            return;
+        _whiteoutCanvas = canvas;
+        _whiteoutStart = e.GetCurrentPoint(canvas).Position;
+        _whiteoutPreview = new Border
+        {
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) { Opacity = 0.75 },
+            BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]),
+            BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(_whiteoutStart.X, _whiteoutStart.Y, 0, 0),
+            IsHitTestVisible = false,
+        };
+        canvas.Children.Add(_whiteoutPreview);
+        canvas.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private async void OnPagePointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (_whiteoutPreview is null || sender is not PageCanvas canvas || canvas != _whiteoutCanvas)
+            return;
+        var end = e.GetCurrentPoint(canvas).Position;
+        canvas.ReleasePointerCapture(e.Pointer);
+        canvas.Children.Remove(_whiteoutPreview);
+        _whiteoutPreview = null;
+        _whiteoutCanvas = null;
+        ViewModel.CancelPlacementModes();
+        _suppressNextTap = true; // the release also raises Tapped
+        e.Handled = true;
+
+        if (canvas.DataContext is not PageView pageView)
+            return;
+        var toPoint = 72.0 / 96 / ViewModel.ZoomFactor;
+        var rect = new PdfRect(
+            Math.Min(_whiteoutStart.X, end.X) * toPoint,
+            Math.Min(_whiteoutStart.Y, end.Y) * toPoint,
+            Math.Abs(end.X - _whiteoutStart.X) * toPoint,
+            Math.Abs(end.Y - _whiteoutStart.Y) * toPoint);
+        await ViewModel.AddWhiteoutAsync(pageView.Index, rect);
+    }
+
     private void OnPagePointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not PageCanvas canvas || canvas.DataContext is not PageView pageView)
             return;
+
+        // Live rubber-band while placing a whiteout.
+        if (_whiteoutPreview is not null && canvas == _whiteoutCanvas)
+        {
+            var current = e.GetCurrentPoint(canvas).Position;
+            _whiteoutPreview.Margin = new Thickness(
+                Math.Min(_whiteoutStart.X, current.X), Math.Min(_whiteoutStart.Y, current.Y), 0, 0);
+            _whiteoutPreview.Width = Math.Abs(current.X - _whiteoutStart.X);
+            _whiteoutPreview.Height = Math.Abs(current.Y - _whiteoutStart.Y);
+            e.Handled = true;
+            return;
+        }
+
         if (_activeEditor is not null)
             return;
 
@@ -443,13 +551,16 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        canvas.SetCursorShape(ViewModel.PendingSignature is not null
-            ? Microsoft.UI.Input.InputSystemCursorShape.Cross
+        canvas.SetCursorShape(
+            ViewModel.PendingSignature is not null || ViewModel.IsWhiteoutMode
+                ? Microsoft.UI.Input.InputSystemCursorShape.Cross
+            : ViewModel.IsTextBoxMode
+                ? Microsoft.UI.Input.InputSystemCursorShape.IBeam
             : region?.Kind switch
             {
                 PageHitKind.TextRun or PageHitKind.FormTextField => Microsoft.UI.Input.InputSystemCursorShape.IBeam,
                 PageHitKind.FormCheckbox or PageHitKind.DrawnCheckbox or PageHitKind.StampAnnotation
-                    => Microsoft.UI.Input.InputSystemCursorShape.Hand,
+                    or PageHitKind.Whiteout => Microsoft.UI.Input.InputSystemCursorShape.Hand,
                 _ => Microsoft.UI.Input.InputSystemCursorShape.Arrow,
             });
 
@@ -723,7 +834,13 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnCancelPlacementClicked(InfoBar sender, object args) =>
-        ViewModel.CancelSignaturePlacement();
+        ViewModel.CancelPlacementModes();
+
+    private void OnWhiteoutModeClicked(object sender, RoutedEventArgs e) =>
+        ViewModel.StartWhiteoutMode();
+
+    private void OnTextBoxModeClicked(object sender, RoutedEventArgs e) =>
+        ViewModel.StartTextBoxMode();
 
     private void OnDefaultAppCardClosed(InfoBar sender, object args) =>
         ViewModel.DismissDefaultAppCard();

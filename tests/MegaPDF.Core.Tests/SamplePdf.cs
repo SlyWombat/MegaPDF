@@ -63,6 +63,25 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// One page with text AND a raster image drawn in the CONTENT stream (a dark
+    /// gray 4x4 bitmap stretched to 120x60pt at 100,480) — for whiteout coverage tests.
+    /// </summary>
+    public static byte[] BuildWithImage()
+    {
+        var content = "BT /F1 18 Tf 72 700 Td (Caption text) Tj ET\nq 120 0 0 60 100 480 cm /Im1 Do Q\n";
+        var imageData = new string('@', 48); // 4x4 RGB, every byte 0x40 → dark gray
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> /XObject << /Im1 6 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            $"6 0 obj\n<< /Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {imageData.Length} >>\nstream\n{imageData}\nendstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// One-page PDF with drawn (non-form) rectangles: an 18pt stroked square at
     /// 100,500 (a checkbox), a 100x50 stroked box (too big), and a 10pt filled
     /// square (decoration, not a checkbox).

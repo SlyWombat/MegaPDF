@@ -371,10 +371,12 @@ public partial class MainViewModel(Window window) : ObservableObject
             if (kind != PageHitKind.None)
                 regions.Add(new InteractiveRegion(field.Bounds, kind));
         }
-        foreach (var square in page.DetectCheckboxSquares())
-            regions.Add(new InteractiveRegion(square, PageHitKind.DrawnCheckbox));
         foreach (var line in page.GetTextLines())
             regions.Add(new InteractiveRegion(line.Bounds, PageHitKind.TextRun));
+        foreach (var whiteout in page.GetWhiteouts())
+            regions.Add(new InteractiveRegion(whiteout.Bounds, PageHitKind.Whiteout));
+        foreach (var square in page.DetectCheckboxSquares())
+            regions.Add(new InteractiveRegion(square, PageHitKind.DrawnCheckbox));
         return regions;
     }
 
@@ -477,8 +479,62 @@ public partial class MainViewModel(Window window) : ObservableObject
     [NotifyPropertyChangedFor(nameof(PlacementHintVisibility), nameof(PlacementHint))]
     private SignatureItem? _pendingSignature;
 
-    public Visibility PlacementHintVisibility => PendingSignature is null ? Visibility.Collapsed : Visibility.Visible;
-    public string PlacementHint => PendingSignature is null ? "" : $"Click on the page to place “{PendingSignature.Name}”";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlacementHintVisibility), nameof(PlacementHint))]
+    private bool _isWhiteoutMode;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlacementHintVisibility), nameof(PlacementHint))]
+    private bool _isTextBoxMode;
+
+    public Visibility PlacementHintVisibility =>
+        PendingSignature is not null || IsWhiteoutMode || IsTextBoxMode ? Visibility.Visible : Visibility.Collapsed;
+
+    public string PlacementHint =>
+        PendingSignature is not null ? $"Click on the page to place “{PendingSignature.Name}”"
+        : IsWhiteoutMode ? "Drag across the area you want to cover — Esc cancels"
+        : IsTextBoxMode ? "Click where the new text should go — Esc cancels"
+        : "";
+
+    public void StartWhiteoutMode()
+    {
+        CancelPlacementModes();
+        IsWhiteoutMode = true;
+    }
+
+    public void StartTextBoxMode()
+    {
+        CancelPlacementModes();
+        IsTextBoxMode = true;
+    }
+
+    public void CancelPlacementModes()
+    {
+        PendingSignature = null;
+        IsWhiteoutMode = false;
+        IsTextBoxMode = false;
+    }
+
+    public async Task AddWhiteoutAsync(int pageIndex, PdfRect bounds)
+    {
+        if (_document is null || bounds.Width < 4 || bounds.Height < 4)
+            return;
+        await DoEditAsync(new AddWhiteoutOperation(_document, pageIndex, bounds));
+    }
+
+    public async Task RemoveWhiteoutAsync(int pageIndex, int objectIndex, PdfRect bounds)
+    {
+        if (_document is null)
+            return;
+        await DoEditAsync(new RemoveWhiteoutOperation(_document, pageIndex, objectIndex, bounds));
+    }
+
+    public async Task AddTextBoxAsync(int pageIndex, PdfPoint topLeft, string text)
+    {
+        if (_document is null || string.IsNullOrWhiteSpace(text))
+            return;
+        await DoEditAsync(new AddTextBoxOperation(_document, pageIndex, text.Trim(), 12, topLeft));
+    }
 
     public void LoadSignatures()
     {

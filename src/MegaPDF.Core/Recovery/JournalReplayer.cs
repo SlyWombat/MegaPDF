@@ -44,6 +44,28 @@ public static class JournalReplayer
                     applied++;
                     break;
 
+                case WhiteoutAddEntry whiteout:
+                    page.AppendWhiteout(new PdfRect(whiteout.X, whiteout.Y, whiteout.Width, whiteout.Height));
+                    applied++;
+                    break;
+
+                case WhiteoutRemoveEntry removal:
+                {
+                    var target = new PdfRect(removal.X, removal.Y, removal.Width, removal.Height);
+                    var match = page.GetWhiteouts()
+                        .Where(w => Math.Abs(w.Bounds.X - target.X) < 1 && Math.Abs(w.Bounds.Y - target.Y) < 1
+                                 && Math.Abs(w.Bounds.Width - target.Width) < 2 && Math.Abs(w.Bounds.Height - target.Height) < 2)
+                        .OrderByDescending(w => w.ObjectIndex)
+                        .Select(w => ((int Index, PdfRect Bounds)?)w)
+                        .FirstOrDefault();
+                    if (match is { } found)
+                    {
+                        page.DetachObjectAt(found.Index);
+                        applied++;
+                    }
+                    break;
+                }
+
                 case LineRestoreEntry lineRestore:
                     foreach (var run in lineRestore.Restores) // recorded ascending
                         page.InsertTextRun(run.Index, run.Text, run.FontName, run.FontSize,

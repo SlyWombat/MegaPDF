@@ -243,17 +243,27 @@ internal sealed class PdfiumPage : IPdfPage
             };
         }
 
+        // Whiteouts and text share the content layer; later objects paint on top,
+        // so when both are under the click, the higher object index wins (a text
+        // box placed over a whiteout must stay editable).
+        var whiteout = GetWhiteouts()
+            .Where(w => w.Bounds.Contains(point))
+            .OrderByDescending(w => w.ObjectIndex)
+            .Select(w => ((int Index, PdfRect Bounds)?)w)
+            .FirstOrDefault();
+        var line = GetTextLines().FirstOrDefault(l => l.Bounds.Contains(point));
+
+        if (whiteout is { } w2 && (line is null || line.Runs.Max(r => r.ObjectIndex) < w2.Index))
+            return new PageHit(PageHitKind.Whiteout, Bounds: w2.Bounds, ObjectIndex: w2.Index);
+
         foreach (var square in DetectCheckboxSquares())
         {
             if (square.Contains(point))
                 return new PageHit(PageHitKind.DrawnCheckbox, Bounds: square);
         }
 
-        foreach (var line in GetTextLines())
-        {
-            if (line.Bounds.Contains(point))
-                return new PageHit(PageHitKind.TextRun, TextRun: line.Runs[0], TextLine: line);
-        }
+        if (line is not null)
+            return new PageHit(PageHitKind.TextRun, TextRun: line.Runs[0], TextLine: line);
         return new PageHit(PageHitKind.None);
     }
 
@@ -607,11 +617,113 @@ internal sealed class PdfiumPage : IPdfPage
             var obj = PdfiumNative.FPDFPage_GetObject(_handle, run.ObjectIndex);
             if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
                 throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
-            if (PdfiumNative.FPDFPage_RemoveObject(_handle, obj) == 0)
-                throw new InvalidOperationException("Could not remove the text.");
+            return DetachObject(obj);
+        }
+    }
+
+    public DetachedTextRun DetachObjectAt(int objectIndex)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
+            if (obj == IntPtr.Zero)
+                throw new InvalidOperationException($"No page object at index {objectIndex}.");
+            return DetachObject(obj);
+        }
+    }
+
+    private DetachedTextRun DetachObject(IntPtr obj)
+    {
+        if (PdfiumNative.FPDFPage_RemoveObject(_handle, obj) == 0)
+            throw new InvalidOperationException("Could not remove the object.");
+        GenerateContent();
+        // Ownership transferred to us; kept alive for a possible undo.
+        return new DetachedTextRun(obj);
+    }
+
+    private const string WhiteoutMarkName = "MegaPDFWhiteout";
+
+    public int AppendWhiteout(PdfRect bounds)
+    {
+        ThrowIfDisposed();
+        var left = (float)bounds.X;
+        var right = (float)bounds.Right;
+        var top = (float)(Height - bounds.Y);
+        var bottom = (float)(Height - bounds.Bottom);
+
+        lock (PdfiumLibrary.Lock)
+        {
+            var path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
+            PdfiumNative.FPDFPath_LineTo(path, right, bottom);
+            PdfiumNative.FPDFPath_LineTo(path, right, top);
+            PdfiumNative.FPDFPath_LineTo(path, left, top);
+            PdfiumNative.FPDFPath_LineTo(path, left, bottom);
+            PdfiumNative.FPDFPageObj_SetFillColor(path, 0xFF, 0xFF, 0xFF, 0xFF);
+            PdfiumNative.FPDFPath_SetDrawMode(path, fillMode: 1, stroke: 0);
+            PdfiumNative.FPDFPageObj_AddMark(path, WhiteoutMarkName);
+
+            var index = PdfiumNative.FPDFPage_CountObjects(_handle);
+            if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, path, (nuint)index) == 0)
+            {
+                PdfiumNative.FPDFPageObj_Destroy(path);
+                throw new InvalidOperationException("Could not place the whiteout.");
+            }
             GenerateContent();
-            // Ownership transferred to us; kept alive for a possible undo.
-            return new DetachedTextRun(obj);
+            return index;
+        }
+    }
+
+    public IReadOnlyList<(int ObjectIndex, PdfRect Bounds)> GetWhiteouts()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var whiteouts = new List<(int, PdfRect)>();
+            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
+                if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_PATH)
+                    continue;
+                if (!HasWhiteoutMark(obj))
+                    continue;
+                if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
+                    continue;
+                whiteouts.Add((i, new PdfRect(left, Height - top, right - left, top - bottom)));
+            }
+            return whiteouts;
+        }
+    }
+
+    private static bool HasWhiteoutMark(IntPtr obj)
+    {
+        var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
+        for (var m = 0; m < marks; m++)
+        {
+            var mark = PdfiumNative.FPDFPageObj_GetMark(obj, m);
+            if (mark == IntPtr.Zero)
+                continue;
+            PdfiumNative.FPDFPageObjMark_GetName(mark, null, 0, out var lengthInBytes);
+            if (lengthInBytes <= 2)
+                continue;
+            var buffer = new byte[lengthInBytes];
+            PdfiumNative.FPDFPageObjMark_GetName(mark, buffer, lengthInBytes, out _);
+            if (System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2) == WhiteoutMarkName)
+                return true;
+        }
+        return false;
+    }
+
+    public int AppendTextBox(string text, double fontSize, PdfPoint topLeft)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var index = PdfiumNative.FPDFPage_CountObjects(_handle);
+            InsertTextRun(index, text, "Helvetica", fontSize,
+                new PdfRect(topLeft.X, topLeft.Y, 0, fontSize));
+            return index;
         }
     }
 

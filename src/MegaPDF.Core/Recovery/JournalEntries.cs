@@ -15,6 +15,8 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(LineEditEntry), "lineEdit")]
 [JsonDerivedType(typeof(LineDeleteEntry), "lineDelete")]
 [JsonDerivedType(typeof(LineRestoreEntry), "lineRestore")]
+[JsonDerivedType(typeof(WhiteoutAddEntry), "whiteoutAdd")]
+[JsonDerivedType(typeof(WhiteoutRemoveEntry), "whiteoutRemove")]
 [JsonDerivedType(typeof(FormTextEntry), "formText")]
 [JsonDerivedType(typeof(CheckToggleEntry), "checkToggle")]
 [JsonDerivedType(typeof(AddMarkEntry), "addMark")]
@@ -48,6 +50,11 @@ public sealed record LineDeleteEntry(int PageIndex, int[] DetachIndexes) : Journ
 
 /// <summary>Undo of a line edit/delete: recreate runs ascending; FirstIndex ≥ 0 also restores that run's text.</summary>
 public sealed record LineRestoreEntry(int PageIndex, int FirstIndex, string? FirstText, RestoreRun[] Restores) : JournalEntry(PageIndex);
+
+public sealed record WhiteoutAddEntry(int PageIndex, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
+
+/// <summary>Removal is resolved by bounds at replay time (content indexes shift).</summary>
+public sealed record WhiteoutRemoveEntry(int PageIndex, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
 
 public sealed record FormTextEntry(int PageIndex, string FieldName, string NewValue) : JournalEntry(PageIndex);
 

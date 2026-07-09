@@ -211,6 +211,14 @@ internal static class PdfiumNative
 
     public const int FPDF_PAGEOBJ_IMAGE = 3;
 
+    // --- Content marks (identify MegaPDF whiteout objects) ---
+
+    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_AddMark(IntPtr pageObject, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+    [DllImport(Dll)] public static extern int FPDFPageObj_CountMarks(IntPtr pageObject);
+    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_GetMark(IntPtr pageObject, int index);
+    /// <summary>UTF-16 buffer; out length in bytes incl. NUL.</summary>
+    [DllImport(Dll)] public static extern int FPDFPageObjMark_GetName(IntPtr mark, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
+
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_MoveTo(IntPtr path, float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_LineTo(IntPtr path, float x, float y);

@@ -84,6 +84,26 @@ public interface IPdfPage : IDisposable
     /// </summary>
     void InsertTextRun(int objectIndex, string text, string fontName, double fontSize, PdfRect bounds);
 
+    /// <summary>
+    /// Appends a white filled rectangle to the page CONTENT (not an annotation), so it
+    /// covers everything drawn before it — text and images alike. Tagged with a content
+    /// mark so it stays identifiable. Returns its object index.
+    /// </summary>
+    int AppendWhiteout(PdfRect bounds);
+
+    /// <summary>MegaPDF whiteout rectangles on this page (object index + bounds).</summary>
+    IReadOnlyList<(int ObjectIndex, PdfRect Bounds)> GetWhiteouts();
+
+    /// <summary>
+    /// Appends new standard-font text at the given top-left position (a "text box").
+    /// Appended after any whiteout, so it renders above one. Returns its object index;
+    /// the result is a normal text run — editable and deletable like any other.
+    /// </summary>
+    int AppendTextBox(string text, double fontSize, PdfPoint topLeft);
+
+    /// <summary>Detaches any page object by index (kept alive for undo), regardless of type.</summary>
+    DetachedTextRun DetachObjectAt(int objectIndex);
+
     void SetFormFieldValue(PdfFormField field, string value);
     void ToggleCheckbox(PdfFormField field);
 
@@ -138,6 +158,9 @@ public enum PageHitKind
 
     /// <summary>A MegaPDF-placed stamp (check mark or signature).</summary>
     StampAnnotation,
+
+    /// <summary>A MegaPDF whiteout rectangle (page content, covers what's beneath).</summary>
+    Whiteout,
 }
 
 public sealed record PageHit(
@@ -146,7 +169,8 @@ public sealed record PageHit(
     PdfFormField? Field = null,
     string? AnnotationId = null,
     PdfRect? Bounds = null,
-    PdfTextLine? TextLine = null);
+    PdfTextLine? TextLine = null,
+    int? ObjectIndex = null);
 
 /// <summary>A contiguous run of body text sharing one font/size/color.</summary>
 public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize);
