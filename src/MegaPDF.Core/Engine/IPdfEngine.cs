@@ -23,6 +23,13 @@ public interface IPdfDocument : IDisposable
     /// Callers own atomicity — see <see cref="Services.AtomicFileWriter"/>.
     /// </summary>
     void Save(Stream target);
+
+    /// <summary>
+    /// Bakes marks, signatures, and form values permanently into page content
+    /// (SDD §3.3 "flatten on save", off by default). Irreversible: annotations
+    /// and fields stop being interactive afterwards.
+    /// </summary>
+    void FlattenAllPages();
 }
 
 public interface IPdfPage : IDisposable

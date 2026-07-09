@@ -205,6 +205,10 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFAnnot_UpdateObject(IntPtr annot, IntPtr pageObject);
     [DllImport(Dll)] public static extern int FPDFImageObj_GetImagePixelSize(IntPtr imageObject, out uint width, out uint height);
 
+    /// <summary>Bakes annotations and form fields into page content. 0=fail, 1=success, 2=nothing to do.</summary>
+    [DllImport(Dll)] public static extern int FPDFPage_Flatten(IntPtr page, int flags);
+    public const int FLAT_NORMALDISPLAY = 0;
+
     public const int FPDF_PAGEOBJ_IMAGE = 3;
 
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);

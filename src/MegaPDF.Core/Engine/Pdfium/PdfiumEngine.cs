@@ -129,6 +129,22 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
     }
 
+    public void FlattenAllPages()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            // Commit any in-progress form editing, then bake every page.
+            PdfiumNative.FORM_ForceToKillFocus(_forms.Handle);
+            var pageCount = PdfiumNative.FPDF_GetPageCount(_handle);
+            for (var i = 0; i < pageCount; i++)
+            {
+                using var page = (PdfiumPage)GetPage(i);
+                page.FlattenInternal();
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -659,6 +675,17 @@ internal sealed class PdfiumPage : IPdfPage
             (false, true) => "Helvetica-Oblique",
             _ => "Helvetica",
         };
+    }
+
+    /// <summary>Bakes this page's annotations/fields into its content stream.</summary>
+    internal void FlattenInternal()
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            if (PdfiumNative.FPDFPage_Flatten(_handle, PdfiumNative.FLAT_NORMALDISPLAY) == 0)
+                throw new InvalidOperationException($"Flattening page {Index} failed.");
+            GenerateContent();
+        }
     }
 
     /// <summary>Test hook: runs the tier-2 substitution path unconditionally.</summary>

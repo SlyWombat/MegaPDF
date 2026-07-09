@@ -175,6 +175,10 @@
                                     x:Name="ReopenToggle"
                                     Header="Reopen last file at startup"
                                     Toggled="OnReopenToggled" />
+                                <ToggleSwitch
+                                    x:Name="FlattenToggle"
+                                    Header="Make marks &amp; signatures permanent when saving"
+                                    Toggled="OnFlattenToggled" />
                                 <StackPanel Spacing="2" Margin="0,4,0,0">
                                     <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                     <TextBlock Text="Free &amp; open source · Apache-2.0" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
@@ -235,7 +239,7 @@
                 VerticalScrollBarVisibility="Auto"
                 ViewChanged="OnPagesScrollViewChanged"
                 PointerWheelChanged="OnPagesPointerWheel">
-                <ItemsControl ItemsSource="{x:Bind ViewModel.Pages}">
+                <ItemsControl x:Name="PagesItems" ItemsSource="{x:Bind ViewModel.Pages}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Spacing="16" Padding="24" HorizontalAlignment="Center" />

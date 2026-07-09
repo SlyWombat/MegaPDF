@@ -49,6 +49,13 @@ public sealed class AppSettings
         set { _model = _model with { DefaultAppCardShown = value }; Save(); }
     }
 
+    /// <summary>SDD §3.3 "flatten on save" — off by default to preserve editability.</summary>
+    public bool FlattenOnSave
+    {
+        get => _model.FlattenOnSave;
+        set { _model = _model with { FlattenOnSave = value }; Save(); }
+    }
+
     private Model Load()
     {
         if (!File.Exists(_path))
@@ -78,5 +85,6 @@ public sealed class AppSettings
         public string Theme { get; init; } = "";
         public bool ReopenLastFile { get; init; }
         public bool DefaultAppCardShown { get; init; }
+        public bool FlattenOnSave { get; init; }
     }
 }

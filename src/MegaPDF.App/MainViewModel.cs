@@ -70,6 +70,12 @@ public partial class MainViewModel(Window window) : ObservableObject
         set => _settings.ReopenLastFile = value;
     }
 
+    public bool FlattenOnSave
+    {
+        get => _settings.FlattenOnSave;
+        set => _settings.FlattenOnSave = value;
+    }
+
     public string? MostRecentDocument => _recentFiles.All.Count > 0 ? _recentFiles.All[0] : null;
 
     /// <summary>First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — shows once, ever.</summary>
@@ -550,15 +556,41 @@ public partial class MainViewModel(Window window) : ObservableObject
         var path = DocumentPath;
         try
         {
+            var flattened = await FlattenIfConfiguredAsync(document);
             // Atomic save protocol (SDD §3.4): temp file in place, flush, swap.
             await Task.Run(() => AtomicFileWriter.Write(path, stream => document.Save(stream)));
             HasUnsavedChanges = false;
             _journal.MarkSaved(path);
+            if (flattened)
+                await OnDocumentFlattenedAsync();
         }
         catch (Exception ex)
         {
             await ShowErrorAsync("Couldn't save", $"{ex.Message}\n\nTry \"Save As\" to save a copy instead.");
         }
+    }
+
+    /// <summary>Applies the flatten-on-save setting. Returns true when the document was baked.</summary>
+    private async Task<bool> FlattenIfConfiguredAsync(IPdfDocument document)
+    {
+        if (!FlattenOnSave)
+            return false;
+        await Task.Run(document.FlattenAllPages);
+        return true;
+    }
+
+    /// <summary>After flattening, prior edits reference annotations that no longer exist.</summary>
+    private async Task OnDocumentFlattenedAsync()
+    {
+        _undoStack.Clear();
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        for (var i = 0; i < Pages.Count; i++)
+        {
+            if (Pages[i].Source is not null)
+                Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+        }
+        await UpdateViewportAsync(_viewFirst, _viewLast);
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]
@@ -579,11 +611,14 @@ public partial class MainViewModel(Window window) : ObservableObject
         var document = _document;
         try
         {
+            var flattened = await FlattenIfConfiguredAsync(document);
             await Task.Run(() => AtomicFileWriter.Write(file.Path, stream => document.Save(stream)));
             // The newly saved file becomes the active document (SDD §3.4).
             DocumentPath = file.Path;
             HasUnsavedChanges = false;
             _journal.MarkSaved(file.Path);
+            if (flattened)
+                await OnDocumentFlattenedAsync();
         }
         catch (Exception ex)
         {
