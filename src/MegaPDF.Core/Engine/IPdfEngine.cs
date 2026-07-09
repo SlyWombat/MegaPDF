@@ -6,7 +6,9 @@ namespace MegaPDF.Core.Engine;
 /// </summary>
 public interface IPdfEngine : IDisposable
 {
-    IPdfDocument Open(string filePath);
+    /// <summary>Opens a document; <paramref name="password"/> for protected files.
+    /// Throws <see cref="Pdfium.PdfLoadException"/> with a password error code when one is required/wrong.</summary>
+    IPdfDocument Open(string filePath, string? password = null);
 }
 
 public interface IPdfDocument : IDisposable

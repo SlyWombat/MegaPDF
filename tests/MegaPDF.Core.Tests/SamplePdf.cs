@@ -64,6 +64,105 @@ internal static class SamplePdf
         ]);
     }
 
+    /// <summary>
+    /// The Build() document encrypted with the PDF standard security handler
+    /// (V1/R2, RC4-40) so password handling can be tested without external files.
+    /// </summary>
+    public static byte[] BuildEncrypted(string userPassword)
+    {
+        var content = "BT /F1 36 Tf 72 700 Td (Hello MegaPDF) Tj ET\n";
+        var id = new byte[16];
+        for (var i = 0; i < 16; i++) id[i] = (byte)(i * 7 + 3);
+        const int permissions = -3904;
+
+        // Owner entry: RC4(MD5(pad(ownerPw))[0..5], pad(userPw)); we use user==owner.
+        byte[] padded = PadPassword(userPassword);
+        byte[] oEntry;
+        using (var md5 = System.Security.Cryptography.MD5.Create())
+            oEntry = Rc4(md5.ComputeHash(PadPassword(userPassword)).Take(5).ToArray(), padded);
+
+        // File encryption key: MD5(pad(userPw) + O + P(le32) + ID)[0..5].
+        byte[] fileKey;
+        using (var md5 = System.Security.Cryptography.MD5.Create())
+        {
+            var input = padded.Concat(oEntry).Concat(BitConverter.GetBytes(permissions)).Concat(id).ToArray();
+            fileKey = md5.ComputeHash(input).Take(5).ToArray();
+        }
+
+        var uEntry = Rc4(fileKey, Padding);
+        var encryptedContent = Rc4(ObjectKey(fileKey, objectNumber: 4), Encoding.ASCII.GetBytes(content));
+
+        var sb = new StringBuilder("%PDF-1.4\n");
+        var offsets = new long[6];
+        void Append(int i, string text) { offsets[i] = sb.Length; sb.Append(text); }
+
+        Append(0, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        Append(1, "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        Append(2, "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n");
+        Append(3, $"4 0 obj\n<< /Length {encryptedContent.Length} >>\nstream\n");
+        var head = Encoding.ASCII.GetBytes(sb.ToString());
+        var tailBuilder = new StringBuilder("\nendstream\nendobj\n");
+        offsets[4] = head.Length + encryptedContent.Length + tailBuilder.Length;
+        tailBuilder.Append("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+        offsets[5] = head.Length + encryptedContent.Length + "\nendstream\nendobj\n".Length +
+                     "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n".Length;
+        tailBuilder.Append($"6 0 obj\n<< /Filter /Standard /V 1 /R 2 /O <{Convert.ToHexString(oEntry)}> /U <{Convert.ToHexString(uEntry)}> /P {permissions} >>\nendobj\n");
+
+        var xrefOffset = head.Length + encryptedContent.Length + tailBuilder.Length;
+        tailBuilder.Append("xref\n0 7\n0000000000 65535 f \n");
+        foreach (var offset in offsets)
+            tailBuilder.Append($"{offset:D10} 00000 n \n");
+        tailBuilder.Append(
+            $"trailer\n<< /Size 7 /Root 1 0 R /Encrypt 6 0 R /ID [<{Convert.ToHexString(id)}> <{Convert.ToHexString(id)}>] >>\n" +
+            $"startxref\n{xrefOffset}\n%%EOF");
+
+        return head.Concat(encryptedContent).Concat(Encoding.ASCII.GetBytes(tailBuilder.ToString())).ToArray();
+    }
+
+    private static readonly byte[] Padding =
+    [
+        0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+        0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
+    ];
+
+    private static byte[] PadPassword(string password)
+    {
+        var bytes = Encoding.ASCII.GetBytes(password);
+        return bytes.Concat(Padding).Take(32).ToArray();
+    }
+
+    private static byte[] ObjectKey(byte[] fileKey, int objectNumber)
+    {
+        var input = fileKey
+            .Concat(new[] { (byte)objectNumber, (byte)(objectNumber >> 8), (byte)(objectNumber >> 16) })
+            .Concat(new byte[] { 0, 0 }) // generation 0
+            .ToArray();
+        using var md5 = System.Security.Cryptography.MD5.Create();
+        return md5.ComputeHash(input).Take(Math.Min(fileKey.Length + 5, 16)).ToArray();
+    }
+
+    private static byte[] Rc4(byte[] key, byte[] data)
+    {
+        var s = new byte[256];
+        for (var i = 0; i < 256; i++) s[i] = (byte)i;
+        var j = 0;
+        for (var i = 0; i < 256; i++)
+        {
+            j = (j + s[i] + key[i % key.Length]) & 0xFF;
+            (s[i], s[j]) = (s[j], s[i]);
+        }
+        var output = new byte[data.Length];
+        int a = 0, b = 0;
+        for (var i = 0; i < data.Length; i++)
+        {
+            a = (a + 1) & 0xFF;
+            b = (b + s[a]) & 0xFF;
+            (s[a], s[b]) = (s[b], s[a]);
+            output[i] = (byte)(data[i] ^ s[(s[a] + s[b]) & 0xFF]);
+        }
+        return output;
+    }
+
     public static byte[] Assemble(string[] objects)
     {
         var sb = new StringBuilder("%PDF-1.4\n");

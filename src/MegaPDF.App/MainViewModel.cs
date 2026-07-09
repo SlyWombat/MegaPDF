@@ -158,14 +158,26 @@ public partial class MainViewModel(Window window) : ObservableObject
         var generation = ++_openGeneration;
 
         IPdfDocument doc;
-        try
+        string? password = null;
+        while (true)
         {
-            doc = await Task.Run(() => Engine.Open(path));
-        }
-        catch (Exception ex)
-        {
-            await ShowErrorAsync("Couldn't open that file", ex.Message);
-            return;
+            try
+            {
+                var attempt = password;
+                doc = await Task.Run(() => Engine.Open(path, attempt));
+                break;
+            }
+            catch (PdfLoadException ex) when (ex.IsPasswordError)
+            {
+                password = await ShowPasswordPromptAsync(Path.GetFileName(path), wrongPassword: password is not null);
+                if (password is null)
+                    return; // user cancelled
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("Couldn't open that file", ex.Message);
+                return;
+            }
         }
 
         if (generation != _openGeneration)
@@ -646,6 +658,39 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     /// <summary>Called when the window closes with the user's consent — nothing left to recover.</summary>
     public void EndJournalSession() => _journal.EndSession();
+
+    /// <summary>Password prompt for protected PDFs. Returns null on cancel.</summary>
+    private async Task<string?> ShowPasswordPromptAsync(string fileName, bool wrongPassword)
+    {
+        if (window.Content?.XamlRoot is not { } xamlRoot)
+            return null;
+
+        var box = new PasswordBox { PlaceholderText = "Password" };
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = wrongPassword
+                ? "That password wasn't right — try again."
+                : $"“{fileName}” is protected. Enter its password to open it.",
+            TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+        });
+        panel.Children.Add(box);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Password required",
+            Content = panel,
+            PrimaryButtonText = "Open",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        box.Loaded += (_, _) => box.Focus(FocusState.Programmatic);
+
+        return await dialog.ShowAsync() == ContentDialogResult.Primary && box.Password.Length > 0
+            ? box.Password
+            : null;
+    }
 
     private async Task ShowErrorAsync(string title, string message)
     {

@@ -7,6 +7,9 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
 {
     public uint ErrorCode { get; } = errorCode;
 
+    /// <summary>True when a password is required or the supplied one was wrong.</summary>
+    public bool IsPasswordError => ErrorCode == PdfiumNative.FPDF_ERR_PASSWORD;
+
     private static string MessageFor(string path, uint code) => code switch
     {
         PdfiumNative.FPDF_ERR_FILE => $"The file could not be read: {path}",
@@ -23,14 +26,14 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
 /// </summary>
 public sealed class PdfiumEngine : IPdfEngine
 {
-    public IPdfDocument Open(string filePath)
+    public IPdfDocument Open(string filePath, string? password = null)
     {
         PdfiumLibrary.EnsureInitialized();
         var bytes = File.ReadAllBytes(filePath);
         var pin = GCHandle.Alloc(bytes, GCHandleType.Pinned);
         lock (PdfiumLibrary.Lock)
         {
-            var handle = PdfiumNative.FPDF_LoadMemDocument(pin.AddrOfPinnedObject(), bytes.Length, null);
+            var handle = PdfiumNative.FPDF_LoadMemDocument(pin.AddrOfPinnedObject(), bytes.Length, password);
             if (handle == IntPtr.Zero)
             {
                 var error = PdfiumNative.FPDF_GetLastError();
