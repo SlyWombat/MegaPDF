@@ -209,6 +209,25 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFPage_Flatten(IntPtr page, int flags);
     public const int FLAT_NORMALDISPLAY = 0;
 
+    // --- Image compression (shrink-for-email) ---
+
+    /// <summary>Returns the image's stored (compressed) stream length in bytes.</summary>
+    [DllImport(Dll)] public static extern nuint FPDFImageObj_GetImageDataRaw(IntPtr imageObject, [Out] byte[]? buffer, nuint buflen);
+
+    /// <summary>Replaces the image's stream with a JPEG read synchronously (inline) from the file access.</summary>
+    [DllImport(Dll)] public static extern int FPDFImageObj_LoadJpegFileInline(IntPtr[]? pages, int count, IntPtr imageObject, ref FPDF_FILEACCESS fileAccess);
+
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int GetBlockDelegate(IntPtr param, uint position, IntPtr buffer, uint size);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FPDF_FILEACCESS
+    {
+        public uint FileLen;      // unsigned long is 4 bytes on Windows
+        public IntPtr GetBlock;
+        public IntPtr Param;
+    }
+
     public const int FPDF_PAGEOBJ_IMAGE = 3;
 
     // --- Content marks (identify MegaPDF whiteout objects) ---

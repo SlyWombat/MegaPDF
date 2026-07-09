@@ -30,6 +30,15 @@ public interface IPdfDocument : IDisposable
     /// and fields stop being interactive afterwards.
     /// </summary>
     void FlattenAllPages();
+
+    /// <summary>All raster images in the document, with stored and displayed sizes.</summary>
+    IReadOnlyList<PdfImageInfo> GetImages();
+
+    /// <summary>Renders an image at the requested pixel size (BGRA, masks applied).</summary>
+    StampImage RenderImageAt(PdfImageInfo image, int targetWidth, int targetHeight);
+
+    /// <summary>Swaps an image's stream for the given JPEG bytes (shrink-for-email).</summary>
+    void ReplaceImageWithJpeg(PdfImageInfo image, byte[] jpegBytes);
 }
 
 public interface IPdfPage : IDisposable
@@ -127,6 +136,12 @@ public sealed record RenderedPage(int PixelWidth, int PixelHeight, byte[] Bgra);
 
 /// <summary>Pixels of a placed image stamp (BGRA).</summary>
 public sealed record StampImage(byte[] Bgra, int PixelWidth, int PixelHeight);
+
+/// <summary>A raster image in the document: where it is, its stored resolution and byte size,
+/// and how large it displays (points).</summary>
+public sealed record PdfImageInfo(
+    int PageIndex, int ObjectIndex, int PixelWidth, int PixelHeight,
+    double DisplayWidthPoints, double DisplayHeightPoints, long StoredByteLength);
 
 /// <summary>A MegaPDF-placed stamp: id (mark:/sig: prefixed) and bounds in top-left page space.</summary>
 public sealed record StampInfo(string Id, PdfRect Bounds);

@@ -129,7 +129,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility))]
-    [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand))]
     private string? _documentPath;
 
     [ObservableProperty]
@@ -725,6 +725,87 @@ public partial class MainViewModel(Window window) : ObservableObject
         catch (Exception ex)
         {
             await ShowErrorAsync("Couldn't save", ex.Message);
+        }
+    }
+
+    // --- Shrink for email: a smaller COPY, original untouched ---
+
+    private const double EmailTargetDpi = 150;
+    private const double JpegQuality = 0.75;
+
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private async Task ShrinkForEmailAsync()
+    {
+        if (DocumentPath is null)
+            return;
+        if (HasUnsavedChanges)
+        {
+            await ShowErrorAsync("Save first", "Save your changes, then shrink the saved file.");
+            return;
+        }
+
+        var sourcePath = DocumentPath;
+        var originalBytes = new FileInfo(sourcePath).Length;
+
+        // Work on a fresh copy from disk so the open document is never degraded.
+        IPdfDocument copy;
+        try
+        {
+            copy = await Task.Run(() => Engine.Open(sourcePath));
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync("Couldn't shrink", ex.Message);
+            return;
+        }
+
+        try
+        {
+            var replaced = 0;
+            foreach (var image in await Task.Run(copy.GetImages))
+            {
+                var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * EmailTargetDpi);
+                var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * EmailTargetDpi);
+                var oversized = image.PixelWidth > targetWidth * 1.2;
+                if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
+                    continue;
+                targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
+                targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
+
+                var img = image;
+                var pixels = await Task.Run(() => copy.RenderImageAt(img, targetWidth, targetHeight));
+                var jpeg = await SignatureImageProcessor.EncodeJpegAsync(
+                    new SignatureImage(pixels.Bgra, pixels.PixelWidth, pixels.PixelHeight), JpegQuality);
+                if (jpeg.Length >= image.StoredByteLength * 0.9)
+                    continue; // not worth it
+
+                await Task.Run(() => copy.ReplaceImageWithJpeg(img, jpeg));
+                replaced++;
+            }
+
+            if (replaced == 0)
+            {
+                await ShowErrorAsync("Nothing to shrink", "The pictures in this document are already small.");
+                return;
+            }
+
+            var picker = new FileSavePicker();
+            picker.FileTypeChoices.Add("PDF document", [".pdf"]);
+            picker.SuggestedFileName = $"{Path.GetFileNameWithoutExtension(sourcePath)} - smaller";
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null)
+                return;
+
+            await Task.Run(() => AtomicFileWriter.Write(file.Path, stream => copy.Save(stream)));
+
+            var newBytes = new FileInfo(file.Path).Length;
+            await ShowErrorAsync("Smaller copy saved",
+                $"Was {originalBytes / 1024.0 / 1024:F1} MB, now {newBytes / 1024.0 / 1024:F1} MB.\n\nSaved as {Path.GetFileName(file.Path)} — ready to email.");
+        }
+        finally
+        {
+            copy.Dispose();
         }
     }
 

@@ -43,6 +43,25 @@ public static class SignatureImageProcessor
         return new SignatureImage(data.DetachPixelData(), (int)decoder.PixelWidth, (int)decoder.PixelHeight);
     }
 
+    /// <summary>JPEG (no alpha) at the given quality — used by shrink-for-email.</summary>
+    public static async Task<byte[]> EncodeJpegAsync(SignatureImage image, double quality)
+    {
+        using var stream = new InMemoryRandomAccessStream();
+        var properties = new BitmapPropertySet
+        {
+            { "ImageQuality", new BitmapTypedValue(quality, Windows.Foundation.PropertyType.Single) },
+        };
+        var encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, stream, properties);
+        encoder.SetPixelData(
+            BitmapPixelFormat.Bgra8, BitmapAlphaMode.Ignore,
+            (uint)image.Width, (uint)image.Height, 96, 96, image.Bgra);
+        await encoder.FlushAsync();
+
+        var bytes = new byte[stream.Size];
+        await stream.ReadAsync(bytes.AsBuffer(), (uint)stream.Size, InputStreamOptions.None);
+        return bytes;
+    }
+
     public static async Task<byte[]> EncodePngAsync(SignatureImage image)
     {
         using var stream = new InMemoryRandomAccessStream();

@@ -52,6 +52,11 @@ scan) to cover it with white. Click a whiteout to select it; ✕ or Delete remov
 whiteout), type, press Enter. The new text behaves like any other text afterwards:
 click it to edit, clear it to delete.
 
+**Shrink for email** — the Shrink button saves a *smaller copy* of the current file
+(pictures reduced to email quality; the original is never touched). Try it on a
+photo-heavy or scanned PDF and check the size difference — and that the copy still
+looks fine.
+
 **Saving** — Ctrl+S overwrites; Save As makes a copy. Close with unsaved changes and
 you should always be asked. After saving, open the file in Edge or Adobe to confirm
 your edits look right there too.

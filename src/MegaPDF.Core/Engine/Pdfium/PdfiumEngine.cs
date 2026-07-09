@@ -145,6 +145,42 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
     }
 
+    public IReadOnlyList<PdfImageInfo> GetImages()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var images = new List<PdfImageInfo>();
+            var pageCount = PdfiumNative.FPDF_GetPageCount(_handle);
+            for (var p = 0; p < pageCount; p++)
+            {
+                using var page = (PdfiumPage)GetPage(p);
+                images.AddRange(page.GetImagesInternal(p));
+            }
+            return images;
+        }
+    }
+
+    public StampImage RenderImageAt(PdfImageInfo image, int targetWidth, int targetHeight)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            using var page = (PdfiumPage)GetPage(image.PageIndex);
+            return page.RenderImageAtInternal(image.ObjectIndex, targetWidth, targetHeight);
+        }
+    }
+
+    public void ReplaceImageWithJpeg(PdfImageInfo image, byte[] jpegBytes)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            using var page = (PdfiumPage)GetPage(image.PageIndex);
+            page.ReplaceImageWithJpegInternal(image.ObjectIndex, jpegBytes);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -846,6 +882,103 @@ internal sealed class PdfiumPage : IPdfPage
             (false, true) => "Helvetica-Oblique",
             _ => "Helvetica",
         };
+    }
+
+    internal List<PdfImageInfo> GetImagesInternal(int pageIndex)
+    {
+        var images = new List<PdfImageInfo>();
+        lock (PdfiumLibrary.Lock)
+        {
+            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
+            for (var i = 0; i < count; i++)
+            {
+                var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
+                if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_IMAGE)
+                    continue;
+                if (PdfiumNative.FPDFImageObj_GetImagePixelSize(obj, out var pxWidth, out var pxHeight) == 0)
+                    continue;
+                PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top);
+                var stored = (long)PdfiumNative.FPDFImageObj_GetImageDataRaw(obj, null, 0);
+                images.Add(new PdfImageInfo(pageIndex, i, (int)pxWidth, (int)pxHeight,
+                    right - left, top - bottom, stored));
+            }
+        }
+        return images;
+    }
+
+    internal StampImage RenderImageAtInternal(int objectIndex, int targetWidth, int targetHeight)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
+            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_IMAGE)
+                throw new InvalidOperationException($"Object {objectIndex} is not an image.");
+
+            // Same trick as stamp extraction: render through a temporary matrix
+            // sized to the target pixels, then restore the placement.
+            PdfiumNative.FPDFPageObj_GetMatrix(obj, out var placement);
+            var renderMatrix = new PdfiumNative.FS_MATRIX { A = targetWidth, B = 0, C = 0, D = targetHeight, E = 0, F = 0 };
+            PdfiumNative.FPDFPageObj_SetMatrix(obj, ref renderMatrix);
+            var bitmap = PdfiumNative.FPDFImageObj_GetRenderedBitmap(_document, _handle, obj);
+            PdfiumNative.FPDFPageObj_SetMatrix(obj, ref placement);
+            if (bitmap == IntPtr.Zero)
+                throw new InvalidOperationException("The image could not be rendered.");
+            try
+            {
+                var width = PdfiumNative.FPDFBitmap_GetWidth(bitmap);
+                var height = PdfiumNative.FPDFBitmap_GetHeight(bitmap);
+                var stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
+                var buffer = PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
+                var pixels = new byte[width * height * 4];
+                for (var row = 0; row < height; row++)
+                    Marshal.Copy(buffer + row * stride, pixels, row * width * 4, width * 4);
+                return new StampImage(pixels, width, height);
+            }
+            finally
+            {
+                PdfiumNative.FPDFBitmap_Destroy(bitmap);
+            }
+        }
+    }
+
+    internal void ReplaceImageWithJpegInternal(int objectIndex, byte[] jpegBytes)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
+            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_IMAGE)
+                throw new InvalidOperationException($"Object {objectIndex} is not an image.");
+
+            var pin = GCHandle.Alloc(jpegBytes, GCHandleType.Pinned);
+            try
+            {
+                int GetBlock(IntPtr _, uint position, IntPtr buffer, uint size)
+                {
+                    if (position + size > jpegBytes.Length)
+                        return 0;
+                    Marshal.Copy(jpegBytes, (int)position, buffer, (int)size);
+                    return 1;
+                }
+
+                var callback = new PdfiumNative.GetBlockDelegate(GetBlock);
+                var access = new PdfiumNative.FPDF_FILEACCESS
+                {
+                    FileLen = (uint)jpegBytes.Length,
+                    GetBlock = Marshal.GetFunctionPointerForDelegate(callback),
+                    Param = IntPtr.Zero,
+                };
+                // Inline: pdfium consumes the data during the call.
+                var ok = PdfiumNative.FPDFImageObj_LoadJpegFileInline([_handle], 1, obj, ref access);
+                GC.KeepAlive(callback);
+                if (ok == 0)
+                    throw new InvalidOperationException("The compressed image could not be applied.");
+                GenerateContent();
+            }
+            finally
+            {
+                pin.Free();
+            }
+        }
     }
 
     /// <summary>Bakes this page's annotations/fields into its content stream.</summary>

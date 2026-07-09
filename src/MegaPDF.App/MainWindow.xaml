@@ -53,6 +53,13 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
+                <Button Command="{x:Bind ViewModel.ShrinkForEmailCommand}" ToolTipService.ToolTip="Save a smaller copy for email" AutomationProperties.Name="Shrink for email">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE715;" FontSize="16" />
+                        <TextBlock Text="Shrink" />
+                    </StackPanel>
+                </Button>
+
                 <AppBarSeparator />
 
                 <Button Command="{x:Bind ViewModel.UndoCommand}">

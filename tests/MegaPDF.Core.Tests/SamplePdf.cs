@@ -82,6 +82,24 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// One page with a LARGE uncompressed raster image (100x100 RGB, 30,000 raw
+    /// bytes of 0x40) displayed at 200x200pt — for shrink-for-email tests.
+    /// </summary>
+    public static byte[] BuildWithLargeImage()
+    {
+        var content = "q 200 0 0 200 100 400 cm /Im1 Do Q\n";
+        var imageData = new string('@', 100 * 100 * 3);
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /XObject << /Im1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            $"5 0 obj\n<< /Type /XObject /Subtype /Image /Width 100 /Height 100 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length {imageData.Length} >>\nstream\n{imageData}\nendstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// One-page PDF with drawn (non-form) rectangles: an 18pt stroked square at
     /// 100,500 (a checkbox), a 100x50 stroked box (too big), and a 10pt filled
     /// square (decoration, not a checkbox).
