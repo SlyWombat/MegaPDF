@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using MegaPDF.Core.Engine;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.ApplicationModel.DataTransfer;
@@ -184,6 +185,7 @@ public sealed partial class MainWindow : Window
         };
         editor.LostFocus += async (_, _) => await CommitAsync();
 
+        AutomationProperties.SetName(editor, "Edit text");
         pageGrid.Children.Add(editor);
         _activeEditor = editor;
         _activeEditorCommit = CommitAsync;
@@ -619,6 +621,15 @@ public sealed partial class MainWindow : Window
 
     private void OnCancelPlacementClicked(InfoBar sender, object args) =>
         ViewModel.CancelSignaturePlacement();
+
+    private void OnDefaultAppCardClosed(InfoBar sender, object args) =>
+        ViewModel.DismissDefaultAppCard();
+
+    private async void OnChooseDefaultAppsClicked(object sender, RoutedEventArgs e)
+    {
+        ViewModel.DismissDefaultAppCard();
+        await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:defaultapps"));
+    }
 
     private async void OnAddSignatureFromImageClicked(object sender, RoutedEventArgs e)
     {

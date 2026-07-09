@@ -249,6 +249,7 @@
                                 Background="White"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
+                                AutomationProperties.Name="{x:Bind AccessibleName}"
                                 Tapped="OnPageTapped"
                                 PointerMoved="OnPagePointerMoved"
                                 PointerExited="OnPagePointerExited">
@@ -268,15 +269,23 @@
                 HorizontalAlignment="Center"
                 Margin="24" />
 
-            <InfoBar
-                Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
-                IsOpen="True"
-                Severity="Informational"
-                Message="{x:Bind ViewModel.PlacementHint, Mode=OneWay}"
-                CloseButtonClick="OnCancelPlacementClicked"
-                VerticalAlignment="Top"
-                HorizontalAlignment="Center"
-                Margin="24,12" />
+            <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="8">
+                <InfoBar
+                    Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
+                    IsOpen="True"
+                    Severity="Informational"
+                    Message="{x:Bind ViewModel.PlacementHint, Mode=OneWay}"
+                    CloseButtonClick="OnCancelPlacementClicked" />
+                <InfoBar
+                    IsOpen="{x:Bind ViewModel.IsDefaultAppCardOpen, Mode=OneWay}"
+                    Severity="Informational"
+                    Message="Make MegaPDF your PDF app?"
+                    CloseButtonClick="OnDefaultAppCardClosed">
+                    <InfoBar.ActionButton>
+                        <Button Content="Choose default apps" Click="OnChooseDefaultAppsClicked" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+            </StackPanel>
 
             <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). -->
             <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">

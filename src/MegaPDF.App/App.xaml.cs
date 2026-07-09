@@ -64,5 +64,8 @@ public partial class App : Application
         {
             await mainWindow.ViewModel.OpenDocumentAsync(lastDocument);
         }
+
+        // First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — once, dismissible forever.
+        mainWindow.ViewModel.MaybeShowDefaultAppCard();
     }
 }

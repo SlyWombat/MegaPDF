@@ -42,6 +42,13 @@ public sealed class AppSettings
         set { _model = _model with { ReopenLastFile = value }; Save(); }
     }
 
+    /// <summary>The SDD §5.4 "Make MegaPDF your PDF app?" card shows once, ever.</summary>
+    public bool DefaultAppCardShown
+    {
+        get => _model.DefaultAppCardShown;
+        set { _model = _model with { DefaultAppCardShown = value }; Save(); }
+    }
+
     private Model Load()
     {
         if (!File.Exists(_path))
@@ -70,5 +77,6 @@ public sealed class AppSettings
         public CheckMarkStyle MarkStyle { get; init; } = CheckMarkStyle.Cross;
         public string Theme { get; init; } = "";
         public bool ReopenLastFile { get; init; }
+        public bool DefaultAppCardShown { get; init; }
     }
 }

@@ -29,7 +29,11 @@ public sealed record PageView(
     double PointsHeight,
     double Width,
     double Height,
-    IReadOnlyList<InteractiveRegion> Regions);
+    IReadOnlyList<InteractiveRegion> Regions)
+{
+    /// <summary>Narrator/UIA name for the page surface.</summary>
+    public string AccessibleName => $"Page {Index + 1}";
+}
 
 /// <summary>A library signature shown in the flyout.</summary>
 public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail);
@@ -67,6 +71,23 @@ public partial class MainViewModel(Window window) : ObservableObject
     }
 
     public string? MostRecentDocument => _recentFiles.All.Count > 0 ? _recentFiles.All[0] : null;
+
+    /// <summary>First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — shows once, ever.</summary>
+    [ObservableProperty]
+    private bool _isDefaultAppCardOpen;
+
+    public void MaybeShowDefaultAppCard()
+    {
+        if (_settings.DefaultAppCardShown)
+            return;
+        IsDefaultAppCardOpen = true;
+    }
+
+    public void DismissDefaultAppCard()
+    {
+        _settings.DefaultAppCardShown = true;
+        IsDefaultAppCardOpen = false;
+    }
     private IPdfDocument? _document;
     private int _openGeneration;
 
