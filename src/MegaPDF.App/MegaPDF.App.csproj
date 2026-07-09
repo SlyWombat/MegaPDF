@@ -7,7 +7,7 @@
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <RootNamespace>MegaPDF.App</RootNamespace>
     <AssemblyName>MegaPDF</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- Embedded in the exe: shows in Explorer, shortcuts, and installer UI. -->
     <ApplicationIcon>Assets\megapdf.ico</ApplicationIcon>
