@@ -266,14 +266,18 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <InfoBar
-                IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
-                Severity="Informational"
-                Message="This document's font isn't available, so a similar one was used."
-                IsClosable="True"
-                VerticalAlignment="Bottom"
-                HorizontalAlignment="Center"
-                Margin="24" />
+            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="8">
+                <InfoBar
+                    IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
+                    Severity="Informational"
+                    Message="This document's font isn't available, so a similar one was used."
+                    IsClosable="True" />
+                <InfoBar
+                    IsOpen="{x:Bind ViewModel.IsScannedHintOpen, Mode=TwoWay}"
+                    Severity="Informational"
+                    Message="This page is a scanned image — its text is a picture and can't be edited."
+                    IsClosable="True" />
+            </StackPanel>
 
             <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="8">
                 <InfoBar

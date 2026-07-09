@@ -160,6 +160,12 @@ public sealed partial class MainWindow : Window
                 break;
             }
 
+            case PageHitKind.None when !pageView.Regions.Any(r => r.Kind == PageHitKind.TextRun):
+                // A page with no text at all is a scan/photo — say so instead of
+                // silently doing nothing (SDD §3.1 tier 3).
+                ViewModel.IsScannedHintOpen = true;
+                break;
+
             case PageHitKind.TextRun:
             {
                 // Lines, not fragments: the editor covers the whole visual line (1.1).

@@ -586,6 +586,10 @@ public partial class MainViewModel(Window window) : ObservableObject
     [ObservableProperty]
     private bool _isFontNoticeOpen;
 
+    /// <summary>SDD §3.1 tier 3: clicking a scanned page explains why nothing is editable.</summary>
+    [ObservableProperty]
+    private bool _isScannedHintOpen;
+
     private bool CanSave() => IsDocumentOpen;
 
     [RelayCommand(CanExecute = nameof(CanSave))]

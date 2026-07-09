@@ -38,6 +38,9 @@ BundleArtifacts/
 *.cer
 *.pfx
 
+# Private local documents — never committed
+tests/Private/
+
 # Logs and OS cruft
 *.log
 Thumbs.db
