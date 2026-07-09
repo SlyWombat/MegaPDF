@@ -12,6 +12,9 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(TextEditEntry), "text")]
 [JsonDerivedType(typeof(TextDeleteEntry), "textDelete")]
 [JsonDerivedType(typeof(TextRestoreEntry), "textRestore")]
+[JsonDerivedType(typeof(LineEditEntry), "lineEdit")]
+[JsonDerivedType(typeof(LineDeleteEntry), "lineDelete")]
+[JsonDerivedType(typeof(LineRestoreEntry), "lineRestore")]
 [JsonDerivedType(typeof(FormTextEntry), "formText")]
 [JsonDerivedType(typeof(CheckToggleEntry), "checkToggle")]
 [JsonDerivedType(typeof(AddMarkEntry), "addMark")]
@@ -28,6 +31,23 @@ public sealed record TextDeleteEntry(int PageIndex, int ObjectIndex) : JournalEn
 public sealed record TextRestoreEntry(
     int PageIndex, int ObjectIndex, string Text, string FontName, double FontSize,
     double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
+
+/// <summary>One run recreated during line-level replay (standard font, best effort).</summary>
+public sealed record RestoreRun(int Index, string Text, string FontName, double FontSize, double X, double Y, double Width, double Height)
+{
+    public static RestoreRun From(Engine.PdfTextRun run) =>
+        new(run.ObjectIndex, run.Text, run.FontName, run.FontSize,
+            run.Bounds.X, run.Bounds.Y, run.Bounds.Width, run.Bounds.Height);
+}
+
+/// <summary>Line edit: new text into the first run, the listed runs detached (indexes pre-recorded descending).</summary>
+public sealed record LineEditEntry(int PageIndex, int FirstIndex, string NewText, int[] DetachIndexes) : JournalEntry(PageIndex);
+
+/// <summary>Line delete: all listed runs detached (indexes pre-recorded descending).</summary>
+public sealed record LineDeleteEntry(int PageIndex, int[] DetachIndexes) : JournalEntry(PageIndex);
+
+/// <summary>Undo of a line edit/delete: recreate runs ascending; FirstIndex ≥ 0 also restores that run's text.</summary>
+public sealed record LineRestoreEntry(int PageIndex, int FirstIndex, string? FirstText, RestoreRun[] Restores) : JournalEntry(PageIndex);
 
 public sealed record FormTextEntry(int PageIndex, string FieldName, string NewValue) : JournalEntry(PageIndex);
 

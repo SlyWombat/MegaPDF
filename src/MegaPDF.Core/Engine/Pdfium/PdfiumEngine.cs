@@ -249,12 +249,71 @@ internal sealed class PdfiumPage : IPdfPage
                 return new PageHit(PageHitKind.DrawnCheckbox, Bounds: square);
         }
 
-        foreach (var run in GetTextRuns())
+        foreach (var line in GetTextLines())
         {
-            if (run.Bounds.Contains(point))
-                return new PageHit(PageHitKind.TextRun, TextRun: run);
+            if (line.Bounds.Contains(point))
+                return new PageHit(PageHitKind.TextRun, TextRun: line.Runs[0], TextLine: line);
         }
         return new PageHit(PageHitKind.None);
+    }
+
+    public IReadOnlyList<PdfTextLine> GetTextLines()
+    {
+        var runs = GetTextRuns();
+        var lines = new List<PdfTextLine>();
+        var used = new bool[runs.Count];
+
+        for (var i = 0; i < runs.Count; i++)
+        {
+            if (used[i])
+                continue;
+
+            // Gather everything sharing this run's baseline (vertical-center tolerance).
+            var members = new List<PdfTextRun> { runs[i] };
+            used[i] = true;
+            for (var j = i + 1; j < runs.Count; j++)
+            {
+                if (used[j])
+                    continue;
+                var a = runs[i].Bounds;
+                var b = runs[j].Bounds;
+                var tolerance = Math.Max(a.Height, b.Height) * 0.5;
+                if (Math.Abs(a.Center.Y - b.Center.Y) <= tolerance)
+                {
+                    members.Add(runs[j]);
+                    used[j] = true;
+                }
+            }
+
+            // Left-to-right, then split where a gap is too wide to be the same line
+            // (columns, page-number gutters).
+            members.Sort((x, y) => x.Bounds.X.CompareTo(y.Bounds.X));
+            var current = new List<PdfTextRun> { members[0] };
+            for (var k = 1; k < members.Count; k++)
+            {
+                var gap = members[k].Bounds.X - current[^1].Bounds.Right;
+                if (gap > Math.Max(current[^1].FontSize, members[k].FontSize) * 2)
+                {
+                    lines.Add(MakeLine(current));
+                    current = [];
+                }
+                current.Add(members[k]);
+            }
+            lines.Add(MakeLine(current));
+        }
+
+        lines.Sort((x, y) => x.Bounds.Y.CompareTo(y.Bounds.Y));
+        return lines;
+    }
+
+    private static PdfTextLine MakeLine(List<PdfTextRun> runs)
+    {
+        var text = string.Concat(runs.Select(r => r.Text));
+        var x = runs.Min(r => r.Bounds.X);
+        var y = runs.Min(r => r.Bounds.Y);
+        var right = runs.Max(r => r.Bounds.Right);
+        var bottom = runs.Max(r => r.Bounds.Bottom);
+        return new PdfTextLine(runs, text, new PdfRect(x, y, right - x, bottom - y), runs[0].FontName, runs[0].FontSize);
     }
 
     /// <summary>SDD §3.2 size window for a drawn checkbox, in points.</summary>

@@ -47,6 +47,10 @@ public interface IPdfPage : IDisposable
     PageHit HitTest(PdfPoint point);
 
     IReadOnlyList<PdfTextRun> GetTextRuns();
+
+    /// <summary>Text runs assembled into visual lines (same baseline, no column-wide gaps).</summary>
+    IReadOnlyList<PdfTextLine> GetTextLines();
+
     IReadOnlyList<PdfFormField> GetFormFields();
 
     /// <summary>
@@ -141,10 +145,17 @@ public sealed record PageHit(
     PdfTextRun? TextRun = null,
     PdfFormField? Field = null,
     string? AnnotationId = null,
-    PdfRect? Bounds = null);
+    PdfRect? Bounds = null,
+    PdfTextLine? TextLine = null);
 
 /// <summary>A contiguous run of body text sharing one font/size/color.</summary>
 public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize);
+
+/// <summary>
+/// A visual line: adjacent same-baseline runs merged so the user edits what they
+/// see, not the PDF's arbitrary fragmentation (1.1 paragraph-grade editing).
+/// </summary>
+public sealed record PdfTextLine(IReadOnlyList<PdfTextRun> Runs, string Text, PdfRect Bounds, string FontName, double FontSize);
 
 public enum FormFieldKind
 {

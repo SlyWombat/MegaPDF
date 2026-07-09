@@ -43,6 +43,26 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// One page whose first visual line is fragmented into three text objects
+    /// ("Hello ", "cruel ", "world") plus a separate second line — mirrors how
+    /// real generators split paragraphs.
+    /// </summary>
+    public static byte[] BuildMultiRun()
+    {
+        var content =
+            "BT /F1 24 Tf 72 700 Td (Hello ) Tj (cruel ) Tj (world) Tj ET\n" +
+            "BT /F1 24 Tf 72 650 Td (Second line) Tj ET\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// One-page PDF with drawn (non-form) rectangles: an 18pt stroked square at
     /// 100,500 (a checkbox), a 100x50 stroked box (too big), and a 10pt filled
     /// square (decoration, not a checkbox).

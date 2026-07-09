@@ -162,12 +162,13 @@ public sealed partial class MainWindow : Window
 
             case PageHitKind.TextRun:
             {
-                var run = hit.TextRun!;
+                // Lines, not fragments: the editor covers the whole visual line (1.1).
+                var line = hit.TextLine!;
                 // Clearing all text means "remove this text" (undoable).
-                ShowInlineEditor(pageGrid, run.Bounds, run.Text, run.FontSize,
+                ShowInlineEditor(pageGrid, line.Bounds, line.Text, line.FontSize,
                     newText => string.IsNullOrWhiteSpace(newText)
-                        ? ViewModel.DeleteTextAsync(pageView.Index, run)
-                        : ViewModel.ApplyTextEditAsync(pageView.Index, run, newText));
+                        ? ViewModel.DeleteLineAsync(pageView.Index, line)
+                        : ViewModel.ApplyLineEditAsync(pageView.Index, line, newText));
                 break;
             }
         }

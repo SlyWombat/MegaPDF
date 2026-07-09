@@ -31,6 +31,28 @@ public static class JournalReplayer
                     applied++;
                     break;
 
+                case LineEditEntry lineEdit:
+                    page.SetTextRunText(new PdfTextRun(lineEdit.FirstIndex, "", default, "", 0), lineEdit.NewText);
+                    foreach (var index in lineEdit.DetachIndexes) // recorded descending
+                        page.DetachTextRun(new PdfTextRun(index, "", default, "", 0));
+                    applied++;
+                    break;
+
+                case LineDeleteEntry lineDelete:
+                    foreach (var index in lineDelete.DetachIndexes) // recorded descending
+                        page.DetachTextRun(new PdfTextRun(index, "", default, "", 0));
+                    applied++;
+                    break;
+
+                case LineRestoreEntry lineRestore:
+                    foreach (var run in lineRestore.Restores) // recorded ascending
+                        page.InsertTextRun(run.Index, run.Text, run.FontName, run.FontSize,
+                            new PdfRect(run.X, run.Y, run.Width, run.Height));
+                    if (lineRestore is { FirstIndex: >= 0, FirstText: not null })
+                        page.SetTextRunText(new PdfTextRun(lineRestore.FirstIndex, "", default, "", 0), lineRestore.FirstText);
+                    applied++;
+                    break;
+
                 case FormTextEntry formText:
                     if (FindField(page, formText.FieldName) is { } field)
                     {

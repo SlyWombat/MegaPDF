@@ -373,8 +373,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         foreach (var square in page.DetectCheckboxSquares())
             regions.Add(new InteractiveRegion(square, PageHitKind.DrawnCheckbox));
-        foreach (var run in page.GetTextRuns())
-            regions.Add(new InteractiveRegion(run.Bounds, PageHitKind.TextRun));
+        foreach (var line in page.GetTextLines())
+            regions.Add(new InteractiveRegion(line.Bounds, PageHitKind.TextRun));
         return regions;
     }
 
@@ -555,12 +555,12 @@ public partial class MainViewModel(Window window) : ObservableObject
         await RefreshPageAsync(op.PageIndex);
     }
 
-    public async Task ApplyTextEditAsync(int pageIndex, PdfTextRun run, string newText)
+    public async Task ApplyLineEditAsync(int pageIndex, PdfTextLine line, string newText)
     {
-        if (_document is null || string.IsNullOrEmpty(newText) || newText == run.Text)
+        if (_document is null || string.IsNullOrEmpty(newText) || newText == line.Text)
             return;
 
-        var op = new TextEditOperation(_document, pageIndex, run, newText);
+        var op = new LineEditOperation(_document, pageIndex, line, newText);
         try
         {
             await DoEditAsync(op);
@@ -575,12 +575,12 @@ public partial class MainViewModel(Window window) : ObservableObject
         IsFontNoticeOpen = op.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont;
     }
 
-    /// <summary>Removes a text run entirely (the user cleared it in the inline editor).</summary>
-    public async Task DeleteTextAsync(int pageIndex, PdfTextRun run)
+    /// <summary>Removes a whole visual line (the user cleared it in the inline editor).</summary>
+    public async Task DeleteLineAsync(int pageIndex, PdfTextLine line)
     {
         if (_document is null)
             return;
-        await DoEditAsync(new DeleteTextOperation(_document, pageIndex, run));
+        await DoEditAsync(new DeleteLineOperation(_document, pageIndex, line));
     }
 
     [ObservableProperty]
