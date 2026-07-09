@@ -146,6 +146,8 @@
                     TextAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom in" AutomationProperties.Name="Zoom in" />
+                <Button Click="OnFitWidthClicked" Content="&#xE9A6;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Fit width" AutomationProperties.Name="Fit width" />
+                <Button Click="OnFitPageClicked" Content="&#xE740;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Fit page" AutomationProperties.Name="Fit page" />
                 <TextBlock
                     Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
                     VerticalAlignment="Center"

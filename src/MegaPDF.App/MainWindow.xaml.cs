@@ -27,6 +27,8 @@ public sealed partial class MainWindow : Window
         ViewModel.LoadSignatures();
         ViewModel.LoadRecentDocuments();
         ApplyTheme();
+        ViewModel.ScrollRestoreRequested += offset =>
+            DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
         AppWindow.Closing += OnAppWindowClosing;
 
         // Keyboard interaction with the selected signature (SDD §3.3):
@@ -545,9 +547,16 @@ public sealed partial class MainWindow : Window
         }
 
         ViewModel.CurrentPage = currentPage;
+        ViewModel.CurrentScrollOffset = PagesScroll.VerticalOffset;
         if (firstVisible >= 0)
             _ = ViewModel.UpdateViewportAsync(firstVisible, lastVisible);
     }
+
+    private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>
+        await ViewModel.FitWidthAsync(PagesScroll.ViewportWidth);
+
+    private async void OnFitPageClicked(object sender, RoutedEventArgs e) =>
+        await ViewModel.FitPageAsync(PagesScroll.ViewportWidth, PagesScroll.ViewportHeight);
 
     // --- Crash recovery offer (SDD §3.4: one-click restore after an unclean exit) ---
 
@@ -587,6 +596,7 @@ public sealed partial class MainWindow : Window
 
     private void OnAppWindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
+        ViewModel.SaveViewState();
         if (_allowClose || !ViewModel.HasUnsavedChanges)
         {
             // Consented close — nothing left to recover (SDD §3.4).

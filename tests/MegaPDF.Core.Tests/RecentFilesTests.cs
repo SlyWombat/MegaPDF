@@ -56,4 +56,35 @@ public class RecentFilesTests : IDisposable
 
         Assert.Equal([keep], reloaded.All);
     }
+
+    [Fact]
+    public void ViewState_PersistsAndSurvivesReopen()
+    {
+        var doc = MakePdf("doc.pdf");
+        var recent = new RecentFiles(StorePath);
+        recent.Add(doc);
+        recent.UpdateViewState(doc, scrollOffset: 1234.5, zoomPercent: 150);
+
+        // Re-opening moves it to front but keeps the remembered view.
+        recent.Add(MakePdf("other.pdf"));
+        recent.Add(doc);
+
+        var reloaded = new RecentFiles(StorePath);
+        var entry = reloaded.FindEntry(doc);
+        Assert.NotNull(entry);
+        Assert.Equal(1234.5, entry.ScrollOffset);
+        Assert.Equal(150, entry.ZoomPercent);
+    }
+
+    [Fact]
+    public void Load_MigratesLegacyPathListFormat()
+    {
+        var doc = MakePdf("legacy.pdf");
+        File.WriteAllText(StorePath, System.Text.Json.JsonSerializer.Serialize(new[] { doc }));
+
+        var recent = new RecentFiles(StorePath);
+
+        Assert.Equal([doc], recent.All);
+        Assert.Equal(100, recent.FindEntry(doc)!.ZoomPercent);
+    }
 }

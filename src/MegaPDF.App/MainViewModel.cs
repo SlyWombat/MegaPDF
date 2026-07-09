@@ -78,6 +78,20 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public string? MostRecentDocument => _recentFiles.All.Count > 0 ? _recentFiles.All[0] : null;
 
+    // --- Per-document view state (SDD §3.4: restore last scroll position) ---
+
+    /// <summary>Kept current by the scroll handler; persisted on close/switch.</summary>
+    public double CurrentScrollOffset { get; set; }
+
+    /// <summary>Raised after a document opens with a remembered scroll position.</summary>
+    public event Action<double>? ScrollRestoreRequested;
+
+    public void SaveViewState()
+    {
+        if (DocumentPath is { } path)
+            _recentFiles.UpdateViewState(path, CurrentScrollOffset, ZoomPercent);
+    }
+
     /// <summary>First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — shows once, ever.</summary>
     [ObservableProperty]
     private bool _isDefaultAppCardOpen;
@@ -161,6 +175,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public async Task OpenDocumentAsync(string path)
     {
+        SaveViewState(); // remember where we left the previous document
         var generation = ++_openGeneration;
 
         IPdfDocument doc;
@@ -193,6 +208,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
         }
 
+        var rememberedView = _recentFiles.FindEntry(path);
         _document?.Dispose();
         _document = doc;
         DocumentPath = path;
@@ -200,6 +216,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         _undoStack.Clear();
         _journal.BeginSession(path);
         _recentFiles.Add(path);
+        if (rememberedView is not null)
+            ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
         LoadRecentDocuments();
         OnPropertyChanged(nameof(RecentDocumentsVisibility));
         Pages.Clear();
@@ -224,6 +242,30 @@ public partial class MainViewModel(Window window) : ObservableObject
             Pages.Add(Placeholder(i, sizes[i].W, sizes[i].H));
 
         await UpdateViewportAsync(0, Math.Min(2, PageCount - 1));
+
+        if (rememberedView is { ScrollOffset: > 0 })
+            ScrollRestoreRequested?.Invoke(rememberedView.ScrollOffset);
+    }
+
+    // --- Fit zoom presets ---
+
+    public async Task FitWidthAsync(double viewportWidthDips)
+    {
+        if (Pages.Count == 0)
+            return;
+        var page = Pages[Math.Clamp(CurrentPage - 1, 0, Pages.Count - 1)];
+        var pageWidthAt100 = page.PointsWidth * 96 / 72;
+        await SetZoomAsync((int)((viewportWidthDips - 64) / pageWidthAt100 * 100));
+    }
+
+    public async Task FitPageAsync(double viewportWidthDips, double viewportHeightDips)
+    {
+        if (Pages.Count == 0)
+            return;
+        var page = Pages[Math.Clamp(CurrentPage - 1, 0, Pages.Count - 1)];
+        var widthFit = (viewportWidthDips - 64) / (page.PointsWidth * 96 / 72);
+        var heightFit = (viewportHeightDips - 56) / (page.PointsHeight * 96 / 72);
+        await SetZoomAsync((int)(Math.Min(widthFit, heightFit) * 100));
     }
 
     private PageView Placeholder(int index, double pointsWidth, double pointsHeight) =>
