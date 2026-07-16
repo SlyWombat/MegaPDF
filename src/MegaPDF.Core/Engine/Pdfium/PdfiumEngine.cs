@@ -279,6 +279,17 @@ internal sealed class PdfiumPage : IPdfPage
             };
         }
 
+        // MegaPDF text boxes are directly selectable (move/nudge/delete), so they win
+        // over the body-text/whiteout layer beneath. Highest object index first, since a
+        // later text box paints over an earlier one.
+        foreach (var box in GetTextBoxes().OrderByDescending(b => b.ObjectIndex))
+        {
+            if (box.Bounds.Contains(point))
+                return new PageHit(PageHitKind.TextBox, TextRun: box, Bounds: box.Bounds,
+                    ObjectIndex: box.ObjectIndex,
+                    TextLine: new PdfTextLine([box], box.Text, box.Bounds, box.FontName, box.FontSize));
+        }
+
         // Whiteouts and text share the content layer; later objects paint on top,
         // so when both are under the click, the higher object index wins (a text
         // box placed over a whiteout must stay editable).
@@ -732,7 +743,10 @@ internal sealed class PdfiumPage : IPdfPage
         }
     }
 
-    private static bool HasWhiteoutMark(IntPtr obj)
+    private static bool HasWhiteoutMark(IntPtr obj) => HasMark(obj, WhiteoutMarkName);
+
+    /// <summary>True when the object carries a MegaPDF page-object mark with the given name.</summary>
+    private static bool HasMark(IntPtr obj, string markName)
     {
         var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
         for (var m = 0; m < marks; m++)
@@ -745,11 +759,13 @@ internal sealed class PdfiumPage : IPdfPage
                 continue;
             var buffer = new byte[lengthInBytes];
             PdfiumNative.FPDFPageObjMark_GetName(mark, buffer, lengthInBytes, out _);
-            if (System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2) == WhiteoutMarkName)
+            if (System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2) == markName)
                 return true;
         }
         return false;
     }
+
+    private const string TextBoxMarkName = "MegaPDFTextBox";
 
     public int AppendTextBox(string text, double fontSize, PdfPoint topLeft)
     {
@@ -759,7 +775,77 @@ internal sealed class PdfiumPage : IPdfPage
             var index = PdfiumNative.FPDFPage_CountObjects(_handle);
             InsertTextRun(index, text, "Helvetica", fontSize,
                 new PdfRect(topLeft.X, topLeft.Y, 0, fontSize));
+            // Tag it so it reads as a movable MegaPDF text box, not ordinary body text.
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, index);
+            if (obj != IntPtr.Zero)
+            {
+                PdfiumNative.FPDFPageObj_AddMark(obj, TextBoxMarkName);
+                GenerateContent();
+            }
             return index;
+        }
+    }
+
+    /// <summary>MegaPDF-added text boxes on this page, as their underlying text runs.</summary>
+    public IReadOnlyList<PdfTextRun> GetTextBoxes()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
+            try
+            {
+                var boxes = new List<PdfTextRun>();
+                var count = PdfiumNative.FPDFPage_CountObjects(_handle);
+                for (var i = 0; i < count; i++)
+                {
+                    var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
+                    if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
+                        continue;
+                    if (!HasMark(obj, TextBoxMarkName))
+                        continue;
+                    if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
+                        continue;
+
+                    var text = ReadTextObjectText(obj, textPage);
+                    if (string.IsNullOrWhiteSpace(text))
+                        continue;
+
+                    PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
+                    var bounds = new PdfRect(left, Height - top, right - left, top - bottom);
+                    boxes.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize));
+                }
+                return boxes;
+            }
+            finally
+            {
+                if (textPage != IntPtr.Zero)
+                    PdfiumNative.FPDFText_ClosePage(textPage);
+            }
+        }
+    }
+
+    public void MoveTextBox(int objectIndex, PdfRect newBounds)
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
+            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
+                throw new InvalidOperationException($"Object {objectIndex} is no longer a text object.");
+            if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var _, out var _, out var top) == 0)
+                throw new InvalidOperationException("Could not read the text box bounds.");
+
+            // Translate in place: page space is top-left, PDF space bottom-left, so a
+            // downward move (larger Y) is a smaller F. Keeps scale/rotation untouched.
+            var currentX = left;
+            var currentY = Height - top;
+            if (PdfiumNative.FPDFPageObj_GetMatrix(obj, out var matrix) == 0)
+                throw new InvalidOperationException("Could not read the text box matrix.");
+            matrix.E += (float)(newBounds.X - currentX);
+            matrix.F -= (float)(newBounds.Y - currentY);
+            PdfiumNative.FPDFPageObj_SetMatrix(obj, ref matrix);
+            GenerateContent();
         }
     }
 
@@ -1027,6 +1113,10 @@ internal sealed class PdfiumPage : IPdfPage
                 PdfiumNative.FPDFPageObj_SetMatrix(newObj, ref matrix);
             if (PdfiumNative.FPDFPageObj_GetFillColor(oldObj, out var r, out var g, out var b, out var a) != 0)
                 PdfiumNative.FPDFPageObj_SetFillColor(newObj, r, g, b, a);
+            // Preserve the text-box tag so an edited text box stays movable (font
+            // substitution rebuilds the object, which would otherwise drop the mark).
+            if (HasMark(oldObj, TextBoxMarkName))
+                PdfiumNative.FPDFPageObj_AddMark(newObj, TextBoxMarkName);
 
             if (PdfiumNative.FPDFPage_RemoveObject(_handle, oldObj) == 0)
                 throw new InvalidOperationException("Could not remove the original text object.");

@@ -120,6 +120,28 @@ public static class JournalReplayer
                         new PdfRect(sig.X, sig.Y, sig.Width, sig.Height), sig.StampId);
                     applied++;
                     break;
+
+                case TextBoxAddEntry textBox:
+                    page.AppendTextBox(textBox.Text, textBox.FontSize, new PdfPoint(textBox.X, textBox.Y));
+                    applied++;
+                    break;
+
+                case MoveTextBoxEntry moveText:
+                {
+                    var target = new PdfRect(moveText.FromX, moveText.FromY, moveText.FromWidth, moveText.FromHeight);
+                    var match = page.GetTextBoxes()
+                        .Where(b => Math.Abs(b.Bounds.X - target.X) < 1 && Math.Abs(b.Bounds.Y - target.Y) < 1
+                                 && Math.Abs(b.Bounds.Width - target.Width) < 2 && Math.Abs(b.Bounds.Height - target.Height) < 2)
+                        .OrderByDescending(b => b.ObjectIndex)
+                        .Select(b => (int?)b.ObjectIndex)
+                        .FirstOrDefault();
+                    if (match is { } index)
+                    {
+                        page.MoveTextBox(index, new PdfRect(moveText.ToX, moveText.ToY, moveText.ToWidth, moveText.ToHeight));
+                        applied++;
+                    }
+                    break;
+                }
             }
         }
         return applied;

@@ -105,10 +105,21 @@ public interface IPdfPage : IDisposable
 
     /// <summary>
     /// Appends new standard-font text at the given top-left position (a "text box").
-    /// Appended after any whiteout, so it renders above one. Returns its object index;
-    /// the result is a normal text run — editable and deletable like any other.
+    /// Appended after any whiteout, so it renders above one. Returns its object index.
+    /// The object is tagged so it stays identifiable as a MegaPDF text box (movable,
+    /// SDD §3.3-style) even though it is otherwise a normal, editable text run.
     /// </summary>
     int AppendTextBox(string text, double fontSize, PdfPoint topLeft);
+
+    /// <summary>MegaPDF-added text boxes on this page, as their underlying text runs.</summary>
+    IReadOnlyList<PdfTextRun> GetTextBoxes();
+
+    /// <summary>
+    /// Repositions a text box (drag/nudge, SDD §3.3) to <paramref name="newBounds"/> by
+    /// translating its object in place — the object index stays stable, so selection and
+    /// undo references survive the move.
+    /// </summary>
+    void MoveTextBox(int objectIndex, PdfRect newBounds);
 
     /// <summary>Detaches any page object by index (kept alive for undo), regardless of type.</summary>
     DetachedTextRun DetachObjectAt(int objectIndex);
@@ -176,6 +187,9 @@ public enum PageHitKind
 
     /// <summary>A MegaPDF whiteout rectangle (page content, covers what's beneath).</summary>
     Whiteout,
+
+    /// <summary>A MegaPDF-added text box — selects for move/nudge/delete; double-click edits.</summary>
+    TextBox,
 }
 
 public sealed record PageHit(

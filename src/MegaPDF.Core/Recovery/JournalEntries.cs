@@ -23,6 +23,8 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(RemoveStampEntry), "removeStamp")]
 [JsonDerivedType(typeof(AddSignatureEntry), "addSignature")]
 [JsonDerivedType(typeof(MoveStampEntry), "moveStamp")]
+[JsonDerivedType(typeof(TextBoxAddEntry), "textBoxAdd")]
+[JsonDerivedType(typeof(MoveTextBoxEntry), "moveTextBox")]
 public abstract record JournalEntry(int PageIndex);
 
 public sealed record TextEditEntry(int PageIndex, int ObjectIndex, string NewText) : JournalEntry(PageIndex);
@@ -65,6 +67,14 @@ public sealed record AddMarkEntry(int PageIndex, double X, double Y, double Widt
 public sealed record RemoveStampEntry(int PageIndex, string StampId) : JournalEntry(PageIndex);
 
 public sealed record MoveStampEntry(int PageIndex, string StampId, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
+
+/// <summary>Text-box add: replayed through AppendTextBox so the box keeps its movable tag.</summary>
+public sealed record TextBoxAddEntry(int PageIndex, string Text, double FontSize, double X, double Y) : JournalEntry(PageIndex);
+
+/// <summary>Text-box move: resolved by the from-bounds at replay time (content indexes shift).</summary>
+public sealed record MoveTextBoxEntry(
+    int PageIndex, double FromX, double FromY, double FromWidth, double FromHeight,
+    double ToX, double ToY, double ToWidth, double ToHeight) : JournalEntry(PageIndex);
 
 public sealed record AddSignatureEntry(
     int PageIndex, double X, double Y, double Width, double Height, string StampId,

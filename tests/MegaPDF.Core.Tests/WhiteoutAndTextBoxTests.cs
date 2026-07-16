@@ -66,14 +66,157 @@ public class WhiteoutAndTextBoxTests : IDisposable
         // Ink on top of the whiteout.
         Assert.False(RegionIsAllWhite(page.Render(612, 792), 105, 258, 100, 18));
 
-        // Clicking the text hits the LINE, not the whiteout beneath it.
+        // Clicking the text selects the movable text box, not the whiteout beneath it.
         var hit = page.HitTest(new PdfPoint(130, 270));
-        Assert.Equal(PageHitKind.TextRun, hit.Kind);
+        Assert.Equal(PageHitKind.TextBox, hit.Kind);
         Assert.Equal("Corrected value", hit.TextLine!.Text);
 
-        // And it's a normal editable run.
+        // And it's still an editable run — edited in place keeps its movable tag.
         page.SetTextRunText(hit.TextLine.Runs[0], "Edited again");
-        Assert.Contains(page.GetTextLines(), l => l.Text == "Edited again");
+        var box = Assert.Single(page.GetTextBoxes());
+        Assert.Equal("Edited again", box.Text);
+        Assert.Equal(PageHitKind.TextBox, page.HitTest(box.Bounds.Center).Kind);
+    }
+
+    [Fact]
+    public void AddedText_IsTaggedAsMovableTextBox_NotBodyText()
+    {
+        using var doc = _engine.Open(WritePdf());
+        using var page = doc.GetPage(0);
+
+        page.AppendTextBox("Movable note", 14, new PdfPoint(105, 260));
+
+        var box = Assert.Single(page.GetTextBoxes());
+        Assert.Equal("Movable note", box.Text);
+
+        var hit = page.HitTest(new PdfPoint(130, 268));
+        Assert.Equal(PageHitKind.TextBox, hit.Kind);
+        Assert.Equal(box.ObjectIndex, hit.ObjectIndex);
+        Assert.Equal("Movable note", hit.TextLine!.Text);
+    }
+
+    [Fact]
+    public void MoveTextBoxOperation_MovesInPlace_AndUndoes()
+    {
+        using var doc = _engine.Open(WritePdf());
+        var stack = new UndoStack();
+        stack.Do(new AddTextBoxOperation(doc, 0, "Drag me", 12, new PdfPoint(150, 300)));
+
+        PdfRect before;
+        int index;
+        using (var page = doc.GetPage(0))
+        {
+            var box = Assert.Single(page.GetTextBoxes());
+            before = box.Bounds;
+            index = box.ObjectIndex;
+        }
+
+        var moved = new PdfRect(before.X + 40, before.Y + 25, before.Width, before.Height);
+        stack.Do(new MoveTextBoxOperation(doc, 0, index, before, moved));
+        using (var page = doc.GetPage(0))
+        {
+            var box = Assert.Single(page.GetTextBoxes());
+            Assert.Equal(before.X + 40, box.Bounds.X, 1);
+            Assert.Equal(before.Y + 25, box.Bounds.Y, 1);
+            // In-place translation keeps the object index (and text) stable.
+            Assert.Equal(index, box.ObjectIndex);
+            Assert.Equal("Drag me", box.Text);
+        }
+
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+        {
+            var box = Assert.Single(page.GetTextBoxes());
+            Assert.Equal(before.X, box.Bounds.X, 1);
+            Assert.Equal(before.Y, box.Bounds.Y, 1);
+        }
+    }
+
+    [Fact]
+    public void MoveTextBox_PersistsAcrossSave()
+    {
+        var savedPath = Path.Combine(_dir, "moved-text.pdf");
+        PdfRect moved;
+        using (var doc = _engine.Open(WritePdf()))
+        {
+            using (var page = doc.GetPage(0))
+            {
+                page.AppendTextBox("Relocate", 12, new PdfPoint(150, 300));
+                var box = page.GetTextBoxes()[0];
+                moved = new PdfRect(box.Bounds.X + 60, box.Bounds.Y + 30, box.Bounds.Width, box.Bounds.Height);
+                page.MoveTextBox(box.ObjectIndex, moved);
+            }
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        var reopenedBox = Assert.Single(reopenedPage.GetTextBoxes());
+        Assert.Equal(moved.X, reopenedBox.Bounds.X, 1);
+        Assert.Equal(moved.Y, reopenedBox.Bounds.Y, 1);
+    }
+
+    [Fact]
+    public void RemoveTextBoxOperation_UndoRedo()
+    {
+        using var doc = _engine.Open(WritePdf());
+        var stack = new UndoStack();
+        stack.Do(new AddTextBoxOperation(doc, 0, "Delete me", 12, new PdfPoint(150, 300)));
+
+        PdfTextRun run;
+        using (var page = doc.GetPage(0))
+            run = Assert.Single(page.GetTextBoxes());
+
+        stack.Do(new RemoveTextBoxOperation(doc, 0, run.ObjectIndex, run));
+        using (var page = doc.GetPage(0))
+            Assert.Empty(page.GetTextBoxes());
+
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+        {
+            var box = Assert.Single(page.GetTextBoxes());
+            Assert.Equal("Delete me", box.Text);
+        }
+    }
+
+    [Fact]
+    public void Journal_TextBoxAddAndMove_Replay()
+    {
+        var docPath = WritePdf();
+        List<JournalEntry> entries;
+        PdfRect moved;
+        using (var doc = _engine.Open(docPath))
+        {
+            var add = new AddTextBoxOperation(doc, 0, "Journaled", 12, new PdfPoint(150, 300));
+            add.Apply();
+
+            PdfRect before;
+            int index;
+            using (var page = doc.GetPage(0))
+            {
+                var box = page.GetTextBoxes()[0];
+                before = box.Bounds;
+                index = box.ObjectIndex;
+            }
+            moved = new PdfRect(before.X + 30, before.Y + 20, before.Width, before.Height);
+            var move = new MoveTextBoxOperation(doc, 0, index, before, moved);
+            move.Apply();
+
+            entries =
+            [
+                add.ToJournalEntry(inverse: false),
+                move.ToJournalEntry(inverse: false),
+            ];
+        }
+
+        using var fresh = _engine.Open(docPath);
+        Assert.Equal(2, JournalReplayer.Replay(fresh, entries));
+        using var freshPage = fresh.GetPage(0);
+        var replayed = Assert.Single(freshPage.GetTextBoxes());
+        Assert.Equal("Journaled", replayed.Text);
+        Assert.Equal(moved.X, replayed.Bounds.X, 1);
+        Assert.Equal(moved.Y, replayed.Bounds.Y, 1);
     }
 
     [Fact]

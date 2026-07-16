@@ -186,6 +186,11 @@ public sealed partial class MainWindow : Window
                 SelectStamp(pageGrid, pageView, $"whiteout:{hit.ObjectIndex}", hit.Bounds!.Value, movable: false);
                 break;
 
+            case PageHitKind.TextBox:
+                // Added text moves/nudges like a signature; double-click edits (no resize).
+                SelectStamp(pageGrid, pageView, $"textbox:{hit.ObjectIndex}", hit.Bounds!.Value, resizable: false);
+                break;
+
             case PageHitKind.FormTextField:
             {
                 var field = hit.Field!;
@@ -212,6 +217,38 @@ public sealed partial class MainWindow : Window
                 break;
             }
         }
+    }
+
+    /// <summary>
+    /// Double-click on an added text box reopens the inline editor to change its
+    /// characters (single-click selects it for move/nudge, SDD §3.3). Fires when the
+    /// box isn't yet selected; once selected, its chrome handles the double-tap instead.
+    /// </summary>
+    private async void OnPageDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (sender is not PageCanvas canvas || canvas.DataContext is not PageView pageView)
+            return;
+        var position = e.GetPosition(canvas);
+        var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
+        if (await EditTextBoxAtAsync(canvas, pageView, new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint)))
+            e.Handled = true;
+    }
+
+    /// <summary>Opens the inline editor over the text box at <paramref name="pagePoint"/>, if one is there.</summary>
+    private async Task<bool> EditTextBoxAtAsync(PageCanvas canvas, PageView pageView, PdfPoint pagePoint)
+    {
+        if (_activeEditor is not null)
+            return false;
+        var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
+        if (hit.Kind != PageHitKind.TextBox || hit.TextLine is not { } line)
+            return false;
+
+        Deselect();
+        ShowInlineEditor(canvas, line.Bounds, line.Text, line.FontSize,
+            newText => string.IsNullOrWhiteSpace(newText)
+                ? ViewModel.DeleteLineAsync(pageView.Index, line)
+                : ViewModel.ApplyLineEditAsync(pageView.Index, line, newText));
+        return true;
     }
 
     private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText, double fontSizePoints, Func<string, Task> commit)
@@ -279,7 +316,7 @@ public sealed partial class MainWindow : Window
     private StampSelection? _selection;
     private Grid? _selectionChrome;
 
-    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds, bool movable = true)
+    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds, bool movable = true, bool resizable = true)
     {
         Deselect();
         if (pageGrid is not PageCanvas canvas)
@@ -319,7 +356,7 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Bottom,
             Margin = new Thickness(0, 0, -7, -7),
             ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY,
-            Visibility = movable ? Visibility.Visible : Visibility.Collapsed,
+            Visibility = movable && resizable ? Visibility.Visible : Visibility.Collapsed,
         };
         chrome.Children.Add(handle);
 
@@ -337,6 +374,15 @@ public sealed partial class MainWindow : Window
         chrome.Children.Add(remove);
 
         chrome.Tapped += (_, args) => args.Handled = true;
+
+        // Double-click a selected text box to edit its characters (single-click already
+        // selected it, so the chrome covers the box and must catch the double-tap itself).
+        if (annotationId.StartsWith("textbox:", StringComparison.Ordinal))
+            chrome.DoubleTapped += async (_, args) =>
+            {
+                args.Handled = true;
+                await EditTextBoxAtAsync(canvas, pageView, bounds.Center);
+            };
 
         chrome.ManipulationDelta += (_, args) =>
         {
@@ -376,6 +422,9 @@ public sealed partial class MainWindow : Window
         if (selection.Id.StartsWith("whiteout:", StringComparison.Ordinal))
             await ViewModel.RemoveWhiteoutAsync(selection.Page.Index,
                 int.Parse(selection.Id.AsSpan("whiteout:".Length)), selection.Bounds);
+        else if (selection.Id.StartsWith("textbox:", StringComparison.Ordinal))
+            await ViewModel.RemoveTextBoxAsync(selection.Page.Index,
+                int.Parse(selection.Id.AsSpan("textbox:".Length)), selection.Bounds);
         else
             await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
     }
@@ -422,14 +471,19 @@ public sealed partial class MainWindow : Window
         var newBounds = new PdfRect(x, y, width, height);
 
         Deselect();
-        await ViewModel.MoveSignatureAsync(selection.Page.Index, selection.Id, selection.Bounds, newBounds);
+        var isTextBox = selection.Id.StartsWith("textbox:", StringComparison.Ordinal);
+        if (isTextBox)
+            await ViewModel.MoveTextBoxAsync(selection.Page.Index,
+                int.Parse(selection.Id.AsSpan("textbox:".Length)), selection.Bounds, newBounds);
+        else
+            await ViewModel.MoveSignatureAsync(selection.Page.Index, selection.Id, selection.Bounds, newBounds);
 
         // The page container was regenerated by the re-render; find it and re-select.
         if (newBounds != selection.Bounds
             && selection.Page.Index < ViewModel.Pages.Count
             && FindPageCanvas(selection.Page.Index) is { } canvas)
         {
-            SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], selection.Id, newBounds);
+            SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], selection.Id, newBounds, resizable: !isTextBox);
         }
     }
 
@@ -563,7 +617,7 @@ public sealed partial class MainWindow : Window
             {
                 PageHitKind.TextRun or PageHitKind.FormTextField => Microsoft.UI.Input.InputSystemCursorShape.IBeam,
                 PageHitKind.FormCheckbox or PageHitKind.DrawnCheckbox or PageHitKind.StampAnnotation
-                    or PageHitKind.Whiteout => Microsoft.UI.Input.InputSystemCursorShape.Hand,
+                    or PageHitKind.Whiteout or PageHitKind.TextBox => Microsoft.UI.Input.InputSystemCursorShape.Hand,
                 _ => Microsoft.UI.Input.InputSystemCursorShape.Arrow,
             });
 

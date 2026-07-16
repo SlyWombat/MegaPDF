@@ -94,6 +94,62 @@ public sealed class AddTextBoxOperation(IPdfDocument document, int pageIndex, st
 
     public JournalEntry ToJournalEntry(bool inverse) => inverse
         ? new TextDeleteEntry(PageIndex, _objectIndex)
-        : new TextRestoreEntry(PageIndex, _objectIndex, text, "Helvetica", fontSize,
-            topLeft.X, topLeft.Y, 0, fontSize);
+        // Replay re-adds through AppendTextBox so the recovered box keeps its movable tag.
+        : new TextBoxAddEntry(PageIndex, text, fontSize, topLeft.X, topLeft.Y);
+}
+
+/// <summary>Reversible text-box move/nudge (drag or arrow keys, SDD §3.3). Translates in place.</summary>
+public sealed class MoveTextBoxOperation(
+    IPdfDocument document, int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds) : IPageEditOperation
+{
+    public int PageIndex { get; } = pageIndex;
+
+    public string Description => "move text";
+
+    public void Apply()
+    {
+        using var page = document.GetPage(PageIndex);
+        page.MoveTextBox(objectIndex, newBounds);
+    }
+
+    public void Revert()
+    {
+        using var page = document.GetPage(PageIndex);
+        page.MoveTextBox(objectIndex, oldBounds);
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse)
+    {
+        var (from, to) = inverse ? (newBounds, oldBounds) : (oldBounds, newBounds);
+        return new MoveTextBoxEntry(PageIndex,
+            from.X, from.Y, from.Width, from.Height, to.X, to.Y, to.Width, to.Height);
+    }
+}
+
+/// <summary>Reversible text-box removal (✕/Delete on the selection). Undo restores it byte-identical.</summary>
+public sealed class RemoveTextBoxOperation(IPdfDocument document, int pageIndex, int objectIndex, PdfTextRun run) : IPageEditOperation
+{
+    private DetachedTextRun? _detached;
+
+    public int PageIndex { get; } = pageIndex;
+
+    public string Description => "remove text";
+
+    public void Apply()
+    {
+        using var page = document.GetPage(PageIndex);
+        _detached = page.DetachObjectAt(objectIndex);
+    }
+
+    public void Revert()
+    {
+        using var page = document.GetPage(PageIndex);
+        page.RestoreTextRun(_detached!, objectIndex);
+        _detached = null;
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new TextRestoreEntry(PageIndex, objectIndex, run.Text, run.FontName, run.FontSize,
+            run.Bounds.X, run.Bounds.Y, run.Bounds.Width, run.Bounds.Height)
+        : new TextDeleteEntry(PageIndex, objectIndex);
 }

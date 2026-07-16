@@ -292,6 +292,7 @@
                                 BorderThickness="1"
                                 AutomationProperties.Name="{x:Bind AccessibleName}"
                                 Tapped="OnPageTapped"
+                                DoubleTapped="OnPageDoubleTapped"
                                 PointerPressed="OnPagePointerPressed"
                                 PointerReleased="OnPagePointerReleased"
                                 PointerMoved="OnPagePointerMoved"

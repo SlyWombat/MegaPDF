@@ -392,6 +392,9 @@ public partial class MainViewModel(Window window) : ObservableObject
         var regions = new List<InteractiveRegion>();
         foreach (var stamp in page.GetStamps())
             regions.Add(new InteractiveRegion(stamp.Bounds, PageHitKind.StampAnnotation));
+        // Before body text, so hovering a text box shows the move affordance, not the caret.
+        foreach (var box in page.GetTextBoxes())
+            regions.Add(new InteractiveRegion(box.Bounds, PageHitKind.TextBox));
         foreach (var field in page.GetFormFields())
         {
             var kind = field.Kind switch
@@ -566,6 +569,25 @@ public partial class MainViewModel(Window window) : ObservableObject
         if (_document is null || string.IsNullOrWhiteSpace(text))
             return;
         await DoEditAsync(new AddTextBoxOperation(_document, pageIndex, text.Trim(), 12, topLeft));
+    }
+
+    /// <summary>Repositions an added text box (drag/nudge, SDD §3.3).</summary>
+    public async Task MoveTextBoxAsync(int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds)
+    {
+        if (_document is null || oldBounds == newBounds)
+            return;
+        await DoEditAsync(new MoveTextBoxOperation(_document, pageIndex, objectIndex, oldBounds, newBounds));
+    }
+
+    /// <summary>Removes an added text box (✕/Delete on the selection).</summary>
+    public async Task RemoveTextBoxAsync(int pageIndex, int objectIndex, PdfRect bounds)
+    {
+        if (_document is null)
+            return;
+        // The run's text/font is only needed to recreate it during crash-recovery replay.
+        var run = HitTestPage(pageIndex, bounds.Center).TextRun
+            ?? new PdfTextRun(objectIndex, "", bounds, "Helvetica", 12);
+        await DoEditAsync(new RemoveTextBoxOperation(_document, pageIndex, objectIndex, run));
     }
 
     public void LoadSignatures()
