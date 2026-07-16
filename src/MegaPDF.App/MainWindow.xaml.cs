@@ -736,6 +736,12 @@ public sealed partial class MainWindow : Window
 
     public async Task CheckForUpdatesAsync()
     {
+        // Store-distributed builds update through the Microsoft Store; our GitHub
+        // self-updater is only for sideloaded test builds (SDD §5). Same binary:
+        // it self-updates when sideloaded and defers to the Store when Store-signed.
+        if (Windows.ApplicationModel.Package.Current.SignatureKind
+                == Windows.ApplicationModel.PackageSignatureKind.Store)
+            return;
         if (!ViewModel.CheckForUpdates)
             return;
         var version = await _updateChecker.CheckAsync();
