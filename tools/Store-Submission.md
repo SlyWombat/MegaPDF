@@ -89,12 +89,11 @@ step) all disappear, and the Store handles updates.
 - Description, screenshots, category, **age rating** (IARC questionnaire).
 - **Privacy policy URL** — required. Data is local-only and telemetry is off by
   default (SDD §5), but the Store still wants a hosted policy page.
-  - Drafted 2026-07-22: `docs/privacy.html` (no collection at all — no telemetry
+  - Done 2026-07-22: `docs/privacy.html` (no collection at all — no telemetry
     code exists yet; Store builds make zero network calls, sideload builds only
-    hit the public GitHub releases feed). To host: GitHub repo → Settings →
-    Pages → deploy from `main` `/docs`, then the URL is
-    `https://<owner>.github.io/MegaPDF/privacy.html`. Requires the repo (or at
-    least Pages) to be public.
+    hit the public GitHub releases feed). Hosted via GitHub Pages (`main`
+    `/docs`): **https://slywombat.github.io/MegaPDF/privacy.html** — this is the
+    URL for the submission's Properties page.
 
 ## Testers during rollout
 - Use a **package flight** (Partner Center) or a **hidden listing** ("available but
