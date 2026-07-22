@@ -19,6 +19,8 @@ step) all disappear, and the Store handles updates.
     (verified against PFN hash), PublisherDisplayName `Electric RV`.
   - Package Family Name `ElectricRV.MegaPDF_fba94j4nmgb9y`; Store ID `9PF4TRRH4M76`
     (listing link: https://apps.microsoft.com/detail/9PF4TRRH4M76).
+  - Package SID `S-1-15-2-889272221-470063173-54854299-340821108-960714459-1437483129-3433287587`
+    (not needed for submission; kept for future use, e.g. loopback exemption).
   - `tools/Setup.cs` AppUserModelId updated to the new family name.
 - Builds now also work on the Sly machine: per-user Windows .NET SDK in
   `%LOCALAPPDATA%\Microsoft\dotnet` (no full VS needed; symbols package skipped —
@@ -67,6 +69,19 @@ step) all disappear, and the Store handles updates.
 ## Certification prep
 - Run the **Windows App Certification Kit (WACK)** against the built package; fix
   anything it flags before submitting.
+- **Done 2026-07-22: overall PASS** (report: `artifacts/store/wack-report.xml`, run
+  against a dev-signed copy of the Store package). Two *optional* tests report
+  FAIL — both are known Windows App SDK / self-contained .NET noise, not app code:
+  - "General metadata correctness": `Microsoft.UI.Xaml.winmd` references WebView2
+    types not present in the package (we don't use WebView2).
+  - "Blocked executables": CreateProcess/ShellExecute references in `coreclr.dll`,
+    `Microsoft.WindowsAppRuntime.dll`, `System.Diagnostics.Process.dll`, etc., plus
+    string false-positives ("cmd", "Reg") in framework DLLs. `runFullTrust` apps may
+    launch processes; informational only.
+- To re-run WACK headlessly: build, sign a copy with the CurrentUser cert
+  `CN=AF0F2AB7-…` (thumbprint `606D40BABE571A55D85E2C0BD26AA17A40B5D9F3`), then run
+  `artifacts/store/wack-run.ps1` elevated (it temporarily trusts the cert + enables
+  sideloading, runs appcert, reverts both).
 - `runFullTrust` (the only declared capability) is allowed for packaged desktop apps;
   expect to briefly justify it during submission — standard for WinUI 3 desktop apps.
 
