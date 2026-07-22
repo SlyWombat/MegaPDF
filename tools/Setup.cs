@@ -14,7 +14,7 @@ using System.Windows.Forms;
 internal static class Setup
 {
     private const string Title = "MegaPDF Setup";
-    private const string AppUserModelId = @"shell:AppsFolder\MegaPDF_spcj169vsxppp!App";
+    private const string AppUserModelId = @"shell:AppsFolder\ElectricRV.MegaPDF_fba94j4nmgb9y!App";
 
     [STAThread]
     private static int Main(string[] args)

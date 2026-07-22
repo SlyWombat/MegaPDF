@@ -13,6 +13,17 @@ step) all disappear, and the Store handles updates.
   Manifest display names (`Properties/DisplayName`, `VisualElements DisplayName`,
   tile `ShortName`) updated to match; submission validation requires the package
   display name to match a reserved name.
+- Store identity written into `Package.appxmanifest` 2026-07-22 (replaces the VS
+  "Associate App with the Store" wizard step):
+  - Identity Name `ElectricRV.MegaPDF`, Publisher `CN=AF0F2AB7-88E9-4EB3-A296-189E990F689E`
+    (verified against PFN hash), PublisherDisplayName `Electric RV`.
+  - Package Family Name `ElectricRV.MegaPDF_fba94j4nmgb9y`; Store ID `9PF4TRRH4M76`
+    (listing link: https://apps.microsoft.com/detail/9PF4TRRH4M76).
+  - `tools/Setup.cs` AppUserModelId updated to the new family name.
+- Builds now also work on the Sly machine: per-user Windows .NET SDK in
+  `%LOCALAPPDATA%\Microsoft\dotnet` (no full VS needed; symbols package skipped —
+  `mspdbcmf.exe` ships with VS only). Store-mode `dotnet build` produces an
+  unsigned `.msix` (no `.msixupload` headlessly; Partner Center accepts `.msix`).
 - Everything below marked "code — done" is already in the repo. Steps marked
   "needs account" or "needs reserved identity" are blocked until login.
 
