@@ -6,7 +6,13 @@ cert problems (error `0x800B010A`, "Publisher: Unknown", the `.cer`/Setup.exe tr
 step) all disappear, and the Store handles updates.
 
 ## Status
-- Partner Center developer account: **applied ~2026-07-16, ~1 week until login.**
+- Partner Center developer account: **active as of 2026-07-22.**
+- When creating the new app, product type = **"MSIX or PWA app"** (not EXE/MSI —
+  Store re-signing, Store-managed updates, and package flights are MSIX-only).
+- Name reserved 2026-07-22: **"Mega PDF"** (with a space — "MegaPDF" was taken).
+  Manifest display names (`Properties/DisplayName`, `VisualElements DisplayName`,
+  tile `ShortName`) updated to match; submission validation requires the package
+  display name to match a reserved name.
 - Everything below marked "code — done" is already in the repo. Steps marked
   "needs account" or "needs reserved identity" are blocked until login.
 
