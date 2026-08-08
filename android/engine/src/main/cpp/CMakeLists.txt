@@ -1,9 +1,14 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(megapdf_engine CXX)
 
-# Scaffold stub. #13 replaces this with the real JNI shim linking the PDFium
-# prebuilts from libs/pdfium/android/<abi>/libpdfium.so.
-add_library(megapdf_engine SHARED engine.cpp)
+# Prebuilt PDFium (bblanchon/pdfium-binaries, pinned to the same major version
+# as libs/pdfium/win-x64 — see libs/pdfium/android/VERSION).
+set(PDFIUM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../libs/pdfium/android)
 
-find_library(log-lib log)
-target_link_libraries(megapdf_engine ${log-lib})
+add_library(pdfium SHARED IMPORTED)
+set_target_properties(pdfium PROPERTIES
+    IMPORTED_LOCATION ${PDFIUM_ROOT}/lib/${ANDROID_ABI}/libpdfium.so)
+
+add_library(megapdf_engine SHARED engine.cpp)
+target_include_directories(megapdf_engine PRIVATE ${PDFIUM_ROOT}/include)
+target_link_libraries(megapdf_engine pdfium android jnigraphics log)
