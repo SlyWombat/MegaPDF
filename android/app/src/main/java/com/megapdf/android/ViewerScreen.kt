@@ -17,14 +17,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,20 +58,57 @@ fun ViewerScreen(
     displayName: String,
     pageSizes: List<PageSize>,
     pageBitmaps: Map<Int, Bitmap>,
+    isDirty: Boolean,
+    isSaving: Boolean,
     onRenderWindowChange: (firstVisible: Int, lastVisible: Int, targetWidthPx: Int) -> Unit,
     onPageTap: (pageIndex: Int, xFraction: Float, yFraction: Float) -> Unit,
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
     onClose: () -> Unit,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     val listState = rememberLazyListState()
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val requestClose = { if (isDirty) confirmDiscard = true else onClose() }
+    androidx.activity.compose.BackHandler { requestClose() }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Unsaved changes") },
+            text = { Text("This document has unsaved changes.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDiscard = false; onSave() }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false; onClose() }) { Text("Discard") }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(displayName, maxLines = 1) },
+                title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
                 navigationIcon = {
-                    IconButton(onClick = onClose) {
+                    IconButton(onClick = requestClose) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close document")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
+                        Text(if (isSaving) "Saving…" else "Save")
+                    }
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Save a copy") },
+                            enabled = !isSaving,
+                            onClick = { menuOpen = false; onSaveAs() },
+                        )
                     }
                 },
             )

@@ -41,6 +41,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val engine = PdfEngine()
     private var document: PdfDocument? = null
+    private var currentUri: Uri? = null
     private val recentsStore =
         RecentFilesStore(File(application.filesDir, "recent.json"))
 
@@ -54,9 +55,21 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private val renderedWidths = HashMap<Int, Int>()
     private var lastWindow: Triple<Int, Int, Int>? = null
 
-    /** True once the in-memory document differs from the file (save lands in #18). */
+    /** True once the in-memory document differs from the file on disk. */
     var isDirty: Boolean by mutableStateOf(false)
         private set
+
+    /** True while a save is streaming to the destination. */
+    var isSaving: Boolean by mutableStateOf(false)
+        private set
+
+    /** One-shot user-facing status ("Saved", errors); cleared by [consumeStatus]. */
+    var statusMessage: String? by mutableStateOf(null)
+        private set
+
+    fun consumeStatus() {
+        statusMessage = null
+    }
 
     fun openUri(uri: Uri, password: String? = null) {
         uiState = ViewerUiState.Loading
@@ -77,6 +90,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 closeCurrent()
                 document = doc
+                currentUri = uri
+                isDirty = false
                 val name = queryDisplayName(uri)
                 persistReadPermission(uri)
                 recentsStore.add(
@@ -186,6 +201,71 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Save = write back to the opened document's URI. SAF has no atomic rename,
+     * so (desktop `AtomicFileWriter` analog, per #18): serialize into an
+     * app-cache temp file first — a PDFium failure never touches the user's
+     * file — verify the result reopens in the engine, then stream it to the
+     * destination with truncation and fsync. Only then is the document clean.
+     */
+    fun save() {
+        val uri = currentUri ?: return
+        writeTo(uri, isSaveAs = false)
+    }
+
+    /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT. */
+    fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
+
+    private fun writeTo(uri: Uri, isSaveAs: Boolean) {
+        val doc = document ?: return
+        if (isSaving) return
+        isSaving = true
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val temp = File(app.cacheDir, "save-${System.currentTimeMillis()}.pdf")
+            try {
+                withContext(Dispatchers.IO) { temp.parentFile?.mkdirs() }
+                java.io.FileOutputStream(temp).use { doc.save(it) }
+
+                val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
+                check(bytes.isNotEmpty()) { "engine produced an empty document" }
+                engine.open(bytes).close()  // verify the output parses before touching the destination
+
+                withContext(Dispatchers.IO) {
+                    // "wt" guarantees truncation; plain "w" can leave a stale tail
+                    // when the new file is shorter.
+                    val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
+                        ?: throw IllegalStateException("provider returned no descriptor")
+                    pfd.use {
+                        java.io.FileOutputStream(it.fileDescriptor).use { out ->
+                            out.write(bytes)
+                            out.fd.sync()
+                        }
+                    }
+                }
+
+                if (isSaveAs) {
+                    currentUri = uri
+                    persistReadPermission(uri)
+                    val name = queryDisplayName(uri)
+                    recentsStore.add(RecentEntry(uri.toString(), name, System.currentTimeMillis()))
+                    (uiState as? ViewerUiState.Viewing)?.let {
+                        uiState = it.copy(displayName = name)
+                    }
+                }
+                isDirty = false
+                statusMessage = "Saved"
+            } catch (_: SecurityException) {
+                statusMessage = "No permission to write here anymore — use Save a copy."
+            } catch (e: Exception) {
+                statusMessage = "Save failed: ${e.message}"
+            } finally {
+                temp.delete()
+                isSaving = false
+            }
+        }
+    }
+
     fun openRecent(entry: RecentEntry) = openUri(Uri.parse(entry.uri))
 
     fun closeDocument() {
@@ -201,6 +281,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         renderJob?.cancel()
         pageBitmaps.clear()
         renderedWidths.clear()
+        lastWindow = null
+        currentUri = null
+        isDirty = false
         val doc = document ?: return
         document = null
         viewModelScope.launch { doc.close() }
