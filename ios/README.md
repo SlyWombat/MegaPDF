@@ -23,22 +23,18 @@ There is no local Mac: **GitHub Actions macOS runners are the build machine.**
 - `ios-ci.yml` builds for the iOS Simulator with `CODE_SIGNING_ALLOWED=NO`,
   so no signing assets are needed for CI verification.
 
-## Signing & TestFlight path (when app work starts)
+## Signing & TestFlight (#24 — wired)
 
-Uses the existing Apple Developer account; no Mac required at any step:
+No Mac at any step. Repo secrets `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8`
+(team App Store Connect API key) and `APPLE_TEAM_ID` are set; the bundle id
+`com.megapdf.ios` is registered.
 
-1. In App Store Connect → Users and Access → Integrations, create an
-   **App Store Connect API key** (role: App Manager). Store as repo secrets:
-   `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (the .p8 contents).
-2. Release workflow (future `ios-release.yml`):
-   - `xcodebuild archive -project MegaPDF.xcodeproj -scheme MegaPDF \
-      -destination 'generic/platform=iOS' -allowProvisioningUpdates \
-      -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID \
-      -authenticationKeyPath <key.p8>` — cloud-managed signing creates the
-      certs/profiles automatically.
-   - `xcodebuild -exportArchive` with `method: app-store-connect`, then upload
-     via `xcrun altool --upload-app` (or fastlane `pilot`) using the same key.
-3. TestFlight internal testers install via the TestFlight app.
-
-Register the app id (`com.megapdf.ios`) and the App Store Connect app record
-before the first archive.
+- Tag `ios-v0.1.0` → `ios-release.yml` archives with cloud-managed signing
+  (certs/profiles created automatically via the API key) and uploads straight
+  to TestFlight (`-exportArchive` with `destination: upload`). The build
+  number is the workflow run number; the marketing version comes from the tag.
+- **One-time manual prerequisite:** create the app record in
+  [App Store Connect](https://appstoreconnect.apple.com) → My Apps → **+ New
+  App** → platform iOS, bundle id `com.megapdf.ios`, name *MegaPDF*. Uploads
+  fail with "no suitable application records" until this exists.
+- Internal testers install via the TestFlight app once a build processes.
