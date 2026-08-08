@@ -94,9 +94,26 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="MegaPDF App Store" \
-            ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES \
             MARKETING_VERSION="$MARKETING" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      # Modern Xcode refuses to embed the Swift stdlib for iOS 16+ targets
+      # (ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES is a no-op), but Apple's
+      # validation demands the embedded format for this delivery. Copy the
+      # linked runtime dylibs into the archive's Frameworks; exportArchive
+      # signs nested code during export.
+      - name: Embed Swift runtime in archive
+        run: |
+          APP="$RUNNER_TEMP/MegaPDF.xcarchive/Products/Applications/MegaPDF.app"
+          TC="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/iphoneos"
+          for lib in $(otool -L "$APP/MegaPDF" | grep -oE '/usr/lib/swift/libswift[A-Za-z_]+\.dylib' | xargs -n1 basename | sort -u); do
+            if [ -f "$TC/$lib" ]; then
+              cp "$TC/$lib" "$APP/Frameworks/"
+            else
+              echo "not in toolchain: $lib"
+            fi
+          done
+          ls -la "$APP/Frameworks/"
 
       - name: Archive diagnostics
         run: |
