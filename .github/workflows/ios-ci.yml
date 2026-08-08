@@ -18,19 +18,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache PDFium xcframework
+        uses: actions/cache@v4
+        with:
+          path: ios/Vendor
+          key: pdfium-ios-chromium-7934-v1
+
+      - name: Fetch PDFium and assemble xcframework
+        run: bash scripts/fetch-pdfium.sh
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build (simulator, unsigned)
+      - name: Pick a simulator
         run: |
-          xcodebuild build \
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['name'] for devs in d.values() for dev in devs if dev['name'].startswith('iPhone')))")
+          echo "SIM_DEVICE=$DEVICE" >> "$GITHUB_ENV"
+          echo "using simulator: $DEVICE"
+
+      - name: Build and test (simulator, unsigned)
+        run: |
+          xcodebuild test \
             -project MegaPDF.xcodeproj \
-            -target MegaPDF \
-            -sdk iphonesimulator \
-            -configuration Debug \
+            -scheme MegaPDF \
+            -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
             CODE_SIGNING_ALLOWED=NO
 
   # ADR-001 evidence: PDFKit vs the MegaPDF_Id interop contract (macOS PDFKit
