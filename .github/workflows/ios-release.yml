@@ -23,9 +23,13 @@ jobs:
       - name: Select stable Xcode
         run: |
           ls -d /Applications/Xcode*.app
-          # Patch-versioned installs (26.4.1 etc.) are the public releases on
-          # this image; the bare-versioned 26.5/26.6 are the beta channel.
-          PICK=$(ls -d /Applications/Xcode_*.*.*.app | sort -V | tail -1)
+          # Explicit pin, two releases behind the image default: deliveries
+          # built with 26.6/iOS 26.5 SDK are rejected with ITMS-90426.
+          for v in 26.4.1 26.4 26.3.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              PICK="/Applications/Xcode_$v.app"; break
+            fi
+          done
           echo "selecting: $PICK"
           sudo xcode-select -s "$PICK"
           xcodebuild -version
