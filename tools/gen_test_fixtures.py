@@ -129,11 +129,93 @@ def gen_stamped():
     return build(objs)
 
 
+def _squiggle_ops(x0, y0, w, h):
+    """Cursive-ish signature stroke as PDF path segments."""
+    import math
+    ops = []
+    n = 60
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        x = x0 + w * (t + 0.04 * math.sin(6 * math.pi * t))
+        y = (y0 + h * 0.5
+             + h * 0.42 * math.sin(2 * math.pi * (1.7 * t + 0.1))
+             * (1 - 0.5 * t)
+             + h * 0.18 * math.sin(2 * math.pi * (5 * t)))
+        pts.append((x, y))
+    ops.append(b"%.1f %.1f m" % pts[0])
+    for p in pts[1:]:
+        ops.append(b"%.1f %.1f l" % p)
+    ops.append(b"S")
+    return b" ".join(ops)
+
+
+def gen_demo():
+    """One-page 'filled agreement' used for App Store screenshots: real
+    MegaPDF-style artifacts (mark:/sig: annots tagged MegaPDF_Id)."""
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+
+    helv = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    bold = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
+    body = [
+        b"BT /F2 22 Tf 72 716 Td (Equipment Rental Agreement) Tj ET",
+        b"BT /F1 11 Tf 72 688 Td (This agreement is made between Sunrise Tool Rental and the customer named) Tj ET",
+        b"BT /F1 11 Tf 72 672 Td (below, covering the rental equipment, delivery options, and insurance terms) Tj ET",
+        b"BT /F1 11 Tf 72 656 Td (described in sections 1 through 4 of this document.) Tj ET",
+        b"BT /F2 13 Tf 72 616 Td (Options) Tj ET",
+        # three drawn checkboxes
+        b"1 w 0.13 0.13 0.13 RG 72 584 13 13 re S",
+        b"BT /F1 12 Tf 94 587 Td (Include delivery and pickup) Tj ET",
+        b"1 w 0.13 0.13 0.13 RG 72 558 13 13 re S",
+        b"BT /F1 12 Tf 94 561 Td (Damage insurance accepted) Tj ET",
+        b"1 w 0.13 0.13 0.13 RG 72 532 13 13 re S",
+        b"BT /F1 12 Tf 94 535 Td (Extended weekend rate) Tj ET",
+        b"BT /F2 13 Tf 72 484 Td (Customer signature) Tj ET",
+        b"0.6 w 0.4 0.4 0.4 RG 72 400 m 320 400 l S",
+        b"BT /F1 9 Tf 72 388 Td (Sign above the line) Tj ET",
+    ]
+    content = add(stream(b"", b"\n".join(body) + b"\n"))
+
+    def mark_ap(size):
+        inset = size * 0.10
+        lw = max(1.2, size * 0.11)
+        return stream(
+            b"/Type /XObject /Subtype /Form /BBox [0 0 %.1f %.1f]" % (size, size),
+            b"0.13 0.13 0.13 RG %.2f w %.1f %.1f m %.1f %.1f l S %.1f %.1f m %.1f %.1f l S\n"
+            % (lw, inset, inset, size - inset, size - inset,
+               inset, size - inset, size - inset, inset))
+
+    ap1 = add(mark_ap(13.0))
+    ap2 = add(mark_ap(13.0))
+    sig_ap = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 220 70]",
+        b"0.10 0.12 0.35 RG 2.0 w " + _squiggle_ops(8, 8, 200, 52) + b"\n"))
+
+    pages_num = len(objs) + 5
+    a1, a2, a3 = len(objs) + 2, len(objs) + 3, len(objs) + 4
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> /Contents %d 0 R "
+               b"/Annots [%d 0 R %d 0 R %d 0 R] >>"
+               % (pages_num, helv, bold, content, a1, a2, a3))
+    m1 = add(b"<< /Type /Annot /Subtype /Stamp /Rect [72 584 85 597] /F 4 "
+             b"/MegaPDF_Id (mark:demo-1) /AP << /N %d 0 R >> >>" % ap1)
+    m2 = add(b"<< /Type /Annot /Subtype /Stamp /Rect [72 558 85 571] /F 4 "
+             b"/MegaPDF_Id (mark:demo-2) /AP << /N %d 0 R >> >>" % ap2)
+    sg = add(b"<< /Type /Annot /Subtype /Stamp /Rect [80 402 300 472] /F 4 "
+             b"/MegaPDF_Id (sig:demo-1) /AP << /N %d 0 R >> >>" % sig_ap)
+    assert (m1, m2, sg) == (a1, a2, a3)
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
-                       ("stamped.pdf", gen_stamped())):
+                       ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)

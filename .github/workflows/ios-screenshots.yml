@@ -1,0 +1,91 @@
+name: iOS Screenshots
+
+# Manual: captures App Store screenshots from real simulators using the app's
+# `-screenshot <state>` launch mode (home / viewer / sign / draw), at the two
+# required sizes: 6.9" iPhone and 13" iPad. Download the artifact and upload
+# the PNGs to App Store Connect (docs/app-store-listing.md maps them).
+on:
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache PDFium xcframework
+        uses: actions/cache@v4
+        with:
+          path: ios/Vendor
+          key: pdfium-ios-chromium-7934-v1
+
+      - name: Fetch PDFium and assemble xcframework
+        run: bash scripts/fetch-pdfium.sh
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for simulator
+        run: |
+          xcodebuild build \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDF \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Capture screenshots
+        run: |
+          APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/MegaPDF.app"
+          OUT="$RUNNER_TEMP/shots"
+          mkdir -p "$OUT"
+
+          pick_device() {
+            xcrun simctl list devices available -j | python3 -c "
+          import json, re, sys
+          pattern = sys.argv[1]
+          data = json.load(sys.stdin)['devices']
+          for devs in data.values():
+              for dev in devs:
+                  if re.search(pattern, dev['name']):
+                      print(dev['udid'] + '|' + dev['name']); sys.exit(0)
+          sys.exit(1)" "$1"
+          }
+
+          capture() {
+            local pattern="$1" label="$2"
+            local picked udid name
+            picked=$(pick_device "$pattern") || { echo "no device for $pattern"; return 1; }
+            udid="${picked%%|*}"; name="${picked##*|}"
+            echo "capturing on: $name"
+            xcrun simctl boot "$udid" || true
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl status_bar "$udid" override --time "9:41" \
+              --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+            xcrun simctl install "$udid" "$APP"
+            for state in home viewer sign draw; do
+              xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state"
+              sleep 8
+              xcrun simctl io "$udid" screenshot "$OUT/${label}-${state}.png"
+              xcrun simctl terminate "$udid" com.megapdf.ios || true
+              sleep 1
+            done
+            xcrun simctl shutdown "$udid" || true
+          }
+
+          capture 'iPhone .*Pro Max' iphone-6_9
+          capture 'iPad Pro 13' ipad-13
+          ls -la "$OUT"
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: appstore-screenshots
+          path: ${{ runner.temp }}/shots/

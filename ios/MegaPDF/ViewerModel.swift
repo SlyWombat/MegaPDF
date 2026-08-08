@@ -30,6 +30,10 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var pendingSignature: SignatureEntry?
     @Published private(set) var selectedStamp: SelectedStamp?
 
+    /// Set only by `-screenshot sign|draw` launches; ViewerView opens the sheet.
+    enum ScreenshotSheet { case signatures, draw }
+    @Published private(set) var screenshotSheet: ScreenshotSheet?
+
     private let recents = RecentsStore()
     private let signatureStore = SignatureStore()
     private var document: PdfDocument?
@@ -44,6 +48,31 @@ final class ViewerModel: ObservableObject {
     init() {
         state = .home(recents: recents.load(), error: nil)
         signatures = signatureStore.load()
+        applyScreenshotModeIfNeeded()
+    }
+
+    private func applyScreenshotModeIfNeeded() {
+        guard let mode = DemoContent.requestedState else { return }
+        if signatures.isEmpty, let image = DemoContent.squiggleImage(),
+           let entry = signatureStore.add(displayName: "David S.", image: image) {
+            signatures.append(entry)
+        }
+        switch mode {
+        case "home":
+            state = .home(recents: DemoContent.demoRecents(), error: nil)
+        case "viewer", "sign", "draw":
+            if let url = Bundle.main.url(forResource: "demo", withExtension: "pdf"),
+               let bytes = try? Data(contentsOf: url) {
+                if mode == "sign" { screenshotSheet = .signatures }
+                if mode == "draw" { screenshotSheet = .draw }
+                Task {
+                    await open(bytes: bytes, password: nil,
+                               displayName: "Rental Agreement.pdf", sourceURL: nil)
+                }
+            }
+        default:
+            break
+        }
     }
 
     // MARK: - opening

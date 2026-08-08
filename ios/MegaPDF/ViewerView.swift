@@ -70,6 +70,7 @@ struct ViewerView: View {
         .sheet(isPresented: $signaturesOpen) {
             SignaturesSheet(
                 signatures: model.signatures,
+                startDrawing: model.screenshotSheet == .draw,
                 onPick: { entry in
                     signaturesOpen = false
                     model.startPlacement(entry)
@@ -79,6 +80,9 @@ struct ViewerView: View {
                 onDelete: model.deleteSignature,
                 onDismiss: { signaturesOpen = false }
             )
+        }
+        .onAppear {
+            if model.screenshotSheet != nil { signaturesOpen = true }
         }
         .alert("Unsaved changes", isPresented: $confirmDiscard) {
             Button("Save") { model.save() }

@@ -4,6 +4,7 @@ import SwiftUI
 /// Library sheet: pick to place, draw a new one, import from Photos, delete.
 struct SignaturesSheet: View {
     let signatures: [SignatureEntry]
+    var startDrawing = false
     let onPick: (SignatureEntry) -> Void
     let onDrawn: (CGImage) -> Void
     let onPhoto: (Data) -> Void
@@ -54,6 +55,9 @@ struct SignaturesSheet: View {
             .sheet(isPresented: $drawing) {
                 DrawSignatureView { image in onDrawn(image) }
             }
+            .onAppear {
+                if startDrawing { drawing = true }
+            }
         }
     }
 }
@@ -64,7 +68,10 @@ struct DrawSignatureView: View {
     let onSave: (CGImage) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var strokes: [[CGPoint]] = []
+    @State private var strokes: [[CGPoint]] =
+        DemoContent.requestedState == "draw"
+            ? DemoContent.squiggleStrokes(width: 350, height: 180)
+            : []
     @State private var current: [CGPoint] = []
     @State private var canvasSize: CGSize = .zero
 
