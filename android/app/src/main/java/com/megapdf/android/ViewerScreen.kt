@@ -73,6 +73,7 @@ fun ViewerScreen(
     onPageTap: (pageIndex: Int, xFraction: Float, yFraction: Float) -> Unit,
     onStartPlacement: (SignatureEntry) -> Unit,
     onAddSignature: () -> Unit,
+    onSaveDrawnSignature: (Bitmap) -> Unit,
     onDeleteSignature: (String) -> Unit,
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
@@ -88,13 +89,21 @@ fun ViewerScreen(
     val requestClose = { if (isDirty) confirmDiscard = true else onClose() }
     androidx.activity.compose.BackHandler { requestClose() }
 
+    var drawDialogOpen by remember { mutableStateOf(false) }
     if (signDialogOpen) {
         SignatureDialog(
             signatures = signatures,
             onPick = { signDialogOpen = false; onStartPlacement(it) },
             onAdd = onAddSignature,
+            onDraw = { signDialogOpen = false; drawDialogOpen = true },
             onDelete = onDeleteSignature,
             onDismiss = { signDialogOpen = false },
+        )
+    }
+    if (drawDialogOpen) {
+        DrawSignatureDialog(
+            onSave = onSaveDrawnSignature,
+            onDismiss = { drawDialogOpen = false; signDialogOpen = true },
         )
     }
 
@@ -244,6 +253,7 @@ private fun SignatureDialog(
     signatures: List<SignatureEntry>,
     onPick: (SignatureEntry) -> Unit,
     onAdd: () -> Unit,
+    onDraw: () -> Unit,
     onDelete: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -253,7 +263,7 @@ private fun SignatureDialog(
         text = {
             androidx.compose.foundation.layout.Column {
                 if (signatures.isEmpty()) {
-                    Text("No signatures yet. Add a photo of your signature on white paper — the background is removed automatically.")
+                    Text("No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.")
                 } else {
                     Text("Tap a signature, then tap the page where it should go.")
                     LazyColumn(
@@ -275,7 +285,12 @@ private fun SignatureDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onAdd) { Text("Add from Photos") } },
+        confirmButton = {
+            androidx.compose.foundation.layout.Row {
+                TextButton(onClick = onDraw) { Text("Draw") }
+                TextButton(onClick = onAdd) { Text("Add from Photos") }
+            }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
 }

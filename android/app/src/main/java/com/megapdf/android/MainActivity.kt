@@ -85,6 +85,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel()) {
                         )
                     )
                 },
+                onSaveDrawnSignature = viewModel::addDrawnSignature,
                 onDeleteSignature = viewModel::deleteSignature,
                 onCommitStampRect = viewModel::commitStampRect,
                 onRemoveStamp = viewModel::removeSelectedStamp,

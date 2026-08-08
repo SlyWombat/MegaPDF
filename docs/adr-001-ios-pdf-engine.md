@@ -1,6 +1,26 @@
 # ADR-001: iOS PDF engine — PDFKit vs PDFium
 
-**Status: OPEN — decide before the iOS milestone starts.** (iOS M0 issue: #20)
+**Status: ACCEPTED — PDFium (Option B), 2026-08-08.** (iOS M0 issue: #20)
+
+## Decision & spike results
+
+The spike (`ios/spike/PdfKitSpike.swift`, run in the `pdfkit-spike` CI job
+against the `stamped.pdf` fixture) measured, via raw CGPDF dictionary dumps:
+
+- `read-custom-key=true` — PDFKit reads `MegaPDF_Id` from PDFium-style stamps.
+- `key-survives-save=true`, `write-custom-key=true` — the id contract holds.
+- **`appearance-streams-preserved=false`** — PDFKit rewrote both stamps'
+  `/AP` streams on save (33→65 and 72→104 bytes).
+
+The AP rewriting is disqualifying in combination with criterion 2: desktop and
+Android move/resize signatures by locating the *image object inside the
+stamp's appearance* (`FPDFAnnot_GetObjectCount`/`GetObject` →
+`FPDFImageObj_GetRenderedBitmap`); a PDFKit re-save that restructures that
+content would strand stamps placed on other platforms. And criterion 2 (the
+drawn-checkbox heuristic) has no PDFKit API surface at all. **iOS therefore
+uses a PDFium xcframework** (bblanchon, pinned 152.x like Windows/Android),
+porting the Android C++ shim logic to Swift's C interop. PDFKit may still be
+used for incidental viewing niceties, but never to *write* documents.
 
 ## Context
 

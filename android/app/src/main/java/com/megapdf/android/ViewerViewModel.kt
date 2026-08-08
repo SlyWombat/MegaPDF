@@ -286,6 +286,28 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Stores a drawn signature: already transparent, so only trim applies. */
+    fun addDrawnSignature(bitmap: Bitmap) {
+        viewModelScope.launch {
+            try {
+                val result = withContext(Dispatchers.Default) {
+                    val pixels = IntArray(bitmap.width * bitmap.height)
+                    bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+                    SignatureImageProcessor.trimToInk(pixels, bitmap.width, bitmap.height)
+                }
+                val out = Bitmap.createBitmap(result.width, result.height, Bitmap.Config.ARGB_8888)
+                out.setPixels(result.pixels, 0, result.width, 0, 0, result.width, result.height)
+                val entry = withContext(Dispatchers.IO) {
+                    signatureStore.add("Signature ${signatures.size + 1}", out)
+                }
+                signatures.add(entry)
+                statusMessage = "Signature added"
+            } catch (e: Exception) {
+                statusMessage = "Couldn't save the signature: ${e.message}"
+            }
+        }
+    }
+
     fun deleteSignature(id: String) {
         viewModelScope.launch(Dispatchers.IO) { signatureStore.delete(id) }
         signatures.removeAll { it.id == id }

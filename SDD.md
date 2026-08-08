@@ -402,6 +402,9 @@ tracked as GitHub issues #11–#20 (milestones *Android M1–M3*, *iOS M0*).
   lives in `android/` with its own path-filtered CI.
 - **Reduced mobile v1 scope: fill-check-sign.** View/zoom, tap-to-check checkboxes
   (both AcroForm widgets and drawn squares), signature library + placement, save.
+  Signature capture on mobile offers both **on-screen drawing** (finger/stylus,
+  transparent ink, trim-only cleanup) and **photo import** (full cleanup contract)
+  — stakeholder decision 2026-08-08; applies to Android and iOS alike.
   **Not** in mobile v1: interactive text editing, whiteout, shrink-for-email, printing.
   The product principles (P1–P5) apply unchanged; "no accounts, no cloud, all local"
   is non-negotiable on every platform.
