@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['android/**', 'libs/pdfium/android/**']
+    paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**']
   pull_request:
     branches: [main]
-    paths-ignore: ['android/**', 'libs/pdfium/android/**']
+    paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**']
 
 jobs:
   build-and-test:

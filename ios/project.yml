@@ -1,0 +1,23 @@
+# XcodeGen spec — the committed source of truth for the Xcode project.
+# CI (and any Mac) runs `xcodegen generate` to produce MegaPDF.xcodeproj,
+# which is gitignored. Install: `brew install xcodegen`.
+name: MegaPDF
+options:
+  bundleIdPrefix: com.megapdf
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  MegaPDF:
+    type: application
+    platform: iOS
+    sources: [MegaPDF]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.megapdf.ios
+        PRODUCT_NAME: MegaPDF
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        TARGETED_DEVICE_FAMILY: "1,2"
