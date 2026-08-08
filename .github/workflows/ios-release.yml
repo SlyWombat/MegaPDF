@@ -94,6 +94,7 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="MegaPDF App Store" \
+            ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES \
             MARKETING_VERSION="$MARKETING" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
@@ -133,14 +134,37 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export"
 
-      # Root cause of the ITMS-90426/90429 chain: libpdfium.dylib's ancient
-      # minimum-OS made Apple classify the app as needing embedded Swift
-      # runtimes. fetch-pdfium.sh now rewrites the dylib to iOS 16 (cache key
-      # v2), so the delivery is modern-classified: no SwiftSupport wanted.
-      - name: Verify embedded dylib min-OS
+      # Apple's validator insists this delivery use the pre-ABI-stability
+      # format (90426 without SwiftSupport, 90429 with SwiftSupport but no
+      # embedded libs — across six builds, two toolchains, two delivery paths).
+      # Give it exactly that: swift stdlibs embedded in Frameworks (see
+      # ALWAYS_EMBED above) and a SwiftSupport mirror of unsigned toolchain
+      # copies. exportArchive usually builds SwiftSupport itself for
+      # embedded-swift apps; inject only if it didn't.
+      - name: Ensure SwiftSupport
         run: |
-          APP="$RUNNER_TEMP/MegaPDF.xcarchive/Products/Applications/MegaPDF.app"
-          xcrun otool -l "$APP/Frameworks/libpdfium.dylib" | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | head -10
+          cd "$RUNNER_TEMP/export"
+          IPA=$(ls *.ipa)
+          echo "--- Frameworks in delivered app:"
+          unzip -l "$IPA" | grep -E "Frameworks/.*dylib" | head -25
+          if unzip -l "$IPA" | grep -q "SwiftSupport/"; then
+            echo "exportArchive included SwiftSupport"
+          else
+            APP="$RUNNER_TEMP/MegaPDF.xcarchive/Products/Applications/MegaPDF.app"
+            TC="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+            LIBDIR=""
+            for cand in "$TC/swift-5.0/iphoneos" "$TC/swift-5.5/iphoneos" "$TC/swift/iphoneos"; do
+              if ls "$cand"/libswiftCore.dylib >/dev/null 2>&1; then LIBDIR="$cand"; break; fi
+            done
+            echo "injecting SwiftSupport from: ${LIBDIR:-NONE}"
+            mkdir -p SwiftSupport/iphoneos
+            for lib in $(unzip -l "$IPA" | grep -oE "Frameworks/libswift[A-Za-z_]+\.dylib" | xargs -n1 basename | sort -u); do
+              [ -f "$LIBDIR/$lib" ] && cp "$LIBDIR/$lib" SwiftSupport/iphoneos/ || echo "missing in toolchain: $lib"
+            done
+            ls SwiftSupport/iphoneos/
+            zip -qur "$IPA" SwiftSupport
+          fi
+          unzip -l "$IPA" | grep -cE "SwiftSupport/iphoneos/libswift" || true
 
       - name: Upload to TestFlight
         env:
