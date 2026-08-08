@@ -43,7 +43,14 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
           mkdir -p "$RUNNER_TEMP/asc"
-          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
+          # xcodebuild sometimes ignores -authenticationKeyPath; it always
+          # checks the conventional private_keys locations.
+          mkdir -p "$HOME/.appstoreconnect/private_keys" "$HOME/private_keys"
+          cp "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" "$HOME/.appstoreconnect/private_keys/"
+          cp "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" "$HOME/private_keys/"
+          openssl pkey -in "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" -noout \
+            && echo "key parses OK"
 
       # Archive unsigned; the export step performs cloud-managed *distribution*
       # signing — the profile type ASC API keys can mint. Requesting development
