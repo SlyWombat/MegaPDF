@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['android/**']
   pull_request:
     branches: [main]
+    paths-ignore: ['android/**']
 
 jobs:
   build-and-test:
