@@ -17,10 +17,25 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // Play upload key, injected by android-release.yml from repo secrets.
+        // Absent locally and on PR builds — release then builds unsigned.
+        val keystorePath = System.getenv("ANDROID_UPLOAD_KEYSTORE_PATH")
+        if (keystorePath != null) {
+            create("upload") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ANDROID_UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_UPLOAD_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_UPLOAD_KEYSTORE_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("upload")
         }
     }
     compileOptions {

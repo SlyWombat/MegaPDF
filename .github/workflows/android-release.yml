@@ -1,0 +1,51 @@
+name: Android Release
+
+# Tag a commit `android-v0.1.0` (etc.) to build the signed release AAB.
+# Signing uses the Play *upload* key from repo secrets (Play App Signing holds
+# the actual release key). The AAB is attached to a GitHub release; upload it
+# to the Play Console track manually until Play API upload is wired up (#19).
+on:
+  push:
+    tags: ['android-v*']
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode upload keystore
+        run: printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+
+      - name: Test and build signed AAB
+        env:
+          ANDROID_UPLOAD_KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.jks
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :engine:testDebugUnitTest :app:bundleRelease
+
+      - name: Attach AAB to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "MegaPDF Android $GITHUB_REF_NAME" \
+            --notes "Signed release bundle for the Play Console. See android/RELEASING.md." \
+            --verify-tag \
+            app/build/outputs/bundle/release/app-release.aab

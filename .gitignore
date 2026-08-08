@@ -45,3 +45,6 @@ tests/Private/
 *.log
 Thumbs.db
 Desktop.ini
+
+# Local distribution drops (CI artifacts downloaded for sideloading)
+dist/
