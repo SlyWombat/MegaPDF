@@ -7,6 +7,11 @@ Writes:
                 square at (72,600)-(84,612): a drawn-checkbox candidate.
   forms.pdf   - 1 page with one AcroForm checkbox widget "agree",
                 rect (100,600)-(115,615), initially /Off.
+  stamped.pdf - 1 page with two MegaPDF-style stamp annots (the SDD 6.2
+                MegaPDF_Id contract): "sig:interop-1" at (100,500)-(190,560)
+                and "mark:interop-2" at (72,600)-(84,612), each with an /AP
+                appearance stream. Used by the iOS PDFKit spike (ADR-001)
+                and future cross-platform interop tests.
 
 Deterministic output; both platforms' engine tests assert against these.
 """
@@ -90,10 +95,45 @@ def gen_forms():
     return build(objs)
 
 
+def gen_stamped():
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    content = add(stream(
+        b"", b"BT /F1 14 Tf 72 720 Td (MegaPDF_Id interop fixture.) Tj ET\n"
+             b"1 w 0.13 0.13 0.13 RG 72 600 12 12 re S\n"))
+    # Signature-style stamp appearance: a solid dark block.
+    ap_sig = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 90 60]",
+        b"0.13 0.19 0.56 rg 5 5 80 50 re f\n"))
+    # Check-mark-style appearance: the X strokes.
+    ap_mark = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 12 12]",
+        b"0.13 0.13 0.13 RG 1.3 w 1.2 1.2 m 10.8 10.8 l S 1.2 10.8 m 10.8 1.2 l S\n"))
+    pages_num = len(objs) + 4
+    sig = len(objs) + 2
+    mark = len(objs) + 3
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R "
+               b"/Annots [%d 0 R %d 0 R] >>"
+               % (pages_num, font, content, sig, mark))
+    s = add(b"<< /Type /Annot /Subtype /Stamp /Rect [100 500 190 560] /F 4 "
+            b"/MegaPDF_Id (sig:interop-1) /AP << /N %d 0 R >> >>" % ap_sig)
+    m = add(b"<< /Type /Annot /Subtype /Stamp /Rect [72 600 84 612] /F 4 "
+            b"/MegaPDF_Id (mark:interop-2) /AP << /N %d 0 R >> >>" % ap_mark)
+    assert (s, m) == (sig, mark)
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
-    for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms())):
+    for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
+                       ("stamped.pdf", gen_stamped())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)
