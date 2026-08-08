@@ -1,18 +1,19 @@
 import SwiftUI
 
-/// Scrolling page list with pinch/double-tap zoom and visible-range tracking
-/// feeding the model's ±2-page render window.
+/// Scrolling page list with pinch/double-tap zoom, tap-to-edit dispatch,
+/// signature placement chrome, and save/sign toolbar.
 struct ViewerView: View {
+    @ObservedObject var model: ViewerModel
     let displayName: String
     let pageSizes: [CGSize]
-    let pageImages: [Int: CGImage]
-    let onWindowChange: (_ first: Int, _ last: Int, _ widthPx: Int) -> Void
-    let onPageTap: (_ index: Int, _ xFraction: Double, _ yFraction: Double) -> Void
+    let onSaveCopy: () -> Void
     let onClose: () -> Void
 
     @State private var zoom: CGFloat = 1
     @State private var gestureZoom: CGFloat = 1
     @State private var visible: Set<Int> = []
+    @State private var signaturesOpen = false
+    @State private var confirmDiscard = false
     @Environment(\.displayScale) private var displayScale
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
@@ -46,12 +47,45 @@ struct ViewerView: View {
                     }
             )
         }
-        .navigationTitle(displayName)
+        .navigationTitle((model.isDirty ? "• " : "") + displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button("Close", action: onClose)
+                Button("Close") {
+                    if model.isDirty { confirmDiscard = true } else { onClose() }
+                }
             }
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button("Sign") { signaturesOpen = true }
+                Button(model.isSaving ? "Saving…" : "Save") { model.save() }
+                    .disabled(!model.isDirty || model.isSaving)
+                Menu {
+                    Button("Save a copy", action: onSaveCopy)
+                        .disabled(model.isSaving)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $signaturesOpen) {
+            SignaturesSheet(
+                signatures: model.signatures,
+                onPick: { entry in
+                    signaturesOpen = false
+                    model.startPlacement(entry)
+                },
+                onDrawn: model.addDrawnSignature,
+                onPhoto: model.importSignature,
+                onDelete: model.deleteSignature,
+                onDismiss: { signaturesOpen = false }
+            )
+        }
+        .alert("Unsaved changes", isPresented: $confirmDiscard) {
+            Button("Save") { model.save() }
+            Button("Discard", role: .destructive, action: onClose)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This document has unsaved changes.")
         }
     }
 
@@ -60,18 +94,28 @@ struct ViewerView: View {
         let size = pageSizes[index]
         let width = containerWidth * effectiveZoom
         let height = width * size.height / size.width
-        Group {
-            if let image = pageImages[index] {
+        ZStack(alignment: .topLeading) {
+            if let image = model.pageImages[index] {
                 Image(uiImage: UIImage(cgImage: image))
                     .resizable()
                     .interpolation(.high)
             } else {
                 Color.white  // placeholder keeps layout stable until the render lands
             }
+            if let stamp = model.selectedStamp, stamp.pageIndex == index {
+                StampOverlay(
+                    stamp: stamp,
+                    pageSize: size,
+                    viewSize: CGSize(width: width, height: height),
+                    onCommit: model.commitStampRect,
+                    onRemove: model.removeSelectedStamp
+                )
+            }
         }
         .frame(width: width, height: height)
+        .clipped()
         // Double-tap zoom is checked first; a lone tap (deferred briefly by
-        // the exclusivity) dispatches to check/uncheck — as on Android.
+        // the exclusivity) dispatches to the model — as on Android.
         .gesture(
             SpatialTapGesture(count: 2)
                 .onEnded { _ in
@@ -80,9 +124,10 @@ struct ViewerView: View {
                 }
                 .exclusively(before: SpatialTapGesture()
                     .onEnded { value in
-                        onPageTap(index,
-                                  Double(value.location.x / width),
-                                  Double(value.location.y / height))
+                        model.onPageTapped(
+                            index: index,
+                            xFraction: Double(value.location.x / width),
+                            yFraction: Double(value.location.y / height))
                     })
         )
         .accessibilityLabel("Page \(index + 1)")
@@ -91,6 +136,6 @@ struct ViewerView: View {
     private func pushWindow(containerWidth: CGFloat) {
         guard let first = visible.min(), let last = visible.max() else { return }
         let widthPx = Int(containerWidth * effectiveZoom * displayScale)
-        onWindowChange(first, last, widthPx)
+        model.updateRenderWindow(first: first, last: last, widthPx: widthPx)
     }
 }

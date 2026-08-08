@@ -215,6 +215,7 @@ final class PdfDocument {
 
     /// Engine-internal access for the surface extensions (checkboxes, stamps).
     var formHandle: FPDF_FORMHANDLE? { form }
+    var docHandle: FPDF_DOCUMENT { doc }
     private let buffer: UnsafeMutableRawPointer
     private let ffi: UnsafeMutablePointer<FPDF_FORMFILLINFO>
     private var destroyed = false
