@@ -16,6 +16,7 @@ enum PdfError: Error, Equatable {
     case pageLoad(index: Int)
     case renderFailed
     case saveFailed
+    case editFailed
 }
 
 /// Rectangle in PDF points, bottom-left origin.
@@ -162,6 +163,15 @@ actor PdfEngine {
     // serializes saves, so a static sink is safe.
     nonisolated(unsafe) static var saveSink = Data()
 
+    /// Loads a page, runs `body`, and closes the page — the standard access
+    /// pattern for all page-scoped operations (form lifecycle included).
+    func withPage<T>(_ document: PdfDocument, index: Int,
+                     _ body: (FPDF_PAGE) throws -> T) throws -> T {
+        let page = try loadPage(document, index: index)
+        defer { closePage(document, page) }
+        return try body(page)
+    }
+
     private func loadPage(_ document: PdfDocument, index: Int) throws -> FPDF_PAGE {
         guard let page = FPDF_LoadPage(document.doc, Int32(index)) else {
             throw PdfError.pageLoad(index: index)
@@ -202,6 +212,9 @@ actor PdfEngine {
 final class PdfDocument {
     fileprivate let doc: FPDF_DOCUMENT
     fileprivate let form: FPDF_FORMHANDLE?
+
+    /// Engine-internal access for the surface extensions (checkboxes, stamps).
+    var formHandle: FPDF_FORMHANDLE? { form }
     private let buffer: UnsafeMutableRawPointer
     private let ffi: UnsafeMutablePointer<FPDF_FORMFILLINFO>
     private var destroyed = false

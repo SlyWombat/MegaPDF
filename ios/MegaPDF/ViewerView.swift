@@ -7,6 +7,7 @@ struct ViewerView: View {
     let pageSizes: [CGSize]
     let pageImages: [Int: CGImage]
     let onWindowChange: (_ first: Int, _ last: Int, _ widthPx: Int) -> Void
+    let onPageTap: (_ index: Int, _ xFraction: Double, _ yFraction: Double) -> Void
     let onClose: () -> Void
 
     @State private var zoom: CGFloat = 1
@@ -44,10 +45,6 @@ struct ViewerView: View {
                         pushWindow(containerWidth: geo.size.width)
                     }
             )
-            .onTapGesture(count: 2) {
-                zoom = zoom < 1.5 ? 2 : 1
-                pushWindow(containerWidth: geo.size.width)
-            }
         }
         .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -73,6 +70,21 @@ struct ViewerView: View {
             }
         }
         .frame(width: width, height: height)
+        // Double-tap zoom is checked first; a lone tap (deferred briefly by
+        // the exclusivity) dispatches to check/uncheck — as on Android.
+        .gesture(
+            SpatialTapGesture(count: 2)
+                .onEnded { _ in
+                    zoom = zoom < 1.5 ? 2 : 1
+                    pushWindow(containerWidth: containerWidth)
+                }
+                .exclusively(before: SpatialTapGesture()
+                    .onEnded { value in
+                        onPageTap(index,
+                                  Double(value.location.x / width),
+                                  Double(value.location.y / height))
+                    })
+        )
         .accessibilityLabel("Page \(index + 1)")
     }
 

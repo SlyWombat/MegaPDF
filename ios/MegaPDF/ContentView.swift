@@ -40,10 +40,11 @@ struct ContentView: View {
 
             case let .viewing(displayName, pageSizes):
                 ViewerView(
-                    displayName: displayName,
+                    displayName: (model.isDirty ? "• " : "") + displayName,
                     pageSizes: pageSizes,
                     pageImages: model.pageImages,
                     onWindowChange: model.updateRenderWindow,
+                    onPageTap: { model.onPageTapped(index: $0, xFraction: $1, yFraction: $2) },
                     onClose: model.close
                 )
             }

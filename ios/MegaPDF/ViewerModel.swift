@@ -14,6 +14,7 @@ enum ViewerState {
 final class ViewerModel: ObservableObject {
     @Published private(set) var state: ViewerState
     @Published private(set) var pageImages: [Int: CGImage] = [:]
+    @Published private(set) var isDirty = false
 
     private let recents = RecentsStore()
     private var document: PdfDocument?
@@ -132,6 +133,53 @@ final class ViewerModel: ObservableObject {
         }
     }
 
+    // MARK: - editing
+
+    /// Tap dispatch — same ordering as desktop and Android: form fields win
+    /// over page content, then existing marks (tap to remove), then drawn
+    /// squares (tap to place). Fractions are tap position / page view size,
+    /// top-left origin.
+    func onPageTapped(index: Int, xFraction: Double, yFraction: Double) {
+        guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
+        let size = pageSizes[index]
+        let x = xFraction * size.width
+        let y = (1 - yFraction) * size.height  // view top-left → PDF bottom-left
+        Task {
+            do {
+                var edited = false
+                let engine = PdfEngine.shared
+                let fields = try await engine.formFields(doc, pageIndex: index)
+                if let field = fields.first(where: { $0.rect.contains(x: x, y: y) }) {
+                    try await engine.clickAt(doc, pageIndex: index,
+                                             x: field.rect.centerX, y: field.rect.centerY)
+                    edited = true
+                } else {
+                    let stamps = try await engine.stamps(doc, pageIndex: index)
+                    if let mark = stamps.first(where: {
+                        $0.id.hasPrefix("mark:") && $0.rect.contains(x: x, y: y)
+                    }) {
+                        try await engine.removeAnnot(doc, pageIndex: index,
+                                                     annotIndex: mark.annotIndex)
+                        edited = true
+                    } else if let square = try await engine
+                        .detectCheckboxSquares(doc, pageIndex: index)
+                        .first(where: { $0.contains(x: x, y: y) }) {
+                        try await engine.addCheckMark(
+                            doc, pageIndex: index, square: square,
+                            id: "mark:\(UUID().uuidString)")
+                        edited = true
+                    }
+                }
+                if edited {
+                    isDirty = true
+                    invalidatePage(index)
+                }
+            } catch {
+                // Edits are tap-driven; a failure just leaves the page unchanged.
+            }
+        }
+    }
+
     func invalidatePage(_ index: Int) {
         renderedWidths.removeValue(forKey: index)
         if let w = lastWindow { updateRenderWindow(first: w.first, last: w.last, widthPx: w.widthPx) }
@@ -154,6 +202,7 @@ final class ViewerModel: ObservableObject {
         renderedWidths = [:]
         lastWindow = nil
         sourceURL = nil
+        isDirty = false
         if let doc = document {
             document = nil
             Task { await PdfEngine.shared.close(doc) }
