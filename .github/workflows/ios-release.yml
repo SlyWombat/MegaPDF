@@ -56,9 +56,14 @@ jobs:
             -P "$IOS_DIST_P12_PASSWORD" -A -t cert -f pkcs12
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
           security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KEYCHAIN"
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          printf '%s' "$IOS_DIST_PROFILE_B64" | base64 -d \
-            > "$HOME/Library/MobileDevice/Provisioning Profiles/MegaPDF_App_Store.mobileprovision"
+          # Xcode 16+ scans UserData/Provisioning Profiles; older tooling and
+          # altool use MobileDevice. Install to both.
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                     "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            printf '%s' "$IOS_DIST_PROFILE_B64" | base64 -d \
+              > "$dir/MegaPDF_App_Store.mobileprovision"
+          done
           security find-identity -v -p codesigning "$KEYCHAIN"
 
       - name: Archive (manual distribution signing)
