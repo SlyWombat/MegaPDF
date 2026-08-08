@@ -38,7 +38,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Vendor
-          key: pdfium-ios-chromium-7934-v1
+          key: pdfium-ios-chromium-7934-v2
 
       - name: Fetch PDFium and assemble xcframework
         run: bash scripts/fetch-pdfium.sh
@@ -133,34 +133,14 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export"
 
-      # ITMS-90426: Apple's delivery validation wants SwiftSupport regardless of
-      # delivery mechanism or toolchain (builds 5/10/11/13/14 all rejected).
-      # Build it ourselves: the toolchain's device swift libs matching what the
-      # binary links, zipped into the IPA next to Payload.
-      - name: Inject SwiftSupport
+      # Root cause of the ITMS-90426/90429 chain: libpdfium.dylib's ancient
+      # minimum-OS made Apple classify the app as needing embedded Swift
+      # runtimes. fetch-pdfium.sh now rewrites the dylib to iOS 16 (cache key
+      # v2), so the delivery is modern-classified: no SwiftSupport wanted.
+      - name: Verify embedded dylib min-OS
         run: |
-          cd "$RUNNER_TEMP/export"
-          IPA=$(ls *.ipa)
           APP="$RUNNER_TEMP/MegaPDF.xcarchive/Products/Applications/MegaPDF.app"
-          TC="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
-          LIBDIR=""
-          for cand in "$TC/swift-5.0/iphoneos" "$TC/swift-5.5/iphoneos" "$TC/swift/iphoneos"; do
-            if ls "$cand"/libswiftCore.dylib >/dev/null 2>&1; then LIBDIR="$cand"; break; fi
-          done
-          echo "toolchain lib dir: ${LIBDIR:-NONE}"
-          mkdir -p SwiftSupport/iphoneos
-          if [ -n "$LIBDIR" ]; then
-            for lib in $(otool -L "$APP/MegaPDF" | grep -oE '/usr/lib/swift/libswift[A-Za-z_]+\.dylib' | xargs -n1 basename | sort -u); do
-              if [ -f "$LIBDIR/$lib" ]; then
-                cp "$LIBDIR/$lib" SwiftSupport/iphoneos/
-              else
-                echo "not in toolchain: $lib"
-              fi
-            done
-          fi
-          ls -la SwiftSupport/iphoneos/ || true
-          zip -qur "$IPA" SwiftSupport
-          unzip -l "$IPA" | grep -E "SwiftSupport|Payload/MegaPDF.app/MegaPDF$" | head -8
+          xcrun otool -l "$APP/Frameworks/libpdfium.dylib" | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | head -10
 
       - name: Upload to TestFlight
         env:

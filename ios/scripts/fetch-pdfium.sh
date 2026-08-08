@@ -36,6 +36,15 @@ lipo -create \
 if [[ "$LIB" == *.dylib ]]; then
     install_name_tool -id "@rpath/$LIB" "$TMP/ios-device-arm64/lib/$LIB"
     install_name_tool -id "@rpath/$LIB" "$TMP/sim/$LIB"
+    # The prebuilt's ancient minimum-OS makes Apple classify the whole app as
+    # needing embedded Swift runtimes (ITMS-90426/90429). Rewrite it to match
+    # the app's deployment target.
+    echo "--- device dylib version info before:"
+    xcrun otool -l "$TMP/ios-device-arm64/lib/$LIB" | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | head -12 || true
+    xcrun vtool -set-build-version ios 16.0 16.0 -replace \
+        -output "$TMP/ios-device-arm64/lib/$LIB" "$TMP/ios-device-arm64/lib/$LIB"
+    echo "--- device dylib version info after:"
+    xcrun otool -l "$TMP/ios-device-arm64/lib/$LIB" | grep -A4 "LC_BUILD_VERSION" | head -8 || true
 fi
 
 xcodebuild -create-xcframework \
