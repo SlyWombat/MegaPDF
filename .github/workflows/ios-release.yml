@@ -108,27 +108,17 @@ jobs:
           echo "--- swift link references:"; otool -L "$APP/MegaPDF" | grep -i swift | head -5 || true
           echo "--- Frameworks:"; ls "$APP/Frameworks" || true
 
-      # destination: upload lets xcodebuild deliver the package itself — the
-      # organizer-style path that assembles SwiftSupport internally. A bare
-      # exported IPA pushed via altool gets rejected with ITMS-90426.
-      - name: Export and upload to TestFlight
+      - name: Export IPA
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
-          mkdir -p "$HOME/.appstoreconnect/private_keys" "$RUNNER_TEMP/asc"
-          printf '%s\n' "$ASC_KEY_P8" \
-            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
           cat > "$RUNNER_TEMP/ExportOptions.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
+            <key>destination</key><string>export</string>
             <key>signingStyle</key><string>manual</string>
             <key>teamID</key><string>${APPLE_TEAM_ID}</string>
             <key>provisioningProfiles</key>
@@ -141,7 +131,46 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/MegaPDF.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -exportPath "$RUNNER_TEMP/export"
+
+      # ITMS-90426: Apple's delivery validation wants SwiftSupport regardless of
+      # delivery mechanism or toolchain (builds 5/10/11/13/14 all rejected).
+      # Build it ourselves: the toolchain's device swift libs matching what the
+      # binary links, zipped into the IPA next to Payload.
+      - name: Inject SwiftSupport
+        run: |
+          cd "$RUNNER_TEMP/export"
+          IPA=$(ls *.ipa)
+          APP="$RUNNER_TEMP/MegaPDF.xcarchive/Products/Applications/MegaPDF.app"
+          TC="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+          LIBDIR=""
+          for cand in "$TC/swift-5.0/iphoneos" "$TC/swift-5.5/iphoneos" "$TC/swift/iphoneos"; do
+            if ls "$cand"/libswiftCore.dylib >/dev/null 2>&1; then LIBDIR="$cand"; break; fi
+          done
+          echo "toolchain lib dir: ${LIBDIR:-NONE}"
+          mkdir -p SwiftSupport/iphoneos
+          if [ -n "$LIBDIR" ]; then
+            for lib in $(otool -L "$APP/MegaPDF" | grep -oE '/usr/lib/swift/libswift[A-Za-z_]+\.dylib' | xargs -n1 basename | sort -u); do
+              if [ -f "$LIBDIR/$lib" ]; then
+                cp "$LIBDIR/$lib" SwiftSupport/iphoneos/
+              else
+                echo "not in toolchain: $lib"
+              fi
+            done
+          fi
+          ls -la SwiftSupport/iphoneos/ || true
+          zip -qur "$IPA" SwiftSupport
+          unzip -l "$IPA" | grep -E "SwiftSupport|Payload/MegaPDF.app/MegaPDF$" | head -8
+
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$ASC_KEY_P8" \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          xcrun altool --upload-app -t ios \
+            -f "$RUNNER_TEMP"/export/*.ipa \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
