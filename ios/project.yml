@@ -32,6 +32,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+        # Standard OS crypto only — skips the TestFlight export-compliance prompt.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
         TARGETED_DEVICE_FAMILY: "1,2"
