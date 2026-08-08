@@ -45,11 +45,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/asc"
           printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
 
-      - name: Archive (cloud-managed signing)
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # Archive unsigned; the export step performs cloud-managed *distribution*
+      # signing — the profile type ASC API keys can mint. Requesting development
+      # signing at archive time fails on a runner with no Xcode account.
+      - name: Archive (unsigned)
         run: |
           MARKETING="${GITHUB_REF_NAME#ios-v}"
           xcodebuild archive \
@@ -57,10 +56,7 @@ jobs:
             -scheme MegaPDF \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/MegaPDF.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="$MARKETING" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
