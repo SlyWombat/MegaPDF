@@ -15,15 +15,15 @@ character limits show the count in brackets.
 | **Secondary category** | Business |
 | **Content rights** | Does not contain, show, or access third-party content |
 | **Age rating** | Answer **No** to every question → **4+** |
-| **Copyright** | © 2026 David Seaman |
+| **Copyright** | `2026 Electric RV` — matches the privacy policy's data-controller framing. **Where:** this field is *not* under App Information; it's on the **version page** — App Store tab → your version (e.g. "1.0 Prepare for Submission") → scroll below the description/keywords block → **Copyright**. |
 
 ## URLs
 
 | Field | Value |
 |---|---|
 | **Support URL** | `https://github.com/SlyWombat/MegaPDF` |
-| **Marketing URL** (optional) | `https://github.com/SlyWombat/MegaPDF` |
-| **Privacy Policy URL** | `https://slywombat.github.io/MegaPDF/privacy.html` |
+| **Marketing URL** (optional) | `https://electricrv.ca/megapdf/` *(landing page — issue #25; use the GitHub URL until it's live)* |
+| **Privacy Policy URL** | `https://electricrv.ca/megapdf/privacy/` *(hosted on electricrv.ca alongside SlyLED's — created by issue #25; the page must be live before submission. Same for Google Play's listing.)* |
 
 ## Promotional Text [170]
 

@@ -28,8 +28,9 @@
 3. **Testers**: create an email list (start with the Windows testers) and share
    the opt-in link.
 4. Required declarations:
-   - **Privacy policy:** the GitHub Pages policy already published for the
-     Microsoft Store listing (see `docs/` store runbook).
+   - **Privacy policy:** `https://electricrv.ca/megapdf/privacy/` — the
+     Electric RV-hosted policy (issue #25; must be live before submission).
+     The interim GitHub Pages policy retires once it is.
    - **Data safety:** no data collected, no data shared — documents and
      signatures never leave the device; the app makes no network calls and
      declares zero permissions.
