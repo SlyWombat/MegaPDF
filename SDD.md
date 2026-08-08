@@ -47,7 +47,8 @@ Stating what MegaPDF will *not* do is as important as what it will. Out of scope
 - Cryptographic digital signatures (PKI / certificate-based signing) — MegaPDF signatures are *graphic* signatures, which is what the target user means by "signing"
 - Redaction, commenting/review workflows, form *authoring*
 - Cloud storage integration beyond what the Windows file picker already provides (OneDrive etc. work transparently through the file system)
-- macOS/Linux/mobile versions
+- macOS/Linux desktop versions
+- ~~mobile versions~~ *(scope amendment, 2026-08-08 — mobile is now in scope with a reduced feature set; see §6)*
 
 ---
 
@@ -383,6 +384,50 @@ Uninstall via Settings → Apps removes the package completely. Per-user data un
 - Source lives in a **public GitHub repository** (Apache-2.0). CI (GitHub Actions, `windows-latest` — free for public repos): build → unit tests (engine adapter mocked) → integration tests against the document corpus → MSIX package → sign (Azure Trusted Signing — the product's only recurring infrastructure cost) → publish to Store submission API / website / winget PR.
 - **Test corpus:** assembled from our own internal documents (Appendix B). Because these are confidential business documents, the corpus lives in a **private** artifact store, never in the public source repo; corpus-dependent integration tests run only on maintainer-triggered CI, and the public repo includes a small synthetic corpus so outside contributors can still run meaningful tests.
 - Every release candidate must pass the kill-during-save torture test (§3.4) and the performance budget suite (§4.5) before publish.
+
+---
+
+## 6. Multi-Platform Strategy *(scope amendment — 2026-08-08)*
+
+Mobile was an explicit v1 non-goal (§1.4); tester and stakeholder demand promoted it. The
+Windows app is unaffected — this section governs the new platforms only. The roadmap is
+tracked as GitHub issues #11–#20 (milestones *Android M1–M3*, *iOS M0*).
+
+### 6.1 Decisions
+
+- **Native per platform, no shared code.** Android is **Kotlin + Jetpack Compose**; iOS
+  (later) is **Swift + SwiftUI**. Each platform reimplements the needed engine surface
+  over PDFium's C API. `MegaPDF.Core` stays the **behavioral reference** — the spec the
+  ports are written against — not a dependency. `src/` remains .NET/Windows; Android
+  lives in `android/` with its own path-filtered CI.
+- **Reduced mobile v1 scope: fill-check-sign.** View/zoom, tap-to-check checkboxes
+  (both AcroForm widgets and drawn squares), signature library + placement, save.
+  **Not** in mobile v1: interactive text editing, whiteout, shrink-for-email, printing.
+  The product principles (P1–P5) apply unchanged; "no accounts, no cloud, all local"
+  is non-negotiable on every platform.
+- **Sequencing: Android first.** iOS follows once the Android engine work has settled
+  the parity contracts; iOS development runs Mac-less via GitHub Actions macOS runners
+  (issue #20), and the engine choice there (Apple PDFKit vs a PDFium xcframework) is an
+  open ADR decided before the iOS milestone starts.
+- **Engine version pinning.** All platforms pin the same PDFium major version
+  (currently 152.x, from bblanchon/pdfium-binaries) so heuristics and rendering
+  don't drift across platforms.
+
+### 6.2 Cross-platform behavioral contracts
+
+A document edited on one platform must round-trip editable on the others. Three
+behaviors are contracts — a change on any platform is a breaking change everywhere:
+
+1. **Stamp identity.** Every MegaPDF-placed annotation is tagged with the custom key
+   `MegaPDF_Id`, id prefixed `mark:` (check marks) or `sig:` (signatures). This is
+   what lets any platform find, select, move, and remove stamps placed by another.
+2. **Drawn-checkbox detection heuristic.** Stroked-not-filled path objects, 6–24 pt on
+   both axes, squareness within 25% (reference: `PdfiumEngine.DetectCheckboxSquares`).
+   Shared fixture PDFs with expected rects live in `tests/` and must pass on every
+   platform.
+3. **Signature cleanup pixel math.** Near-white removal: luminance
+   `0.114·B + 0.587·G + 0.299·R > 235` → alpha 0; trim to the bounding box of pixels
+   with alpha > 16, plus a 4 px margin (reference: `SignatureImageProcessor`).
 
 ---
 

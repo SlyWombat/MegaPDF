@@ -119,3 +119,15 @@ disabled. Until then the Setup.exe bootstrapper covers friction.
 All strings are inline English. If distribution goes beyond en-US, move UI
 strings to resw, pseudo-localize, and verify layout at +30% string length.
 Blocked on distribution plans; don't start speculatively.
+
+---
+
+## Mobile (Android & iOS)
+
+The mobile roadmap lives directly in GitHub issues, not in this file: issues
+[#11–#20](https://github.com/SlyWombat/MegaPDF/issues?q=is%3Aissue+label%3Aandroid%2Cios)
+under milestones **Android M1 — Foundation**, **Android M2 — Fill-Check-Sign**,
+**Android M3 — Launch**, and **iOS M0 — Groundwork**. Strategy and the
+cross-platform behavioral contracts are in SDD §6 (scope amendment 2026-08-08):
+native Kotlin/Compose and Swift/SwiftUI, no shared code, fill-check-sign v1
+scope, Android first.
