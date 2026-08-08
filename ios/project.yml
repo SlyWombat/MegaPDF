@@ -22,6 +22,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.megapdf.ios
         PRODUCT_NAME: MegaPDF
+        # Substituted by ios-release.yml before xcodegen; CI simulator builds
+        # run with CODE_SIGNING_ALLOWED=NO and never evaluate it.
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: TEAMID_PLACEHOLDER
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

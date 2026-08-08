@@ -29,6 +29,11 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Set signing team
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: sed -i '' "s/TEAMID_PLACEHOLDER/$APPLE_TEAM_ID/" project.yml
+
       - name: Generate Xcode project
         run: xcodegen generate
 
@@ -56,8 +61,6 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CODE_SIGN_STYLE=Automatic \
             MARKETING_VERSION="$MARKETING" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
