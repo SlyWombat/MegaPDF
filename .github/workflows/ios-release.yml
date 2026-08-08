@@ -17,6 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The image default (Xcode 26.6, iOS 26.5 SDK) draws ITMS-90426 on every
+      # delivery — the "use the current public (GM) version of Xcode" boilerplate
+      # points at a beta/RC toolchain. Pin the previous Xcode on the image.
+      - name: Select stable Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          PICK=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc' | sort -V | tail -2 | head -1)
+          echo "selecting: $PICK"
+          sudo xcode-select -s "$PICK"
+          xcodebuild -version
+
       - name: Cache PDFium xcframework
         uses: actions/cache@v4
         with:
@@ -79,6 +90,17 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="MegaPDF App Store" \
             MARKETING_VERSION="$MARKETING" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      - name: Archive diagnostics
+        run: |
+          APP="$RUNNER_TEMP/MegaPDF.xcarchive/Products/Applications/MegaPDF.app"
+          echo "--- archive contents:"; ls "$RUNNER_TEMP/MegaPDF.xcarchive"
+          echo "--- MinimumOSVersion:"; /usr/libexec/PlistBuddy -c Print:MinimumOSVersion "$APP/Info.plist" || true
+          echo "--- DTXcode / DTSDKName:"
+          /usr/libexec/PlistBuddy -c Print:DTXcode "$APP/Info.plist" || true
+          /usr/libexec/PlistBuddy -c Print:DTSDKName "$APP/Info.plist" || true
+          echo "--- swift link references:"; otool -L "$APP/MegaPDF" | grep -i swift | head -5 || true
+          echo "--- Frameworks:"; ls "$APP/Frameworks" || true
 
       # destination: upload lets xcodebuild deliver the package itself — the
       # organizer-style path that assembles SwiftSupport internally. A bare
