@@ -38,6 +38,14 @@ internal object PdfiumNative {
     external fun nativeAnnotRectsPacked(handle: Long): DoubleArray
     external fun nativeRemoveAnnot(handle: Long, index: Int): Boolean
 
+    // Signature stamps (#17). Pixels are ARGB ints; readback returns
+    // [width, height, argb...] at native image resolution, or null.
+    external fun nativeAddImageStamp(
+        handle: Long, pixels: IntArray, pixelWidth: Int, pixelHeight: Int,
+        l: Double, b: Double, r: Double, t: Double, id: String,
+    ): Boolean
+    external fun nativeGetStampImagePacked(handle: Long, annotIndex: Int): IntArray?
+
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4
 }

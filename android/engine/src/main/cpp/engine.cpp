@@ -8,6 +8,7 @@
 #include <jni.h>
 #include <android/bitmap.h>
 
+#include <cstdint>
 #include <cstring>
 #include <vector>
 
@@ -432,6 +433,132 @@ Java_com_megapdf_engine_PdfiumNative_nativeRemoveAnnot(JNIEnv*, jobject, jlong h
                                                        jint index) {
     auto* p = reinterpret_cast<Page*>(handle);
     return FPDFPage_RemoveAnnot(p->page, index) ? JNI_TRUE : JNI_FALSE;
+}
+
+// --- Signature stamps (#17). Behavioral reference: PdfiumEngine.AddImageStamp.
+
+// Places an image stamp: STAMP annot at rect, image object positioned via the
+// unit-square matrix (A=width, D=height, E=left, F=bottom, PDF points), tagged
+// MegaPDF_Id = id ("sig:..."). Pixels are ARGB ints (Android Bitmap layout).
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeAddImageStamp(JNIEnv* env, jobject, jlong handle,
+                                                         jintArray pixels, jint pw, jint ph,
+                                                         jdouble l, jdouble b, jdouble r,
+                                                         jdouble t, jstring id) {
+    auto* p = reinterpret_cast<Page*>(handle);
+
+    FPDF_BITMAP bmp = FPDFBitmap_Create(pw, ph, /*alpha=*/1);
+    if (bmp == nullptr) return JNI_FALSE;
+    {
+        jint* src = env->GetIntArrayElements(pixels, nullptr);
+        auto* dst = static_cast<uint8_t*>(FPDFBitmap_GetBuffer(bmp));
+        const int stride = FPDFBitmap_GetStride(bmp);
+        for (int y = 0; y < ph; y++) {
+            uint8_t* row = dst + y * stride;
+            for (int x = 0; x < pw; x++) {
+                const uint32_t argb = static_cast<uint32_t>(src[y * pw + x]);
+                row[x * 4 + 0] = argb & 0xFF;          // B
+                row[x * 4 + 1] = (argb >> 8) & 0xFF;   // G
+                row[x * 4 + 2] = (argb >> 16) & 0xFF;  // R
+                row[x * 4 + 3] = (argb >> 24) & 0xFF;  // A
+            }
+        }
+        env->ReleaseIntArrayElements(pixels, src, JNI_ABORT);
+    }
+
+    bool ok = true;
+    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(p->page, FPDF_ANNOT_STAMP);
+    if (annot == nullptr) {
+        FPDFBitmap_Destroy(bmp);
+        return JNI_FALSE;
+    }
+    FS_RECTF rect{static_cast<float>(l), static_cast<float>(t),
+                  static_cast<float>(r), static_cast<float>(b)};
+    ok = ok && FPDFAnnot_SetRect(annot, &rect);
+
+    FPDF_PAGEOBJECT img = FPDFPageObj_NewImageObj(p->owner->doc);
+    ok = ok && img != nullptr;
+    if (img != nullptr) {
+        ok = ok && FPDFImageObj_SetBitmap(nullptr, 0, img, bmp);
+        FS_MATRIX m{static_cast<float>(r - l), 0, 0,
+                    static_cast<float>(t - b), static_cast<float>(l),
+                    static_cast<float>(b)};
+        ok = ok && FPDFPageObj_SetMatrix(img, &m);
+        ok = ok && FPDFAnnot_AppendObject(annot, img);
+    }
+
+    if (ok) {
+        const jchar* chars = env->GetStringChars(id, nullptr);
+        const jsize len = env->GetStringLength(id);
+        std::vector<FPDF_WCHAR> wide(chars, chars + len);
+        wide.push_back(0);
+        env->ReleaseStringChars(id, chars);
+        ok = FPDFAnnot_SetStringValue(annot, kMegaPdfIdKey, wide.data());
+    }
+
+    FPDFPage_CloseAnnot(annot);
+    FPDFBitmap_Destroy(bmp);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// Reads the stamp's image back at native pixel resolution: temporarily set a
+// 1pt-per-pixel matrix, render, restore (the desktop move/resize pattern, so
+// repeated moves never lose resolution). Returns [width, height, argb...] or
+// null when the annot has no image object.
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeGetStampImagePacked(JNIEnv* env, jobject,
+                                                               jlong handle,
+                                                               jint annotIndex) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, annotIndex);
+    if (annot == nullptr) return nullptr;
+
+    jintArray result = nullptr;
+    const int objCount = FPDFAnnot_GetObjectCount(annot);
+    for (int i = 0; i < objCount && result == nullptr; i++) {
+        FPDF_PAGEOBJECT obj = FPDFAnnot_GetObject(annot, i);
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
+
+        unsigned int pw = 0, ph = 0;
+        if (!FPDFImageObj_GetImagePixelSize(obj, &pw, &ph) || pw == 0 || ph == 0) continue;
+
+        FS_MATRIX original;
+        if (!FPDFPageObj_GetMatrix(obj, &original)) continue;
+        FS_MATRIX native{static_cast<float>(pw), 0, 0, static_cast<float>(ph), 0, 0};
+        FPDFPageObj_SetMatrix(obj, &native);
+        FPDF_BITMAP bmp = FPDFImageObj_GetRenderedBitmap(p->owner->doc, p->page, obj);
+        FPDFPageObj_SetMatrix(obj, &original);
+        if (bmp == nullptr) continue;
+
+        const int w = FPDFBitmap_GetWidth(bmp);
+        const int h = FPDFBitmap_GetHeight(bmp);
+        const int stride = FPDFBitmap_GetStride(bmp);
+        const auto* buf = static_cast<const uint8_t*>(FPDFBitmap_GetBuffer(bmp));
+        std::vector<jint> packed(static_cast<size_t>(w) * h + 2);
+        packed[0] = w;
+        packed[1] = h;
+        for (int y = 0; y < h; y++) {
+            const uint8_t* row = buf + y * stride;
+            for (int x = 0; x < w; x++) {
+                const uint32_t bgra = row[x * 4 + 0] | (row[x * 4 + 1] << 8) |
+                                      (row[x * 4 + 2] << 16) |
+                                      (static_cast<uint32_t>(row[x * 4 + 3]) << 24);
+                // BGRA bytes -> ARGB int: A stays, swap R/B positions.
+                packed[2 + y * w + x] = static_cast<jint>(
+                    (bgra & 0xFF000000u) | ((bgra & 0x00FF0000u) >> 16) |
+                    (bgra & 0x0000FF00u) | ((bgra & 0x000000FFu) << 16));
+            }
+        }
+        FPDFBitmap_Destroy(bmp);
+
+        result = env->NewIntArray(static_cast<jsize>(packed.size()));
+        if (result != nullptr) {
+            env->SetIntArrayRegion(result, 0, static_cast<jsize>(packed.size()),
+                                   packed.data());
+        }
+    }
+    FPDFPage_CloseAnnot(annot);
+    return result;
 }
 
 }  // extern "C"

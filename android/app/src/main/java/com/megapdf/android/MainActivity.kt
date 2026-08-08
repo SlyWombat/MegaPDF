@@ -36,6 +36,9 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel()) {
     val createDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri -> uri?.let { viewModel.saveAs(it) } }
+    val pickSignatureImage = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri -> uri?.let { viewModel.importSignature(it) } }
 
     // One-shot status toasts ("Saved", save errors).
     val context = LocalContext.current
@@ -70,8 +73,21 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel()) {
                 pageBitmaps = viewModel.pageBitmaps,
                 isDirty = viewModel.isDirty,
                 isSaving = viewModel.isSaving,
+                signatures = viewModel.signatures,
+                selectedStamp = viewModel.selectedStamp,
                 onRenderWindowChange = viewModel::updateRenderWindow,
                 onPageTap = viewModel::onPageTapped,
+                onStartPlacement = viewModel::startPlacement,
+                onAddSignature = {
+                    pickSignatureImage.launch(
+                        androidx.activity.result.PickVisualMediaRequest(
+                            ActivityResultContracts.PickVisualMedia.ImageOnly
+                        )
+                    )
+                },
+                onDeleteSignature = viewModel::deleteSignature,
+                onCommitStampRect = viewModel::commitStampRect,
+                onRemoveStamp = viewModel::removeSelectedStamp,
                 onSave = viewModel::save,
                 onSaveAs = { createDocument.launch(state.displayName) },
                 onClose = viewModel::closeDocument,

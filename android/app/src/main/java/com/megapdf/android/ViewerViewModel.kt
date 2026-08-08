@@ -24,6 +24,14 @@ import java.io.File
 /** Width/height of a page in PDF points (1/72 inch). */
 data class PageSize(val widthPoints: Double, val heightPoints: Double)
 
+/** A stamp currently selected for move/resize/remove. */
+data class SelectedStamp(
+    val pageIndex: Int,
+    val annotIndex: Int,
+    val id: String,
+    val rect: com.megapdf.engine.PdfRect,
+)
+
 sealed interface ViewerUiState {
     data class Home(val recents: List<RecentEntry>, val error: String? = null) : ViewerUiState
     data object Loading : ViewerUiState
@@ -44,6 +52,21 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private var currentUri: Uri? = null
     private val recentsStore =
         RecentFilesStore(File(application.filesDir, "recent.json"))
+    private val signatureStore =
+        SignatureLibraryStore(File(application.filesDir, "signatures"))
+
+    /** Signature library entries, newest last; backs the Sign dialog. */
+    val signatures = androidx.compose.runtime.mutableStateListOf<SignatureEntry>().apply {
+        addAll(signatureStore.load())
+    }
+
+    /** Non-null while waiting for the user to tap a placement spot. */
+    var pendingSignature: SignatureEntry? by mutableStateOf(null)
+        private set
+
+    /** The stamp currently selected for move/resize/remove. */
+    var selectedStamp: SelectedStamp? by mutableStateOf(null)
+        private set
 
     var uiState: ViewerUiState by mutableStateOf(ViewerUiState.Home(recentsStore.load()))
         private set
@@ -165,15 +188,34 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             val size = state.pageSizes[pageIndex]
             val x = xFraction * size.widthPoints
             val y = (1 - yFraction) * size.heightPoints  // view top-left → PDF bottom-left
+
+            pendingSignature?.let { entry ->
+                pendingSignature = null
+                placeSignature(doc, entry, pageIndex, size, x, y)
+                return@launch
+            }
+
             var edited = false
             val page = doc.openPage(pageIndex)
             try {
+                val stamps = page.stamps()
+                val signature = stamps
+                    .filter { it.id.startsWith("sig:") }
+                    .firstOrNull { it.rect.contains(x, y) }
+                if (signature != null) {
+                    // Selection only — move/resize/remove happen via the overlay.
+                    selectedStamp = SelectedStamp(
+                        pageIndex, signature.annotIndex, signature.id, signature.rect)
+                    return@launch
+                }
+                selectedStamp = null
+
                 val field = page.formFields().firstOrNull { it.rect.contains(x, y) }
                 if (field != null) {
                     page.clickAt(field.rect.centerX, field.rect.centerY)
                     edited = true
                 } else {
-                    val mark = page.stamps()
+                    val mark = stamps
                         .filter { it.id.startsWith("mark:") }
                         .firstOrNull { it.rect.contains(x, y) }
                     if (mark != null) {
@@ -192,13 +234,172 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 page.close()
             }
             if (edited) {
-                isDirty = true
-                renderedWidths.remove(pageIndex)
-                lastWindow?.let { (first, last, width) ->
-                    updateRenderWindow(first, last, width)
-                }
+                markEditedAndRerender(pageIndex)
             }
         }
+    }
+
+    // --- Signature library and placement (#16/#17) ---
+
+    /** Imports a picked image: decode, cleanup per the SDD contract, store. */
+    fun importSignature(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                val bitmap = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)
+                        ?.use { android.graphics.BitmapFactory.decodeStream(it) }
+                } ?: throw IllegalStateException("couldn't decode the image")
+
+                val scaled = if (bitmap.width > MAX_SIGNATURE_SOURCE_DIM ||
+                    bitmap.height > MAX_SIGNATURE_SOURCE_DIM
+                ) {
+                    val scale = MAX_SIGNATURE_SOURCE_DIM.toFloat() /
+                        maxOf(bitmap.width, bitmap.height)
+                    Bitmap.createScaledBitmap(
+                        bitmap,
+                        (bitmap.width * scale).toInt().coerceAtLeast(1),
+                        (bitmap.height * scale).toInt().coerceAtLeast(1),
+                        true,
+                    )
+                } else bitmap
+
+                val result = withContext(Dispatchers.Default) {
+                    var pixels = IntArray(scaled.width * scaled.height)
+                    scaled.getPixels(pixels, 0, scaled.width, 0, 0, scaled.width, scaled.height)
+                    // Already-transparent PNGs skip white removal (SDD contract).
+                    if (!SignatureImageProcessor.hasTransparency(pixels)) {
+                        pixels = SignatureImageProcessor.removeWhiteBackground(pixels)
+                    }
+                    SignatureImageProcessor.trimToInk(pixels, scaled.width, scaled.height)
+                }
+                val out = Bitmap.createBitmap(result.width, result.height, Bitmap.Config.ARGB_8888)
+                out.setPixels(result.pixels, 0, result.width, 0, 0, result.width, result.height)
+
+                val entry = withContext(Dispatchers.IO) {
+                    signatureStore.add("Signature ${signatures.size + 1}", out)
+                }
+                signatures.add(entry)
+                statusMessage = "Signature added"
+            } catch (e: Exception) {
+                statusMessage = "Couldn't import the signature: ${e.message}"
+            }
+        }
+    }
+
+    fun deleteSignature(id: String) {
+        viewModelScope.launch(Dispatchers.IO) { signatureStore.delete(id) }
+        signatures.removeAll { it.id == id }
+    }
+
+    fun startPlacement(entry: SignatureEntry) {
+        pendingSignature = entry
+        statusMessage = "Tap the page where the signature should go"
+    }
+
+    fun cancelPlacement() {
+        pendingSignature = null
+    }
+
+    private suspend fun placeSignature(
+        doc: PdfDocument, entry: SignatureEntry, pageIndex: Int,
+        size: PageSize, x: Double, y: Double,
+    ) {
+        val bitmap = withContext(Dispatchers.IO) { signatureStore.loadBitmap(entry) }
+        if (bitmap == null) {
+            statusMessage = "That signature's image is missing"
+            return
+        }
+        // Default size: a third of the page width, aspect preserved (desktop default).
+        var w = size.widthPoints / 3.0
+        var h = w * bitmap.height / bitmap.width
+        val maxH = size.heightPoints / 3.0
+        if (h > maxH) {
+            h = maxH
+            w = h * bitmap.width / bitmap.height
+        }
+        val rect = clampToPage(
+            com.megapdf.engine.PdfRect(x - w / 2, y - h / 2, x + w / 2, y + h / 2), size)
+
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val id = "sig:${java.util.UUID.randomUUID()}"
+
+        val page = doc.openPage(pageIndex)
+        try {
+            page.addImageStamp(pixels, bitmap.width, bitmap.height, rect, id)
+            val placed = page.stamps().first { it.id == id }
+            selectedStamp = SelectedStamp(pageIndex, placed.annotIndex, id, placed.rect)
+        } finally {
+            page.close()
+        }
+        markEditedAndRerender(pageIndex)
+    }
+
+    /**
+     * Commits a move/resize from the selection overlay: read the image back at
+     * native resolution, remove, re-add under the same id (the desktop pattern —
+     * repeated moves never lose resolution, and it works for stamps placed by
+     * Windows MegaPDF too).
+     */
+    fun commitStampRect(newRect: com.megapdf.engine.PdfRect) {
+        val sel = selectedStamp ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val doc = document ?: return
+        viewModelScope.launch {
+            val rect = clampToPage(newRect, state.pageSizes[sel.pageIndex])
+            val page = doc.openPage(sel.pageIndex)
+            try {
+                val packed = page.stampImagePacked(sel.annotIndex)
+                if (packed == null) {
+                    statusMessage = "Couldn't read this signature's image"
+                    return@launch
+                }
+                val w = packed[0]
+                val h = packed[1]
+                page.removeAnnot(sel.annotIndex)
+                page.addImageStamp(packed.copyOfRange(2, packed.size), w, h, rect, sel.id)
+                val placed = page.stamps().first { it.id == sel.id }
+                selectedStamp = sel.copy(annotIndex = placed.annotIndex, rect = placed.rect)
+            } finally {
+                page.close()
+            }
+            markEditedAndRerender(sel.pageIndex)
+        }
+    }
+
+    fun removeSelectedStamp() {
+        val sel = selectedStamp ?: return
+        val doc = document ?: return
+        viewModelScope.launch {
+            val page = doc.openPage(sel.pageIndex)
+            try {
+                page.removeAnnot(sel.annotIndex)
+            } finally {
+                page.close()
+            }
+            selectedStamp = null
+            markEditedAndRerender(sel.pageIndex)
+        }
+    }
+
+    fun deselectStamp() {
+        selectedStamp = null
+    }
+
+    private fun clampToPage(
+        rect: com.megapdf.engine.PdfRect, size: PageSize,
+    ): com.megapdf.engine.PdfRect {
+        val w = (rect.right - rect.left).coerceAtMost(size.widthPoints)
+        val h = (rect.top - rect.bottom).coerceAtMost(size.heightPoints)
+        val left = rect.left.coerceIn(0.0, size.widthPoints - w)
+        val bottom = rect.bottom.coerceIn(0.0, size.heightPoints - h)
+        return com.megapdf.engine.PdfRect(left, bottom, left + w, bottom + h)
+    }
+
+    private fun markEditedAndRerender(pageIndex: Int) {
+        isDirty = true
+        renderedWidths.remove(pageIndex)
+        lastWindow?.let { (first, last, width) -> updateRenderWindow(first, last, width) }
     }
 
     /**
@@ -284,6 +485,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         lastWindow = null
         currentUri = null
         isDirty = false
+        pendingSignature = null
+        selectedStamp = null
         val doc = document ?: return
         document = null
         viewModelScope.launch { doc.close() }
@@ -322,5 +525,6 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private companion object {
         const val RENDER_MARGIN = 2      // desktop MainViewModel's ±2-page window
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
+        const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
     }
 }

@@ -176,6 +176,35 @@ class PdfPage internal constructor(
         check(PdfiumNative.nativeRemoveAnnot(handle, annotIndex)) { "failed to remove annot" }
     }
 
+    /**
+     * Places an image stamp over [rect], tagged `MegaPDF_Id` = [id] (`sig:` for
+     * signatures). [pixels] is ARGB, [pixelWidth] x [pixelHeight].
+     */
+    suspend fun addImageStamp(
+        pixels: IntArray, pixelWidth: Int, pixelHeight: Int, rect: PdfRect, id: String,
+    ): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        require(pixels.size == pixelWidth * pixelHeight) { "pixel buffer size mismatch" }
+        check(
+            PdfiumNative.nativeAddImageStamp(
+                handle, pixels, pixelWidth, pixelHeight,
+                rect.left, rect.bottom, rect.right, rect.top, id,
+            )
+        ) { "failed to add image stamp" }
+    }
+
+    /**
+     * Reads a stamp's image back at native resolution ([width, height, argb...])
+     * — the desktop move/resize pattern: read back, remove, re-add under the
+     * same id, so repeated moves never lose resolution. Null when the annot has
+     * no image object.
+     */
+    suspend fun stampImagePacked(annotIndex: Int): IntArray? =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            PdfiumNative.nativeGetStampImagePacked(handle, annotIndex)
+        }
+
     // NonCancellable: a cancelled render job's finally-block close must still run.
     suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
