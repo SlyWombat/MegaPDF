@@ -229,6 +229,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeSave(JNIEnv* env, jobject, jlong hand
     return (ok && !writer.failed) ? JNI_TRUE : JNI_FALSE;
 }
 
+}  // extern "C"
+
 // --- Checkbox surface (#15). Behavioral reference: PdfiumEngine.cs; the
 // --- heuristic constants and MegaPDF_Id tagging are SDD §6.2 contracts.
 
