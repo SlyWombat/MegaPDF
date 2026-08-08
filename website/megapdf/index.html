@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="MegaPDF fills, checks, and signs PDF forms — free, open source, on Windows, Android, and iPhone. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    <link rel="canonical" href="https://electricrv.ca/megapdf/">
+    <title>MegaPDF — Fill, check &amp; sign PDFs. Free, private, everywhere.</title>
+    <meta property="og:title" content="MegaPDF — Fill, check &amp; sign PDFs">
+    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Android, and iPhone. No account, no cloud, no tracking.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://electricrv.ca/megapdf/">
+    <meta property="og:image" content="https://electricrv.ca/megapdf/icon.png">
+    <link rel="icon" href="icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0c1220; --bg2: #10233b; --card: rgba(255,255,255,.04);
+            --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #a9b4cc;
+            --blue: #0A5BC4; --teal: #0FA8C6; --accent: #35b6e0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, var(--bg) 0%, #141c2e 55%, var(--bg2) 100%);
+            color: var(--text); font-family: 'Inter', -apple-system, sans-serif;
+            line-height: 1.6; min-height: 100vh;
+        }
+        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+        .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+        header.site { padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+        header.site .wrap { display: flex; align-items: center; gap: 12px; }
+        header.site img { width: 34px; height: 34px; border-radius: 8px; }
+        header.site .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px; }
+        header.site a.home { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
+        header.site a.home:hover { color: var(--text); }
+
+        .hero { display: flex; gap: 48px; align-items: center; padding: 64px 0 48px; flex-wrap: wrap; }
+        .hero .copy { flex: 1 1 420px; min-width: 0; }
+        .badge {
+            display: inline-block; background: linear-gradient(135deg, var(--blue), var(--teal));
+            color: #061325; font-family: 'Space Grotesk', sans-serif; font-size: 11px;
+            font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+            padding: 4px 14px; border-radius: 20px; margin-bottom: 18px;
+        }
+        .hero h1 { font-size: 44px; line-height: 1.1; margin-bottom: 10px; }
+        .hero h1 span { color: var(--accent); }
+        .tagline { font-family: 'Space Grotesk', sans-serif; font-size: 20px; color: var(--accent);
+                   letter-spacing: .5px; margin-bottom: 16px; }
+        .hero p.sub { color: var(--muted); font-size: 17px; max-width: 54ch; margin-bottom: 28px; }
+        .ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+        .cta {
+            display: inline-block; background: var(--accent); color: #061325; font-weight: 700;
+            font-size: 15px; padding: 13px 26px; border-radius: 10px; text-decoration: none;
+        }
+        .cta:hover { background: #6fd0f0; }
+        .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
+        .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
+        .stores { color: var(--muted); font-size: 13px; margin-top: 14px; }
+        .stores strong { color: var(--text); }
+
+        .shot { flex: 0 1 300px; }
+        .shot img {
+            width: 100%; max-width: 300px; border-radius: 24px; display: block;
+            border: 1px solid rgba(255,255,255,.12);
+            box-shadow: 0 24px 60px rgba(4, 33, 61, .55);
+        }
+
+        .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+                    gap: 18px; padding: 24px 0 40px; }
+        .feature { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+        .feature h3 { font-size: 17px; margin-bottom: 8px; color: var(--text); }
+        .feature h3 .dot { color: var(--accent); }
+        .feature p { color: var(--muted); font-size: 14.5px; }
+
+        .strip { border-top: 1px solid rgba(255,255,255,.06); padding: 34px 0; color: var(--muted);
+                 font-size: 15px; }
+        .strip .wrap { display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; align-items: center; }
+        .strip b { color: var(--text); font-family: 'Space Grotesk', sans-serif; }
+
+        footer { border-top: 1px solid rgba(255,255,255,.06); padding: 26px 0 40px;
+                 color: var(--muted); font-size: 13.5px; }
+        footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+        footer a { color: var(--muted); }
+        footer a:hover { color: var(--text); }
+        @media (max-width: 640px) {
+            .hero { padding: 40px 0 24px; }
+            .hero h1 { font-size: 32px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="site">
+        <div class="wrap">
+            <img src="icon.png" alt="">
+            <span class="name">MegaPDF</span>
+            <a class="home" href="/">ElectricRV home</a>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="hero">
+            <div class="copy">
+                <span class="badge">Free &amp; Open Source</span>
+                <h1>Someone sent you a PDF. <span>Send it back done.</span></h1>
+                <p class="tagline">Open. Fix. Save. Done.</p>
+                <p class="sub">
+                    MegaPDF does the one job most people actually have with a PDF:
+                    check the boxes, drop in your signature, and save it back —
+                    without an account, a subscription, or your document ever
+                    leaving your device.
+                </p>
+                <div class="ctas">
+                    <a class="cta" href="https://github.com/SlyWombat/MegaPDF/releases">Download for Windows</a>
+                    <a class="cta ghost" href="https://github.com/SlyWombat/MegaPDF">View the source</a>
+                </div>
+                <p class="stores"><strong>Android</strong> and <strong>iPhone&nbsp;/&nbsp;iPad</strong> apps
+                   are in testing now — Google&nbsp;Play and App&nbsp;Store releases are on the way.</p>
+            </div>
+            <div class="shot">
+                <img src="screenshot-viewer.png"
+                     alt="MegaPDF on iPhone showing a rental agreement with checked boxes and a signature">
+            </div>
+        </section>
+
+        <section class="features" aria-label="What MegaPDF does">
+            <article class="feature">
+                <h3><span class="dot">✓</span> Check any box</h3>
+                <p>Real form fields and plain printed squares alike — MegaPDF recognizes
+                   drawn checkboxes that other apps treat as decoration.</p>
+            </article>
+            <article class="feature">
+                <h3><span class="dot">✎</span> Sign like you mean it</h3>
+                <p>Draw your signature or photograph the one on paper — the white
+                   background disappears. Place it, move it, resize it until it sits
+                   right on the line.</p>
+            </article>
+            <article class="feature">
+                <h3><span class="dot">💾</span> Save without fear</h3>
+                <p>Every save is verified before it touches your original, so a failed
+                   write can never corrupt the file someone sent you.</p>
+            </article>
+            <article class="feature">
+                <h3><span class="dot">🔒</span> Private by design</h3>
+                <p>Zero permissions, zero network access, zero analytics. There is no
+                   server for your documents to go to — and the code is open, so
+                   anyone can check.</p>
+            </article>
+        </section>
+
+        <section class="strip">
+            <div class="wrap" style="padding:0">
+                <span><b>One engine, three platforms.</b> Documents you sign on Windows
+                      open perfectly on Android and iPhone — and vice versa.</span>
+                <span>Windows&nbsp;11 · Android · iOS&nbsp;/&nbsp;iPadOS</span>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="wrap">
+            <span>© 2026 Electric RV</span>
+            <a href="privacy/">Privacy policy</a>
+            <a href="https://github.com/SlyWombat/MegaPDF">GitHub</a>
+            <a href="/">ElectricRV</a>
+        </div>
+    </footer>
+</body>
+</html>
