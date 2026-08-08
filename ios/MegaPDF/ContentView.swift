@@ -1,17 +1,53 @@
 import SwiftUI
 
-// Scaffold stage (#20): proves the Mac-less CI pipeline builds a SwiftUI app.
-// The real viewer starts after the engine ADR (docs/adr-001-ios-pdf-engine.md)
-// is decided.
 struct ContentView: View {
+    @StateObject private var model = ViewerModel()
+    @State private var password = ""
+
     var body: some View {
-        VStack(spacing: 8) {
-            Text("MegaPDF")
-                .font(.largeTitle.bold())
-            Text("Open. Fix. Save. Done.")
-                .foregroundStyle(.secondary)
+        NavigationStack {
+            switch model.state {
+            case let .home(recents, error):
+                HomeView(
+                    recents: recents,
+                    error: error,
+                    onOpen: model.openPicked,
+                    onRecent: model.openRecent
+                )
+
+            case .loading:
+                ProgressView()
+
+            case let .passwordNeeded(_, displayName, _, wrongPassword):
+                VStack {
+                    Text(displayName).font(.headline)
+                }
+                .alert("Password required", isPresented: .constant(true)) {
+                    SecureField("Password", text: $password)
+                    Button("Open") {
+                        model.submitPassword(password)
+                        password = ""
+                    }
+                    Button("Cancel", role: .cancel) {
+                        password = ""
+                        model.close()
+                    }
+                } message: {
+                    Text(wrongPassword
+                        ? "That password didn't work. Try again."
+                        : "This document is protected.")
+                }
+
+            case let .viewing(displayName, pageSizes):
+                ViewerView(
+                    displayName: displayName,
+                    pageSizes: pageSizes,
+                    pageImages: model.pageImages,
+                    onWindowChange: model.updateRenderWindow,
+                    onClose: model.close
+                )
+            }
         }
-        .padding()
     }
 }
 
