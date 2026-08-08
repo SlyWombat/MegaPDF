@@ -68,27 +68,34 @@ struct DrawSignatureView: View {
     let onSave: (CGImage) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var strokes: [[CGPoint]] =
-        DemoContent.requestedState == "draw"
-            ? DemoContent.squiggleStrokes(width: 350, height: 180)
-            : []
+    @State private var strokes: [[CGPoint]] = []
     @State private var current: [CGPoint] = []
     @State private var canvasSize: CGSize = .zero
+    private let screenshotMode = DemoContent.requestedState == "draw"
 
     private let inkColor = Color(red: 0.10, green: 0.10, blue: 0.10)
 
     var body: some View {
         NavigationStack {
             VStack {
-                Canvas { context, size in
-                    let width = max(size.height / 36, 3)
-                    for points in strokes + [current] where points.count > 1 {
-                        var path = Path()
-                        path.move(to: points[0])
-                        for p in points.dropFirst() { path.addLine(to: p) }
-                        context.stroke(path, with: .color(inkColor),
-                                       style: StrokeStyle(lineWidth: width,
-                                                          lineCap: .round, lineJoin: .round))
+                ZStack {
+                    Canvas { context, size in
+                        let width = max(size.height / 36, 3)
+                        for points in strokes + [current] where points.count > 1 {
+                            var path = Path()
+                            path.move(to: points[0])
+                            for p in points.dropFirst() { path.addLine(to: p) }
+                            context.stroke(path, with: .color(inkColor),
+                                           style: StrokeStyle(lineWidth: width,
+                                                              lineCap: .round, lineJoin: .round))
+                        }
+                    }
+                    // Screenshot mode shows the demo signature as if just drawn.
+                    if screenshotMode, let sig = DemoContent.signatureImage() {
+                        Image(uiImage: UIImage(cgImage: sig))
+                            .resizable()
+                            .scaledToFit()
+                            .padding(28)
                     }
                 }
                 .background(Color(white: 0.96))
@@ -118,7 +125,7 @@ struct DrawSignatureView: View {
                         if let image = renderStrokes() { onSave(image) }
                         dismiss()
                     }
-                    .disabled(strokes.isEmpty)
+                    .disabled(strokes.isEmpty && !screenshotMode)
                 }
             }
         }

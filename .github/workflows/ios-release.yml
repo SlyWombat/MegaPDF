@@ -80,17 +80,27 @@ jobs:
             MARKETING_VERSION="$MARKETING" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
-      - name: Export IPA
+      # destination: upload lets xcodebuild deliver the package itself — the
+      # organizer-style path that assembles SwiftSupport internally. A bare
+      # exported IPA pushed via altool gets rejected with ITMS-90426.
+      - name: Export and upload to TestFlight
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys" "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY_P8" \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8"
           cat > "$RUNNER_TEMP/ExportOptions.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>export</string>
+            <key>destination</key><string>upload</string>
             <key>signingStyle</key><string>manual</string>
             <key>teamID</key><string>${APPLE_TEAM_ID}</string>
             <key>provisioningProfiles</key>
@@ -103,17 +113,7 @@ jobs:
           xcodebuild -exportArchive \
             -archivePath "$RUNNER_TEMP/MegaPDF.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export"
-
-      - name: Upload to TestFlight
-        env:
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-        run: |
-          mkdir -p "$HOME/.appstoreconnect/private_keys"
-          printf '%s\n' "$ASC_KEY_P8" \
-            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
-          xcrun altool --upload-app -t ios \
-            -f "$RUNNER_TEMP"/export/*.ipa \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+            -exportPath "$RUNNER_TEMP/export" \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

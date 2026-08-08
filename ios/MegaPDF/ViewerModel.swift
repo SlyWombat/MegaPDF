@@ -53,8 +53,8 @@ final class ViewerModel: ObservableObject {
 
     private func applyScreenshotModeIfNeeded() {
         guard let mode = DemoContent.requestedState else { return }
-        if signatures.isEmpty, let image = DemoContent.squiggleImage(),
-           let entry = signatureStore.add(displayName: "David S.", image: image) {
+        if signatures.isEmpty, let image = DemoContent.signatureImage(),
+           let entry = signatureStore.add(displayName: "MegaWoman", image: image) {
             signatures.append(entry)
         }
         switch mode {

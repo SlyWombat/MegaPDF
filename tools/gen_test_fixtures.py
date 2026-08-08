@@ -188,9 +188,24 @@ def gen_demo():
 
     ap1 = add(mark_ap(13.0))
     ap2 = add(mark_ap(13.0))
-    sig_ap = add(stream(
-        b"/Type /XObject /Subtype /Form /BBox [0 0 220 70]",
-        b"0.10 0.12 0.35 RG 2.0 w " + _squiggle_ops(8, 8, 200, 52) + b"\n"))
+    # Handwritten "MegaWoman" signature: the pre-rendered JPEG (white background
+    # is invisible over the white page) embedded as an image XObject; falls back
+    # to the parametric squiggle if the asset is missing.
+    sig_asset = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "assets", "megawoman-sig.jpg")
+    if os.path.exists(sig_asset):
+        jpg = open(sig_asset, "rb").read()
+        img = add(b"<< /Type /XObject /Subtype /Image /Width 495 /Height 149 "
+                  b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode "
+                  b"/Length %d >>\nstream\n" % len(jpg) + jpg + b"\nendstream")
+        sig_ap = add(stream(
+            b"/Type /XObject /Subtype /Form /BBox [0 0 233 70] "
+            b"/Resources << /XObject << /Im1 %d 0 R >> >>" % img,
+            b"q 233 0 0 70 0 0 cm /Im1 Do Q\n"))
+    else:
+        sig_ap = add(stream(
+            b"/Type /XObject /Subtype /Form /BBox [0 0 233 70]",
+            b"0.10 0.12 0.35 RG 2.0 w " + _squiggle_ops(8, 8, 210, 52) + b"\n"))
 
     pages_num = len(objs) + 5
     a1, a2, a3 = len(objs) + 2, len(objs) + 3, len(objs) + 4
@@ -202,7 +217,7 @@ def gen_demo():
              b"/MegaPDF_Id (mark:demo-1) /AP << /N %d 0 R >> >>" % ap1)
     m2 = add(b"<< /Type /Annot /Subtype /Stamp /Rect [72 558 85 571] /F 4 "
              b"/MegaPDF_Id (mark:demo-2) /AP << /N %d 0 R >> >>" % ap2)
-    sg = add(b"<< /Type /Annot /Subtype /Stamp /Rect [80 402 300 472] /F 4 "
+    sg = add(b"<< /Type /Annot /Subtype /Stamp /Rect [80 402 313 472] /F 4 "
              b"/MegaPDF_Id (sig:demo-1) /AP << /N %d 0 R >> >>" % sig_ap)
     assert (m1, m2, sg) == (a1, a2, a3)
     pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
