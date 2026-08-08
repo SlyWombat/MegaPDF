@@ -24,16 +24,23 @@ done
 
 libname() { ls "$TMP/$1/lib" | head -1; }
 LIB="$(libname ios-device-arm64)"
-echo "library file: $LIB"
+echo "library file: $LIB"   # bblanchon iOS slices ship a dynamic libpdfium.dylib
 
+# Keep the dylib extension — mixing looks static to xcodebuild — and normalize
+# the install name so the embedded copy resolves via @rpath.
+mkdir -p "$TMP/sim"
 lipo -create \
     "$TMP/ios-simulator-arm64/lib/$LIB" \
     "$TMP/ios-simulator-x64/lib/$LIB" \
-    -output "$TMP/libpdfium-simulator.a"
+    -output "$TMP/sim/$LIB"
+if [[ "$LIB" == *.dylib ]]; then
+    install_name_tool -id "@rpath/$LIB" "$TMP/ios-device-arm64/lib/$LIB"
+    install_name_tool -id "@rpath/$LIB" "$TMP/sim/$LIB"
+fi
 
 xcodebuild -create-xcframework \
     -library "$TMP/ios-device-arm64/lib/$LIB" \
-    -library "$TMP/libpdfium-simulator.a" \
+    -library "$TMP/sim/$LIB" \
     -output "$VENDOR/pdfium.xcframework"
 
 mkdir -p "$VENDOR/pdfium/include"

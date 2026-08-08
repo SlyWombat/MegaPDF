@@ -9,15 +9,15 @@ options:
 settings:
   base:
     SWIFT_INCLUDE_PATHS: $(SRCROOT)/Vendor/pdfium/include
-    OTHER_LDFLAGS: ["-lc++"]   # PDFium's static lib is C++
 targets:
   MegaPDF:
     type: application
     platform: iOS
     sources: [MegaPDF]
     dependencies:
+      # Dynamic libpdfium.dylib — must be embedded (and signed) in the bundle.
       - framework: Vendor/pdfium.xcframework
-        embed: false
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.megapdf.ios
