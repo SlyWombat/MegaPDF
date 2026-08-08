@@ -2,6 +2,7 @@ package com.megapdf.engine
 
 import android.graphics.Bitmap
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
@@ -86,7 +87,9 @@ class PdfDocument internal constructor(
         out.flush()
     }
 
-    suspend fun close(): Unit = withContext(engine.dispatcher) {
+    // NonCancellable: close must run even from a cancelled caller, or the native
+    // document leaks.
+    suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
             closed = true
             PdfiumNative.nativeCloseDocument(handle)
@@ -112,7 +115,8 @@ class PdfPage internal constructor(
         check(PdfiumNative.nativeRenderPage(handle, bitmap)) { "render failed" }
     }
 
-    suspend fun close(): Unit = withContext(engine.dispatcher) {
+    // NonCancellable: a cancelled render job's finally-block close must still run.
+    suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
             closed = true
             PdfiumNative.nativeClosePage(handle)
