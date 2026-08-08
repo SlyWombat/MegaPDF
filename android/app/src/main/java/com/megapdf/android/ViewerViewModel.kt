@@ -52,6 +52,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var renderJob: Job? = null
     private val renderedWidths = HashMap<Int, Int>()
+    private var lastWindow: Triple<Int, Int, Int>? = null
+
+    /** True once the in-memory document differs from the file (save lands in #18). */
+    var isDirty: Boolean by mutableStateOf(false)
+        private set
 
     fun openUri(uri: Uri, password: String? = null) {
         uiState = ViewerUiState.Loading
@@ -99,6 +104,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun updateRenderWindow(firstVisible: Int, lastVisible: Int, targetWidthPx: Int) {
         val state = uiState as? ViewerUiState.Viewing ?: return
         val doc = document ?: return
+        lastWindow = Triple(firstVisible, lastVisible, targetWidthPx)
         val window = (firstVisible - RENDER_MARGIN).coerceAtLeast(0)..
             (lastVisible + RENDER_MARGIN).coerceAtMost(state.pageSizes.size - 1)
 
@@ -127,6 +133,55 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 pageBitmaps[index] = bitmap
                 renderedWidths[index] = width
+            }
+        }
+    }
+
+    /**
+     * Tap dispatch, the mobile port of the desktop `OnPageTapped` hit ordering:
+     * form fields win over page content; then existing check marks (tap to
+     * remove); then drawn-square candidates (tap to place a mark).
+     * Fractions are tap position / rendered page size, top-left origin.
+     */
+    fun onPageTapped(pageIndex: Int, xFraction: Float, yFraction: Float) {
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val doc = document ?: return
+        viewModelScope.launch {
+            val size = state.pageSizes[pageIndex]
+            val x = xFraction * size.widthPoints
+            val y = (1 - yFraction) * size.heightPoints  // view top-left → PDF bottom-left
+            var edited = false
+            val page = doc.openPage(pageIndex)
+            try {
+                val field = page.formFields().firstOrNull { it.rect.contains(x, y) }
+                if (field != null) {
+                    page.clickAt(field.rect.centerX, field.rect.centerY)
+                    edited = true
+                } else {
+                    val mark = page.stamps()
+                        .filter { it.id.startsWith("mark:") }
+                        .firstOrNull { it.rect.contains(x, y) }
+                    if (mark != null) {
+                        page.removeAnnot(mark.annotIndex)
+                        edited = true
+                    } else {
+                        val square = page.detectCheckboxSquares()
+                            .firstOrNull { it.contains(x, y) }
+                        if (square != null) {
+                            page.addCheckMark(square, "mark:${java.util.UUID.randomUUID()}")
+                            edited = true
+                        }
+                    }
+                }
+            } finally {
+                page.close()
+            }
+            if (edited) {
+                isDirty = true
+                renderedWidths.remove(pageIndex)
+                lastWindow?.let { (first, last, width) ->
+                    updateRenderWindow(first, last, width)
+                }
             }
         }
     }

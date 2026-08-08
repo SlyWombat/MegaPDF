@@ -115,6 +115,67 @@ class PdfPage internal constructor(
         check(PdfiumNative.nativeRenderPage(handle, bitmap)) { "render failed" }
     }
 
+    /** Checkbox and radio widgets on this page. */
+    suspend fun formFields(): List<FormField> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val packed = PdfiumNative.nativeFormFieldsPacked(handle)
+        (packed.indices step 6).map { i ->
+            FormField(
+                isRadio = packed[i] == 3.0,  // FPDF_FORMFIELD_RADIOBUTTON
+                isChecked = packed[i + 1] != 0.0,
+                rect = PdfRect(packed[i + 2], packed[i + 3], packed[i + 4], packed[i + 5]),
+            )
+        }
+    }
+
+    /**
+     * Simulated click at page coordinates (points, bottom-left origin) — toggles
+     * the form field under the point via PDFium's form machinery, keeping radio
+     * groups and appearance states consistent.
+     */
+    suspend fun clickAt(x: Double, y: Double): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeClickAt(handle, x, y)
+    }
+
+    /** Drawn (non-form) checkbox candidates per the SDD §6.2 heuristic. */
+    suspend fun detectCheckboxSquares(): List<PdfRect> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val packed = PdfiumNative.nativeDetectSquaresPacked(handle)
+        (packed.indices step 4).map { i ->
+            PdfRect(packed[i], packed[i + 1], packed[i + 2], packed[i + 3])
+        }
+    }
+
+    /** Places an X check-mark stamp over [square], tagged `MegaPDF_Id` = [id]. */
+    suspend fun addCheckMark(square: PdfRect, id: String): Unit =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            check(
+                PdfiumNative.nativeAddCheckMark(
+                    handle, square.left, square.bottom, square.right, square.top, id
+                )
+            ) { "failed to add check mark" }
+        }
+
+    /** All MegaPDF-placed stamps on this page (desktop or Android alike). */
+    suspend fun stamps(): List<Stamp> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val ids = PdfiumNative.nativeAnnotIds(handle)
+        val rects = PdfiumNative.nativeAnnotRectsPacked(handle)
+        ids.withIndex()
+            .filter { it.value.isNotEmpty() }
+            .map { (i, id) ->
+                Stamp(i, id, PdfRect(rects[i * 4], rects[i * 4 + 1], rects[i * 4 + 2], rects[i * 4 + 3]))
+            }
+    }
+
+    /** Removes the annotation at [annotIndex] (from [stamps]). */
+    suspend fun removeAnnot(annotIndex: Int): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        check(PdfiumNative.nativeRemoveAnnot(handle, annotIndex)) { "failed to remove annot" }
+    }
+
     // NonCancellable: a cancelled render job's finally-block close must still run.
     suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
@@ -123,6 +184,19 @@ class PdfPage internal constructor(
         }
     }
 }
+
+/** Rectangle in PDF points, bottom-left origin (top > bottom). */
+data class PdfRect(val left: Double, val bottom: Double, val right: Double, val top: Double) {
+    fun contains(x: Double, y: Double): Boolean = x in left..right && y in bottom..top
+    val centerX: Double get() = (left + right) / 2
+    val centerY: Double get() = (bottom + top) / 2
+}
+
+/** A checkbox or radio-button widget on a page. */
+data class FormField(val isRadio: Boolean, val isChecked: Boolean, val rect: PdfRect)
+
+/** A MegaPDF-placed stamp annotation (`mark:` check mark or `sig:` signature). */
+data class Stamp(val annotIndex: Int, val id: String, val rect: PdfRect)
 
 class PdfPasswordException : Exception("Password required or incorrect password")
 

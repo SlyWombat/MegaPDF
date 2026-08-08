@@ -12,6 +12,8 @@
 #include <vector>
 
 #include "fpdfview.h"
+#include "fpdf_annot.h"
+#include "fpdf_edit.h"
 #include "fpdf_formfill.h"
 #include "fpdf_save.h"
 
@@ -225,6 +227,209 @@ Java_com_megapdf_engine_PdfiumNative_nativeSave(JNIEnv* env, jobject, jlong hand
 
     const FPDF_BOOL ok = FPDF_SaveAsCopy(d->doc, &writer.fw, 0);
     return (ok && !writer.failed) ? JNI_TRUE : JNI_FALSE;
+}
+
+// --- Checkbox surface (#15). Behavioral reference: PdfiumEngine.cs; the
+// --- heuristic constants and MegaPDF_Id tagging are SDD §6.2 contracts.
+
+namespace {
+
+constexpr char kMegaPdfIdKey[] = "MegaPDF_Id";
+
+// Reads MegaPDF_Id from an annot; empty string when absent.
+std::vector<jchar> ReadMegaPdfId(FPDF_ANNOTATION annot) {
+    unsigned long bytes = FPDFAnnot_GetStringValue(annot, kMegaPdfIdKey, nullptr, 0);
+    if (bytes <= 2) return {};
+    std::vector<FPDF_WCHAR> buf(bytes / 2);
+    FPDFAnnot_GetStringValue(annot, kMegaPdfIdKey, buf.data(), bytes);
+    return std::vector<jchar>(buf.begin(), buf.end() - 1);  // drop the terminator
+}
+
+}  // namespace
+
+extern "C" {
+
+// Widget checkbox/radio fields, packed [type, checked, l, b, r, t] per field.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject,
+                                                            jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    FPDF_FORMHANDLE form = p->owner->form;
+    std::vector<double> packed;
+    if (form != nullptr) {
+        const int count = FPDFPage_GetAnnotCount(p->page);
+        for (int i = 0; i < count; i++) {
+            FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
+            if (annot == nullptr) continue;
+            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) {
+                const int type = FPDFAnnot_GetFormFieldType(form, annot);
+                if (type == FPDF_FORMFIELD_CHECKBOX || type == FPDF_FORMFIELD_RADIOBUTTON) {
+                    FS_RECTF r;
+                    if (FPDFAnnot_GetRect(annot, &r)) {
+                        packed.push_back(type);
+                        packed.push_back(FPDFAnnot_IsChecked(form, annot) ? 1 : 0);
+                        packed.push_back(r.left);
+                        packed.push_back(r.bottom);
+                        packed.push_back(r.right);
+                        packed.push_back(r.top);
+                    }
+                }
+            }
+            FPDFPage_CloseAnnot(annot);
+        }
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
+// Simulated click in page coordinates (PDF bottom-left origin) — toggles the
+// field under the point through PDFium's form machinery, keeping /V, /AS and
+// radio-group siblings consistent. Desktop: PdfiumEngine.ToggleCheckbox.
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeClickAt(JNIEnv*, jobject, jlong handle,
+                                                   jdouble x, jdouble y) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    FPDF_FORMHANDLE form = p->owner->form;
+    if (form == nullptr) return;
+    FORM_OnLButtonDown(form, p->page, 0, x, y);
+    FORM_OnLButtonUp(form, p->page, 0, x, y);
+    FORM_ForceToKillFocus(form);
+}
+
+// Drawn-checkbox candidates, packed [l, b, r, t] per square. Contract constants:
+// stroked-not-filled paths, 6-24pt on both axes, squareness within 25%.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeDetectSquaresPacked(JNIEnv* env, jobject,
+                                                               jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<double> packed;
+    const int count = FPDFPage_CountObjects(p->page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_PATH) continue;
+        float l, b, r, t;
+        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
+        const float w = r - l, h = t - b;
+        if (w < 6 || w > 24 || h < 6 || h > 24) continue;
+        const float larger = w > h ? w : h;
+        if ((w > h ? w - h : h - w) > 0.25f * larger) continue;
+        int fillmode = 0;
+        FPDF_BOOL stroke = 0;
+        if (!FPDFPath_GetDrawMode(obj, &fillmode, &stroke)) continue;
+        if (!stroke || fillmode != FPDF_FILLMODE_NONE) continue;
+        packed.push_back(l);
+        packed.push_back(b);
+        packed.push_back(r);
+        packed.push_back(t);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
+// Adds an X check-mark stamp annot over a drawn square, inset 10%, stroke
+// 0x202020 at width max(1.2, w*0.11), tagged MegaPDF_Id = id ("mark:...").
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jlong handle,
+                                                        jdouble l, jdouble b, jdouble r,
+                                                        jdouble t, jstring id) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const double w = r - l, h = t - b;
+    const float il = static_cast<float>(l + 0.10 * w);
+    const float ib = static_cast<float>(b + 0.10 * h);
+    const float ir = static_cast<float>(r - 0.10 * w);
+    const float it = static_cast<float>(t - 0.10 * h);
+
+    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(p->page, FPDF_ANNOT_STAMP);
+    if (annot == nullptr) return JNI_FALSE;
+
+    bool ok = true;
+    FS_RECTF rect{il, it, ir, ib};  // FS_RECTF is left, top, right, bottom
+    ok = ok && FPDFAnnot_SetRect(annot, &rect);
+
+    FPDF_PAGEOBJECT path = FPDFPageObj_CreateNewPath(il, ib);
+    ok = ok && path != nullptr;
+    if (path != nullptr) {
+        ok = ok && FPDFPath_LineTo(path, ir, it);
+        ok = ok && FPDFPath_MoveTo(path, il, it);
+        ok = ok && FPDFPath_LineTo(path, ir, ib);
+        FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
+        const double strokeWidth = w * 0.11 > 1.2 ? w * 0.11 : 1.2;
+        FPDFPageObj_SetStrokeWidth(path, static_cast<float>(strokeWidth));
+        FPDFPath_SetDrawMode(path, FPDF_FILLMODE_NONE, 1);
+        ok = ok && FPDFAnnot_AppendObject(annot, path);
+    }
+
+    if (ok) {
+        const jchar* chars = env->GetStringChars(id, nullptr);
+        const jsize len = env->GetStringLength(id);
+        std::vector<FPDF_WCHAR> wide(chars, chars + len);
+        wide.push_back(0);
+        env->ReleaseStringChars(id, chars);
+        ok = FPDFAnnot_SetStringValue(annot, kMegaPdfIdKey, wide.data());
+    }
+
+    FPDFPage_CloseAnnot(annot);
+    return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// MegaPDF_Id per annot index ("" for annots that aren't ours).
+JNIEXPORT jobjectArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeAnnotIds(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const int count = FPDFPage_GetAnnotCount(p->page);
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray out = env->NewObjectArray(count, stringClass, nullptr);
+    for (int i = 0; i < count; i++) {
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
+        std::vector<jchar> id;
+        if (annot != nullptr) {
+            id = ReadMegaPdfId(annot);
+            FPDFPage_CloseAnnot(annot);
+        }
+        jstring s = env->NewString(id.data(), static_cast<jsize>(id.size()));
+        env->SetObjectArrayElement(out, i, s);
+        env->DeleteLocalRef(s);
+    }
+    return out;
+}
+
+// Annot rects packed [l, b, r, t] per annot index, aligned with nativeAnnotIds.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeAnnotRectsPacked(JNIEnv* env, jobject,
+                                                            jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const int count = FPDFPage_GetAnnotCount(p->page);
+    std::vector<double> packed(static_cast<size_t>(count) * 4, 0.0);
+    for (int i = 0; i < count; i++) {
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
+        if (annot == nullptr) continue;
+        FS_RECTF r;
+        if (FPDFAnnot_GetRect(annot, &r)) {
+            packed[i * 4 + 0] = r.left;
+            packed[i * 4 + 1] = r.bottom;
+            packed[i * 4 + 2] = r.right;
+            packed[i * 4 + 3] = r.top;
+        }
+        FPDFPage_CloseAnnot(annot);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRemoveAnnot(JNIEnv*, jobject, jlong handle,
+                                                       jint index) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    return FPDFPage_RemoveAnnot(p->page, index) ? JNI_TRUE : JNI_FALSE;
 }
 
 }  // extern "C"

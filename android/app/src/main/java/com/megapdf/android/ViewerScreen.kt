@@ -53,6 +53,7 @@ fun ViewerScreen(
     pageSizes: List<PageSize>,
     pageBitmaps: Map<Int, Bitmap>,
     onRenderWindowChange: (firstVisible: Int, lastVisible: Int, targetWidthPx: Int) -> Unit,
+    onPageTap: (pageIndex: Int, xFraction: Float, yFraction: Float) -> Unit,
     onClose: () -> Unit,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -92,11 +93,7 @@ fun ViewerScreen(
                         } while (event.changes.any { it.pressed })
                     }
                 }
-                .pointerInput(Unit) {
-                    detectTapGestures(onDoubleTap = {
-                        zoom = if (zoom < 1.5f) 2f else 1f
-                    })
-                },
+                ,
         ) {
             val density = LocalDensity.current
             val containerWidthPx = with(density) { maxWidth.toPx() }
@@ -131,10 +128,24 @@ fun ViewerScreen(
                 items(pageSizes.size, key = { it }) { index ->
                     val size = pageSizes[index]
                     val bitmap = pageBitmaps[index]
+                    // onTap defers ~300ms when onDoubleTap is present — that's the
+                    // built-in disambiguation between check-a-box and zoom.
                     val pageModifier = Modifier
                         .width(pageWidthDp)
                         .aspectRatio((size.widthPoints / size.heightPoints).toFloat())
                         .background(Color.White)
+                        .pointerInput(index) {
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    onPageTap(
+                                        index,
+                                        offset.x / this.size.width,
+                                        offset.y / this.size.height,
+                                    )
+                                },
+                                onDoubleTap = { zoom = if (zoom < 1.5f) 2f else 1f },
+                            )
+                        }
                     if (bitmap != null) {
                         Image(
                             bitmap = bitmap.asImageBitmap(),

@@ -25,6 +25,19 @@ internal object PdfiumNative {
     external fun nativeRenderPage(handle: Long, bitmap: Bitmap): Boolean
     external fun nativeSave(handle: Long, out: OutputStream): Boolean
 
+    // Checkbox surface (#15). Packed arrays keep the JNI boundary simple:
+    // form fields are [type, checked, l, b, r, t] per field; squares and annot
+    // rects are [l, b, r, t] each, all in PDF points, bottom-left origin.
+    external fun nativeFormFieldsPacked(handle: Long): DoubleArray
+    external fun nativeClickAt(handle: Long, x: Double, y: Double)
+    external fun nativeDetectSquaresPacked(handle: Long): DoubleArray
+    external fun nativeAddCheckMark(
+        handle: Long, l: Double, b: Double, r: Double, t: Double, id: String,
+    ): Boolean
+    external fun nativeAnnotIds(handle: Long): Array<String>
+    external fun nativeAnnotRectsPacked(handle: Long): DoubleArray
+    external fun nativeRemoveAnnot(handle: Long, index: Int): Boolean
+
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4
 }

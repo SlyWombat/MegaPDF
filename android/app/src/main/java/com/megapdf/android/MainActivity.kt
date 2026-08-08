@@ -55,6 +55,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel()) {
                 pageSizes = state.pageSizes,
                 pageBitmaps = viewModel.pageBitmaps,
                 onRenderWindowChange = viewModel::updateRenderWindow,
+                onPageTap = viewModel::onPageTapped,
                 onClose = viewModel::closeDocument,
             )
         }
