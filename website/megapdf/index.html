@@ -73,6 +73,20 @@
         .feature h3 .dot { color: var(--accent); }
         .feature p { color: var(--muted); font-size: 14.5px; }
 
+        .gallery { padding: 16px 0 48px; }
+        .gallery h2 { font-size: 26px; margin-bottom: 6px; }
+        .gallery p.lead { color: var(--muted); margin-bottom: 26px; }
+        .gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                          gap: 22px; }
+        .gallery figure { margin: 0; }
+        .gallery img {
+            width: 100%; border-radius: 18px; display: block;
+            border: 1px solid rgba(255,255,255,.12);
+            box-shadow: 0 14px 36px rgba(4, 33, 61, .45);
+        }
+        .gallery figcaption { color: var(--muted); font-size: 13.5px; margin-top: 10px;
+                              text-align: center; }
+
         .strip { border-top: 1px solid rgba(255,255,255,.06); padding: 34px 0; color: var(--muted);
                  font-size: 15px; }
         .strip .wrap { display: flex; gap: 20px; flex-wrap: wrap; justify-content: space-between; align-items: center; }
@@ -146,6 +160,29 @@
                    server for your documents to go to — and the code is open, so
                    anyone can check.</p>
             </article>
+        </section>
+
+        <section class="gallery" aria-label="Screenshots">
+            <h2>See it in action</h2>
+            <p class="lead">The real app, doing the real job — no mockups.</p>
+            <div class="shots">
+                <figure>
+                    <img src="shot-viewer.png" alt="A rental agreement with two checked boxes and a handwritten MegaWoman signature">
+                    <figcaption>Checked and signed in under a minute</figcaption>
+                </figure>
+                <figure>
+                    <img src="shot-sign.png" alt="The signature library sheet">
+                    <figcaption>Your signatures, saved on your device</figcaption>
+                </figure>
+                <figure>
+                    <img src="shot-draw.png" alt="Drawing a signature with a finger">
+                    <figcaption>Draw it once, use it everywhere</figcaption>
+                </figure>
+                <figure>
+                    <img src="shot-home.png" alt="The home screen with recent documents">
+                    <figcaption>No account. No cloud. No tracking.</figcaption>
+                </figure>
+            </div>
         </section>
 
         <section class="strip">
