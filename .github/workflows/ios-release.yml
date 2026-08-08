@@ -23,7 +23,9 @@ jobs:
       - name: Select stable Xcode
         run: |
           ls -d /Applications/Xcode*.app
-          PICK=$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|rc' | sort -V | tail -2 | head -1)
+          # Patch-versioned installs (26.4.1 etc.) are the public releases on
+          # this image; the bare-versioned 26.5/26.6 are the beta channel.
+          PICK=$(ls -d /Applications/Xcode_*.*.*.app | sort -V | tail -1)
           echo "selecting: $PICK"
           sudo xcode-select -s "$PICK"
           xcodebuild -version
