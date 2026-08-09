@@ -134,6 +134,15 @@ jobs:
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
             -exportPath "$RUNNER_TEMP/export"
 
+      # The signed IPA as an artifact: lets manual uploads (Windows
+      # iTMSTransporter -v eXtreme) capture server-side validation detail
+      # that altool does not surface.
+      - name: Save IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: megapdf-ipa
+          path: ${{ runner.temp }}/export/*.ipa
+
       - name: Upload to TestFlight
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
