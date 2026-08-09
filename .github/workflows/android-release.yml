@@ -49,3 +49,10 @@ jobs:
             --notes "Signed release bundle for the Play Console. See android/RELEASING.md." \
             --verify-tag \
             app/build/outputs/bundle/release/app-release.aab
+
+      - name: Submit to Play internal track
+        env:
+          PLAY_SA_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          python3 ../tools/play_submit.py submit \
+            app/build/outputs/bundle/release/app-release.aab

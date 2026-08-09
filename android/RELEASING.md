@@ -66,13 +66,13 @@ console visit. Setup (adapted from SlyTab's `docs/private/android-play-setup.md`
    documented shared location — gitignored there; never commit it anywhere).
    Optionally also `gh secret set PLAY_SERVICE_ACCOUNT_JSON < file` in this
    repo so `android-release.yml` can gain a `play-submit` step.
-5. Tell Claude it exists — the API flow is: OAuth token from the SA key →
-   `edits` insert → bundle upload → `tracks/internal` release (versionCode
-   from the AAB) → `edits` commit.
-
-Note: the **first** AAB upload for a brand-new app should be done in the
-console UI anyway (it locks the package name and enrolls Play App Signing
-with confirmation prompts the API skips silently).
+**Status: DONE (2026-08-09).** The service account is live
+(`play-publisher@electricrv-play.iam.gserviceaccount.com`, Admin), the key
+sits at the path above and in the repo secret `PLAY_SERVICE_ACCOUNT_JSON`,
+and `android-release.yml` submits every tagged release to the internal track
+automatically via `tools/play_submit.py`. The 0.1.1 first release went
+through the API end to end — including the first-bundle upload, which
+worked fine against the console-created app record.
 
 ## Subsequent releases
 
