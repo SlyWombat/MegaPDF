@@ -143,9 +143,9 @@ jobs:
           name: megapdf-ipa
           path: ${{ runner.temp }}/export/*.ipa
 
-      # Transporter's verbose verify prints the raw server-side validation
-      # conversation that altool reduces to terse ITMS emails.
-      - name: Transporter verbose verify + upload
+      # --validate-app runs the server-side asset validation synchronously and
+      # prints the failures altool's upload path only reports by email later.
+      - name: Validate then upload
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -156,24 +156,24 @@ jobs:
             > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
           IPA=$(ls "$RUNNER_TEMP"/export/*.ipa)
           set +e
-          xcrun iTMSTransporter -m verify -assetFile "$IPA" \
-            -apiKey "$ASC_KEY_ID" -apiIssuer "$ASC_ISSUER_ID" \
-            -v eXtreme > "$RUNNER_TEMP/transporter-verify.log" 2>&1
-          VERIFY_RC=$?
+          xcrun altool --validate-app -t ios -f "$IPA" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" \
+            --verbose --output-format xml > "$RUNNER_TEMP/validate.log" 2>&1
+          RC=$?
           set -e
-          echo "verify exit code: $VERIFY_RC"
-          echo "=== errors/warnings from verify ==="
-          grep -inE "error|warn|fail|swift|reject" "$RUNNER_TEMP/transporter-verify.log" | tail -60 || true
-          echo "=== last 40 lines ==="
-          tail -40 "$RUNNER_TEMP/transporter-verify.log"
-          if [ "$VERIFY_RC" -eq 0 ]; then
+          echo "validate exit code: $RC"
+          echo "=== validation errors ==="
+          grep -inE "error|fail|swift|invalid|reject" "$RUNNER_TEMP/validate.log" | head -60 || true
+          echo "=== last 60 lines ==="
+          tail -60 "$RUNNER_TEMP/validate.log"
+          if [ "$RC" -eq 0 ]; then
             xcrun altool --upload-app -t ios -f "$IPA" \
               --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
           fi
 
-      - name: Save Transporter log
+      - name: Save validation log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: transporter-verify-log
-          path: ${{ runner.temp }}/transporter-verify.log
+          name: validate-log
+          path: ${{ runner.temp }}/validate.log
