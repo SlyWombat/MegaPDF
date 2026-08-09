@@ -20,7 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ios/Vendor
-          key: pdfium-ios-chromium-7934-v3
+          key: pdfium-ios-chromium-7934-v4
 
       - name: Fetch PDFium and assemble xcframework
         run: bash scripts/fetch-pdfium.sh

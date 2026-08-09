@@ -26,31 +26,53 @@ libname() { ls "$TMP/$1/lib" | head -1; }
 LIB="$(libname ios-device-arm64)"
 echo "library file: $LIB"   # bblanchon iOS slices ship a dynamic libpdfium.dylib
 
-# Keep the dylib extension — mixing looks static to xcodebuild — and normalize
-# the install name so the embedded copy resolves via @rpath.
 mkdir -p "$TMP/sim"
 lipo -create \
     "$TMP/ios-simulator-arm64/lib/$LIB" \
     "$TMP/ios-simulator-x64/lib/$LIB" \
     -output "$TMP/sim/$LIB"
-if [[ "$LIB" == *.dylib ]]; then
-    install_name_tool -id "@rpath/$LIB" "$TMP/ios-device-arm64/lib/$LIB"
-    install_name_tool -id "@rpath/$LIB" "$TMP/sim/$LIB"
-    # The prebuilt declares minos = sdk = 26.0 — higher than the app's iOS 16
-    # deployment target, which confuses Apple's delivery validation
-    # (ITMS-90426/90429). Rewrite to minos 16.0 while keeping a current SDK
-    # stamp (a 16.0 sdk field trips the minimum-SDK policy instead).
-    echo "--- device dylib version info before:"
-    xcrun otool -l "$TMP/ios-device-arm64/lib/$LIB" | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" | head -12 || true
-    xcrun vtool -set-build-version ios 16.0 26.0 -replace \
-        -output "$TMP/ios-device-arm64/lib/$LIB" "$TMP/ios-device-arm64/lib/$LIB"
-    echo "--- device dylib version info after:"
-    xcrun otool -l "$TMP/ios-device-arm64/lib/$LIB" | grep -A4 "LC_BUILD_VERSION" | head -8 || true
-fi
+
+# Apple's delivery validation only tolerates libswift* as bare dylibs in an
+# app's Frameworks folder; any other bare dylib shunts the package into the
+# legacy Swift-app codepath and draws ITMS-90426/90429 boilerplate (#24).
+# Package PDFium as a proper framework bundle instead. Also normalize the
+# prebuilt's minos (shipped 26.0, above the app's target).
+make_framework() {
+    local srclib="$1" outdir="$2" patch_version="$3"
+    mkdir -p "$outdir/pdfium.framework"
+    cp "$srclib" "$outdir/pdfium.framework/pdfium"
+    install_name_tool -id "@rpath/pdfium.framework/pdfium" "$outdir/pdfium.framework/pdfium"
+    if [ "$patch_version" = "yes" ]; then
+        xcrun vtool -set-build-version ios 16.0 26.0 -replace \
+            -output "$outdir/pdfium.framework/pdfium" "$outdir/pdfium.framework/pdfium"
+    fi
+    cat > "$outdir/pdfium.framework/Info.plist" << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleExecutable</key><string>pdfium</string>
+    <key>CFBundleIdentifier</key><string>ca.electricrv.pdfium</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>pdfium</string>
+    <key>CFBundlePackageType</key><string>FMWK</string>
+    <key>CFBundleShortVersionString</key><string>152.0.7934</string>
+    <key>CFBundleVersion</key><string>7934</string>
+    <key>MinimumOSVersion</key><string>16.0</string>
+</dict>
+</plist>
+PLIST
+}
+
+make_framework "$TMP/ios-device-arm64/lib/$LIB" "$TMP/fw-device" yes
+make_framework "$TMP/sim/$LIB" "$TMP/fw-sim" no
+echo "--- device framework binary version info:"
+xcrun otool -l "$TMP/fw-device/pdfium.framework/pdfium" | grep -A4 "LC_BUILD_VERSION" | head -8 || true
 
 xcodebuild -create-xcframework \
-    -library "$TMP/ios-device-arm64/lib/$LIB" \
-    -library "$TMP/sim/$LIB" \
+    -framework "$TMP/fw-device/pdfium.framework" \
+    -framework "$TMP/fw-sim/pdfium.framework" \
     -output "$VENDOR/pdfium.xcframework"
 
 mkdir -p "$VENDOR/pdfium/include"
