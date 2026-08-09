@@ -49,6 +49,31 @@
    - **Ads:** none.
 5. Roll out the internal-testing release.
 
+## Headless Play submission (one-time service-account setup)
+
+With a Play service account, releases become tag-only: CI (or Claude via the
+Play Developer API) uploads the AAB and rolls out the internal track — no
+console visit. Setup (adapted from SlyTab's `docs/private/android-play-setup.md`):
+
+1. Play Console → **Setup → API access** → link (or create) a Google Cloud
+   project → **Create service account** (opens Google Cloud Console).
+2. In Google Cloud: create the service account (name e.g. `play-publisher`),
+   no special GCP roles needed. Then **Keys → Add key → JSON** and download.
+3. Back in Play Console → API access → the new account → **Grant access** →
+   role **Release manager**, scope **account-level** (covers MegaPDF, SlyTab,
+   and future apps).
+4. Save the JSON as `SplitWise\secrets\play-service-account.json` (the
+   documented shared location — gitignored there; never commit it anywhere).
+   Optionally also `gh secret set PLAY_SERVICE_ACCOUNT_JSON < file` in this
+   repo so `android-release.yml` can gain a `play-submit` step.
+5. Tell Claude it exists — the API flow is: OAuth token from the SA key →
+   `edits` insert → bundle upload → `tracks/internal` release (versionCode
+   from the AAB) → `edits` commit.
+
+Note: the **first** AAB upload for a brand-new app should be done in the
+console UI anyway (it locks the package name and enrolls Play App Signing
+with confirmation prompts the API skips silently).
+
 ## Subsequent releases
 
 Bump versions → tag → download AAB → Play Console → Internal testing → new
