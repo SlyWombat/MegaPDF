@@ -39,7 +39,7 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"  # iPhone-only until ingestion is green; iPad returns per SDD via #24
   MegaPDFTests:
     type: bundle.unit-test
     platform: iOS
