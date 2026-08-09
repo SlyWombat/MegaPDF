@@ -12,3 +12,6 @@ set_target_properties(pdfium PROPERTIES
 add_library(megapdf_engine SHARED engine.cpp)
 target_include_directories(megapdf_engine PRIVATE ${PDFIUM_ROOT}/include)
 target_link_libraries(megapdf_engine pdfium android jnigraphics log)
+# Android 15 requirement: 16 KB-aligned load segments (Play rejects 4 KB-only).
+# The PDFium prebuilt is already 16 KB-aligned.
+target_link_options(megapdf_engine PRIVATE "-Wl,-z,max-page-size=16384")
