@@ -173,6 +173,8 @@ app screenshots. Keep page source versioned in the product repo
 | emulator-runner "expecting done" syntax error | It splits script lines → call a repo shell script |
 | Play `appPriceSchedules` "invalid id format" | Inline-created resources need `${local-id}` style ids |
 | WSL `python3` behaves strangely with paths | It's the Windows shim → use `/usr/bin/python3` / `PATH=/usr/bin:/bin` |
+| Play: "app does not support 16 KB memory page sizes" | CMake-built JNI lib on 4 KB default alignment → `target_link_options(... "-Wl,-z,max-page-size=16384")` (bblanchon PDFium prebuilts already comply; verify any prebuilt via ELF PT_LOAD p_align ≥ 0x4000) |
+| Play API: "Only releases with status draft may be created on draft app" | A never-published app's first production release must be status `draft` via API; a human presses Send-for-review in the console |
 | Xcode picks wrong version despite pinning logic | Every release exists under bare AND patch names → pin the exact path |
 
 ## 9. New-product checklist (condensed order of battle)
