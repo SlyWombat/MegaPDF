@@ -1,0 +1,128 @@
+name: iOS Diagnostic Upload
+
+# Manual: uploads the same app under the DIAGNOSTIC bundle id
+# (ca.electricrv.megapdf) to a separate throwaway app record, to test whether
+# the original record (com.megapdf.ios, #24) is the ingestion fault. Requires
+# the diag app record to exist in App Store Connect first.
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select stable Xcode
+        run: |
+          for v in 26.4.1 26.4 26.3.0; do
+            if [ -d "/Applications/Xcode_$v.app" ]; then
+              PICK="/Applications/Xcode_$v.app"; break
+            fi
+          done
+          sudo xcode-select -s "$PICK"
+          xcodebuild -version
+
+      - name: Cache PDFium xcframework
+        uses: actions/cache@v4
+        with:
+          path: ios/Vendor
+          key: pdfium-ios-chromium-7934-v3
+
+      - name: Fetch PDFium and assemble xcframework
+        run: bash scripts/fetch-pdfium.sh
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Set signing team
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: sed -i '' "s/TEAMID_PLACEHOLDER/$APPLE_TEAM_ID/" project.yml
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Import signing identity and diag profile
+        env:
+          IOS_DIST_P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_DIAG_PROFILE_B64: ${{ secrets.IOS_DIAG_PROFILE_B64 }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          printf '%s' "$IOS_DIST_P12_B64" | base64 -d > "$RUNNER_TEMP/dist.p12"
+          security create-keychain -p ci "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" \
+            -P "$IOS_DIST_P12_PASSWORD" -A -t cert -f pkcs12
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KEYCHAIN"
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                     "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            printf '%s' "$IOS_DIAG_PROFILE_B64" | base64 -d \
+              > "$dir/MegaPDF_Diag_App_Store.mobileprovision"
+          done
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Archive (diag bundle id)
+        run: |
+          xcodebuild archive \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDF \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/MegaPDF.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="MegaPDF Diag App Store" \
+            PRODUCT_BUNDLE_IDENTIFIER=ca.electricrv.megapdf \
+            MARKETING_VERSION=0.0.1 \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      - name: Export IPA
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>ca.electricrv.megapdf</key><string>MegaPDF Diag App Store</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/MegaPDF.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Validate then upload
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$ASC_KEY_P8" \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          IPA=$(ls "$RUNNER_TEMP"/export/*.ipa)
+          xcrun altool --validate-app -t ios -f "$IPA" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tail -5
+          xcrun altool --upload-app -t ios -f "$IPA" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" \
+            2>&1 | tee "$RUNNER_TEMP/upload.log" | tail -5
+          if grep -qE "UPLOAD FAILED|Failed to upload|ERROR ITMS-" "$RUNNER_TEMP/upload.log"; then
+            echo "upload reported failure"; exit 1
+          fi
