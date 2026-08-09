@@ -167,8 +167,14 @@ jobs:
           echo "=== last 60 lines ==="
           tail -60 "$RUNNER_TEMP/validate.log"
           if [ "$RC" -eq 0 ]; then
+            # altool exits 0 even on validation failures — grep-guard the output
+            # (SlyLED pipeline treaty).
             xcrun altool --upload-app -t ios -f "$IPA" \
-              --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+              --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" \
+              2>&1 | tee "$RUNNER_TEMP/upload.log"
+            if grep -qE "UPLOAD FAILED|Failed to upload|ERROR ITMS-" "$RUNNER_TEMP/upload.log"; then
+              echo "upload reported failure"; exit 1
+            fi
           fi
 
       - name: Save validation log
