@@ -75,6 +75,7 @@ fun ViewerScreen(
     onAddSignature: () -> Unit,
     onSaveDrawnSignature: (Bitmap) -> Unit,
     onDeleteSignature: (String) -> Unit,
+    screenshotSheet: String? = null,
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
     onSave: () -> Unit,
@@ -90,6 +91,10 @@ fun ViewerScreen(
     androidx.activity.compose.BackHandler { requestClose() }
 
     var drawDialogOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(screenshotSheet) {
+        if (screenshotSheet == "sign") signDialogOpen = true
+        if (screenshotSheet == "draw") drawDialogOpen = true
+    }
     if (signDialogOpen) {
         SignatureDialog(
             signatures = signatures,
@@ -104,6 +109,7 @@ fun ViewerScreen(
         DrawSignatureDialog(
             onSave = onSaveDrawnSignature,
             onDismiss = { drawDialogOpen = false; signDialogOpen = true },
+            screenshotMode = screenshotSheet == "draw",
         )
     }
 

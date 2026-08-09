@@ -3,6 +3,12 @@ package com.megapdf.android
 import android.graphics.Bitmap
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Row
@@ -40,6 +46,7 @@ private const val INK_COLOR = 0xFF1A1A1A
 fun DrawSignatureDialog(
     onSave: (Bitmap) -> Unit,
     onDismiss: () -> Unit,
+    screenshotMode: Boolean = false,
 ) {
     val strokes = remember { mutableStateListOf<List<Offset>>() }
     var current by remember { mutableStateOf<List<Offset>>(emptyList()) }
@@ -49,6 +56,15 @@ fun DrawSignatureDialog(
         onDismissRequest = onDismiss,
         title = { Text("Draw your signature") },
         text = {
+            val context = LocalContext.current
+            val demoSig = remember(screenshotMode) {
+                if (screenshotMode) runCatching {
+                    context.assets.open("demo-signature.png").use {
+                        android.graphics.BitmapFactory.decodeStream(it)
+                    }
+                }.getOrNull() else null
+            }
+            Box {
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -84,10 +100,23 @@ fun DrawSignatureDialog(
                     }
                 }
             }
+            // Screenshot mode shows the demo signature as if just drawn.
+            if (demoSig != null) {
+                Image(
+                    bitmap = demoSig.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .align(Alignment.Center)
+                        .padding(24.dp),
+                )
+            }
+            }
         },
         confirmButton = {
             TextButton(
-                enabled = strokes.isNotEmpty() && canvasSize != IntSize.Zero,
+                enabled = (strokes.isNotEmpty() && canvasSize != IntSize.Zero) || screenshotMode,
                 onClick = {
                     onSave(renderStrokes(strokes, canvasSize))
                     onDismiss()

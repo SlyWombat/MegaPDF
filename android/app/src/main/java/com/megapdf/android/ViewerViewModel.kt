@@ -64,6 +64,61 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var pendingSignature: SignatureEntry? by mutableStateOf(null)
         private set
 
+    /** Screenshot-mode sheet request ("sign" | "draw"); set via launch intent. */
+    var screenshotSheet: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * Marketing screenshot mode (mirrors iOS `-screenshot`): seeds the "Mega W."
+     * demo signature and opens the bundled demo agreement in the requested UI
+     * state. Never active in normal launches.
+     */
+    fun applyScreenshotMode(state: String?) {
+        if (state == null) return
+        val app = getApplication<Application>()
+        if (signatures.isEmpty()) {
+            runCatching {
+                app.assets.open("demo-signature.png").use { input ->
+                    android.graphics.BitmapFactory.decodeStream(input)
+                }
+            }.getOrNull()?.let { bmp ->
+                signatureStore.add("Mega W.", bmp)
+                signatures.clear()
+                signatures.addAll(signatureStore.load())
+            }
+        }
+        when (state) {
+            "home" -> {
+                val now = System.currentTimeMillis()
+                val day = 86_400_000L
+                uiState = ViewerUiState.Home(listOf(
+                    RecentEntry("demo://1", "Rental Agreement.pdf", now - day / 2),
+                    RecentEntry("demo://2", "Field Trip Permission.pdf", now - 2 * day),
+                    RecentEntry("demo://3", "Insurance Claim Form.pdf", now - 6 * day),
+                ), null)
+            }
+            "viewer", "sign", "draw" -> {
+                screenshotSheet = if (state == "viewer") null else state
+                viewModelScope.launch {
+                    val bytes = withContext(Dispatchers.IO) {
+                        app.assets.open("demo.pdf").use { it.readBytes() }
+                    }
+                    val doc = engine.open(bytes)
+                    val count = doc.pageCount()
+                    val sizes = ArrayList<PageSize>(count)
+                    for (i in 0 until count) {
+                        val page = doc.openPage(i)
+                        sizes += PageSize(page.widthPoints, page.heightPoints)
+                        page.close()
+                    }
+                    closeCurrent()
+                    document = doc
+                    uiState = ViewerUiState.Viewing("Rental Agreement.pdf", sizes)
+                }
+            }
+        }
+    }
+
     /** The stamp currently selected for move/resize/remove. */
     var selectedStamp: SelectedStamp? by mutableStateOf(null)
         private set

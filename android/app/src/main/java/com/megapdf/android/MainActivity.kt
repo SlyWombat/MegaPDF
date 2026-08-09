@@ -18,10 +18,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val screenshotState = intent.getStringExtra("screenshot")
         setContent {
             MaterialTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MegaPdfApp()
+                    MegaPdfApp(screenshotState = screenshotState)
                 }
             }
         }
@@ -29,7 +30,8 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MegaPdfApp(viewModel: ViewerViewModel = viewModel()) {
+fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String? = null) {
+    LaunchedEffect(screenshotState) { viewModel.applyScreenshotMode(screenshotState) }
     val openDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { viewModel.openUri(it) } }
@@ -87,6 +89,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel()) {
                 },
                 onSaveDrawnSignature = viewModel::addDrawnSignature,
                 onDeleteSignature = viewModel::deleteSignature,
+                screenshotSheet = viewModel.screenshotSheet,
                 onCommitStampRect = viewModel::commitStampRect,
                 onRemoveStamp = viewModel::removeSelectedStamp,
                 onSave = viewModel::save,
