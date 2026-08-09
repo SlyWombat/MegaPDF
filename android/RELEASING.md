@@ -4,12 +4,12 @@
 
 | Field | Value |
 |---|---|
-| **Package name** (applicationId) | `com.megapdf.android` — locked in by the first AAB uploaded to Play, permanent thereafter |
+| **Package name** (applicationId) | `ca.electricrv.megapdf` — locked in by the first AAB uploaded to Play, permanent thereafter |
 | Play Console app name | MegaPDF |
 | Version scheme | `versionName` = marketing (0.1.0…), `versionCode` = must increase every upload |
 | Privacy policy URL | `https://electricrv.ca/megapdf/privacy/` |
 | Data safety | Nothing collected, nothing shared; no ads; zero permissions |
-| Sibling ids for reference | iOS `com.megapdf.ios` · SlyLED `ca.electricrv.slyled` · SlyTab `ca.electricrv.slytab` |
+| Sibling ids for reference | iOS `com.megapdf.ios` (+ diag `ca.electricrv.megapdf`) · SlyLED `ca.electricrv.slyled` · SlyTab `ca.electricrv.slytab` |
 
 ## Signing model
 
