@@ -105,12 +105,16 @@ workflow), download the `appstore-screenshots` artifact, and upload:
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|
 | `iphone-6_9-viewer.png` | iPhone 6.9" #1 | *Checked and signed in under a minute* |
-| `iphone-6_9-sign.png` | iPhone 6.9" #2 | *Your signatures, saved on your device* |
-| `iphone-6_9-draw.png` | iPhone 6.9" #3 | *Draw it once, use it everywhere* |
-| `iphone-6_9-home.png` | iPhone 6.9" #4 | *No account. No cloud. No tracking.* |
-| `ipad-13-*.png` | iPad 13" #1–4 | same order |
+| `iphone-6_9-search.png` | iPhone 6.9" #2 | *Find any word, on every page* |
+| `iphone-6_9-sign.png` | iPhone 6.9" #3 | *Your signatures, saved on your device* |
+| `iphone-6_9-draw.png` | iPhone 6.9" #4 | *Draw it once, use it everywhere* |
+| `iphone-6_9-home.png` | iPhone 6.9" #5 | *No account. No cloud. No tracking.* |
+| `ipad-13-*.png` | iPad 13" #1–5 | same order |
 
 Order matters: the viewer shot (a filled, signed agreement) leads.
+
+The search shot only exists once the `search` screenshot state ships — it is
+not in the 1.0 builds, so upload it with the update that carries Find.
 
 ## App Review Information
 
