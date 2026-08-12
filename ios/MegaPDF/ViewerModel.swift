@@ -43,6 +43,10 @@ final class ViewerModel: ObservableObject {
     enum ScreenshotSheet { case signatures, draw }
     @Published private(set) var screenshotSheet: ScreenshotSheet?
 
+    /// Set only by `-screenshot search` launches; ViewerView opens the find
+    /// bar with this term already entered and runs the search immediately.
+    @Published private(set) var screenshotSearchTerm: String?
+
     private let recents = RecentsStore()
     private let signatureStore = SignatureStore()
     private var document: PdfDocument?
@@ -70,11 +74,12 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
-        case "viewer", "sign", "draw":
+        case "viewer", "sign", "draw", "search":
             if let url = Bundle.main.url(forResource: "demo", withExtension: "pdf"),
                let bytes = try? Data(contentsOf: url) {
                 if mode == "sign" { screenshotSheet = .signatures }
                 if mode == "draw" { screenshotSheet = .draw }
+                if mode == "search" { screenshotSearchTerm = DemoContent.searchTerm }
                 Task {
                     await open(bytes: bytes, password: nil,
                                displayName: "Rental Agreement.pdf", sourceURL: nil)
@@ -262,8 +267,9 @@ final class ViewerModel: ObservableObject {
 
     /// As-you-type search: brief debounce, then a whole-document scan for
     /// case-insensitive literal matches, aggregated into the flat match list.
-    /// An empty term just clears the results.
-    func search(term: String) {
+    /// An empty term just clears the results. `debounce` is only turned off by
+    /// the `-screenshot search` seeding, which supplies the whole term at once.
+    func search(term: String, debounce: Bool = true) {
         searchTask?.cancel()
         searchMatches = []
         currentMatchIndex = nil
@@ -274,8 +280,10 @@ final class ViewerModel: ObservableObject {
         }
         isSearching = true
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 250_000_000)
-            if Task.isCancelled { return }
+            if debounce {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                if Task.isCancelled { return }
+            }
             var matches: [SearchMatch] = []
             for index in 0..<pageSizes.count {
                 if Task.isCancelled { return }

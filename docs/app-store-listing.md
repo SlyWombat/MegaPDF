@@ -30,7 +30,7 @@ character limits show the count in brackets.
 > Someone emailed you a PDF to sign? Open it, tap the boxes, drop in your
 > signature, save. Done in under a minute — no account, no subscription.
 
-*(156 characters)*
+*(142 characters)*
 
 ## Description [4000]
 
@@ -56,6 +56,11 @@ character limits show the count in brackets.
 > document before it touches your original, so a failed save can never corrupt
 > the file someone sent you. Or keep the original and save a copy.
 >
+> **Find any word**
+> Search the whole document as you type. Every match lights up and the counter
+> tells you how many there are, so the one clause you need in a forty-page
+> lease is a few taps away.
+>
 > **Private by design**
 > MegaPDF requests zero permissions and makes zero network connections. Your
 > documents and your signature never leave your device — there is no server
@@ -70,13 +75,13 @@ character limits show the count in brackets.
 > MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or
 > bury you in toolbars. It opens, it fixes, it saves. Done.
 
-*(~1,600 characters — room to grow)*
+*(~1,800 characters — room to grow)*
 
 ## Keywords [100]
 
-> `pdf,sign,signature,fill,form,checkbox,esign,editor,document,annotate,fill and sign`
+> `pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign`
 
-*(84 characters, comma-separated)*
+*(89 characters, comma-separated)*
 
 ## What's New (version 0.1.0)
 
@@ -134,7 +139,10 @@ Order matters: the viewer shot (a filled, signed agreement) leads.
 > 3. Sign → Draw a signature, place it, drag/resize it, save.
 > 4. Reopen the saved file in another app (Files preview, Acrobat) — is
 >    everything where you put it?
-> 5. If you also use MegaPDF on Windows or Android: sign there, open here —
+> 5. Tap the magnifier and search a long document — do the highlights and the
+>    "3 of 17" count match what you see, and does the return key walk through
+>    the matches and wrap around at the end?
+> 6. If you also use MegaPDF on Windows or Android: sign there, open here —
 >    the signature should be movable on both.
 
 ---

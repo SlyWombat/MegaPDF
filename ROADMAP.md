@@ -93,6 +93,13 @@ Not in the SDD, but the most-expected missing basic. PDFium has FPDFText_Find*.
 Minimal chrome: a small find bar, highlight matches, Enter cycles. Needs an SDD
 amendment first (keep the minimalism bar).
 
+**Status: DONE (2026-08-12)** — shipped as GitHub issue #26 on all three
+platforms, not just Windows. The SDD amendment came first as specified: search
+is now **SDD §3.6 (F6)**, with the mobile note in §6.1. Each platform binds
+`FPDFText_Find*` in its own engine layer and returns per-match rects in page
+space; the UI is a find bar (Windows) / search bar (iOS, Android) sharing one
+behavior contract.
+
 ---
 
 ## #8 · Printing

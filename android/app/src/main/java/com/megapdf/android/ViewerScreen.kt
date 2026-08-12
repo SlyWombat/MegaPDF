@@ -126,6 +126,9 @@ fun ViewerScreen(
     LaunchedEffect(screenshotSheet) {
         if (screenshotSheet == "sign") signDialogOpen = true
         if (screenshotSheet == "draw") drawDialogOpen = true
+        // The query itself is already seeded by the view model, so the bar
+        // opens filled in, with its match count and highlights in place.
+        if (screenshotSheet == "search") searchOpen = true
     }
     if (signDialogOpen) {
         SignatureDialog(
@@ -171,6 +174,7 @@ fun ViewerScreen(
                     onPrevious = onSearchPrevious,
                     onNext = onSearchNext,
                     onClose = closeSearch,
+                    screenshotMode = screenshotSheet == "search",
                 )
             } else {
                 TopAppBar(
@@ -327,6 +331,7 @@ private fun SearchTopBar(
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onClose: () -> Unit,
+    screenshotMode: Boolean = false,
 ) {
     val focusRequester = remember { FocusRequester() }
     TopAppBar(
@@ -367,7 +372,10 @@ private fun SearchTopBar(
             }
         },
     )
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // Screenshot mode skips the focus grab: whether the soft keyboard would
+    // then cover the page depends on the emulator's hw.keyboard setting, and a
+    // marketing capture may not depend on that.
+    LaunchedEffect(Unit) { if (!screenshotMode) focusRequester.requestFocus() }
 }
 
 /**

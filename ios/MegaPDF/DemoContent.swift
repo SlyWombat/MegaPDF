@@ -13,6 +13,14 @@ enum DemoContent {
         return args[i + 1]
     }
 
+    /// Term seeded into the find bar by `-screenshot search`. "rental" is the
+    /// most-repeated word on the demo agreement's only page — it hits the
+    /// "Equipment Rental Agreement" heading, "Sunrise Tool Rental" and "the
+    /// rental equipment" — so the capture shows three highlights clustered
+    /// under the bar with the counter reading "1 of 3". Search is
+    /// case-insensitive, so the lower-case term matches the capitalized ones.
+    static let searchTerm = "rental"
+
     /// The handwritten "MegaWoman" demo signature (bundled transparent PNG,
     /// rendered from a script typeface at build time).
     static func signatureImage() -> CGImage? {

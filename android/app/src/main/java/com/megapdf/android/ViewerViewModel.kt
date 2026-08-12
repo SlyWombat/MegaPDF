@@ -72,7 +72,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var pendingSignature: SignatureEntry? by mutableStateOf(null)
         private set
 
-    /** Screenshot-mode sheet request ("sign" | "draw"); set via launch intent. */
+    /** Screenshot-mode sheet request ("sign" | "draw" | "search"); set via launch intent. */
     var screenshotSheet: String? by mutableStateOf(null)
         private set
 
@@ -105,7 +105,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     RecentEntry("demo://3", "Insurance Claim Form.pdf", now - 6 * day),
                 ), null)
             }
-            "viewer", "sign", "draw" -> {
+            "viewer", "sign", "draw", "search" -> {
                 screenshotSheet = if (state == "viewer") null else state
                 viewModelScope.launch {
                     val bytes = withContext(Dispatchers.IO) {
@@ -122,6 +122,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     closeCurrent()
                     document = doc
                     uiState = ViewerUiState.Viewing("Rental Agreement.pdf", sizes)
+                    if (state == "search") {
+                        // Seed here, not from the UI: the document and the
+                        // Viewing state are both already set, so the sweep can
+                        // never hit updateSearchQuery's "nothing open" early
+                        // return, and the debounce is skipped so the hits and
+                        // the "N of M" count are on screen without any wait.
+                        startSearch(SCREENSHOT_SEARCH_TERM, debounceMs = 0L)
+                    }
                 }
             }
         }
@@ -177,12 +185,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var searchJob: Job? = null
 
+    /** As-you-type search from the search bar; debounced against fast typing. */
+    fun updateSearchQuery(query: String) = startSearch(query, SEARCH_DEBOUNCE_MS)
+
     /**
-     * As-you-type search: debounce, then sweep every page on the engine thread
-     * and aggregate hits into one flat document-ordered list. Case-insensitive
-     * literal substring — the cross-platform contract.
+     * The search itself: wait out [debounceMs], then sweep every page on the
+     * engine thread and aggregate hits into one flat document-ordered list.
+     * Case-insensitive literal substring — the cross-platform contract.
+     * Screenshot mode passes a zero debounce for its one deliberate query.
      */
-    fun updateSearchQuery(query: String) {
+    private fun startSearch(query: String, debounceMs: Long) {
         searchQuery = query
         searchJob?.cancel()
         searchHits = emptyList()
@@ -196,7 +208,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         isSearching = true
         searchJob = viewModelScope.launch {
             try {
-                delay(SEARCH_DEBOUNCE_MS)
+                if (debounceMs > 0) delay(debounceMs)
                 val hits = ArrayList<SearchHit>()
                 for (pageIndex in state.pageSizes.indices) {
                     val page = doc.openPage(pageIndex)
@@ -693,5 +705,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
         const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
+        // Marketing screenshot query: "rental" is the most-repeated real word in
+        // the demo agreement (title, then twice in the opening paragraph).
+        const val SCREENSHOT_SEARCH_TERM = "rental"
     }
 }

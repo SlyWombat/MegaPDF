@@ -4,6 +4,11 @@ Native Kotlin + Jetpack Compose implementation of MegaPDF's mobile v1 scope:
 **fill-check-sign** — view/zoom, tap-to-check checkboxes, signature library and
 placement, save. No text editing in v1. Roadmap: issues #12–#19.
 
+Past that line: **find in document** (#26, SDD §3.6) — case-insensitive literal
+search across the whole document, matches highlighted with the current one in a
+different colour — and an **About** dialog on the home screen carrying the version,
+the credits, and the bundled `THIRD-PARTY-NOTICES.txt` (SDD §4.3).
+
 ## Ground rules
 
 - **No code sharing with the .NET app.** `src/MegaPDF.Core` is the *behavioral

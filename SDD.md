@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Document version** | 1.1 |
-| **Date** | 2026-07-08 |
+| **Document version** | 1.2 |
+| **Date** | 2026-08-12 |
 | **Status** | Open questions resolved (Appendix B); ready for planning |
 | **Product** | MegaPDF — a lightweight PDF editor for Windows 11 |
 
@@ -74,13 +74,13 @@ Stating what MegaPDF will *not* do is as important as what it will. Out of scope
 **Command surface: a single slim toolbar.** No ribbon, no menu bar, no dockable panels. The toolbar contains, left to right:
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│  [Open]  [Save]  [Save As]   |   [Undo] [Redo]   |   [✒ Signatures]    │
-│                                        [ − 100% + ]  [Page 3 of 12]  ⚙ │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  [Open] [Save] [Save As] [Shrink] [Print]   |   [Undo] [Redo]   |   [✒ Signatures] [Whiteout] [Add text]   |   [Find]  │
+│                                                                                       [ − 100% + ]  [Page 3 of 12]  ⚙  │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Seven primary controls total. Every control is labeled with **icon + text** (icons alone fail discoverability for this persona).
+- Twelve primary controls total. Every control is labeled with **icon + text** (icons alone fail discoverability for this persona).
 - `⚙` opens a minimal settings flyout (theme, default zoom, "reopen last file" toggle). Settings that most users never need do not earn toolbar space.
 - The zoom and page indicators live at the right edge, matching Edge's built-in PDF viewer — a UI Pat already knows.
 
@@ -244,6 +244,41 @@ deliberately minimal (P1):
 **Acceptance:** print the persona's filled form to Microsoft Print to PDF; output
 matches the on-screen document page-for-page.
 
+### 3.6 F6 — Find in Document *(scope amendment — 2026-08-12)*
+
+**User story:** *"The agreement is forty pages and I need the paragraph about the deposit. I type 'deposit', and it takes me to each one."*
+
+Search was not in the SDD; it sat on the roadmap as the most-expected missing basic (#7) and was promoted by demand (issue #26). It is the first capability to land on **all three platforms at once** — Windows, iOS, and Android — and the first addition to mobile beyond the fill-check-sign scope of §6.1. Read-only by nature, it touches nothing the save path cares about.
+
+The scope is deliberately the minimum that does the job (P1): one text field, a match counter, previous/next, and a close.
+
+#### Behavior
+
+1. **Opening.** Windows: the toolbar's **Find** button or `Ctrl+F` reveals a compact Edge-style find bar overlaid at the top-right of the document (both entry points do the same thing, and using either again refocuses the field and selects its contents rather than toggling the bar shut — the bar's ✕ and `Esc` close it). The button is disabled until a document is open. iOS: a magnifier button in the viewer toolbar opens a search bar. Android: a search icon in the viewer top bar swaps it for a search field.
+2. **Matching is case-insensitive literal substring** — the query is passed to PDFium's `FPDFText_FindStart` with **flags `0`**, which is the only mode offered. There is no regex, no whole-word toggle, no match-case toggle, and no options UI to hide any of them behind. An empty query returns nothing; the query is otherwise not trimmed or normalized.
+3. **Scope is the whole document.** The engine surface is deliberately per-page (`PdfiumPage.FindText`, `PdfPage.search`, `PdfEngine.search(_:pageIndex:term:)`), returning each match's bounding rectangles in page space; the document-wide sweep is a loop in the view-model layer, which concatenates the per-page results into one document-ordered list. A match that wraps a line, or that spans several text objects, is one match with several rects.
+4. **As-you-type, with a 250 ms debounce** on every platform, so a fast typist triggers one sweep rather than one per keystroke. The sweep runs off the UI thread (Windows `Task.Run`; iOS an actor-isolated `Task`; Android the engine's dedicated PDFium dispatcher) and is cancelled by the next keystroke, by closing the search, and by opening a different document — matches never outlive the document they came from.
+5. **The counter reads `N of M`** — a flat index across the document, not a page reference — and reads **`No results`** when the query matched nothing. It is blank while the query is empty. On Windows the counter is a polite UIA live region, so Narrator announces the count without interrupting typing.
+6. **Previous/next cycle with wraparound**, across page boundaries and around the ends of the document, and the view follows the current match: Windows scrolls (animated) to sit the match about a third down the viewport, iOS centres the match's page, and Android scrolls to the page only when it isn't already visible. A completed search selects the first match automatically. Windows binds `Enter` / `Shift+Enter` to next/previous **while focus is inside the find bar**; iOS's return key advances to the next match; Android has no keyboard binding.
+7. **Every match on a visible page is highlighted, and the current one is distinct.** Windows and iOS tint with the system accent colour — a heavier fill for the current match plus an outline the others don't get; Android distinguishes by hue instead (translucent blue for matches, translucent amber for the current one). Highlights are drawn as a non-interactive overlay above the page bitmap, so they never intercept a click meant for the text, a checkbox, or a signature beneath them.
+8. **Closing clears.** Windows `Esc` or the ✕ closes the bar, empties the field, and discards matches and highlights; Android's system **Back** closes search before it closes the document; iOS has a Done button. Reopening always starts fresh — a stale count is a surprise, and surprise is a P3 violation.
+
+#### Edge cases
+
+- **Scanned or photographed pages have no text layer**, so they contribute no matches — silently, with no warning and no distinct empty state. This is the same honesty position as F1's non-editable scanned text: no OCR is a non-goal (§1.4), and a search that quietly finds nothing on an image is better than one that pretends.
+- **Password-protected documents** are handled at open time, not here; nothing in the search path consults permission or extraction bits, so once a document is open, search behaves identically whether or not it was encrypted.
+- **Results are not progressive.** The counter and highlights appear only when the whole sweep finishes; there is no cap on pages scanned or matches returned. On a very large document this is visible as a pause rather than a filling-in list.
+- **A whitespace-only query is legal** and matches spaces throughout the document — a consequence of not normalizing the query, not a designed feature.
+- Windows keeps the previous query's highlights and count on screen during the debounce and sweep; iOS and Android clear theirs first. The end state is identical on all three.
+
+#### Acceptance criteria
+
+- A lower-case query matches mixed-case text, and vice versa, on every platform (parity is verified against the shared `tests/` fixtures — §6.2).
+- A match that spans two text objects on the same line is reported once, with a plausible non-degenerate rect straddling the text baseline.
+- An empty query and a query with no matches both return an empty result set rather than an error.
+- Next from the last match wraps to the first, and previous from the first wraps to the last, including when those matches are on different pages.
+- Closing search leaves no highlight and no count behind, and a search started before opening a second document never applies its matches to that document.
+
 ---
 
 ## 4. Technical Architecture & UI Framework
@@ -307,6 +342,8 @@ Key decisions:
 | iText / MuPDF | AGPL | License-compatible only if MegaPDF itself went AGPL, which would constrain downstream users and contributors; rejected. Neither offers interactive in-place editing anyway. |
 | PdfPig / PDFsharp | Apache / MIT | Useful read/create utilities; no in-place editing or reliable incremental save. Retained as candidates for test tooling and structural verification, not the engine. |
 
+**Attribution obligation** *(amendment — 2026-08-12)*. Permissive is not the same as free of conditions: the BSD/MIT licenses of PDFium and the libraries it bundles (abseil, FreeType, ICU, libjpeg-turbo, libpng, libtiff, zlib, and the rest) require their copyright notices and license text to **travel with the binary**. A public source repository does not satisfy this for a user who installs from a store. Therefore `tools/gen_third_party_notices.py` generates a `THIRD-PARTY-NOTICES.txt` per platform from the vendored license sets under `libs/pdfium/<flavor>/licenses/` plus this repository's Apache-2.0 `LICENSE`, and each app **bundles that file as a resource and displays it in full** from its About surface (§5.3): Windows `src/MegaPDF.App/Assets/`, Android `android/app/src/main/assets/`, iOS `ios/MegaPDF/Resources/`. The Windows set additionally carries the MIT notice for the Windows App SDK / WinUI 3 and the .NET runtime. The generator is run by hand and its output is committed, so the notices are reviewable in the repo and diffable in review. It is **not** wired into any build or CI job, which makes re-running it a manual release obligation whenever the pinned PDFium version (§6.1) moves; wiring it into the release pipeline as a check is an open follow-up.
+
 **Consequence — we own the hard part.** No $0 library provides interactive in-place body-text editing (glyph metrics, font subsetting/substitution, content-stream rewriting, line reflow). That layer is built in-house on top of PDFium's page-object API.
 
 **Scope decision (stakeholder, 2026-07-08): v1.0 ships all four features in full, including body-text editing tiers 1 and 2.** There is no phased F1 rollout. Because the text-edit layer is the product's dominant schedule risk, it is managed by build order rather than by scope cuts:
@@ -363,7 +400,7 @@ Some corporate environments still block Store/MSIX sideloading and mandate MSI f
 ### 5.3 Update experience
 
 - Updates are **silent and automatic** by default (Store or App Installer mechanisms). The persona should never see a "new version available!" interstitial, never click through an update wizard, and never be interrupted mid-document — updates apply on next launch.
-- In-app "About" flyout shows current version and a "Check for updates" button (links to Store/App Installer check) for support scenarios.
+- In-app "About" flyout shows current version and a "Check for updates" button (links to Store/App Installer check) for support scenarios. It also carries the licence and attribution block: *"Free & open source · Apache-2.0"*, the copyright line, the credit line, a link to the GitHub repository, and a **Third-party notices** entry that opens the bundled `THIRD-PARTY-NOTICES.txt` in full (§4.3). *(Amendment — 2026-08-12: the same About surface exists on mobile — a sheet on iOS, a dialog on Android, both reached from the home screen — carrying the same version / copyright / credit / GitHub / notices content. Windows reaches it from the `⚙` settings flyout.)*
 - **Versioning:** semantic `MAJOR.MINOR.PATCH.0` (MSIX requires 4-part). Release cadence: patch releases as needed; feature releases quarterly at most — churn is a cost to this persona, not a benefit.
 - **Rollback:** Store and App Installer both support publishing a rolled-back package version; the recovery journal format (§3.4) is versioned and backward-compatible so a rollback never strands unsaved-work journals.
 
@@ -408,6 +445,14 @@ tracked as GitHub issues #11–#20 (milestones *Android M1–M3*, *iOS M0*).
   **Not** in mobile v1: interactive text editing, whiteout, shrink-for-email, printing.
   The product principles (P1–P5) apply unchanged; "no accounts, no cloud, all local"
   is non-negotiable on every platform.
+- **Beyond mobile v1: find in document** *(amendment — 2026-08-12)*. **F6 (§3.6)** is
+  implemented on Android and iOS as well as Windows — the first capability to cross the
+  fill-check-sign line above, and the first shipped simultaneously on all three
+  platforms. It does not reopen the v1 scope: it landed after the 1.0 mobile builds and
+  belongs to a later update, and everything listed as **not** in mobile v1 stays out.
+  Search is a natural mobile fit — a phone screen shows less of a long document than a
+  desktop does, so finding a clause matters more there, not less. The **About surface**
+  and bundled third-party notices (§4.3, §5.3) landed with it on both mobile platforms.
 - **Sequencing: Android first.** iOS follows once the Android engine work has settled
   the parity contracts; iOS development runs Mac-less via GitHub Actions macOS runners
   (issue #20), and the engine choice there (Apple PDFKit vs a PDFium xcframework) is an
@@ -440,6 +485,8 @@ behaviors are contracts — a change on any platform is a breaking change everyw
 |---|---|
 | No modes; click-determines-action | P1, P2 |
 | No text-formatting toolbar in v1 | P1 |
+| Search with no regex/case/whole-word options | P1 |
+| Search highlights never intercept clicks | P2 |
 | Drawn-square checkbox detection | P2 |
 | Atomic saves + recovery journal | P3 |
 | Signature flatten off by default | P3 |

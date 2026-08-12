@@ -735,19 +735,29 @@ public sealed partial class MainWindow : Window
     private async void OnPrintClicked(object sender, RoutedEventArgs e) =>
         await _printer.ShowPrintUiAsync();
 
-    // --- Find in document (Ctrl+F, issue #26: the Edge-style find bar) ---
+    // --- Find in document (toolbar Find / Ctrl+F, issue #26: the Edge-style find bar) ---
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _findDebounce;
 
     /// <summary>Ctrl+F: open (or refocus) the find bar.</summary>
-    private void OnFindAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private void OnFindAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
+        args.Handled = ShowFindBar();
+
+    /// <summary>Toolbar Find button: the visible twin of Ctrl+F (SDD §2.2 — a labelled control for every capability).</summary>
+    private void OnFindClicked(object sender, RoutedEventArgs e) => ShowFindBar();
+
+    /// <summary>
+    /// Opens the find bar, or refocuses and reselects it when it is already open — it never toggles the bar
+    /// shut, so the button and the accelerator behave identically. Returns false when there is no document.
+    /// </summary>
+    private bool ShowFindBar()
     {
         if (!ViewModel.IsDocumentOpen)
-            return;
-        args.Handled = true;
+            return false;
         FindBar.Visibility = Visibility.Visible;
         FindQuery.Focus(FocusState.Programmatic);
         FindQuery.SelectAll();
+        return true;
     }
 
     /// <summary>Search as you type — a small debounce keeps big documents responsive.</summary>

@@ -25,8 +25,9 @@ one onto the page. Move it, nudge it, resize it until it sits exactly right.
 SAVE — Save overwrites, Save As creates a copy. No export wizards, no
 "flatten" dialogs, no surprises.
 
-Also included, because real documents need them: print your PDF, and shrink
-oversized scans for email with one click (image downsampling and JPEG
+Also included, because real documents need them: find any word with Ctrl+F
+(every match highlighted, Enter to step through them), print your PDF, and
+shrink oversized scans for email with one click (image downsampling and JPEG
 recompression).
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
@@ -37,11 +38,12 @@ someone else's server.
 Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 
 ## Feature bullets
-(Store listing → "App features", up to 20 × 200 chars. Use these seven.)
+(Store listing → "App features", up to 20 × 200 chars. Use these eight.)
 
 - Edit text in any PDF by clicking and typing — like a Word document
 - Click empty squares to check boxes on any form
 - Drag signatures from your personal library onto the page, then nudge and resize
+- Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
 - Save overwrites, Save As copies — no export wizards or flatten dialogs
 - Shrink oversized scans for email with one click
 - Print directly from the app

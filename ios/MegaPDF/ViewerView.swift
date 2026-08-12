@@ -58,7 +58,11 @@ struct ViewerView: View {
                     model.search(term: term)
                 }
                 // Bring the current match's page on screen (wraps included).
+                // The screenshot launch skips this: its matches are already at
+                // the top of page 1, and centring them would push them under
+                // the find bar on the taller iPad capture.
                 .onChange(of: model.currentMatchIndex) { newValue in
+                    guard model.screenshotSearchTerm == nil else { return }
                     guard let newValue, newValue < model.searchMatches.count else { return }
                     withAnimation {
                         proxy.scrollTo(model.searchMatches[newValue].pageIndex,
@@ -109,6 +113,15 @@ struct ViewerView: View {
         }
         .onAppear {
             if model.screenshotSheet != nil { signaturesOpen = true }
+            // `-screenshot search`: open the find bar with the term already
+            // typed and start the scan here. This view only exists in the
+            // `.viewing` state, so the document is loaded by construction —
+            // the seeded search can't fire too early or be lost.
+            if let term = model.screenshotSearchTerm, !searchOpen {
+                searchOpen = true
+                searchText = term
+                model.search(term: term, debounce: false)
+            }
         }
         .alert("Unsaved changes", isPresented: $confirmDiscard) {
             Button("Save") { model.save() }
@@ -153,7 +166,9 @@ struct ViewerView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
-        .onAppear { searchFocused = true }
+        // Screenshot captures keep the keyboard down: the term is already in
+        // the field and a keyboard would cover half the page.
+        .onAppear { if model.screenshotSearchTerm == nil { searchFocused = true } }
     }
 
     private var matchCountLabel: String {
