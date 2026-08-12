@@ -68,6 +68,19 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFText_SetText(IntPtr textObject, [MarshalAs(UnmanagedType.LPWStr)] string text);
     [DllImport(Dll)] public static extern int FPDFPage_GenerateContent(IntPtr page);
 
+    // --- Text search (fpdf_text.h; simple find, issue #26) ---
+
+    /// <summary>findWhat is an FPDF_WIDESTRING (UTF-16LE, NUL-terminated); flags 0 = case-insensitive substring.</summary>
+    [DllImport(Dll)] public static extern IntPtr FPDFText_FindStart(IntPtr textPage, [MarshalAs(UnmanagedType.LPWStr)] string findWhat, uint flags, int startIndex);
+    [DllImport(Dll)] public static extern int FPDFText_FindNext(IntPtr handle);
+    [DllImport(Dll)] public static extern int FPDFText_GetSchResultIndex(IntPtr handle);
+    [DllImport(Dll)] public static extern int FPDFText_GetSchCount(IntPtr handle);
+    [DllImport(Dll)] public static extern void FPDFText_FindClose(IntPtr handle);
+
+    /// <summary>Computes the rects covering a char range; FPDFText_GetRect then reads them by index.</summary>
+    [DllImport(Dll)] public static extern int FPDFText_CountRects(IntPtr textPage, int startIndex, int count);
+    [DllImport(Dll)] public static extern int FPDFText_GetRect(IntPtr textPage, int rectIndex, out double left, out double top, out double right, out double bottom);
+
     // --- Font substitution (tier 2, SDD §3.1) ---
 
     /// <summary>Buffer is UTF-8; returns bytes incl. NUL. Subset fonts carry an ABCDEF+ prefix.</summary>

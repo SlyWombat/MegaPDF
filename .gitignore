@@ -48,3 +48,7 @@ Desktop.ini
 
 # Local distribution drops (CI artifacts downloaded for sideloading)
 dist/
+
+# Local secrets and Python cruft — never committed
+.env
+__pycache__/

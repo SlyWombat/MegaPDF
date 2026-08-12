@@ -19,6 +19,12 @@ struct SelectedStamp: Equatable {
     let rect: PdfRect
 }
 
+/// One search hit in the document-wide flat match list (#26).
+struct SearchMatch: Equatable {
+    let pageIndex: Int
+    let rects: [PdfRect]
+}
+
 @MainActor
 final class ViewerModel: ObservableObject {
     @Published private(set) var state: ViewerState
@@ -29,6 +35,9 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var signatures: [SignatureEntry] = []
     @Published private(set) var pendingSignature: SignatureEntry?
     @Published private(set) var selectedStamp: SelectedStamp?
+    @Published private(set) var searchMatches: [SearchMatch] = []
+    @Published private(set) var currentMatchIndex: Int?
+    @Published private(set) var isSearching = false
 
     /// Set only by `-screenshot sign|draw` launches; ViewerView opens the sheet.
     enum ScreenshotSheet { case signatures, draw }
@@ -40,6 +49,7 @@ final class ViewerModel: ObservableObject {
     private var sourceURL: URL?
     private var renderedWidths: [Int: Int] = [:]
     private var renderTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
     private var lastWindow: (first: Int, last: Int, widthPx: Int)?
 
     private static let renderMargin = 2
@@ -246,6 +256,58 @@ final class ViewerModel: ObservableObject {
     func invalidatePage(_ index: Int) {
         renderedWidths.removeValue(forKey: index)
         if let w = lastWindow { updateRenderWindow(first: w.first, last: w.last, widthPx: w.widthPx) }
+    }
+
+    // MARK: - search (#26)
+
+    /// As-you-type search: brief debounce, then a whole-document scan for
+    /// case-insensitive literal matches, aggregated into the flat match list.
+    /// An empty term just clears the results.
+    func search(term: String) {
+        searchTask?.cancel()
+        searchMatches = []
+        currentMatchIndex = nil
+        guard !term.isEmpty, case let .viewing(_, pageSizes) = state,
+              let doc = document else {
+            isSearching = false
+            return
+        }
+        isSearching = true
+        searchTask = Task {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if Task.isCancelled { return }
+            var matches: [SearchMatch] = []
+            for index in 0..<pageSizes.count {
+                if Task.isCancelled { return }
+                let hits = (try? await PdfEngine.shared.search(
+                    doc, pageIndex: index, term: term)) ?? []
+                matches.append(contentsOf: hits.map {
+                    SearchMatch(pageIndex: index, rects: $0.rects)
+                })
+            }
+            if Task.isCancelled { return }
+            searchMatches = matches
+            currentMatchIndex = matches.isEmpty ? nil : 0
+            isSearching = false
+        }
+    }
+
+    func nextMatch() {
+        guard let current = currentMatchIndex, !searchMatches.isEmpty else { return }
+        currentMatchIndex = (current + 1) % searchMatches.count
+    }
+
+    func previousMatch() {
+        guard let current = currentMatchIndex, !searchMatches.isEmpty else { return }
+        currentMatchIndex = (current + searchMatches.count - 1) % searchMatches.count
+    }
+
+    /// Search bar dismissed: drop highlights and any in-flight scan.
+    func clearSearch() {
+        searchTask?.cancel()
+        searchMatches = []
+        currentMatchIndex = nil
+        isSearching = false
     }
 
     // MARK: - signatures (#22)
@@ -482,6 +544,7 @@ final class ViewerModel: ObservableObject {
 
     private func closeCurrent() {
         renderTask?.cancel()
+        clearSearch()
         pageImages = [:]
         renderedWidths = [:]
         lastWindow = nil

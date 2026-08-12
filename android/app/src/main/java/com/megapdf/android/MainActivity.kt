@@ -77,8 +77,16 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 isSaving = viewModel.isSaving,
                 signatures = viewModel.signatures,
                 selectedStamp = viewModel.selectedStamp,
+                searchQuery = viewModel.searchQuery,
+                searchHits = viewModel.searchHits,
+                currentHitIndex = viewModel.currentHitIndex,
+                isSearching = viewModel.isSearching,
                 onRenderWindowChange = viewModel::updateRenderWindow,
                 onPageTap = viewModel::onPageTapped,
+                onSearchQueryChange = viewModel::updateSearchQuery,
+                onSearchPrevious = viewModel::previousSearchHit,
+                onSearchNext = viewModel::nextSearchHit,
+                onCloseSearch = viewModel::closeSearch,
                 onStartPlacement = viewModel::startPlacement,
                 onAddSignature = {
                     pickSignatureImage.launch(

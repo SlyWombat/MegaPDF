@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,7 @@ import com.megapdf.engine.PdfLoadException
 import com.megapdf.engine.PdfPasswordException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -30,6 +32,12 @@ data class SelectedStamp(
     val annotIndex: Int,
     val id: String,
     val rect: com.megapdf.engine.PdfRect,
+)
+
+/** One document-wide search hit: page plus highlight rects in page points. */
+data class SearchHit(
+    val pageIndex: Int,
+    val rects: List<com.megapdf.engine.PdfRect>,
 )
 
 sealed interface ViewerUiState {
@@ -147,6 +155,86 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun consumeStatus() {
         statusMessage = null
+    }
+
+    // --- Text search (#26) ---
+
+    /** Current search query; matches update as it changes (small debounce). */
+    var searchQuery: String by mutableStateOf("")
+        private set
+
+    /** All hits across the document, in page-then-reading order. */
+    var searchHits: List<SearchHit> by mutableStateOf(emptyList())
+        private set
+
+    /** Index into [searchHits] of the current match; -1 when there are none. */
+    var currentHitIndex: Int by mutableIntStateOf(-1)
+        private set
+
+    /** True from the first keystroke until that query's results are in. */
+    var isSearching: Boolean by mutableStateOf(false)
+        private set
+
+    private var searchJob: Job? = null
+
+    /**
+     * As-you-type search: debounce, then sweep every page on the engine thread
+     * and aggregate hits into one flat document-ordered list. Case-insensitive
+     * literal substring — the cross-platform contract.
+     */
+    fun updateSearchQuery(query: String) {
+        searchQuery = query
+        searchJob?.cancel()
+        searchHits = emptyList()
+        currentHitIndex = -1
+        val state = uiState as? ViewerUiState.Viewing
+        val doc = document
+        if (query.isEmpty() || state == null || doc == null) {
+            isSearching = false
+            return
+        }
+        isSearching = true
+        searchJob = viewModelScope.launch {
+            try {
+                delay(SEARCH_DEBOUNCE_MS)
+                val hits = ArrayList<SearchHit>()
+                for (pageIndex in state.pageSizes.indices) {
+                    val page = doc.openPage(pageIndex)
+                    try {
+                        page.search(query).forEach { hits += SearchHit(pageIndex, it.rects) }
+                    } finally {
+                        page.close()
+                    }
+                }
+                searchHits = hits
+                currentHitIndex = if (hits.isEmpty()) -1 else 0
+            } finally {
+                // A superseding query has already reset the flag for itself;
+                // only the query still on screen may clear it.
+                if (searchQuery == query) isSearching = false
+            }
+        }
+    }
+
+    /** Next match; wraps past the last hit back to the first. */
+    fun nextSearchHit() {
+        if (searchHits.isEmpty()) return
+        currentHitIndex = (currentHitIndex + 1) % searchHits.size
+    }
+
+    /** Previous match; wraps past the first hit back to the last. */
+    fun previousSearchHit() {
+        if (searchHits.isEmpty()) return
+        currentHitIndex = (currentHitIndex - 1 + searchHits.size) % searchHits.size
+    }
+
+    /** Closes the search UI: stops any sweep and clears all highlights. */
+    fun closeSearch() {
+        searchJob?.cancel()
+        searchQuery = ""
+        searchHits = emptyList()
+        currentHitIndex = -1
+        isSearching = false
     }
 
     fun openUri(uri: Uri, password: String? = null) {
@@ -557,6 +645,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun closeCurrent() {
         renderJob?.cancel()
+        closeSearch()
         pageBitmaps.clear()
         renderedWidths.clear()
         lastWindow = null
@@ -603,5 +692,6 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         const val RENDER_MARGIN = 2      // desktop MainViewModel's ±2-page window
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
+        const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
     }
 }

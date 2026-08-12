@@ -8,6 +8,7 @@ struct HomeView: View {
     let onRecent: (RecentEntry) -> Void
 
     @State private var importing = false
+    @State private var aboutOpen = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -47,6 +48,19 @@ struct HomeView: View {
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
             if case let .success(url) = result { onOpen(url) }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    aboutOpen = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .accessibilityLabel("About MegaPDF")
+            }
+        }
+        .sheet(isPresented: $aboutOpen) {
+            AboutView()
         }
     }
 }

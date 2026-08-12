@@ -561,6 +561,56 @@ internal sealed class PdfiumPage : IPdfPage
         }
     }
 
+    public IReadOnlyList<PdfSearchMatch> FindText(string term)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrEmpty(term))
+            return [];
+
+        lock (PdfiumLibrary.Lock)
+        {
+            var matches = new List<PdfSearchMatch>();
+            var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
+            if (textPage == IntPtr.Zero)
+                return matches;
+            try
+            {
+                // Flags 0 = case-insensitive substring — the only mode we offer (issue #26).
+                var find = PdfiumNative.FPDFText_FindStart(textPage, term, flags: 0, startIndex: 0);
+                if (find == IntPtr.Zero)
+                    return matches;
+                try
+                {
+                    while (PdfiumNative.FPDFText_FindNext(find) != 0)
+                    {
+                        var charIndex = PdfiumNative.FPDFText_GetSchResultIndex(find);
+                        var charCount = PdfiumNative.FPDFText_GetSchCount(find);
+                        var rectCount = PdfiumNative.FPDFText_CountRects(textPage, charIndex, charCount);
+                        var rects = new List<PdfRect>(rectCount);
+                        for (var r = 0; r < rectCount; r++)
+                        {
+                            if (PdfiumNative.FPDFText_GetRect(textPage, r, out var left, out var top, out var right, out var bottom) == 0)
+                                continue;
+                            // PDF coords are bottom-left origin; our page space is top-left (Geometry.cs).
+                            rects.Add(new PdfRect(left, Height - top, right - left, top - bottom));
+                        }
+                        if (rects.Count > 0)
+                            matches.Add(new PdfSearchMatch(rects));
+                    }
+                }
+                finally
+                {
+                    PdfiumNative.FPDFText_FindClose(find);
+                }
+                return matches;
+            }
+            finally
+            {
+                PdfiumNative.FPDFText_ClosePage(textPage);
+            }
+        }
+    }
+
     public IReadOnlyList<PdfFormField> GetFormFields()
     {
         ThrowIfDisposed();

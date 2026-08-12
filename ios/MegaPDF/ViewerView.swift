@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Scrolling page list with pinch/double-tap zoom, tap-to-edit dispatch,
-/// signature placement chrome, and save/sign toolbar.
+/// signature placement chrome, search bar, and save/sign toolbar.
 struct ViewerView: View {
     @ObservedObject var model: ViewerModel
     let displayName: String
@@ -14,38 +14,58 @@ struct ViewerView: View {
     @State private var visible: Set<Int> = []
     @State private var signaturesOpen = false
     @State private var confirmDiscard = false
+    @State private var searchOpen = false
+    @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
     @Environment(\.displayScale) private var displayScale
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
 
     var body: some View {
         GeometryReader { geo in
-            ScrollView(effectiveZoom > 1 ? [.vertical, .horizontal] : .vertical) {
-                LazyVStack(spacing: 8) {
-                    ForEach(pageSizes.indices, id: \.self) { index in
-                        pageView(index: index, containerWidth: geo.size.width)
-                            .onAppear {
-                                visible.insert(index)
-                                pushWindow(containerWidth: geo.size.width)
-                            }
-                            .onDisappear {
-                                visible.remove(index)
-                                pushWindow(containerWidth: geo.size.width)
-                            }
+            ScrollViewReader { proxy in
+                ScrollView(effectiveZoom > 1 ? [.vertical, .horizontal] : .vertical) {
+                    LazyVStack(spacing: 8) {
+                        ForEach(pageSizes.indices, id: \.self) { index in
+                            pageView(index: index, containerWidth: geo.size.width)
+                                .onAppear {
+                                    visible.insert(index)
+                                    pushWindow(containerWidth: geo.size.width)
+                                }
+                                .onDisappear {
+                                    visible.remove(index)
+                                    pushWindow(containerWidth: geo.size.width)
+                                }
+                                .id(index)
+                        }
+                    }
+                    .frame(minWidth: geo.size.width)
+                }
+                .background(Color(white: 0.25))
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { gestureZoom = $0 }
+                        .onEnded { value in
+                            zoom = min(max(zoom * value, 1), 4)
+                            gestureZoom = 1
+                            pushWindow(containerWidth: geo.size.width)
+                        }
+                )
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if searchOpen { searchBar }
+                }
+                .onChange(of: searchText) { term in
+                    model.search(term: term)
+                }
+                // Bring the current match's page on screen (wraps included).
+                .onChange(of: model.currentMatchIndex) { newValue in
+                    guard let newValue, newValue < model.searchMatches.count else { return }
+                    withAnimation {
+                        proxy.scrollTo(model.searchMatches[newValue].pageIndex,
+                                       anchor: .center)
                     }
                 }
-                .frame(minWidth: geo.size.width)
             }
-            .background(Color(white: 0.25))
-            .gesture(
-                MagnificationGesture()
-                    .onChanged { gestureZoom = $0 }
-                    .onEnded { value in
-                        zoom = min(max(zoom * value, 1), 4)
-                        gestureZoom = 1
-                        pushWindow(containerWidth: geo.size.width)
-                    }
-            )
         }
         .navigationTitle((model.isDirty ? "• " : "") + displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -56,6 +76,12 @@ struct ViewerView: View {
                 }
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    if searchOpen { closeSearch() } else { searchOpen = true }
+                } label: {
+                    Image(systemName: "magnifyingglass")
+                }
+                .accessibilityLabel("Find in document")
                 Button("Sign") { signaturesOpen = true }
                 Button(model.isSaving ? "Saving…" : "Save") { model.save() }
                     .disabled(!model.isDirty || model.isSaving)
@@ -93,6 +119,85 @@ struct ViewerView: View {
         }
     }
 
+    // MARK: - search (#26)
+
+    /// Inline find bar: as-you-type field, "N of M" count, previous/next
+    /// (wrapping), and Done to dismiss and clear highlights.
+    private var searchBar: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            TextField("Find in document", text: $searchText)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.search)
+                .focused($searchFocused)
+                .onSubmit { model.nextMatch() }
+            Text(matchCountLabel)
+                .font(.footnote.monospacedDigit())
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+            Button { model.previousMatch() } label: {
+                Image(systemName: "chevron.up")
+            }
+            .disabled(model.searchMatches.isEmpty)
+            .accessibilityLabel("Previous match")
+            Button { model.nextMatch() } label: {
+                Image(systemName: "chevron.down")
+            }
+            .disabled(model.searchMatches.isEmpty)
+            .accessibilityLabel("Next match")
+            Button("Done") { closeSearch() }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .onAppear { searchFocused = true }
+    }
+
+    private var matchCountLabel: String {
+        if searchText.isEmpty || model.isSearching { return "" }
+        guard let current = model.currentMatchIndex else { return "No results" }
+        return "\(current + 1) of \(model.searchMatches.count)"
+    }
+
+    private func closeSearch() {
+        searchOpen = false
+        searchText = ""
+        searchFocused = false
+        model.clearSearch()
+    }
+
+    /// Translucent accent rects over every match on the page; the current
+    /// match gets a stronger fill plus an outline.
+    private func searchHighlights(index: Int, pageSize: CGSize,
+                                  viewSize: CGSize) -> some View {
+        Canvas { context, _ in
+            let scaleX = Double(viewSize.width / pageSize.width)
+            let scaleY = Double(viewSize.height / pageSize.height)
+            for (i, match) in model.searchMatches.enumerated()
+            where match.pageIndex == index {
+                let isCurrent = i == model.currentMatchIndex
+                for rect in match.rects {
+                    let r = CGRect(
+                        x: rect.left * scaleX,
+                        y: (Double(pageSize.height) - rect.top) * scaleY,
+                        width: (rect.right - rect.left) * scaleX,
+                        height: (rect.top - rect.bottom) * scaleY)
+                    context.fill(
+                        Path(r),
+                        with: .color(Color.accentColor.opacity(isCurrent ? 0.45 : 0.25)))
+                    if isCurrent {
+                        context.stroke(Path(r), with: .color(Color.accentColor),
+                                       lineWidth: 2)
+                    }
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
     @ViewBuilder
     private func pageView(index: Int, containerWidth: CGFloat) -> some View {
         let size = pageSizes[index]
@@ -105,6 +210,10 @@ struct ViewerView: View {
                     .interpolation(.high)
             } else {
                 Color.white  // placeholder keeps layout stable until the render lands
+            }
+            if !model.searchMatches.isEmpty {
+                searchHighlights(index: index, pageSize: size,
+                                 viewSize: CGSize(width: width, height: height))
             }
             if let stamp = model.selectedStamp, stamp.pageIndex == index {
                 StampOverlay(

@@ -8,8 +8,27 @@ RELEASE="chromium%2F7934"   # 152.0.7934 — keep in lockstep with the other pla
 BASE="https://github.com/bblanchon/pdfium-binaries/releases/download/${RELEASE}"
 VENDOR="$(cd "$(dirname "$0")/.." && pwd)/Vendor"
 
+# The modulemap is rewritten even when the xcframework is cached (CI restores
+# Vendor/ from a version-keyed cache), so header-list changes take effect
+# without a cache-key bump.
+write_modulemap() {
+    mkdir -p "$VENDOR/pdfium/include"
+    cat > "$VENDOR/pdfium/include/module.modulemap" << 'MM'
+module CPdfium {
+    header "fpdfview.h"
+    header "fpdf_annot.h"
+    header "fpdf_edit.h"
+    header "fpdf_formfill.h"
+    header "fpdf_save.h"
+    header "fpdf_text.h"
+    export *
+}
+MM
+}
+
 if [ -d "$VENDOR/pdfium.xcframework" ]; then
-    echo "pdfium.xcframework already present — skipping fetch"
+    echo "pdfium.xcframework already present — skipping fetch, refreshing modulemap"
+    write_modulemap
     exit 0
 fi
 
@@ -79,16 +98,7 @@ mkdir -p "$VENDOR/pdfium/include"
 cp -R "$TMP/ios-device-arm64/include/." "$VENDOR/pdfium/include/"
 cp "$TMP/ios-device-arm64/VERSION" "$VENDOR/pdfium/VERSION" 2>/dev/null || true
 
-cat > "$VENDOR/pdfium/include/module.modulemap" << 'MM'
-module CPdfium {
-    header "fpdfview.h"
-    header "fpdf_annot.h"
-    header "fpdf_edit.h"
-    header "fpdf_formfill.h"
-    header "fpdf_save.h"
-    export *
-}
-MM
+write_modulemap
 
 rm -rf "$TMP"
 echo "done: $VENDOR/pdfium.xcframework"

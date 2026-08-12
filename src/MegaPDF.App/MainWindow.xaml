@@ -9,6 +9,9 @@
     </Window.SystemBackdrop>
 
     <Grid>
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindAccelerator" />
+        </Grid.KeyboardAccelerators>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -216,9 +219,34 @@
                                     x:Name="UpdateCheckToggle"
                                     Header="Check for updates at startup"
                                     Toggled="OnUpdateCheckToggled" />
-                                <StackPanel Spacing="2" Margin="0,4,0,0">
+                                <StackPanel Spacing="2" Margin="0,4,0,0" MaxWidth="260" AutomationProperties.Name="About Mega PDF">
+                                    <TextBlock Text="About Mega PDF" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,4" />
                                     <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                     <TextBlock Text="Free &amp; open source · Apache-2.0" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock
+                                        Text="Copyright © 2026 ElectricRV.ca Corporation. All rights reserved."
+                                        TextWrapping="Wrap"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <TextBlock
+                                        Text="Special thanks to Mega Woman."
+                                        TextWrapping="Wrap"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                    <HyperlinkButton
+                                        NavigateUri="https://github.com/SlyWombat/MegaPDF"
+                                        Content="github.com/SlyWombat/MegaPDF"
+                                        ToolTipService.ToolTip="https://github.com/SlyWombat/MegaPDF"
+                                        AutomationProperties.Name="Mega PDF on GitHub"
+                                        FontSize="12"
+                                        Padding="0,2"
+                                        Margin="0,2,0,0" />
+                                    <HyperlinkButton
+                                        Click="OnThirdPartyNoticesClicked"
+                                        Content="Third-party notices"
+                                        AutomationProperties.Name="Third-party notices"
+                                        FontSize="12"
+                                        Padding="0,2" />
                                 </StackPanel>
                             </StackPanel>
                         </Flyout>
@@ -298,6 +326,29 @@
                                 PointerMoved="OnPagePointerMoved"
                                 PointerExited="OnPagePointerExited">
                                 <Image Source="{x:Bind Source}" Stretch="Uniform" />
+                                <!-- Find-match highlights (issue #26); Grid panel so Margin positions each rect. -->
+                                <ItemsControl ItemsSource="{x:Bind Highlights}" IsHitTestVisible="False">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <Grid />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="local:SearchHighlight">
+                                            <Rectangle
+                                                Width="{x:Bind Width}"
+                                                Height="{x:Bind Height}"
+                                                Margin="{x:Bind Margin}"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
+                                                Fill="{x:Bind Fill}"
+                                                Stroke="{x:Bind Stroke}"
+                                                StrokeThickness="{x:Bind StrokeThickness}"
+                                                RadiusX="1.5"
+                                                RadiusY="1.5" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </local:PageCanvas>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -346,6 +397,39 @@
                     </InfoBar.ActionButton>
                 </InfoBar>
             </StackPanel>
+
+            <!-- Ctrl+F find bar: compact Edge-style overlay (issue #26 simple search) -->
+            <Border
+                x:Name="FindBar"
+                Visibility="Collapsed"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,8,24,0"
+                Padding="8,6"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                PreviewKeyDown="OnFindBarKeyDown">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBox
+                        x:Name="FindQuery"
+                        MinWidth="180"
+                        PlaceholderText="Find"
+                        AutomationProperties.Name="Find in document"
+                        TextChanged="OnFindQueryChanged" />
+                    <TextBlock
+                        Text="{x:Bind ViewModel.SearchStatus, Mode=OneWay}"
+                        VerticalAlignment="Center"
+                        MinWidth="64"
+                        TextAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        AutomationProperties.LiveSetting="Polite" />
+                    <Button Click="OnFindPreviousClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Previous match (Shift+Enter)" AutomationProperties.Name="Previous match" />
+                    <Button Click="OnFindNextClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Next match (Enter)" AutomationProperties.Name="Next match" />
+                    <Button Click="OnFindCloseClicked" Content="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Close (Esc)" AutomationProperties.Name="Close find" />
+                </StackPanel>
+            </Border>
 
             <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). -->
             <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">

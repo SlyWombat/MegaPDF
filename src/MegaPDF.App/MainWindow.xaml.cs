@@ -32,6 +32,8 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         ViewModel.ScrollRestoreRequested += offset =>
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
+        ViewModel.SearchScrollRequested += offset =>
+            DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null));
         AppWindow.Closing += OnAppWindowClosing;
 
         // Keyboard interaction with the selected signature (SDD §3.3):
@@ -86,6 +88,9 @@ public sealed partial class MainWindow : Window
         {
             if (e.PropertyName is nameof(MainViewModel.WindowTitle))
                 Title = ViewModel.WindowTitle;
+            // A different document means the matches are gone — close the stale bar.
+            if (e.PropertyName is nameof(MainViewModel.DocumentPath) && FindBar.Visibility == Visibility.Visible)
+                CloseFindBar();
         };
         Title = ViewModel.WindowTitle;
     }
@@ -730,6 +735,67 @@ public sealed partial class MainWindow : Window
     private async void OnPrintClicked(object sender, RoutedEventArgs e) =>
         await _printer.ShowPrintUiAsync();
 
+    // --- Find in document (Ctrl+F, issue #26: the Edge-style find bar) ---
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _findDebounce;
+
+    /// <summary>Ctrl+F: open (or refocus) the find bar.</summary>
+    private void OnFindAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        if (!ViewModel.IsDocumentOpen)
+            return;
+        args.Handled = true;
+        FindBar.Visibility = Visibility.Visible;
+        FindQuery.Focus(FocusState.Programmatic);
+        FindQuery.SelectAll();
+    }
+
+    /// <summary>Search as you type — a small debounce keeps big documents responsive.</summary>
+    private void OnFindQueryChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_findDebounce is null)
+        {
+            _findDebounce = DispatcherQueue.CreateTimer();
+            _findDebounce.Interval = TimeSpan.FromMilliseconds(250);
+            _findDebounce.IsRepeating = false;
+            _findDebounce.Tick += async (_, _) => await ViewModel.SearchAsync(FindQuery.Text);
+        }
+        _findDebounce.Stop();
+        _findDebounce.Start();
+    }
+
+    /// <summary>Enter = next, Shift+Enter = previous, Esc = close — from anywhere in the bar.</summary>
+    private void OnFindBarKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            var shift = (Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
+            ViewModel.MoveToMatch(shift ? -1 : 1);
+        }
+        else if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            CloseFindBar();
+        }
+    }
+
+    private void OnFindPreviousClicked(object sender, RoutedEventArgs e) => ViewModel.MoveToMatch(-1);
+
+    private void OnFindNextClicked(object sender, RoutedEventArgs e) => ViewModel.MoveToMatch(1);
+
+    private void OnFindCloseClicked(object sender, RoutedEventArgs e) => CloseFindBar();
+
+    /// <summary>Esc closes AND clears (issue #26) — reopening starts fresh.</summary>
+    private void CloseFindBar()
+    {
+        _findDebounce?.Stop();
+        FindBar.Visibility = Visibility.Collapsed;
+        FindQuery.Text = "";
+        ViewModel.ClearSearch();
+    }
+
     // --- Startup update check (packaged builds only) ---
 
     private readonly UpdateChecker _updateChecker = new();
@@ -923,6 +989,45 @@ public sealed partial class MainWindow : Window
     {
         if (!_settingsLoading)
             ViewModel.CheckForUpdates = UpdateCheckToggle.IsOn;
+    }
+
+    /// <summary>Opens the bundled THIRD-PARTY-NOTICES.txt in a scrollable in-app viewer.</summary>
+    private async void OnThirdPartyNoticesClicked(object sender, RoutedEventArgs e)
+    {
+        string text;
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "Assets", "THIRD-PARTY-NOTICES.txt");
+            text = await File.ReadAllTextAsync(path);
+        }
+        catch (Exception ex)
+        {
+            text = "The third-party notices file could not be loaded.\n\n" + ex.Message;
+        }
+
+        var viewer = new TextBox
+        {
+            Text = text,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            FontSize = 12,
+            MinWidth = 480,
+            MinHeight = 360,
+        };
+        Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollBarVisibility(viewer, ScrollBarVisibility.Auto);
+        viewer.SetValue(AutomationProperties.NameProperty, "Third-party notices text");
+
+        var dialog = new ContentDialog
+        {
+            Title = "Third-party notices",
+            Content = viewer,
+            CloseButtonText = "Close",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     public void ApplyTheme()

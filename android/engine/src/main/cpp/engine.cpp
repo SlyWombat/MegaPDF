@@ -17,6 +17,7 @@
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
 #include "fpdf_save.h"
+#include "fpdf_text.h"
 
 namespace {
 
@@ -559,6 +560,57 @@ Java_com_megapdf_engine_PdfiumNative_nativeGetStampImagePacked(JNIEnv* env, jobj
     }
     FPDFPage_CloseAnnot(annot);
     return result;
+}
+
+}  // extern "C"
+
+// --- Text search (#26). Case-insensitive literal substring search — flags 0,
+// --- no whole-word, no regex; the contract is shared across all platforms.
+
+extern "C" {
+
+// Matches on the page, packed [rectCount, l, b, r, t...] per match (a match
+// wrapping across lines has several rects), PDF points, bottom-left origin.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSearchPagePacked(JNIEnv* env, jobject,
+                                                            jlong handle, jstring query) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<double> packed;
+    const jsize len = env->GetStringLength(query);
+    FPDF_TEXTPAGE text = len > 0 ? FPDFText_LoadPage(p->page) : nullptr;
+    if (text != nullptr) {
+        // jchar is already UTF-16; FPDF_WIDESTRING wants a null terminator.
+        const jchar* chars = env->GetStringChars(query, nullptr);
+        std::vector<FPDF_WCHAR> wide(chars, chars + len);
+        wide.push_back(0);
+        env->ReleaseStringChars(query, chars);
+
+        FPDF_SCHHANDLE find = FPDFText_FindStart(text, wide.data(), 0, 0);
+        if (find != nullptr) {
+            while (FPDFText_FindNext(find)) {
+                const int start = FPDFText_GetSchResultIndex(find);
+                const int count = FPDFText_GetSchCount(find);
+                const int rects = FPDFText_CountRects(text, start, count);
+                if (rects <= 0) continue;
+                packed.push_back(rects);
+                for (int i = 0; i < rects; i++) {
+                    double l = 0, t = 0, r = 0, b = 0;
+                    FPDFText_GetRect(text, i, &l, &t, &r, &b);
+                    packed.push_back(l);
+                    packed.push_back(b);
+                    packed.push_back(r);
+                    packed.push_back(t);
+                }
+            }
+            FPDFText_FindClose(find);
+        }
+        FPDFText_ClosePage(text);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
 }
 
 }  // extern "C"

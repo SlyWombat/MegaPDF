@@ -5,5 +5,16 @@
 
     <Grid>
         <Image Source="Assets/SplashScreen.scale-200.png" Stretch="UniformToFill" />
+        <!-- Credit line, bottom-left: the artwork is dark navy there, and the
+             bottom-center is taken by the image's own "FREE & OPEN SOURCE" line. -->
+        <TextBlock
+            Text="© 2026 ElectricRV.ca Corporation — Special thanks to Mega Woman"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Margin="14,0,0,10"
+            FontSize="11"
+            Foreground="#99FFFFFF"
+            IsHitTestVisible="False"
+            AutomationProperties.Name="Copyright 2026 ElectricRV.ca Corporation. Special thanks to Mega Woman." />
     </Grid>
 </Window>
