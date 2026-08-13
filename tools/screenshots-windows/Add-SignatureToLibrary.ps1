@@ -4,7 +4,10 @@ $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | S
 Front $h
 Click-Btn ($AE::FromHandle($h)) "Signatures" | Out-Null
 Start-Sleep -Seconds 2
-Click-InShot $h 1587 378        # "Add from image..." in the flyout
+# "Add from image..." in the flyout. This coordinate assumes a library with ONE
+# entry above it — with a different number of saved signatures the row moves, so
+# run Open-SignatureFlyout.ps1 first and re-read it off that shot.
+Click-InShot $h 1587 378
 Start-Sleep -Seconds 3
 Send-Path $Img
 Start-Sleep -Seconds 4
