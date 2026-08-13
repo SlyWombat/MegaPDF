@@ -33,6 +33,25 @@ struct Page {
     Document* owner = nullptr;
 };
 
+// pdfium reports page content in user space, whose origin is the MediaBox, but it
+// renders and measures the CropBox. Where the two differ -- imposed pages, trimmed
+// scans -- every coordinate handed to the UI is out by that difference, so search
+// highlights and tap targets land on the wrong part of the page (#28). Everything
+// crossing the JNI boundary is shifted into crop-relative space, which is a no-op on
+// the usual page whose crop origin is already (0,0).
+struct CropOrigin {
+    double x = 0;
+    double y = 0;
+};
+
+CropOrigin cropOrigin(FPDF_PAGE page) {
+    float l = 0, b = 0, r = 0, t = 0;
+    if (FPDFPage_GetCropBox(page, &l, &b, &r, &t) && r > l && t > b) {
+        return CropOrigin{static_cast<double>(l), static_cast<double>(b)};
+    }
+    return CropOrigin{};
+}
+
 // --- FPDF_FORMFILLINFO no-op callbacks (no JS, no XFA), as on desktop. ---
 void FfiInvalidate(FPDF_FORMFILLINFO*, FPDF_PAGE, double, double, double, double) {}
 void FfiOutputSelectedRect(FPDF_FORMFILLINFO*, FPDF_PAGE, double, double, double, double) {}
@@ -258,6 +277,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
     FPDF_FORMHANDLE form = p->owner->form;
     std::vector<double> packed;
     if (form != nullptr) {
@@ -272,10 +292,10 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject
                     if (FPDFAnnot_GetRect(annot, &r)) {
                         packed.push_back(type);
                         packed.push_back(FPDFAnnot_IsChecked(form, annot) ? 1 : 0);
-                        packed.push_back(r.left);
-                        packed.push_back(r.bottom);
-                        packed.push_back(r.right);
-                        packed.push_back(r.top);
+                        packed.push_back(r.left - crop.x);
+                        packed.push_back(r.bottom - crop.y);
+                        packed.push_back(r.right - crop.x);
+                        packed.push_back(r.top - crop.y);
                     }
                 }
             }
@@ -296,10 +316,11 @@ JNIEXPORT void JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeClickAt(JNIEnv*, jobject, jlong handle,
                                                    jdouble x, jdouble y) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
     FPDF_FORMHANDLE form = p->owner->form;
     if (form == nullptr) return;
-    FORM_OnLButtonDown(form, p->page, 0, x, y);
-    FORM_OnLButtonUp(form, p->page, 0, x, y);
+    FORM_OnLButtonDown(form, p->page, 0, x + crop.x, y + crop.y);
+    FORM_OnLButtonUp(form, p->page, 0, x + crop.x, y + crop.y);
     FORM_ForceToKillFocus(form);
 }
 
@@ -309,6 +330,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeDetectSquaresPacked(JNIEnv* env, jobject,
                                                                jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
     std::vector<double> packed;
     const int count = FPDFPage_CountObjects(p->page);
     for (int i = 0; i < count; i++) {
@@ -324,10 +346,10 @@ Java_com_megapdf_engine_PdfiumNative_nativeDetectSquaresPacked(JNIEnv* env, jobj
         FPDF_BOOL stroke = 0;
         if (!FPDFPath_GetDrawMode(obj, &fillmode, &stroke)) continue;
         if (!stroke || fillmode != FPDF_FILLMODE_NONE) continue;
-        packed.push_back(l);
-        packed.push_back(b);
-        packed.push_back(r);
-        packed.push_back(t);
+        packed.push_back(l - crop.x);
+        packed.push_back(b - crop.y);
+        packed.push_back(r - crop.x);
+        packed.push_back(t - crop.y);
     }
     jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
     if (out && !packed.empty()) {
@@ -343,6 +365,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jl
                                                         jdouble l, jdouble b, jdouble r,
                                                         jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
+    l += crop.x; r += crop.x; b += crop.y; t += crop.y;
     const double w = r - l, h = t - b;
     const float il = static_cast<float>(l + 0.10 * w);
     const float ib = static_cast<float>(b + 0.10 * h);
@@ -408,6 +432,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAnnotRectsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
     const int count = FPDFPage_GetAnnotCount(p->page);
     std::vector<double> packed(static_cast<size_t>(count) * 4, 0.0);
     for (int i = 0; i < count; i++) {
@@ -415,10 +440,10 @@ Java_com_megapdf_engine_PdfiumNative_nativeAnnotRectsPacked(JNIEnv* env, jobject
         if (annot == nullptr) continue;
         FS_RECTF r;
         if (FPDFAnnot_GetRect(annot, &r)) {
-            packed[i * 4 + 0] = r.left;
-            packed[i * 4 + 1] = r.bottom;
-            packed[i * 4 + 2] = r.right;
-            packed[i * 4 + 3] = r.top;
+            packed[i * 4 + 0] = r.left - crop.x;
+            packed[i * 4 + 1] = r.bottom - crop.y;
+            packed[i * 4 + 2] = r.right - crop.x;
+            packed[i * 4 + 3] = r.top - crop.y;
         }
         FPDFPage_CloseAnnot(annot);
     }
@@ -447,6 +472,9 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddImageStamp(JNIEnv* env, jobject, j
                                                          jdouble l, jdouble b, jdouble r,
                                                          jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
+
+    l += crop.x; r += crop.x; b += crop.y; t += crop.y;
 
     FPDF_BITMAP bmp = FPDFBitmap_Create(pw, ph, /*alpha=*/1);
     if (bmp == nullptr) return JNI_FALSE;
@@ -575,6 +603,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeSearchPagePacked(JNIEnv* env, jobject,
                                                             jlong handle, jstring query) {
     auto* p = reinterpret_cast<Page*>(handle);
+    const CropOrigin crop = cropOrigin(p->page);
     std::vector<double> packed;
     const jsize len = env->GetStringLength(query);
     FPDF_TEXTPAGE text = len > 0 ? FPDFText_LoadPage(p->page) : nullptr;
@@ -596,10 +625,10 @@ Java_com_megapdf_engine_PdfiumNative_nativeSearchPagePacked(JNIEnv* env, jobject
                 for (int i = 0; i < rects; i++) {
                     double l = 0, t = 0, r = 0, b = 0;
                     FPDFText_GetRect(text, i, &l, &t, &r, &b);
-                    packed.push_back(l);
-                    packed.push_back(b);
-                    packed.push_back(r);
-                    packed.push_back(t);
+                    packed.push_back(l - crop.x);
+                    packed.push_back(b - crop.y);
+                    packed.push_back(r - crop.x);
+                    packed.push_back(t - crop.y);
                 }
             }
             FPDFText_FindClose(find);

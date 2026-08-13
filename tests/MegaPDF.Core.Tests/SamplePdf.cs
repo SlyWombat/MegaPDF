@@ -5,6 +5,28 @@ namespace MegaPDF.Core.Tests;
 /// <summary>Builds small, valid PDFs (correct xref offsets) for engine tests.</summary>
 internal static class SamplePdf
 {
+    /// <summary>
+    /// A page whose CropBox does not start at the MediaBox origin — the shape of
+    /// real-world documents (scans, imposed pages) and the case that exposes
+    /// coordinate handling: the viewer renders the CropBox, so anything reported in
+    /// raw user space lands in the wrong place. Text is drawn at 72,650, which is
+    /// 50pt below the crop top.
+    /// </summary>
+    public static byte[] BuildWithOffsetCropBox(string text = "Hello MegaPDF")
+    {
+        var content = $"BT /F1 36 Tf 72 650 Td ({text}) Tj ET\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                + "/CropBox [0 100 612 700] /Contents 4 0 R "
+                + "/Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+        ]);
+    }
+
     /// <summary>One-page US-Letter PDF drawing Helvetica text at 72,700.</summary>
     public static byte[] Build(string text = "Hello MegaPDF")
     {

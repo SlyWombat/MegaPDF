@@ -34,6 +34,9 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern IntPtr FPDF_LoadPage(IntPtr document, int pageIndex);
     [DllImport(Dll)] public static extern void FPDF_ClosePage(IntPtr page);
     [DllImport(Dll)] public static extern float FPDF_GetPageWidthF(IntPtr page);
+    /// <summary>The box the viewer actually shows; its origin is not always (0,0).</summary>
+    [DllImport(Dll)] public static extern bool FPDFPage_GetCropBox(
+        IntPtr page, out float left, out float bottom, out float right, out float top);
     [DllImport(Dll)] public static extern float FPDF_GetPageHeightF(IntPtr page);
 
     [DllImport(Dll)] public static extern IntPtr FPDFBitmap_Create(int width, int height, int alpha);

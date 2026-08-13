@@ -49,6 +49,39 @@ class TextSearchTest {
         }
     }
 
+    /**
+     * A page whose CropBox starts above the MediaBox origin (#28). The viewer sizes
+     * and draws the CropBox, so rects must be crop-relative; reported in raw user
+     * space they land off the page -- which is what put the highlight on the wrong
+     * line in the wild.
+     */
+    @Test
+    fun searchRectsAreRelativeToTheCropBox() {
+        runBlocking {
+            val doc = engine.open(asset("cropped.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    // CropBox [0 100 612 700] -> the visible page is 612 x 600.
+                    assertEquals(612.0, page.widthPoints, 1.0)
+                    assertEquals(600.0, page.heightPoints, 1.0)
+
+                    val rect = page.search("megapdf").single().rects.single()
+                    // Baseline is 50pt below the crop top, so the glyphs sit just
+                    // under y=550 in crop space -- and inside the page either way.
+                    assertTrue("rect must sit inside the visible page, was $rect",
+                        rect.bottom >= 0.0 && rect.top <= page.heightPoints)
+                    assertTrue("rect should straddle the baseline 50pt below the top",
+                        rect.bottom < 556.0 && rect.top > 544.0)
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
     @Test
     fun searchIsCaseInsensitive() {
         runBlocking {

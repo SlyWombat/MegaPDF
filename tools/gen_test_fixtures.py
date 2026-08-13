@@ -226,11 +226,35 @@ def gen_demo():
     return build(objs)
 
 
+def gen_cropped():
+    """A page whose CropBox does not start at the MediaBox origin (#28).
+
+    Viewers render and measure the CropBox, but pdfium reports page content in user
+    space, whose origin is the MediaBox. Where they differ every reported coordinate
+    is out by that offset, so search highlights and tap targets land on the wrong
+    part of the page. Text sits at 72,650 -- 50pt below the crop top.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    content = add(stream(b"", b"BT /F1 36 Tf 72 650 Td (Hello MegaPDF) Tj ET\n"))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/CropBox [0 100 612 700] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+               % (pages_num, font, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
-                       ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo())):
+                       ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
+                              ("cropped.pdf", gen_cropped())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)
