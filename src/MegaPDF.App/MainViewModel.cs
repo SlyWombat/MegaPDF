@@ -199,10 +199,14 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public string OpenDocumentName => DocumentPath is null ? "" : Path.GetFileName(DocumentPath);
 
-    // Unsaved-changes dot convention (SDD §2.2).
+    // Unsaved-changes dot convention (SDD §2.2). "Mega PDF" with the space is the
+    // reserved Store name and the manifest DisplayName; the title bar is what the
+    // listing's screenshots show, so it has to read the same.
+    public const string AppName = "Mega PDF";
+
     public string WindowTitle =>
-        DocumentPath is null ? "MegaPDF"
-        : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName} — MegaPDF";
+        DocumentPath is null ? AppName
+        : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName} — {AppName}";
 
     public string SaveButtonLabel => HasUnsavedChanges ? "Save ●" : "Save";
 
