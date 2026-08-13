@@ -63,8 +63,8 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ## Other fields
 - Category: **Productivity**
 - Pricing: **Free**
-- Privacy policy URL: https://slywombat.github.io/MegaPDF/privacy.html
-- Website: https://github.com/SlyWombat/MegaPDF
+- Privacy policy URL: https://electricrv.ca/megapdf/privacy/
+- Website: https://electricrv.ca/megapdf/
 - Support contact: dave@drscapital.com
 - Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
 
