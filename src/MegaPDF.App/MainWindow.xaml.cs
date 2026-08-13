@@ -861,6 +861,40 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Toolbar breakpoints, in effective pixels (the states themselves live in
+    // MainWindow.xaml). Above Full the toolbar shows icon + label; below it the labels
+    // go and every button stays; below Icons the zoom cluster folds into the single
+    // View flyout. Sized against the widest the bar ever gets — every command enabled
+    // and Save carrying its unsaved-changes dot — so nothing is ever clipped.
+    private const double ToolbarFullWidth = 1500;
+    private const double ToolbarIconsWidth = 980;
+
+    private void OnRootSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyToolbarLayout(e.NewSize.Width);
+
+    /// <summary>
+    /// Sheds toolbar detail as the window narrows so no command is ever clipped:
+    /// wide shows icon + label, then labels drop, then the zoom cluster collapses
+    /// behind the View flyout. Width is in effective pixels, so one set of
+    /// breakpoints holds at every display scale.
+    /// </summary>
+    private void ApplyToolbarLayout(double width)
+    {
+        var labels = width >= ToolbarFullWidth ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var label in new[]
+                 {
+                     LabelOpen, LabelSave, LabelSaveAs, LabelShrink, LabelPrint, LabelUndo,
+                     LabelRedo, LabelSignatures, LabelWhiteout, LabelAddText, LabelFind,
+                 })
+        {
+            label.Visibility = labels;
+        }
+
+        var compact = width < ToolbarIconsWidth;
+        ViewControls.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        ViewMenuButton.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>
         await ViewModel.FitWidthAsync(PagesScroll.ViewportWidth);
 
