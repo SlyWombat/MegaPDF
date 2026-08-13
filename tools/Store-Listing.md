@@ -69,8 +69,8 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 - Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
 
 ## Screenshots
-Shot and ready to upload: `artifacts/store/screenshots/` (2408×1549, well over the
-1366×768 minimum; 1–4 required). Captured from **1.6.0** — see that folder's
+Shot and ready to upload: `artifacts/store/screenshots/` (3038×1989, well over the
+1366×768 minimum; 1–4 required). Captured from **1.6.1** — see that folder's
 README.md to re-shoot after a UI change. Upload in this order, one caption each:
 
 | File | Caption (≤ 200 chars) |
