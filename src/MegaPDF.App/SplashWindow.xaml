@@ -5,16 +5,28 @@
 
     <Grid>
         <Image Source="Assets/SplashScreen.scale-200.png" Stretch="UniformToFill" />
-        <!-- Credit line, bottom-left: the artwork is dark navy there, and the
-             bottom-center is taken by the image's own "FREE & OPEN SOURCE" line. -->
-        <TextBlock
-            Text="© 2026 ElectricRV.ca Corporation — Special thanks to Mega Woman"
+        <!-- Credit, bottom-left, wrapped to two short lines. One long line ran
+             across the artwork's own "FREE & OPEN SOURCE" (which sits centred at
+             x 238-380), so both became unreadable. Keeping each line under ~200px
+             leaves the artwork text clear. MaxWidth enforces that, rather than
+             trusting the line break. -->
+        <StackPanel
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
-            Margin="14,0,0,10"
-            FontSize="11"
-            Foreground="#99FFFFFF"
+            Margin="14,0,0,8"
+            MaxWidth="200"
             IsHitTestVisible="False"
-            AutomationProperties.Name="Copyright 2026 ElectricRV.ca Corporation. Special thanks to Mega Woman." />
+            AutomationProperties.Name="Copyright 2026 ElectricRV.ca Corporation. Special thanks to Mega Woman.">
+            <TextBlock
+                Text="© 2026 ElectricRV.ca Corporation"
+                FontSize="10"
+                LineHeight="14"
+                Foreground="#99FFFFFF" />
+            <TextBlock
+                Text="Special thanks to Mega Woman"
+                FontSize="10"
+                LineHeight="14"
+                Foreground="#99FFFFFF" />
+        </StackPanel>
     </Grid>
 </Window>
