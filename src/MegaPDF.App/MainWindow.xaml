@@ -26,7 +26,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                <Button Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O">
+                <Button Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" ToolTipService.ToolTip="Open a PDF (Ctrl+O)" AutomationProperties.Name="Open">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8E5;" FontSize="16" />
                         <TextBlock Text="Open" />
@@ -36,7 +36,9 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
-                <Button Command="{x:Bind ViewModel.SaveCommand}" AccessKey="S">
+                <!-- The visible label carries the unsaved-changes dot; the UIA name
+                     stays plain "Save" so Narrator announces a stable control name. -->
+                <Button Command="{x:Bind ViewModel.SaveCommand}" AccessKey="S" ToolTipService.ToolTip="Save (Ctrl+S)" AutomationProperties.Name="Save">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE74E;" FontSize="16" />
                         <TextBlock Text="{x:Bind ViewModel.SaveButtonLabel, Mode=OneWay}" />
@@ -46,7 +48,7 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
-                <Button Command="{x:Bind ViewModel.SaveAsCommand}">
+                <Button Command="{x:Bind ViewModel.SaveAsCommand}" ToolTipService.ToolTip="Save a copy (Ctrl+Shift+S)" AutomationProperties.Name="Save As">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE792;" FontSize="16" />
                         <TextBlock Text="Save As" />
@@ -75,7 +77,7 @@
 
                 <AppBarSeparator />
 
-                <Button Command="{x:Bind ViewModel.UndoCommand}">
+                <Button Command="{x:Bind ViewModel.UndoCommand}" ToolTipService.ToolTip="Undo (Ctrl+Z)" AutomationProperties.Name="Undo">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE7A7;" FontSize="16" />
                         <TextBlock Text="Undo" />
@@ -85,7 +87,7 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
-                <Button Command="{x:Bind ViewModel.RedoCommand}">
+                <Button Command="{x:Bind ViewModel.RedoCommand}" ToolTipService.ToolTip="Redo (Ctrl+Y)" AutomationProperties.Name="Redo">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE7A6;" FontSize="16" />
                         <TextBlock Text="Redo" />
@@ -97,7 +99,7 @@
 
                 <AppBarSeparator />
 
-                <Button>
+                <Button ToolTipService.ToolTip="Your signatures" AutomationProperties.Name="Signatures">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xEE56;" FontSize="16" />
                         <TextBlock Text="Signatures" />
