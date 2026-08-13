@@ -1,6 +1,9 @@
 name: Android CI
 
 on:
+  # Lets a debug APK be built on demand for sideload testing, without waiting for
+  # a push to main or a tagged release.
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ['android/**', 'libs/pdfium/android/**', '.github/workflows/android-ci.yml']
