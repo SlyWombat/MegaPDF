@@ -35,6 +35,11 @@ the result before continuing. Paths must be **Windows** paths.
     # 5. shot 4 — save, open the scan, Shrink for email
     .\Shot-Shrink.ps1 -Pdf "<repo>\...\scanned-agreement.pdf" -Out "<repo>\...\scanned-agreement - smaller.pdf"
 
+`Test-FullBreakpoint.ps1` captures toolbar strips right at the full-label
+breakpoint with a document open and edited, so `Save ●` is showing — the widest
+the bar ever gets, and the one state where clipping could survive the fix.
+Verified 2026-08-13 at 1489 / 1494 / 1509 effective px: clean at all three.
+
 `Add-SignatureToLibrary.ps1` seeds `tools/assets/megawoman-sig.jpg` into the
 signature library (needed once per machine). `Test-ToolbarWidths.ps1` captures
 toolbar strips across a list of widths. `Shot-Now.ps1` grabs the current state.

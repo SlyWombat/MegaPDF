@@ -70,7 +70,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 
 ## Screenshots
 Shot and ready to upload: `artifacts/store/screenshots/` (3038×1989, well over the
-1366×768 minimum; 1–4 required). Captured from **1.6.1** — see that folder's
+1366×768 minimum; 1–4 required). Captured from **1.6.2** — see that folder's
 README.md to re-shoot after a UI change. Upload in this order, one caption each:
 
 | File | Caption (≤ 200 chars) |
