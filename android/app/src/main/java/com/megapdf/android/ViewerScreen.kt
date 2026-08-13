@@ -106,6 +106,8 @@ fun ViewerScreen(
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     val listState = rememberLazyListState()
+    // Hoisted so search navigation can reach a hit that is off to the side when zoomed.
+    val hScroll = rememberScrollState()
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var signDialogOpen by remember { mutableStateOf(false) }
@@ -113,14 +115,6 @@ fun ViewerScreen(
     val closeSearch = { searchOpen = false; onCloseSearch() }
     val requestClose = { if (isDirty) confirmDiscard = true else onClose() }
     androidx.activity.compose.BackHandler { if (searchOpen) closeSearch() else requestClose() }
-
-    // Bring the current hit's page into view (matches can be pages away).
-    LaunchedEffect(currentHitIndex, searchHits) {
-        val hit = searchHits.getOrNull(currentHitIndex) ?: return@LaunchedEffect
-        if (listState.layoutInfo.visibleItemsInfo.none { it.index == hit.pageIndex }) {
-            listState.animateScrollToItem(hit.pageIndex)
-        }
-    }
 
     var drawDialogOpen by remember { mutableStateOf(false) }
     LaunchedEffect(screenshotSheet) {
@@ -253,11 +247,53 @@ fun ViewerScreen(
                     }
             }
 
+            // Bring the current hit itself into view, not merely its page (#28).
+            // Zoomed in, a page can be several screens tall and wider than the
+            // display, so "the page is visible" says nothing about whether the match
+            // is: scrolling only when the page was entirely off screen left hits
+            // sitting below the fold, or off to the side, with the view never moving.
+            LaunchedEffect(currentHitIndex, searchHits, zoom, pageSizes) {
+                val hit = searchHits.getOrNull(currentHitIndex) ?: return@LaunchedEffect
+                val page = pageSizes.getOrNull(hit.pageIndex) ?: return@LaunchedEffect
+                val rect = hit.rects.firstOrNull() ?: return@LaunchedEffect
+
+                val pageWidthPx = containerWidthPx * zoom
+                val pageHeightPx = pageWidthPx * (page.heightPoints / page.widthPoints).toFloat()
+                // Page points are bottom-left origin; the overlay flips them the same way.
+                val hitTopPx = ((page.heightPoints - rect.top) / page.heightPoints).toFloat() * pageHeightPx
+                val hitHeightPx = ((rect.top - rect.bottom) / page.heightPoints).toFloat() * pageHeightPx
+                val viewportHeightPx = listState.layoutInfo.viewportSize.height.toFloat()
+                val margin = viewportHeightPx * 0.15f
+
+                // Scroll vertically unless the hit already sits comfortably on screen.
+                val itemOffset = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index == hit.pageIndex }?.offset?.toFloat()
+                val hitY = itemOffset?.plus(hitTopPx)
+                if (hitY == null || hitY < margin || hitY + hitHeightPx > viewportHeightPx - margin) {
+                    listState.animateScrollToItem(
+                        hit.pageIndex,
+                        (hitTopPx - margin).toInt().coerceAtLeast(0),
+                    )
+                }
+
+                // And horizontally, which nothing did before: when zoom > 1 the page is
+                // wider than the display and the match can be entirely off to one side.
+                if (zoom > 1f && hScroll.maxValue > 0) {
+                    val hitCentreX = ((rect.left + rect.right) / 2.0 / page.widthPoints).toFloat() * pageWidthPx
+                    val target = (hitCentreX - containerWidthPx / 2f)
+                        .toInt()
+                        .coerceIn(0, hScroll.maxValue)
+                    if (kotlin.math.abs(target - hScroll.value) > containerWidthPx * 0.1f) {
+                        hScroll.animateScrollTo(target)
+                    }
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .horizontalScroll(rememberScrollState(), enabled = zoom > 1f),
+                    .horizontalScroll(hScroll, enabled = zoom > 1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {

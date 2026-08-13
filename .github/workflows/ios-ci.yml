@@ -2,6 +2,9 @@ name: iOS CI
 
 # Development is Mac-less: this runner is the build machine (#20).
 on:
+  # Development is Mac-less, so this is the only way to compile-check an iOS change
+  # without opening a PR.
+  workflow_dispatch:
   push:
     branches: [main]
     paths: ['ios/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']

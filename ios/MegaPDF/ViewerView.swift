@@ -21,6 +21,9 @@ struct ViewerView: View {
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
 
+    /// Identity of the zero-size view pinned to the current search match.
+    private let matchAnchorID = "megapdf.current-match"
+
     var body: some View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
@@ -64,9 +67,16 @@ struct ViewerView: View {
                 .onChange(of: model.currentMatchIndex) { newValue in
                     guard model.screenshotSearchTerm == nil else { return }
                     guard let newValue, newValue < model.searchMatches.count else { return }
+                    // Two steps, and the order matters: the page scroll materialises
+                    // the row in the lazy stack so the anchor exists at all, then
+                    // centring the anchor puts the match itself on screen -- on both
+                    // axes, which is what a zoomed-in page needs.
                     withAnimation {
                         proxy.scrollTo(model.searchMatches[newValue].pageIndex,
                                        anchor: .center)
+                    }
+                    DispatchQueue.main.async {
+                        withAnimation { proxy.scrollTo(matchAnchorID, anchor: .center) }
                     }
                 }
             }
@@ -229,6 +239,22 @@ struct ViewerView: View {
             if !model.searchMatches.isEmpty {
                 searchHighlights(index: index, pageSize: size,
                                  viewSize: CGSize(width: width, height: height))
+                // ScrollViewReader can only scroll to a view, so the current match
+                // gets one: a zero-size anchor sitting exactly on it. Scrolling to the
+                // page instead left the match off screen whenever zoom made the page
+                // taller or wider than the viewport (#28).
+                if let current = model.currentMatchIndex,
+                   current < model.searchMatches.count,
+                   model.searchMatches[current].pageIndex == index,
+                   let rect = model.searchMatches[current].rects.first {
+                    let scaleX = width / size.width
+                    let scaleY = height / size.height
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .offset(x: CGFloat(rect.left) * scaleX,
+                                y: CGFloat(Double(size.height) - rect.top) * scaleY)
+                        .id(matchAnchorID)
+                }
             }
             if let stamp = model.selectedStamp, stamp.pageIndex == index {
                 StampOverlay(
