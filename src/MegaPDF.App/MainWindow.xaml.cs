@@ -32,8 +32,8 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         ViewModel.ScrollRestoreRequested += offset =>
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
-        ViewModel.SearchScrollRequested += offset =>
-            DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null));
+        ViewModel.SearchScrollRequested += target =>
+            DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
         AppWindow.Closing += OnAppWindowClosing;
 
         // Keyboard interaction with the selected signature (SDD §3.3):
@@ -895,6 +895,37 @@ public sealed partial class MainWindow : Window
         ViewMenuButton.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Brings the current search match into view. Zoomed in, a match is just as
+    /// likely to be off to the side as below the fold, and the horizontal offset used
+    /// to be left alone — so pressing next appeared to do nothing (#28). Each axis
+    /// only moves when the match is actually outside the viewport, so stepping
+    /// through hits that are already on screen doesn't jolt the page around.
+    /// </summary>
+    private void ScrollMatchIntoView(MainViewModel.SearchScrollTarget target)
+    {
+        const double margin = 24;   // don't land the hit hard against an edge
+        double? horizontal = null, vertical = null;
+
+        // Only when the content actually overflows: below that the panel is centred,
+        // so content coordinates don't line up with the scroll offset.
+        if (PagesScroll.ExtentWidth > PagesScroll.ViewportWidth + 0.5)
+        {
+            var left = PagesScroll.HorizontalOffset;
+            var right = left + PagesScroll.ViewportWidth;
+            if (target.X < left + margin || target.X + target.Width > right - margin)
+                horizontal = Math.Max(0, target.X + target.Width / 2 - PagesScroll.ViewportWidth / 2);
+        }
+
+        var top = PagesScroll.VerticalOffset;
+        var bottom = top + PagesScroll.ViewportHeight;
+        if (target.Y < top + margin || target.Y + target.Height > bottom - margin)
+            vertical = Math.Max(0, target.Y - PagesScroll.ViewportHeight / 3);
+
+        if (horizontal is not null || vertical is not null)
+            PagesScroll.ChangeView(horizontal, vertical, null);
+    }
+
     private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>
         await ViewModel.FitWidthAsync(PagesScroll.ViewportWidth);
 
@@ -922,7 +953,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             Title = "Restore unsaved changes?",
-            Content = $"MegaPDF closed unexpectedly with unsaved changes to {Path.GetFileName(session.DocumentPath)}.",
+            Content = $"{MainViewModel.AppName} closed unexpectedly with unsaved changes to {Path.GetFileName(session.DocumentPath)}.",
             PrimaryButtonText = "Restore",
             CloseButtonText = "Discard",
             DefaultButton = ContentDialogButton.Primary,

@@ -1,7 +1,7 @@
 # Shared harness for the Microsoft Store screenshots (tools/screenshots-windows).
 # Dot-source this from the step scripts; see README.md for the run order.
 # Buttons all carry AutomationProperties.Name since d250120, so plain
-# Name+ControlType matching works — no TreeWalker climb needed.
+# Name+ControlType matching works -- no TreeWalker climb needed.
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
@@ -77,7 +77,7 @@ function Shot($h, $name) {
     $g.CopyFromScreen($r.Left, $r.Top, 0, 0, $bmp.Size)
     $path = Join-Path $global:SHOTDIR "$name.png"
     $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-    # mean brightness over a sampled grid — a locked session captures pure black
+    # mean brightness over a sampled grid -- a locked session captures pure black
     $sum = 0; $n = 0
     for ($x = 5; $x -lt $bmp.Width; $x += 60) { for ($y = 5; $y -lt $bmp.Height; $y += 60) {
         $c = $bmp.GetPixel($x, $y); $sum += ($c.R + $c.G + $c.B) / 3; $n++ } }
@@ -116,19 +116,32 @@ function Find-Dialog($titles) {
     return [IntPtr]::Zero
 }
 function Send-Path($path) {
-    Start-Sleep -Seconds 3
-    $dlg = Find-Dialog @("Open", "Save As", "Save a smaller copy")
+    # Poll rather than sleep a fixed time: the first launch after a build or install
+    # can take several seconds longer to put the picker up.
+    $dlg = [IntPtr]::Zero
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Milliseconds 700
+        $dlg = Find-Dialog @("Open", "Save As", "Save a smaller copy")
+        if ($dlg -ne [IntPtr]::Zero) { break }
+    }
     if ($dlg -ne [IntPtr]::Zero) {
         $dr = New-Object Win+RECT; [Win]::GetWindowRect($dlg, [ref]$dr) | Out-Null
         Click-At ([int](($dr.Left + $dr.Right) / 2)) ([int]($dr.Top + 20))
         [Win]::SetForegroundWindow($dlg) | Out-Null
         Start-Sleep -Milliseconds 800
         Write-Host ("  picker foreground: '{0}'" -f [Win]::Title([Win]::GetForegroundWindow()))
-    } else { Write-Host "  !! no picker dialog found" }
+    } else {
+        # Bailing out matters: without a picker in the foreground the SendKeys below
+        # would type a file path and press Enter into whatever window happens to have
+        # focus, which can open files in other apps. Seen for real.
+        Write-Host "  !! no picker dialog found -- not typing (would go to the wrong window)"
+        return $false
+    }
     [System.Windows.Forms.SendKeys]::SendWait($path.Replace("(", "{(}").Replace(")", "{)}"))
     Start-Sleep -Milliseconds 900
     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
     Start-Sleep -Seconds 6
+    return $true
 }
 
 # WinUI keeps painting access-key badges on the toolbar until it leaves menu mode.

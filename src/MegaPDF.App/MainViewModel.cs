@@ -506,7 +506,10 @@ public partial class MainViewModel(Window window) : ObservableObject
         : $"{CurrentSearchMatch} of {SearchMatchCount}";
 
     /// <summary>Raised when navigation lands on a match — the view scrolls it into view.</summary>
-    public event Action<double>? SearchScrollRequested;
+    /// <summary>Where the current match sits in the scroll content, in DIPs.</summary>
+    public readonly record struct SearchScrollTarget(double X, double Y, double Width, double Height);
+
+    public event Action<SearchScrollTarget>? SearchScrollRequested;
 
     /// <summary>Whole-document search (as-you-type; the view debounces the calls).</summary>
     public async Task SearchAsync(string term)
@@ -611,13 +614,24 @@ public partial class MainViewModel(Window window) : ObservableObject
     private void ScrollToCurrentMatch()
     {
         var (pageIndex, rects) = _searchMatches[CurrentSearchMatch - 1];
-        // Mirrors the layout math in OnPagesScrollViewChanged: 24 top padding, 16 spacing.
+        var toDip = 96.0 / 72 * ZoomFactor;
+
+        // Mirrors the layout math in OnPagesScrollViewChanged: 24 panel padding,
+        // 16 spacing. The panel is centre-aligned, so a page's left edge sits at the
+        // padding whenever the content is wide enough to scroll at all — which is the
+        // only case the horizontal offset matters.
         var top = 24d;
         for (var i = 0; i < pageIndex && i < Pages.Count; i++)
             top += Pages[i].Height + 16;
-        top += rects[0].Y * (96.0 / 72 * ZoomFactor);
-        // Land the match about a third down the viewport, not hard against the top.
-        SearchScrollRequested?.Invoke(Math.Max(0, top - 120));
+
+        // A match can wrap across lines; take the union so the whole hit is targeted.
+        var left = rects.Min(r => r.X) * toDip;
+        var right = rects.Max(r => r.X + r.Width) * toDip;
+        var matchTop = rects.Min(r => r.Y) * toDip;
+        var matchBottom = rects.Max(r => r.Y + r.Height) * toDip;
+
+        SearchScrollRequested?.Invoke(new SearchScrollTarget(
+            24 + left, top + matchTop, right - left, matchBottom - matchTop));
     }
 
     /// <summary>Hit-tests a click (page-space points, top-left origin): form fields, then body text.</summary>

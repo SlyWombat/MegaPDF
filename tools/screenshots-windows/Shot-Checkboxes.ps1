@@ -5,7 +5,7 @@ Front $h
 Start-Sleep -Seconds 3
 Click-InShot $h 870 978      # "Include delivery and pickup"
 Start-Sleep -Seconds 2
-Click-InShot $h 870 1053      # "Damage insurance accepted" — third box stays empty
+Click-InShot $h 870 1053      # "Damage insurance accepted" -- third box stays empty
 Start-Sleep -Seconds 2
 Park $h
 Shot $h "02-checkbox"
