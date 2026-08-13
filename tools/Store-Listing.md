@@ -83,6 +83,3 @@ README.md to re-shoot after a UI change. Upload in this order, one caption each:
 Shot 3 is click-to-place, not drag: picking a signature from the library arms
 placement and the next click on the page drops it there, selected for nudging.
 Don't write a caption that promises a drag.
-
-There is also a stale `02-checkboxes.png` in that folder from 2026-07-23 — 1044×788
-(under the minimum) and a pre-Find toolbar. Delete it rather than upload it.
