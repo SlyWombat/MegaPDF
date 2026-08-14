@@ -1,13 +1,26 @@
 # App Review Information — MegaPDF iOS
 
 Apple rejected submission `17d75c27-bffc-4e94-b0de-a91ad6e16591` (2026-08-14) under
-**Guideline 2.1 — Information Needed**. Nothing was reported as broken; the review
-notes were empty, so Apple asked for seven things before continuing.
+**Guideline 2.1 — Information Needed**. Nothing was reported as broken.
+
+The Notes field was **not** empty — it held 357 characters covering roughly items 3
+and 4:
+
+> MegaPDF is a local-only PDF form filler: no account, no server, no network
+> access. To test: open any PDF via the Files picker (any form with checkboxes
+> works - e.g. an IRS form), tap a checkbox to check it, tap Sign -> Draw to create
+> a signature, tap the page to place it, then Save. The app writes back to the
+> original file via the system file coordinator.
+
+That was accurate but far short of Apple's checklist: no screen recording, no list
+of devices tested, no statement about external services, regions or regulated
+material. The replacement below answers all seven points explicitly, because a
+2.1 rejection is answered by completeness, not brevity.
 
 Paste the block below into **App Store Connect → your version → App Review
-Information → Notes**, and reply to the Resolution Center message with the same
-text plus the screen recording. Keeping it here means the next submission starts
-with it already written.
+Information → Notes** (replacing what is there), and reply to the Resolution
+Center message with the same text plus the screen recording. Keeping it here means
+the next submission starts with it already written.
 
 ---
 
