@@ -77,6 +77,29 @@ worked fine against the console-created app record.
 
 ## Subsequent releases
 
-Bump versions → tag → download AAB → Play Console → Internal testing → new
-release. (Automating the Console upload via a service-account API key is a
-possible follow-up in #19.)
+Bump `versionCode` and `versionName` → push a tag `android-v<version>` on **main**
+→ `android-release.yml` builds the signed AAB, attaches it to a GitHub release and
+puts it on the **internal** track. Nothing else is automatic.
+
+**Promoting to production is a separate, deliberate step** — `play_submit.py` only
+ever touches `internal`. Either use the Play Console, or drive the API directly:
+create an edit, `PUT /edits/{id}/tracks/production` with
+`{"releases":[{"versionCodes":["<vc>"],"status":"completed","releaseNotes":[…]}]}`,
+then `POST /edits/{id}:commit`. Service-account key at
+`SlyTab/secrets/play-service-account.json`; run it with `/usr/bin/python3` (the
+Windows Python shim ships a broken `cryptography`).
+
+Reading state is safe: `edits.insert` → `tracks.list` → `edits.delete` changes
+nothing. **The API cannot tell you the review verdict** — track `status=completed`
+describes the rollout, not Google's decision. Only Play Console → Publishing
+overview shows whether a release is in review, approved or rejected; a 404 on
+`https://play.google.com/store/apps/details?id=ca.electricrv.megapdf` means it is
+not public yet.
+
+### Release log
+
+| Version | vc | Track | Notes |
+|---|---|---|---|
+| 0.1.1 | 2 | internal | first API upload end to end |
+| 1.0.0 | 4 | production | submitted 2026-08-09 for Google's first-app review; **shipped the default Android launcher icon** (no mipmap resources existed) |
+| 1.1.2 | 7 | production | promoted 2026-08-14, replacing vc4 while that review was still pending — accepted a likely review restart to avoid a first public release with a placeholder icon and misplaced highlights. Adds search, the real launcher icon, the CropBox coordinate fix (#28) and scroll-to-hit. |

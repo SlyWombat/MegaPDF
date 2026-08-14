@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Google Play internal-track submission via the Play Developer API.
 
+Internal track only, by design: promoting to production is a deliberate act and
+lives in android/RELEASING.md, not in the tag pipeline.
+
 Used by android-release.yml (secret PLAY_SERVICE_ACCOUNT_JSON) and manually.
 RS256 JWT via openssl (no google libs). Usage as a library or:
   play_api.py probe   — token + edits.insert probe for the package
