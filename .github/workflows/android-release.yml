@@ -2,8 +2,9 @@ name: Android Release
 
 # Tag a commit `android-v0.1.0` (etc.) to build the signed release AAB.
 # Signing uses the Play *upload* key from repo secrets (Play App Signing holds
-# the actual release key). The AAB is attached to a GitHub release; upload it
-# to the Play Console track manually until Play API upload is wired up (#19).
+# the actual release key). The AAB is attached to a GitHub release and pushed to
+# the Play **internal** track by tools/play_submit.py. Promotion to production is
+# deliberately NOT automated -- see android/RELEASING.md.
 on:
   push:
     tags: ['android-v*']
