@@ -27,13 +27,13 @@ Never print or commit any of these. Pipe files straight into `gh secret set`.
 
 | Credential | Location | Notes |
 |---|---|---|
-| **Apple team ASC API key** | `SplitWise/secrets/AuthKey_QUC9SR2G3F.p8`; issuer id in `SplitWise/.env` (`APPLE_ASC_ISSUER_ID`) | Team key, works for provisioning + uploads + full ASC API. Repo secrets: `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` |
-| **Apple Team ID** | `V97FBD9SXN` | ⚠️ `APPLEDEVID` in SplitWise/.env is a DIFFERENT identifier — do not use it as the team id. Read the real one off any signing cert identity |
+| **Apple team ASC API key** | `SlyTab/secrets/AuthKey_QUC9SR2G3F.p8`; issuer id in `SlyTab/.env` (`APPLE_ASC_ISSUER_ID`) | Team key, works for provisioning + uploads + full ASC API. Repo secrets: `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_KEY_P8` |
+| **Apple Team ID** | `V97FBD9SXN` | ⚠️ `APPLEDEVID` in SlyTab/.env is a DIFFERENT identifier — do not use it as the team id. Read the real one off any signing cert identity |
 | **Apple Distribution cert + App Store profile** | Minted **via ASC API** per app (CSR with openssl → `POST /v1/certificates` type DISTRIBUTION → `POST /v1/profiles` type IOS_APP_STORE). Local copies in `~/.megapdf-keys/ios-dist/` pattern; secrets `IOS_DIST_P12_B64` / `IOS_DIST_P12_PASSWORD` / `IOS_DIST_PROFILE_B64` | Expire yearly — calendar it. p12 via `openssl pkcs12 -export` (add `-legacy` if macOS rejects it — SlyLED lesson) |
 | **Android upload keystore** | Per-product, generated with Android Studio's bundled keytool (`/mnt/c/Program Files/Android/Android Studio/jre/bin/keytool.exe` — no JDK in WSL). Kept outside OneDrive (`C:\Users\...\.megapdf-keys\`); secrets `ANDROID_UPLOAD_*` | Play App Signing holds the real key; upload keys are resettable |
-| **Play service account** | `SplitWise/secrets/play-service-account.json` (`play-publisher@electricrv-play.iam.gserviceaccount.com`); repo secret `PLAY_SERVICE_ACCOUNT_JSON` | Account-level access → works for ALL Play apps. ⚠️ Play Console's old "API access" page is GONE — service accounts are invited via **Users and permissions** like a human |
+| **Play service account** | `SlyTab/secrets/play-service-account.json` (`play-publisher@electricrv-play.iam.gserviceaccount.com`); repo secret `PLAY_SERVICE_ACCOUNT_JSON` | Account-level access → works for ALL Play apps. ⚠️ Play Console's old "API access" page is GONE — service accounts are invited via **Users and permissions** like a human |
 | **cPanel (website deploys)** | `Lighting Arduino/.env` (`CPANEL_HOST/PORT/USER/TOKEN`) | UAPI client pattern: that repo's `server/deploy.py` |
-| **ASC API JWT helper** | `SplitWise/scripts/ops/asc-api.sh` (GET/POST/PATCH/DELETE any ASC endpoint) | Run with `PATH=/usr/bin:/bin` — the Windows Python shim breaks it |
+| **ASC API JWT helper** | `SlyTab/scripts/ops/asc-api.sh` (GET/POST/PATCH/DELETE any ASC endpoint) | Run with `PATH=/usr/bin:/bin` — the Windows Python shim breaks it |
 
 ## 3. iOS pipeline (the shape that works)
 
