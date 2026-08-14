@@ -118,6 +118,12 @@ not in the 1.0 builds, so upload it with the update that carries Find.
 
 ## App Review Information
 
+> **Leaving the Notes field empty got 1.0 rejected** under Guideline 2.1 on
+> 2026-08-14 — Apple asked for seven pieces of information before continuing the
+> review. The answers are written out in `docs/app-review-notes.md`; paste them
+> into Notes for every submission.
+
+
 | Field | Value |
 |---|---|
 | Sign-in required | **No** — there are no accounts |
