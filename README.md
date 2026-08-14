@@ -12,6 +12,10 @@ MegaPDF does four things exceptionally well and deliberately nothing else:
 3. **Apply signatures** — keep a small personal library of signature images; drag one onto the page.
 4. **Save** — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs.
 
+Also included, because long documents need it: **Find** (the toolbar button, or
+`Ctrl+F`) searches the whole document — type and every match lights up, Enter
+walks through them.
+
 No account. No cloud. No subscription. All processing is local.
 
 ## Design

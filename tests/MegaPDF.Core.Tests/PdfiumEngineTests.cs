@@ -87,6 +87,71 @@ public class PdfiumEngineTests : IDisposable
         Assert.Equal(PdfiumNative.FPDF_ERR_FORMAT, ex.ErrorCode);
     }
 
+    // --- Text search (issue #26: case-insensitive substring, rects in top-left page space) ---
+
+    [Fact]
+    public void FindText_MatchesCaseInsensitively()
+    {
+        using var doc = _engine.Open(WriteSamplePdf()); // draws "Hello MegaPDF"
+        using var page = doc.GetPage(0);
+
+        var matches = page.FindText("megapdf");
+
+        var match = Assert.Single(matches);
+        var rect = Assert.Single(match.Rects);
+        // 36pt Helvetica at 72,700 (PDF bottom-left): "MegaPDF" starts after "Hello ",
+        // and 792-700=92 puts the baseline — so the glyph top — near y≈60 in our space.
+        Assert.InRange(rect.X, 100, 300);
+        Assert.InRange(rect.Y, 40, 92);
+        Assert.InRange(rect.Width, 50, 300);
+        Assert.InRange(rect.Height, 10, 45);
+    }
+
+    [Fact]
+    public void FindText_ReturnsEveryOccurrence_InReadingOrder()
+    {
+        var path = Path.Combine(_dir, "fish.pdf");
+        File.WriteAllBytes(path, SamplePdf.Build("one fish two fish red fish"));
+        using var doc = _engine.Open(path);
+        using var page = doc.GetPage(0);
+
+        var matches = page.FindText("FISH");
+
+        Assert.Equal(3, matches.Count);
+        var xs = matches.Select(m => m.Rects[0].X).ToList();
+        Assert.True(xs[0] < xs[1] && xs[1] < xs[2], "matches should come back left to right");
+    }
+
+    [Fact]
+    public void FindText_SpansTextObjectBoundaries()
+    {
+        var path = Path.Combine(_dir, "multirun.pdf");
+        File.WriteAllBytes(path, SamplePdf.BuildMultiRun()); // "Hello " + "cruel " + "world"
+        using var doc = _engine.Open(path);
+        using var page = doc.GetPage(0);
+
+        var matches = page.FindText("hello cruel");
+
+        var match = Assert.Single(matches);
+        Assert.NotEmpty(match.Rects);
+    }
+
+    [Fact]
+    public void FindText_NoMatch_ReturnsEmpty()
+    {
+        using var doc = _engine.Open(WriteSamplePdf());
+        using var page = doc.GetPage(0);
+        Assert.Empty(page.FindText("zebra"));
+    }
+
+    [Fact]
+    public void FindText_EmptyTerm_ReturnsEmpty()
+    {
+        using var doc = _engine.Open(WriteSamplePdf());
+        using var page = doc.GetPage(0);
+        Assert.Empty(page.FindText(""));
+    }
+
     private string WriteSamplePdf()
     {
         var path = Path.Combine(_dir, $"sample-{Guid.NewGuid():N}.pdf");

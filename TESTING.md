@@ -52,6 +52,19 @@ scan) to cover it with white. Click a whiteout to select it; ✕ or Delete remov
 whiteout), type, press Enter. The new text behaves like any other text afterwards:
 click it to edit, clear it to delete.
 
+**Find** — press **Ctrl+F** and a small find bar appears at the top right. Type and it
+searches the whole document as you go (capitals don't matter): every match on the page
+lights up, the current one stands out from the rest, and the box next to the field reads
+"3 of 17" — or "No results". **Enter** goes to the next match and **Shift+Enter** the
+previous (while the find box still has focus; the arrow buttons always work), and both
+wrap around from the end of the document back to the beginning. **Esc**
+(or the ✕) closes the bar and clears the highlights. Try it on something long, and try a
+phrase that runs across two lines.
+
+**About** — the ⚙ Settings flyout ends with an About section: the version number, a link
+to the source on GitHub, and **Third-party notices** — the licences of the open-source
+pieces MegaPDF is built on. Check the notices dialog opens and scrolls.
+
 **Print** — the Print button (or Ctrl+P) opens the normal Windows print dialog with a
 preview; pick a printer and print. What you see, including your edits, is what prints.
 
@@ -75,11 +88,28 @@ Scroll through a long document; pages should appear as you reach them.
 
 ## Known limitations (not bugs)
 
-- Text in scanned/photographed PDFs can't be edited (there's no OCR — by design).
+- Text in scanned/photographed PDFs can't be edited (there's no OCR — by design), and
+  Ctrl+F can't find it either: to the app, a scan is a picture, not words.
+- Find is plain text only — no wildcards, no "match case" or "whole word" options, and
+  no replace. On a very long document the count appears when the whole sweep finishes,
+  not progressively.
 - Editing text sometimes substitutes a similar font, with a notice — expected when
   the document doesn't embed a complete font.
 - Password-protected PDFs show an error instead of a password prompt.
 - No page add/remove/reorder, no merging — out of scope for 1.0.
+
+## Automated coverage (for contributors, not testers)
+
+Search is covered by engine-level tests on all three platforms, so a parity break shows
+up in CI rather than in your hands: `tests/MegaPDF.Core.Tests/PdfiumEngineTests.cs`
+(five tests — case-insensitive matching with a plausible rect, every occurrence in
+reading order, a match spanning text-object boundaries, no-match, empty term),
+`ios/MegaPDFTests/SearchTests.swift`, and
+`android/engine/src/androidTest/java/com/megapdf/engine/TextSearchTest.kt` — the last two
+run against the same shared fixture PDFs. The About screen's notices formatting is
+covered by `android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt`.
+None of this replaces the manual pass above: nothing automated checks how the find bar
+*feels*.
 
 ## Reporting
 

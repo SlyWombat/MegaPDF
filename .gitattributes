@@ -1,0 +1,4 @@
+# Generated attribution files are compared byte-for-byte by the CI drift check
+# (tools/gen_third_party_notices.py writes LF). Pin them so a Windows checkout
+# can't rewrite the line endings and make a regenerated file look changed.
+THIRD-PARTY-NOTICES.txt text eol=lf

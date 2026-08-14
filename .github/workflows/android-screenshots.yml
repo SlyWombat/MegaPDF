@@ -1,7 +1,7 @@
 name: Android Screenshots
 
 # Manual: captures Play Store phone screenshots from an emulator using the
-# app's `--es screenshot <state>` launch extra (home / viewer / sign / draw).
+# app's `--es screenshot <state>` launch extra (home / viewer / search / sign / draw).
 # Download the artifact; tools/play_submit.py-style API upload puts them on
 # the listing.
 on:

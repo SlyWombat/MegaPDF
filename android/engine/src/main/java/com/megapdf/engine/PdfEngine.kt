@@ -205,6 +205,30 @@ class PdfPage internal constructor(
             PdfiumNative.nativeGetStampImagePacked(handle, annotIndex)
         }
 
+    /**
+     * Case-insensitive literal substring search on this page (#26), matches in
+     * reading order. A match that wraps across lines carries one rect per line.
+     */
+    suspend fun search(query: String): List<SearchMatch> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        if (query.isEmpty()) return@withContext emptyList()
+        val packed = PdfiumNative.nativeSearchPagePacked(handle, query)
+        val matches = ArrayList<SearchMatch>()
+        var i = 0
+        while (i < packed.size) {
+            val rectCount = packed[i].toInt()
+            i++
+            matches += SearchMatch(
+                (0 until rectCount).map { r ->
+                    val j = i + r * 4
+                    PdfRect(packed[j], packed[j + 1], packed[j + 2], packed[j + 3])
+                }
+            )
+            i += rectCount * 4
+        }
+        matches
+    }
+
     // NonCancellable: a cancelled render job's finally-block close must still run.
     suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
         if (!closed) {
@@ -226,6 +250,9 @@ data class FormField(val isRadio: Boolean, val isChecked: Boolean, val rect: Pdf
 
 /** A MegaPDF-placed stamp annotation (`mark:` check mark or `sig:` signature). */
 data class Stamp(val annotIndex: Int, val id: String, val rect: PdfRect)
+
+/** One search hit on a page; several rects when the hit wraps across lines. */
+data class SearchMatch(val rects: List<PdfRect>)
 
 class PdfPasswordException : Exception("Password required or incorrect password")
 

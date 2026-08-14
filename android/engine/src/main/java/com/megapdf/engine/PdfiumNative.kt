@@ -46,6 +46,10 @@ internal object PdfiumNative {
     ): Boolean
     external fun nativeGetStampImagePacked(handle: Long, annotIndex: Int): IntArray?
 
+    // Text search (#26). Case-insensitive literal substring; packed
+    // [rectCount, l, b, r, t...] per match, PDF points, bottom-left origin.
+    external fun nativeSearchPagePacked(handle: Long, query: String): DoubleArray
+
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4
 }

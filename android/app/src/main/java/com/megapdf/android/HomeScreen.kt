@@ -10,10 +10,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -32,6 +36,49 @@ import java.util.Date
 
 @Composable
 fun HomeScreen(
+    recents: List<RecentEntry>,
+    error: String?,
+    onOpenClick: () -> Unit,
+    onRecentClick: (RecentEntry) -> Unit,
+) {
+    var aboutOpen by remember { mutableStateOf(false) }
+    var noticesOpen by remember { mutableStateOf(false) }
+
+    Box(Modifier.fillMaxSize()) {
+        HomeContent(
+            recents = recents,
+            error = error,
+            onOpenClick = onOpenClick,
+            onRecentClick = onRecentClick,
+        )
+        IconButton(
+            onClick = { aboutOpen = true },
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+        ) {
+            Icon(
+                Icons.Outlined.Info,
+                contentDescription = "About MegaPDF",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (noticesOpen) {
+            ThirdPartyNoticesScreen(onClose = { noticesOpen = false })
+        }
+    }
+
+    if (aboutOpen) {
+        AboutDialog(
+            onDismiss = { aboutOpen = false },
+            onShowNotices = {
+                aboutOpen = false
+                noticesOpen = true
+            },
+        )
+    }
+}
+
+@Composable
+private fun HomeContent(
     recents: List<RecentEntry>,
     error: String?,
     onOpenClick: () -> Unit,

@@ -33,6 +33,25 @@ public sealed record PageView(
 {
     /// <summary>Narrator/UIA name for the page surface.</summary>
     public string AccessibleName => $"Page {Index + 1}";
+
+    /// <summary>Find-match highlights at this slot's zoom; empty when no search is active.</summary>
+    public IReadOnlyList<SearchHighlight> Highlights { get; init; } = [];
+}
+
+/// <summary>One find-match rectangle on a page, in DIPs (zoom baked in at creation).</summary>
+public sealed record SearchHighlight(double X, double Y, double Width, double Height, bool IsCurrent)
+{
+    private static Windows.UI.Color Accent => (Windows.UI.Color)Application.Current.Resources["SystemAccentColor"];
+
+    public Thickness Margin => new(X, Y, 0, 0);
+
+    /// <summary>Translucent accent fill; the current match reads stronger (issue #26).</summary>
+    public Brush Fill => new SolidColorBrush(Accent) { Opacity = IsCurrent ? 0.42 : 0.18 };
+
+    /// <summary>The current match is also outlined so it stands out beside its neighbors.</summary>
+    public Brush Stroke => new SolidColorBrush(Accent) { Opacity = IsCurrent ? 1 : 0 };
+
+    public double StrokeThickness => IsCurrent ? 1.5 : 0;
 }
 
 /// <summary>A library signature shown in the flyout.</summary>
@@ -180,10 +199,14 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public string OpenDocumentName => DocumentPath is null ? "" : Path.GetFileName(DocumentPath);
 
-    // Unsaved-changes dot convention (SDD §2.2).
+    // Unsaved-changes dot convention (SDD §2.2). "Mega PDF" with the space is the
+    // reserved Store name and the manifest DisplayName; the title bar is what the
+    // listing's screenshots show, so it has to read the same.
+    public const string AppName = "Mega PDF";
+
     public string WindowTitle =>
-        DocumentPath is null ? "MegaPDF"
-        : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName} — MegaPDF";
+        DocumentPath is null ? AppName
+        : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName} — {AppName}";
 
     public string SaveButtonLabel => HasUnsavedChanges ? "Save ●" : "Save";
 
@@ -246,6 +269,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         DocumentPath = path;
         HasUnsavedChanges = false;
         _undoStack.Clear();
+        ClearSearch(); // matches belong to the previous document
         _journal.BeginSession(path);
         _recentFiles.Add(path);
         if (rememberedView is not null)
@@ -302,7 +326,8 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     private PageView Placeholder(int index, double pointsWidth, double pointsHeight) =>
         new(index, null, pointsWidth, pointsHeight,
-            pointsWidth * 96 / 72 * ZoomFactor, pointsHeight * 96 / 72 * ZoomFactor, []);
+            pointsWidth * 96 / 72 * ZoomFactor, pointsHeight * 96 / 72 * ZoomFactor, [])
+        { Highlights = HighlightsFor(index, ZoomFactor) };
 
     // --- Viewport-window rendering (SDD §4.2: visible pages ± 2, evict the rest) ---
 
@@ -383,7 +408,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         bitmap.Invalidate();
 
         return new PageView(pageIndex, bitmap, pointsW, pointsH,
-            pointsW * 96 / 72 * zoom, pointsH * 96 / 72 * zoom, regions);
+            pointsW * 96 / 72 * zoom, pointsH * 96 / 72 * zoom, regions)
+        { Highlights = HighlightsFor(pageIndex, zoom) };
     }
 
     /// <summary>Interaction map in HitTest priority order: stamps, form fields, squares, text.</summary>
@@ -454,6 +480,158 @@ public partial class MainViewModel(Window window) : ObservableObject
         if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
             return;
         Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
+    }
+
+    // --- Find in document (Ctrl+F, issue #26: simple search) ---
+
+    private readonly List<(int PageIndex, IReadOnlyList<PdfRect> Rects)> _searchMatches = [];
+    private string _searchTerm = "";
+    private int _searchGeneration;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchStatus), nameof(HasSearchResults))]
+    private int _searchMatchCount;
+
+    /// <summary>1-based position of the current match; 0 when there is none.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SearchStatus))]
+    private int _currentSearchMatch;
+
+    public bool HasSearchResults => SearchMatchCount > 0;
+
+    /// <summary>The find bar's readout: "N of M", "No results", or blank without a term.</summary>
+    public string SearchStatus =>
+        _searchTerm.Length == 0 ? ""
+        : SearchMatchCount == 0 ? "No results"
+        : $"{CurrentSearchMatch} of {SearchMatchCount}";
+
+    /// <summary>Raised when navigation lands on a match — the view scrolls it into view.</summary>
+    /// <summary>Where the current match sits in the scroll content, in DIPs.</summary>
+    public readonly record struct SearchScrollTarget(double X, double Y, double Width, double Height);
+
+    public event Action<SearchScrollTarget>? SearchScrollRequested;
+
+    /// <summary>Whole-document search (as-you-type; the view debounces the calls).</summary>
+    public async Task SearchAsync(string term)
+    {
+        _searchTerm = term;
+        var generation = ++_searchGeneration;
+        var openGeneration = _openGeneration;
+        var doc = _document;
+
+        if (doc is null || term.Length == 0)
+        {
+            ResetSearchState();
+            return;
+        }
+
+        // Page by page off the UI thread, abandoning as soon as a newer search
+        // (or document) supersedes this one — same idea as viewport rendering.
+        var found = await Task.Run(() =>
+        {
+            var list = new List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>();
+            for (var i = 0; i < doc.PageCount; i++)
+            {
+                if (generation != _searchGeneration || openGeneration != _openGeneration)
+                    return null;
+                using var page = doc.GetPage(i);
+                foreach (var match in page.FindText(term))
+                    list.Add((i, match.Rects));
+            }
+            return list;
+        });
+
+        if (found is null || generation != _searchGeneration || openGeneration != _openGeneration)
+            return;
+
+        _searchMatches.Clear();
+        _searchMatches.AddRange(found);
+        SearchMatchCount = _searchMatches.Count;
+        CurrentSearchMatch = SearchMatchCount > 0 ? 1 : 0;
+        OnPropertyChanged(nameof(SearchStatus));
+        ApplySearchHighlights();
+        if (CurrentSearchMatch > 0)
+            ScrollToCurrentMatch();
+    }
+
+    /// <summary>Next/previous match (+1/−1), wrapping around the document ends.</summary>
+    public void MoveToMatch(int delta)
+    {
+        if (SearchMatchCount == 0)
+            return;
+        CurrentSearchMatch = (CurrentSearchMatch - 1 + delta + SearchMatchCount) % SearchMatchCount + 1;
+        ApplySearchHighlights();
+        ScrollToCurrentMatch();
+    }
+
+    /// <summary>Close/Esc: drop the term, the matches, and every highlight.</summary>
+    public void ClearSearch()
+    {
+        _searchGeneration++;
+        _searchTerm = "";
+        ResetSearchState();
+    }
+
+    private void ResetSearchState()
+    {
+        _searchMatches.Clear();
+        SearchMatchCount = 0;
+        CurrentSearchMatch = 0;
+        OnPropertyChanged(nameof(SearchStatus));
+        ApplySearchHighlights();
+    }
+
+    /// <summary>Highlight rectangles for one page slot, in DIPs at the given zoom.</summary>
+    private IReadOnlyList<SearchHighlight> HighlightsFor(int pageIndex, double zoom)
+    {
+        if (_searchMatches.Count == 0)
+            return [];
+        var toDip = 96.0 / 72 * zoom;
+        var highlights = new List<SearchHighlight>();
+        for (var m = 0; m < _searchMatches.Count; m++)
+        {
+            if (_searchMatches[m].PageIndex != pageIndex)
+                continue;
+            foreach (var rect in _searchMatches[m].Rects)
+                highlights.Add(new SearchHighlight(
+                    rect.X * toDip, rect.Y * toDip, rect.Width * toDip, rect.Height * toDip,
+                    IsCurrent: m == CurrentSearchMatch - 1));
+        }
+        return highlights;
+    }
+
+    /// <summary>Re-stamps every page slot whose highlights changed (bitmaps are kept).</summary>
+    private void ApplySearchHighlights()
+    {
+        for (var i = 0; i < Pages.Count; i++)
+        {
+            var highlights = HighlightsFor(i, ZoomFactor);
+            if (!highlights.SequenceEqual(Pages[i].Highlights))
+                Pages[i] = Pages[i] with { Highlights = highlights };
+        }
+    }
+
+    private void ScrollToCurrentMatch()
+    {
+        var (pageIndex, rects) = _searchMatches[CurrentSearchMatch - 1];
+        var toDip = 96.0 / 72 * ZoomFactor;
+
+        // Mirrors the layout math in OnPagesScrollViewChanged: 24 panel padding,
+        // 16 spacing. The panel is centre-aligned, so a page's left edge sits at the
+        // padding whenever the content is wide enough to scroll at all — which is the
+        // only case the horizontal offset matters.
+        var top = 24d;
+        for (var i = 0; i < pageIndex && i < Pages.Count; i++)
+            top += Pages[i].Height + 16;
+
+        // A match can wrap across lines; take the union so the whole hit is targeted.
+        var left = rects.Min(r => r.X) * toDip;
+        var right = rects.Max(r => r.X + r.Width) * toDip;
+        var matchTop = rects.Min(r => r.Y) * toDip;
+        var matchBottom = rects.Max(r => r.Y + r.Height) * toDip;
+
+        SearchScrollRequested?.Invoke(new SearchScrollTarget(
+            24 + left, top + matchTop, right - left, matchBottom - matchTop));
     }
 
     /// <summary>Hit-tests a click (page-space points, top-left origin): form fields, then body text.</summary>

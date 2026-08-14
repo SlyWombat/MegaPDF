@@ -9,6 +9,20 @@ on:
     paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**']
 
 jobs:
+  # The bundled notices must match the vendored license sets — a PDFium bump that
+  # changes licenses/ would otherwise ship stale attribution silently. Runs on
+  # Linux so the generator's LF output is compared against an LF checkout.
+  notices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Regenerate and check for drift
+        run: |
+          python3 tools/gen_third_party_notices.py
+          git diff --exit-code -- '*THIRD-PARTY-NOTICES.txt' \
+            || { echo "::error::Third-party notices are stale — run tools/gen_third_party_notices.py and commit the result"; exit 1; }
+
   build-and-test:
     runs-on: windows-latest
     steps:

@@ -216,12 +216,40 @@ internal sealed class PdfiumPage : IPdfPage
             PdfiumNative.FORM_OnAfterLoadPage(handle, forms);
             Width = PdfiumNative.FPDF_GetPageWidthF(handle);
             Height = PdfiumNative.FPDF_GetPageHeightF(handle);
+            // pdfium reports page *content* in user space, whose origin is the
+            // MediaBox — but it renders, and sizes, the CropBox. When the two differ
+            // (imposed pages, trimmed scans) every coordinate we hand the UI is out by
+            // the difference: highlights, checkbox squares and click targets all land
+            // on the wrong part of the page (#28). Everything below converts through
+            // the crop origin instead of assuming it is (0,0).
+            if (PdfiumNative.FPDFPage_GetCropBox(handle, out var cl, out var cb, out var cr, out var ct)
+                && cr > cl && ct > cb)
+            {
+                _cropLeft = cl;
+                _cropTop = ct;
+            }
+            else
+            {
+                _cropLeft = 0;
+                _cropTop = Height;
+            }
         }
     }
 
     public int Index { get; }
     public double Width { get; }
     public double Height { get; }
+
+    private readonly double _cropLeft;
+    private readonly double _cropTop;
+
+    /// <summary>PDF user space (bottom-left, MediaBox origin) to view space (top-left, crop origin).</summary>
+    private double ViewX(double userX) => userX - _cropLeft;
+    private double ViewY(double userTop) => _cropTop - userTop;
+
+    /// <summary>View space back to PDF user space.</summary>
+    private double UserX(double viewX) => viewX + _cropLeft;
+    private double UserY(double viewY) => _cropTop - viewY;
 
     public RenderedPage Render(int pixelWidth, int pixelHeight)
     {
@@ -404,7 +432,7 @@ internal sealed class PdfiumPage : IPdfPage
                     || stroke == 0 || fillMode != 0)
                     continue;
 
-                squares.Add(new PdfRect(left, Height - top, width, height));
+                squares.Add(new PdfRect(ViewX(left), ViewY(top), width, height));
             }
             return squares;
         }
@@ -419,10 +447,10 @@ internal sealed class PdfiumPage : IPdfPage
 
         // Mark at ~80% of the square, centered (SDD §3.2), in PDF page coordinates.
         var inset = Math.Max(squareBounds.Width, squareBounds.Height) * 0.10;
-        var left = (float)(squareBounds.X + inset);
-        var right = (float)(squareBounds.Right - inset);
-        var top = (float)(Height - squareBounds.Y - inset);
-        var bottom = (float)(Height - squareBounds.Bottom + inset);
+        var left = (float)UserX(squareBounds.X + inset);
+        var right = (float)UserX(squareBounds.Right - inset);
+        var top = (float)(UserY(squareBounds.Y + inset));
+        var bottom = (float)(UserY(squareBounds.Bottom - inset));
 
         lock (PdfiumLibrary.Lock)
         {
@@ -509,7 +537,7 @@ internal sealed class PdfiumPage : IPdfPage
                     var id = ReadStampId(annot);
                     if (id.Length == 0 || PdfiumNative.FPDFAnnot_GetRect(annot, out var rect) == 0)
                         continue;
-                    stamps.Add((id, new PdfRect(rect.Left, Height - rect.Top, rect.Right - rect.Left, rect.Top - rect.Bottom)));
+                    stamps.Add((id, new PdfRect(ViewX(rect.Left), ViewY(rect.Top), rect.Right - rect.Left, rect.Top - rect.Bottom)));
                 }
                 finally
                 {
@@ -548,7 +576,7 @@ internal sealed class PdfiumPage : IPdfPage
                     PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
 
                     // PDF coords are bottom-left origin; our page space is top-left (Geometry.cs).
-                    var bounds = new PdfRect(left, Height - top, right - left, top - bottom);
+                    var bounds = new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom);
                     runs.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize));
                 }
                 return runs;
@@ -557,6 +585,56 @@ internal sealed class PdfiumPage : IPdfPage
             {
                 if (textPage != IntPtr.Zero)
                     PdfiumNative.FPDFText_ClosePage(textPage);
+            }
+        }
+    }
+
+    public IReadOnlyList<PdfSearchMatch> FindText(string term)
+    {
+        ThrowIfDisposed();
+        if (string.IsNullOrEmpty(term))
+            return [];
+
+        lock (PdfiumLibrary.Lock)
+        {
+            var matches = new List<PdfSearchMatch>();
+            var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
+            if (textPage == IntPtr.Zero)
+                return matches;
+            try
+            {
+                // Flags 0 = case-insensitive substring — the only mode we offer (issue #26).
+                var find = PdfiumNative.FPDFText_FindStart(textPage, term, flags: 0, startIndex: 0);
+                if (find == IntPtr.Zero)
+                    return matches;
+                try
+                {
+                    while (PdfiumNative.FPDFText_FindNext(find) != 0)
+                    {
+                        var charIndex = PdfiumNative.FPDFText_GetSchResultIndex(find);
+                        var charCount = PdfiumNative.FPDFText_GetSchCount(find);
+                        var rectCount = PdfiumNative.FPDFText_CountRects(textPage, charIndex, charCount);
+                        var rects = new List<PdfRect>(rectCount);
+                        for (var r = 0; r < rectCount; r++)
+                        {
+                            if (PdfiumNative.FPDFText_GetRect(textPage, r, out var left, out var top, out var right, out var bottom) == 0)
+                                continue;
+                            // PDF coords are bottom-left origin; our page space is top-left (Geometry.cs).
+                            rects.Add(new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom));
+                        }
+                        if (rects.Count > 0)
+                            matches.Add(new PdfSearchMatch(rects));
+                    }
+                }
+                finally
+                {
+                    PdfiumNative.FPDFText_FindClose(find);
+                }
+                return matches;
+            }
+            finally
+            {
+                PdfiumNative.FPDFText_ClosePage(textPage);
             }
         }
     }
@@ -589,7 +667,7 @@ internal sealed class PdfiumPage : IPdfPage
                     if (PdfiumNative.FPDFAnnot_GetRect(annot, out var rect) == 0)
                         continue;
                     // PDF rect (bottom-left origin) → our top-left page space.
-                    var bounds = new PdfRect(rect.Left, Height - rect.Top, rect.Right - rect.Left, rect.Top - rect.Bottom);
+                    var bounds = new PdfRect(ViewX(rect.Left), ViewY(rect.Top), rect.Right - rect.Left, rect.Top - rect.Bottom);
 
                     var name = ReadUtf16ByteLengthString(
                         (buffer, length) => PdfiumNative.FPDFAnnot_GetFormFieldName(_forms, annot, buffer, length));
@@ -694,10 +772,10 @@ internal sealed class PdfiumPage : IPdfPage
     public int AppendWhiteout(PdfRect bounds)
     {
         ThrowIfDisposed();
-        var left = (float)bounds.X;
-        var right = (float)bounds.Right;
-        var top = (float)(Height - bounds.Y);
-        var bottom = (float)(Height - bounds.Bottom);
+        var left = (float)UserX(bounds.X);
+        var right = (float)UserX(bounds.Right);
+        var top = (float)UserY(bounds.Y);
+        var bottom = (float)UserY(bounds.Bottom);
 
         lock (PdfiumLibrary.Lock)
         {
@@ -737,7 +815,7 @@ internal sealed class PdfiumPage : IPdfPage
                     continue;
                 if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
                     continue;
-                whiteouts.Add((i, new PdfRect(left, Height - top, right - left, top - bottom)));
+                whiteouts.Add((i, new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom)));
             }
             return whiteouts;
         }
@@ -812,7 +890,7 @@ internal sealed class PdfiumPage : IPdfPage
                         continue;
 
                     PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
-                    var bounds = new PdfRect(left, Height - top, right - left, top - bottom);
+                    var bounds = new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom);
                     boxes.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize));
                 }
                 return boxes;
@@ -839,7 +917,7 @@ internal sealed class PdfiumPage : IPdfPage
             // Translate in place: page space is top-left, PDF space bottom-left, so a
             // downward move (larger Y) is a smaller F. Keeps scale/rotation untouched.
             var currentX = left;
-            var currentY = Height - top;
+            var currentY = ViewY(top);
             if (PdfiumNative.FPDFPageObj_GetMatrix(obj, out var matrix) == 0)
                 throw new InvalidOperationException("Could not read the text box matrix.");
             matrix.E += (float)(newBounds.X - currentX);
@@ -876,8 +954,8 @@ internal sealed class PdfiumPage : IPdfPage
                 var matrix = new PdfiumNative.FS_MATRIX
                 {
                     A = 1, B = 0, C = 0, D = 1,
-                    E = (float)bounds.X,
-                    F = (float)(Height - bounds.Bottom),
+                    E = (float)UserX(bounds.X),
+                    F = (float)UserY(bounds.Bottom),
                 };
                 PdfiumNative.FPDFPageObj_SetMatrix(obj, ref matrix);
                 if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, obj, (nuint)objectIndex) == 0)
@@ -1194,9 +1272,11 @@ internal sealed class PdfiumPage : IPdfPage
     private void ClickField(PdfFormField field)
     {
         var center = field.Bounds.Center;
-        var pdfY = Height - center.Y; // back to PDF bottom-left origin
-        PdfiumNative.FORM_OnLButtonDown(_forms, _handle, 0, center.X, pdfY);
-        PdfiumNative.FORM_OnLButtonUp(_forms, _handle, 0, center.X, pdfY);
+        // Back to PDF user space, through the crop origin on both axes.
+        var pdfX = UserX(center.X);
+        var pdfY = UserY(center.Y);
+        PdfiumNative.FORM_OnLButtonDown(_forms, _handle, 0, pdfX, pdfY);
+        PdfiumNative.FORM_OnLButtonUp(_forms, _handle, 0, pdfX, pdfY);
     }
     public string AddImageStamp(ReadOnlyMemory<byte> bgra, int pixelWidth, int pixelHeight, PdfRect bounds, string? stampId = null)
     {
@@ -1205,10 +1285,10 @@ internal sealed class PdfiumPage : IPdfPage
             throw new ArgumentException("BGRA buffer size must be width*height*4.", nameof(bgra));
 
         var id = stampId ?? "sig:" + Guid.NewGuid().ToString("N");
-        var left = (float)bounds.X;
-        var right = (float)bounds.Right;
-        var top = (float)(Height - bounds.Y);
-        var bottom = (float)(Height - bounds.Bottom);
+        var left = (float)UserX(bounds.X);
+        var right = (float)UserX(bounds.Right);
+        var top = (float)UserY(bounds.Y);
+        var bottom = (float)UserY(bounds.Bottom);
 
         lock (PdfiumLibrary.Lock)
         {

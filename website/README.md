@@ -10,6 +10,10 @@ upload client pattern: that project's `server/deploy.py`).
   feature that collects data** (policy §8 promises that ordering).
 - `icon.png` (512, from the iOS AppIcon), `screenshot-viewer.png` (from the
   appstore-screenshots CI artifact)
+- `shot-*.png` — the gallery, from the same artifact: take the
+  `iphone-6_9-<state>.png` captures (1320×2868) and resize to exactly a third
+  (440×956). Refresh them by running the **iOS Screenshots** workflow after a
+  UI change; `shot-search.png` came from the `search` state.
 
 The main-page teaser block (`.megapdf-teaser` CSS + section) lives in
 `/public_html/index.html` on the server; a pre-edit backup was uploaded as

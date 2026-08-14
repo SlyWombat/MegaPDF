@@ -32,6 +32,8 @@ public sealed partial class MainWindow : Window
         ApplyTheme();
         ViewModel.ScrollRestoreRequested += offset =>
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
+        ViewModel.SearchScrollRequested += target =>
+            DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
         AppWindow.Closing += OnAppWindowClosing;
 
         // Keyboard interaction with the selected signature (SDD §3.3):
@@ -86,6 +88,9 @@ public sealed partial class MainWindow : Window
         {
             if (e.PropertyName is nameof(MainViewModel.WindowTitle))
                 Title = ViewModel.WindowTitle;
+            // A different document means the matches are gone — close the stale bar.
+            if (e.PropertyName is nameof(MainViewModel.DocumentPath) && FindBar.Visibility == Visibility.Visible)
+                CloseFindBar();
         };
         Title = ViewModel.WindowTitle;
     }
@@ -730,6 +735,77 @@ public sealed partial class MainWindow : Window
     private async void OnPrintClicked(object sender, RoutedEventArgs e) =>
         await _printer.ShowPrintUiAsync();
 
+    // --- Find in document (toolbar Find / Ctrl+F, issue #26: the Edge-style find bar) ---
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _findDebounce;
+
+    /// <summary>Ctrl+F: open (or refocus) the find bar.</summary>
+    private void OnFindAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args) =>
+        args.Handled = ShowFindBar();
+
+    /// <summary>Toolbar Find button: the visible twin of Ctrl+F (SDD §2.2 — a labelled control for every capability).</summary>
+    private void OnFindClicked(object sender, RoutedEventArgs e) => ShowFindBar();
+
+    /// <summary>
+    /// Opens the find bar, or refocuses and reselects it when it is already open — it never toggles the bar
+    /// shut, so the button and the accelerator behave identically. Returns false when there is no document.
+    /// </summary>
+    private bool ShowFindBar()
+    {
+        if (!ViewModel.IsDocumentOpen)
+            return false;
+        FindBar.Visibility = Visibility.Visible;
+        FindQuery.Focus(FocusState.Programmatic);
+        FindQuery.SelectAll();
+        return true;
+    }
+
+    /// <summary>Search as you type — a small debounce keeps big documents responsive.</summary>
+    private void OnFindQueryChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_findDebounce is null)
+        {
+            _findDebounce = DispatcherQueue.CreateTimer();
+            _findDebounce.Interval = TimeSpan.FromMilliseconds(250);
+            _findDebounce.IsRepeating = false;
+            _findDebounce.Tick += async (_, _) => await ViewModel.SearchAsync(FindQuery.Text);
+        }
+        _findDebounce.Stop();
+        _findDebounce.Start();
+    }
+
+    /// <summary>Enter = next, Shift+Enter = previous, Esc = close — from anywhere in the bar.</summary>
+    private void OnFindBarKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == VirtualKey.Enter)
+        {
+            e.Handled = true;
+            var shift = (Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(VirtualKey.Shift) & Windows.UI.Core.CoreVirtualKeyStates.Down) != 0;
+            ViewModel.MoveToMatch(shift ? -1 : 1);
+        }
+        else if (e.Key == VirtualKey.Escape)
+        {
+            e.Handled = true;
+            CloseFindBar();
+        }
+    }
+
+    private void OnFindPreviousClicked(object sender, RoutedEventArgs e) => ViewModel.MoveToMatch(-1);
+
+    private void OnFindNextClicked(object sender, RoutedEventArgs e) => ViewModel.MoveToMatch(1);
+
+    private void OnFindCloseClicked(object sender, RoutedEventArgs e) => CloseFindBar();
+
+    /// <summary>Esc closes AND clears (issue #26) — reopening starts fresh.</summary>
+    private void CloseFindBar()
+    {
+        _findDebounce?.Stop();
+        FindBar.Visibility = Visibility.Collapsed;
+        FindQuery.Text = "";
+        ViewModel.ClearSearch();
+    }
+
     // --- Startup update check (packaged builds only) ---
 
     private readonly UpdateChecker _updateChecker = new();
@@ -785,6 +861,71 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // Toolbar breakpoints, in effective pixels (the states themselves live in
+    // MainWindow.xaml). Above Full the toolbar shows icon + label; below it the labels
+    // go and every button stays; below Icons the zoom cluster folds into the single
+    // View flyout. Sized against the widest the bar ever gets — every command enabled
+    // and Save carrying its unsaved-changes dot — so nothing is ever clipped.
+    private const double ToolbarFullWidth = 1500;
+    private const double ToolbarIconsWidth = 980;
+
+    private void OnRootSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyToolbarLayout(e.NewSize.Width);
+
+    /// <summary>
+    /// Sheds toolbar detail as the window narrows so no command is ever clipped:
+    /// wide shows icon + label, then labels drop, then the zoom cluster collapses
+    /// behind the View flyout. Width is in effective pixels, so one set of
+    /// breakpoints holds at every display scale.
+    /// </summary>
+    private void ApplyToolbarLayout(double width)
+    {
+        var labels = width >= ToolbarFullWidth ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var label in new[]
+                 {
+                     LabelOpen, LabelSave, LabelSaveAs, LabelShrink, LabelPrint, LabelUndo,
+                     LabelRedo, LabelSignatures, LabelWhiteout, LabelAddText, LabelFind,
+                 })
+        {
+            label.Visibility = labels;
+        }
+
+        var compact = width < ToolbarIconsWidth;
+        ViewControls.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        ViewMenuButton.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Brings the current search match into view. Zoomed in, a match is just as
+    /// likely to be off to the side as below the fold, and the horizontal offset used
+    /// to be left alone — so pressing next appeared to do nothing (#28). Each axis
+    /// only moves when the match is actually outside the viewport, so stepping
+    /// through hits that are already on screen doesn't jolt the page around.
+    /// </summary>
+    private void ScrollMatchIntoView(MainViewModel.SearchScrollTarget target)
+    {
+        const double margin = 24;   // don't land the hit hard against an edge
+        double? horizontal = null, vertical = null;
+
+        // Only when the content actually overflows: below that the panel is centred,
+        // so content coordinates don't line up with the scroll offset.
+        if (PagesScroll.ExtentWidth > PagesScroll.ViewportWidth + 0.5)
+        {
+            var left = PagesScroll.HorizontalOffset;
+            var right = left + PagesScroll.ViewportWidth;
+            if (target.X < left + margin || target.X + target.Width > right - margin)
+                horizontal = Math.Max(0, target.X + target.Width / 2 - PagesScroll.ViewportWidth / 2);
+        }
+
+        var top = PagesScroll.VerticalOffset;
+        var bottom = top + PagesScroll.ViewportHeight;
+        if (target.Y < top + margin || target.Y + target.Height > bottom - margin)
+            vertical = Math.Max(0, target.Y - PagesScroll.ViewportHeight / 3);
+
+        if (horizontal is not null || vertical is not null)
+            PagesScroll.ChangeView(horizontal, vertical, null);
+    }
+
     private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>
         await ViewModel.FitWidthAsync(PagesScroll.ViewportWidth);
 
@@ -812,7 +953,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             Title = "Restore unsaved changes?",
-            Content = $"MegaPDF closed unexpectedly with unsaved changes to {Path.GetFileName(session.DocumentPath)}.",
+            Content = $"{MainViewModel.AppName} closed unexpectedly with unsaved changes to {Path.GetFileName(session.DocumentPath)}.",
             PrimaryButtonText = "Restore",
             CloseButtonText = "Discard",
             DefaultButton = ContentDialogButton.Primary,
@@ -923,6 +1064,45 @@ public sealed partial class MainWindow : Window
     {
         if (!_settingsLoading)
             ViewModel.CheckForUpdates = UpdateCheckToggle.IsOn;
+    }
+
+    /// <summary>Opens the bundled THIRD-PARTY-NOTICES.txt in a scrollable in-app viewer.</summary>
+    private async void OnThirdPartyNoticesClicked(object sender, RoutedEventArgs e)
+    {
+        string text;
+        try
+        {
+            var path = Path.Combine(AppContext.BaseDirectory, "Assets", "THIRD-PARTY-NOTICES.txt");
+            text = await File.ReadAllTextAsync(path);
+        }
+        catch (Exception ex)
+        {
+            text = "The third-party notices file could not be loaded.\n\n" + ex.Message;
+        }
+
+        var viewer = new TextBox
+        {
+            Text = text,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            FontSize = 12,
+            MinWidth = 480,
+            MinHeight = 360,
+        };
+        Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollBarVisibility(viewer, ScrollBarVisibility.Auto);
+        viewer.SetValue(AutomationProperties.NameProperty, "Third-party notices text");
+
+        var dialog = new ContentDialog
+        {
+            Title = "Third-party notices",
+            Content = viewer,
+            CloseButtonText = "Close",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot,
+        };
+        await dialog.ShowAsync();
     }
 
     public void ApplyTheme()

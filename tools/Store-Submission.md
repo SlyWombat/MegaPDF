@@ -89,11 +89,15 @@ step) all disappear, and the Store handles updates.
 - Description, screenshots, category, **age rating** (IARC questionnaire).
 - **Privacy policy URL** — required. Data is local-only and telemetry is off by
   default (SDD §5), but the Store still wants a hosted policy page.
-  - Done 2026-07-22: `docs/privacy.html` (no collection at all — no telemetry
-    code exists yet; Store builds make zero network calls, sideload builds only
-    hit the public GitHub releases feed). Hosted via GitHub Pages (`main`
-    `/docs`): **https://slywombat.github.io/MegaPDF/privacy.html** — this is the
-    URL for the submission's Properties page.
+  - Use **https://electricrv.ca/megapdf/privacy/** on the submission's
+    Properties page. Source: `website/megapdf/privacy/index.html`, deployed with
+    `website/deploy.py --privacy`. Effective 8 August 2026, it covers Windows,
+    Android, and iOS in one document, and it is the same URL both mobile store
+    listings reference.
+  - **Superseded:** the original 2026-07-22 policy, `docs/privacy.html` hosted
+    via GitHub Pages (`main` `/docs`) at
+    https://slywombat.github.io/MegaPDF/privacy.html, is Windows-only and still
+    served. Do not cite it in a submission.
 
 ## Testers during rollout
 - Use a **package flight** (Partner Center) or a **hidden listing** ("available but

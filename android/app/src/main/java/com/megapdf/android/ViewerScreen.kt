@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -33,10 +34,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,6 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -59,6 +68,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
 
+// Search highlight fills (#26): every match gets the translucent accent; the
+// current match is set apart in translucent orange.
+private val MATCH_HIGHLIGHT = Color(0x4D1E88E5)
+private val CURRENT_MATCH_HIGHLIGHT = Color(0x66FF8F00)
+
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun ViewerScreen(
@@ -69,8 +83,16 @@ fun ViewerScreen(
     isSaving: Boolean,
     signatures: List<SignatureEntry>,
     selectedStamp: SelectedStamp?,
+    searchQuery: String,
+    searchHits: List<SearchHit>,
+    currentHitIndex: Int,
+    isSearching: Boolean,
     onRenderWindowChange: (firstVisible: Int, lastVisible: Int, targetWidthPx: Int) -> Unit,
     onPageTap: (pageIndex: Int, xFraction: Float, yFraction: Float) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onSearchPrevious: () -> Unit,
+    onSearchNext: () -> Unit,
+    onCloseSearch: () -> Unit,
     onStartPlacement: (SignatureEntry) -> Unit,
     onAddSignature: () -> Unit,
     onSaveDrawnSignature: (Bitmap) -> Unit,
@@ -84,16 +106,23 @@ fun ViewerScreen(
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     val listState = rememberLazyListState()
+    // Hoisted so search navigation can reach a hit that is off to the side when zoomed.
+    val hScroll = rememberScrollState()
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var signDialogOpen by remember { mutableStateOf(false) }
+    var searchOpen by remember { mutableStateOf(false) }
+    val closeSearch = { searchOpen = false; onCloseSearch() }
     val requestClose = { if (isDirty) confirmDiscard = true else onClose() }
-    androidx.activity.compose.BackHandler { requestClose() }
+    androidx.activity.compose.BackHandler { if (searchOpen) closeSearch() else requestClose() }
 
     var drawDialogOpen by remember { mutableStateOf(false) }
     LaunchedEffect(screenshotSheet) {
         if (screenshotSheet == "sign") signDialogOpen = true
         if (screenshotSheet == "draw") drawDialogOpen = true
+        // The query itself is already seeded by the view model, so the bar
+        // opens filled in, with its match count and highlights in place.
+        if (screenshotSheet == "search") searchOpen = true
     }
     if (signDialogOpen) {
         SignatureDialog(
@@ -129,30 +158,47 @@ fun ViewerScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
-                navigationIcon = {
-                    IconButton(onClick = requestClose) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close document")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = { signDialogOpen = true }) { Text("Sign") }
-                    TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
-                        Text(if (isSaving) "Saving…" else "Save")
-                    }
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More options")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Save a copy") },
-                            enabled = !isSaving,
-                            onClick = { menuOpen = false; onSaveAs() },
-                        )
-                    }
-                },
-            )
+            if (searchOpen) {
+                SearchTopBar(
+                    query = searchQuery,
+                    hitCount = searchHits.size,
+                    currentHitIndex = currentHitIndex,
+                    isSearching = isSearching,
+                    onQueryChange = onSearchQueryChange,
+                    onPrevious = onSearchPrevious,
+                    onNext = onSearchNext,
+                    onClose = closeSearch,
+                    screenshotMode = screenshotSheet == "search",
+                )
+            } else {
+                TopAppBar(
+                    title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
+                    navigationIcon = {
+                        IconButton(onClick = requestClose) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close document")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { searchOpen = true }) {
+                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                        }
+                        TextButton(onClick = { signDialogOpen = true }) { Text("Sign") }
+                        TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
+                            Text(if (isSaving) "Saving…" else "Save")
+                        }
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Save a copy") },
+                                enabled = !isSaving,
+                                onClick = { menuOpen = false; onSaveAs() },
+                            )
+                        }
+                    },
+                )
+            }
         },
     ) { padding ->
         BoxWithConstraints(
@@ -201,11 +247,53 @@ fun ViewerScreen(
                     }
             }
 
+            // Bring the current hit itself into view, not merely its page (#28).
+            // Zoomed in, a page can be several screens tall and wider than the
+            // display, so "the page is visible" says nothing about whether the match
+            // is: scrolling only when the page was entirely off screen left hits
+            // sitting below the fold, or off to the side, with the view never moving.
+            LaunchedEffect(currentHitIndex, searchHits, zoom, pageSizes) {
+                val hit = searchHits.getOrNull(currentHitIndex) ?: return@LaunchedEffect
+                val page = pageSizes.getOrNull(hit.pageIndex) ?: return@LaunchedEffect
+                val rect = hit.rects.firstOrNull() ?: return@LaunchedEffect
+
+                val pageWidthPx = containerWidthPx * zoom
+                val pageHeightPx = pageWidthPx * (page.heightPoints / page.widthPoints).toFloat()
+                // Page points are bottom-left origin; the overlay flips them the same way.
+                val hitTopPx = ((page.heightPoints - rect.top) / page.heightPoints).toFloat() * pageHeightPx
+                val hitHeightPx = ((rect.top - rect.bottom) / page.heightPoints).toFloat() * pageHeightPx
+                val viewportHeightPx = listState.layoutInfo.viewportSize.height.toFloat()
+                val margin = viewportHeightPx * 0.15f
+
+                // Scroll vertically unless the hit already sits comfortably on screen.
+                val itemOffset = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index == hit.pageIndex }?.offset?.toFloat()
+                val hitY = itemOffset?.plus(hitTopPx)
+                if (hitY == null || hitY < margin || hitY + hitHeightPx > viewportHeightPx - margin) {
+                    listState.animateScrollToItem(
+                        hit.pageIndex,
+                        (hitTopPx - margin).toInt().coerceAtLeast(0),
+                    )
+                }
+
+                // And horizontally, which nothing did before: when zoom > 1 the page is
+                // wider than the display and the match can be entirely off to one side.
+                if (zoom > 1f && hScroll.maxValue > 0) {
+                    val hitCentreX = ((rect.left + rect.right) / 2.0 / page.widthPoints).toFloat() * pageWidthPx
+                    val target = (hitCentreX - containerWidthPx / 2f)
+                        .toInt()
+                        .coerceIn(0, hScroll.maxValue)
+                    if (kotlin.math.abs(target - hScroll.value) > containerWidthPx * 0.1f) {
+                        hScroll.animateScrollTo(target)
+                    }
+                }
+            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .horizontalScroll(rememberScrollState(), enabled = zoom > 1f),
+                    .horizontalScroll(hScroll, enabled = zoom > 1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -239,6 +327,15 @@ fun ViewerScreen(
                                 contentScale = ContentScale.Fit,
                             )
                         }
+                        val pageHits = searchHits.withIndex()
+                            .filter { it.value.pageIndex == index }
+                        if (pageHits.isNotEmpty()) {
+                            SearchHighlightOverlay(
+                                hits = pageHits,
+                                currentHitIndex = currentHitIndex,
+                                pageSize = size,
+                            )
+                        }
                         if (selectedStamp != null && selectedStamp.pageIndex == index) {
                             StampSelectionOverlay(
                                 stamp = selectedStamp,
@@ -249,6 +346,103 @@ fun ViewerScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Search-mode top bar (#26): as-you-type query field, "N of M" match count
+ * ("No results" when the sweep comes back empty), previous/next chevrons
+ * (wrapping around document ends), and close, which clears all highlights.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchTopBar(
+    query: String,
+    hitCount: Int,
+    currentHitIndex: Int,
+    isSearching: Boolean,
+    onQueryChange: (String) -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onClose: () -> Unit,
+    screenshotMode: Boolean = false,
+) {
+    val focusRequester = remember { FocusRequester() }
+    TopAppBar(
+        title = {
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = { Text("Search") },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                ),
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, contentDescription = "Close search")
+            }
+        },
+        actions = {
+            Text(
+                when {
+                    query.isEmpty() || isSearching -> ""
+                    hitCount == 0 -> "No results"
+                    else -> "${currentHitIndex + 1} of $hitCount"
+                },
+                maxLines = 1,
+            )
+            IconButton(onClick = onPrevious, enabled = hitCount > 0) {
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Previous match")
+            }
+            IconButton(onClick = onNext, enabled = hitCount > 0) {
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Next match")
+            }
+        },
+    )
+    // Screenshot mode skips the focus grab: whether the soft keyboard would
+    // then cover the page depends on the emulator's hw.keyboard setting, and a
+    // marketing capture may not depend on that.
+    LaunchedEffect(Unit) { if (!screenshotMode) focusRequester.requestFocus() }
+}
+
+/**
+ * Translucent fills over every search hit on this page; the current hit gets
+ * the distinct color. Hit rects are PDF points (bottom-left origin) mapped
+ * into the page box's pixel space, same transform as [StampSelectionOverlay].
+ */
+@Composable
+private fun SearchHighlightOverlay(
+    hits: List<IndexedValue<SearchHit>>,
+    currentHitIndex: Int,
+    pageSize: PageSize,
+) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val sx = size.width / pageSize.widthPoints.toFloat()
+        val sy = size.height / pageSize.heightPoints.toFloat()
+        for ((hitIndex, hit) in hits) {
+            val color =
+                if (hitIndex == currentHitIndex) CURRENT_MATCH_HIGHLIGHT else MATCH_HIGHLIGHT
+            for (rect in hit.rects) {
+                drawRect(
+                    color = color,
+                    topLeft = androidx.compose.ui.geometry.Offset(
+                        (rect.left * sx).toFloat(),
+                        ((pageSize.heightPoints - rect.top) * sy).toFloat(),
+                    ),
+                    size = androidx.compose.ui.geometry.Size(
+                        ((rect.right - rect.left) * sx).toFloat(),
+                        ((rect.top - rect.bottom) * sy).toFloat(),
+                    ),
+                )
             }
         }
     }

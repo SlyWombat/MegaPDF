@@ -57,6 +57,13 @@ public interface IPdfPage : IDisposable
 
     IReadOnlyList<PdfTextRun> GetTextRuns();
 
+    /// <summary>
+    /// Case-insensitive substring search on this page (issue #26 simple search —
+    /// no whole-word, no regex). Matches in reading order; each match carries the
+    /// rectangles that cover it in top-left page space (several when it wraps lines).
+    /// </summary>
+    IReadOnlyList<PdfSearchMatch> FindText(string term);
+
     /// <summary>Text runs assembled into visual lines (same baseline, no column-wide gaps).</summary>
     IReadOnlyList<PdfTextLine> GetTextLines();
 
@@ -203,6 +210,9 @@ public sealed record PageHit(
 
 /// <summary>A contiguous run of body text sharing one font/size/color.</summary>
 public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize);
+
+/// <summary>One search hit: the rectangles covering it, in top-left page space.</summary>
+public sealed record PdfSearchMatch(IReadOnlyList<PdfRect> Rects);
 
 /// <summary>
 /// A visual line: adjacent same-baseline runs merged so the user edits what they

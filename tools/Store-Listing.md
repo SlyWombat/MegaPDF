@@ -25,8 +25,9 @@ one onto the page. Move it, nudge it, resize it until it sits exactly right.
 SAVE — Save overwrites, Save As creates a copy. No export wizards, no
 "flatten" dialogs, no surprises.
 
-Also included, because real documents need them: print your PDF, and shrink
-oversized scans for email with one click (image downsampling and JPEG
+Also included, because real documents need them: find any word with Ctrl+F
+(every match highlighted, Enter to step through them), print your PDF, and
+shrink oversized scans for email with one click (image downsampling and JPEG
 recompression).
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
@@ -37,11 +38,12 @@ someone else's server.
 Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 
 ## Feature bullets
-(Store listing → "App features", up to 20 × 200 chars. Use these seven.)
+(Store listing → "App features", up to 20 × 200 chars. Use these eight.)
 
 - Edit text in any PDF by clicking and typing — like a Word document
 - Click empty squares to check boxes on any form
 - Drag signatures from your personal library onto the page, then nudge and resize
+- Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
 - Save overwrites, Save As copies — no export wizards or flatten dialogs
 - Shrink oversized scans for email with one click
 - Print directly from the app
@@ -61,19 +63,23 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ## Other fields
 - Category: **Productivity**
 - Pricing: **Free**
-- Privacy policy URL: https://slywombat.github.io/MegaPDF/privacy.html
-- Website: https://github.com/SlyWombat/MegaPDF
+- Privacy policy URL: https://electricrv.ca/megapdf/privacy/
+- Website: https://electricrv.ca/megapdf/
 - Support contact: dave@drscapital.com
 - Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
 
-## Screenshot plan
-(1–4 required, 1366×768 or larger. Suggested set, one caption each ≤ 200 chars:)
+## Screenshots
+Shot and ready to upload: `artifacts/store/screenshots/` (3038×1989, well over the
+1366×768 minimum; 1–4 required). Captured from **1.6.2** — see that folder's
+README.md to re-shoot after a UI change. Upload in this order, one caption each:
 
-1. A real-looking form open with text mid-edit, caret visible —
-   "Click any text and type — editing a PDF like a Word file."
-2. Checkbox being checked on a form —
-   "Click an empty square to check it."
-3. Signature library flyout with a signature dragged onto a signature line —
-   "Drag a saved signature onto the page, nudge it into place."
-4. Shrink-for-email dialog showing before/after file size —
-   "Shrink oversized scans to email-friendly sizes in one click."
+| File | Caption (≤ 200 chars) |
+|---|---|
+| `01-edit-text.png` | Click any text and type — editing a PDF like a Word file. |
+| `02-checkbox.png` | Click an empty square to check it. Drawn checkboxes too, not just real form fields. |
+| `03-signature.png` | Drop a saved signature on the line, then nudge it into place. |
+| `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
+
+Shot 3 is click-to-place, not drag: picking a signature from the library arms
+placement and the next click on the page drops it there, selected for nudging.
+Don't write a caption that promises a drag.

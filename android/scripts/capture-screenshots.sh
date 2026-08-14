@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Play Store screenshot capture — run inside android-emulator-runner with a
 # booted emulator. Installs the debug APK, sets a clean demo status bar, and
-# captures the four marketing states to /tmp/shots.
+# captures the marketing states to /tmp/shots.
 set -euo pipefail
 
 adb install app/build/outputs/apk/debug/app-debug.apk
@@ -13,7 +13,7 @@ adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi s
 adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false || true
 
 mkdir -p /tmp/shots
-for state in home viewer sign draw; do
+for state in home viewer search sign draw; do
     adb shell am force-stop ca.electricrv.megapdf || true
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10
