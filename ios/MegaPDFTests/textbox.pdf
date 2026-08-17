@@ -10,10 +10,10 @@ BT /F1 14 Tf 72 720 Td (Ordinary body text, not a text box.) Tj ET
 /MegaPDFTextBox << /id (text:fixture-1) >> BDC
 BT /F1 12 Tf 100 300 Td (Fixture text box) Tj ET
 EMC
-/MegaPDFTextBox BDC
+/MegaPDFTextBox BMC
 BT /F1 12 Tf 100 260 Td (Legacy box one) Tj ET
 EMC
-/MegaPDFTextBox BDC
+/MegaPDFTextBox BMC
 BT /F1 12 Tf 100 220 Td (Legacy box two) Tj ET
 EMC
 

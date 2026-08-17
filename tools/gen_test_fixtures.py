@@ -280,10 +280,14 @@ def gen_textbox():
         # Two boxes marked but carrying no id: what MegaPDF for Windows wrote
         # before it started stamping one (SDD 6.2 contract 4). They must read as
         # text boxes and still be told apart.
-        b"/MegaPDFTextBox BDC\n"
+        #
+        # BMC, not BDC: BDC takes *two* operands (tag + property list), so a tag
+        # with no properties is BMC -- which is also what pdfium emits for a
+        # param-less FPDFPageObj_AddMark, making this the faithful legacy form.
+        b"/MegaPDFTextBox BMC\n"
         b"BT /F1 12 Tf 100 260 Td (Legacy box one) Tj ET\n"
         b"EMC\n"
-        b"/MegaPDFTextBox BDC\n"
+        b"/MegaPDFTextBox BMC\n"
         b"BT /F1 12 Tf 100 220 Td (Legacy box two) Tj ET\n"
         b"EMC\n"))
     pages_num = len(objs) + 2
