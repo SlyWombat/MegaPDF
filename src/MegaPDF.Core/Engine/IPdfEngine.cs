@@ -209,7 +209,13 @@ public sealed record PageHit(
     int? ObjectIndex = null);
 
 /// <summary>A contiguous run of body text sharing one font/size/color.</summary>
-public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize);
+/// <param name="TextBoxId">
+/// For MegaPDF text boxes, the `id` carried by the object's MegaPDFTextBox mark
+/// (SDD §6.2 contract 4) — how the mobile apps address a box, since page-object
+/// indices shift. Null for ordinary body text, and for boxes written before the
+/// param existed.
+/// </param>
+public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize, string? TextBoxId = null);
 
 /// <summary>One search hit: the rectangles covering it, in top-left page space.</summary>
 public sealed record PdfSearchMatch(IReadOnlyList<PdfRect> Rects);

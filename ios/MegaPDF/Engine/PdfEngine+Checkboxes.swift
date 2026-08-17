@@ -25,6 +25,7 @@ extension PdfEngine {
     func formFields(_ document: PdfDocument, pageIndex: Int) throws -> [PdfFormField] {
         try withPage(document, index: pageIndex) { page in
             guard let form = document.formHandle else { return [] }
+            let crop = cropOrigin(page)
             var result: [PdfFormField] = []
             for i in 0..<FPDFPage_GetAnnotCount(page) {
                 guard let annot = FPDFPage_GetAnnot(page, i) else { continue }
@@ -39,7 +40,7 @@ extension PdfEngine {
                     isRadio: type == FPDF_FORMFIELD_RADIOBUTTON,
                     isChecked: FPDFAnnot_IsChecked(form, annot) != 0,
                     rect: PdfRect(left: Double(r.left), bottom: Double(r.bottom),
-                                  right: Double(r.right), top: Double(r.top))))
+                                  right: Double(r.right), top: Double(r.top)).toCrop(crop)))
             }
             return result
         }
@@ -51,8 +52,9 @@ extension PdfEngine {
     func clickAt(_ document: PdfDocument, pageIndex: Int, x: Double, y: Double) throws {
         try withPage(document, index: pageIndex) { page in
             guard let form = document.formHandle else { return }
-            FORM_OnLButtonDown(form, page, 0, x, y)
-            FORM_OnLButtonUp(form, page, 0, x, y)
+            let crop = cropOrigin(page)
+            FORM_OnLButtonDown(form, page, 0, x + crop.x, y + crop.y)
+            FORM_OnLButtonUp(form, page, 0, x + crop.x, y + crop.y)
             FORM_ForceToKillFocus(form)
         }
     }
@@ -61,6 +63,7 @@ extension PdfEngine {
     /// 6–24 pt on both axes, squareness within 25%.
     func detectCheckboxSquares(_ document: PdfDocument, pageIndex: Int) throws -> [PdfRect] {
         try withPage(document, index: pageIndex) { page in
+            let crop = cropOrigin(page)
             var result: [PdfRect] = []
             for i in 0..<FPDFPage_CountObjects(page) {
                 guard let obj = FPDFPage_GetObject(page, i),
@@ -75,7 +78,7 @@ extension PdfEngine {
                 guard FPDFPath_GetDrawMode(obj, &fillmode, &stroke) != 0,
                       stroke != 0, fillmode == FPDF_FILLMODE_NONE else { continue }
                 result.append(PdfRect(left: Double(l), bottom: Double(b),
-                                      right: Double(r), top: Double(t)))
+                                      right: Double(r), top: Double(t)).toCrop(crop))
             }
             return result
         }
@@ -86,6 +89,8 @@ extension PdfEngine {
     func addCheckMark(_ document: PdfDocument, pageIndex: Int,
                       square: PdfRect, id: String) throws {
         try withPage(document, index: pageIndex) { page in
+            // The square arrives in crop space from the UI; pdfium wants user space.
+            let square = square.toUser(cropOrigin(page))
             let w = square.right - square.left
             let h = square.top - square.bottom
             let il = Float(square.left + 0.10 * w)

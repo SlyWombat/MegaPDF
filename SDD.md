@@ -463,7 +463,7 @@ tracked as GitHub issues #11–#20 (milestones *Android M1–M3*, *iOS M0*).
 
 ### 6.2 Cross-platform behavioral contracts
 
-A document edited on one platform must round-trip editable on the others. Three
+A document edited on one platform must round-trip editable on the others. Four
 behaviors are contracts — a change on any platform is a breaking change everywhere:
 
 1. **Stamp identity.** Every MegaPDF-placed annotation is tagged with the custom key
@@ -476,6 +476,20 @@ behaviors are contracts — a change on any platform is a breaking change everyw
 3. **Signature cleanup pixel math.** Near-white removal: luminance
    `0.114·B + 0.587·G + 0.299·R > 235` → alpha 0; trim to the bounding box of pixels
    with alpha > 16, plus a 4 px margin (reference: `SignatureImageProcessor`).
+4. **Text-box identity** *(amendment — 2026-08-16, #34)*. Added text is a page
+   **text object** carrying the `MegaPDFTextBox` page-object mark (reference:
+   `PdfiumEngine.AppendTextBox`), which is what makes it a movable MegaPDF text box
+   rather than part of the document's own body text. The mark also carries an `id`
+   string param, prefixed `text:` — the page-object equivalent of contract 1, and
+   the handle mobile undo addresses, since page-object indices shift as objects are
+   added and removed. A marked object with no `id` is still a text box (desktop
+   boxes predate the param); it is simply not individually addressable. Shared
+   fixture: `textbox.pdf`.
+
+   Note the asymmetry with contract 1: stamps are annotations, text boxes are page
+   content. Text boxes are therefore real, searchable, selectable text in every
+   viewer — which is the point — but they are edited through the content stream,
+   so `FPDFPage_GenerateContent` must follow every change.
 
 ---
 

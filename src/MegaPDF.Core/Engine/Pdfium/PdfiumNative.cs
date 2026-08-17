@@ -253,6 +253,9 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_GetMark(IntPtr pageObject, int index);
     /// <summary>UTF-16 buffer; out length in bytes incl. NUL.</summary>
     [DllImport(Dll)] public static extern int FPDFPageObjMark_GetName(IntPtr mark, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
+    [DllImport(Dll)] public static extern int FPDFPageObjMark_SetStringParam(IntPtr document, IntPtr pageObject, IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+    /// <summary>UTF-16 buffer; out length in bytes incl. NUL.</summary>
+    [DllImport(Dll)] public static extern int FPDFPageObjMark_GetParamStringValue(IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
 
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_MoveTo(IntPtr path, float x, float y);

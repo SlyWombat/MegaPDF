@@ -20,6 +20,7 @@ extension PdfEngine {
         throws -> [PdfSearchMatch] {
         guard !term.isEmpty else { return [] }
         return try withPage(document, index: pageIndex) { page in
+            let crop = cropOrigin(page)
             guard let text = FPDFText_LoadPage(page) else { return [] }
             defer { FPDFText_ClosePage(text) }
 
@@ -40,7 +41,7 @@ extension PdfEngine {
                 for i in 0..<max(FPDFText_CountRects(text, start, count), 0) {
                     var l = 0.0, t = 0.0, r = 0.0, b = 0.0
                     guard FPDFText_GetRect(text, i, &l, &t, &r, &b) != 0 else { continue }
-                    rects.append(PdfRect(left: l, bottom: b, right: r, top: t))
+                    rects.append(PdfRect(left: l, bottom: b, right: r, top: t).toCrop(crop))
                 }
                 if !rects.isEmpty { result.append(PdfSearchMatch(rects: rects)) }
             }

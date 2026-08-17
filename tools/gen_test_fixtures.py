@@ -13,6 +13,11 @@ Writes:
                 appearance stream. Used by the iOS PDFKit spike (ADR-001)
                 and future cross-platform interop tests.
 
+  cropped.pdf - CropBox [0 100 612 700] on a 612x792 MediaBox (#28/#30): the
+                offset that makes user-space and rendered coordinates disagree.
+  textbox.pdf - a MegaPDFTextBox-marked text object with an id property (#34),
+                so every platform can prove it reads boxes written elsewhere.
+
 Deterministic output; both platforms' engine tests assert against these.
 """
 import os
@@ -249,12 +254,41 @@ def gen_cropped():
     return build(objs)
 
 
+def gen_textbox():
+    """A page carrying a MegaPDF *text box* written the way the engines write it
+    (#34): a text object wrapped in a marked-content section named
+    `MegaPDFTextBox` with an `id` property.
+
+    This is the interop half of the contract. Each platform's own tests prove it
+    can write a box and read it back; this fixture proves it can read one written
+    somewhere else -- the text-object equivalent of `stamped.pdf` for annots.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    content = add(stream(
+        b"",
+        b"BT /F1 14 Tf 72 720 Td (Ordinary body text, not a text box.) Tj ET\n"
+        b"/MegaPDFTextBox << /id (text:fixture-1) >> BDC\n"
+        b"BT /F1 12 Tf 100 300 Td (Fixture text box) Tj ET\n"
+        b"EMC\n"))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+               % (pages_num, font, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
                        ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
-                              ("cropped.pdf", gen_cropped())):
+                              ("cropped.pdf", gen_cropped()),
+                       ("textbox.pdf", gen_textbox())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)

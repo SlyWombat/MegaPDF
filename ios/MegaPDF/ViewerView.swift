@@ -16,6 +16,8 @@ struct ViewerView: View {
     @State private var confirmDiscard = false
     @State private var searchOpen = false
     @State private var searchText = ""
+    /// Buffer for the "Add text" field (#34).
+    @State private var newText = ""
     @FocusState private var searchFocused: Bool
     @Environment(\.displayScale) private var displayScale
 
@@ -84,10 +86,17 @@ struct ViewerView: View {
         .navigationTitle((model.isDirty ? "• " : "") + displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
+            ToolbarItemGroup(placement: .navigationBarLeading) {
                 Button("Close") {
                     if model.isDirty { confirmDiscard = true } else { onClose() }
                 }
+                Button {
+                    model.undo()
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .accessibilityLabel("Undo")
+                .disabled(!model.canUndo)
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
@@ -97,11 +106,15 @@ struct ViewerView: View {
                 }
                 .accessibilityLabel("Find in document")
                 Button("Sign") { signaturesOpen = true }
+                Button("Text") { model.startTextPlacement() }
+                    .accessibilityLabel("Add text")
                 Button(model.isSaving ? "Saving…" : "Save") { model.save() }
                     .disabled(!model.isDirty || model.isSaving)
                 Menu {
                     Button("Save a copy", action: onSaveCopy)
                         .disabled(model.isSaving)
+                    Button("Redo", action: model.redo)
+                        .disabled(!model.canRedo)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -132,6 +145,27 @@ struct ViewerView: View {
                 searchText = term
                 model.search(term: term, debounce: false)
             }
+        }
+        // The setter deliberately does nothing: SwiftUI flips `isPresented` to
+        // false as soon as any button is tapped, and if that cleared the pending
+        // tap before the Add action ran, the text would be silently dropped. Both
+        // buttons resolve the state explicitly instead.
+        .alert("Add text", isPresented: Binding(
+            get: { model.pendingText != nil },
+            set: { _ in }
+        )) {
+            TextField("Text", text: $newText)
+                .autocorrectionDisabled()
+            Button("Add") {
+                model.commitText(newText)
+                newText = ""
+            }
+            Button("Cancel", role: .cancel) {
+                newText = ""
+                model.cancelTextPlacement()
+            }
+        } message: {
+            Text("This will be added where you tapped.")
         }
         .alert("Unsaved changes", isPresented: $confirmDiscard) {
             Button("Save") { model.save() }

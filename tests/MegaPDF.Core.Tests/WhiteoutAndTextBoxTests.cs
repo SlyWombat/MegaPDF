@@ -95,6 +95,36 @@ public class WhiteoutAndTextBoxTests : IDisposable
         Assert.Equal("Movable note", hit.TextLine!.Text);
     }
 
+    /// <summary>
+    /// SDD §6.2 contract 4: a box written here must be addressable by id on the
+    /// phones, which work by id because page-object indices shift under them.
+    /// </summary>
+    [Fact]
+    public void AddedText_CarriesAnAddressableId_ThatSurvivesSave()
+    {
+        var savedPath = Path.Combine(_dir, "text-box-id.pdf");
+        string id;
+        using (var doc = _engine.Open(WritePdf()))
+        {
+            using (var page = doc.GetPage(0))
+            {
+                page.AppendTextBox("Movable note", 14, new PdfPoint(105, 260));
+                var box = Assert.Single(page.GetTextBoxes());
+                Assert.NotNull(box.TextBoxId);
+                Assert.StartsWith("text:", box.TextBoxId);
+                id = box.TextBoxId!;
+            }
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        var after = Assert.Single(reopenedPage.GetTextBoxes());
+        Assert.Equal("Movable note", after.Text);
+        Assert.Equal(id, after.TextBoxId);
+    }
+
     [Fact]
     public void MoveTextBoxOperation_MovesInPlace_AndUndoes()
     {

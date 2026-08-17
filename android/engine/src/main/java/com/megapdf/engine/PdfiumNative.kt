@@ -46,6 +46,19 @@ internal object PdfiumNative {
     ): Boolean
     external fun nativeGetStampImagePacked(handle: Long, annotIndex: Int): IntArray?
 
+    // Added text (#34). A text box is a page text object carrying the
+    // "MegaPDFTextBox" mark plus an "id" param — the desktop's representation,
+    // addressed by id because page-object indices shift. Ids, texts and
+    // [l, b, r, t, fontSize] arrive as three aligned arrays.
+    external fun nativeAddTextBox(
+        handle: Long, text: String, fontSize: Double, x: Double, y: Double, id: String,
+    ): Boolean
+    external fun nativeTextBoxIds(handle: Long): Array<String>
+    external fun nativeTextBoxTexts(handle: Long): Array<String>
+    external fun nativeTextBoxRectsPacked(handle: Long): DoubleArray
+    external fun nativeMoveTextBox(handle: Long, id: String, x: Double, y: Double): Boolean
+    external fun nativeRemoveTextBox(handle: Long, id: String): Boolean
+
     // Text search (#26). Case-insensitive literal substring; packed
     // [rectCount, l, b, r, t...] per match, PDF points, bottom-left origin.
     external fun nativeSearchPagePacked(handle: Long, query: String): DoubleArray

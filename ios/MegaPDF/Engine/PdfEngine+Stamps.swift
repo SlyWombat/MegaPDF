@@ -16,6 +16,8 @@ extension PdfEngine {
                        rect: PdfRect, id: String) throws {
         guard pixels.count == pixelWidth * pixelHeight else { throw PdfError.editFailed }
         try withPage(document, index: pageIndex) { page in
+            // Placement arrives in crop space from the UI (#30); pdfium wants user space.
+            let rect = rect.toUser(cropOrigin(page))
             guard let bmp = FPDFBitmap_Create(Int32(pixelWidth), Int32(pixelHeight), 1),
                   let buffer = FPDFBitmap_GetBuffer(bmp) else { throw PdfError.editFailed }
             defer { FPDFBitmap_Destroy(bmp) }
@@ -48,6 +50,16 @@ extension PdfEngine {
                   Self.setMegaPdfId(annot, id: id)
             else { throw PdfError.editFailed }
         }
+    }
+
+    /// Removes the annotation carrying `MegaPDF_Id` == `id`, wherever it now sits.
+    /// Annotation indices shift as annots come and go, so every reversible edit
+    /// addresses its target by id instead (#34). A no-op when it is already gone,
+    /// so an undo cannot throw on a document someone else has since changed.
+    func removeAnnot(_ document: PdfDocument, pageIndex: Int, id: String) throws {
+        let found = try stamps(document, pageIndex: pageIndex).first { $0.id == id }
+        guard let found else { return }
+        try removeAnnot(document, pageIndex: pageIndex, annotIndex: found.annotIndex)
     }
 
     /// Reads a stamp's image back at native pixel resolution via the temporary

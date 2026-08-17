@@ -52,3 +52,8 @@ dist/
 # Local secrets and Python cruft — never committed
 .env
 __pycache__/
+
+# Understand-Anything knowledge graph: generated analysis output (~600 KB), rebuilt
+# by /understand. The .understandignore inside it IS worth keeping if you want the
+# exclusions shared, but the graph itself is a build artifact.
+.ua/
