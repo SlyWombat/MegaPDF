@@ -40,6 +40,9 @@ data class SearchHit(
     val rects: List<com.megapdf.engine.PdfRect>,
 )
 
+/** A tap that is waiting for the text the user is about to type (#34). */
+data class PendingTextTap(val pageIndex: Int, val x: Double, val y: Double)
+
 sealed interface ViewerUiState {
     data class Home(val recents: List<RecentEntry>, val error: String? = null) : ViewerUiState
     data object Loading : ViewerUiState
@@ -70,6 +73,22 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Non-null while waiting for the user to tap a placement spot. */
     var pendingSignature: SignatureEntry? by mutableStateOf(null)
+        private set
+
+    private val history = EditHistory()
+
+    /** Undo/redo availability (#34) — mirrored out of the history for the toolbar. */
+    var canUndo: Boolean by mutableStateOf(false)
+        private set
+    var canRedo: Boolean by mutableStateOf(false)
+        private set
+
+    /** True between "Add text" and the tap that says where it goes. */
+    var isPlacingText: Boolean by mutableStateOf(false)
+        private set
+
+    /** Set by that tap; the screen shows the text field for it. */
+    var pendingTextTap: PendingTextTap? by mutableStateOf(null)
         private set
 
     /** Screenshot-mode sheet request ("sign" | "draw" | "search"); set via launch intent. */
@@ -350,7 +369,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
 
-            var edited = false
+            if (isPlacingText) {
+                isPlacingText = false
+                statusMessage = null
+                pendingTextTap = PendingTextTap(pageIndex, x, y)
+                return@launch
+            }
+
+            // Whichever edit the tap lands on, it goes through the history so it
+            // can be taken back (#34).
+            var operation: PdfEditOperation? = null
             val page = doc.openPage(pageIndex)
             try {
                 val stamps = page.stamps()
@@ -366,32 +394,102 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 selectedStamp = null
 
                 val field = page.formFields().firstOrNull { it.rect.contains(x, y) }
-                if (field != null) {
-                    page.clickAt(field.rect.centerX, field.rect.centerY)
-                    edited = true
+                operation = if (field != null) {
+                    FieldToggleOperation(pageIndex, field.rect.centerX, field.rect.centerY)
                 } else {
                     val mark = stamps
                         .filter { it.id.startsWith("mark:") }
                         .firstOrNull { it.rect.contains(x, y) }
                     if (mark != null) {
-                        page.removeAnnot(mark.annotIndex)
-                        edited = true
+                        MarkOperation(
+                            pageIndex, MarkOperation.squareFromMark(mark.rect), mark.id, false)
                     } else {
-                        val square = page.detectCheckboxSquares()
+                        page.detectCheckboxSquares()
                             .firstOrNull { it.contains(x, y) }
-                        if (square != null) {
-                            page.addCheckMark(square, "mark:${java.util.UUID.randomUUID()}")
-                            edited = true
-                        }
+                            ?.let {
+                                MarkOperation(
+                                    pageIndex, it, "mark:${java.util.UUID.randomUUID()}", true)
+                            }
                     }
                 }
             } finally {
                 page.close()
             }
-            if (edited) {
-                markEditedAndRerender(pageIndex)
+            operation?.let { perform(it, doc) }
+        }
+    }
+
+    // --- Added text (#34) ---
+
+    /** Arms the next tap to place text. Tapping the page opens the text field. */
+    fun startTextPlacement() {
+        cancelPlacement()
+        selectedStamp = null
+        isPlacingText = true
+        statusMessage = "Tap the page where the text should go"
+    }
+
+    fun cancelTextPlacement() {
+        isPlacingText = false
+        pendingTextTap = null
+        statusMessage = null
+    }
+
+    /** Commits the text typed for the pending tap. */
+    fun commitText(text: String) {
+        val pending = pendingTextTap ?: return
+        val doc = document ?: return
+        pendingTextTap = null
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                perform(
+                    TextBoxOperation(
+                        pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
+                        trimmed, 12.0, pending.x, pending.y, adding = true),
+                    doc)
+            } catch (e: Exception) {
+                statusMessage = "Couldn't add that text"
             }
         }
+    }
+
+    // --- Undo / redo (#34) ---
+
+    fun undo() {
+        val doc = document ?: return
+        viewModelScope.launch {
+            try {
+                history.undo(doc)?.let { afterHistoryChange(it) }
+            } catch (e: Exception) {
+                statusMessage = "Couldn't undo that"
+            }
+        }
+    }
+
+    fun redo() {
+        val doc = document ?: return
+        viewModelScope.launch {
+            try {
+                history.redo(doc)?.let { afterHistoryChange(it) }
+            } catch (e: Exception) {
+                statusMessage = "Couldn't redo that"
+            }
+        }
+    }
+
+    /** The single funnel for every reversible change. */
+    private suspend fun perform(operation: PdfEditOperation, doc: PdfDocument) {
+        history.perform(operation, doc)
+        afterHistoryChange(operation.pageIndex)
+    }
+
+    private fun afterHistoryChange(pageIndex: Int) {
+        canUndo = history.canUndo
+        canRedo = history.canRedo
+        selectedStamp = null
+        markEditedAndRerender(pageIndex)
     }
 
     // --- Signature library and placement (#16/#17) ---
@@ -501,15 +599,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
         val id = "sig:${java.util.UUID.randomUUID()}"
 
+        perform(
+            StampOperation(pageIndex, id, pixels, bitmap.width, bitmap.height,
+                           rect, adding = true),
+            doc)
+        // Keep it selected so the handles appear straight away.
         val page = doc.openPage(pageIndex)
         try {
-            page.addImageStamp(pixels, bitmap.width, bitmap.height, rect, id)
-            val placed = page.stamps().first { it.id == id }
-            selectedStamp = SelectedStamp(pageIndex, placed.annotIndex, id, placed.rect)
+            val placed = page.stamps().firstOrNull { it.id == id }
+            if (placed != null) {
+                selectedStamp = SelectedStamp(pageIndex, placed.annotIndex, id, placed.rect)
+            }
         } finally {
             page.close()
         }
-        markEditedAndRerender(pageIndex)
     }
 
     /**
@@ -524,23 +627,30 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val doc = document ?: return
         viewModelScope.launch {
             val rect = clampToPage(newRect, state.pageSizes[sel.pageIndex])
-            val page = doc.openPage(sel.pageIndex)
-            try {
-                val packed = page.stampImagePacked(sel.annotIndex)
-                if (packed == null) {
-                    statusMessage = "Couldn't read this signature's image"
-                    return@launch
-                }
-                val w = packed[0]
-                val h = packed[1]
-                page.removeAnnot(sel.annotIndex)
-                page.addImageStamp(packed.copyOfRange(2, packed.size), w, h, rect, sel.id)
-                val placed = page.stamps().first { it.id == sel.id }
-                selectedStamp = sel.copy(annotIndex = placed.annotIndex, rect = placed.rect)
+            var page = doc.openPage(sel.pageIndex)
+            val packed = try {
+                page.stampImagePacked(sel.annotIndex)
             } finally {
                 page.close()
             }
-            markEditedAndRerender(sel.pageIndex)
+            if (packed == null) {
+                statusMessage = "Couldn't read this signature's image"
+                return@launch
+            }
+            perform(
+                MoveStampOperation(
+                    sel.pageIndex, sel.id, packed.copyOfRange(2, packed.size),
+                    packed[0], packed[1], from = sel.rect, to = rect),
+                doc)
+            page = doc.openPage(sel.pageIndex)
+            try {
+                val placed = page.stamps().firstOrNull { it.id == sel.id }
+                if (placed != null) {
+                    selectedStamp = sel.copy(annotIndex = placed.annotIndex, rect = placed.rect)
+                }
+            } finally {
+                page.close()
+            }
         }
     }
 
@@ -548,14 +658,22 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val sel = selectedStamp ?: return
         val doc = document ?: return
         viewModelScope.launch {
+            // Read the image back first: without it, undo could not put the same
+            // signature back.
             val page = doc.openPage(sel.pageIndex)
-            try {
-                page.removeAnnot(sel.annotIndex)
+            val packed = try {
+                page.stampImagePacked(sel.annotIndex)
             } finally {
                 page.close()
             }
-            selectedStamp = null
-            markEditedAndRerender(sel.pageIndex)
+            if (packed == null) {
+                statusMessage = "Couldn't remove this signature"
+                return@launch
+            }
+            perform(
+                StampOperation(sel.pageIndex, sel.id, packed.copyOfRange(2, packed.size),
+                               packed[0], packed[1], sel.rect, adding = false),
+                doc)
         }
     }
 
@@ -665,6 +783,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         isDirty = false
         pendingSignature = null
         selectedStamp = null
+        // History belongs to the open document — never offer to undo an edit made
+        // to a file that is no longer on screen.
+        history.clear()
+        canUndo = false
+        canRedo = false
+        isPlacingText = false
+        pendingTextTap = null
         val doc = document ?: return
         document = null
         viewModelScope.launch { doc.close() }

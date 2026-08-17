@@ -205,6 +205,64 @@ class PdfPage internal constructor(
             PdfiumNative.nativeGetStampImagePacked(handle, annotIndex)
         }
 
+    // ---- Added text (#34) ------------------------------------------------
+
+    /**
+     * Places [text] with its baseline starting at ([x], [y]) in crop space,
+     * tagged with the given [id]. The representation matches the desktop's, so
+     * the box is movable text in MegaPDF for Windows and searchable text
+     * everywhere else.
+     */
+    suspend fun addTextBox(
+        text: String, fontSize: Double, x: Double, y: Double, id: String,
+    ): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        require(text.isNotBlank()) { "text must not be blank" }
+        check(PdfiumNative.nativeAddTextBox(handle, text.trim(), fontSize, x, y, id)) {
+            "failed to add text box"
+        }
+    }
+
+    /** Every MegaPDF text box on this page, in page-object order. */
+    suspend fun textBoxes(): List<TextBox> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val ids = PdfiumNative.nativeTextBoxIds(handle)
+        val texts = PdfiumNative.nativeTextBoxTexts(handle)
+        val packed = PdfiumNative.nativeTextBoxRectsPacked(handle)
+        ids.mapIndexed { i, id ->
+            TextBox(
+                id = id,
+                text = texts.getOrElse(i) { "" },
+                rect = PdfRect(packed[i * 5], packed[i * 5 + 1],
+                               packed[i * 5 + 2], packed[i * 5 + 3]),
+                fontSize = packed[i * 5 + 4],
+            )
+        }
+    }
+
+    /** Moves the box with [id] so its lower-left corner lands on ([x], [y]). */
+    suspend fun moveTextBox(id: String, x: Double, y: Double): Unit =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            check(PdfiumNative.nativeMoveTextBox(handle, id, x, y)) { "failed to move text box" }
+        }
+
+    /** Removes the box with [id]. Already gone is success — undo may race a render. */
+    suspend fun removeTextBox(id: String): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        check(PdfiumNative.nativeRemoveTextBox(handle, id)) { "failed to remove text box" }
+    }
+
+    /**
+     * Removes the annotation carrying `MegaPDF_Id` == [id], wherever it now sits.
+     * Indices shift as annots come and go, so reversible edits address by id (#34).
+     * A no-op when it is already gone.
+     */
+    suspend fun removeAnnot(id: String) {
+        val found = stamps().firstOrNull { it.id == id } ?: return
+        removeAnnot(found.annotIndex)
+    }
+
     /**
      * Case-insensitive literal substring search on this page (#26), matches in
      * reading order. A match that wraps across lines carries one rect per line.
@@ -253,6 +311,14 @@ data class Stamp(val annotIndex: Int, val id: String, val rect: PdfRect)
 
 /** One search hit on a page; several rects when the hit wraps across lines. */
 data class SearchMatch(val rects: List<PdfRect>)
+
+/** A MegaPDF text box (#34): added text, addressed by its stable [id]. */
+data class TextBox(
+    val id: String,
+    val text: String,
+    val rect: PdfRect,
+    val fontSize: Double,
+)
 
 class PdfPasswordException : Exception("Password required or incorrect password")
 

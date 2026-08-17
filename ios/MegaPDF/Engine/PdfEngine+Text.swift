@@ -45,8 +45,11 @@ extension PdfEngine {
 
             guard let obj = FPDFPageObj_CreateTextObj(
                 document.docHandle, font, Float(fontSize)) else { throw PdfError.editFailed }
-            var inserted = false
-            defer { if !inserted { FPDFPageObj_Destroy(obj) } }
+            // pdfium takes ownership in FPDFPage_InsertObject — and frees the
+            // object itself if that call fails — so once it is handed over we
+            // must not destroy it, success or not.
+            var handedToPdfium = false
+            defer { if !handedToPdfium { FPDFPageObj_Destroy(obj) } }
 
             let wide = Array(trimmed.utf16) + [0]
             let didSet = wide.withUnsafeBufferPointer { FPDFText_SetText(obj, $0.baseAddress) }
@@ -61,10 +64,10 @@ extension PdfEngine {
             }
             // Re-read the mark we just added so the id param lands on the object
             // pdfium owns, then hand the object to the page.
-            guard Self.tagLastMark(document, obj, id: id),
-                  FPDFPage_InsertObject(page, obj) != 0 else { throw PdfError.editFailed }
-            inserted = true
-            guard FPDFPage_GenerateContent(page) != 0 else { throw PdfError.editFailed }
+            guard Self.tagLastMark(document, obj, id: id) else { throw PdfError.editFailed }
+            handedToPdfium = true
+            guard FPDFPage_InsertObject(page, obj) != 0,
+                  FPDFPage_GenerateContent(page) != 0 else { throw PdfError.editFailed }
         }
         return id
     }

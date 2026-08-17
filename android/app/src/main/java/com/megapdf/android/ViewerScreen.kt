@@ -64,6 +64,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material3.OutlinedTextField
 
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
@@ -83,6 +86,9 @@ fun ViewerScreen(
     isSaving: Boolean,
     signatures: List<SignatureEntry>,
     selectedStamp: SelectedStamp?,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    pendingTextTap: PendingTextTap?,
     searchQuery: String,
     searchHits: List<SearchHit>,
     currentHitIndex: Int,
@@ -98,6 +104,11 @@ fun ViewerScreen(
     onSaveDrawnSignature: (Bitmap) -> Unit,
     onDeleteSignature: (String) -> Unit,
     screenshotSheet: String? = null,
+    onUndo: () -> Unit,
+    onRedo: () -> Unit,
+    onStartTextPlacement: () -> Unit,
+    onCommitText: (String) -> Unit,
+    onCancelTextPlacement: () -> Unit,
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
     onSave: () -> Unit,
@@ -134,6 +145,33 @@ fun ViewerScreen(
             onDismiss = { signDialogOpen = false },
         )
     }
+    if (pendingTextTap != null) {
+        var typed by remember(pendingTextTap) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = onCancelTextPlacement,
+            title = { Text("Add text") },
+            text = {
+                Column {
+                    Text("This will be added where you tapped.")
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onCommitText(typed) }, enabled = typed.isNotBlank()) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelTextPlacement) { Text("Cancel") }
+            },
+        )
+    }
+
     if (drawDialogOpen) {
         DrawSignatureDialog(
             onSave = onSaveDrawnSignature,
@@ -179,10 +217,14 @@ fun ViewerScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = onUndo, enabled = canUndo) {
+                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                        }
                         IconButton(onClick = { searchOpen = true }) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
                         }
                         TextButton(onClick = { signDialogOpen = true }) { Text("Sign") }
+                        TextButton(onClick = onStartTextPlacement) { Text("Text") }
                         TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
                             Text(if (isSaving) "Saving…" else "Save")
                         }
@@ -194,6 +236,11 @@ fun ViewerScreen(
                                 text = { Text("Save a copy") },
                                 enabled = !isSaving,
                                 onClick = { menuOpen = false; onSaveAs() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Redo") },
+                                enabled = canRedo,
+                                onClick = { menuOpen = false; onRedo() },
                             )
                         }
                     },
