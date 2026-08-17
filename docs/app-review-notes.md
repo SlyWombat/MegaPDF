@@ -41,18 +41,30 @@ device.
 
 **4. Setting up and reaching the main features** (no login or credentials exist)
 Any PDF works as a sample; the app ships no content of its own and needs none.
+A purpose-built blank form is attached to the submission and kept at
+`docs/review/MegaPDF-Test-Form.pdf` (regenerate: `python3 tools/gen_review_form.py`):
+it has three printed squares, two real AcroForm checkboxes, a signature rule,
+and the word "insurance" four times for the search demonstration.
 1. Launch the app → Home screen → tap **Open PDF** → the iOS Files picker opens →
    choose any PDF from Files or iCloud Drive.
 2. **Check a box:** tap a checkbox or an empty printed square on the page — it is
    marked immediately. Both real AcroForm checkboxes and drawn squares work.
-3. **Edit text:** tap any line of text on the page, then type.
+3. **Clear a mark:** tap a marked box again and the mark is removed.
 4. **Sign:** tap **Sign** → **Draw** to sign with a finger or Apple Pencil, or
    **Photos** to use a photograph of a signature on paper (the white background is
    removed automatically). Then tap the saved signature and tap the page to place
    it; drag to move it, use the handles to resize.
 5. **Search:** tap the magnifier, type a word — every match is highlighted and the
    up/down arrows step through them.
-6. **Save:** tap **Save** to write the edited PDF back through the Files picker.
+6. **Save:** tap **Save** — the edited PDF is written back to the original file
+   in place (a "Saved" confirmation appears); **Save a copy**, in the overflow
+   menu, writes a new file through the Files picker instead.
+
+> **Scope note (checked against `ios/MegaPDF/Engine/` on 2026-08-15):** the iOS
+> engine does checkboxes (AcroForm widgets and drawn squares), signature stamps,
+> search, render and save — there is **no text editing on iOS**. Text editing is a
+> Windows-only feature; `TESTING.md` describes the Windows app. Do not tell App
+> Review about a feature the build does not have.
 
 **5. External services, tools or platforms**
 None. The app makes no network requests at all — no analytics, no crash
@@ -74,10 +86,12 @@ files the user already has and already opened, contains no third-party protected
 material, and provides no service in a regulated industry.
 
 **Permissions and privacy**
-The only permission prompt in the app is the system Photos picker, shown when the
-user chooses to add a signature from a photo — it uses PhotosPicker, so the app
-never gets library-wide access. There are no location, contacts, camera or App
-Tracking Transparency prompts. No data is collected; privacy policy:
+The app requests no permissions at all, and shows no permission dialogs. Adding a
+signature from a photo uses SwiftUI's `PhotosPicker`, which runs out of process
+and hands back only the single chosen image, so no photo-library authorisation is
+requested and the app never gets library-wide access — the build ships no
+`NSPhotoLibraryUsageDescription` because none is needed. There are no location,
+contacts, camera or App Tracking Transparency prompts either. No data is collected; privacy policy:
 https://electricrv.ca/megapdf/privacy/
 
 ---
@@ -103,13 +117,14 @@ only the core flow is needed:
 1. Launch from the home screen — show the app opening cold.
 2. Home screen → tap **Open PDF** → pick a PDF in Files.
 3. Tap two checkboxes/squares — show them marked.
-4. Tap a line of text, edit it, confirm.
+4. Tap one marked box a second time to clear it, then tap it again.
 5. Tap **Sign** → **Draw** → sign → save → tap the signature → tap the page to
    place it → drag it onto the signature line.
 6. Tap the magnifier → search a word → step through matches with the arrows.
-7. Tap **Save** → save through the Files picker → reopen the saved file to show
-   the edits persisted.
-8. Show the Photos prompt once (Sign → Photos) so the one permission dialog in the
-   app appears in the recording.
+7. Tap **Save** → the "Saved" confirmation appears → **Close** → reopen the file
+   from the Recents list on the home screen to show the edits persisted.
+8. Tap **Sign → Photos** once so the system photo picker appears, then close it.
+   Note for whoever films this: **no permission dialog will appear** — `PhotosPicker`
+   is out-of-process. The app has no permission prompts to record.
 
 Keep it unhurried; a couple of minutes is fine.

@@ -21,6 +21,7 @@ module CPdfium {
     header "fpdf_formfill.h"
     header "fpdf_save.h"
     header "fpdf_text.h"
+    header "fpdf_transformpage.h"
     export *
 }
 MM

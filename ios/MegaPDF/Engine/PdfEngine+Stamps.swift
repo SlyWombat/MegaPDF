@@ -16,6 +16,8 @@ extension PdfEngine {
                        rect: PdfRect, id: String) throws {
         guard pixels.count == pixelWidth * pixelHeight else { throw PdfError.editFailed }
         try withPage(document, index: pageIndex) { page in
+            // Placement arrives in crop space from the UI (#30); pdfium wants user space.
+            let rect = rect.toUser(cropOrigin(page))
             guard let bmp = FPDFBitmap_Create(Int32(pixelWidth), Int32(pixelHeight), 1),
                   let buffer = FPDFBitmap_GetBuffer(bmp) else { throw PdfError.editFailed }
             defer { FPDFBitmap_Destroy(bmp) }

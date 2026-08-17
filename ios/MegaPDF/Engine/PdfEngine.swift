@@ -27,6 +27,34 @@ struct PdfRect: Equatable {
     var top: Double
 }
 
+/// The CropBox origin in user space (#28/#30).
+///
+/// pdfium reports page content in user space, whose origin is the **MediaBox**,
+/// but it renders and measures the **CropBox**. Where the two differ — imposed
+/// pages, trimmed scans — every coordinate handed to the UI is out by that
+/// difference. Every coordinate crossing this engine's boundary is therefore
+/// shifted into crop-relative space, which is a no-op on the usual page whose
+/// crop origin is already (0,0). Mirrors `cropOrigin()` in Android's
+/// `engine.cpp` and `_cropLeft`/`_cropTop` in the desktop `PdfiumEngine`.
+struct CropOrigin: Equatable {
+    var x: Double = 0
+    var y: Double = 0
+}
+
+extension PdfRect {
+    /// User space (pdfium) → crop space (what the UI draws in).
+    func toCrop(_ crop: CropOrigin) -> PdfRect {
+        PdfRect(left: left - crop.x, bottom: bottom - crop.y,
+                right: right - crop.x, top: top - crop.y)
+    }
+
+    /// Crop space (what the UI hands us) → user space (pdfium).
+    func toUser(_ crop: CropOrigin) -> PdfRect {
+        PdfRect(left: left + crop.x, bottom: bottom + crop.y,
+                right: right + crop.x, top: top + crop.y)
+    }
+}
+
 struct PdfStamp: Equatable {
     let annotIndex: Int
     let id: String
@@ -138,6 +166,7 @@ actor PdfEngine {
         let page = try loadPage(document, index: pageIndex)
         defer { closePage(document, page) }
 
+        let crop = cropOrigin(page)
         var result: [PdfStamp] = []
         for i in 0..<FPDFPage_GetAnnotCount(page) {
             guard let annot = FPDFPage_GetAnnot(page, i) else { continue }
@@ -152,7 +181,7 @@ actor PdfEngine {
             result.append(PdfStamp(
                 annotIndex: Int(i), id: id,
                 rect: PdfRect(left: Double(r.left), bottom: Double(r.bottom),
-                              right: Double(r.right), top: Double(r.top))))
+                              right: Double(r.right), top: Double(r.top)).toCrop(crop)))
         }
         return result
     }
@@ -162,6 +191,16 @@ actor PdfEngine {
     // WriteBlock is a C function pointer with no user-context slot; the actor
     // serializes saves, so a static sink is safe.
     nonisolated(unsafe) static var saveSink = Data()
+
+    /// The page's CropBox origin, or (0,0) when it has none (#30). Cheap enough
+    /// to read per call; every coordinate-returning entry point converts through it.
+    func cropOrigin(_ page: FPDF_PAGE) -> CropOrigin {
+        var l: Float = 0, b: Float = 0, r: Float = 0, t: Float = 0
+        guard FPDFPage_GetCropBox(page, &l, &b, &r, &t) != 0, r > l, t > b else {
+            return CropOrigin()
+        }
+        return CropOrigin(x: Double(l), y: Double(b))
+    }
 
     /// Loads a page, runs `body`, and closes the page — the standard access
     /// pattern for all page-scoped operations (form lifecycle included).
