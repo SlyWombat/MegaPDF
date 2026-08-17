@@ -58,6 +58,15 @@
         .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
         .stores { color: var(--muted); font-size: 13px; margin-top: 14px; }
         .stores strong { color: var(--text); }
+        /* Store links, used once the apps are public (see the block in the hero). */
+        .storelinks { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+        .storelinks a {
+            display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+            border: 1px solid rgba(255,255,255,.25); border-radius: 10px;
+            padding: 10px 18px; color: var(--text); font-size: 14px;
+        }
+        .storelinks a:hover { border-color: var(--accent); color: var(--accent); }
+        .storelinks .where { color: var(--muted); font-size: 12px; display: block; }
 
         .shot { flex: 0 1 300px; }
         .shot img {
@@ -130,6 +139,20 @@
                 </div>
                 <p class="stores"><strong>Android</strong> and <strong>iPhone&nbsp;/&nbsp;iPad</strong> apps
                    are in testing now — Google&nbsp;Play and App&nbsp;Store releases are on the way.</p>
+
+                <!-- LAUNCH SWAP: when a store approves, delete the <p class="stores">
+                     line above and uncomment the matching link below. Both listings
+                     404 until they are public, so do not uncomment early. Deploy with
+                     website/deploy.py (credentials in Lighting Arduino/.env).
+                <div class="storelinks">
+                    <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
+                        <span><span class="where">Get it on</span>Google Play</span>
+                    </a>
+                    <a href="https://apps.apple.com/app/id6799522972">
+                        <span><span class="where">Download on the</span>App Store</span>
+                    </a>
+                </div>
+                -->
             </div>
             <div class="shot">
                 <img src="screenshot-viewer.png"
