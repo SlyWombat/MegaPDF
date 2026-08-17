@@ -59,28 +59,25 @@ extension PdfEngine {
         }
     }
 
-    /// Drawn (non-form) checkbox candidates: stroked-not-filled path objects,
-    /// 6–24 pt on both axes, squareness within 25%.
+    /// Drawn (non-form) checkbox candidates, from the shared engine core (#33):
+    /// stroked-not-filled path objects, 6–24 pt, squareness within 25% (SDD §6.2
+    /// contract 2). The heuristic itself is no longer written here — one
+    /// implementation now serves all three platforms, which is what stops the
+    /// next #30 from happening.
     func detectCheckboxSquares(_ document: PdfDocument, pageIndex: Int) throws -> [PdfRect] {
         try withPage(document, index: pageIndex) { page in
-            let crop = cropOrigin(page)
-            var result: [PdfRect] = []
-            for i in 0..<FPDFPage_CountObjects(page) {
-                guard let obj = FPDFPage_GetObject(page, i),
-                      FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_PATH else { continue }
-                var l: Float = 0, b: Float = 0, r: Float = 0, t: Float = 0
-                guard FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) != 0 else { continue }
-                let w = r - l, h = t - b
-                guard w >= 6, w <= 24, h >= 6, h <= 24 else { continue }
-                guard abs(w - h) <= 0.25 * max(w, h) else { continue }
-                var fillmode: Int32 = 0
-                var stroke: FPDF_BOOL = 0
-                guard FPDFPath_GetDrawMode(obj, &fillmode, &stroke) != 0,
-                      stroke != 0, fillmode == FPDF_FILLMODE_NONE else { continue }
-                result.append(PdfRect(left: Double(l), bottom: Double(b),
-                                      right: Double(r), top: Double(t)).toCrop(crop))
+            // FPDF_PAGE is an OpaquePointer here; the ABI takes a bare void*.
+            let handle = UnsafeMutableRawPointer(page)
+            let count = megapdf_detect_checkbox_squares(handle, nil, 0)
+            guard count > 0 else { return [] }
+            var buffer = [megapdf_rect](repeating: megapdf_rect(), count: count)
+            _ = buffer.withUnsafeMutableBufferPointer {
+                megapdf_detect_checkbox_squares(handle, $0.baseAddress, count)
             }
-            return result
+            // The core already returns crop-space rects.
+            return buffer.map {
+                PdfRect(left: $0.left, bottom: $0.bottom, right: $0.right, top: $0.top)
+            }
         }
     }
 

@@ -20,6 +20,8 @@
 #include "fpdf_text.h"
 #include "fpdf_transformpage.h"  // FPDFPage_GetCropBox
 
+#include "megapdf_core.h"  // the shared policy core (#33)
+
 namespace {
 
 struct Document {
@@ -403,28 +405,21 @@ Java_com_megapdf_engine_PdfiumNative_nativeClickAt(JNIEnv*, jobject, jlong handl
 // stroked-not-filled paths, 6-24pt on both axes, squareness within 25%.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeDetectSquaresPacked(JNIEnv* env, jobject,
-                                                               jlong handle) {
+                                                                jlong handle) {
+    // The heuristic itself lives in the shared core (#33) — this is marshalling
+    // only, which is what this shim was always supposed to be.
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const size_t count = megapdf_detect_checkbox_squares(p->page, nullptr, 0);
+    std::vector<megapdf_rect> rects(count);
+    if (count > 0) megapdf_detect_checkbox_squares(p->page, rects.data(), count);
+
     std::vector<double> packed;
-    const int count = FPDFPage_CountObjects(p->page);
-    for (int i = 0; i < count; i++) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
-        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_PATH) continue;
-        float l, b, r, t;
-        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
-        const float w = r - l, h = t - b;
-        if (w < 6 || w > 24 || h < 6 || h > 24) continue;
-        const float larger = w > h ? w : h;
-        if ((w > h ? w - h : h - w) > 0.25f * larger) continue;
-        int fillmode = 0;
-        FPDF_BOOL stroke = 0;
-        if (!FPDFPath_GetDrawMode(obj, &fillmode, &stroke)) continue;
-        if (!stroke || fillmode != FPDF_FILLMODE_NONE) continue;
-        packed.push_back(l - crop.x);
-        packed.push_back(b - crop.y);
-        packed.push_back(r - crop.x);
-        packed.push_back(t - crop.y);
+    packed.reserve(count * 4);
+    for (const megapdf_rect& r : rects) {
+        packed.push_back(r.left);
+        packed.push_back(r.bottom);
+        packed.push_back(r.right);
+        packed.push_back(r.top);
     }
     jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
     if (out && !packed.empty()) {
