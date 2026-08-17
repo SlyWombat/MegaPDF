@@ -52,6 +52,16 @@ extension PdfEngine {
         }
     }
 
+    /// Removes the annotation carrying `MegaPDF_Id` == `id`, wherever it now sits.
+    /// Annotation indices shift as annots come and go, so every reversible edit
+    /// addresses its target by id instead (#34). A no-op when it is already gone,
+    /// so an undo cannot throw on a document someone else has since changed.
+    func removeAnnot(_ document: PdfDocument, pageIndex: Int, id: String) throws {
+        let found = try stamps(document, pageIndex: pageIndex).first { $0.id == id }
+        guard let found else { return }
+        try removeAnnot(document, pageIndex: pageIndex, annotIndex: found.annotIndex)
+    }
+
     /// Reads a stamp's image back at native pixel resolution via the temporary
     /// 1pt-per-pixel matrix (the shared move/resize pattern — repeated moves
     /// never lose resolution, including stamps placed by other platforms).

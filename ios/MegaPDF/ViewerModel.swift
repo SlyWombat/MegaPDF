@@ -19,6 +19,14 @@ struct SelectedStamp: Equatable {
     let rect: PdfRect
 }
 
+/// A tap that is waiting for the text the user is about to type (#34).
+struct PendingText: Identifiable {
+    let id = UUID()
+    let pageIndex: Int
+    let x: Double
+    let y: Double
+}
+
 /// One search hit in the document-wide flat match list (#26).
 struct SearchMatch: Equatable {
     let pageIndex: Int
@@ -38,6 +46,13 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var searchMatches: [SearchMatch] = []
     @Published private(set) var currentMatchIndex: Int?
     @Published private(set) var isSearching = false
+    /// Undo/redo availability (#34) — mirrored out of the history for the toolbar.
+    @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
+    /// True between "Add text" and the tap that says where it goes.
+    @Published private(set) var isPlacingText = false
+    /// Set by that tap; ViewerView presents the text field for it.
+    @Published var pendingText: PendingText?
 
     /// Set only by `-screenshot sign|draw` launches; ViewerView opens the sheet.
     enum ScreenshotSheet { case signatures, draw }
@@ -49,6 +64,7 @@ final class ViewerModel: ObservableObject {
 
     private let recents = RecentsStore()
     private let signatureStore = SignatureStore()
+    private let history = EditHistory()
     private var document: PdfDocument?
     private var sourceURL: URL?
     private var renderedWidths: [Int: Int] = [:]
@@ -211,9 +227,15 @@ final class ViewerModel: ObservableObject {
             return
         }
 
+        if isPlacingText {
+            isPlacingText = false
+            statusMessage = nil
+            pendingText = PendingText(pageIndex: index, x: x, y: y)
+            return
+        }
+
         Task {
             do {
-                var edited = false
                 let engine = PdfEngine.shared
 
                 let allStamps = try await engine.stamps(doc, pageIndex: index)
@@ -226,36 +248,115 @@ final class ViewerModel: ObservableObject {
                 }
                 selectedStamp = nil
 
+                // Whichever edit the tap lands on, it goes through the history so
+                // it can be taken back (#34).
+                var operation: PdfEditOperation?
                 let fields = try await engine.formFields(doc, pageIndex: index)
                 if let field = fields.first(where: { $0.rect.contains(x: x, y: y) }) {
-                    try await engine.clickAt(doc, pageIndex: index,
-                                             x: field.rect.centerX, y: field.rect.centerY)
-                    edited = true
-                } else {
-                    let stamps = try await engine.stamps(doc, pageIndex: index)
-                    if let mark = stamps.first(where: {
-                        $0.id.hasPrefix("mark:") && $0.rect.contains(x: x, y: y)
-                    }) {
-                        try await engine.removeAnnot(doc, pageIndex: index,
-                                                     annotIndex: mark.annotIndex)
-                        edited = true
-                    } else if let square = try await engine
-                        .detectCheckboxSquares(doc, pageIndex: index)
-                        .first(where: { $0.contains(x: x, y: y) }) {
-                        try await engine.addCheckMark(
-                            doc, pageIndex: index, square: square,
-                            id: "mark:\(UUID().uuidString)")
-                        edited = true
-                    }
+                    operation = FieldToggleOperation(pageIndex: index,
+                                                     x: field.rect.centerX,
+                                                     y: field.rect.centerY)
+                } else if let mark = allStamps.first(where: {
+                    $0.id.hasPrefix("mark:") && $0.rect.contains(x: x, y: y)
+                }) {
+                    operation = MarkOperation(
+                        pageIndex: index,
+                        square: MarkOperation.square(fromMark: mark.rect),
+                        id: mark.id, adding: false)
+                } else if let square = try await engine
+                    .detectCheckboxSquares(doc, pageIndex: index)
+                    .first(where: { $0.contains(x: x, y: y) }) {
+                    operation = MarkOperation(pageIndex: index, square: square,
+                                              id: "mark:\(UUID().uuidString)", adding: true)
                 }
-                if edited {
-                    isDirty = true
-                    invalidatePage(index)
+                if let operation {
+                    try await perform(operation, doc: doc)
                 }
             } catch {
                 // Edits are tap-driven; a failure just leaves the page unchanged.
             }
         }
+    }
+
+    // MARK: - added text (#34)
+
+    /// Arms the next tap to place text. Tapping the page opens the text field.
+    func startTextPlacement() {
+        cancelPlacement()
+        selectedStamp = nil
+        isPlacingText = true
+        statusMessage = "Tap the page where the text should go"
+    }
+
+    func cancelTextPlacement() {
+        isPlacingText = false
+        pendingText = nil
+        statusMessage = nil
+    }
+
+    /// Commits the text the user typed for the pending tap.
+    func commitText(_ text: String) {
+        guard let pending = pendingText, let doc = document else { return }
+        pendingText = nil
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task {
+            do {
+                try await perform(
+                    TextBoxOperation(pageIndex: pending.pageIndex,
+                                     id: "text:\(UUID().uuidString)",
+                                     text: trimmed, fontSize: 12,
+                                     x: pending.x, y: pending.y, adding: true),
+                    doc: doc)
+            } catch {
+                statusMessage = "Couldn't add that text."
+            }
+        }
+    }
+
+    // MARK: - undo / redo (#34)
+
+    func undo() {
+        guard let doc = document else { return }
+        Task {
+            do {
+                if let page = try await history.undo(PdfEngine.shared, doc) {
+                    afterHistoryChange(page)
+                }
+            } catch {
+                statusMessage = "Couldn't undo that."
+            }
+        }
+    }
+
+    func redo() {
+        guard let doc = document else { return }
+        Task {
+            do {
+                if let page = try await history.redo(PdfEngine.shared, doc) {
+                    afterHistoryChange(page)
+                }
+            } catch {
+                statusMessage = "Couldn't redo that."
+            }
+        }
+    }
+
+    /// Applies an edit through the history and refreshes everything that depends
+    /// on it. The single funnel for every reversible change.
+    private func perform(_ operation: PdfEditOperation, doc: PdfDocument) async throws {
+        try await history.perform(operation, PdfEngine.shared, doc)
+        afterHistoryChange(operation.pageIndex)
+    }
+
+    private func afterHistoryChange(_ pageIndex: Int) {
+        // Deliberately conservative: any history movement leaves the document
+        // possibly different from the bytes on disk, so it stays dirty.
+        isDirty = true
+        canUndo = history.canUndo
+        canRedo = history.canRedo
+        selectedStamp = nil
+        invalidatePage(pageIndex)
     }
 
     func invalidatePage(_ index: Int) {
@@ -373,21 +474,19 @@ final class ViewerModel: ObservableObject {
                     statusMessage = "Couldn't read this signature's image."
                     return
                 }
-                try await engine.removeAnnot(doc, pageIndex: sel.pageIndex,
-                                             annotIndex: sel.annotIndex)
-                try await engine.addImageStamp(
-                    doc, pageIndex: sel.pageIndex, pixels: image.pixels,
-                    pixelWidth: image.width, pixelHeight: image.height,
-                    rect: rect, id: sel.id)
-                let placed = try await engine.stamps(doc, pageIndex: sel.pageIndex)
-                    .first { $0.id == sel.id }
-                if let placed {
+                try await perform(
+                    MoveStampOperation(pageIndex: sel.pageIndex, id: sel.id,
+                                       pixels: image.pixels,
+                                       pixelWidth: image.width, pixelHeight: image.height,
+                                       from: sel.rect, to: rect),
+                    doc: doc)
+                // Keep the moved stamp selected so the handles stay put.
+                if let placed = try await engine.stamps(doc, pageIndex: sel.pageIndex)
+                    .first(where: { $0.id == sel.id }) {
                     selectedStamp = SelectedStamp(pageIndex: sel.pageIndex,
                                                   annotIndex: placed.annotIndex,
                                                   id: sel.id, rect: placed.rect)
                 }
-                isDirty = true
-                invalidatePage(sel.pageIndex)
             } catch {
                 statusMessage = "Couldn't move the signature."
             }
@@ -397,11 +496,24 @@ final class ViewerModel: ObservableObject {
     func removeSelectedStamp() {
         guard let sel = selectedStamp, let doc = document else { return }
         Task {
-            try? await PdfEngine.shared.removeAnnot(
-                doc, pageIndex: sel.pageIndex, annotIndex: sel.annotIndex)
-            selectedStamp = nil
-            isDirty = true
-            invalidatePage(sel.pageIndex)
+            do {
+                let engine = PdfEngine.shared
+                // Read the image back first: without it, undo could not put the
+                // same signature back.
+                guard let image = try await engine.stampImage(
+                    doc, pageIndex: sel.pageIndex, annotIndex: sel.annotIndex) else {
+                    statusMessage = "Couldn't remove this signature."
+                    return
+                }
+                try await perform(
+                    StampOperation(pageIndex: sel.pageIndex, id: sel.id,
+                                   pixels: image.pixels,
+                                   pixelWidth: image.width, pixelHeight: image.height,
+                                   rect: sel.rect, adding: false),
+                    doc: doc)
+            } catch {
+                statusMessage = "Couldn't remove this signature."
+            }
         }
     }
 
@@ -432,17 +544,17 @@ final class ViewerModel: ObservableObject {
         Task {
             do {
                 let engine = PdfEngine.shared
-                try await engine.addImageStamp(doc, pageIndex: pageIndex, pixels: pixels,
-                                               pixelWidth: w, pixelHeight: h,
-                                               rect: rect, id: id)
+                try await perform(
+                    StampOperation(pageIndex: pageIndex, id: id, pixels: pixels,
+                                   pixelWidth: w, pixelHeight: h,
+                                   rect: rect, adding: true),
+                    doc: doc)
                 if let placed = try await engine.stamps(doc, pageIndex: pageIndex)
                     .first(where: { $0.id == id }) {
                     selectedStamp = SelectedStamp(pageIndex: pageIndex,
                                                   annotIndex: placed.annotIndex,
                                                   id: id, rect: placed.rect)
                 }
-                isDirty = true
-                invalidatePage(pageIndex)
             } catch {
                 statusMessage = "Couldn't place the signature."
             }
@@ -560,6 +672,13 @@ final class ViewerModel: ObservableObject {
         isDirty = false
         pendingSignature = nil
         selectedStamp = nil
+        // History belongs to the open document — never offer to undo an edit
+        // made to a file that is no longer on screen.
+        history.clear()
+        canUndo = false
+        canRedo = false
+        isPlacingText = false
+        pendingText = nil
         if let doc = document {
             document = nil
             Task { await PdfEngine.shared.close(doc) }
