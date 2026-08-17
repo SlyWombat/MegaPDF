@@ -146,9 +146,13 @@ struct ViewerView: View {
                 model.search(term: term, debounce: false)
             }
         }
+        // The setter deliberately does nothing: SwiftUI flips `isPresented` to
+        // false as soon as any button is tapped, and if that cleared the pending
+        // tap before the Add action ran, the text would be silently dropped. Both
+        // buttons resolve the state explicitly instead.
         .alert("Add text", isPresented: Binding(
             get: { model.pendingText != nil },
-            set: { if !$0 { model.cancelTextPlacement() } }
+            set: { _ in }
         )) {
             TextField("Text", text: $newText)
                 .autocorrectionDisabled()
