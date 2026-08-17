@@ -65,8 +65,31 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.layout.Column
-import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.materialIcon
+import androidx.compose.material.icons.materialPath
+import androidx.compose.ui.graphics.vector.ImageVector
+
+/**
+ * The undo arrow. `material-icons-core` does not carry it and one glyph is not
+ * worth pulling in `material-icons-extended` (SDD §4.5 keeps the footprint
+ * small), so it is drawn here from the standard 24dp Material path.
+ */
+private val UndoIcon: ImageVector = materialIcon(name = "Filled.Undo") {
+    materialPath {
+        moveTo(12.5f, 8.0f)
+        curveToRelative(-2.65f, 0.0f, -5.05f, 0.99f, -6.9f, 2.6f)
+        lineTo(2.0f, 7.0f)
+        verticalLineToRelative(9.0f)
+        horizontalLineToRelative(9.0f)
+        lineToRelative(-3.62f, -3.62f)
+        curveToRelative(1.39f, -1.16f, 3.16f, -1.88f, 5.12f, -1.88f)
+        curveToRelative(3.54f, 0.0f, 6.55f, 2.31f, 7.6f, 5.5f)
+        lineToRelative(2.37f, -0.78f)
+        curveTo(21.08f, 11.03f, 17.15f, 8.0f, 12.5f, 8.0f)
+        close()
+    }
+}
 
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
@@ -218,7 +241,7 @@ fun ViewerScreen(
                     },
                     actions = {
                         IconButton(onClick = onUndo, enabled = canUndo) {
-                            Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                            Icon(UndoIcon, contentDescription = "Undo")
                         }
                         IconButton(onClick = { searchOpen = true }) {
                             Icon(Icons.Filled.Search, contentDescription = "Search")
