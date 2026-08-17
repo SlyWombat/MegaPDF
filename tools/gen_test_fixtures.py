@@ -262,6 +262,11 @@ def gen_textbox():
     This is the interop half of the contract. Each platform's own tests prove it
     can write a box and read it back; this fixture proves it can read one written
     somewhere else -- the text-object equivalent of `stamped.pdf` for annots.
+
+    It also carries two boxes that are marked but carry *no* id, which is what
+    MegaPDF for Windows wrote before it started stamping one. They must read as
+    text boxes and must not collide: an id shared between two objects would make
+    removeTextBox delete an arbitrary one.
     """
     objs = []
     add = lambda b: (objs.append(b), len(objs))[1]
@@ -271,6 +276,15 @@ def gen_textbox():
         b"BT /F1 14 Tf 72 720 Td (Ordinary body text, not a text box.) Tj ET\n"
         b"/MegaPDFTextBox << /id (text:fixture-1) >> BDC\n"
         b"BT /F1 12 Tf 100 300 Td (Fixture text box) Tj ET\n"
+        b"EMC\n"
+        # Two boxes marked but carrying no id: what MegaPDF for Windows wrote
+        # before it started stamping one (SDD 6.2 contract 4). They must read as
+        # text boxes and still be told apart.
+        b"/MegaPDFTextBox BDC\n"
+        b"BT /F1 12 Tf 100 260 Td (Legacy box one) Tj ET\n"
+        b"EMC\n"
+        b"/MegaPDFTextBox BDC\n"
+        b"BT /F1 12 Tf 100 220 Td (Legacy box two) Tj ET\n"
         b"EMC\n"))
     pages_num = len(objs) + 2
     page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "

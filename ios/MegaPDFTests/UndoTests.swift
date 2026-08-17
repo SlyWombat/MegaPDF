@@ -115,6 +115,42 @@ final class UndoTests: XCTestCase {
         XCTAssertEqual(boxes.first?.id, "text:undo-1")
     }
 
+    /// The round trip that matters, through pdfium rather than through Swift
+    /// arithmetic: mark a square, clear the mark, undo the clear, and the mark
+    /// must come back where it was. `square(fromMark:)` inverts an inset that was
+    /// stored as float, so this is where any drift would show.
+    func testUndoingAClearRestoresTheMarkGeometry() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        defer { Task { await engine.close(doc) } }
+        let history = EditHistory()
+
+        let squares = try await engine.detectCheckboxSquares(doc, pageIndex: 0)
+        let square = try XCTUnwrap(squares.first)
+        try await history.perform(
+            MarkOperation(pageIndex: 0, square: square, id: "mark:geo", adding: true),
+            engine, doc)
+        let afterMark = try await engine.stamps(doc, pageIndex: 0)
+        let placed = try XCTUnwrap(afterMark.first { $0.id == "mark:geo" })
+
+        // Clear it the way a tap does — reconstructing the square from the mark.
+        try await history.perform(
+            MarkOperation(pageIndex: 0,
+                          square: MarkOperation.square(fromMark: placed.rect),
+                          id: "mark:geo", adding: false),
+            engine, doc)
+        let afterClear = try await engine.stamps(doc, pageIndex: 0)
+        XCTAssertTrue(afterClear.isEmpty)
+
+        _ = try await history.undo(engine, doc)
+        let afterUndoStamps = try await engine.stamps(doc, pageIndex: 0)
+        let restored = try XCTUnwrap(afterUndoStamps.first { $0.id == "mark:geo" })
+        XCTAssertEqual(restored.rect.left, placed.rect.left, accuracy: 0.01)
+        XCTAssertEqual(restored.rect.bottom, placed.rect.bottom, accuracy: 0.01)
+        XCTAssertEqual(restored.rect.right, placed.rect.right, accuracy: 0.01)
+        XCTAssertEqual(restored.rect.top, placed.rect.top, accuracy: 0.01)
+    }
+
     /// `square(fromMark:)` reconstructs the detected square from the drawn mark,
     /// which is what lets "clear a mark" be undone.
     func testSquareReconstructionRoundTrips() {

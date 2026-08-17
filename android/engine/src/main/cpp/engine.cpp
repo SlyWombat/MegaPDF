@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "fpdfview.h"
@@ -269,6 +270,8 @@ constexpr char kMegaPdfIdKey[] = "MegaPDF_Id";
 // come and go, so every reversible edit addresses its target by id instead.
 constexpr const char* kTextBoxMark = "MegaPDFTextBox";
 constexpr const char* kTextBoxIdKey = "id";
+// Handle given to a marked box that carries no id; the object index follows.
+constexpr const char* kUntaggedPrefix = "text:untagged#";
 
 bool MarkNameIs(FPDF_PAGEOBJECTMARK mark, const char* name) {
     unsigned long bytes = 0;
@@ -283,7 +286,13 @@ bool MarkNameIs(FPDF_PAGEOBJECTMARK mark, const char* name) {
 }
 
 // True when `obj` is one of our text boxes; fills `out` with its id.
-bool TextBoxId(FPDF_PAGEOBJECT obj, std::vector<jchar>* out) {
+//
+// A box written before the id param existed (shipping Windows 1.6.x) still reads
+// as a text box, but its handle can only be its position -- and it must be
+// *unique*, or a document carrying two of them would let removeTextBox delete an
+// arbitrary one. Position-derived handles are not stable across edits, which is
+// fine: nothing here creates untagged boxes, it only has to read them coherently.
+bool TextBoxId(FPDF_PAGEOBJECT obj, int objectIndex, std::vector<jchar>* out) {
     if (FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return false;
     const int marks = FPDFPageObj_CountMarks(obj);
     for (int m = 0; m < marks; m++) {
@@ -299,9 +308,8 @@ bool TextBoxId(FPDF_PAGEOBJECT obj, std::vector<jchar>* out) {
                 return true;
             }
         }
-        // Desktop boxes predate the id param: still a text box, just unaddressable.
-        static const char kUntagged[] = "text:untagged";
-        *out = std::vector<jchar>(kUntagged, kUntagged + sizeof(kUntagged) - 1);
+        const std::string fallback = std::string(kUntaggedPrefix) + std::to_string(objectIndex);
+        *out = std::vector<jchar>(fallback.begin(), fallback.end());
         return true;
     }
     return false;
@@ -312,7 +320,7 @@ FPDF_PAGEOBJECT FindTextBox(FPDF_PAGE page, const std::vector<jchar>& id) {
     for (int i = 0; i < count; i++) {
         FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
         std::vector<jchar> found;
-        if (obj != nullptr && TextBoxId(obj, &found) && found == id) return obj;
+        if (obj != nullptr && TextBoxId(obj, i, &found) && found == id) return obj;
     }
     return nullptr;
 }
@@ -537,7 +545,7 @@ Java_com_megapdf_engine_PdfiumNative_nativeTextBoxIds(JNIEnv* env, jobject, jlon
     for (int i = 0; i < count; i++) {
         FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
         std::vector<jchar> id;
-        if (obj != nullptr && TextBoxId(obj, &id)) ids.push_back(id);
+        if (obj != nullptr && TextBoxId(obj, i, &id)) ids.push_back(id);
     }
     jclass stringClass = env->FindClass("java/lang/String");
     jobjectArray out = env->NewObjectArray(static_cast<jsize>(ids.size()), stringClass, nullptr);
@@ -559,7 +567,7 @@ Java_com_megapdf_engine_PdfiumNative_nativeTextBoxTexts(JNIEnv* env, jobject, jl
     for (int i = 0; i < count; i++) {
         FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
         std::vector<jchar> id;
-        if (obj == nullptr || !TextBoxId(obj, &id)) continue;
+        if (obj == nullptr || !TextBoxId(obj, i, &id)) continue;
         texts.push_back(textPage != nullptr ? ReadTextObjectText(obj, textPage)
                                             : std::vector<jchar>());
     }
@@ -586,7 +594,7 @@ Java_com_megapdf_engine_PdfiumNative_nativeTextBoxRectsPacked(JNIEnv* env, jobje
     for (int i = 0; i < count; i++) {
         FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
         std::vector<jchar> id;
-        if (obj == nullptr || !TextBoxId(obj, &id)) continue;
+        if (obj == nullptr || !TextBoxId(obj, i, &id)) continue;
         float l = 0, b = 0, r = 0, t = 0, size = 0;
         FPDFPageObj_GetBounds(obj, &l, &b, &r, &t);
         FPDFTextObj_GetFontSize(obj, &size);
