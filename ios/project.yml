@@ -13,7 +13,13 @@ targets:
   MegaPDF:
     type: application
     platform: iOS
-    sources: [MegaPDF]
+    sources:
+      - MegaPDF
+      # The shared engine core (#33), compiled straight into the app — one
+      # implementation of the policy that used to be written per platform.
+      - path: ../core
+        name: core
+        includes: ["*.cpp", "*.h"]
     dependencies:
       # Dynamic libpdfium.dylib — must be embedded (and signed) in the bundle.
       - framework: Vendor/pdfium.xcframework
@@ -22,6 +28,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.megapdf.ios
         PRODUCT_NAME: MegaPDF
+        # Swift reaches the core's C ABI through the bridging header; the core's
+        # own .cpp needs pdfium's headers, hence the search path.
+        SWIFT_OBJC_BRIDGING_HEADER: MegaPDF/MegaPDF-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/../core $(SRCROOT)/Vendor/pdfium/include
         # Substituted by ios-release.yml before xcodegen; CI simulator builds
         # run with CODE_SIGNING_ALLOWED=NO and never evaluate it.
         CODE_SIGN_STYLE: Automatic
