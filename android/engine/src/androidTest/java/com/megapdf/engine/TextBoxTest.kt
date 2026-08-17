@@ -118,6 +118,31 @@ class TextBoxTest {
         }
     }
 
+    /**
+     * Interop: a box written by another platform must read back here. The
+     * fixture carries the marked-content section the engines write, not one this
+     * platform produced.
+     */
+    @Test
+    fun readsATextBoxWrittenElsewhere() {
+        runBlocking {
+            val doc = engine.open(asset("textbox.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    val boxes = page.textBoxes()
+                    assertEquals("ordinary body text must not read as a box", 1, boxes.size)
+                    assertEquals("Fixture text box", boxes[0].text)
+                    assertEquals("text:fixture-1", boxes[0].id)
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
     @Test
     fun textGoesWhereAskedOnACroppedPage() {
         runBlocking {

@@ -78,6 +78,20 @@ final class AddTextTests: XCTestCase {
         try await engine.removeTextBox(doc, pageIndex: 0, id: first)
     }
 
+    /// Interop: a box written by another platform must read back here. The
+    /// fixture carries the marked-content section the engines write, not one
+    /// this platform produced.
+    func testReadsATextBoxWrittenElsewhere() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("textbox"))
+        defer { Task { await engine.close(doc) } }
+
+        let boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        XCTAssertEqual(boxes.count, 1, "the ordinary body text must not read as a box")
+        XCTAssertEqual(boxes.first?.text, "Fixture text box")
+        XCTAssertEqual(boxes.first?.id, "text:fixture-1")
+    }
+
     func testTextGoesWhereAskedOnACroppedPage() async throws {
         let engine = PdfEngine.shared
         let doc = try await engine.open(try fixture("cropped"))
