@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "com.megapdf.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ca.electricrv.megapdf"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 8
         versionName = "1.2.0"
     }
