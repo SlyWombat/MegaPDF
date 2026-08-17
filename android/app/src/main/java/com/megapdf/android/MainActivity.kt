@@ -1,8 +1,11 @@
 package com.megapdf.android
 
+import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +20,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Edge-to-edge, declared rather than inherited (#40). Targeting API 36
+        // makes it mandatory — Android 16 ignores the opt-out — so saying it here
+        // means every OS version behaves the same way instead of only the new ones.
+        //
+        // Both bars are forced to the *light* style: MegaPDF has no dark theme
+        // (`MaterialTheme {}` takes the default light scheme regardless of the
+        // system setting), so the automatic style would paint white icons onto a
+        // white app whenever the device is in dark mode.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
+        )
         super.onCreate(savedInstanceState)
         val screenshotState = intent.getStringExtra("screenshot")
         setContent {

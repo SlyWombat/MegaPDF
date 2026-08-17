@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -44,7 +45,10 @@ fun HomeScreen(
     var aboutOpen by remember { mutableStateOf(false) }
     var noticesOpen by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize()) {
+    // The only screen without a Scaffold, so nothing else applies window insets
+    // to it (#40). Without this the About button sits under the status bar once
+    // edge-to-edge is on.
+    Box(Modifier.fillMaxSize().safeDrawingPadding()) {
         HomeContent(
             recents = recents,
             error = error,
@@ -61,9 +65,12 @@ fun HomeScreen(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (noticesOpen) {
-            ThirdPartyNoticesScreen(onClose = { noticesOpen = false })
-        }
+    }
+
+    // Outside the inset Box on purpose: this is a full-screen overlay with its own
+    // Scaffold, so leaving it inside would apply the window insets twice (#40).
+    if (noticesOpen) {
+        ThirdPartyNoticesScreen(onClose = { noticesOpen = false })
     }
 
     if (aboutOpen) {
