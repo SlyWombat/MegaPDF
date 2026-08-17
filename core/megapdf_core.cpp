@@ -31,8 +31,8 @@ CropOrigin CropOriginOf(FPDF_PAGE page) {
 
 extern "C" {
 
-size_t megapdf_detect_checkbox_squares(void* page_handle, megapdf_rect* out,
-                                       size_t capacity) {
+MEGAPDF_API size_t megapdf_detect_checkbox_squares(void* page_handle, megapdf_rect* out,
+                                                   size_t capacity) {
     FPDF_PAGE page = static_cast<FPDF_PAGE>(page_handle);
     if (page == nullptr) return 0;
 
@@ -67,7 +67,7 @@ size_t megapdf_detect_checkbox_squares(void* page_handle, megapdf_rect* out,
     return found;
 }
 
-void megapdf_crop_origin(void* page_handle, double* out_x, double* out_y) {
+MEGAPDF_API void megapdf_crop_origin(void* page_handle, double* out_x, double* out_y) {
     const CropOrigin crop = CropOriginOf(static_cast<FPDF_PAGE>(page_handle));
     if (out_x != nullptr) *out_x = crop.x;
     if (out_y != nullptr) *out_y = crop.y;
