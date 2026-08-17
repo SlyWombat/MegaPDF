@@ -24,6 +24,23 @@
 
 #include <stddef.h>
 
+/*
+ * Visibility. Android and iOS compile this straight into their binaries, so the
+ * macro is empty there. Windows consumes it as a DLL through P/Invoke: the build
+ * defines MEGAPDF_CORE_BUILD to export, and nothing else ever includes this
+ * header on that platform (C# does not), so the import side is only here for
+ * completeness.
+ */
+#if defined(_WIN32)
+#  if defined(MEGAPDF_CORE_BUILD)
+#    define MEGAPDF_API __declspec(dllexport)
+#  else
+#    define MEGAPDF_API __declspec(dllimport)
+#  endif
+#else
+#  define MEGAPDF_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -46,13 +63,13 @@ typedef struct megapdf_rect {
  * @return the number of candidates found, which may exceed `capacity` — call
  *         again with a larger buffer to get them all.
  */
-size_t megapdf_detect_checkbox_squares(void* page, megapdf_rect* out, size_t capacity);
+MEGAPDF_API size_t megapdf_detect_checkbox_squares(void* page, megapdf_rect* out, size_t capacity);
 
 /**
  * The page's CropBox origin, or (0,0) when it has none. Exposed because bindings
  * still convert coordinates of their own on the way *in* (a tap, a placement).
  */
-void megapdf_crop_origin(void* page, double* out_x, double* out_y);
+MEGAPDF_API void megapdf_crop_origin(void* page, double* out_x, double* out_y);
 
 #ifdef __cplusplus
 }  /* extern "C" */
