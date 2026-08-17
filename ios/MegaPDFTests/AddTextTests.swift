@@ -87,9 +87,35 @@ final class AddTextTests: XCTestCase {
         defer { Task { await engine.close(doc) } }
 
         let boxes = try await engine.textBoxes(doc, pageIndex: 0)
-        XCTAssertEqual(boxes.count, 1, "the ordinary body text must not read as a box")
+        XCTAssertEqual(boxes.count, 3, "the ordinary body text must not read as a box")
         XCTAssertEqual(boxes.first?.text, "Fixture text box")
         XCTAssertEqual(boxes.first?.id, "text:fixture-1")
+
+        // The two marked-but-unidentified boxes are what MegaPDF for Windows
+        // wrote before it stamped ids. They must be told apart: one shared id
+        // would let a remove delete an arbitrary one.
+        let legacy = boxes.filter { $0.id.hasPrefix(PdfEngine.untaggedPrefix) }
+        XCTAssertEqual(legacy.count, 2)
+        XCTAssertEqual(Set(legacy.map(\.id)).count, 2, "untagged boxes must not share an id")
+        XCTAssertEqual(legacy.map(\.text), ["Legacy box one", "Legacy box two"])
+    }
+
+    /// Removing one untagged box must leave the other alone — the failure this
+    /// guards against is a shared handle resolving to whichever came first.
+    func testRemovingOneUntaggedBoxLeavesTheOther() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("textbox"))
+        defer { Task { await engine.close(doc) } }
+
+        let before = try await engine.textBoxes(doc, pageIndex: 0)
+        let target = try XCTUnwrap(before.first { $0.text == "Legacy box one" })
+        try await engine.removeTextBox(doc, pageIndex: 0, id: target.id)
+
+        let after = try await engine.textBoxes(doc, pageIndex: 0)
+        XCTAssertEqual(after.count, 2)
+        XCTAssertTrue(after.contains { $0.text == "Legacy box two" },
+                      "the other untagged box must survive")
+        XCTAssertFalse(after.contains { $0.text == "Legacy box one" })
     }
 
     func testTextGoesWhereAskedOnACroppedPage() async throws {

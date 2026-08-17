@@ -103,3 +103,4 @@ not public yet.
 | 0.1.1 | 2 | internal | first API upload end to end |
 | 1.0.0 | 4 | production | submitted 2026-08-09 for Google's first-app review; **shipped the default Android launcher icon** (no mipmap resources existed) |
 | 1.1.2 | 7 | production | promoted 2026-08-14, replacing vc4 while that review was still pending — accepted a likely review restart to avoid a first public release with a placeholder icon and misplaced highlights. Adds search, the real launcher icon, the CropBox coordinate fix (#28) and scroll-to-hit. |
+| 1.2.0 | 8 | *not released* | version bumped in `build.gradle.kts` when the work merged; **nothing is uploaded until an `android-v*` tag is pushed**. Adds undo/redo and Add text (#34). Deliberately held: Google's first-app review of vc7 was still pending, and replacing it again would restart that review a second time. Store copy is ready in `docs/release-notes-mobile-1.2.md`. |

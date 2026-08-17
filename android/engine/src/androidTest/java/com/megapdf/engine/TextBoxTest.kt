@@ -131,9 +131,48 @@ class TextBoxTest {
                 val page = doc.openPage(0)
                 try {
                     val boxes = page.textBoxes()
-                    assertEquals("ordinary body text must not read as a box", 1, boxes.size)
+                    assertEquals("ordinary body text must not read as a box", 3, boxes.size)
                     assertEquals("Fixture text box", boxes[0].text)
                     assertEquals("text:fixture-1", boxes[0].id)
+
+                    // The two marked-but-unidentified boxes are what MegaPDF for
+                    // Windows wrote before it stamped ids. They must be told
+                    // apart: one shared id would let a remove delete an
+                    // arbitrary one.
+                    val legacy = boxes.filter { it.id.startsWith("text:untagged#") }
+                    assertEquals(2, legacy.size)
+                    assertEquals("untagged boxes must not share an id",
+                        2, legacy.map { it.id }.toSet().size)
+                    assertEquals(listOf("Legacy box one", "Legacy box two"),
+                        legacy.map { it.text })
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    /**
+     * Removing one untagged box must leave the other alone — the failure this
+     * guards against is a shared handle resolving to whichever came first.
+     */
+    @Test
+    fun removingOneUntaggedBoxLeavesTheOther() {
+        runBlocking {
+            val doc = engine.open(asset("textbox.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    val target = page.textBoxes().first { it.text == "Legacy box one" }
+                    page.removeTextBox(target.id)
+
+                    val after = page.textBoxes()
+                    assertEquals(2, after.size)
+                    assertTrue("the other untagged box must survive",
+                        after.any { it.text == "Legacy box two" })
+                    assertTrue(after.none { it.text == "Legacy box one" })
                 } finally {
                     page.close()
                 }

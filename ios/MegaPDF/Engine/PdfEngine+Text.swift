@@ -83,7 +83,7 @@ extension PdfEngine {
             for i in 0..<FPDFPage_CountObjects(page) {
                 guard let obj = FPDFPage_GetObject(page, i),
                       FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT,
-                      let id = Self.textBoxId(obj) else { continue }
+                      let id = Self.textBoxId(obj, objectIndex: Int(i)) else { continue }
                 var l: Float = 0, b: Float = 0, r: Float = 0, t: Float = 0
                 guard FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) != 0 else { continue }
                 var size: Float = 0
@@ -134,7 +134,7 @@ extension PdfEngine {
         for i in 0..<FPDFPage_CountObjects(page) {
             guard let obj = FPDFPage_GetObject(page, i),
                   FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT,
-                  textBoxId(obj) == id else { continue }
+                  textBoxId(obj, objectIndex: Int(i)) == id else { continue }
             return obj
         }
         return nil
@@ -143,16 +143,28 @@ extension PdfEngine {
     /// The id carried by the object's `MegaPDFTextBox` mark, or nil when the
     /// object is not one of ours. Desktop boxes predate the id param, so a marked
     /// object with no id still reads as a text box — it just gets a derived handle.
-    private static func textBoxId(_ obj: FPDF_PAGEOBJECT) -> String? {
+    private static func textBoxId(_ obj: FPDF_PAGEOBJECT, objectIndex: Int) -> String? {
         for m in 0..<FPDFPageObj_CountMarks(obj) {
             guard let mark = FPDFPageObj_GetMark(obj, UInt(m)),
                   readWide({ FPDFPageObjMark_GetName(mark, $0, $1, $2) }) == textBoxMark
             else { continue }
-            let id = readWide { FPDFPageObjMark_GetParamStringValue(mark, "id", $0, $1, $2) }
-            return id?.isEmpty == false ? id : "text:untagged"
+            if let id = readWide({ FPDFPageObjMark_GetParamStringValue(mark, "id", $0, $1, $2) }),
+               !id.isEmpty {
+                return id
+            }
+            // A box written before the id param existed (shipping Windows 1.6.x).
+            // It still reads as a text box, but its handle can only be its
+            // position — and it must be *unique*, or a document with two of them
+            // would let removeTextBox delete an arbitrary one. Position-derived
+            // handles are not stable across edits, which is fine: nothing here
+            // creates untagged boxes, it only has to read them coherently.
+            return "\(untaggedPrefix)\(objectIndex)"
         }
         return nil
     }
+
+    /// Prefix for the handle given to a marked box that carries no id.
+    static let untaggedPrefix = "text:untagged#"
 
     private static func tagLastMark(_ document: PdfDocument, _ obj: FPDF_PAGEOBJECT,
                                     id: String) -> Bool {
