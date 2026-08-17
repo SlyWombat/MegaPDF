@@ -824,6 +824,29 @@ internal sealed class PdfiumPage : IPdfPage
     private static bool HasWhiteoutMark(IntPtr obj) => HasMark(obj, WhiteoutMarkName);
 
     /// <summary>True when the object carries a MegaPDF page-object mark with the given name.</summary>
+    /// <summary>
+    /// The `id` carried by the object's MegaPDFTextBox mark (SDD §6.2 contract 4),
+    /// or null when it has none — boxes written before the param existed.
+    /// </summary>
+    internal static string? ReadTextBoxId(IntPtr obj)
+    {
+        var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
+        for (var m = 0; m < marks; m++)
+        {
+            var mark = PdfiumNative.FPDFPageObj_GetMark(obj, m);
+            if (mark == IntPtr.Zero)
+                continue;
+            PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, TextBoxIdKey, null, 0, out var lengthInBytes);
+            if (lengthInBytes <= 2)
+                continue;
+            var buffer = new byte[lengthInBytes];
+            if (PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, TextBoxIdKey, buffer, lengthInBytes, out _) == 0)
+                continue;
+            return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
+        }
+        return null;
+    }
+
     private static bool HasMark(IntPtr obj, string markName)
     {
         var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
@@ -844,6 +867,7 @@ internal sealed class PdfiumPage : IPdfPage
     }
 
     private const string TextBoxMarkName = "MegaPDFTextBox";
+    private const string TextBoxIdKey = "id";
 
     public int AppendTextBox(string text, double fontSize, PdfPoint topLeft)
     {
@@ -857,7 +881,16 @@ internal sealed class PdfiumPage : IPdfPage
             var obj = PdfiumNative.FPDFPage_GetObject(_handle, index);
             if (obj != IntPtr.Zero)
             {
-                PdfiumNative.FPDFPageObj_AddMark(obj, TextBoxMarkName);
+                var mark = PdfiumNative.FPDFPageObj_AddMark(obj, TextBoxMarkName);
+                // SDD §6.2 contract 4: the id is how the mobile apps address a box,
+                // since page-object indices shift. Windows still works by index
+                // internally; this is written so a box created here is addressable
+                // on a phone.
+                if (mark != IntPtr.Zero)
+                {
+                    PdfiumNative.FPDFPageObjMark_SetStringParam(
+                        _document, obj, mark, TextBoxIdKey, $"text:{Guid.NewGuid()}");
+                }
                 GenerateContent();
             }
             return index;
@@ -891,7 +924,8 @@ internal sealed class PdfiumPage : IPdfPage
 
                     PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
                     var bounds = new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom);
-                    boxes.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize));
+                    boxes.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize,
+                        ReadTextBoxId(obj)));
                 }
                 return boxes;
             }
