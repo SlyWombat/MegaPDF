@@ -115,6 +115,103 @@ creating the app. Decline "Automatic integrity protection" for FOSS apps.
 `ca.electricrv.<product>` BEFORE tagging. (API upload of the very first bundle
 works fine against a console-created app record.)
 
+## 4b. Sideloaded and single-device apps (SlyCam, 2026-08-21/22)
+
+Everything above assumes a store release. An app that is **sideloaded onto one
+device you cannot reach** breaks different things, and the breakages are worse
+because nobody is standing in front of the phone.
+
+### ☢️ THE SIGNING LAW: one stable key, or you will delete your users' data
+
+**CI generates a fresh throwaway debug keystore on every runner.** Each build is
+therefore signed by a different key, Android refuses `adb install -r` with
+`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, and the only way to install the new version
+is to **uninstall the old one — which wipes app-private storage.**
+
+For a store app this never surfaces: Play App Signing gives you one identity.
+For a sideloaded app it means *every update destroys the app's data*, and it is
+not obvious until a user says "why do I have to uninstall every time". On SlyCam
+it nearly cost a night of security recordings.
+
+**Fix: sign debug builds with one stable key from a repo secret**, exactly like a
+release key.
+
+```kotlin
+signingConfigs {
+    val ksPath = System.getenv("SLYCAM_KEYSTORE_PATH")
+    if (ksPath != null && file(ksPath).exists()) {
+        create("shared") {
+            storeFile = file(ksPath); storeType = "PKCS12"
+            storePassword = System.getenv("SLYCAM_KEYSTORE_PASSWORD")
+            keyAlias = "slycam"
+            keyPassword = System.getenv("SLYCAM_KEYSTORE_PASSWORD")
+        }
+    }
+}
+buildTypes { debug { signingConfigs.findByName("shared")?.let { signingConfig = it } } }
+```
+
+Make CI **warn loudly** when the secret is missing, rather than silently emitting
+an APK that cannot update.
+
+**And you do not need a JDK to make the keystore** — which matters here, because
+there is no JDK in WSL (§2). Android accepts PKCS12:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -sha256 -days 10950 -nodes \
+    -keyout k.pem -out c.pem -subj "/CN=AppName/O=Electric RV/C=CA"
+openssl pkcs12 -export -inkey k.pem -in c.pem -name appalias -out key.p12 -passout pass:...
+base64 -w0 key.p12 | gh secret set APP_KEYSTORE_B64
+```
+
+### What survives an uninstall
+
+| Location | Survives uninstall? | Needs permission to read back? |
+|---|---|---|
+| `filesDir` / app-private | **No** | — |
+| `MediaStore` shared collections (`Pictures/App`, `Movies/App`) | **Yes** | **Yes** — after a reinstall you no longer own the entries you wrote, so reading your own files back needs `READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` |
+
+**No other app can rescue app-private data** — the sandbox forbids it, with or
+without permissions. Only `adb run-as` on a debuggable build, or the app itself.
+So if data must outlive an uninstall, write it to shared storage *at capture
+time*, not at cleanup time.
+
+### Storage accounting drifts, silently
+
+SlyCam filled a phone overnight from four compounding causes, and the pattern
+generalises: **the accounting and the actual writes had drifted apart.**
+
+- the budget swept one directory while four grew
+- every capture was *also* copied to shared storage, so everything existed twice
+  and half of it was unreachable by an app-private sweep
+- cleanup was coupled to an optional success path — files were deleted only
+  after a successful upload, and uploads were never configured, so nothing was
+  ever deleted
+- the cap was 20 GB, which is not a cap on a phone that also holds an OS update
+
+**Rules that follow:** one total budget across every path the app writes, swept
+on a timer rather than only when something is already wrong; never couple
+deletion to a success that may never come; keep a hard free-space floor below
+which the app degrades but keeps running and keeps signalling; and **if a new
+code path writes bytes, it goes into the sweep in the same commit.**
+
+### Build the trace before you need it
+
+An unattended device 300 km away cannot be attached to a debugger. Log to
+**three sinks at once**: logcat under a single tag, an in-app rolling panel with
+a share button, and a rotating file that can be uploaded. Narrate every step
+that can silently do nothing — permission state, service start, each capture,
+each upload with its HTTP status — and emit a periodic *alive* line carrying a
+monotonic counter. A status that says "running" cannot prove the pipeline is
+still delivering; a frame count can.
+
+**Instrument the near miss, not just the hit.** SlyCam missed a person 30 m down
+the road because they spanned about one cell of a 40×30 detection grid against a
+6-cell floor — no setting could have fired. Logging *what was seen and what it
+was short of* turned an unfalsifiable "it does not work" into a number to change.
+
+---
+
 ## 5. Marketing assets, the honest way
 
 Give the app a **screenshot mode**: iOS launch argument (`-screenshot
@@ -176,6 +273,14 @@ app screenshots. Keep page source versioned in the product repo
 | Play: "app does not support 16 KB memory page sizes" | CMake-built JNI lib on 4 KB default alignment → `target_link_options(... "-Wl,-z,max-page-size=16384")` (bblanchon PDFium prebuilts already comply; verify any prebuilt via ELF PT_LOAD p_align ≥ 0x4000) |
 | Play API: "Only releases with status draft may be created on draft app" | A never-published app's first production release must be status `draft` via API; a human presses Send-for-review in the console |
 | Xcode picks wrong version despite pinning logic | Every release exists under bare AND patch names → pin the exact path |
+| Android: `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, every sideloaded update needs an uninstall | CI made a fresh debug keystore per run → one stable key from a repo secret (§4b). **The uninstall wipes app data** |
+| App data vanished after a sideloaded update | Same cause. Anything that must survive belongs in `MediaStore` at capture time, not app-private |
+| Reinstalled app cannot read the files it wrote to `Pictures/App` | Ownership is lost on uninstall → declare `READ_MEDIA_IMAGES`/`READ_MEDIA_VIDEO` |
+| Storage fills despite a budget | The sweep covered one directory while other paths grew, and gallery copies doubled everything → one total budget over every write path |
+| Files never cleaned up | Deletion was coupled to a successful upload that never happened → bound by count/age regardless of the optional path |
+| CameraX: `PreviewView` black while `ImageAnalysis` gets frames fine | Two causes, either sufficient: the surface was handed to a service that did not exist yet (async start, and an `AndroidView` factory runs once), and `PreviewView` defaults to `PERFORMANCE`/SurfaceView which renders black under Compose content → re-attach from a `LaunchedEffect`, and set `ImplementationMode.COMPATIBLE` |
+| Saved frames sideways on a fixed-mount camera | `imageInfo.rotationDegrees` follows the display, which means nothing on a phone lying on its side → offer an explicit 0/90/180/270 override and pin it |
+| Camera FGS will not start after reboot (Android 15+) | `camera` is in the `BOOT_COMPLETED` FGS type ban → the app must already be foreground; declaring `CATEGORY_HOME` is one way |
 
 ## 9. New-product checklist (condensed order of battle)
 
@@ -196,5 +301,11 @@ app screenshots. Keep page source versioned in the product repo
 ---
 *Born from the MegaPDF campaign of 2026-08-08/09: two native apps from empty
 directories to store review in a weekend, including a 14-build fight with
-Apple's ingestion that ended in the Dylib Law. Update this document when a
-store moves the furniture again — they will.*
+Apple's ingestion that ended in the Dylib Law.*
+
+*§4b added 2026-08-22 from SlyCam, a sideloaded single-device camera built in a
+day under real time pressure. Its lesson is narrower than the Dylib Law and
+costs more often: **without a stable signing key, every sideloaded update
+deletes the app's data**, and nothing warns you.*
+
+*Update this document when a store moves the furniture again — they will.*
