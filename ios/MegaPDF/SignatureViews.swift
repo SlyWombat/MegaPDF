@@ -156,6 +156,62 @@ struct DrawSignatureView: View {
     }
 }
 
+/// What a base-14 face is called in the UI. The PDF names are exact and must not
+/// change (SDD §6.2 contract 4); these are only what the buttons say.
+func textBoxFontLabel(_ fontName: String) -> String {
+    fontName == "Times-Roman" ? "Times" : fontName
+}
+
+/// The one text editor in the app: placing new text (#34), correcting a box
+/// already on the page (#36), and choosing its size and face (#43).
+///
+/// Deliberately small. Six sizes and three faces are what "make this match the
+/// form I am filling in" needs, and SDD §3.1 keeps anything more out.
+struct TextBoxSheet: View {
+    let isEditing: Bool
+    @Binding var text: String
+    @Binding var fontSize: Double
+    @Binding var fontName: String
+    let onCommit: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Text", text: $text)
+                        .autocorrectionDisabled()
+                } footer: {
+                    Text(isEditing ? "This replaces the text you tapped."
+                                   : "This will be added where you tapped.")
+                }
+                Picker("Size", selection: $fontSize) {
+                    ForEach(textSizes, id: \.self) { size in
+                        Text("\(Int(size))").tag(size)
+                    }
+                }
+                Picker("Font", selection: $fontName) {
+                    ForEach(PdfEngine.standardFonts, id: \.self) { face in
+                        Text(textBoxFontLabel(face)).tag(face)
+                    }
+                }
+            }
+            .navigationTitle(isEditing ? "Edit text" : "Add text")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isEditing ? "Save" : "Add", action: onCommit)
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
 /// Selection chrome for something the user placed on the page: drag to move,
 /// corner handle to resize (aspect locked), ✕ to remove.
 ///

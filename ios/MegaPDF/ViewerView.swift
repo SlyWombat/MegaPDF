@@ -144,32 +144,28 @@ struct ViewerView: View {
                 model.search(term: term, debounce: false)
             }
         }
-        // One text field serves both jobs: placing new text (#34) and correcting a
-        // box already on the page (#36), which opens prefilled. The field is bound
-        // to the model, not to @State, so the prefill lands in the same update as
-        // `pendingText` rather than racing the alert's presentation.
+        // A sheet, not an alert: #43 puts size and face pickers beside the text
+        // field, and an alert's content builder ignores everything that is not a
+        // button or a text field. The `item:` form also drops the no-op-setter
+        // hack the alert needed — it does not flip its own binding when a button
+        // is tapped, so the pending tap can only be resolved deliberately.
         //
-        // The `isPresented` setter deliberately does nothing: SwiftUI flips it to
-        // false as soon as any button is tapped, and if that cleared the pending
-        // tap before the Add action ran, the text would be silently dropped. Both
-        // buttons resolve the state explicitly instead.
-        .alert(model.pendingText?.editingId == nil ? "Add text" : "Edit text",
-               isPresented: Binding(
-            get: { model.pendingText != nil },
-            set: { _ in }
-        )) {
-            TextField("Text", text: $model.draftText)
-                .autocorrectionDisabled()
-            Button(model.pendingText?.editingId == nil ? "Add" : "Save") {
-                model.commitText(model.draftText)
-            }
-            Button("Cancel", role: .cancel) {
-                model.cancelTextPlacement()
-            }
-        } message: {
-            Text(model.pendingText?.editingId == nil
-                 ? "This will be added where you tapped."
-                 : "This replaces the text you tapped.")
+        // The field and the pickers bind to the model, not to @State, so a
+        // correction's prefill lands in the same update as `pendingText` rather
+        // than racing the sheet's presentation.
+        .sheet(item: $model.pendingText) { pending in
+            TextBoxSheet(
+                isEditing: pending.editingId != nil,
+                text: $model.draftText,
+                fontSize: $model.draftSize,
+                fontName: $model.draftFont,
+                onCommit: {
+                    model.commitText(model.draftText,
+                                     fontSize: model.draftSize,
+                                     fontName: model.draftFont)
+                },
+                onCancel: model.cancelTextPlacement
+            )
         }
         .alert("Unsaved changes", isPresented: $confirmDiscard) {
             Button("Save") { model.save() }

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.System;
@@ -13,6 +14,7 @@ namespace MegaPDF.App;
 public sealed partial class MainWindow : Window
 {
     private TextBox? _activeEditor;
+    private StackPanel? _activeStyleBar;
     private Func<Task>? _activeEditorCommit;
 
     public MainViewModel ViewModel { get; }
@@ -159,10 +161,13 @@ public sealed partial class MainWindow : Window
         if (ViewModel.IsTextBoxMode)
         {
             ViewModel.CancelPlacementModes();
-            ShowInlineEditor(pageGrid, new PdfRect(pagePoint.X, pagePoint.Y, 0, 12), "", 12,
-                newText => string.IsNullOrWhiteSpace(newText)
+            var newStyle = ViewModel.LastTextStyle;
+            ShowInlineEditor(pageGrid, new PdfRect(pagePoint.X, pagePoint.Y, 0, newStyle.FontSize),
+                "", newStyle.FontSize, newStyle,
+                (newText, style) => string.IsNullOrWhiteSpace(newText)
                     ? Task.CompletedTask
-                    : ViewModel.AddTextBoxAsync(pageView.Index, pagePoint, newText));
+                    : ViewModel.AddTextBoxAsync(pageView.Index, pagePoint, newText,
+                        style!.FontName, style.FontSize));
             return;
         }
 
@@ -200,7 +205,8 @@ public sealed partial class MainWindow : Window
             {
                 var field = hit.Field!;
                 ShowInlineEditor(pageGrid, field.Bounds, field.Value, fontSizePoints: 12,
-                    newText => ViewModel.ApplyFormTextAsync(pageView.Index, field, newText));
+                    style: null,
+                    (newText, _) => ViewModel.ApplyFormTextAsync(pageView.Index, field, newText));
                 break;
             }
 
@@ -215,8 +221,12 @@ public sealed partial class MainWindow : Window
                 // Lines, not fragments: the editor covers the whole visual line (1.1).
                 var line = hit.TextLine!;
                 // Clearing all text means "remove this text" (undoable).
+                // style: null — §3.1 is explicit that no formatting UI appears when
+                // editing the document's own text. Its formatting is inherited from
+                // the run, so there is nothing to choose.
                 ShowInlineEditor(pageGrid, line.Bounds, line.Text, line.FontSize,
-                    newText => string.IsNullOrWhiteSpace(newText)
+                    style: null,
+                    (newText, _) => string.IsNullOrWhiteSpace(newText)
                         ? ViewModel.DeleteLineAsync(pageView.Index, line)
                         : ViewModel.ApplyLineEditAsync(pageView.Index, line, newText));
                 break;
@@ -249,14 +259,32 @@ public sealed partial class MainWindow : Window
             return false;
 
         Deselect();
-        ShowInlineEditor(canvas, line.Bounds, line.Text, line.FontSize,
-            newText => string.IsNullOrWhiteSpace(newText)
+        // An *added* box, not the document's own text: it has no inherited
+        // formatting, so this is where the size and face pickers belong (#43).
+        var run = hit.TextRun!;
+        var current = new TextStyleChoice(
+            run.FontSize, run.TextBoxFont ?? StandardTextBoxFonts.Default);
+        ShowInlineEditor(canvas, line.Bounds, line.Text, line.FontSize, current,
+            (newText, style) => string.IsNullOrWhiteSpace(newText)
                 ? ViewModel.DeleteLineAsync(pageView.Index, line)
-                : ViewModel.ApplyLineEditAsync(pageView.Index, line, newText));
+                : ViewModel.RestyleTextBoxAsync(pageView.Index, run, newText,
+                    style!.FontName, style.FontSize));
         return true;
     }
 
-    private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText, double fontSizePoints, Func<string, Task> commit)
+    /// <summary>What a base-14 face is called in the UI; the PDF names are exact.</summary>
+    private static string FontLabel(string fontName) =>
+        fontName == StandardTextBoxFonts.Serif ? "Times" : fontName;
+
+    /// <summary>
+    /// The inline editor. <paramref name="style"/> non-null adds the size and face
+    /// pickers above it — passed only for MegaPDF's own text boxes. It is null for
+    /// the document's own text and for form fields, where SDD §3.1 is explicit that
+    /// no formatting UI appears because the formatting is inherited.
+    /// </summary>
+    private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText,
+                                  double fontSizePoints, TextStyleChoice? style,
+                                  Func<string, TextStyleChoice?, Task> commit)
     {
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var editor = new TextBox
@@ -270,13 +298,52 @@ public sealed partial class MainWindow : Window
             AcceptsReturn = false,
         };
 
+        StackPanel? styleBar = null;
+        ComboBox? sizeBox = null;
+        ComboBox? fontBox = null;
+        if (style is not null)
+        {
+            sizeBox = new ComboBox { MinWidth = 72 };
+            foreach (var size in ViewModel.TextSizes)
+                sizeBox.Items.Add(new ComboBoxItem { Content = ((int)size).ToString(), Tag = size });
+            sizeBox.SelectedIndex = Math.Max(0, ViewModel.TextSizes.ToList().IndexOf(style.FontSize));
+            AutomationProperties.SetName(sizeBox, "Text size");
+
+            fontBox = new ComboBox { MinWidth = 110 };
+            foreach (var face in StandardTextBoxFonts.All)
+                fontBox.Items.Add(new ComboBoxItem { Content = FontLabel(face), Tag = face });
+            fontBox.SelectedIndex = Math.Max(0, StandardTextBoxFonts.All.ToList().IndexOf(style.FontName));
+            AutomationProperties.SetName(fontBox, "Text font");
+
+            styleBar = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(bounds.X * toDip - 6, bounds.Y * toDip - 48, 0, 0),
+            };
+            styleBar.Children.Add(sizeBox);
+            styleBar.Children.Add(fontBox);
+        }
+
+        TextStyleChoice? ChosenStyle()
+        {
+            if (style is null)
+                return null;
+            var size = (sizeBox?.SelectedItem as ComboBoxItem)?.Tag as double? ?? style.FontSize;
+            var face = (fontBox?.SelectedItem as ComboBoxItem)?.Tag as string ?? style.FontName;
+            return new TextStyleChoice(size, face);
+        }
+
         async Task CommitAsync()
         {
             if (!pageGrid.Children.Contains(editor))
                 return; // already committed or cancelled
             var newText = editor.Text;
+            var chosen = ChosenStyle();
             CloseEditor(pageGrid, editor);
-            await commit(newText);
+            await commit(newText, chosen);
         }
 
         // PreviewKeyDown, not KeyDown: TextBox handles Escape internally (reverting
@@ -294,9 +361,23 @@ public sealed partial class MainWindow : Window
                 CloseEditor(pageGrid, editor);
             }
         };
-        editor.LostFocus += async (_, _) => await CommitAsync();
+        // Focus moving into the pickers must not commit and tear the editor down.
+        editor.LostFocus += async (_, _) =>
+        {
+            if (FocusManager.GetFocusedElement(pageGrid.XamlRoot) is DependencyObject focused
+                && styleBar is not null && IsWithin(focused, styleBar))
+            {
+                return;
+            }
+            await CommitAsync();
+        };
 
         AutomationProperties.SetName(editor, "Edit text");
+        if (styleBar is not null)
+        {
+            pageGrid.Children.Add(styleBar);
+            _activeStyleBar = styleBar;
+        }
         pageGrid.Children.Add(editor);
         _activeEditor = editor;
         _activeEditorCommit = CommitAsync;
@@ -307,11 +388,28 @@ public sealed partial class MainWindow : Window
     private void CloseEditor(Grid pageGrid, TextBox editor)
     {
         pageGrid.Children.Remove(editor);
+        if (_activeStyleBar is not null)
+        {
+            pageGrid.Children.Remove(_activeStyleBar);
+            _activeStyleBar = null;
+        }
         if (_activeEditor == editor)
         {
             _activeEditor = null;
             _activeEditorCommit = null;
         }
+    }
+
+    /// <summary>True when <paramref name="node"/> is <paramref name="ancestor"/> or sits inside it.</summary>
+    private static bool IsWithin(DependencyObject node, DependencyObject ancestor)
+    {
+        for (DependencyObject? current = node; current is not null;
+             current = VisualTreeHelper.GetParent(current))
+        {
+            if (current == ancestor)
+                return true;
+        }
+        return false;
     }
 
     // --- Signature selection chrome (SDD §3.3: drag to move, handle to resize, ✕/Delete to remove) ---

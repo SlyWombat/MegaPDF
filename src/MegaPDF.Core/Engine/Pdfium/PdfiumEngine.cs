@@ -991,6 +991,48 @@ internal sealed class PdfiumPage : IPdfPage
         }
     }
 
+    public void InsertStyledTextBox(int objectIndex, string text, string fontName,
+                                    double fontSize, PdfPoint anchor, string id)
+    {
+        ThrowIfDisposed();
+        if (!StandardTextBoxFonts.IsSupported(fontName))
+            throw new ArgumentOutOfRangeException(nameof(fontName), fontName,
+                "Text boxes are limited to the three standard faces (#43).");
+
+        // Monitor is reentrant, so the nested engine calls below are safe.
+        lock (PdfiumLibrary.Lock)
+        {
+            // InsertTextRun reads bounds.Bottom as the baseline, the way AppendTextBox
+            // uses it; the true bounds are normalised below.
+            InsertTextRun(objectIndex, text, fontName, fontSize,
+                new PdfRect(anchor.X, anchor.Y - fontSize, 0, fontSize));
+
+            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
+            if (obj == IntPtr.Zero)
+                throw new InvalidOperationException("The restyled text box went missing.");
+
+            var mark = PdfiumNative.FPDFPageObj_AddMark(obj, TextBoxMarkName);
+            if (mark != IntPtr.Zero)
+            {
+                PdfiumNative.FPDFPageObjMark_SetStringParam(_document, obj, mark, TextBoxIdKey, id);
+                PdfiumNative.FPDFPageObjMark_SetStringParam(
+                    _document, obj, mark, TextBoxFontKey, fontName);
+            }
+            GenerateContent();
+
+            // Normalise onto the bounds anchor: InsertTextRun placed the baseline, and
+            // GetTextBoxes/MoveTextBox both speak bounds. Without this a 12pt → 18pt
+            // restyle drops by the extra descender depth.
+            if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom,
+                                                   out var right, out var top) != 0)
+            {
+                var height = top - bottom;
+                MoveTextBox(objectIndex,
+                    new PdfRect(anchor.X, anchor.Y - height, right - left, height));
+            }
+        }
+    }
+
     public void InsertTextRun(int objectIndex, string text, string fontName, double fontSize, PdfRect bounds)
     {
         ThrowIfDisposed();

@@ -143,6 +143,40 @@ final class AddTextTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(boxes.first { $0.id == "text:mono" }).fontName, "Courier")
     }
 
+    /// Restyling (#43) is remove + re-add at the old bounds lower-left, so the box
+    /// keeps the corner the user put it on. This is the case where the anchor
+    /// choice actually shows: growing 12 pt → 18 pt makes the glyphs taller, and
+    /// the box must grow *upward* from the rule it sits on rather than sinking
+    /// through it.
+    func testRestylingGrowsUpwardFromTheAnchoredCorner() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        defer { Task { await engine.close(doc) } }
+
+        let id = try await engine.addTextBox(doc, pageIndex: 0, text: "Paying agent",
+                                             fontSize: 12, x: 100, y: 300)
+        var boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        let before = try XCTUnwrap(boxes.first { $0.id == id }).rect
+
+        // The restyle the app performs, byte for byte.
+        try await engine.removeTextBox(doc, pageIndex: 0, id: id)
+        try await engine.addTextBox(doc, pageIndex: 0, text: "Paying agent", fontSize: 18,
+                                    x: before.left, y: before.bottom, id: id,
+                                    fontName: "Times-Roman")
+        try await engine.moveTextBox(doc, pageIndex: 0, id: id,
+                                     x: before.left, y: before.bottom)
+
+        boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        let after = try XCTUnwrap(boxes.first { $0.id == id })
+        XCTAssertEqual(after.fontName, "Times-Roman")
+        XCTAssertEqual(after.fontSize, 18, accuracy: 0.5)
+        XCTAssertEqual(after.rect.left, before.left, accuracy: 0.01,
+                       "the anchored corner must not move")
+        XCTAssertEqual(after.rect.bottom, before.bottom, accuracy: 0.01)
+        XCTAssertGreaterThan(after.rect.top, before.top,
+                             "bigger text must grow upward, not downward")
+    }
+
     /// Deliberately strict: the app passes one of three constants, so anything else
     /// is a bug and should fail loudly rather than silently render in the wrong face.
     func testAFaceOutsideTheThreeIsRejected() async throws {
