@@ -742,11 +742,49 @@ public partial class MainViewModel(Window window) : ObservableObject
         await DoEditAsync(new RemoveWhiteoutOperation(_document, pageIndex, objectIndex, bounds));
     }
 
-    public async Task AddTextBoxAsync(int pageIndex, PdfPoint topLeft, string text)
+    /// <summary>
+    /// Sizes offered for added text (#43). A short list, not a free-entry number box:
+    /// the job is "match the form I am filling in", and six presets cover it.
+    /// </summary>
+    public IReadOnlyList<double> TextSizes { get; } = [8, 10, 12, 14, 18, 24];
+
+    /// <summary>
+    /// The size and face the last added box was given. Sticky for the session, so
+    /// filling six fields on one form is not six trips through the pickers. Not
+    /// persisted — a new document is usually a new job.
+    /// </summary>
+    public TextStyleChoice LastTextStyle { get; private set; } =
+        new(12, StandardTextBoxFonts.Default);
+
+    public async Task AddTextBoxAsync(int pageIndex, PdfPoint topLeft, string text,
+                                      string fontName = StandardTextBoxFonts.Default,
+                                      double fontSize = 12)
     {
         if (_document is null || string.IsNullOrWhiteSpace(text))
             return;
-        await DoEditAsync(new AddTextBoxOperation(_document, pageIndex, text.Trim(), 12, topLeft));
+        LastTextStyle = new TextStyleChoice(fontSize, fontName);
+        await DoEditAsync(new AddTextBoxOperation(
+            _document, pageIndex, text.Trim(), fontSize, topLeft, fontName));
+    }
+
+    /// <summary>
+    /// Changes an added box's text, size and face together (#43) — one undoable edit,
+    /// anchored to the corner the box already sits on so it does not wander.
+    /// </summary>
+    public async Task RestyleTextBoxAsync(int pageIndex, PdfTextRun run, string text,
+                                          string fontName, double fontSize)
+    {
+        if (_document is null || string.IsNullOrWhiteSpace(text))
+            return;
+        var trimmed = text.Trim();
+        if (trimmed == run.Text && fontName == (run.TextBoxFont ?? StandardTextBoxFonts.Default)
+            && Math.Abs(fontSize - run.FontSize) < 0.01)
+        {
+            return;
+        }
+        LastTextStyle = new TextStyleChoice(fontSize, fontName);
+        await DoEditAsync(new RestyleTextBoxOperation(
+            _document, pageIndex, run.ObjectIndex, run, trimmed, fontName, fontSize));
     }
 
     /// <summary>Repositions an added text box (drag/nudge, SDD §3.3).</summary>
@@ -1156,3 +1194,6 @@ public partial class MainViewModel(Window window) : ObservableObject
         await dialog.ShowAsync();
     }
 }
+
+/// <summary>The size and face an added text box is being given (#43).</summary>
+public sealed record TextStyleChoice(double FontSize, string FontName);

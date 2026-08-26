@@ -135,6 +135,19 @@ public interface IPdfPage : IDisposable
     /// <summary>Detaches any page object by index (kept alive for undo), regardless of type.</summary>
     DetachedTextRun DetachObjectAt(int objectIndex);
 
+    /// <summary>
+    /// Inserts a MegaPDF text box at <paramref name="objectIndex"/> in the given face and
+    /// size, tagged with <paramref name="id"/> so it keeps its identity across a restyle
+    /// (SDD §6.2 contract 4) — that id is the handle the mobile apps address it by.
+    ///
+    /// Positioned so the box's *bounds* bottom-left lands on <paramref name="anchor"/>
+    /// (page space, so a larger Y is lower down). Deliberately not the baseline: a bigger
+    /// face has a deeper descender, so a restyle anchored on the baseline would sink the
+    /// box through the printed rule it sits on. Same trap the mobile engines document.
+    /// </summary>
+    void InsertStyledTextBox(int objectIndex, string text, string fontName, double fontSize,
+                             PdfPoint anchor, string id);
+
     void SetFormFieldValue(PdfFormField field, string value);
     void ToggleCheckbox(PdfFormField field);
 

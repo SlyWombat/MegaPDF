@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json.Serialization;
+using MegaPDF.Core.Engine;
 
 namespace MegaPDF.Core.Recovery;
 
@@ -24,6 +25,7 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(AddSignatureEntry), "addSignature")]
 [JsonDerivedType(typeof(MoveStampEntry), "moveStamp")]
 [JsonDerivedType(typeof(TextBoxAddEntry), "textBoxAdd")]
+[JsonDerivedType(typeof(TextBoxRestyleEntry), "textBoxRestyle")]
 [JsonDerivedType(typeof(MoveTextBoxEntry), "moveTextBox")]
 public abstract record JournalEntry(int PageIndex);
 
@@ -74,6 +76,14 @@ public sealed record MoveStampEntry(int PageIndex, string StampId, double X, dou
 /// boxes are all Helvetica, which is the default.
 /// </summary>
 public sealed record TextBoxAddEntry(int PageIndex, string Text, double FontSize, double X, double Y, string FontName = StandardTextBoxFonts.Default) : JournalEntry(PageIndex);
+
+/// <summary>
+/// Text-box restyle (#43): replayed by detaching whatever sits at the index and
+/// inserting the described box in its place, under the same id.
+/// </summary>
+public sealed record TextBoxRestyleEntry(
+    int PageIndex, int ObjectIndex, string Text, string FontName, double FontSize,
+    double AnchorX, double AnchorY, string Id) : JournalEntry(PageIndex);
 
 /// <summary>Text-box move: resolved by the from-bounds at replay time (content indexes shift).</summary>
 public sealed record MoveTextBoxEntry(
