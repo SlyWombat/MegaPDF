@@ -19,6 +19,8 @@ struct PdfTextBox: Equatable {
     let text: String
     let rect: PdfRect
     let fontSize: Double
+    /// The face it was written in; Helvetica for boxes that predate #43.
+    let fontName: String
 }
 
 extension PdfEngine {
@@ -26,19 +28,40 @@ extension PdfEngine {
     /// The page-object mark that distinguishes our text from the document's own.
     static let textBoxMark = "MegaPDFTextBox"
 
+    /// The face the user picked (#43), carried as a mark param beside the id
+    /// rather than read back off the font resource: pdfium is free to normalise
+    /// a standard font's reported name, and the cross-platform contract has to
+    /// be exactly what was chosen.
+    static let textBoxFontKey = "font"
+
+    /// The base-14 faces a text box may be written in (#43).
+    ///
+    /// Three, not fourteen: SDD §3.1 keeps formatting controls out of the app,
+    /// and a choice between serif, sans and monospace is what "make this match
+    /// the form I am filling in" actually needs. These are the exact names
+    /// `FPDFText_LoadStandardFont` takes, so nothing has to be mapped.
+    static let standardFonts = ["Helvetica", "Times-Roman", "Courier"]
+
+    /// What a box with no recorded face is, and what a new one defaults to.
+    static let defaultFont = "Helvetica"
+
     /// Places `text` with its baseline starting at the crop-space point
     /// (`x`, `y`) — text sits *on* the point tapped, which is what putting it on
     /// a printed rule needs. Returns the new box's stable id.
+    /// `fontName` must be one of `standardFonts`; the face is recorded on the
+    /// mark so every platform reads back exactly what was chosen (#43).
     @discardableResult
     func addTextBox(_ document: PdfDocument, pageIndex: Int, text: String,
                     fontSize: Double, x: Double, y: Double,
-                    id: String = "text:\(UUID().uuidString)") throws -> String {
+                    id: String = "text:\(UUID().uuidString)",
+                    fontName: String = PdfEngine.defaultFont) throws -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw PdfError.editFailed }
+        guard Self.standardFonts.contains(fontName) else { throw PdfError.editFailed }
 
         try withPage(document, index: pageIndex) { page in
             let crop = cropOrigin(page)
-            guard let font = FPDFText_LoadStandardFont(document.docHandle, "Helvetica") else {
+            guard let font = FPDFText_LoadStandardFont(document.docHandle, fontName) else {
                 throw PdfError.editFailed
             }
             defer { FPDFFont_Close(font) }
@@ -62,9 +85,11 @@ extension PdfEngine {
             guard FPDFPageObj_AddMark(obj, Self.textBoxMark) != nil else {
                 throw PdfError.editFailed
             }
-            // Re-read the mark we just added so the id param lands on the object
+            // Re-read the mark we just added so the params land on the object
             // pdfium owns, then hand the object to the page.
-            guard Self.tagLastMark(document, obj, id: id) else { throw PdfError.editFailed }
+            guard Self.tagLastMark(document, obj, id: id, fontName: fontName) else {
+                throw PdfError.editFailed
+            }
             handedToPdfium = true
             guard FPDFPage_InsertObject(page, obj) != 0,
                   FPDFPage_GenerateContent(page) != 0 else { throw PdfError.editFailed }
@@ -93,7 +118,8 @@ extension PdfEngine {
                     text: Self.textOf(obj, textPage),
                     rect: PdfRect(left: Double(l), bottom: Double(b),
                                   right: Double(r), top: Double(t)).toCrop(crop),
-                    fontSize: Double(size)))
+                    fontSize: Double(size),
+                    fontName: Self.textBoxFont(obj)))
             }
             return result
         }
@@ -166,11 +192,30 @@ extension PdfEngine {
     /// Prefix for the handle given to a marked box that carries no id.
     static let untaggedPrefix = "text:untagged#"
 
+    /// The face named by the box's `font` param, or Helvetica when it carries
+    /// none — which is every box written before #43, and what they all are.
+    private static func textBoxFont(_ obj: FPDF_PAGEOBJECT) -> String {
+        for m in 0..<FPDFPageObj_CountMarks(obj) {
+            guard let mark = FPDFPageObj_GetMark(obj, UInt(m)),
+                  readWide({ FPDFPageObjMark_GetName(mark, $0, $1, $2) }) == textBoxMark
+            else { continue }
+            if let face = readWide({
+                FPDFPageObjMark_GetParamStringValue(mark, textBoxFontKey, $0, $1, $2)
+            }), !face.isEmpty {
+                return face
+            }
+            break
+        }
+        return defaultFont
+    }
+
     private static func tagLastMark(_ document: PdfDocument, _ obj: FPDF_PAGEOBJECT,
-                                    id: String) -> Bool {
+                                    id: String, fontName: String) -> Bool {
         let count = FPDFPageObj_CountMarks(obj)
         guard count > 0, let mark = FPDFPageObj_GetMark(obj, UInt(count - 1)) else { return false }
         return FPDFPageObjMark_SetStringParam(document.docHandle, obj, mark, "id", id) != 0
+            && FPDFPageObjMark_SetStringParam(
+                document.docHandle, obj, mark, textBoxFontKey, fontName) != 0
     }
 
     /// Despite the headers saying FPDF_WCHARs, these lengths are in **BYTES**

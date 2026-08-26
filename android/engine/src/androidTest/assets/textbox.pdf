@@ -4,11 +4,17 @@
 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
 endobj
 2 0 obj
-<<  /Length 309 >>
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>
+endobj
+3 0 obj
+<<  /Length 437 >>
 stream
 BT /F1 14 Tf 72 720 Td (Ordinary body text, not a text box.) Tj ET
 /MegaPDFTextBox << /id (text:fixture-1) >> BDC
 BT /F1 12 Tf 100 300 Td (Fixture text box) Tj ET
+EMC
+/MegaPDFTextBox << /id (text:fixture-times) /font (Times-Roman) >> BDC
+BT /F2 18 Tf 100 180 Td (Eighteen point Times) Tj ET
 EMC
 /MegaPDFTextBox BMC
 BT /F1 12 Tf 100 260 Td (Legacy box one) Tj ET
@@ -19,25 +25,26 @@ EMC
 
 endstream
 endobj
-3 0 obj
-<< /Type /Page /Parent 4 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
-endobj
 4 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+<< /Type /Page /Parent 5 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R >>
 endobj
 5 0 obj
-<< /Type /Catalog /Pages 4 0 R >>
+<< /Type /Pages /Kids [4 0 R] /Count 1 >>
+endobj
+6 0 obj
+<< /Type /Catalog /Pages 5 0 R >>
 endobj
 xref
-0 6
+0 7
 0000000000 65535 f 
 0000000015 00000 n 
 0000000085 00000 n 
-0000000446 00000 n 
-0000000572 00000 n 
-0000000629 00000 n 
+0000000157 00000 n 
+0000000646 00000 n 
+0000000782 00000 n 
+0000000839 00000 n 
 trailer
-<< /Size 6 /Root 5 0 R >>
+<< /Size 7 /Root 6 0 R >>
 startxref
-678
+888
 %%EOF

@@ -122,7 +122,8 @@ public static class JournalReplayer
                     break;
 
                 case TextBoxAddEntry textBox:
-                    page.AppendTextBox(textBox.Text, textBox.FontSize, new PdfPoint(textBox.X, textBox.Y));
+                    page.AppendTextBox(textBox.Text, textBox.FontSize,
+                        new PdfPoint(textBox.X, textBox.Y), textBox.FontName);
                     applied++;
                     break;
 

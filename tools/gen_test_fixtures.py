@@ -267,15 +267,27 @@ def gen_textbox():
     MegaPDF for Windows wrote before it started stamping one. They must read as
     text boxes and must not collide: an id shared between two objects would make
     removeTextBox delete an arbitrary one.
+
+    One box is deliberately *not* 12 pt Helvetica (#43): 18 pt Times-Roman, with
+    the face named in a `font` property beside the id. Every box written before
+    #43 carries no `font`, and must still read as Helvetica -- that is what the
+    `text:fixture-1` box pins.
     """
     objs = []
     add = lambda b: (objs.append(b), len(objs))[1]
     font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    times = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>")
     content = add(stream(
         b"",
         b"BT /F1 14 Tf 72 720 Td (Ordinary body text, not a text box.) Tj ET\n"
         b"/MegaPDFTextBox << /id (text:fixture-1) >> BDC\n"
         b"BT /F1 12 Tf 100 300 Td (Fixture text box) Tj ET\n"
+        b"EMC\n"
+        # A box that chose its face and size (#43). The `font` property is the
+        # contract: it says what the user picked, independent of whatever name
+        # pdfium reports for the resource.
+        b"/MegaPDFTextBox << /id (text:fixture-times) /font (Times-Roman) >> BDC\n"
+        b"BT /F2 18 Tf 100 180 Td (Eighteen point Times) Tj ET\n"
         b"EMC\n"
         # Two boxes marked but carrying no id: what MegaPDF for Windows wrote
         # before it started stamping one (SDD 6.2 contract 4). They must read as
@@ -292,8 +304,8 @@ def gen_textbox():
         b"EMC\n"))
     pages_num = len(objs) + 2
     page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
-               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
-               % (pages_num, font, content))
+               b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> /Contents %d 0 R >>"
+               % (pages_num, font, times, content))
     pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
     assert pages == pages_num
     add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)

@@ -68,8 +68,12 @@ public sealed record RemoveStampEntry(int PageIndex, string StampId) : JournalEn
 
 public sealed record MoveStampEntry(int PageIndex, string StampId, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
 
-/// <summary>Text-box add: replayed through AppendTextBox so the box keeps its movable tag.</summary>
-public sealed record TextBoxAddEntry(int PageIndex, string Text, double FontSize, double X, double Y) : JournalEntry(PageIndex);
+/// <summary>
+/// Text-box add: replayed through AppendTextBox so the box keeps its movable tag.
+/// <c>FontName</c> is optional so a journal written before #43 still replays — those
+/// boxes are all Helvetica, which is the default.
+/// </summary>
+public sealed record TextBoxAddEntry(int PageIndex, string Text, double FontSize, double X, double Y, string FontName = StandardTextBoxFonts.Default) : JournalEntry(PageIndex);
 
 /// <summary>Text-box move: resolved by the from-bounds at replay time (content indexes shift).</summary>
 public sealed record MoveTextBoxEntry(

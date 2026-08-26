@@ -270,6 +270,13 @@ constexpr char kMegaPdfIdKey[] = "MegaPDF_Id";
 // come and go, so every reversible edit addresses its target by id instead.
 constexpr const char* kTextBoxMark = "MegaPDFTextBox";
 constexpr const char* kTextBoxIdKey = "id";
+// The face the user picked (#43), carried as a mark param beside the id rather
+// than read back off the font resource: pdfium is free to normalise a standard
+// font's reported name, and the cross-platform contract has to be exactly what
+// was chosen. A box with no `font` param is Helvetica -- which is what every box
+// written before #43 is.
+constexpr const char* kTextBoxFontKey = "font";
+constexpr const char* kDefaultTextBoxFont = "Helvetica";
 // Handle given to a marked box that carries no id; the object index follows.
 constexpr const char* kUntaggedPrefix = "text:untagged#";
 
@@ -313,6 +320,37 @@ bool TextBoxId(FPDF_PAGEOBJECT obj, int objectIndex, std::vector<jchar>* out) {
         return true;
     }
     return false;
+}
+
+// Reads a string param off the object's MegaPDFTextBox mark. False when the
+// object is not one of ours, or the mark does not carry that key.
+bool TextBoxMarkParam(FPDF_PAGEOBJECT obj, const char* key, std::vector<jchar>* out) {
+    if (FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return false;
+    const int marks = FPDFPageObj_CountMarks(obj);
+    for (int m = 0; m < marks; m++) {
+        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_GetMark(obj, static_cast<unsigned long>(m));
+        if (mark == nullptr || !MarkNameIs(mark, kTextBoxMark)) continue;
+        unsigned long bytes = 0;
+        if (!FPDFPageObjMark_GetParamStringValue(mark, key, nullptr, 0, &bytes) || bytes <= 2) {
+            return false;
+        }
+        std::vector<FPDF_WCHAR> buf(bytes / 2);
+        if (!FPDFPageObjMark_GetParamStringValue(mark, key, buf.data(), bytes, &bytes)) {
+            return false;
+        }
+        *out = std::vector<jchar>(buf.begin(), buf.end() - 1);
+        return true;
+    }
+    return false;
+}
+
+// The face a box was written in, defaulting to Helvetica for boxes that predate
+// the `font` param.
+std::vector<jchar> TextBoxFont(FPDF_PAGEOBJECT obj) {
+    std::vector<jchar> face;
+    if (TextBoxMarkParam(obj, kTextBoxFontKey, &face)) return face;
+    const std::string fallback = kDefaultTextBoxFont;
+    return std::vector<jchar>(fallback.begin(), fallback.end());
 }
 
 FPDF_PAGEOBJECT FindTextBox(FPDF_PAGE page, const std::vector<jchar>& id) {
@@ -491,18 +529,27 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jl
 
 // ---- Added text (#34) -------------------------------------------------------
 
-// Places `text` with its baseline starting at crop-space (x, y), in Helvetica,
-// tagged with the MegaPDFTextBox mark and the given id.
+// Places `text` with its baseline starting at crop-space (x, y) in the named
+// base-14 face, tagged with the MegaPDFTextBox mark and the given id.
+//
+// `fontName` must be a name FPDFText_LoadStandardFont accepts -- deliberately
+// strict: the app passes one of three constants, so anything else is a bug and
+// should fail loudly rather than silently render in the wrong face.
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAddTextBox(JNIEnv* env, jobject, jlong handle,
-                                                      jstring text, jdouble fontSize,
+                                                      jstring text, jstring fontName,
+                                                      jdouble fontSize,
                                                       jdouble x, jdouble y, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
     const CropOrigin crop = cropOrigin(p->page);
     FPDF_DOCUMENT doc = p->owner->doc;
 
-    FPDF_FONT font = FPDFText_LoadStandardFont(doc, "Helvetica");
-    if (font == nullptr) return JNI_FALSE;
+    const char* faceUtf8 = env->GetStringUTFChars(fontName, nullptr);
+    FPDF_FONT font = FPDFText_LoadStandardFont(doc, faceUtf8);
+    if (font == nullptr) {
+        env->ReleaseStringUTFChars(fontName, faceUtf8);
+        return JNI_FALSE;
+    }
 
     FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(fontSize));
     bool ok = obj != nullptr;
@@ -520,7 +567,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddTextBox(JNIEnv* env, jobject, jlon
         FPDF_PAGEOBJECTMARK mark = FPDFPageObj_AddMark(obj, kTextBoxMark);
         const char* idUtf8 = env->GetStringUTFChars(id, nullptr);
         ok = mark != nullptr &&
-             FPDFPageObjMark_SetStringParam(doc, obj, mark, kTextBoxIdKey, idUtf8);
+             FPDFPageObjMark_SetStringParam(doc, obj, mark, kTextBoxIdKey, idUtf8) &&
+             FPDFPageObjMark_SetStringParam(doc, obj, mark, kTextBoxFontKey, faceUtf8);
         env->ReleaseStringUTFChars(id, idUtf8);
     }
     if (ok) {
@@ -533,7 +581,30 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddTextBox(JNIEnv* env, jobject, jlon
     }
 
     FPDFFont_Close(font);
+    env->ReleaseStringUTFChars(fontName, faceUtf8);
     return ok ? JNI_TRUE : JNI_FALSE;
+}
+
+// The face of each box, aligned with nativeTextBoxIds.
+JNIEXPORT jobjectArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeTextBoxFonts(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<std::vector<jchar>> faces;
+    const int count = FPDFPage_CountObjects(p->page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
+        std::vector<jchar> id;
+        if (obj == nullptr || !TextBoxId(obj, i, &id)) continue;
+        faces.push_back(TextBoxFont(obj));
+    }
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray out = env->NewObjectArray(static_cast<jsize>(faces.size()), stringClass, nullptr);
+    for (size_t i = 0; i < faces.size(); i++) {
+        jstring s = env->NewString(faces[i].data(), static_cast<jsize>(faces[i].size()));
+        env->SetObjectArrayElement(out, static_cast<jsize>(i), s);
+        env->DeleteLocalRef(s);
+    }
+    return out;
 }
 
 // Ids of the MegaPDF text boxes on the page, in page-object order.

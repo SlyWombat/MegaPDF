@@ -54,6 +54,75 @@ public class WhiteoutAndTextBoxTests : IDisposable
         Assert.Single(reopenedPage.GetWhiteouts());
     }
 
+    /// <summary>
+    /// #43: the face is carried on the mark, not inferred from the font resource —
+    /// pdfium is free to normalise a standard font's reported name, so the only
+    /// thing that can be a cross-platform contract is what we wrote down.
+    /// </summary>
+    [Fact]
+    public void TextBox_RecordsTheChosenFaceAndSize_AndSurvivesSave()
+    {
+        var savedPath = Path.Combine(_dir, "faced.pdf");
+        using (var doc = _engine.Open(WritePdf()))
+        {
+            using (var page = doc.GetPage(0))
+            {
+                page.AppendTextBox("Eighteen point Times", 18, new PdfPoint(105, 260),
+                    StandardTextBoxFonts.Serif);
+                var box = Assert.Single(page.GetTextBoxes());
+                Assert.Equal(StandardTextBoxFonts.Serif, box.TextBoxFont);
+                Assert.Equal(18, box.FontSize, 1);
+            }
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        var reloaded = Assert.Single(reopenedPage.GetTextBoxes());
+        Assert.Equal(StandardTextBoxFonts.Serif, reloaded.TextBoxFont);
+        Assert.Equal(18, reloaded.FontSize, 1);
+    }
+
+    /// <summary>A box written before #43 carries no face, and every one of them is Helvetica.</summary>
+    [Fact]
+    public void TextBox_WithNoRecordedFace_ReadsAsHelvetica()
+    {
+        using var doc = _engine.Open(WritePdf());
+        using var page = doc.GetPage(0);
+
+        page.AppendTextBox("Default face", 12, new PdfPoint(105, 260));
+        var box = Assert.Single(page.GetTextBoxes());
+        Assert.Equal(StandardTextBoxFonts.Default, box.TextBoxFont);
+        Assert.Equal(StandardTextBoxFonts.Sans, box.TextBoxFont);
+    }
+
+    /// <summary>
+    /// Deliberately strict: the app passes one of three constants, so anything else
+    /// is a bug and should fail loudly rather than silently render in the wrong face.
+    /// </summary>
+    [Fact]
+    public void TextBox_RejectsAFaceOutsideTheThree()
+    {
+        using var doc = _engine.Open(WritePdf());
+        using var page = doc.GetPage(0);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => page.AppendTextBox("Nope", 12, new PdfPoint(105, 260), "Comic Sans MS"));
+        Assert.Empty(page.GetTextBoxes());
+    }
+
+    /// <summary>
+    /// A journal written before #43 has no face recorded; replaying it must not
+    /// throw, and must produce the Helvetica box it described.
+    /// </summary>
+    [Fact]
+    public void TextBoxAddEntry_WithoutAFace_DefaultsToHelvetica()
+    {
+        var entry = new TextBoxAddEntry(0, "Recovered", 12, 150, 300);
+        Assert.Equal(StandardTextBoxFonts.Default, entry.FontName);
+    }
+
     [Fact]
     public void TextBox_OverWhiteout_RendersAboveIt_AndStaysEditable()
     {
