@@ -42,7 +42,15 @@ struct ViewerView: View {
                                 .id(index)
                         }
                     }
-                    .frame(minWidth: geo.size.width)
+                    // Centred, not top-packed (#48): the grey behind the scroll view
+                    // is the document surround every PDF viewer draws so you can see
+                    // where the page ends. Top-packed and full-bleed, it could only
+                    // ever show below the last page — a third of the viewport in one
+                    // dead block on a one-page document. minHeight only bites while
+                    // the content is shorter than the viewport, so a multi-page
+                    // document still packs from the top and scrolls unchanged.
+                    .frame(minWidth: geo.size.width, minHeight: geo.size.height,
+                           alignment: .center)
                 }
                 .background(Color(white: 0.25))
                 .gesture(
