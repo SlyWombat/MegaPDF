@@ -253,11 +253,19 @@ final class MoveStampOperation: PdfEditOperation {
 /// must normalize through a move: adding at the reported rect alone leaves the
 /// box a descender's depth too high, and undo would not restore the position.
 private func placeTextBox(_ engine: PdfEngine, _ document: PdfDocument, pageIndex: Int,
-                          id: String, text: String, fontSize: Double,
+                          id: String, style: TextBoxStyle,
                           x: Double, y: Double) async throws {
-    try await engine.addTextBox(document, pageIndex: pageIndex, text: text,
-                                fontSize: fontSize, x: x, y: y, id: id)
+    try await engine.addTextBox(document, pageIndex: pageIndex, text: style.text,
+                                fontSize: style.fontSize, x: x, y: y, id: id,
+                                fontName: style.fontName)
     try await engine.moveTextBox(document, pageIndex: pageIndex, id: id, x: x, y: y)
+}
+
+/// How a text box is styled: what it says, how big, in which face.
+struct TextBoxStyle: Equatable {
+    var text: String
+    var fontSize: Double = 12
+    var fontName: String = PdfEngine.defaultFont
 }
 
 /// Adding or removing a text box (#34).
@@ -275,9 +283,11 @@ final class TextBoxOperation: PdfEditOperation {
     private let y: Double
     private let adding: Bool
     private let boundsAnchored: Bool
+    private let fontName: String
 
     init(pageIndex: Int, id: String, text: String, fontSize: Double,
-         x: Double, y: Double, adding: Bool, boundsAnchored: Bool = false) {
+         x: Double, y: Double, adding: Bool, boundsAnchored: Bool = false,
+         fontName: String = PdfEngine.defaultFont) {
         self.pageIndex = pageIndex
         self.id = id
         self.text = text
@@ -286,6 +296,7 @@ final class TextBoxOperation: PdfEditOperation {
         self.y = y
         self.adding = adding
         self.boundsAnchored = boundsAnchored
+        self.fontName = fontName
     }
 
     var name: String { adding ? "text" : "remove text" }
@@ -308,11 +319,14 @@ final class TextBoxOperation: PdfEditOperation {
 
     private func add(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         if boundsAnchored {
-            try await placeTextBox(engine, document, pageIndex: pageIndex, id: id,
-                                   text: text, fontSize: fontSize, x: x, y: y)
+            try await placeTextBox(
+                engine, document, pageIndex: pageIndex, id: id,
+                style: TextBoxStyle(text: text, fontSize: fontSize, fontName: fontName),
+                x: x, y: y)
         } else {
             try await engine.addTextBox(document, pageIndex: pageIndex, text: text,
-                                        fontSize: fontSize, x: x, y: y, id: id)
+                                        fontSize: fontSize, x: x, y: y, id: id,
+                                        fontName: fontName)
         }
     }
 
@@ -321,44 +335,48 @@ final class TextBoxOperation: PdfEditOperation {
     }
 }
 
-/// Correcting the text of a placed box (#36) — remove and re-add under the same
-/// id, anchored to the rect it occupied. The width changes with the new text; the
-/// lower-left corner does not, so the correction stays where the user put it.
+/// Restyling a placed box (#36 for the text, #43 for the size and face) — remove
+/// and re-add under the same id, anchored to the rect it occupied.
+///
+/// Anything about the box's appearance can change at once, and all of it is one
+/// undo. The box's width and height change with the new style; its lower-left
+/// corner does not, so the box stays where the user put it. That anchor choice
+/// matters more for a size change than for a typo fix: going 12 pt → 18 pt grows
+/// the glyphs, and the box grows upward from the corner it sits on — right for
+/// text sitting on a printed rule.
 final class EditTextBoxOperation: PdfEditOperation {
     let pageIndex: Int
     private let id: String
-    private let oldText: String
-    private let newText: String
-    private let fontSize: Double
+    private let from: TextBoxStyle
+    private let to: TextBoxStyle
     private let x: Double
     private let y: Double
 
-    init(pageIndex: Int, id: String, oldText: String, newText: String,
-         fontSize: Double, x: Double, y: Double) {
+    init(pageIndex: Int, id: String, from: TextBoxStyle, to: TextBoxStyle,
+         x: Double, y: Double) {
         self.pageIndex = pageIndex
         self.id = id
-        self.oldText = oldText
-        self.newText = newText
-        self.fontSize = fontSize
+        self.from = from
+        self.to = to
         self.x = x
         self.y = y
     }
 
-    var name: String { "edit text" }
+    var name: String { from.text == to.text ? "restyle text" : "edit text" }
 
     func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try await replace(engine, document, with: newText)
+        try await replace(engine, document, with: to)
     }
 
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try await replace(engine, document, with: oldText)
+        try await replace(engine, document, with: from)
     }
 
     private func replace(_ engine: PdfEngine, _ document: PdfDocument,
-                         with text: String) async throws {
+                         with style: TextBoxStyle) async throws {
         try await engine.removeTextBox(document, pageIndex: pageIndex, id: id)
         try await placeTextBox(engine, document, pageIndex: pageIndex, id: id,
-                               text: text, fontSize: fontSize, x: x, y: y)
+                               style: style, x: x, y: y)
     }
 }
 

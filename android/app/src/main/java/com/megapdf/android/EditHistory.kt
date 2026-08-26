@@ -1,6 +1,7 @@
 package com.megapdf.android
 
 import com.megapdf.engine.PdfDocument
+import com.megapdf.engine.DEFAULT_FONT
 import com.megapdf.engine.PdfRect
 
 // Undo/redo (#34) — the mobile port of the desktop `IEditOperation` + `UndoStack`
@@ -182,9 +183,10 @@ class MoveStampOperation(
  * box a descender's depth too high, and undo would not restore the position.
  */
 private suspend fun PdfDocument.placeTextBoxAt(
-    pageIndex: Int, id: String, text: String, fontSize: Double, x: Double, y: Double,
+    pageIndex: Int, id: String, text: String, fontSize: Double, fontName: String,
+    x: Double, y: Double,
 ) = onPage(pageIndex) {
-    it.addTextBox(text, fontSize, x, y, id)
+    it.addTextBox(text, fontSize, x, y, id, fontName)
     it.moveTextBox(id, x, y)
 }
 
@@ -205,6 +207,7 @@ class TextBoxOperation(
     private val y: Double,
     private val adding: Boolean,
     private val boundsAnchored: Boolean = false,
+    private val fontName: String = DEFAULT_FONT,
 ) : PdfEditOperation {
 
     override val name: String get() = if (adding) "text" else "remove text"
@@ -213,37 +216,50 @@ class TextBoxOperation(
     override suspend fun revert(doc: PdfDocument) = if (adding) remove(doc) else add(doc)
 
     private suspend fun add(doc: PdfDocument) =
-        if (boundsAnchored) doc.placeTextBoxAt(pageIndex, id, text, fontSize, x, y)
-        else doc.onPage(pageIndex) { it.addTextBox(text, fontSize, x, y, id) }
+        if (boundsAnchored) doc.placeTextBoxAt(pageIndex, id, text, fontSize, fontName, x, y)
+        else doc.onPage(pageIndex) { it.addTextBox(text, fontSize, x, y, id, fontName) }
 
     private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { it.removeTextBox(id) }
 }
 
+/** How a text box is styled: what it says, how big, in which face. */
+data class TextBoxStyle(
+    val text: String,
+    val fontSize: Double = 12.0,
+    val fontName: String = DEFAULT_FONT,
+)
+
 /**
- * Correcting the text of a placed box (#36) — remove and re-add under the same
- * id, anchored to the rect it occupied. The width changes with the new text;
- * the lower-left corner does not, so the correction stays where the user put it.
+ * Restyling a placed box (#36 for the text, #43 for the size and face) — remove
+ * and re-add under the same id, anchored to the rect it occupied.
+ *
+ * Anything about the box's appearance can change at once, and all of it is one
+ * undo. The box's width and height change with the new style; its lower-left
+ * corner does not, so the box stays where the user put it. That anchor choice
+ * matters more for a size change than for a typo fix: going 12 pt → 18 pt grows
+ * the glyphs, and the box grows upward from the corner it sits on — right for
+ * text sitting on a printed rule.
  */
 class EditTextBoxOperation(
     override val pageIndex: Int,
     private val id: String,
-    private val oldText: String,
-    private val newText: String,
-    private val fontSize: Double,
+    private val from: TextBoxStyle,
+    private val to: TextBoxStyle,
     private val x: Double,
     private val y: Double,
 ) : PdfEditOperation {
 
-    override val name: String get() = "edit text"
+    override val name: String
+        get() = if (from.text == to.text) "restyle text" else "edit text"
 
-    override suspend fun apply(doc: PdfDocument) = replace(doc, newText)
-    override suspend fun revert(doc: PdfDocument) = replace(doc, oldText)
+    override suspend fun apply(doc: PdfDocument) = replace(doc, to)
+    override suspend fun revert(doc: PdfDocument) = replace(doc, from)
 
     // One page load for the whole swap, as MoveStampOperation does — pdfium has
-    // no in-place text edit, so replacing the text means rebuilding the object.
-    private suspend fun replace(doc: PdfDocument, text: String) = doc.onPage(pageIndex) {
+    // no in-place text edit, so restyling means rebuilding the object.
+    private suspend fun replace(doc: PdfDocument, style: TextBoxStyle) = doc.onPage(pageIndex) {
         it.removeTextBox(id)
-        it.addTextBox(text, fontSize, x, y, id)
+        it.addTextBox(style.text, style.fontSize, x, y, id, style.fontName)
         it.moveTextBox(id, x, y)
     }
 }

@@ -25,8 +25,16 @@ struct SelectedTextBox: Equatable {
     let id: String
     let text: String
     let fontSize: Double
+    let fontName: String
     let rect: PdfRect
 }
+
+/// Sizes offered for added text (#43). A short list, not a free-entry number box:
+/// the job is "match the form I am filling in", and six presets cover it.
+let textSizes: [Double] = [8, 10, 12, 14, 18, 24]
+
+/// What a new box starts at, before the user has chosen anything this session.
+let defaultTextSize: Double = 12
 
 /// A tap that is waiting for the text the user is about to type (#34). When
 /// `editingId` is set the tap re-opened an existing box to correct it (#36), and
@@ -37,7 +45,8 @@ struct PendingText: Identifiable {
     let x: Double
     let y: Double
     var editingId: String?
-    var fontSize: Double = 12
+    var fontSize: Double = defaultTextSize
+    var fontName: String = PdfEngine.defaultFont
     var initialText: String = ""
 }
 
@@ -69,10 +78,18 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var isPlacingText = false
     /// Set by that tap; ViewerView presents the text field for it.
     @Published var pendingText: PendingText?
-    /// What that text field is bound to. Seeded here rather than in the view, so
-    /// a correction's prefill (#36) lands in the same update as `pendingText`
-    /// instead of racing the alert's presentation.
+    /// What the text sheet is bound to. Seeded here rather than in the view, so a
+    /// correction's prefill (#36/#43) lands in the same update as `pendingText`
+    /// instead of racing the sheet's presentation.
     @Published var draftText = ""
+    @Published var draftSize = defaultTextSize
+    @Published var draftFont = PdfEngine.defaultFont
+
+    /// The size and face the last box was given (#43). Sticky for the session, so
+    /// filling six fields on one form is not six trips through the pickers. Not
+    /// persisted: a new document is usually a new job.
+    private var lastFontSize = defaultTextSize
+    private var lastFontName = PdfEngine.defaultFont
 
     /// Set only by `-screenshot sign|draw` launches; ViewerView opens the sheet.
     enum ScreenshotSheet { case signatures, draw }
@@ -254,7 +271,10 @@ final class ViewerModel: ObservableObject {
             isPlacingText = false
             statusMessage = nil
             draftText = ""
-            pendingText = PendingText(pageIndex: index, x: x, y: y)
+            draftSize = lastFontSize
+            draftFont = lastFontName
+            pendingText = PendingText(pageIndex: index, x: x, y: y,
+                                      fontSize: lastFontSize, fontName: lastFontName)
             return
         }
 
@@ -296,7 +316,9 @@ final class ViewerModel: ObservableObject {
                     let wasSelected = selectedTextBox?.id == box.id
                     selectedTextBox = SelectedTextBox(pageIndex: index, id: box.id,
                                                       text: box.text,
-                                                      fontSize: box.fontSize, rect: box.rect)
+                                                      fontSize: box.fontSize,
+                                                      fontName: box.fontName,
+                                                      rect: box.rect)
                     if wasSelected {
                         // A second tap on the selected box also opens the editor.
                         // The overlay's pencil is the discoverable way in, because
@@ -356,22 +378,28 @@ final class ViewerModel: ObservableObject {
         statusMessage = nil
     }
 
-    /// Commits the text the user typed for the pending tap — a new box, or a
-    /// correction to one that is already on the page (#36).
-    func commitText(_ text: String) {
+    /// Commits what the text sheet was left holding — a new box, or a change to
+    /// one already on the page. Text, size and face all arrive together, so
+    /// restyling and correcting a typo are the same single undoable edit.
+    func commitText(_ text: String, fontSize: Double, fontName: String) {
         guard let pending = pendingText, let doc = document else { return }
         pendingText = nil
         draftText = ""
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        lastFontSize = fontSize
+        lastFontName = fontName
+        let style = TextBoxStyle(text: trimmed, fontSize: fontSize, fontName: fontName)
         Task {
             do {
                 if let editingId = pending.editingId {
-                    guard trimmed != pending.initialText else { return }
+                    let before = TextBoxStyle(text: pending.initialText,
+                                              fontSize: pending.fontSize,
+                                              fontName: pending.fontName)
+                    guard before != style else { return }
                     try await perform(
                         EditTextBoxOperation(pageIndex: pending.pageIndex, id: editingId,
-                                             oldText: pending.initialText, newText: trimmed,
-                                             fontSize: pending.fontSize,
+                                             from: before, to: style,
                                              x: pending.x, y: pending.y),
                         doc: doc)
                     await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
@@ -379,8 +407,9 @@ final class ViewerModel: ObservableObject {
                     try await perform(
                         TextBoxOperation(pageIndex: pending.pageIndex,
                                          id: "text:\(UUID().uuidString)",
-                                         text: trimmed, fontSize: 12,
-                                         x: pending.x, y: pending.y, adding: true),
+                                         text: trimmed, fontSize: fontSize,
+                                         x: pending.x, y: pending.y, adding: true,
+                                         fontName: fontName),
                         doc: doc)
                 }
             } catch {
@@ -424,10 +453,12 @@ final class ViewerModel: ObservableObject {
         guard let sel = selectedTextBox else { return }
         selectedTextBox = nil
         draftText = sel.text
+        draftSize = sel.fontSize
+        draftFont = sel.fontName
         pendingText = PendingText(pageIndex: sel.pageIndex,
                                   x: sel.rect.left, y: sel.rect.bottom,
                                   editingId: sel.id, fontSize: sel.fontSize,
-                                  initialText: sel.text)
+                                  fontName: sel.fontName, initialText: sel.text)
     }
 
     func removeSelectedTextBox() {
@@ -440,7 +471,8 @@ final class ViewerModel: ObservableObject {
                     TextBoxOperation(pageIndex: sel.pageIndex, id: sel.id, text: sel.text,
                                      fontSize: sel.fontSize,
                                      x: sel.rect.left, y: sel.rect.bottom,
-                                     adding: false, boundsAnchored: true),
+                                     adding: false, boundsAnchored: true,
+                                     fontName: sel.fontName),
                     doc: doc)
             } catch {
                 statusMessage = "Couldn't remove that text."
@@ -455,7 +487,8 @@ final class ViewerModel: ObservableObject {
         guard let box = try? await PdfEngine.shared.textBoxes(doc, pageIndex: pageIndex)
             .first(where: { $0.id == id }) else { return }
         selectedTextBox = SelectedTextBox(pageIndex: pageIndex, id: id, text: box.text,
-                                          fontSize: box.fontSize, rect: box.rect)
+                                          fontSize: box.fontSize, fontName: box.fontName,
+                                          rect: box.rect)
     }
 
     // MARK: - undo / redo (#34)

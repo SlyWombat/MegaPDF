@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import kotlin.math.roundToInt
@@ -29,8 +30,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -131,7 +134,7 @@ fun ViewerScreen(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onStartTextPlacement: () -> Unit,
-    onCommitText: (String) -> Unit,
+    onCommitText: (text: String, fontSize: Double, fontName: String) -> Unit,
     onCancelTextPlacement: () -> Unit,
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
@@ -173,14 +176,17 @@ fun ViewerScreen(
         )
     }
     if (pendingTextTap != null) {
-        // A correction opens on the box's current text (#36); a new box opens empty.
+        // A correction opens on the box's current text, size and face (#36/#43);
+        // a new box opens empty, at whatever the last one used.
         val editing = pendingTextTap.editingId != null
         var typed by remember(pendingTextTap) { mutableStateOf(pendingTextTap.initialText) }
+        var size by remember(pendingTextTap) { mutableStateOf(pendingTextTap.fontSize) }
+        var face by remember(pendingTextTap) { mutableStateOf(pendingTextTap.fontName) }
         AlertDialog(
             onDismissRequest = onCancelTextPlacement,
             title = { Text(if (editing) "Edit text" else "Add text") },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         if (editing) "This replaces the text you tapped."
                         else "This will be added where you tapped."
@@ -191,10 +197,27 @@ fun ViewerScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    ChipRow(
+                        label = "Size",
+                        options = TEXT_SIZES,
+                        selected = size,
+                        labelOf = { it.toInt().toString() },
+                        onSelect = { size = it },
+                    )
+                    ChipRow(
+                        label = "Font",
+                        options = com.megapdf.engine.STANDARD_FONTS,
+                        selected = face,
+                        labelOf = ::fontLabel,
+                        onSelect = { face = it },
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { onCommitText(typed) }, enabled = typed.isNotBlank()) {
+                TextButton(
+                    onClick = { onCommitText(typed, size, face) },
+                    enabled = typed.isNotBlank(),
+                ) {
                     Text(if (editing) "Save" else "Add")
                 }
             },
@@ -586,6 +609,44 @@ private fun SignatureDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
     )
+}
+
+/**
+ * What a base-14 face is called in the UI. The PDF names are exact and must not
+ * change (SDD §6.2 contract 4); these are only what the chips say.
+ */
+private fun fontLabel(fontName: String): String = when (fontName) {
+    "Times-Roman" -> "Times"
+    else -> fontName
+}
+
+/**
+ * One labelled row of single-choice chips — the size and face pickers (#43).
+ * Horizontally scrollable so a narrow phone never clips the last option.
+ */
+@Composable
+private fun <T> ChipRow(
+    label: String,
+    options: List<T>,
+    selected: T,
+    labelOf: (T) -> String,
+    onSelect: (T) -> Unit,
+) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            options.forEach { option ->
+                FilterChip(
+                    selected = option == selected,
+                    onClick = { onSelect(option) },
+                    label = { Text(labelOf(option)) },
+                )
+            }
+        }
+    }
 }
 
 /**
