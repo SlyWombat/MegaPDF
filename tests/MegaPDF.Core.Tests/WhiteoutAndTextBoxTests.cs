@@ -84,6 +84,58 @@ public class WhiteoutAndTextBoxTests : IDisposable
         Assert.Equal(18, reloaded.FontSize, 1);
     }
 
+    /// <summary>
+    /// Restyling (#43) keeps the box's id and its bottom-left corner. The size change
+    /// is where the anchor choice shows: growing 12 pt to 18 pt makes the glyphs
+    /// taller, and the box must grow *upward* from the rule it sits on rather than
+    /// sinking through it. Undo restores the original object byte-identically.
+    /// </summary>
+    [Fact]
+    public void RestyleTextBox_KeepsItsIdAndCorner_AndGrowsUpward()
+    {
+        using var doc = _engine.Open(WritePdf());
+        var stack = new UndoStack();
+
+        int objectIndex;
+        PdfTextRun before;
+        string id;
+        using (var page = doc.GetPage(0))
+        {
+            page.AppendTextBox("Paying agent", 12, new PdfPoint(105, 260));
+            before = Assert.Single(page.GetTextBoxes());
+            objectIndex = before.ObjectIndex;
+            id = Assert.IsType<string>(before.TextBoxId);
+        }
+
+        stack.Do(new RestyleTextBoxOperation(doc, 0, objectIndex, before,
+            "Paying agent", StandardTextBoxFonts.Serif, 18));
+
+        using (var page = doc.GetPage(0))
+        {
+            var after = Assert.Single(page.GetTextBoxes());
+            Assert.Equal(id, after.TextBoxId);
+            Assert.Equal(StandardTextBoxFonts.Serif, after.TextBoxFont);
+            Assert.Equal(18, after.FontSize, 1);
+            Assert.Equal(before.Bounds.X, after.Bounds.X, 1);
+            // Page space is top-left, so "grew upward" is a smaller Y with the
+            // bottom edge pinned.
+            Assert.Equal(before.Bounds.Bottom, after.Bounds.Bottom, 1);
+            Assert.True(after.Bounds.Y < before.Bounds.Y,
+                "bigger text must grow upward, not downward");
+        }
+
+        stack.Undo();
+
+        using (var page = doc.GetPage(0))
+        {
+            var reverted = Assert.Single(page.GetTextBoxes());
+            Assert.Equal(id, reverted.TextBoxId);
+            Assert.Equal(StandardTextBoxFonts.Default, reverted.TextBoxFont);
+            Assert.Equal(12, reverted.FontSize, 1);
+            Assert.Equal(before.Bounds.Y, reverted.Bounds.Y, 1);
+        }
+    }
+
     /// <summary>A box written before #43 carries no face, and every one of them is Helvetica.</summary>
     [Fact]
     public void TextBox_WithNoRecordedFace_ReadsAsHelvetica()

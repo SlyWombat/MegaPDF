@@ -127,6 +127,14 @@ public static class JournalReplayer
                     applied++;
                     break;
 
+                case TextBoxRestyleEntry restyle:
+                    page.DetachObjectAt(restyle.ObjectIndex);
+                    page.InsertStyledTextBox(restyle.ObjectIndex, restyle.Text, restyle.FontName,
+                        restyle.FontSize, new PdfPoint(restyle.AnchorX, restyle.AnchorY),
+                        restyle.Id);
+                    applied++;
+                    break;
+
                 case MoveTextBoxEntry moveText:
                 {
                     var target = new PdfRect(moveText.FromX, moveText.FromY, moveText.FromWidth, moveText.FromHeight);

@@ -126,6 +126,63 @@ public sealed class MoveTextBoxOperation(
     }
 }
 
+/// <summary>
+/// Restyling a placed text box (#43): text, size and face change together, under the
+/// same id, anchored to the bottom-left corner the box already sits on — so growing
+/// 12 pt to 18 pt makes it taller upward rather than sinking it through the rule.
+///
+/// Both directions are byte-identical: the object being replaced is detached and kept,
+/// never rebuilt from a description, so undo and redo each restore the exact object
+/// that was there.
+/// </summary>
+public sealed class RestyleTextBoxOperation(
+    IPdfDocument document, int pageIndex, int objectIndex, PdfTextRun run,
+    string newText, string newFontName, double newFontSize) : IPageEditOperation
+{
+    private DetachedTextRun? _original;
+    private DetachedTextRun? _restyled;
+
+    /// <summary>The box keeps its identity across the restyle, or gains one if it had none.</summary>
+    private string Id { get; } = run.TextBoxId ?? $"text:{Guid.NewGuid()}";
+
+    private PdfPoint Anchor => new(run.Bounds.X, run.Bounds.Bottom);
+
+    public int PageIndex { get; } = pageIndex;
+
+    public string Description => run.Text == newText ? "restyle text" : "edit text";
+
+    public void Apply()
+    {
+        using var page = document.GetPage(PageIndex);
+        _original = page.DetachObjectAt(objectIndex);
+        if (_restyled is not null)
+        {
+            // Redo: put the exact restyled object back.
+            page.RestoreTextRun(_restyled, objectIndex);
+            _restyled = null;
+        }
+        else
+        {
+            page.InsertStyledTextBox(objectIndex, newText, newFontName, newFontSize, Anchor, Id);
+        }
+    }
+
+    public void Revert()
+    {
+        using var page = document.GetPage(PageIndex);
+        _restyled = page.DetachObjectAt(objectIndex);
+        page.RestoreTextRun(_original!, objectIndex);
+        _original = null;
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new TextBoxRestyleEntry(PageIndex, objectIndex, run.Text,
+            run.TextBoxFont ?? StandardTextBoxFonts.Default, run.FontSize,
+            Anchor.X, Anchor.Y, Id)
+        : new TextBoxRestyleEntry(PageIndex, objectIndex, newText, newFontName, newFontSize,
+            Anchor.X, Anchor.Y, Id);
+}
+
 /// <summary>Reversible text-box removal (✕/Delete on the selection). Undo restores it byte-identical.</summary>
 public sealed class RemoveTextBoxOperation(IPdfDocument document, int pageIndex, int objectIndex, PdfTextRun run) : IPageEditOperation
 {
