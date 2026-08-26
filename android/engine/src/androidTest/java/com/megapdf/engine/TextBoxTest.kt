@@ -199,6 +199,46 @@ class TextBoxTest {
     }
 
     /**
+     * Restyling (#43) is remove + re-add at the old bounds lower-left, so the box
+     * keeps the corner the user put it on. This is the case where the anchor
+     * choice actually shows: growing 12 pt → 18 pt makes the glyphs taller, and
+     * the box must grow *upward* from the rule it sits on rather than sinking
+     * through it.
+     */
+    @Test
+    fun restylingGrowsUpwardFromTheAnchoredCorner() {
+        runBlocking {
+            val doc = engine.open(asset("fixture.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    page.addTextBox("Paying agent", 12.0, 100.0, 300.0, "text:restyle")
+                    val before = page.textBoxes().first { it.id == "text:restyle" }.rect
+
+                    // The restyle the app performs, byte for byte.
+                    page.removeTextBox("text:restyle")
+                    page.addTextBox("Paying agent", 18.0, before.left, before.bottom,
+                                    "text:restyle", fontName = "Times-Roman")
+                    page.moveTextBox("text:restyle", before.left, before.bottom)
+
+                    val after = page.textBoxes().first { it.id == "text:restyle" }
+                    assertEquals("Times-Roman", after.fontName)
+                    assertEquals(18.0, after.fontSize, 0.5)
+                    assertEquals("the anchored corner must not move",
+                        before.left, after.rect.left, 0.01)
+                    assertEquals(before.bottom, after.rect.bottom, 0.01)
+                    assertTrue("bigger text must grow upward, not downward",
+                        after.rect.top > before.top)
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    /**
      * Deliberately strict: the app passes one of three constants, so anything else
      * is a bug and should fail loudly rather than silently render in the wrong face.
      */

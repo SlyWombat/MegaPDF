@@ -46,6 +46,7 @@ data class SelectedTextBox(
     val id: String,
     val text: String,
     val fontSize: Double,
+    val fontName: String,
     val rect: com.megapdf.engine.PdfRect,
 )
 
@@ -59,9 +60,19 @@ data class PendingTextTap(
     val x: Double,
     val y: Double,
     val editingId: String? = null,
-    val fontSize: Double = 12.0,
+    val fontSize: Double = DEFAULT_FONT_SIZE,
+    val fontName: String = com.megapdf.engine.DEFAULT_FONT,
     val initialText: String = "",
 )
+
+/**
+ * Sizes offered for added text (#43). A short list, not a free-entry number box:
+ * the job is "match the form I am filling in", and six presets cover it.
+ */
+val TEXT_SIZES = listOf(8.0, 10.0, 12.0, 14.0, 18.0, 24.0)
+
+/** What a new box starts at, before the user has chosen anything this session. */
+const val DEFAULT_FONT_SIZE = 12.0
 
 sealed interface ViewerUiState {
     data class Home(val recents: List<RecentEntry>, val error: String? = null) : ViewerUiState
@@ -106,6 +117,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** True between "Add text" and the tap that says where it goes. */
     var isPlacingText: Boolean by mutableStateOf(false)
         private set
+
+    /**
+     * The size and face the last box was given (#43). Sticky for the session, so
+     * filling six fields on one form is not six trips through the pickers. Not
+     * persisted: a new document is usually a new job.
+     */
+    private var lastFontSize = DEFAULT_FONT_SIZE
+    private var lastFontName = com.megapdf.engine.DEFAULT_FONT
 
     /** Set by that tap; the screen shows the text field for it. */
     var pendingTextTap: PendingTextTap? by mutableStateOf(null)
@@ -396,7 +415,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             if (isPlacingText) {
                 isPlacingText = false
                 statusMessage = null
-                pendingTextTap = PendingTextTap(pageIndex, x, y)
+                pendingTextTap = PendingTextTap(
+                    pageIndex, x, y, fontSize = lastFontSize, fontName = lastFontName)
                 return@launch
             }
 
@@ -439,7 +459,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         return@launch
                     }
                     val selected = SelectedTextBox(
-                        pageIndex, box.id, box.text, box.fontSize, box.rect)
+                        pageIndex, box.id, box.text, box.fontSize, box.fontName, box.rect)
                     if (selectedTextBox?.id == box.id) {
                         // A second tap on the selected box also opens the editor.
                         // The overlay's ✎ is the discoverable way in, because a
@@ -497,28 +517,38 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         statusMessage = null
     }
 
-    /** Commits the text typed for the pending tap — a new box, or a correction. */
-    fun commitText(text: String) {
+    /**
+     * Commits what the text dialog was left holding — a new box, or a change to
+     * one already on the page. Text, size and face all arrive together, so
+     * restyling and correcting a typo are the same single undoable edit.
+     */
+    fun commitText(text: String, fontSize: Double, fontName: String) {
         val pending = pendingTextTap ?: return
         val doc = document ?: return
         pendingTextTap = null
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
+        lastFontSize = fontSize
+        lastFontName = fontName
+        val style = TextBoxStyle(trimmed, fontSize, fontName)
         viewModelScope.launch {
             try {
                 if (pending.editingId != null) {
-                    if (trimmed == pending.initialText) return@launch
+                    val before = TextBoxStyle(
+                        pending.initialText, pending.fontSize, pending.fontName)
+                    if (before == style) return@launch
                     perform(
                         EditTextBoxOperation(
-                            pending.pageIndex, pending.editingId, pending.initialText,
-                            trimmed, pending.fontSize, pending.x, pending.y),
+                            pending.pageIndex, pending.editingId, before, style,
+                            pending.x, pending.y),
                         doc)
                     reselectTextBox(doc, pending.pageIndex, pending.editingId)
                 } else {
                     perform(
                         TextBoxOperation(
                             pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
-                            trimmed, 12.0, pending.x, pending.y, adding = true),
+                            trimmed, fontSize, pending.x, pending.y, adding = true,
+                            fontName = fontName),
                         doc)
                 }
             } catch (e: Exception) {
@@ -569,7 +599,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         selectedTextBox = null
         pendingTextTap = PendingTextTap(
             sel.pageIndex, sel.rect.left, sel.rect.bottom,
-            editingId = sel.id, fontSize = sel.fontSize, initialText = sel.text)
+            editingId = sel.id, fontSize = sel.fontSize, fontName = sel.fontName,
+            initialText = sel.text)
     }
 
     fun removeSelectedTextBox() {
@@ -583,7 +614,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     TextBoxOperation(
                         sel.pageIndex, sel.id, sel.text, sel.fontSize,
                         sel.rect.left, sel.rect.bottom, adding = false,
-                        boundsAnchored = true),
+                        boundsAnchored = true, fontName = sel.fontName),
                     doc)
             } catch (e: Exception) {
                 statusMessage = "Couldn't remove that text"
@@ -600,7 +631,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val page = doc.openPage(pageIndex)
         try {
             val box = page.textBoxes().firstOrNull { it.id == id } ?: return
-            selectedTextBox = SelectedTextBox(pageIndex, id, box.text, box.fontSize, box.rect)
+            selectedTextBox =
+                SelectedTextBox(pageIndex, id, box.text, box.fontSize, box.fontName, box.rect)
         } finally {
             page.close()
         }
