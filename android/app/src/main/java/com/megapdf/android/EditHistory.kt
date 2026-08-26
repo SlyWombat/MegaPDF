@@ -171,7 +171,31 @@ class MoveStampOperation(
     }
 }
 
-/** Adding or removing a text box (#34). */
+/**
+ * Places a text box so its **bounds** lower-left lands on ([x], [y]).
+ *
+ * `addTextBox` puts the text *baseline* on the point given — right for the tap
+ * that creates a box, since the text should sit on the printed rule the user
+ * tapped. But `textBoxes()` reports **bounds**, and `moveTextBox` anchors
+ * bounds. So any operation that has to put a box back where a rect said it was
+ * must normalize through a move: adding at the reported rect alone leaves the
+ * box a descender's depth too high, and undo would not restore the position.
+ */
+private suspend fun PdfDocument.placeTextBoxAt(
+    pageIndex: Int, id: String, text: String, fontSize: Double, x: Double, y: Double,
+) = onPage(pageIndex) {
+    it.addTextBox(text, fontSize, x, y, id)
+    it.moveTextBox(id, x, y)
+}
+
+/**
+ * Adding or removing a text box (#34).
+ *
+ * [boundsAnchored] picks what ([x], [y]) means: false for the tap that creates a
+ * box (baseline, so the text sits on the tapped rule), true when the coordinates
+ * came from a box's reported rect — a removal, whose undo has to put the box
+ * back exactly where it was.
+ */
 class TextBoxOperation(
     override val pageIndex: Int,
     private val id: String,
@@ -180,6 +204,7 @@ class TextBoxOperation(
     private val x: Double,
     private val y: Double,
     private val adding: Boolean,
+    private val boundsAnchored: Boolean = false,
 ) : PdfEditOperation {
 
     override val name: String get() = if (adding) "text" else "remove text"
@@ -187,10 +212,40 @@ class TextBoxOperation(
     override suspend fun apply(doc: PdfDocument) = if (adding) add(doc) else remove(doc)
     override suspend fun revert(doc: PdfDocument) = if (adding) remove(doc) else add(doc)
 
-    private suspend fun add(doc: PdfDocument) = doc.onPage(pageIndex) {
-        it.addTextBox(text, fontSize, x, y, id)
-    }
+    private suspend fun add(doc: PdfDocument) =
+        if (boundsAnchored) doc.placeTextBoxAt(pageIndex, id, text, fontSize, x, y)
+        else doc.onPage(pageIndex) { it.addTextBox(text, fontSize, x, y, id) }
+
     private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { it.removeTextBox(id) }
+}
+
+/**
+ * Correcting the text of a placed box (#36) — remove and re-add under the same
+ * id, anchored to the rect it occupied. The width changes with the new text;
+ * the lower-left corner does not, so the correction stays where the user put it.
+ */
+class EditTextBoxOperation(
+    override val pageIndex: Int,
+    private val id: String,
+    private val oldText: String,
+    private val newText: String,
+    private val fontSize: Double,
+    private val x: Double,
+    private val y: Double,
+) : PdfEditOperation {
+
+    override val name: String get() = "edit text"
+
+    override suspend fun apply(doc: PdfDocument) = replace(doc, newText)
+    override suspend fun revert(doc: PdfDocument) = replace(doc, oldText)
+
+    // One page load for the whole swap, as MoveStampOperation does — pdfium has
+    // no in-place text edit, so replacing the text means rebuilding the object.
+    private suspend fun replace(doc: PdfDocument, text: String) = doc.onPage(pageIndex) {
+        it.removeTextBox(id)
+        it.addTextBox(text, fontSize, x, y, id)
+        it.moveTextBox(id, x, y)
+    }
 }
 
 /** Moving a text box to a new lower-left corner. */

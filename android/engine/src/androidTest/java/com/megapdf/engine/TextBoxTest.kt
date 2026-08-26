@@ -65,6 +65,92 @@ class TextBoxTest {
         }
     }
 
+    /**
+     * The anchor contract the app's edit and remove operations rest on (#36):
+     * `addTextBox` places the text **baseline** on the point given, while
+     * `textBoxes()` reports **bounds** and `moveTextBox` anchors bounds. So a box
+     * moved to its own reported lower-left must not shift — if it does, undoing a
+     * removal or a text correction would put the box back a descender too high.
+     *
+     * The text carries a descender ("g", "y") on purpose: without one the two
+     * conventions coincide and the test proves nothing.
+     */
+    @Test
+    fun movingABoxToItsOwnRectIsANoOp() {
+        runBlocking {
+            val doc = engine.open(asset("fixture.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    page.addTextBox("paging gravy", 12.0, 100.0, 300.0, "text:anchor")
+                    val before = page.textBoxes().first { it.id == "text:anchor" }.rect
+                    assertTrue("the fixture text must have a descender below the baseline",
+                        before.bottom < 300.0)
+
+                    page.moveTextBox("text:anchor", before.left, before.bottom)
+                    val after = page.textBoxes().first { it.id == "text:anchor" }.rect
+                    assertEquals(before.left, after.left, 0.01)
+                    assertEquals(before.bottom, after.bottom, 0.01)
+
+                    // And it must stay a no-op when repeated — the app normalizes
+                    // through move on every re-add.
+                    page.moveTextBox("text:anchor", after.left, after.bottom)
+                    val third = page.textBoxes().first { it.id == "text:anchor" }.rect
+                    assertEquals(before.left, third.left, 0.01)
+                    assertEquals(before.bottom, third.bottom, 0.01)
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    /**
+     * Correcting a typo (#36) is remove + re-add under the same id, anchored to
+     * the old bounds lower-left. The width changes with the new text; the corner
+     * the user placed does not, and reverting restores the original exactly.
+     */
+    @Test
+    fun correctingTheTextKeepsTheBoxWhereItWas() {
+        runBlocking {
+            val doc = engine.open(asset("fixture.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    page.addTextBox("Jhon Smithy", 12.0, 100.0, 300.0, "text:typo")
+                    val original = page.textBoxes().first { it.id == "text:typo" }.rect
+
+                    suspend fun replaceWith(text: String) {
+                        page.removeTextBox("text:typo")
+                        page.addTextBox(text, 12.0, original.left, original.bottom, "text:typo")
+                        page.moveTextBox("text:typo", original.left, original.bottom)
+                    }
+
+                    replaceWith("John Smithy")
+                    val fixed = page.textBoxes().first { it.id == "text:typo" }
+                    assertEquals("John Smithy", fixed.text)
+                    assertEquals(original.left, fixed.rect.left, 0.01)
+                    assertEquals(original.bottom, fixed.rect.bottom, 0.01)
+
+                    // Undo: the same operation run with the old text.
+                    replaceWith("Jhon Smithy")
+                    val reverted = page.textBoxes().first { it.id == "text:typo" }
+                    assertEquals("Jhon Smithy", reverted.text)
+                    assertEquals(original.left, reverted.rect.left, 0.01)
+                    assertEquals(original.bottom, reverted.rect.bottom, 0.01)
+                    assertEquals("reverting must restore the original width",
+                        original.right, reverted.rect.right, 0.5)
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
     @Test
     fun addedTextIsFoundBySearch() {
         runBlocking {

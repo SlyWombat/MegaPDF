@@ -299,6 +299,10 @@ class PdfPage internal constructor(
 /** Rectangle in PDF points, bottom-left origin (top > bottom). */
 data class PdfRect(val left: Double, val bottom: Double, val right: Double, val top: Double) {
     fun contains(x: Double, y: Double): Boolean = x in left..right && y in bottom..top
+
+    /** The same rect with [margin] points added on every side — touch targets. */
+    fun grownBy(margin: Double): PdfRect =
+        PdfRect(left - margin, bottom - margin, right + margin, top + margin)
     val centerX: Double get() = (left + right) / 2
     val centerY: Double get() = (bottom + top) / 2
 }

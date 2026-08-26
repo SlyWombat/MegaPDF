@@ -16,8 +16,6 @@ struct ViewerView: View {
     @State private var confirmDiscard = false
     @State private var searchOpen = false
     @State private var searchText = ""
-    /// Buffer for the "Add text" field (#34).
-    @State private var newText = ""
     @FocusState private var searchFocused: Bool
     @Environment(\.displayScale) private var displayScale
 
@@ -146,26 +144,32 @@ struct ViewerView: View {
                 model.search(term: term, debounce: false)
             }
         }
-        // The setter deliberately does nothing: SwiftUI flips `isPresented` to
+        // One text field serves both jobs: placing new text (#34) and correcting a
+        // box already on the page (#36), which opens prefilled. The field is bound
+        // to the model, not to @State, so the prefill lands in the same update as
+        // `pendingText` rather than racing the alert's presentation.
+        //
+        // The `isPresented` setter deliberately does nothing: SwiftUI flips it to
         // false as soon as any button is tapped, and if that cleared the pending
         // tap before the Add action ran, the text would be silently dropped. Both
         // buttons resolve the state explicitly instead.
-        .alert("Add text", isPresented: Binding(
+        .alert(model.pendingText?.editingId == nil ? "Add text" : "Edit text",
+               isPresented: Binding(
             get: { model.pendingText != nil },
             set: { _ in }
         )) {
-            TextField("Text", text: $newText)
+            TextField("Text", text: $model.draftText)
                 .autocorrectionDisabled()
-            Button("Add") {
-                model.commitText(newText)
-                newText = ""
+            Button(model.pendingText?.editingId == nil ? "Add" : "Save") {
+                model.commitText(model.draftText)
             }
             Button("Cancel", role: .cancel) {
-                newText = ""
                 model.cancelTextPlacement()
             }
         } message: {
-            Text("This will be added where you tapped.")
+            Text(model.pendingText?.editingId == nil
+                 ? "This will be added where you tapped."
+                 : "This replaces the text you tapped.")
         }
         .alert("Unsaved changes", isPresented: $confirmDiscard) {
             Button("Save") { model.save() }
@@ -291,12 +295,23 @@ struct ViewerView: View {
                 }
             }
             if let stamp = model.selectedStamp, stamp.pageIndex == index {
-                StampOverlay(
-                    stamp: stamp,
+                SelectionOverlay(
+                    rect: stamp.rect,
                     pageSize: size,
                     viewSize: CGSize(width: width, height: height),
                     onCommit: model.commitStampRect,
                     onRemove: model.removeSelectedStamp
+                )
+            }
+            if let box = model.selectedTextBox, box.pageIndex == index {
+                SelectionOverlay(
+                    rect: box.rect,
+                    pageSize: size,
+                    viewSize: CGSize(width: width, height: height),
+                    onCommit: model.commitTextBoxRect,
+                    onRemove: model.removeSelectedTextBox,
+                    resizable: false,
+                    onEdit: model.editSelectedTextBox
                 )
             }
         }

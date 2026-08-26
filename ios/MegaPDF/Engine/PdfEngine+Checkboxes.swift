@@ -17,6 +17,12 @@ extension PdfRect {
     }
     var centerX: Double { (left + right) / 2 }
     var centerY: Double { (bottom + top) / 2 }
+
+    /// The same rect with `margin` points added on every side — touch targets.
+    func grown(by margin: Double) -> PdfRect {
+        PdfRect(left: left - margin, bottom: bottom - margin,
+                right: right + margin, top: top + margin)
+    }
 }
 
 extension PdfEngine {

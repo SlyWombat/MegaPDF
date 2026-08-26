@@ -38,6 +38,79 @@ final class AddTextTests: XCTestCase {
         XCTAssertEqual(after.first?.id, id, "its id is the handle undo relies on")
     }
 
+    /// The anchor contract the app's edit and remove operations rest on (#36):
+    /// `addTextBox` places the text **baseline** on the point given, while
+    /// `textBoxes()` reports **bounds** and `moveTextBox` anchors bounds. So a box
+    /// moved to its own reported lower-left must not shift — if it does, undoing a
+    /// removal or a text correction would put the box back a descender too high.
+    ///
+    /// The text carries a descender ("g", "y") on purpose: without one the two
+    /// conventions coincide and the test proves nothing.
+    func testMovingABoxToItsOwnRectIsANoOp() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        defer { Task { await engine.close(doc) } }
+
+        let id = try await engine.addTextBox(doc, pageIndex: 0, text: "paging gravy",
+                                             fontSize: 12, x: 100, y: 300)
+        var boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        let before = try XCTUnwrap(boxes.first { $0.id == id }).rect
+        XCTAssertLessThan(before.bottom, 300,
+                          "the fixture text must have a descender below the baseline")
+
+        try await engine.moveTextBox(doc, pageIndex: 0, id: id,
+                                     x: before.left, y: before.bottom)
+        boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        let after = try XCTUnwrap(boxes.first { $0.id == id }).rect
+        XCTAssertEqual(after.left, before.left, accuracy: 0.01)
+        XCTAssertEqual(after.bottom, before.bottom, accuracy: 0.01)
+
+        // And it must stay a no-op when repeated — the app normalizes through
+        // move on every re-add.
+        try await engine.moveTextBox(doc, pageIndex: 0, id: id, x: after.left, y: after.bottom)
+        boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        let third = try XCTUnwrap(boxes.first { $0.id == id }).rect
+        XCTAssertEqual(third.left, before.left, accuracy: 0.01)
+        XCTAssertEqual(third.bottom, before.bottom, accuracy: 0.01)
+    }
+
+    /// Correcting a typo (#36) is remove + re-add under the same id, anchored to
+    /// the old bounds lower-left. The width changes with the new text; the corner
+    /// the user placed does not, and reverting restores the original exactly.
+    func testCorrectingTheTextKeepsTheBoxWhereItWas() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        defer { Task { await engine.close(doc) } }
+
+        let id = try await engine.addTextBox(doc, pageIndex: 0, text: "Jhon Smithy",
+                                             fontSize: 12, x: 100, y: 300)
+        let placed = try await engine.textBoxes(doc, pageIndex: 0)
+        let original = try XCTUnwrap(placed.first { $0.id == id }).rect
+
+        func replace(with text: String) async throws -> PdfTextBox {
+            try await engine.removeTextBox(doc, pageIndex: 0, id: id)
+            try await engine.addTextBox(doc, pageIndex: 0, text: text, fontSize: 12,
+                                        x: original.left, y: original.bottom, id: id)
+            try await engine.moveTextBox(doc, pageIndex: 0, id: id,
+                                         x: original.left, y: original.bottom)
+            let updated = try await engine.textBoxes(doc, pageIndex: 0)
+            return try XCTUnwrap(updated.first { $0.id == id })
+        }
+
+        let fixed = try await replace(with: "John Smithy")
+        XCTAssertEqual(fixed.text, "John Smithy")
+        XCTAssertEqual(fixed.rect.left, original.left, accuracy: 0.01)
+        XCTAssertEqual(fixed.rect.bottom, original.bottom, accuracy: 0.01)
+
+        // Undo: the same operation run with the old text.
+        let reverted = try await replace(with: "Jhon Smithy")
+        XCTAssertEqual(reverted.text, "Jhon Smithy")
+        XCTAssertEqual(reverted.rect.left, original.left, accuracy: 0.01)
+        XCTAssertEqual(reverted.rect.bottom, original.bottom, accuracy: 0.01)
+        XCTAssertEqual(reverted.rect.right, original.right, accuracy: 0.5,
+                       "reverting must restore the original width")
+    }
+
     func testTextIsFoundBySearchLikeAnyOtherText() async throws {
         let engine = PdfEngine.shared
         let doc = try await engine.open(try fixture("fixture"))

@@ -491,6 +491,23 @@ behaviors are contracts — a change on any platform is a breaking change everyw
    viewer — which is the point — but they are edited through the content stream,
    so `FPDFPage_GenerateContent` must follow every change.
 
+   **Anchor convention** *(amendment — 2026-08-26, #36)*. Two different points
+   address a box, and mixing them silently shifts text:
+
+   | Call | Anchors |
+   |---|---|
+   | `addTextBox(text, size, x, y, id)` | the text **baseline** left |
+   | `textBoxes()` → `rect` | the object's **bounds** |
+   | `moveTextBox(id, x, y)` | the object's **bounds** lower-left |
+
+   Baseline placement is deliberate for the tap that creates a box: the text
+   should sit *on* the printed rule the user tapped. But any operation that puts
+   a box back where a rect said it was — undoing a removal, replacing the text of
+   a box to fix a typo — must re-add and then `moveTextBox` to the same
+   coordinates. Adding at the reported rect alone leaves the box a descender's
+   depth too high, so undo would not restore the position. Regression tests pin
+   this on both mobile platforms (`movingABoxToItsOwnRectIsANoOp`).
+
 ---
 
 ## Appendix A — Traceability: features → principles
