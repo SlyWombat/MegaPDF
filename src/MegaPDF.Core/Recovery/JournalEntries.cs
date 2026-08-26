@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json.Serialization;
+using MegaPDF.Core.Engine;
 
 namespace MegaPDF.Core.Recovery;
 
