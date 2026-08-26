@@ -19,12 +19,26 @@ struct SelectedStamp: Equatable {
     let rect: PdfRect
 }
 
-/// A tap that is waiting for the text the user is about to type (#34).
+/// A text box currently selected for drag/correct/remove (#36).
+struct SelectedTextBox: Equatable {
+    let pageIndex: Int
+    let id: String
+    let text: String
+    let fontSize: Double
+    let rect: PdfRect
+}
+
+/// A tap that is waiting for the text the user is about to type (#34). When
+/// `editingId` is set the tap re-opened an existing box to correct it (#36), and
+/// (`x`, `y`) is that box's bounds lower-left rather than the raw tap point.
 struct PendingText: Identifiable {
     let id = UUID()
     let pageIndex: Int
     let x: Double
     let y: Double
+    var editingId: String?
+    var fontSize: Double = 12
+    var initialText: String = ""
 }
 
 /// One search hit in the document-wide flat match list (#26).
@@ -43,6 +57,8 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var signatures: [SignatureEntry] = []
     @Published private(set) var pendingSignature: SignatureEntry?
     @Published private(set) var selectedStamp: SelectedStamp?
+    /// The text box currently selected for drag/correct/remove (#36).
+    @Published private(set) var selectedTextBox: SelectedTextBox?
     @Published private(set) var searchMatches: [SearchMatch] = []
     @Published private(set) var currentMatchIndex: Int?
     @Published private(set) var isSearching = false
@@ -53,6 +69,10 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var isPlacingText = false
     /// Set by that tap; ViewerView presents the text field for it.
     @Published var pendingText: PendingText?
+    /// What that text field is bound to. Seeded here rather than in the view, so
+    /// a correction's prefill (#36) lands in the same update as `pendingText`
+    /// instead of racing the alert's presentation.
+    @Published var draftText = ""
 
     /// Set only by `-screenshot sign|draw` launches; ViewerView opens the sheet.
     enum ScreenshotSheet { case signatures, draw }
@@ -71,6 +91,9 @@ final class ViewerModel: ObservableObject {
     private var renderTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
     private var lastWindow: (first: Int, last: Int, widthPx: Int)?
+
+    /// Margin added to a text box's tight glyph rect when hit-testing a tap (#36).
+    private static let tapSlopPoints: Double = 6
 
     private static let renderMargin = 2
     private static let maxPixelDim = 2048
@@ -230,6 +253,7 @@ final class ViewerModel: ObservableObject {
         if isPlacingText {
             isPlacingText = false
             statusMessage = nil
+            draftText = ""
             pendingText = PendingText(pageIndex: index, x: x, y: y)
             return
         }
@@ -244,9 +268,45 @@ final class ViewerModel: ObservableObject {
                 }) {
                     selectedStamp = SelectedStamp(pageIndex: index, annotIndex: sig.annotIndex,
                                                   id: sig.id, rect: sig.rect)
+                    selectedTextBox = nil
                     return
                 }
                 selectedStamp = nil
+
+                // Text boxes (#36) rank with signatures: both are things the user
+                // put on the page, so they win over the document underneath. Last
+                // match wins — later page objects paint on top. The rect is tight
+                // around the glyphs, and a 12 pt line is a few points tall, so the
+                // hit test gets `tapSlopPoints` of margin.
+                let boxes = try await engine.textBoxes(doc, pageIndex: index)
+                if let box = boxes.last(where: {
+                    $0.rect.grown(by: Self.tapSlopPoints).contains(x: x, y: y)
+                }) {
+                    if box.id.hasPrefix(PdfEngine.untaggedPrefix) {
+                        // A box written by MegaPDF for Windows 1.6.x, before boxes
+                        // carried an id. Its only handle is its page-object index,
+                        // which the history would replay against a page whose
+                        // indices had since shifted — so it would eventually move
+                        // or delete the wrong box. Swallow the tap rather than let
+                        // it fall through and toggle whatever is underneath.
+                        selectedTextBox = nil
+                        statusMessage = "This text was added by an older version and can't be edited here."
+                        return
+                    }
+                    let wasSelected = selectedTextBox?.id == box.id
+                    selectedTextBox = SelectedTextBox(pageIndex: index, id: box.id,
+                                                      text: box.text,
+                                                      fontSize: box.fontSize, rect: box.rect)
+                    if wasSelected {
+                        // A second tap on the selected box also opens the editor.
+                        // The overlay's pencil is the discoverable way in, because
+                        // a *quick* second tap is claimed by double-tap-to-zoom —
+                        // this path only fires after that disambiguation lapses.
+                        editSelectedTextBox()
+                    }
+                    return
+                }
+                selectedTextBox = nil
 
                 // Whichever edit the tap lands on, it goes through the history so
                 // it can be taken back (#34).
@@ -284,6 +344,7 @@ final class ViewerModel: ObservableObject {
     func startTextPlacement() {
         cancelPlacement()
         selectedStamp = nil
+        selectedTextBox = nil
         isPlacingText = true
         statusMessage = "Tap the page where the text should go"
     }
@@ -291,27 +352,110 @@ final class ViewerModel: ObservableObject {
     func cancelTextPlacement() {
         isPlacingText = false
         pendingText = nil
+        draftText = ""
         statusMessage = nil
     }
 
-    /// Commits the text the user typed for the pending tap.
+    /// Commits the text the user typed for the pending tap — a new box, or a
+    /// correction to one that is already on the page (#36).
     func commitText(_ text: String) {
         guard let pending = pendingText, let doc = document else { return }
         pendingText = nil
+        draftText = ""
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         Task {
             do {
-                try await perform(
-                    TextBoxOperation(pageIndex: pending.pageIndex,
-                                     id: "text:\(UUID().uuidString)",
-                                     text: trimmed, fontSize: 12,
-                                     x: pending.x, y: pending.y, adding: true),
-                    doc: doc)
+                if let editingId = pending.editingId {
+                    guard trimmed != pending.initialText else { return }
+                    try await perform(
+                        EditTextBoxOperation(pageIndex: pending.pageIndex, id: editingId,
+                                             oldText: pending.initialText, newText: trimmed,
+                                             fontSize: pending.fontSize,
+                                             x: pending.x, y: pending.y),
+                        doc: doc)
+                    await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
+                } else {
+                    try await perform(
+                        TextBoxOperation(pageIndex: pending.pageIndex,
+                                         id: "text:\(UUID().uuidString)",
+                                         text: trimmed, fontSize: 12,
+                                         x: pending.x, y: pending.y, adding: true),
+                        doc: doc)
+                }
             } catch {
-                statusMessage = "Couldn't add that text."
+                statusMessage = pending.editingId != nil
+                    ? "Couldn't change that text."
+                    : "Couldn't add that text."
             }
         }
+    }
+
+    // MARK: - selected text box: drag, correct, remove (#36)
+
+    /// Commits a drag from the selection overlay. Only the position changes — a
+    /// text box has no resize handle, because resizing one would mean changing
+    /// its font size, and SDD §3.1 keeps formatting controls out of the app.
+    func commitTextBoxRect(_ newRect: PdfRect) {
+        guard let sel = selectedTextBox, let doc = document,
+              case let .viewing(_, pageSizes) = state else { return }
+        let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
+        // A tap that slipped into a drag can land a sub-point move; don't put a
+        // no-op on the undo stack for it.
+        guard abs(rect.left - sel.rect.left) >= 0.01
+                || abs(rect.bottom - sel.rect.bottom) >= 0.01 else { return }
+        Task {
+            do {
+                try await perform(
+                    MoveTextBoxOperation(pageIndex: sel.pageIndex, id: sel.id,
+                                         from: (x: sel.rect.left, y: sel.rect.bottom),
+                                         to: (x: rect.left, y: rect.bottom)),
+                    doc: doc)
+                await reselectTextBox(doc, pageIndex: sel.pageIndex, id: sel.id)
+            } catch {
+                statusMessage = "Couldn't move that text."
+            }
+        }
+    }
+
+    /// Opens the text field on the selected box so a typo can be corrected. The
+    /// anchor handed to the edit is the box's bounds lower-left, not a tap point.
+    func editSelectedTextBox() {
+        guard let sel = selectedTextBox else { return }
+        selectedTextBox = nil
+        draftText = sel.text
+        pendingText = PendingText(pageIndex: sel.pageIndex,
+                                  x: sel.rect.left, y: sel.rect.bottom,
+                                  editingId: sel.id, fontSize: sel.fontSize,
+                                  initialText: sel.text)
+    }
+
+    func removeSelectedTextBox() {
+        guard let sel = selectedTextBox, let doc = document else { return }
+        Task {
+            do {
+                // boundsAnchored: the coordinates are the box's reported rect, so
+                // an undo must re-add against bounds, not the baseline.
+                try await perform(
+                    TextBoxOperation(pageIndex: sel.pageIndex, id: sel.id, text: sel.text,
+                                     fontSize: sel.fontSize,
+                                     x: sel.rect.left, y: sel.rect.bottom,
+                                     adding: false, boundsAnchored: true),
+                    doc: doc)
+            } catch {
+                statusMessage = "Couldn't remove that text."
+            }
+        }
+    }
+
+    /// Re-reads the box after an edit and keeps it selected, so the handles stay
+    /// on it. The rect must be read back rather than reused: correcting the text
+    /// changes the box's width.
+    private func reselectTextBox(_ doc: PdfDocument, pageIndex: Int, id: String) async {
+        guard let box = try? await PdfEngine.shared.textBoxes(doc, pageIndex: pageIndex)
+            .first(where: { $0.id == id }) else { return }
+        selectedTextBox = SelectedTextBox(pageIndex: pageIndex, id: id, text: box.text,
+                                          fontSize: box.fontSize, rect: box.rect)
     }
 
     // MARK: - undo / redo (#34)
@@ -356,6 +500,7 @@ final class ViewerModel: ObservableObject {
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = nil
+        selectedTextBox = nil
         invalidatePage(pageIndex)
     }
 
@@ -454,6 +599,7 @@ final class ViewerModel: ObservableObject {
     }
 
     func startPlacement(_ entry: SignatureEntry) {
+        selectedTextBox = nil
         pendingSignature = entry
         statusMessage = "Tap the page where the signature should go"
     }
@@ -672,6 +818,7 @@ final class ViewerModel: ObservableObject {
         isDirty = false
         pendingSignature = nil
         selectedStamp = nil
+        selectedTextBox = nil
         // History belongs to the open document — never offer to undo an edit
         // made to a file that is no longer on screen.
         history.clear()
@@ -679,6 +826,7 @@ final class ViewerModel: ObservableObject {
         canRedo = false
         isPlacingText = false
         pendingText = nil
+        draftText = ""
         if let doc = document {
             document = nil
             Task { await PdfEngine.shared.close(doc) }

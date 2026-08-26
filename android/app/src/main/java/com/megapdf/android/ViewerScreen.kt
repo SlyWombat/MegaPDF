@@ -109,6 +109,7 @@ fun ViewerScreen(
     isSaving: Boolean,
     signatures: List<SignatureEntry>,
     selectedStamp: SelectedStamp?,
+    selectedTextBox: SelectedTextBox?,
     canUndo: Boolean,
     canRedo: Boolean,
     pendingTextTap: PendingTextTap?,
@@ -134,6 +135,9 @@ fun ViewerScreen(
     onCancelTextPlacement: () -> Unit,
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
+    onCommitTextBoxRect: (com.megapdf.engine.PdfRect) -> Unit,
+    onEditTextBox: () -> Unit,
+    onRemoveTextBox: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onClose: () -> Unit,
@@ -169,13 +173,18 @@ fun ViewerScreen(
         )
     }
     if (pendingTextTap != null) {
-        var typed by remember(pendingTextTap) { mutableStateOf("") }
+        // A correction opens on the box's current text (#36); a new box opens empty.
+        val editing = pendingTextTap.editingId != null
+        var typed by remember(pendingTextTap) { mutableStateOf(pendingTextTap.initialText) }
         AlertDialog(
             onDismissRequest = onCancelTextPlacement,
-            title = { Text("Add text") },
+            title = { Text(if (editing) "Edit text" else "Add text") },
             text = {
                 Column {
-                    Text("This will be added where you tapped.")
+                    Text(
+                        if (editing) "This replaces the text you tapped."
+                        else "This will be added where you tapped."
+                    )
                     OutlinedTextField(
                         value = typed,
                         onValueChange = { typed = it },
@@ -186,7 +195,7 @@ fun ViewerScreen(
             },
             confirmButton = {
                 TextButton(onClick = { onCommitText(typed) }, enabled = typed.isNotBlank()) {
-                    Text("Add")
+                    Text(if (editing) "Save" else "Add")
                 }
             },
             dismissButton = {
@@ -407,11 +416,25 @@ fun ViewerScreen(
                             )
                         }
                         if (selectedStamp != null && selectedStamp.pageIndex == index) {
-                            StampSelectionOverlay(
-                                stamp = selectedStamp,
+                            SelectionOverlay(
+                                key = selectedStamp,
+                                rect = selectedStamp.rect,
                                 pageSize = size,
                                 onCommit = onCommitStampRect,
                                 onRemove = onRemoveStamp,
+                            )
+                        }
+                        if (selectedTextBox != null && selectedTextBox.pageIndex == index) {
+                            SelectionOverlay(
+                                key = selectedTextBox,
+                                rect = selectedTextBox.rect,
+                                pageSize = size,
+                                // No resize handle: resizing text means changing its
+                                // font size, and SDD §3.1 keeps formatting out (#36).
+                                resizable = false,
+                                onCommit = onCommitTextBoxRect,
+                                onRemove = onRemoveTextBox,
+                                onEdit = onEditTextBox,
                             )
                         }
                     }
@@ -487,7 +510,7 @@ private fun SearchTopBar(
 /**
  * Translucent fills over every search hit on this page; the current hit gets
  * the distinct color. Hit rects are PDF points (bottom-left origin) mapped
- * into the page box's pixel space, same transform as [StampSelectionOverlay].
+ * into the page box's pixel space, same transform as [SelectionOverlay].
  */
 @Composable
 private fun SearchHighlightOverlay(
@@ -566,16 +589,24 @@ private fun SignatureDialog(
 }
 
 /**
- * Selection chrome for a placed signature: drag to move, corner handle to
- * resize (aspect locked), X to remove. Changes commit to the engine on
- * drag end; the page bitmap refreshes after each commit.
+ * Selection chrome for something the user placed on the page: drag to move,
+ * corner handle to resize (aspect locked), X to remove. Changes commit to the
+ * engine on drag end; the page bitmap refreshes after each commit.
+ *
+ * Signatures and text boxes share it (#36) rather than growing a second
+ * interaction model — [resizable] and [onEdit] are the only differences between
+ * them. [key] is whatever identifies the current selection; the in-progress drag
+ * resets whenever it changes.
  */
 @Composable
-private fun StampSelectionOverlay(
-    stamp: SelectedStamp,
+private fun SelectionOverlay(
+    key: Any,
+    rect: com.megapdf.engine.PdfRect,
     pageSize: PageSize,
     onCommit: (com.megapdf.engine.PdfRect) -> Unit,
     onRemove: () -> Unit,
+    resizable: Boolean = true,
+    onEdit: (() -> Unit)? = null,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -584,14 +615,15 @@ private fun StampSelectionOverlay(
         val sx = pxWidth / pageSize.widthPoints.toFloat()
         val sy = pxHeight / pageSize.heightPoints.toFloat()
 
-        var drag by remember(stamp) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-        var widthDelta by remember(stamp) { mutableFloatStateOf(0f) }
+        var drag by remember(key) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        var widthDelta by remember(key) { mutableFloatStateOf(0f) }
 
-        val rect = stamp.rect
         val baseX = (rect.left * sx).toFloat()
         val baseY = ((pageSize.heightPoints - rect.top) * sy).toFloat()
         val baseW = ((rect.right - rect.left) * sx).toFloat()
         val baseH = ((rect.top - rect.bottom) * sy).toFloat()
+        // widthDelta only ever moves when the resize handle exists, so a
+        // non-resizable selection commits at scale 1 — a pure translation.
         val scale = ((baseW + widthDelta) / baseW).coerceAtLeast(0.15f)
 
         fun commit() {
@@ -617,7 +649,7 @@ private fun StampSelectionOverlay(
                     with(density) { (baseH * scale).toDp() },
                 )
                 .border(2.dp, Color(0xFF1E88E5))
-                .pointerInput(stamp) {
+                .pointerInput(key) {
                     detectDragGestures(
                         onDrag = { change, delta -> change.consume(); drag += delta },
                         onDragEnd = { commit() },
@@ -633,18 +665,33 @@ private fun StampSelectionOverlay(
                     .padding(horizontal = 6.dp, vertical = 2.dp)
                     .clickable { onRemove() },
             )
-            androidx.compose.foundation.layout.Box(
-                Modifier
-                    .align(Alignment.BottomEnd)
-                    .size(18.dp)
-                    .background(Color(0xFF1E88E5))
-                    .pointerInput(stamp) {
-                        detectDragGestures(
-                            onDrag = { change, delta -> change.consume(); widthDelta += delta.x },
-                            onDragEnd = { commit() },
-                        )
-                    },
-            )
+            if (onEdit != null) {
+                Text(
+                    "✎",
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .background(Color(0xFF1E88E5))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .clickable { onEdit() },
+                )
+            }
+            if (resizable) {
+                androidx.compose.foundation.layout.Box(
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(18.dp)
+                        .background(Color(0xFF1E88E5))
+                        .pointerInput(key) {
+                            detectDragGestures(
+                                onDrag = { change, delta ->
+                                    change.consume(); widthDelta += delta.x
+                                },
+                                onDragEnd = { commit() },
+                            )
+                        },
+                )
+            }
         }
     }
 }

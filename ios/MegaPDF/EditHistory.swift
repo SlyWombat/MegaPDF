@@ -244,7 +244,28 @@ final class MoveStampOperation: PdfEditOperation {
     }
 }
 
+/// Places a text box so its **bounds** lower-left lands on (`x`, `y`).
+///
+/// `addTextBox` puts the text *baseline* on the point given — right for the tap
+/// that creates a box, since the text should sit on the printed rule the user
+/// tapped. But `textBoxes()` reports **bounds**, and `moveTextBox` anchors
+/// bounds. So any operation that has to put a box back where a rect said it was
+/// must normalize through a move: adding at the reported rect alone leaves the
+/// box a descender's depth too high, and undo would not restore the position.
+private func placeTextBox(_ engine: PdfEngine, _ document: PdfDocument, pageIndex: Int,
+                          id: String, text: String, fontSize: Double,
+                          x: Double, y: Double) async throws {
+    try await engine.addTextBox(document, pageIndex: pageIndex, text: text,
+                                fontSize: fontSize, x: x, y: y, id: id)
+    try await engine.moveTextBox(document, pageIndex: pageIndex, id: id, x: x, y: y)
+}
+
 /// Adding or removing a text box (#34).
+///
+/// `boundsAnchored` picks what (`x`, `y`) means: false for the tap that creates a
+/// box (baseline, so the text sits on the tapped rule), true when the coordinates
+/// came from a box's reported rect — a removal, whose undo has to put the box
+/// back exactly where it was.
 final class TextBoxOperation: PdfEditOperation {
     let pageIndex: Int
     private let id: String
@@ -253,9 +274,10 @@ final class TextBoxOperation: PdfEditOperation {
     private let x: Double
     private let y: Double
     private let adding: Bool
+    private let boundsAnchored: Bool
 
     init(pageIndex: Int, id: String, text: String, fontSize: Double,
-         x: Double, y: Double, adding: Bool) {
+         x: Double, y: Double, adding: Bool, boundsAnchored: Bool = false) {
         self.pageIndex = pageIndex
         self.id = id
         self.text = text
@@ -263,6 +285,7 @@ final class TextBoxOperation: PdfEditOperation {
         self.x = x
         self.y = y
         self.adding = adding
+        self.boundsAnchored = boundsAnchored
     }
 
     var name: String { adding ? "text" : "remove text" }
@@ -284,12 +307,58 @@ final class TextBoxOperation: PdfEditOperation {
     }
 
     private func add(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try await engine.addTextBox(document, pageIndex: pageIndex, text: text,
-                                    fontSize: fontSize, x: x, y: y, id: id)
+        if boundsAnchored {
+            try await placeTextBox(engine, document, pageIndex: pageIndex, id: id,
+                                   text: text, fontSize: fontSize, x: x, y: y)
+        } else {
+            try await engine.addTextBox(document, pageIndex: pageIndex, text: text,
+                                        fontSize: fontSize, x: x, y: y, id: id)
+        }
     }
 
     private func remove(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         try await engine.removeTextBox(document, pageIndex: pageIndex, id: id)
+    }
+}
+
+/// Correcting the text of a placed box (#36) — remove and re-add under the same
+/// id, anchored to the rect it occupied. The width changes with the new text; the
+/// lower-left corner does not, so the correction stays where the user put it.
+final class EditTextBoxOperation: PdfEditOperation {
+    let pageIndex: Int
+    private let id: String
+    private let oldText: String
+    private let newText: String
+    private let fontSize: Double
+    private let x: Double
+    private let y: Double
+
+    init(pageIndex: Int, id: String, oldText: String, newText: String,
+         fontSize: Double, x: Double, y: Double) {
+        self.pageIndex = pageIndex
+        self.id = id
+        self.oldText = oldText
+        self.newText = newText
+        self.fontSize = fontSize
+        self.x = x
+        self.y = y
+    }
+
+    var name: String { "edit text" }
+
+    func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        try await replace(engine, document, with: newText)
+    }
+
+    func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        try await replace(engine, document, with: oldText)
+    }
+
+    private func replace(_ engine: PdfEngine, _ document: PdfDocument,
+                         with text: String) async throws {
+        try await engine.removeTextBox(document, pageIndex: pageIndex, id: id)
+        try await placeTextBox(engine, document, pageIndex: pageIndex, id: id,
+                               text: text, fontSize: fontSize, x: x, y: y)
     }
 }
 

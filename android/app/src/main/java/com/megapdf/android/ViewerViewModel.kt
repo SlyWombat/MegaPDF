@@ -40,8 +40,28 @@ data class SearchHit(
     val rects: List<com.megapdf.engine.PdfRect>,
 )
 
-/** A tap that is waiting for the text the user is about to type (#34). */
-data class PendingTextTap(val pageIndex: Int, val x: Double, val y: Double)
+/** A text box currently selected for drag/correct/remove (#36). */
+data class SelectedTextBox(
+    val pageIndex: Int,
+    val id: String,
+    val text: String,
+    val fontSize: Double,
+    val rect: com.megapdf.engine.PdfRect,
+)
+
+/**
+ * A tap that is waiting for the text the user is about to type (#34). When
+ * [editingId] is set the tap re-opened an existing box to correct it (#36), and
+ * ([x], [y]) is that box's bounds lower-left rather than the raw tap point.
+ */
+data class PendingTextTap(
+    val pageIndex: Int,
+    val x: Double,
+    val y: Double,
+    val editingId: String? = null,
+    val fontSize: Double = 12.0,
+    val initialText: String = "",
+)
 
 sealed interface ViewerUiState {
     data class Home(val recents: List<RecentEntry>, val error: String? = null) : ViewerUiState
@@ -156,6 +176,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** The stamp currently selected for move/resize/remove. */
     var selectedStamp: SelectedStamp? by mutableStateOf(null)
+        private set
+
+    /** The text box currently selected for drag/correct/remove (#36). */
+    var selectedTextBox: SelectedTextBox? by mutableStateOf(null)
         private set
 
     var uiState: ViewerUiState by mutableStateOf(ViewerUiState.Home(recentsStore.load()))
@@ -389,9 +413,46 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     // Selection only — move/resize/remove happen via the overlay.
                     selectedStamp = SelectedStamp(
                         pageIndex, signature.annotIndex, signature.id, signature.rect)
+                    selectedTextBox = null
                     return@launch
                 }
                 selectedStamp = null
+
+                // Text boxes (#36) rank with signatures: both are things the user
+                // put on the page, so they win over the document underneath.
+                // Last match wins — later page objects paint on top. The rect is
+                // tight around the glyphs, and a 12 pt line is a few pixels tall
+                // on a phone, so the hit test gets TAP_SLOP_POINTS of margin.
+                val box = page.textBoxes().lastOrNull {
+                    it.rect.grownBy(TAP_SLOP_POINTS).contains(x, y)
+                }
+                if (box != null) {
+                    if (box.id.startsWith(UNTAGGED_TEXT_PREFIX)) {
+                        // A box written by MegaPDF for Windows 1.6.x, before boxes
+                        // carried an id. Its only handle is its page-object index,
+                        // which the history would replay against a page whose
+                        // indices had since shifted — so it would eventually move
+                        // or delete the wrong box. Swallow the tap rather than let
+                        // it fall through and toggle whatever is underneath.
+                        selectedTextBox = null
+                        statusMessage = "This text was added by an older version and can't be edited here"
+                        return@launch
+                    }
+                    val selected = SelectedTextBox(
+                        pageIndex, box.id, box.text, box.fontSize, box.rect)
+                    if (selectedTextBox?.id == box.id) {
+                        // A second tap on the selected box also opens the editor.
+                        // The overlay's ✎ is the discoverable way in, because a
+                        // *quick* second tap is claimed by double-tap-to-zoom —
+                        // this path only fires after that disambiguation lapses.
+                        selectedTextBox = selected
+                        editSelectedTextBox()
+                    } else {
+                        selectedTextBox = selected
+                    }
+                    return@launch
+                }
+                selectedTextBox = null
 
                 val field = page.formFields().firstOrNull { it.rect.contains(x, y) }
                 operation = if (field != null) {
@@ -425,6 +486,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun startTextPlacement() {
         cancelPlacement()
         selectedStamp = null
+        selectedTextBox = null
         isPlacingText = true
         statusMessage = "Tap the page where the text should go"
     }
@@ -435,7 +497,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         statusMessage = null
     }
 
-    /** Commits the text typed for the pending tap. */
+    /** Commits the text typed for the pending tap — a new box, or a correction. */
     fun commitText(text: String) {
         val pending = pendingTextTap ?: return
         val doc = document ?: return
@@ -444,14 +506,103 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             try {
+                if (pending.editingId != null) {
+                    if (trimmed == pending.initialText) return@launch
+                    perform(
+                        EditTextBoxOperation(
+                            pending.pageIndex, pending.editingId, pending.initialText,
+                            trimmed, pending.fontSize, pending.x, pending.y),
+                        doc)
+                    reselectTextBox(doc, pending.pageIndex, pending.editingId)
+                } else {
+                    perform(
+                        TextBoxOperation(
+                            pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
+                            trimmed, 12.0, pending.x, pending.y, adding = true),
+                        doc)
+                }
+            } catch (e: Exception) {
+                statusMessage =
+                    if (pending.editingId != null) "Couldn't change that text"
+                    else "Couldn't add that text"
+            }
+        }
+    }
+
+    // --- Selected text box: drag, correct, remove (#36) ---
+
+    /**
+     * Commits a drag from the selection overlay. Only the position changes — a
+     * text box has no resize handle, because resizing one would mean changing
+     * its font size, and SDD §3.1 keeps formatting controls out of the app.
+     */
+    fun commitTextBoxRect(newRect: com.megapdf.engine.PdfRect) {
+        val sel = selectedTextBox ?: return
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        val doc = document ?: return
+        viewModelScope.launch {
+            val rect = clampToPage(newRect, state.pageSizes[sel.pageIndex])
+            // A tap that slipped into a drag can land a sub-point move; don't put
+            // a no-op on the undo stack for it.
+            if (kotlin.math.abs(rect.left - sel.rect.left) < 0.01 &&
+                kotlin.math.abs(rect.bottom - sel.rect.bottom) < 0.01) return@launch
+            try {
+                perform(
+                    MoveTextBoxOperation(
+                        sel.pageIndex, sel.id,
+                        fromX = sel.rect.left, fromY = sel.rect.bottom,
+                        toX = rect.left, toY = rect.bottom),
+                    doc)
+                reselectTextBox(doc, sel.pageIndex, sel.id)
+            } catch (e: Exception) {
+                statusMessage = "Couldn't move that text"
+            }
+        }
+    }
+
+    /**
+     * Opens the text field on the selected box so a typo can be corrected. The
+     * anchor handed to the edit is the box's bounds lower-left, not a tap point.
+     */
+    fun editSelectedTextBox() {
+        val sel = selectedTextBox ?: return
+        selectedTextBox = null
+        pendingTextTap = PendingTextTap(
+            sel.pageIndex, sel.rect.left, sel.rect.bottom,
+            editingId = sel.id, fontSize = sel.fontSize, initialText = sel.text)
+    }
+
+    fun removeSelectedTextBox() {
+        val sel = selectedTextBox ?: return
+        val doc = document ?: return
+        viewModelScope.launch {
+            try {
+                // boundsAnchored: the coordinates are the box's reported rect, so
+                // an undo must re-add against bounds, not the baseline.
                 perform(
                     TextBoxOperation(
-                        pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
-                        trimmed, 12.0, pending.x, pending.y, adding = true),
+                        sel.pageIndex, sel.id, sel.text, sel.fontSize,
+                        sel.rect.left, sel.rect.bottom, adding = false,
+                        boundsAnchored = true),
                     doc)
             } catch (e: Exception) {
-                statusMessage = "Couldn't add that text"
+                statusMessage = "Couldn't remove that text"
             }
+        }
+    }
+
+    /**
+     * Re-reads the box after an edit and keeps it selected, so the handles stay
+     * on it. The rect must be read back rather than reused: correcting the text
+     * changes the box's width.
+     */
+    private suspend fun reselectTextBox(doc: PdfDocument, pageIndex: Int, id: String) {
+        val page = doc.openPage(pageIndex)
+        try {
+            val box = page.textBoxes().firstOrNull { it.id == id } ?: return
+            selectedTextBox = SelectedTextBox(pageIndex, id, box.text, box.fontSize, box.rect)
+        } finally {
+            page.close()
         }
     }
 
@@ -489,6 +640,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = null
+        selectedTextBox = null
         markEditedAndRerender(pageIndex)
     }
 
@@ -567,6 +719,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun startPlacement(entry: SignatureEntry) {
+        selectedTextBox = null
         pendingSignature = entry
         statusMessage = "Tap the page where the signature should go"
     }
@@ -783,6 +936,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         isDirty = false
         pendingSignature = null
         selectedStamp = null
+        selectedTextBox = null
         // History belongs to the open document — never offer to undo an edit made
         // to a file that is no longer on screen.
         history.clear()
@@ -826,6 +980,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private companion object {
+        /** Handle prefix the engine gives a marked box that carries no id. */
+        const val UNTAGGED_TEXT_PREFIX = "text:untagged#"
+
+        /** Margin added to a text box's tight glyph rect when hit-testing a tap. */
+        const val TAP_SLOP_POINTS = 6.0
+
         const val RENDER_MARGIN = 2      // desktop MainViewModel's ±2-page window
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup

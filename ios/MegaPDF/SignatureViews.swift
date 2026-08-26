@@ -156,14 +156,23 @@ struct DrawSignatureView: View {
     }
 }
 
-/// Selection chrome for a placed signature: drag to move, corner handle to
-/// resize (aspect locked), ✕ to remove. Commits to the engine on drag end.
-struct StampOverlay: View {
-    let stamp: SelectedStamp
+/// Selection chrome for something the user placed on the page: drag to move,
+/// corner handle to resize (aspect locked), ✕ to remove.
+///
+/// Signatures and text boxes share it (#36) rather than growing a second
+/// interaction model — `resizable` and `onEdit` are the only differences between
+/// them. A text box has no resize handle because resizing one would mean changing
+/// its font size, and SDD §3.1 keeps formatting controls out of the app.
+struct SelectionOverlay: View {
+    let rect: PdfRect
     let pageSize: CGSize
     let viewSize: CGSize
     let onCommit: (PdfRect) -> Void
     let onRemove: () -> Void
+    var resizable = true
+    /// When set, a pencil appears alongside the ✕ — the discoverable way to
+    /// correct a text box, since a quick second tap is taken by zoom.
+    var onEdit: (() -> Void)?
 
     @State private var drag: CGSize = .zero
     @State private var widthDelta: CGFloat = 0
@@ -171,10 +180,12 @@ struct StampOverlay: View {
     var body: some View {
         let sx = viewSize.width / pageSize.width
         let sy = viewSize.height / pageSize.height
-        let baseX = CGFloat(stamp.rect.left) * sx
-        let baseY = (pageSize.height - CGFloat(stamp.rect.top)) * sy
-        let baseW = CGFloat(stamp.rect.right - stamp.rect.left) * sx
-        let baseH = CGFloat(stamp.rect.top - stamp.rect.bottom) * sy
+        let baseX = CGFloat(rect.left) * sx
+        let baseY = (pageSize.height - CGFloat(rect.top)) * sy
+        let baseW = CGFloat(rect.right - rect.left) * sx
+        let baseH = CGFloat(rect.top - rect.bottom) * sy
+        // widthDelta only ever moves when the resize handle exists, so a
+        // non-resizable selection commits at scale 1 — a pure translation.
         let scale = max((baseW + widthDelta) / baseW, 0.15)
 
         ZStack(alignment: .topTrailing) {
@@ -188,16 +199,27 @@ struct StampOverlay: View {
                     .font(.title3)
             }
             .offset(x: 10, y: -10)
-            Rectangle()
-                .fill(Color.blue)
-                .frame(width: 16, height: 16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity,
-                       alignment: .bottomTrailing)
-                .gesture(
-                    DragGesture()
-                        .onChanged { widthDelta = $0.translation.width }
-                        .onEnded { _ in commit(scale: scale) }
-                )
+            if let onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil.circle.fill")
+                        .foregroundStyle(.white, .blue)
+                        .font(.title3)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .offset(x: -10, y: -10)
+            }
+            if resizable {
+                Rectangle()
+                    .fill(Color.blue)
+                    .frame(width: 16, height: 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity,
+                           alignment: .bottomTrailing)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { widthDelta = $0.translation.width }
+                            .onEnded { _ in commit(scale: scale) }
+                    )
+            }
         }
         .frame(width: baseW * scale, height: baseH * scale)
         .offset(x: baseX + drag.width, y: baseY + drag.height)
@@ -213,10 +235,10 @@ struct StampOverlay: View {
         let sy = viewSize.height / pageSize.height
         let dxPt = Double(drag.width / sx)
         let dyPt = Double(drag.height / sy)
-        let newW = (stamp.rect.right - stamp.rect.left) * Double(scale)
-        let newH = (stamp.rect.top - stamp.rect.bottom) * Double(scale)
-        let newLeft = stamp.rect.left + dxPt
-        let newTop = stamp.rect.top - dyPt
+        let newW = (rect.right - rect.left) * Double(scale)
+        let newH = (rect.top - rect.bottom) * Double(scale)
+        let newLeft = rect.left + dxPt
+        let newTop = rect.top - dyPt
         drag = .zero
         widthDelta = 0
         onCommit(PdfRect(left: newLeft, bottom: newTop - newH,
