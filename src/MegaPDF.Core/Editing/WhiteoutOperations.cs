@@ -62,7 +62,7 @@ public sealed class RemoveWhiteoutOperation(IPdfDocument document, int pageIndex
 /// Adds a new text box (standard font, appended above any whiteout). The result is a
 /// regular text run — subsequent edits go through the normal line machinery.
 /// </summary>
-public sealed class AddTextBoxOperation(IPdfDocument document, int pageIndex, string text, double fontSize, PdfPoint topLeft) : IPageEditOperation
+public sealed class AddTextBoxOperation(IPdfDocument document, int pageIndex, string text, double fontSize, PdfPoint topLeft, string fontName = StandardTextBoxFonts.Default) : IPageEditOperation
 {
     private int _objectIndex = -1;
     private DetachedTextRun? _detached;
@@ -82,7 +82,7 @@ public sealed class AddTextBoxOperation(IPdfDocument document, int pageIndex, st
         }
         else
         {
-            _objectIndex = page.AppendTextBox(text, fontSize, topLeft);
+            _objectIndex = page.AppendTextBox(text, fontSize, topLeft, fontName);
         }
     }
 
@@ -95,7 +95,7 @@ public sealed class AddTextBoxOperation(IPdfDocument document, int pageIndex, st
     public JournalEntry ToJournalEntry(bool inverse) => inverse
         ? new TextDeleteEntry(PageIndex, _objectIndex)
         // Replay re-adds through AppendTextBox so the recovered box keeps its movable tag.
-        : new TextBoxAddEntry(PageIndex, text, fontSize, topLeft.X, topLeft.Y);
+        : new TextBoxAddEntry(PageIndex, text, fontSize, topLeft.X, topLeft.Y, fontName);
 }
 
 /// <summary>Reversible text-box move/nudge (drag or arrow keys, SDD §3.3). Translates in place.</summary>

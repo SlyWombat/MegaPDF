@@ -828,24 +828,7 @@ internal sealed class PdfiumPage : IPdfPage
     /// The `id` carried by the object's MegaPDFTextBox mark (SDD §6.2 contract 4),
     /// or null when it has none — boxes written before the param existed.
     /// </summary>
-    internal static string? ReadTextBoxId(IntPtr obj)
-    {
-        var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
-        for (var m = 0; m < marks; m++)
-        {
-            var mark = PdfiumNative.FPDFPageObj_GetMark(obj, m);
-            if (mark == IntPtr.Zero)
-                continue;
-            PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, TextBoxIdKey, null, 0, out var lengthInBytes);
-            if (lengthInBytes <= 2)
-                continue;
-            var buffer = new byte[lengthInBytes];
-            if (PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, TextBoxIdKey, buffer, lengthInBytes, out _) == 0)
-                continue;
-            return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
-        }
-        return null;
-    }
+    internal static string? ReadTextBoxId(IntPtr obj) => ReadMarkParam(obj, TextBoxIdKey);
 
     private static bool HasMark(IntPtr obj, string markName)
     {
@@ -866,16 +849,47 @@ internal sealed class PdfiumPage : IPdfPage
         return false;
     }
 
+    /// <summary>
+    /// The face named by the box's `font` mark param (#43), or the default when it
+    /// carries none — which is every box written before #43, and what they all are.
+    /// </summary>
+    internal static string ReadTextBoxFont(IntPtr obj)
+        => ReadMarkParam(obj, TextBoxFontKey) ?? StandardTextBoxFonts.Default;
+
+    private static string? ReadMarkParam(IntPtr obj, string key)
+    {
+        var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
+        for (var m = 0; m < marks; m++)
+        {
+            var mark = PdfiumNative.FPDFPageObj_GetMark(obj, m);
+            if (mark == IntPtr.Zero)
+                continue;
+            PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, key, null, 0, out var lengthInBytes);
+            if (lengthInBytes <= 2)
+                continue;
+            var buffer = new byte[lengthInBytes];
+            if (PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, key, buffer, lengthInBytes, out _) == 0)
+                continue;
+            return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
+        }
+        return null;
+    }
+
     private const string TextBoxMarkName = "MegaPDFTextBox";
     private const string TextBoxIdKey = "id";
+    private const string TextBoxFontKey = "font";
 
-    public int AppendTextBox(string text, double fontSize, PdfPoint topLeft)
+    public int AppendTextBox(string text, double fontSize, PdfPoint topLeft,
+                             string fontName = StandardTextBoxFonts.Default)
     {
         ThrowIfDisposed();
+        if (!StandardTextBoxFonts.IsSupported(fontName))
+            throw new ArgumentOutOfRangeException(nameof(fontName), fontName,
+                "Text boxes are limited to the three standard faces (#43).");
         lock (PdfiumLibrary.Lock)
         {
             var index = PdfiumNative.FPDFPage_CountObjects(_handle);
-            InsertTextRun(index, text, "Helvetica", fontSize,
+            InsertTextRun(index, text, fontName, fontSize,
                 new PdfRect(topLeft.X, topLeft.Y, 0, fontSize));
             // Tag it so it reads as a movable MegaPDF text box, not ordinary body text.
             var obj = PdfiumNative.FPDFPage_GetObject(_handle, index);
@@ -890,6 +904,11 @@ internal sealed class PdfiumPage : IPdfPage
                 {
                     PdfiumNative.FPDFPageObjMark_SetStringParam(
                         _document, obj, mark, TextBoxIdKey, $"text:{Guid.NewGuid()}");
+                    // The face the user picked, recorded rather than inferred: pdfium
+                    // is free to normalise a standard font's reported name, and the
+                    // cross-platform contract has to be exactly what was chosen (#43).
+                    PdfiumNative.FPDFPageObjMark_SetStringParam(
+                        _document, obj, mark, TextBoxFontKey, fontName);
                 }
                 GenerateContent();
             }
@@ -925,7 +944,7 @@ internal sealed class PdfiumPage : IPdfPage
                     PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
                     var bounds = new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom);
                     boxes.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize,
-                        ReadTextBoxId(obj)));
+                        ReadTextBoxId(obj), ReadTextBoxFont(obj)));
                 }
                 return boxes;
             }

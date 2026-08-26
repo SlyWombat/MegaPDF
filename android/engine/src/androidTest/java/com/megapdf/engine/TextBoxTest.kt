@@ -151,6 +151,82 @@ class TextBoxTest {
         }
     }
 
+    /**
+     * #43: the face is carried on the mark, not inferred from the font resource —
+     * pdfium is free to normalise a standard font's reported name, so the only
+     * thing that can be a cross-platform contract is what we wrote down.
+     */
+    @Test
+    fun theChosenFaceAndSizeSurviveSaveAndReopen() {
+        runBlocking {
+            val doc = engine.open(asset("fixture.pdf"))
+            val saved: ByteArray
+            try {
+                val page = doc.openPage(0)
+                try {
+                    page.addTextBox("Eighteen point Times", 18.0, 100.0, 300.0,
+                                    "text:serif", fontName = "Times-Roman")
+                    page.addTextBox("Twelve point Courier", 12.0, 100.0, 250.0,
+                                    "text:mono", fontName = "Courier")
+                    val boxes = page.textBoxes().associateBy { it.id }
+                    assertEquals("Times-Roman", boxes.getValue("text:serif").fontName)
+                    assertEquals(18.0, boxes.getValue("text:serif").fontSize, 0.5)
+                    assertEquals("Courier", boxes.getValue("text:mono").fontName)
+                } finally {
+                    page.close()
+                }
+                saved = java.io.ByteArrayOutputStream().also { doc.save(it) }.toByteArray()
+            } finally {
+                doc.close()
+            }
+
+            val reopened = engine.open(saved)
+            try {
+                val page = reopened.openPage(0)
+                try {
+                    val boxes = page.textBoxes().associateBy { it.id }
+                    assertEquals(2, boxes.size)
+                    assertEquals("Times-Roman", boxes.getValue("text:serif").fontName)
+                    assertEquals(18.0, boxes.getValue("text:serif").fontSize, 0.5)
+                    assertEquals("Courier", boxes.getValue("text:mono").fontName)
+                } finally {
+                    page.close()
+                }
+            } finally {
+                reopened.close()
+            }
+        }
+    }
+
+    /**
+     * Deliberately strict: the app passes one of three constants, so anything else
+     * is a bug and should fail loudly rather than silently render in the wrong face.
+     */
+    @Test
+    fun aFaceOutsideTheThreeIsRejected() {
+        runBlocking {
+            val doc = engine.open(asset("fixture.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    var threw = false
+                    try {
+                        page.addTextBox("Nope", 12.0, 100.0, 300.0, "text:bad",
+                                        fontName = "Comic Sans MS")
+                    } catch (e: IllegalArgumentException) {
+                        threw = true
+                    }
+                    assertTrue("an unsupported face must be rejected", threw)
+                    assertTrue("and must not leave a box behind", page.textBoxes().isEmpty())
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
     @Test
     fun addedTextIsFoundBySearch() {
         runBlocking {
@@ -217,15 +293,25 @@ class TextBoxTest {
                 val page = doc.openPage(0)
                 try {
                     val boxes = page.textBoxes()
-                    assertEquals("ordinary body text must not read as a box", 3, boxes.size)
+                    assertEquals("ordinary body text must not read as a box", 4, boxes.size)
                     assertEquals("Fixture text box", boxes[0].text)
                     assertEquals("text:fixture-1", boxes[0].id)
+                    assertEquals("a box with no recorded face is Helvetica",
+                        DEFAULT_FONT, boxes[0].fontName)
+
+                    // The box that chose its face and size (#43).
+                    val times = boxes.first { it.id == "text:fixture-times" }
+                    assertEquals("Eighteen point Times", times.text)
+                    assertEquals("Times-Roman", times.fontName)
+                    assertEquals(18.0, times.fontSize, 0.5)
 
                     // The two marked-but-unidentified boxes are what MegaPDF for
                     // Windows wrote before it stamped ids. They must be told
                     // apart: one shared id would let a remove delete an
                     // arbitrary one.
                     val legacy = boxes.filter { it.id.startsWith("text:untagged#") }
+                    assertEquals("untagged boxes are Helvetica too",
+                        listOf(DEFAULT_FONT, DEFAULT_FONT), legacy.map { it.fontName })
                     assertEquals(2, legacy.size)
                     assertEquals("untagged boxes must not share an id",
                         2, legacy.map { it.id }.toSet().size)
@@ -255,7 +341,7 @@ class TextBoxTest {
                     page.removeTextBox(target.id)
 
                     val after = page.textBoxes()
-                    assertEquals(2, after.size)
+                    assertEquals("only the targeted box goes", 3, after.size)
                     assertTrue("the other untagged box must survive",
                         after.any { it.text == "Legacy box two" })
                     assertTrue(after.none { it.text == "Legacy box one" })

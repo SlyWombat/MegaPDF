@@ -208,17 +208,22 @@ class PdfPage internal constructor(
     // ---- Added text (#34) ------------------------------------------------
 
     /**
-     * Places [text] with its baseline starting at ([x], [y]) in crop space,
-     * tagged with the given [id]. The representation matches the desktop's, so
-     * the box is movable text in MegaPDF for Windows and searchable text
-     * everywhere else.
+     * Places [text] with its baseline starting at ([x], [y]) in crop space, in
+     * [fontName], tagged with the given [id]. The representation matches the
+     * desktop's, so the box is movable text in MegaPDF for Windows and
+     * searchable text everywhere else.
+     *
+     * [fontName] must be one of [STANDARD_FONTS]; the face is recorded on the
+     * mark so every platform reads back exactly what was chosen (#43).
      */
     suspend fun addTextBox(
         text: String, fontSize: Double, x: Double, y: Double, id: String,
+        fontName: String = DEFAULT_FONT,
     ): Unit = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }
         require(text.isNotBlank()) { "text must not be blank" }
-        check(PdfiumNative.nativeAddTextBox(handle, text.trim(), fontSize, x, y, id)) {
+        require(fontName in STANDARD_FONTS) { "unsupported font: $fontName" }
+        check(PdfiumNative.nativeAddTextBox(handle, text.trim(), fontName, fontSize, x, y, id)) {
             "failed to add text box"
         }
     }
@@ -228,6 +233,7 @@ class PdfPage internal constructor(
         check(!closed) { "page is closed" }
         val ids = PdfiumNative.nativeTextBoxIds(handle)
         val texts = PdfiumNative.nativeTextBoxTexts(handle)
+        val fonts = PdfiumNative.nativeTextBoxFonts(handle)
         val packed = PdfiumNative.nativeTextBoxRectsPacked(handle)
         ids.mapIndexed { i, id ->
             TextBox(
@@ -236,6 +242,7 @@ class PdfPage internal constructor(
                 rect = PdfRect(packed[i * 5], packed[i * 5 + 1],
                                packed[i * 5 + 2], packed[i * 5 + 3]),
                 fontSize = packed[i * 5 + 4],
+                fontName = fonts.getOrElse(i) { DEFAULT_FONT },
             )
         }
     }
@@ -322,7 +329,22 @@ data class TextBox(
     val text: String,
     val rect: PdfRect,
     val fontSize: Double,
+    /** The face it was written in; [DEFAULT_FONT] for boxes that predate #43. */
+    val fontName: String = DEFAULT_FONT,
 )
+
+/**
+ * The base-14 face a text box may be written in (#43).
+ *
+ * Three, not fourteen: SDD §3.1 keeps formatting controls out of the app, and a
+ * choice between serif, sans and monospace is what "make this match the form I
+ * am filling in" actually needs. These are the exact names
+ * `FPDFText_LoadStandardFont` takes, so nothing has to be mapped.
+ */
+val STANDARD_FONTS = listOf("Helvetica", "Times-Roman", "Courier")
+
+/** What a box with no recorded face is, and what a new one defaults to. */
+const val DEFAULT_FONT = "Helvetica"
 
 class PdfPasswordException : Exception("Password required or incorrect password")
 

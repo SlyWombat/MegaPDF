@@ -111,6 +111,56 @@ final class AddTextTests: XCTestCase {
                        "reverting must restore the original width")
     }
 
+    /// #43: the face is carried on the mark, not inferred from the font resource —
+    /// pdfium is free to normalise a standard font's reported name, so the only
+    /// thing that can be a cross-platform contract is what we wrote down.
+    func testTheChosenFaceAndSizeSurviveSaveAndReopen() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+
+        try await engine.addTextBox(doc, pageIndex: 0, text: "Eighteen point Times",
+                                    fontSize: 18, x: 100, y: 300,
+                                    id: "text:serif", fontName: "Times-Roman")
+        try await engine.addTextBox(doc, pageIndex: 0, text: "Twelve point Courier",
+                                    fontSize: 12, x: 100, y: 250,
+                                    id: "text:mono", fontName: "Courier")
+        var boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        var serif = try XCTUnwrap(boxes.first { $0.id == "text:serif" })
+        XCTAssertEqual(serif.fontName, "Times-Roman")
+        XCTAssertEqual(serif.fontSize, 18, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(boxes.first { $0.id == "text:mono" }).fontName, "Courier")
+
+        let saved = try await engine.save(doc)
+        await engine.close(doc)
+
+        let reopened = try await engine.open(saved)
+        defer { Task { await engine.close(reopened) } }
+        boxes = try await engine.textBoxes(reopened, pageIndex: 0)
+        XCTAssertEqual(boxes.count, 2)
+        serif = try XCTUnwrap(boxes.first { $0.id == "text:serif" })
+        XCTAssertEqual(serif.fontName, "Times-Roman")
+        XCTAssertEqual(serif.fontSize, 18, accuracy: 0.5)
+        XCTAssertEqual(try XCTUnwrap(boxes.first { $0.id == "text:mono" }).fontName, "Courier")
+    }
+
+    /// Deliberately strict: the app passes one of three constants, so anything else
+    /// is a bug and should fail loudly rather than silently render in the wrong face.
+    func testAFaceOutsideTheThreeIsRejected() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        defer { Task { await engine.close(doc) } }
+
+        do {
+            try await engine.addTextBox(doc, pageIndex: 0, text: "Nope", fontSize: 12,
+                                        x: 100, y: 300, fontName: "Comic Sans MS")
+            XCTFail("an unsupported face must be rejected")
+        } catch {
+            // expected
+        }
+        let boxes = try await engine.textBoxes(doc, pageIndex: 0)
+        XCTAssertTrue(boxes.isEmpty, "a rejected face must not leave a box behind")
+    }
+
     func testTextIsFoundBySearchLikeAnyOtherText() async throws {
         let engine = PdfEngine.shared
         let doc = try await engine.open(try fixture("fixture"))
@@ -160,15 +210,26 @@ final class AddTextTests: XCTestCase {
         defer { Task { await engine.close(doc) } }
 
         let boxes = try await engine.textBoxes(doc, pageIndex: 0)
-        XCTAssertEqual(boxes.count, 3, "the ordinary body text must not read as a box")
+        XCTAssertEqual(boxes.count, 4, "the ordinary body text must not read as a box")
         XCTAssertEqual(boxes.first?.text, "Fixture text box")
         XCTAssertEqual(boxes.first?.id, "text:fixture-1")
+        XCTAssertEqual(boxes.first?.fontName, PdfEngine.defaultFont,
+                       "a box with no recorded face is Helvetica")
+
+        // The box that chose its face and size (#43).
+        let times = try XCTUnwrap(boxes.first { $0.id == "text:fixture-times" })
+        XCTAssertEqual(times.text, "Eighteen point Times")
+        XCTAssertEqual(times.fontName, "Times-Roman")
+        XCTAssertEqual(times.fontSize, 18, accuracy: 0.5)
 
         // The two marked-but-unidentified boxes are what MegaPDF for Windows
         // wrote before it stamped ids. They must be told apart: one shared id
         // would let a remove delete an arbitrary one.
         let legacy = boxes.filter { $0.id.hasPrefix(PdfEngine.untaggedPrefix) }
         XCTAssertEqual(legacy.count, 2)
+        XCTAssertEqual(legacy.map(\.fontName),
+                       [PdfEngine.defaultFont, PdfEngine.defaultFont],
+                       "untagged boxes are Helvetica too")
         XCTAssertEqual(Set(legacy.map(\.id)).count, 2, "untagged boxes must not share an id")
         XCTAssertEqual(legacy.map(\.text), ["Legacy box one", "Legacy box two"])
     }
@@ -185,7 +246,7 @@ final class AddTextTests: XCTestCase {
         try await engine.removeTextBox(doc, pageIndex: 0, id: target.id)
 
         let after = try await engine.textBoxes(doc, pageIndex: 0)
-        XCTAssertEqual(after.count, 2)
+        XCTAssertEqual(after.count, 3, "only the targeted box goes")
         XCTAssertTrue(after.contains { $0.text == "Legacy box two" },
                       "the other untagged box must survive")
         XCTAssertFalse(after.contains { $0.text == "Legacy box one" })

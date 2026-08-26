@@ -491,6 +491,30 @@ behaviors are contracts — a change on any platform is a breaking change everyw
    viewer — which is the point — but they are edited through the content stream,
    so `FPDFPage_GenerateContent` must follow every change.
 
+   **Font and size** *(amendment — 2026-08-26, #43)*. A box records the face the
+   user picked as a **`font` string param on the same mark**, beside the `id`.
+   It is written down rather than read back off the font resource because pdfium
+   is free to normalise a standard font's reported name, and a cross-platform
+   contract has to be exactly what was chosen. Permitted values are three
+   base-14 names, passed verbatim to `FPDFText_LoadStandardFont` so nothing has
+   to be mapped:
+
+   | Value | |
+   |---|---|
+   | `Helvetica` | sans — the default |
+   | `Times-Roman` | serif |
+   | `Courier` | monospace |
+
+   Three, not fourteen: §3.1 keeps formatting controls out of the app, and a
+   choice between serif, sans and monospace is what "make this match the form I
+   am filling in" needs. An engine must **reject** any other name rather than
+   substitute — the apps pass one of three constants, so anything else is a bug.
+   A box carrying no `font` param reads as `Helvetica`, which is what every box
+   written before this amendment is. Size was already a parameter on every
+   engine's add path and needed no representation change. Shared fixture:
+   `textbox.pdf` carries an 18 pt `Times-Roman` box (`text:fixture-times`)
+   alongside the pre-#43 boxes that carry no face at all.
+
    **Anchor convention** *(amendment — 2026-08-26, #36)*. Two different points
    address a box, and mixing them silently shifts text:
 

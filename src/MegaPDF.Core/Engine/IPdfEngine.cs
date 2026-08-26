@@ -115,8 +115,12 @@ public interface IPdfPage : IDisposable
     /// Appended after any whiteout, so it renders above one. Returns its object index.
     /// The object is tagged so it stays identifiable as a MegaPDF text box (movable,
     /// SDD §3.3-style) even though it is otherwise a normal, editable text run.
+    /// <paramref name="fontName"/> must be one of <see cref="StandardTextBoxFonts"/>;
+    /// the face is recorded on the mark so every platform reads back exactly what was
+    /// chosen (#43). Optional so existing callers keep the pre-#43 default.
     /// </summary>
-    int AppendTextBox(string text, double fontSize, PdfPoint topLeft);
+    int AppendTextBox(string text, double fontSize, PdfPoint topLeft,
+                      string fontName = StandardTextBoxFonts.Default);
 
     /// <summary>MegaPDF-added text boxes on this page, as their underlying text runs.</summary>
     IReadOnlyList<PdfTextRun> GetTextBoxes();
@@ -215,7 +219,29 @@ public sealed record PageHit(
 /// indices shift. Null for ordinary body text, and for boxes written before the
 /// param existed.
 /// </param>
-public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize, string? TextBoxId = null);
+public sealed record PdfTextRun(int ObjectIndex, string Text, PdfRect Bounds, string FontName, double FontSize, string? TextBoxId = null, string? TextBoxFont = null);
+
+/// <summary>
+/// The base-14 faces an added text box may be written in (#43).
+///
+/// Three, not fourteen: SDD §3.1 keeps formatting controls out of the app, and a
+/// choice between serif, sans and monospace is what "make this match the form I am
+/// filling in" actually needs. These are the exact names FPDFText_LoadStandardFont
+/// takes, so nothing has to be mapped.
+/// </summary>
+public static class StandardTextBoxFonts
+{
+    public const string Sans = "Helvetica";
+    public const string Serif = "Times-Roman";
+    public const string Mono = "Courier";
+
+    /// <summary>What a box with no recorded face is, and what a new one defaults to.</summary>
+    public const string Default = Sans;
+
+    public static readonly IReadOnlyList<string> All = [Sans, Serif, Mono];
+
+    public static bool IsSupported(string fontName) => All.Contains(fontName);
+}
 
 /// <summary>One search hit: the rectangles covering it, in top-left page space.</summary>
 public sealed record PdfSearchMatch(IReadOnlyList<PdfRect> Rects);
