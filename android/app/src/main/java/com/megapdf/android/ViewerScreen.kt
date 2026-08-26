@@ -397,7 +397,14 @@ fun ViewerScreen(
                     .fillMaxSize()
                     .horizontalScroll(hScroll, enabled = zoom > 1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                // Centred, not top-packed (#48): the 0xFF404040 behind the list is
+                // the document surround every PDF viewer draws so you can see where
+                // the page ends. Top-packed and full-bleed, it could only ever show
+                // below the last page — a third of the viewport in one dead block on
+                // a one-page document. For a LazyColumn the arrangement applies only
+                // while the content is shorter than the viewport, so a multi-page
+                // document still packs from the top and scrolls unchanged.
+                verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
             ) {
                 items(pageSizes.size, key = { it }) { index ->
                     val size = pageSizes[index]
