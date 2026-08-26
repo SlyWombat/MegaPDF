@@ -21,6 +21,12 @@ enum DemoContent {
     /// case-insensitive, so the lower-case term matches the capitalized ones.
     static let searchTerm = "rental"
 
+    /// Marketing "Add text" shot (#43): the name the customer would print under
+    /// the signature rule the demo agreement draws at y=400, and where it sits.
+    static let printedName = "Jane Whitfield"
+    static let printedNameX: Double = 72
+    static let printedNameY: Double = 372
+
     /// The handwritten "MegaWoman" demo signature (bundled transparent PNG,
     /// rendered from a script typeface at build time).
     static func signatureImage() -> CGImage? {

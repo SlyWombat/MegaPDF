@@ -35,6 +35,9 @@ the result before continuing. Paths must be **Windows** paths.
     # 5. shot 4 — save, open the scan, Shrink for email
     .\Shot-Shrink.ps1 -Pdf "<repo>\...\scanned-agreement.pdf" -Out "<repo>\...\scanned-agreement - smaller.pdf"
 
+    # 6. shot 5 — NOT YET SCRIPTED, see below
+    #    Add text with the size and face pickers showing (#43).
+
 `Test-FullBreakpoint.ps1` captures toolbar strips right at the full-label
 breakpoint with a document open and edited, so `Save ●` is showing — the widest
 the bar ever gets, and the one state where clipping could survive the fix.
@@ -48,6 +51,29 @@ toolbar strips across a list of widths. `Shot-Now.ps1` grabs the current state.
 scale.** They are read off the previous screenshot, not computed: `Click-InShot`
 maps image coordinates to screen because the shot *is* the DWM frame rect. On any
 other frame, take a shot first and re-read them.
+
+## Shot 5 — Add text, with the pickers (#43): still to be written
+
+`tools/Store-Listing.md` now describes ADD TEXT and lists a fifth screenshot,
+`05-add-text.png`. **There is no script for it yet, and the four shots on disk
+predate the feature.** Both need doing before the listing is submitted, or it
+describes a build its screenshots do not show.
+
+What the shot has to show: the inline editor open on a blank line with the size
+box and font box above it — the state `ShowInlineEditor` produces when it is
+handed a non-null `style`, which happens only for MegaPDF's own text boxes (the
+Add text button's click, or a double-click on an existing box).
+
+Why it is not scripted here: every coordinate in this harness is *read off the
+previous screenshot*, not computed, and the pickers are new UI that has never
+been captured — so there is no frame to read them from. The sequence is
+`Setup-Frame.ps1`, click the **Add text** toolbar button, click the blank line
+under the signature rule, type, then open the size box before shooting. Write it
+the way `Shot-TextEdit.ps1` is written, taking `-X`/`-Y` from a probe shot.
+
+It also cannot be done from CI: unlike iOS and Android, whose screenshots come
+from the Actions workflows, this harness drives a real installed package on a
+real desktop.
 
 ## Why 3060x2000
 

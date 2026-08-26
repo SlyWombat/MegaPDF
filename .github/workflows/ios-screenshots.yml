@@ -1,7 +1,7 @@
 name: iOS Screenshots
 
 # Manual: captures App Store screenshots from real simulators using the app's
-# `-screenshot <state>` launch mode (home / viewer / search / sign / draw), at the two
+# `-screenshot <state>` launch mode (home / viewer / search / sign / draw / text), at the two
 # required sizes: 6.9" iPhone and 13" iPad. Download the artifact and upload
 # the PNGs to App Store Connect (docs/app-store-listing.md maps them).
 on:
@@ -70,7 +70,7 @@ jobs:
             xcrun simctl status_bar "$udid" override --time "9:41" \
               --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
             xcrun simctl install "$udid" "$APP"
-            for state in home viewer search sign draw; do
+            for state in home viewer search sign draw text; do
               xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state"
               sleep 8
               xcrun simctl io "$udid" screenshot "$OUT/${label}-${state}.png"
