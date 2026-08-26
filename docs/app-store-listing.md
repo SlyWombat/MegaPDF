@@ -45,6 +45,12 @@ character limits show the count in brackets.
 > printed squares alike. MegaPDF recognizes drawn checkboxes that other apps
 > treat as decoration.
 >
+> **Type on any line**
+> Tap where the answer goes and type it. Choose the size and the face — sans,
+> serif or monospace — so what you add matches the form you are filling in.
+> Drag it into place, or tap it again to fix a typo. Everything you add is
+> real, searchable text, not a sticker on top of the page.
+>
 > **Sign like you mean it**
 > Draw your signature with a finger, or photograph the one on paper — the
 > white background disappears automatically. Your signatures stay in a private
@@ -90,6 +96,9 @@ character limits show the count in brackets.
 > signature, and save safely back to the original file. No account, no
 > tracking, no network access — everything stays on your device.
 
+*Later releases keep their copy in `docs/release-notes-mobile-*.md`, written
+when the work merges rather than composed under time pressure on approval day.*
+
 ## App Privacy (Data Collection)
 
 Select **"Data is not collected"** for every category. Justification if asked:
@@ -105,16 +114,19 @@ workflow), download the `appstore-screenshots` artifact, and upload:
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|
 | `iphone-6_9-viewer.png` | iPhone 6.9" #1 | *Checked and signed in under a minute* |
-| `iphone-6_9-search.png` | iPhone 6.9" #2 | *Find any word, on every page* |
-| `iphone-6_9-sign.png` | iPhone 6.9" #3 | *Your signatures, saved on your device* |
-| `iphone-6_9-draw.png` | iPhone 6.9" #4 | *Draw it once, use it everywhere* |
-| `iphone-6_9-home.png` | iPhone 6.9" #5 | *No account. No cloud. No tracking.* |
-| `ipad-13-*.png` | iPad 13" #1–5 | same order |
+| `iphone-6_9-text.png` | iPhone 6.9" #2 | *Type on the blank line — your size, your font* |
+| `iphone-6_9-search.png` | iPhone 6.9" #3 | *Find any word, on every page* |
+| `iphone-6_9-sign.png` | iPhone 6.9" #4 | *Your signatures, saved on your device* |
+| `iphone-6_9-draw.png` | iPhone 6.9" #5 | *Draw it once, use it everywhere* |
+| `iphone-6_9-home.png` | iPhone 6.9" #6 | *No account. No cloud. No tracking.* |
+| `ipad-13-*.png` | iPad 13" #1–6 | same order |
 
 Order matters: the viewer shot (a filled, signed agreement) leads.
 
-The search shot only exists once the `search` screenshot state ships — it is
-not in the 1.0 builds, so upload it with the update that carries Find.
+Each shot only exists once its screenshot state ships. `search` is not in the
+1.0 builds, and `text` is newer still (#43) — upload each with the update that
+actually carries the feature, or the listing promises something the binary does
+not do.
 
 ## App Review Information
 
@@ -152,8 +164,12 @@ not in the 1.0 builds, so upload it with the update that carries Find.
 > 5. Tap the magnifier and search a long document — do the highlights and the
 >    "3 of 17" count match what you see, and does the return key walk through
 >    the matches and wrap around at the end?
-> 6. If you also use MegaPDF on Windows or Android: sign there, open here —
->    the signature should be movable on both.
+> 6. Tap Text, tap a blank line, and type — try a different size and font
+>    before adding it. Then tap the text you placed: drag it, use the pencil to
+>    fix a typo or change its size, and undo the lot.
+> 7. If you also use MegaPDF on Windows or Android: sign there, open here —
+>    the signature should be movable on both, and text added on one should
+>    keep its size and face on the others.
 
 ---
 

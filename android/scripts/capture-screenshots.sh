@@ -13,7 +13,7 @@ adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi s
 adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false || true
 
 mkdir -p /tmp/shots
-for state in home viewer search sign draw; do
+for state in home viewer search sign draw text; do
     adb shell am force-stop ca.electricrv.megapdf || true
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10

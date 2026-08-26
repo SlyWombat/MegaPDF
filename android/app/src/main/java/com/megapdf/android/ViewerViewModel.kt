@@ -130,7 +130,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var pendingTextTap: PendingTextTap? by mutableStateOf(null)
         private set
 
-    /** Screenshot-mode sheet request ("sign" | "draw" | "search"); set via launch intent. */
+    /** Screenshot-mode sheet request ("sign" | "draw" | "search" | "text"); set via launch intent. */
     var screenshotSheet: String? by mutableStateOf(null)
         private set
 
@@ -163,7 +163,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     RecentEntry("demo://3", "Insurance Claim Form.pdf", now - 6 * day),
                 ), null)
             }
-            "viewer", "sign", "draw", "search" -> {
+            "viewer", "sign", "draw", "search", "text" -> {
                 screenshotSheet = if (state == "viewer") null else state
                 viewModelScope.launch {
                     val bytes = withContext(Dispatchers.IO) {
@@ -187,6 +187,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         // return, and the debounce is skipped so the hits and
                         // the "N of M" count are on screen without any wait.
                         startSearch(SCREENSHOT_SEARCH_TERM, debounceMs = 0L)
+                    }
+                    if (state == "text") {
+                        // The Add text dialog, open on a typed name with the size
+                        // and face pickers showing (#43). Armed here rather than
+                        // through onPageTapped because the tap point is chosen,
+                        // not synthesised: just under the signature rule, where a
+                        // printed name belongs on this agreement.
+                        pendingTextTap = PendingTextTap(
+                            0, SCREENSHOT_TEXT_X, SCREENSHOT_TEXT_Y,
+                            initialText = SCREENSHOT_TEXT)
                     }
                 }
             }
@@ -1025,5 +1035,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // Marketing screenshot query: "rental" is the most-repeated real word in
         // the demo agreement (title, then twice in the opening paragraph).
         const val SCREENSHOT_SEARCH_TERM = "rental"
+
+        // Marketing "Add text" shot: the name the customer would print under the
+        // signature rule the demo agreement draws at y=400.
+        const val SCREENSHOT_TEXT = "Jane Whitfield"
+        const val SCREENSHOT_TEXT_X = 72.0
+        const val SCREENSHOT_TEXT_Y = 372.0
     }
 }

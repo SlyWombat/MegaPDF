@@ -130,7 +130,7 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
-        case "viewer", "sign", "draw", "search":
+        case "viewer", "sign", "draw", "search", "text":
             if let url = Bundle.main.url(forResource: "demo", withExtension: "pdf"),
                let bytes = try? Data(contentsOf: url) {
                 if mode == "sign" { screenshotSheet = .signatures }
@@ -139,6 +139,18 @@ final class ViewerModel: ObservableObject {
                 Task {
                     await open(bytes: bytes, password: nil,
                                displayName: "Rental Agreement.pdf", sourceURL: nil)
+                    if mode == "text" {
+                        // The Add text sheet, open on a typed name with the size
+                        // and face pickers showing (#43). Armed after the open so
+                        // it cannot be cleared by the state change, and with a
+                        // chosen tap point rather than a synthesised one: just
+                        // under the signature rule, where a printed name belongs.
+                        draftText = DemoContent.printedName
+                        pendingText = PendingText(pageIndex: 0,
+                                                  x: DemoContent.printedNameX,
+                                                  y: DemoContent.printedNameY,
+                                                  initialText: DemoContent.printedName)
+                    }
                 }
             }
         default:

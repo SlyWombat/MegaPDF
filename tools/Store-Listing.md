@@ -10,11 +10,15 @@
 paragraphs survive, markdown does not.)
 
 Mega PDF is a free, lightweight PDF editor built for people who find the big
-PDF suites too bloated and complex. It does four things exceptionally well —
+PDF suites too bloated and complex. It does five things exceptionally well —
 and deliberately nothing else.
 
 EDIT TEXT — Click any text in the document and type, like editing a Word file.
 Fix a typo, change a date, update a number. Done.
+
+ADD TEXT — Click a blank line and type on it. Pick the size and the face —
+sans, serif or monospace — so what you add matches the rest of the form. Drag
+it into place, or double-click it later to change it.
 
 CHECK BOXES — Click an empty square and it becomes a checked box. Forms that
 were never meant to be filled digitally, filled digitally.
@@ -41,6 +45,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 (Store listing → "App features", up to 20 × 200 chars. Use these eight.)
 
 - Edit text in any PDF by clicking and typing — like a Word document
+- Add text on any blank line, in the size and face that matches the form
 - Click empty squares to check boxes on any form
 - Drag signatures from your personal library onto the page, then nudge and resize
 - Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
@@ -69,9 +74,8 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 - Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
 
 ## Screenshots
-Shot and ready to upload: `artifacts/store/screenshots/` (3038×1989, well over the
-1366×768 minimum; 1–4 required). Captured from **1.6.2** — see that folder's
-README.md to re-shoot after a UI change. Upload in this order, one caption each:
+`artifacts/store/screenshots/` (3038×1989, well over the 1366×768 minimum; 1–4
+required). Upload in this order, one caption each:
 
 | File | Caption (≤ 200 chars) |
 |---|---|
@@ -79,6 +83,17 @@ README.md to re-shoot after a UI change. Upload in this order, one caption each:
 | `02-checkbox.png` | Click an empty square to check it. Drawn checkboxes too, not just real form fields. |
 | `03-signature.png` | Drop a saved signature on the line, then nudge it into place. |
 | `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
+| `05-add-text.png` | Type on a blank line, in the size and face that matches the form. |
+
+⚠️ **The four shots on disk are from 1.6.2 and predate the ADD TEXT copy above.**
+They show a toolbar without the size and font pickers, and there is no
+`05-add-text.png` yet. Re-shoot all five before submitting, or the listing
+describes a build the screenshots do not show — the same mismatch NEXT-STEPS.md
+already flags between the shots and the staged upload package.
+
+Re-shooting needs a Windows desktop with the new build installed; the harness is
+`tools/screenshots-windows/` (start with its README). It cannot be done from CI —
+unlike iOS and Android, whose screenshots come from the Actions workflows.
 
 Shot 3 is click-to-place, not drag: picking a signature from the library arms
 placement and the next click on the page drops it there, selected for nudging.
