@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**']
+    paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**', 'spike/**']
   pull_request:
     branches: [main]
-    paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**']
+    paths-ignore: ['android/**', 'libs/pdfium/android/**', 'ios/**', 'spike/**']
 
 jobs:
   # The bundled notices must match the vendored license sets — a PDFium bump that

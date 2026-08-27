@@ -57,3 +57,6 @@ __pycache__/
 # by /understand. The .understandignore inside it IS worth keeping if you want the
 # exclusions shared, but the graph itself is a build artifact.
 .ua/
+
+# ADR-002 macOS spike: PDFium is fetched by tools/fetch-pdfium-mac.sh, never committed.
+spike/Vendor/
