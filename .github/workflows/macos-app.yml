@@ -57,13 +57,38 @@ jobs:
       - name: Build MegaPDF.app
         run: tools/build-macos-app.sh ${{ matrix.rid }} "$RUNNER_TEMP/app"
 
-      # Proves the bundle actually launches and can rasterise a page, rather than
-      # only that it assembled. Headless: there is no display on the runner.
-      - name: Smoke test the bundle
+      # Two smoke tests, because they prove different things and only one of them
+      # is obvious.
+      #
+      # --render-check returns before Avalonia is ever initialised, so it proves
+      # Core and libpdfium.dylib load inside the bundle and nothing more.
+      - name: Engine loads inside the bundle
         run: |
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
           "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
             "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+      # The UI has to be started for real. PublishSingleFile changed how the
+      # runtime resolves native libraries, and libAvaloniaNative/libSkiaSharp/
+      # libHarfBuzzSharp now sit outside the apphost — a combination no spike
+      # ever exercised. Without this step a bundle whose window cannot open
+      # would ship having passed every check.
+      - name: The UI actually starts
+        run: |
+          APP="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
+          "$APP" "$RUNNER_TEMP/fixtures/stamped.pdf" > "$RUNNER_TEMP/ui.log" 2>&1 &
+          PID=$!
+          sleep 10
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "UI start: PASS — still running after 10s"
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          else
+            echo "::error::UI start: the app exited on its own. Output follows."
+            cat "$RUNNER_TEMP/ui.log"
+            exit 1
+          fi
+          echo "--- app output:"; cat "$RUNNER_TEMP/ui.log"
 
       # Zip explicitly: upload-artifact does not preserve the executable bit, which
       # would leave the downloaded .app unable to launch.

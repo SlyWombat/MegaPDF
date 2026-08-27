@@ -61,7 +61,6 @@ __pycache__/
 # PDFium for macOS is fetched by tools/fetch-pdfium-mac.sh, not committed
 # (ADR-002 §7 tracks vendor-vs-fetch for the shipping app).
 libs/pdfium/mac-univ/
-spike/Vendor/
 
 # Local fixture output from tools/gen_test_fixtures.py
 .fixtures/
