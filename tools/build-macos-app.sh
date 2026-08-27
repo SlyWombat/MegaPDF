@@ -13,6 +13,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+RUNNER_TEMP_DIR="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 RID="${1:-osx-arm64}"
 OUT="${2:-$ROOT/artifacts/macos}"
 PROJECT="$ROOT/src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj"
@@ -111,15 +112,66 @@ find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
 # not code and cannot have one. Signing the .app instead lets codesign sign the
 # main executable itself and seal everything else as resources, which is what
 # CodeResources is for.
-# MACOS_ENTITLEMENTS opts the bundle into the App Sandbox (Mac App Store
-# requires it). Off by default so the plain build keeps working while the
-# sandbox is still being proven out.
-SIGN_ARGS=(--force --timestamp=none --sign -)
+# Three signing modes, selected by what is in the environment:
+#
+#   ad-hoc (default)   `--sign -`. Runnable locally after clearing quarantine.
+#   Developer ID       MACOS_DEVID_P12_B64 set. Real identity + Hardened Runtime
+#                      + secure timestamp, which is what notarization requires.
+#   sandbox            MACOS_ENTITLEMENTS points at sandbox.entitlements. For the
+#                      Mac App Store build.
+#
+# The identity and the entitlements are chosen independently on purpose: the
+# tester build is Developer ID + hardened (no sandbox), the Store build is
+# sandbox + Mac App Distribution.
+IDENTITY="-"
+TIMESTAMP_ARGS=(--timestamp=none)
+HARDENED_ARGS=()
+
+if [ -n "${MACOS_DEVID_P12_B64:-}" ]; then
+    : "${MACOS_DEVID_P12_PASSWORD:?MACOS_DEVID_P12_PASSWORD is required alongside MACOS_DEVID_P12_B64}"
+    : "${MACOS_DEVID_IDENTITY:?MACOS_DEVID_IDENTITY is required alongside MACOS_DEVID_P12_B64}"
+
+    # A throwaway keychain, not the login keychain: CI has no login keychain
+    # worth touching, and this one dies with the runner.
+    KEYCHAIN="$RUNNER_TEMP_DIR/megapdf-signing.keychain-db"
+    KEYCHAIN_PW="$(openssl rand -base64 24)"
+    security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+    security set-keychain-settings -lut 21600 "$KEYCHAIN"
+    security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+
+    echo "$MACOS_DEVID_P12_B64" | base64 -d > "$RUNNER_TEMP_DIR/devid.p12"
+    security import "$RUNNER_TEMP_DIR/devid.p12" -k "$KEYCHAIN" \
+        -P "$MACOS_DEVID_P12_PASSWORD" -T /usr/bin/codesign
+    rm -f "$RUNNER_TEMP_DIR/devid.p12"
+
+    # Without this codesign blocks on a GUI prompt that will never be answered.
+    security set-key-partition-list -S apple-tool:,apple:,codesign: \
+        -s -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+    security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
+    IDENTITY="$MACOS_DEVID_IDENTITY"
+    # Notarization requires BOTH the Hardened Runtime and a secure timestamp.
+    TIMESTAMP_ARGS=(--timestamp)
+    HARDENED_ARGS=(--options runtime)
+    echo "signing identity: $IDENTITY (hardened runtime, secure timestamp)"
+    security find-identity -v -p codesigning "$KEYCHAIN" | head -3
+else
+    echo "signing identity: ad-hoc (no MACOS_DEVID_P12_B64 in the environment)"
+fi
+
+SIGN_ARGS=(--force "${TIMESTAMP_ARGS[@]}" "${HARDENED_ARGS[@]}" --sign "$IDENTITY")
 if [ -n "${MACOS_ENTITLEMENTS:-}" ]; then
     [ -f "$MACOS_ENTITLEMENTS" ] || { echo "::error::entitlements file not found: $MACOS_ENTITLEMENTS" >&2; exit 1; }
-    echo "signing with entitlements: $MACOS_ENTITLEMENTS"
+    echo "entitlements: $MACOS_ENTITLEMENTS"
     SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
 fi
+
+# The nested dylibs need the same identity and hardening as the bundle.
+if [ "$IDENTITY" != "-" ]; then
+    find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
+        | xargs -0 -n1 codesign --force --timestamp --options runtime --sign "$IDENTITY"
+fi
+
 codesign "${SIGN_ARGS[@]}" "$APP"
 
 echo "--- entitlements actually embedded in the signature:"

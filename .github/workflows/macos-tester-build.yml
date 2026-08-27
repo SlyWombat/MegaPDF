@@ -1,0 +1,71 @@
+# Produces a notarized MegaPDF.app a tester can double-click on any Mac.
+#
+# Deliberately workflow_dispatch only. It signs with the real Developer ID
+# identity and UPLOADS THE APP TO APPLE for notarization — neither of which
+# belongs on every pull request.
+#
+# This is the Developer ID route, which is NOT how the app will ship: ADR-002
+# decided Mac App Store. It exists because a notarized build is the fastest way
+# to get something into a tester's hands, and because the Mac App Store build
+# needs the sandbox work (AtomicFileWriter, RecentFiles bookmarks) finished
+# first. Store submission uses different certificates and a .pkg.
+name: macOS tester build (notarized)
+
+on:
+  workflow_dispatch:
+    inputs:
+      rid:
+        description: Architecture to build
+        required: true
+        default: osx-arm64
+        type: choice
+        options: [osx-arm64, osx-x64]
+
+jobs:
+  tester-build:
+    name: Notarized MegaPDF.app (${{ inputs.rid }})
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Hardened runtime (required by notarization), real identity, secure
+      # timestamp. No sandbox: this build is for testing outside the Store, and
+      # sandboxing it would impose the file restrictions without the bookmark
+      # plumbing that makes them survivable.
+      - name: Build and sign with Developer ID
+        env:
+          MACOS_DEVID_P12_B64: ${{ secrets.MACOS_DEVID_P12_B64 }}
+          MACOS_DEVID_P12_PASSWORD: ${{ secrets.MACOS_DEVID_P12_PASSWORD }}
+          MACOS_DEVID_IDENTITY: ${{ secrets.MACOS_DEVID_IDENTITY }}
+          MACOS_ENTITLEMENTS: tools/macos/hardened.entitlements
+        run: tools/build-macos-app.sh ${{ inputs.rid }} "$RUNNER_TEMP/app"
+
+      - name: It runs before we ask Apple about it
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
+            "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+      - name: Notarize and staple
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: tools/notarize-macos-app.sh "$RUNNER_TEMP/app/MegaPDF.app"
+
+      # ditto again for the download, so the stapled ticket and the signature
+      # survive the round trip to the tester's Mac.
+      - name: Package for the tester
+        run: |
+          ditto -c -k --keepParent "$RUNNER_TEMP/app/MegaPDF.app" \
+            "$RUNNER_TEMP/MegaPDF-${{ inputs.rid }}-notarized.zip"
+          ls -lh "$RUNNER_TEMP/MegaPDF-${{ inputs.rid }}-notarized.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-notarized-${{ inputs.rid }}
+          path: ${{ runner.temp }}/MegaPDF-${{ inputs.rid }}-notarized.zip
+          if-no-files-found: error

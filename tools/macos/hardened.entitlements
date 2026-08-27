@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- For the Developer ID / notarized build that goes to testers. NOT the Mac
+         App Store build — that one uses sandbox.entitlements and its own certs.
+
+         Notarization requires the Hardened Runtime, which blocks JIT by default,
+         so CoreCLR needs this to run managed code at all. Same minimal principle
+         as the sandbox set: allow-unsigned-executable-memory is absent until a
+         failure demands it. The sandbox probe (run 33085979305) showed .NET 8 on
+         arm64 does not need it.
+
+         No app-sandbox here: this build is for testing outside the Store, and
+         sandboxing it would hand testers the file-access restrictions without
+         the bookmark plumbing that makes them survivable. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>
