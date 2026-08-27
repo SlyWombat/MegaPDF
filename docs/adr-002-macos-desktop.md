@@ -272,16 +272,34 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
   Application** certificate plus `notarytool` stapling for direct download, or
   a Mac App Store profile for the Store — same Team ID, different certificate
   type and different pipeline. The iOS automation does not carry over as-is.
-- **Hardened runtime and library validation.** A notarized app loading a
-  vendored `libpdfium.dylib` must have the dylib signed with the *same*
-  Developer ID and placed in `Contents/Frameworks/`, or else carry
-  `com.apple.security.cs.disable-library-validation`. Given the "Dylib Law"
-  landmine already recorded in `docs/mobile-app-blueprint.md`, budget for this
-  rather than discovering it at notarization. **Spike job 2 already produced the
-  first evidence:** ad-hoc bundle signing fails until every nested managed
-  assembly is signed individually, inside-out (`code object is not signed at
-  all / In subcomponent: Avalonia.Markup.Xaml.dll`). Budget for a signing script
-  that walks the bundle, not a single `codesign` call.
+- **Bundle signing — SOLVED, and the answer was structural.** `codesign` treats
+  every loose file in `Contents/MacOS/` as code it must account for. A .NET
+  publish drops `.pdb`, `.runtimeconfig.json` and `.deps.json` there, none of
+  which can carry a signature, and it surfaces as a misleading `code object is
+  not signed at all / In subcomponent: <file>` — naming a new file each time one
+  is removed. Three build attempts chased it that way before the real fix:
+  **`PublishSingleFile=true`**, which embeds the managed assemblies and runtime
+  config into the apphost and leaves only Mach-O binaries beside it. The bundle
+  becomes signable by construction rather than by exclusion list. Two further
+  rules that matter: sign nested `.dylib`s *first*, then sign the `.app` itself
+  and **never** the executable inside it (signing
+  `Contents/MacOS/<exe>` makes `codesign` treat that directory as the bundle
+  root and demand signatures for its siblings). `tools/build-macos-app.sh`
+  encodes all of this; the resulting bundle reports `valid on disk` and
+  `satisfies its Designated Requirement`.
+- **Hardened runtime and library validation — still open.** The above is ad-hoc
+  signing. A *notarized* app loading a vendored `libpdfium.dylib` must have the
+  dylib signed with the same Developer ID, and may need it in
+  `Contents/Frameworks/` or else carry
+  `com.apple.security.cs.disable-library-validation`. The "Dylib Law" landmine
+  in `docs/mobile-app-blueprint.md` applies. Evidence so far: the dylib sits in
+  `Contents/MacOS/` beside the apphost, is found by .NET's bare-name probing,
+  and the bundle verifies — under ad-hoc signing only.
+- **Bundle size: 110 MB unpacked, ~46 MB zipped**, from a self-contained publish
+  (the .NET runtime, Skia, HarfBuzz and PDFium). Acceptable for an internal
+  build, large for a consumer download. `PublishTrimmed` is the obvious lever
+  and the risky one — Avalonia and the MVVM toolkit lean on reflection — so
+  treat it as its own measured change, not a flag to flip.
 - **Distribution shape.** Windows ships both Store (MSIX) and direct download
   with a self-disabling updater. Mac needs the equivalent decision: `.dmg` +
   Sparkle-style updates, Mac App Store, or both. `UpdateChecker`'s MSIX
