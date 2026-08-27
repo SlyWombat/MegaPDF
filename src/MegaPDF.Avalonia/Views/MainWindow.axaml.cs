@@ -4,6 +4,7 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
+using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine;
 
 namespace MegaPDF.Avalonia.Views;
@@ -24,6 +25,7 @@ public partial class MainWindow : Window
         OpenButton.Click += async (_, _) => await OpenDocumentAsync();
 
         BindShortcuts();
+        WireSignatures();
 
         // Only realised pages rasterise. ContainerPrepared/ContainerClearing are the
         // virtualization hooks — this is where "render what you can see" happens, and
@@ -53,6 +55,18 @@ public partial class MainWindow : Window
         base.OnDataContextChanged(e);
         if (ViewModel is { } vm)
             vm.SaveRequested += () => _ = SaveAsync();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        // Escape is how every desktop app leaves a placement mode.
+        if (e.Key == Key.Escape && ViewModel is { IsPlacingSignature: true } vm)
+        {
+            vm.CancelPlacing();
+            e.Handled = true;
+            return;
+        }
+        base.OnKeyDown(e);
     }
 
     protected override void OnOpened(EventArgs e)
@@ -92,6 +106,54 @@ public partial class MainWindow : Window
 
         vm.HandlePageClick(page.Index, pagePoint);
         e.Handled = true;
+    }
+
+    // --- Signatures (SDD §3.3) ---
+
+    private void WireSignatures()
+    {
+        // Choosing one arms placement and closes the flyout, so the next click lands
+        // on the page rather than being swallowed by an open popup.
+        SignatureList.SelectionChanged += (_, _) =>
+        {
+            if (SignatureList.SelectedItem is not SignatureItem item || ViewModel is not { } vm)
+                return;
+
+            SignatureList.SelectedItem = null;
+            SignButton.Flyout?.Hide();
+            vm.BeginPlacing(item);
+        };
+
+        DrawSignatureButton.Click += async (_, _) =>
+        {
+            SignButton.Flyout?.Hide();
+            await CaptureSignatureAsync();
+        };
+    }
+
+    private async Task CaptureSignatureAsync()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var capture = new SignatureCaptureWindow();
+        await capture.ShowDialog(this);
+
+        if (capture.Result is not { } bitmap)
+            return;
+
+        try
+        {
+            var png = Rendering.SignatureImages.EncodePng(bitmap);
+            var entry = vm.AddSignature(capture.ResultName, png);
+            // Straight into placement: someone who just drew a signature wants to put
+            // it somewhere, not to admire the library.
+            vm.BeginPlacing(entry);
+        }
+        catch (Exception ex)
+        {
+            vm.Status = $"Could not save that signature: {ex.Message}";
+        }
     }
 
     // --- Shortcuts ---

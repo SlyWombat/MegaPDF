@@ -3,10 +3,20 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Core.Editing;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine.Pdfium;
 using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.ViewModels;
+
+/// <summary>
+/// A stored signature and its preview. You pick a signature by how it looks, so the
+/// list needs the image, not just the name.
+/// </summary>
+public sealed record SignatureItem(SignatureEntry Entry, global::Avalonia.Media.Imaging.Bitmap? Thumbnail)
+{
+    public string Name => Entry.Name;
+}
 
 /// <summary>
 /// The document shell: open, view, check, save.
@@ -27,6 +37,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private readonly IPdfEngine _engine = new PdfiumEngine();
     private readonly UndoStack _undoStack = new();
+    private readonly ISignatureLibrary _signatures = new SignatureLibrary();
     private IPdfDocument? _document;
 
     public ObservableCollection<PageViewModel> Pages { get; } = [];
@@ -103,6 +114,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         _document = document;
+        LoadSignatures();
         for (var i = 0; i < document.PageCount; i++)
         {
             using var page = document.GetPage(i);
@@ -137,6 +149,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
+        // Placement mode wins over everything: the click is choosing a spot, not
+        // asking what is under it.
+        if (PendingSignature is { } pending)
+        {
+            PlacePendingSignature(pageIndex, point, pending);
+            return;
+        }
+
         var hit = HitTest(pageIndex, point);
         switch (hit.Kind)
         {
@@ -154,9 +174,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                       "Unchecked.");
                 break;
 
+            case PageHitKind.StampAnnotation:
+                // A placed signature. Move/resize chrome is a later increment; until
+                // then clicking one removes it, which at least makes a misplaced
+                // signature recoverable without reaching for undo.
+                Apply(new RemoveSignatureOperation(_document, pageIndex, hit.AnnotationId!, hit.Bounds!.Value),
+                      "Signature removed.");
+                break;
+
             default:
-                // Everything else is a later increment (signatures, text, whiteout).
-                // Saying nothing is better than pretending something happened.
+                // Text boxes and whiteout are later increments. Saying nothing is
+                // better than pretending something happened.
                 break;
         }
     }
@@ -201,6 +229,114 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    // --- Signatures (SDD §3.3) ---
+
+    /// <summary>The stored signature library, newest first.</summary>
+    public ObservableCollection<SignatureItem> Signatures { get; } = [];
+
+    /// <summary>
+    /// The signature awaiting a click on the page. While this is set the next page
+    /// click places it rather than routing to a checkbox — the same modal placement
+    /// the WinUI app uses, and the reason HandlePageClick checks it first.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPlacingSignature))]
+    private SignatureEntry? _pendingSignature;
+
+    public bool IsPlacingSignature => PendingSignature is not null;
+
+    public void LoadSignatures()
+    {
+        foreach (var existing in Signatures)
+            existing.Thumbnail?.Dispose();
+        Signatures.Clear();
+
+        foreach (var entry in _signatures.All.OrderByDescending(e => e.CreatedUtc))
+            Signatures.Add(new SignatureItem(entry, Rendering.SignatureImages.LoadThumbnail(entry.PngPath)));
+
+        HasSignatures = Signatures.Count > 0;
+    }
+
+    [ObservableProperty]
+    private bool _hasSignatures;
+
+    public SignatureEntry AddSignature(string name, byte[] png)
+    {
+        var entry = _signatures.Add(name, png);
+        LoadSignatures();
+        Status = $"Saved the signature \"{entry.Name}\". Click where it should go.";
+        return entry;
+    }
+
+    public void RemoveSignature(Guid id)
+    {
+        _signatures.Remove(id);
+        LoadSignatures();
+        Status = "Signature deleted.";
+    }
+
+    public void BeginPlacing(SignatureItem item) => BeginPlacing(item.Entry);
+
+    public void BeginPlacing(SignatureEntry entry)
+    {
+        PendingSignature = entry;
+        Status = $"Click where \"{entry.Name}\" should go.";
+    }
+
+    public void CancelPlacing()
+    {
+        if (PendingSignature is null)
+            return;
+        PendingSignature = null;
+        Status = "Placement cancelled.";
+    }
+
+    /// <summary>
+    /// Places the pending signature centred on the click, 180pt wide with the aspect
+    /// ratio preserved and clamped inside the page — the same geometry the WinUI app
+    /// uses, so a document signed on one desktop looks the same on the other.
+    /// </summary>
+    private void PlacePendingSignature(int pageIndex, PdfPoint point, SignatureEntry pending)
+    {
+        PendingSignature = null;
+
+        SignatureBitmap image;
+        try
+        {
+            image = Rendering.SignatureImages.LoadBgra(pending.PngPath);
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not read that signature: {ex.Message}";
+            return;
+        }
+
+        PlaceSignature(pageIndex, point, image, $"Placed \"{pending.Name}\".");
+    }
+
+    /// <summary>
+    /// The placement geometry, separated from loading a PNG so it can be exercised
+    /// without a file — and without an initialised graphics stack — by --self-test.
+    /// </summary>
+    internal void PlaceSignature(int pageIndex, PdfPoint point, SignatureBitmap image, string doneMessage)
+    {
+        if (_document is null)
+            return;
+
+        const double defaultWidthPoints = 180;
+        var width = defaultWidthPoints;
+        var height = width * image.Height / image.Width;
+
+        var page = Pages[pageIndex];
+        var x = Math.Clamp(point.X - (width / 2), 0, Math.Max(0, page.PointWidth - width));
+        var y = Math.Clamp(point.Y - (height / 2), 0, Math.Max(0, page.PointHeight - height));
+
+        Apply(new AddSignatureOperation(
+                  _document, pageIndex, image.Bgra, image.Width, image.Height,
+                  new PdfRect(x, y, width, height)),
+              doneMessage);
     }
 
     // --- Saving (SDD §3.4) ---

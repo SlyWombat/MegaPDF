@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MegaPDF.Avalonia.Views.SignatureCaptureWindow"
+        Title="Add a signature"
+        Width="560" Height="380"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+  <DockPanel Margin="16">
+
+    <TextBlock DockPanel.Dock="Top" Margin="0,0,0,10"
+               Text="Sign in the box below, the way you would on paper." />
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+      <Button Name="ClearButton" Content="Clear" />
+      <Button Name="CancelButton" Content="Cancel" />
+      <Button Name="SaveButton" Content="Save" IsDefault="True" IsEnabled="False" />
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+      <TextBlock Text="Name" VerticalAlignment="Center" />
+      <TextBox Name="NameBox" Width="240" Watermark="e.g. Dave" />
+    </StackPanel>
+
+    <!-- White field with a rule to sign on, so it reads as a signing line rather
+         than an empty box. The ink itself is drawn on transparency (see
+         SignaturePad) — this white is the panel behind it, not part of the image. -->
+    <Border BorderThickness="1" CornerRadius="4"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+            Background="White">
+      <Grid>
+        <Rectangle Height="1" Fill="#40000000" VerticalAlignment="Bottom" Margin="24,0,24,42" />
+        <TextBlock Text="✕" Foreground="#40000000" FontSize="13"
+                   VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="24,0,0,46" />
+        <Panel Name="PadHost" />
+      </Grid>
+    </Border>
+
+  </DockPanel>
+</Window>

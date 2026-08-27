@@ -1,6 +1,7 @@
 using Avalonia;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine.Pdfium;
 
 namespace MegaPDF.Avalonia;
@@ -173,6 +174,62 @@ internal static class Program
         {
             Console.Error.WriteLine($"::error::AcroForm checkbox: {ex.GetType().Name}: {ex.Message}");
             failures++;
+        }
+
+        // --- Signature placement (SDD §3.3) ---
+        Console.WriteLine("signature placement:");
+        var signedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-sig-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            // A 40x20 block of opaque ink. Synthesised rather than loaded so this runs
+            // with no graphics stack initialised — the PNG round-trip is Avalonia's
+            // job and is exercised by the app itself, the geometry is what matters here.
+            const int w = 40, h = 20;
+            var bgra = new byte[w * h * 4];
+            for (var i = 0; i < bgra.Length; i += 4)
+            {
+                bgra[i] = bgra[i + 1] = bgra[i + 2] = 0x20;
+                bgra[i + 3] = 255;
+            }
+
+            var at = new PdfPoint(300, 400);
+            vm.PlaceSignature(0, at, new SignatureBitmap(bgra, w, h), "placed");
+            Check("placing a signature marks the document dirty", vm.IsDirty);
+
+            using (var file = File.Create(signedPath))
+                vm.SaveTo(file);
+
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(signedPath);
+            using var page = reopened.GetPage(0);
+            var sig = page.GetStamps().FirstOrDefault(st => st.Id.StartsWith("sig:", StringComparison.Ordinal));
+            Check("the signature survived save and reopen", sig is not null);
+
+            if (sig is not null)
+            {
+                // 180pt wide, aspect preserved (40x20 => 90pt tall), centred on the
+                // click. Same geometry as the WinUI app, so a document signed on one
+                // desktop looks the same on the other.
+                Check("it is 180pt wide", Math.Abs(sig.Bounds.Width - 180) < 0.5);
+                Check("its aspect ratio is preserved", Math.Abs(sig.Bounds.Height - 90) < 0.5);
+                Check("and it is centred on the click", Math.Abs(sig.Bounds.X - (300 - 90)) < 0.5);
+            }
+
+            vm.UndoCommand.Execute(null);
+            Check("undo removes the signature",
+                  vm.HitTest(0, at).Kind != PageHitKind.StampAnnotation);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::signature placement: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(signedPath)) File.Delete(signedPath);
         }
 
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");

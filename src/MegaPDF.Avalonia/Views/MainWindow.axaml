@@ -23,6 +23,37 @@
         <Button Name="OpenButton" Content="Open" />
         <Button Name="SaveButton" Content="Save" Command="{Binding SaveCommand}" />
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+        <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
+             placement, and the next click on the page puts it there. -->
+        <Button Name="SignButton" Content="Sign" IsEnabled="{Binding IsDocumentOpen}">
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel Width="260" Spacing="8">
+                <TextBlock Text="Your signatures" FontWeight="SemiBold" />
+                <TextBlock Text="Nothing saved yet — draw one below."
+                           TextWrapping="Wrap" Opacity="0.7"
+                           IsVisible="{Binding !HasSignatures}" />
+                <ListBox Name="SignatureList" ItemsSource="{Binding Signatures}"
+                         MaxHeight="220" IsVisible="{Binding HasSignatures}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Spacing="2" Margin="0,4">
+                        <Image Source="{Binding Thumbnail}" Height="40"
+                               HorizontalAlignment="Left" Stretch="Uniform" />
+                        <TextBlock Text="{Binding Name}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Button Name="DrawSignatureButton" Content="Draw a new signature…"
+                        HorizontalAlignment="Stretch" />
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
         <Button Name="UndoButton" Content="Undo" Command="{Binding UndoCommand}" />
         <Button Name="RedoButton" Content="Redo" Command="{Binding RedoCommand}" />
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
