@@ -40,12 +40,15 @@ rm -rf "$APP"
 PUBLISH="$(mktemp -d)"
 trap 'rm -rf "$PUBLISH"' EXIT
 
-# DebugType=none: a .pdb in Contents/MacOS makes codesign refuse the executable
-# with "code object is not signed at all / In subcomponent: MegaPDF.pdb" — it
-# treats every file beside the binary as something it must account for. Symbols
-# have no place in a shipped bundle anyway.
+# PublishSingleFile is what makes this bundle signable, not just tidier.
+# codesign treats EVERY loose file in Contents/MacOS as code it must account
+# for — .pdb, then MegaPDF.runtimeconfig.json, then the next one. A JSON file
+# cannot carry a signature, so deleting offenders one at a time never converges.
+# Single-file embeds the managed assemblies and the runtime config into the
+# apphost, leaving only signable Mach-O binaries beside it: the executable and
+# the native .dylibs. DebugType=none keeps symbols out for the same reason.
 dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false \
+    -p:PublishSingleFile=true -p:DebugType=none -p:DebugSymbols=false \
     -o "$PUBLISH"
 
 if [ ! -f "$PUBLISH/libpdfium.dylib" ]; then
@@ -94,8 +97,13 @@ echo '</plist>' >> "$APP/Contents/Info.plist"
 # Inside-out signing. The ADR-002 spike established that a .NET bundle cannot be
 # signed in one call: codesign rejects the bundle with "code object is not signed
 # at all / In subcomponent: <some>.dll" until every nested binary is signed first.
+echo "bundle contents before signing:"
+ls -1 "$APP/Contents/MacOS"
+
+# Native libraries stay outside the single-file apphost and each needs its own
+# signature before the bundle can seal them.
 echo "signing nested binaries..."
-find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) -print0 \
+find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
     | xargs -0 -n1 codesign --force --timestamp=none --sign -
 # Then the bundle — and ONLY the bundle. Signing Contents/MacOS/MegaPDF directly
 # makes codesign treat that directory as the bundle root and demand a signature
