@@ -39,7 +39,11 @@ echo "building MegaPDF $VERSION for $RID"
 
 rm -rf "$APP"
 PUBLISH="$(mktemp -d)"
-trap 'rm -rf "$PUBLISH"' EXIT
+# Preserve the failing status explicitly. In bash 3.2 — which is what /bin/bash is
+# on a macOS runner — the exit status after an EXIT trap can become the status of
+# the trap's own last command, so a successful `rm` silently turned a failed build
+# into a green step that uploaded an unsigned bundle.
+trap 'code=$?; rm -rf "$PUBLISH"; exit $code' EXIT
 
 # PublishSingleFile is what makes this bundle signable, not just tidier.
 # codesign treats EVERY loose file in Contents/MacOS as code it must account
@@ -101,11 +105,6 @@ echo '</plist>' >> "$APP/Contents/Info.plist"
 echo "bundle contents before signing:"
 ls -1 "$APP/Contents/MacOS"
 
-# Native libraries stay outside the single-file apphost and each needs its own
-# signature before the bundle can seal them.
-echo "signing nested binaries..."
-find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
-    | xargs -0 -n1 codesign --force --timestamp=none --sign -
 # Then the bundle — and ONLY the bundle. Signing Contents/MacOS/MegaPDF directly
 # makes codesign treat that directory as the bundle root and demand a signature
 # for every sibling file in it, including MegaPDF.runtimeconfig.json, which is
@@ -124,8 +123,6 @@ find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
 # tester build is Developer ID + hardened (no sandbox), the Store build is
 # sandbox + Mac App Distribution.
 IDENTITY="-"
-TIMESTAMP_ARGS=(--timestamp=none)
-HARDENED_ARGS=()
 
 if [ -n "${MACOS_DEVID_P12_B64:-}" ]; then
     : "${MACOS_DEVID_P12_PASSWORD:?MACOS_DEVID_P12_PASSWORD is required alongside MACOS_DEVID_P12_B64}"
@@ -150,29 +147,51 @@ if [ -n "${MACOS_DEVID_P12_B64:-}" ]; then
     security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
     IDENTITY="$MACOS_DEVID_IDENTITY"
-    # Notarization requires BOTH the Hardened Runtime and a secure timestamp.
-    TIMESTAMP_ARGS=(--timestamp)
-    HARDENED_ARGS=(--options runtime)
     echo "signing identity: $IDENTITY (hardened runtime, secure timestamp)"
     security find-identity -v -p codesigning "$KEYCHAIN" | head -3
 else
     echo "signing identity: ad-hoc (no MACOS_DEVID_P12_B64 in the environment)"
 fi
 
-SIGN_ARGS=(--force "${TIMESTAMP_ARGS[@]}" "${HARDENED_ARGS[@]}" --sign "$IDENTITY")
+# Built up with += rather than by expanding TIMESTAMP_ARGS/HARDENED_ARGS. On
+# bash 3.2 `"${EMPTY[@]}"` under `set -u` is an unbound-variable error, which is
+# exactly how this script previously died one line before signing.
+SIGN_ARGS=(--force)
+if [ "$IDENTITY" = "-" ]; then
+    SIGN_ARGS+=(--timestamp=none)
+else
+    # Notarization requires both of these; ad-hoc signing accepts neither.
+    SIGN_ARGS+=(--timestamp --options runtime)
+fi
+SIGN_ARGS+=(--sign "$IDENTITY")
+
 if [ -n "${MACOS_ENTITLEMENTS:-}" ]; then
     [ -f "$MACOS_ENTITLEMENTS" ] || { echo "::error::entitlements file not found: $MACOS_ENTITLEMENTS" >&2; exit 1; }
     echo "entitlements: $MACOS_ENTITLEMENTS"
     SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
 fi
 
-# The nested dylibs need the same identity and hardening as the bundle.
-if [ "$IDENTITY" != "-" ]; then
-    find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
-        | xargs -0 -n1 codesign --force --timestamp --options runtime --sign "$IDENTITY"
+# Nested Mach-O libraries must carry their own signatures before the bundle can
+# seal them, with the same identity and hardening the bundle will use.
+echo "signing nested binaries..."
+NESTED_ARGS=(--force)
+if [ "$IDENTITY" = "-" ]; then
+    NESTED_ARGS+=(--timestamp=none)
+else
+    NESTED_ARGS+=(--timestamp --options runtime)
 fi
+NESTED_ARGS+=(--sign "$IDENTITY")
+find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
+    | xargs -0 -n1 codesign "${NESTED_ARGS[@]}"
 
 codesign "${SIGN_ARGS[@]}" "$APP"
+
+# Fail loudly rather than uploading something unsigned: this is the check that
+# would have caught the bash 3.2 bug above on the run that introduced it.
+if [ -n "${MACOS_ENTITLEMENTS:-}" ]; then
+    codesign -d --entitlements - "$APP" 2>&1 | grep -q "app-sandbox\|allow-jit" \
+        || { echo "::error::entitlements were requested but are not in the signature" >&2; exit 1; }
+fi
 
 echo "--- entitlements actually embedded in the signature:"
 codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null \
