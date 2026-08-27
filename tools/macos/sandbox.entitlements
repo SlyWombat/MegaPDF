@@ -24,5 +24,12 @@
          AtomicFileWriter's sibling-temp strategy a problem (SDD §3.4). -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
+
+    <!-- Printing (SDD §3.5) goes through NSPrintOperation in-process. Without this
+         the print panel silently never appears in the sandboxed build — and the
+         sandbox probe would not catch it, because nothing about printing is
+         exercised by starting the app. -->
+    <key>com.apple.security.print</key>
+    <true/>
 </dict>
 </plist>

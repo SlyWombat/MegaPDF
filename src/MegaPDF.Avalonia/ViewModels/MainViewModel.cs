@@ -307,6 +307,74 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RedoCommand.NotifyCanExecuteChanged();
     }
 
+    // --- Printing (SDD §3.5) and shrink-for-email (SDD §3.7) ---
+
+    /// <summary>
+    /// Writes the LIVE document — unsaved edits included — to a temp file and hands
+    /// it to the platform printer. Printing what is on screen rather than what is on
+    /// disk is the behaviour the Windows app documents, and the one people expect:
+    /// you tick the boxes, then print.
+    ///
+    /// The temp file goes in <see cref="Path.GetTempPath"/>, which under the App
+    /// Sandbox is inside the container, and is deleted as soon as the operation
+    /// returns.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    private void Print()
+    {
+        if (_document is null)
+            return;
+
+        if (!OperatingSystem.IsMacOS())
+        {
+            // Deliberately not implemented for Avalonia-on-Windows: MegaPDF.App is
+            // the Windows product and already prints. A second, half-working
+            // implementation would be a liability for a case that does not exist.
+            Status = "Printing from this build is available on macOS only.";
+            return;
+        }
+
+        var temp = Path.Combine(Path.GetTempPath(), $"megapdf-print-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using (var file = File.Create(temp))
+                _document.Save(file);
+
+            var outcome = Platform.MacPrinter.Print(temp);
+            Status = outcome.Message;
+        }
+        catch (Exception ex)
+        {
+            Status = $"Could not print: {ex.Message}";
+        }
+        finally
+        {
+            if (File.Exists(temp))
+                File.Delete(temp);
+        }
+    }
+
+    /// <summary>
+    /// Re-encodes oversized images so the document can be emailed (SDD §3.7). Works
+    /// on a fresh copy from disk so the open document is never degraded, which is
+    /// also why it insists on a saved file first.
+    /// </summary>
+    public ImageShrinker.Result? ShrinkForEmail(Stream destination)
+    {
+        if (DocumentPath is null)
+            return null;
+
+        using var copy = _engine.Open(DocumentPath);
+        var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
+        if (result.ImagesReplaced == 0)
+            return result;
+
+        StagedStreamWriter.Write(destination, stream => copy.Save(stream));
+        return result;
+    }
+
+    public bool CanShrink => IsDocumentOpen && !IsDirty;
+
     // --- Recent documents (SDD §2.2 empty state) ---
 
     public ObservableCollection<RecentEntry> Recents { get; } = [];

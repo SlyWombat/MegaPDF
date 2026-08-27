@@ -32,6 +32,11 @@
          and [RelayCommand] attributes mean the same thing on both sides when the
          extraction in ADR-002 happens. -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- Pinned to the exact version Avalonia.Skia resolves. A floating reference
+         that drifts ahead gives two SkiaSharp versions wanting different
+         libSkiaSharp ABIs in one bundle, and that fails at runtime on macOS rather
+         than at build. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Configuration)' == 'Debug'">

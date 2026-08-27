@@ -23,6 +23,9 @@
         <Button Name="OpenButton" Content="Open" />
         <Button Name="SaveButton" Content="Save" Command="{Binding SaveCommand}" />
         <Button Name="SaveAsButton" Content="Save As" IsEnabled="{Binding IsDocumentOpen}" />
+        <Button Name="PrintButton" Content="Print" Command="{Binding PrintCommand}" />
+        <Button Name="ShrinkButton" Content="Shrink" IsEnabled="{Binding CanShrink}"
+                ToolTip.Tip="Save a smaller copy for email" />
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms

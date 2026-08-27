@@ -90,6 +90,17 @@ jobs:
         run: |
           "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
 
+      # Printing goes through PDFKit and AppKit by Objective-C runtime interop, so
+      # the binding surface is the risk: a wrong objc_msgSend signature returns a
+      # plausible-looking pointer rather than throwing. This resolves every class
+      # and selector, builds a real PDFDocument, and requires its page count to
+      # agree with PdfiumEngine. It stops before the print panel, which CI cannot
+      # reach.
+      - name: Printing interop is sound
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --print-check \
+            "$RUNNER_TEMP/fixtures/fixture.pdf"
+
       - name: The UI actually starts
         run: |
           APP="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
@@ -202,3 +213,40 @@ jobs:
         run: |
           echo "sandbox file access: ${SANDBOX_FILE_ACCESS:-unknown}"
           echo "See the step results above: UI survival is the go/no-go for Mac App Store."
+
+  # ==========================================================================
+  # The engine, on macOS. This ran in the ADR-002 spike and lost its home when
+  # that workflow was retired — leaving Core covered on Windows only, which is
+  # the wrong way round for a port whose whole premise is that Core is shared.
+  #
+  # Nothing is excluded. ImageCompressionTests used to be carved out because the
+  # test project pulled System.Drawing.Common, which throws
+  # PlatformNotSupportedException off Windows (ADR-002 fact 5). It now encodes
+  # through SkiaSharp — already in the tree, since Avalonia renders with it — so
+  # there is no longer anything this suite can do on Windows and not on macOS.
+  # ==========================================================================
+  core-tests-macos:
+    name: Core tests on macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Fetch pinned PDFium
+        run: tools/fetch-pdfium-mac.sh "$RUNNER_TEMP/pdfium-mac"
+
+      - name: Build the test project
+        run: dotnet build tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
+
+      # Build, then place the dylib, then run with --no-build: .NET resolves the
+      # bare name "pdfium" relative to the assembly directory.
+      - name: Place libpdfium.dylib beside the test assembly
+        run: cp "$RUNNER_TEMP/pdfium-mac/lib/libpdfium.dylib" \
+               tests/MegaPDF.Core.Tests/bin/Release/net8.0/
+
+      - name: Run the whole Core suite
+        run: |
+          dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj \
+            -c Release --no-build --logger "console;verbosity=normal"

@@ -11,6 +11,7 @@ using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.Views;
@@ -31,6 +32,7 @@ public partial class MainWindow : Window
         OpenButton.Click += async (_, _) => await OpenDocumentAsync();
         SaveAsButton.Click += async (_, _) => await SaveAsAsync();
         EmptyOpenButton.Click += async (_, _) => await OpenDocumentAsync();
+        ShrinkButton.Click += async (_, _) => await ShrinkForEmailAsync();
 
         RecentList.SelectionChanged += async (_, _) =>
         {
@@ -521,6 +523,7 @@ public partial class MainWindow : Window
     {
         Bind(OpenButton, Key.O, KeyModifiers.None, "Open a PDF", () => _ = OpenDocumentAsync());
         Bind(SaveButton, Key.S, KeyModifiers.None, "Save", () => ViewModel?.SaveCommand.Execute(null));
+        Bind(PrintButton, Key.P, KeyModifiers.None, "Print", () => ViewModel?.PrintCommand.Execute(null));
         Bind(UndoButton, Key.Z, KeyModifiers.None, "Undo", () => ViewModel?.UndoCommand.Execute(null));
         // Redo is Shift+Cmd+Z on macOS and Ctrl+Y on Windows — genuinely different
         // conventions, not just a different modifier.
@@ -764,6 +767,51 @@ public partial class MainWindow : Window
         // rather than looking like the first one failed to register.
         _passwordRetry = dialog.Password is not null;
         return dialog.Password;
+    }
+
+    /// <summary>
+    /// Saves a smaller copy for email (SDD §3.7). Asks where to put it first,
+    /// because the shrink is destructive to image quality and belongs in a copy —
+    /// never over the original.
+    /// </summary>
+    private async Task ShrinkForEmailAsync()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        if (vm.IsDirty)
+        {
+            vm.Status = "Save your changes first, then shrink the saved file.";
+            return;
+        }
+
+        var baseName = vm.DocumentName is { } n ? Path.GetFileNameWithoutExtension(n) : "document";
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save a smaller copy",
+            SuggestedFileName = $"{baseName} - smaller.pdf",
+            DefaultExtension = "pdf",
+            FileTypeChoices = [PdfFileType],
+            ShowOverwritePrompt = true,
+        });
+
+        if (file is null)
+            return;
+
+        try
+        {
+            ImageShrinker.Result? result;
+            await using (var stream = await file.OpenWriteAsync())
+                result = vm.ShrinkForEmail(stream);
+
+            vm.Status = result is null || result.ImagesReplaced == 0
+                ? "The pictures in this document are already small — nothing to shrink."
+                : $"Saved a smaller copy: {result.ImagesReplaced} picture(s) re-encoded.";
+        }
+        catch (Exception ex)
+        {
+            vm.Status = $"Could not shrink: {ex.Message}";
+        }
     }
 
     private static FilePickerFileType PdfFileType => new("PDF document")

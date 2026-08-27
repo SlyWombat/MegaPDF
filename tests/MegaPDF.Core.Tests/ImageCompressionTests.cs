@@ -1,4 +1,5 @@
 using MegaPDF.Core.Engine.Pdfium;
+using SkiaSharp;
 using Xunit;
 
 namespace MegaPDF.Core.Tests;
@@ -81,21 +82,29 @@ public class ImageCompressionTests : IDisposable
         Assert.InRange(rendered.Bgra[i], 0x28, 0x58);
     }
 
+    /// <summary>
+    /// SkiaSharp rather than System.Drawing.Common: that package throws
+    /// PlatformNotSupportedException off Windows, which was the single reason this
+    /// suite could not run green on a macOS runner (ADR-002 fact 5). SkiaSharp is
+    /// already in the tree — Avalonia renders through it — so this costs no new
+    /// native dependency.
+    /// </summary>
     private static byte[] EncodeJpeg(byte[] bgra, int width, int height, long quality)
     {
-        using var bitmap = new System.Drawing.Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        var data = bitmap.LockBits(new System.Drawing.Rectangle(0, 0, width, height),
-            System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        System.Runtime.InteropServices.Marshal.Copy(bgra, 0, data.Scan0, bgra.Length);
-        bitmap.UnlockBits(data);
+        var info = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+        using var bitmap = new SKBitmap(info);
 
-        var encoder = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders()
-            .First(c => c.FormatID == System.Drawing.Imaging.ImageFormat.Jpeg.Guid);
-        using var parameters = new System.Drawing.Imaging.EncoderParameters(1);
-        parameters.Param[0] = new System.Drawing.Imaging.EncoderParameter(
-            System.Drawing.Imaging.Encoder.Quality, quality);
-        using var output = new MemoryStream();
-        bitmap.Save(output, encoder, parameters);
-        return output.ToArray();
+        var handle = System.Runtime.InteropServices.GCHandle.Alloc(bgra, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            bitmap.InstallPixels(info, handle.AddrOfPinnedObject(), info.RowBytes);
+            using var image = SKImage.FromBitmap(bitmap);
+            using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, (int)quality);
+            return encoded.ToArray();
+        }
+        finally
+        {
+            handle.Free();
+        }
     }
 }

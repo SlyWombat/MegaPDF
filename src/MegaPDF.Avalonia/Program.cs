@@ -14,6 +14,7 @@ internal static class Program
     public static int Main(string[] args)
         => args.Contains("--render-check") ? RenderCheck(args)
          : args.Contains("--self-test") ? SelfTest(args)
+         : args.Contains("--print-check") ? PrintCheck(args)
          : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
     public static AppBuilder BuildAvaloniaApp()
@@ -75,6 +76,58 @@ internal static class Program
             Console.Error.WriteLine($"::error::render-check: {ex.GetType().Name}: {ex.Message}");
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Verifies the macOS printing interop without printing anything.
+    ///
+    /// Every step up to the print panel is checkable headlessly, and the last one is
+    /// the point: it reads the page count back through PDFKit and compares it with
+    /// what PdfiumEngine says about the same file. A wrong objc_msgSend signature
+    /// returns a plausible-looking pointer rather than failing, so only comparing a
+    /// value against a known-good number proves the marshalling is actually correct.
+    ///
+    /// It stops before runOperation — the modal panel is the one part CI cannot reach.
+    /// </summary>
+    private static int PrintCheck(string[] args)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            Console.WriteLine("print-check: skipped (not macOS)");
+            return 0;
+        }
+
+        var path = args.FirstOrDefault(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
+        if (path is null || !File.Exists(path))
+        {
+            Console.Error.WriteLine("usage: MegaPDF --print-check <file.pdf>");
+            return 2;
+        }
+
+        int pageCount;
+        try
+        {
+            using var engine = new PdfiumEngine();
+            using var document = engine.Open(path);
+            pageCount = document.PageCount;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::print-check: could not read the fixture: {ex.Message}");
+            return 1;
+        }
+
+        var outcome = Platform.MacPrinter.Probe(path, pageCount);
+        Console.WriteLine($"print-check: {outcome.Message}");
+
+        if (!outcome.Ok)
+        {
+            Console.Error.WriteLine("::error::print-check FAILED — the PDFKit/AppKit interop is not sound.");
+            return 1;
+        }
+
+        Console.WriteLine("print-check: PASS");
+        return 0;
     }
 
     /// <summary>
