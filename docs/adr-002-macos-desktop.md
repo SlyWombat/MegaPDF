@@ -2,6 +2,10 @@
 
 **Status: ACCEPTED — Option B (.NET 8 + Avalonia over `MegaPDF.Core`), 2026-08-27.**
 Spike run: PR #52, workflow run 33079843332.
+**Feature parity with the Windows app reached 2026-08-27** (run 33119805192):
+view, checkboxes, form fields, body-text editing, text boxes, whiteout,
+signatures, find, save/save-as, print, shrink-for-email, recents, passwords,
+undo/redo.
 
 ## Decision & spike results
 
@@ -346,7 +350,37 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
 - **A free win from the sandbox.** `Environment.SpecialFolder.LocalApplicationData`
   redirects into the app container under the sandbox, which resolves fact 7's
   `~/Library/Application Support` nit for the Store build without a path branch.
-- **Printing replacement** for `PdfPrinter`'s `Windows.Graphics.Printing`.
+- **Printing — SOLVED, via PDFKit and NSPrintOperation.** Avalonia has no print
+  API, and the obvious workaround (write a temp PDF, let Preview print it) is
+  unavailable in the build being shipped: a sandboxed app cannot scatter files
+  for another app to read, nor launch one to finish the job. So printing runs
+  in-process through PDFKit's `PDFDocument` and AppKit's `NSPrintOperation`, by
+  Objective-C runtime interop, giving the real system print panel.
+
+  **This does not contradict ADR-001.** That ADR rejected PDFKit as an *engine*
+  because it rewrites annotation appearance streams on save, which would strand
+  stamps placed on other platforms. Printing never saves, and ADR-001 explicitly
+  permits PDFKit for reading. Nothing in `MacPrinter` opens a write path.
+
+  Three things the interop had to get right, two of which it got wrong first and
+  which `--print-check` caught before anyone pressed Print:
+
+  1. **One `objc_msgSend` declaration per distinct signature.** The ABI varies by
+     return and argument type; on arm64 a mismatch is silent corruption, not an
+     exception.
+  2. **`fileURLWithPath:` takes an `NSString*`, not a `char*`.** Marshalling a C#
+     string as `LPUTF8Str` hands Objective-C a pointer that is not an object, and
+     the process segfaults. `stringWithUTF8String:` is the bridge.
+  3. **`dlopen` AppKit as well as PDFKit** before any class lookup — `NSPrintInfo`
+     and `NSPrintOperation` live in AppKit, and a console-mode run has not linked
+     it, so `objc_getClass` returns nil.
+
+  `com.apple.security.print` is in `sandbox.entitlements`. Without it printing
+  fails silently in the sandboxed build, and the sandbox probe would not catch
+  it, because nothing about printing is exercised by starting the app.
+
+  Printing prints the **live** document, unsaved edits included, through a temp
+  file inside the container that is deleted when the operation returns.
 - **New icon sources for the toolbar.** `MainWindow.xaml` draws every toolbar
   button with `FontIcon` over Segoe MDL2 glyphs (`&#xE8E5;` open, `&#xE74E;`
   save, `&#xE749;` print, …). That font does not exist on macOS, so each button
@@ -363,8 +397,21 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
   `SignatureImageProcessorTest.kt` as the oracle. Do this as part of the port,
   not after: it is the contract with no cross-platform fixture PDF to catch
   drift later.
-- **A cross-platform JPEG encoder for the tests** to retire
-  `System.Drawing.Common` (fact 5), so the suite can be green on macOS CI.
+- **Shrink-for-email — SOLVED, and fact 5 with it.** SkiaSharp was already in
+  the tree: Avalonia renders through it, so `libSkiaSharp` ships in the bundle
+  either way and this cost no new native dependency. The reference is pinned to
+  the exact version `Avalonia.Skia` resolves — a floating one that drifts ahead
+  gives two SkiaSharp versions wanting different `libSkiaSharp` ABIs in one app,
+  and that fails at runtime on macOS rather than at build.
+
+  The decision rules (which images are worth re-encoding, at what size, and when
+  the saving is too small to be worth the quality loss) moved to
+  `MegaPDF.Core.Imaging.ImageShrinker`, with only the encoder injected — that
+  part genuinely differs per platform, the rules should not.
+
+  The same encoder replaced `System.Drawing.Common` in the test project, which
+  **retires fact 5**: the whole Core suite now runs green on macOS with nothing
+  excluded (135 tests, verified in `core-tests-macos`).
 - **Vendor-vs-fetch for the shipping app.** The spike *fetches* the dylib
   (`tools/fetch-pdfium-mac.sh`) rather than committing 14.6 MB to answer a
   question — the iOS tree already establishes fetch-and-gitignore as an accepted
