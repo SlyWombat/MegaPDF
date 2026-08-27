@@ -63,11 +63,31 @@ internal static class MacPrinter
     private const int RtldNow = 2;
 
     /// <summary>
-    /// PDFKit must be loaded before its classes can be looked up — objc_getClass
-    /// returns zero for a framework the process has never linked.
+    /// The frameworks must be loaded before their classes can be looked up —
+    /// objc_getClass returns nil for a framework the process has never linked.
+    /// AppKit as well as PDFKit: NSPrintInfo and NSPrintOperation live there, and a
+    /// console-mode run has not linked it.
     /// </summary>
-    private static bool EnsurePdfKit() =>
-        dlopen("/System/Library/Frameworks/PDFKit.framework/PDFKit", RtldNow) != IntPtr.Zero;
+    private static bool EnsureFrameworks() =>
+        dlopen("/System/Library/Frameworks/AppKit.framework/AppKit", RtldNow) != IntPtr.Zero
+        && dlopen("/System/Library/Frameworks/PDFKit.framework/PDFKit", RtldNow) != IntPtr.Zero;
+
+    /// <summary>
+    /// Wraps a C# string as an NSString.
+    ///
+    /// This is what the first version got wrong, and it cost a segfault rather than
+    /// an error: `fileURLWithPath:` takes an NSString*, but marshalling a C# string
+    /// as LPUTF8Str hands it a char*. Objective-C then sends messages to a pointer
+    /// that is not an object. `stringWithUTF8String:` is the one selector here that
+    /// genuinely does take a C string, so it is the bridge.
+    /// </summary>
+    private static IntPtr NSString(string value)
+    {
+        var cls = objc_getClass("NSString");
+        return cls == IntPtr.Zero
+            ? IntPtr.Zero
+            : MsgSend_Utf8(cls, sel_registerName("stringWithUTF8String:"), value);
+    }
 
     /// <summary>kPDFPrintPageScaleDownToFit — fit each page to the paper.</summary>
     private const long ScaleDownToFit = 1;
@@ -90,8 +110,8 @@ internal static class MacPrinter
         if (!OperatingSystem.IsMacOS())
             return new Outcome(false, "not macOS");
 
-        if (!EnsurePdfKit())
-            return new Outcome(false, "PDFKit.framework did not load");
+        if (!EnsureFrameworks())
+            return new Outcome(false, "AppKit or PDFKit did not load");
 
         var nsUrl = objc_getClass("NSURL");
         var pdfDocument = objc_getClass("PDFDocument");
@@ -112,7 +132,11 @@ internal static class MacPrinter
             || printOperationSel == IntPtr.Zero || runOperation == IntPtr.Zero)
             return new Outcome(false, "one or more selectors did not resolve");
 
-        var url = MsgSend_Utf8(nsUrl, fileUrlWithPath, pdfPath);
+        var pathString = NSString(pdfPath);
+        if (pathString == IntPtr.Zero)
+            return new Outcome(false, "could not create an NSString for the path");
+
+        var url = MsgSend_Ptr(nsUrl, fileUrlWithPath, pathString);
         if (url == IntPtr.Zero)
             return new Outcome(false, "fileURLWithPath: returned nil");
 
@@ -137,8 +161,8 @@ internal static class MacPrinter
         if (!OperatingSystem.IsMacOS())
             return new Outcome(false, "Printing is only available on macOS in this build.");
 
-        if (!EnsurePdfKit())
-            return new Outcome(false, "Could not load the system PDF library.");
+        if (!EnsureFrameworks())
+            return new Outcome(false, "Could not load the system printing components.");
 
         var nsUrl = objc_getClass("NSURL");
         var pdfDocument = objc_getClass("PDFDocument");
@@ -146,7 +170,11 @@ internal static class MacPrinter
         if (nsUrl == IntPtr.Zero || pdfDocument == IntPtr.Zero || nsPrintInfo == IntPtr.Zero)
             return new Outcome(false, "The system print components are unavailable.");
 
-        var url = MsgSend_Utf8(nsUrl, sel_registerName("fileURLWithPath:"), pdfPath);
+        var pathString = NSString(pdfPath);
+        if (pathString == IntPtr.Zero)
+            return new Outcome(false, "The document path could not be prepared.");
+
+        var url = MsgSend_Ptr(nsUrl, sel_registerName("fileURLWithPath:"), pathString);
         var document = MsgSend_Ptr(
             MsgSend(pdfDocument, sel_registerName("alloc")), sel_registerName("initWithURL:"), url);
         if (document == IntPtr.Zero)

@@ -243,8 +243,9 @@ jobs:
       # Build, then place the dylib, then run with --no-build: .NET resolves the
       # bare name "pdfium" relative to the assembly directory.
       - name: Place libpdfium.dylib beside the test assembly
-        run: cp "$RUNNER_TEMP/pdfium-mac/lib/libpdfium.dylib" \
-               tests/MegaPDF.Core.Tests/bin/Release/net8.0/
+        run: |
+          cp "$RUNNER_TEMP/pdfium-mac/lib/libpdfium.dylib" \
+             tests/MegaPDF.Core.Tests/bin/Release/net8.0/
 
       - name: Run the whole Core suite
         run: |
