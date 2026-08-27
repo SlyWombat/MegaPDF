@@ -1,0 +1,80 @@
+# Builds the macOS app (ADR-002 Option B: Avalonia over MegaPDF.Core) and
+# publishes a runnable .app as a workflow artifact.
+#
+# The bundles are AD-HOC SIGNED ONLY — runnable by someone who trusts them, not
+# distributable. Developer ID signing and notarytool stapling are ADR-002 §7.
+# To open one on a Mac the first time: right-click the app and choose Open, or
+# `xattr -dr com.apple.quarantine MegaPDF.app`.
+name: macOS app
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/macos-app.yml'
+      - 'tools/build-macos-app.sh'
+      - 'tools/fetch-pdfium-mac.sh'
+      - 'src/MegaPDF.Avalonia/**'
+      # Core is shared with the Windows app, so a Core change that breaks the Mac
+      # build has to surface here rather than at release time. This is the one
+      # path that makes the job fire on unrelated PRs; it is deliberate.
+      - 'src/MegaPDF.Core/**'
+
+jobs:
+  # Fast feedback on the same code, on the cheaper runner. This is ADR-002
+  # criterion 3 in CI form: the Avalonia UI builds and runs on Windows, so the
+  # daily loop never needs a Mac.
+  windows-build:
+    name: Build on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build
+        run: dotnet build src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release
+      - name: Core tests still green on Windows
+        run: |
+          dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release `
+            --logger "console;verbosity=minimal"
+
+  macos-app:
+    name: MegaPDF.app (${{ matrix.rid }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Fetches pdfium into libs/pdfium/mac-univ (where MegaPDF.Core.csproj looks)
+      # and fails if the slice is not the pinned build.
+      - name: Build MegaPDF.app
+        run: tools/build-macos-app.sh ${{ matrix.rid }} "$RUNNER_TEMP/app"
+
+      # Proves the bundle actually launches and can rasterise a page, rather than
+      # only that it assembled. Headless: there is no display on the runner.
+      - name: Smoke test the bundle
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
+            "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+      # Zip explicitly: upload-artifact does not preserve the executable bit, which
+      # would leave the downloaded .app unable to launch.
+      - name: Package
+        run: |
+          cd "$RUNNER_TEMP/app"
+          zip -qry "$RUNNER_TEMP/MegaPDF-${{ matrix.rid }}.zip" MegaPDF.app
+          ls -lh "$RUNNER_TEMP/MegaPDF-${{ matrix.rid }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-macos-${{ matrix.rid }}
+          path: ${{ runner.temp }}/MegaPDF-${{ matrix.rid }}.zip
+          if-no-files-found: error

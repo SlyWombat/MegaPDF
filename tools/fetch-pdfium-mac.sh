@@ -10,12 +10,13 @@
 # fetch-and-gitignore as the accepted pattern.
 #
 # Usage: tools/fetch-pdfium-mac.sh [dest-dir]
-#   dest-dir defaults to spike/Vendor/pdfium-mac
+#   dest-dir defaults to libs/pdfium/mac-univ, which is where
+#   MegaPDF.Core.csproj looks for it (and which .gitignore excludes)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PIN="$ROOT/libs/pdfium/win-x64/VERSION"
-DEST="${1:-$ROOT/spike/Vendor/pdfium-mac}"
+DEST="${1:-$ROOT/libs/pdfium/mac-univ}"
 
 [ -f "$PIN" ] || { echo "::error::pin file not found: $PIN" >&2; exit 1; }
 

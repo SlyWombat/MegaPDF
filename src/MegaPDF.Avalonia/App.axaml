@@ -1,0 +1,10 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="MegaPDF.Avalonia.App"
+             RequestedThemeVariant="Default">
+  <!-- Default, not Light/Dark: the app follows the OS, which on macOS is what
+       people expect and on Windows matches the WinUI app's behaviour. -->
+  <Application.Styles>
+    <FluentTheme />
+  </Application.Styles>
+</Application>

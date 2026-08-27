@@ -58,5 +58,10 @@ __pycache__/
 # exclusions shared, but the graph itself is a build artifact.
 .ua/
 
-# ADR-002 macOS spike: PDFium is fetched by tools/fetch-pdfium-mac.sh, never committed.
+# PDFium for macOS is fetched by tools/fetch-pdfium-mac.sh, not committed
+# (ADR-002 §7 tracks vendor-vs-fetch for the shipping app).
+libs/pdfium/mac-univ/
 spike/Vendor/
+
+# Local fixture output from tools/gen_test_fixtures.py
+.fixtures/

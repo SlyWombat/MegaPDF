@@ -1,7 +1,48 @@
 # ADR-002: macOS desktop app — UI framework and code sharing
 
-**Status: PROPOSED — 2026-08-27.** Leaning: **Option B (.NET 8 + Avalonia over
-`MegaPDF.Core`)**. Decide after the spike in §6.
+**Status: ACCEPTED — Option B (.NET 8 + Avalonia over `MegaPDF.Core`), 2026-08-27.**
+Spike run: PR #52, workflow run 33079843332.
+
+## Decision & spike results
+
+All three spike jobs passed on the first run.
+
+**Job 1 — engine (the load-bearing one): 120 tests passed on macOS, zero
+failures in the gate.** `MegaPDF.Core` built and ran unmodified on a
+`macos-latest` runner against `libpdfium.dylib`, with the fetch script's version
+check confirming the slice matched the Windows pin exactly. §6.2 contracts 1, 2
+and 4 all hold on macOS — `SignatureStampTests`, `DrawnCheckboxTests`,
+`WhiteoutAndTextBoxTests`, `AcroFormTests`, `FontSubstitutionTests`. **Option B's
+premise is confirmed: the engine ports for zero engine-code change.**
+
+**Job 2 — surface: Avalonia renders Core's output identically on both
+platforms.** Page 1 of `stamped.pdf` rendered to `816x1056 px / 3,446,784 BGRA
+bytes / 9 distinct pixel values` on *both* `macos-latest` and `windows-latest`,
+and the composited frame captured on both. The artifact PNGs are visually
+correct — body text, the ✗ mark stamp and the signature stamp all present. They
+are not byte-identical (12,344 vs 11,977 bytes), which is font antialiasing and
+PNG encoding, not geometry. The `Avalonia.Headless` capture — the half expected
+to need iteration — worked first try on both.
+
+**Corrections to the facts below, from the run:**
+
+- Fact 5 overstated the damage: **1** test fails on macOS
+  (`ReplaceImageWithJpeg_ShrinksTheFile_AndStillRenders`), not 3. The other two
+  `ImageCompressionTests` pass. The failure is exactly the predicted
+  `PlatformNotSupportedException: System.Drawing.Common is not supported on
+  non-Windows platforms`.
+- **New finding — bundle signing needs every nested assembly signed
+  individually.** Ad-hoc signing the dylib then the bundle failed with `code
+  object is not signed at all / In subcomponent: Avalonia.Markup.Xaml.dll`, then
+  `code has no resources but signature indicates they must be present`. A .NET
+  app bundle carries dozens of managed DLLs and `codesign` will not accept the
+  bundle until each is signed, inside-out. This is now a concrete, evidenced
+  input to the notarization work item in §7 rather than a guess — and it is
+  ordinary .NET-on-macOS packaging work, not a blocker.
+- The dylib in `Contents/MacOS/` was found by .NET's bare-name probing and the
+  app ran from the bundle, so probing and Apple's layout preference do not
+  conflict for an *unsigned* bundle. Whether library validation forces
+  `Contents/Frameworks/` under a real Developer ID signature is still open.
 
 ## Context
 
@@ -65,9 +106,10 @@ below, not on doctrine.
    it needs nothing fetched. But it pulls `System.Drawing.Common` 8.0.8 (its own
    csproj comment: "Windows-only, tests-only") for JPEG encoding in
    `ImageCompressionTests`. On .NET 8 that package throws
-   `PlatformNotSupportedException` off Windows, so **3 tests will fail on macOS
-   for reasons unrelated to the engine.** Expect them to fail; they need a
-   cross-platform encoder (SkiaSharp/ImageSharp) or a macOS skip.
+   `PlatformNotSupportedException` off Windows. *Measured on the spike run: **1**
+   of the 3 actually fails* — `ReplaceImageWithJpeg_ShrinksTheFile_AndStillRenders`
+   — for reasons unrelated to the engine. It needs a cross-platform encoder
+   (SkiaSharp/ImageSharp) or a macOS skip.
 6. **§6.2 contract 3 has no .NET test.** `SignatureImageProcessor` — the SDD's
    own named reference for the signature cleanup pixel math — lives in
    `src/MegaPDF.App`, is Windows-only (`Windows.Graphics.Imaging`), and the App
@@ -235,13 +277,25 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
   Developer ID and placed in `Contents/Frameworks/`, or else carry
   `com.apple.security.cs.disable-library-validation`. Given the "Dylib Law"
   landmine already recorded in `docs/mobile-app-blueprint.md`, budget for this
-  rather than discovering it at notarization. Spike job 2 produces the first
-  evidence.
+  rather than discovering it at notarization. **Spike job 2 already produced the
+  first evidence:** ad-hoc bundle signing fails until every nested managed
+  assembly is signed individually, inside-out (`code object is not signed at
+  all / In subcomponent: Avalonia.Markup.Xaml.dll`). Budget for a signing script
+  that walks the bundle, not a single `codesign` call.
 - **Distribution shape.** Windows ships both Store (MSIX) and direct download
   with a self-disabling updater. Mac needs the equivalent decision: `.dmg` +
   Sparkle-style updates, Mac App Store, or both. `UpdateChecker`'s MSIX
   self-disable logic needs a Mac analogue.
 - **Printing replacement** for `PdfPrinter`'s `Windows.Graphics.Printing`.
+- **New icon sources for the toolbar.** `MainWindow.xaml` draws every toolbar
+  button with `FontIcon` over Segoe MDL2 glyphs (`&#xE8E5;` open, `&#xE74E;`
+  save, `&#xE749;` print, …). That font does not exist on macOS, so each button
+  needs an inline path or a bundled icon font. A visible slice of the ~1,900 LOC
+  rebuild that the option write-ups did not itemise.
+- **Two of the 17 `MainViewModel` touch points are reshapes, not renames.**
+  `FileOpenPicker`/`FileSavePicker` become Avalonia's `IStorageProvider`, which
+  is async and reached through the `TopLevel`; `ContentDialog` has no Avalonia
+  equivalent at all and becomes a custom `Window`. Small, but real work.
 - **Image processing replacement** for `SignatureImageProcessor`'s
   `Windows.Graphics.Imaging` (SkiaSharp or ImageSharp). It must reproduce §6.2
   contract 3's pixel math exactly — and per fact 6 **there are no .NET tests to

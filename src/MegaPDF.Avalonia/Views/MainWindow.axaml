@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MegaPDF.Avalonia.ViewModels"
+        x:Class="MegaPDF.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="MegaPDF"
+        Width="1000" Height="800"
+        MinWidth="480" MinHeight="360">
+
+  <DockPanel>
+
+    <!-- Toolbar. Text labels, no icons yet: the WinUI app draws these with
+         FontIcon over Segoe MDL2 glyphs, a font that does not exist on macOS.
+         New icon sources are a tracked ADR-002 §7 work item; shipping wrong
+         glyphs or empty boxes in the meantime would be worse than words. -->
+    <Border DockPanel.Dock="Top" Padding="8,6" BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <!-- No HotKey= here: the shortcut modifier differs per platform (Cmd on
+             macOS, Ctrl elsewhere), so the gestures and these tooltips are both
+             built in code-behind. A Mac app with Ctrl+O is a Windows app with
+             round corners. -->
+        <Button Name="OpenButton" Content="Open" />
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        <Button Name="ZoomOutButton" Content="Zoom out" Command="{Binding ZoomOutCommand}"
+                IsEnabled="{Binding IsDocumentOpen}" />
+        <Button Name="ZoomInButton" Content="Zoom in" Command="{Binding ZoomInCommand}"
+                IsEnabled="{Binding IsDocumentOpen}" />
+        <Button Name="ZoomResetButton" Content="Actual size" Command="{Binding ZoomResetCommand}"
+                IsEnabled="{Binding IsDocumentOpen}" />
+      </StackPanel>
+    </Border>
+
+    <!-- Status bar. One line, plain words: SDD §2.2 wants the app to say what
+         happened without a dialog. -->
+    <Border DockPanel.Dock="Bottom" Padding="10,5" BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+    </Border>
+
+    <ScrollViewer Name="PageScroller"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+      <ItemsControl Name="PageList" ItemsSource="{Binding Pages}" Margin="0,16">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <!-- Virtualizing: only realised pages hold a raster, which is what
+                 keeps a 200-page document from costing 200 renders on open. -->
+            <VirtualizingStackPanel Orientation="Vertical" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:PageViewModel">
+            <Border Margin="0,0,0,16"
+                    HorizontalAlignment="Center"
+                    Background="White"
+                    Width="{Binding LayoutWidth}"
+                    Height="{Binding LayoutHeight}"
+                    BoxShadow="0 2 8 0 #22000000">
+              <!-- Stretch=Fill, not Uniform: the bitmap is rasterised at exactly
+                   this size, so any scaling here would mean a stale render is
+                   being smeared to fit rather than re-rendered. -->
+              <Image Source="{Binding Image}" Stretch="Fill" />
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+  </DockPanel>
+</Window>

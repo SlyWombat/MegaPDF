@@ -9,10 +9,29 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- PDFium native binary (BSD-3, see libs\pdfium\win-x64\LICENSE). Flows to
-         referencing projects' output. win-x64 only for now; arm64 is a TODO. -->
+  <!-- PDFium native binary (BSD-3, see libs\pdfium\*\LICENSE). Flows to
+       referencing projects' output. PdfiumNative.Dll is the bare name "pdfium",
+       so .NET probes for pdfium.dll on Windows and libpdfium.dylib on macOS and
+       neither needs any code change (ADR-002 fact 2, proven by 120 Core tests
+       passing on macOS in that ADR's spike).
+
+       Conditioned rather than unconditional: without this, a macOS build copies
+       a Windows DLL it can never load and no dylib at all. win-arm64 remains a
+       TODO. -->
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
     <None Include="..\..\libs\pdfium\win-x64\pdfium.dll" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Fetched by tools/fetch-pdfium-mac.sh, not committed (ADR-002 §7 tracks
+       vendor-vs-fetch for the shipping app). Absent on a fresh clone, so the
+       Exists() guard keeps a macOS build working right up until the point it
+       actually needs to load a document. -->
+  <PropertyGroup>
+    <PdfiumMacDylib Condition="'$(PdfiumMacDylib)' == ''">$(MSBuildThisFileDirectory)..\..\libs\pdfium\mac-univ\lib\libpdfium.dylib</PdfiumMacDylib>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX')) And Exists('$(PdfiumMacDylib)')">
+    <None Include="$(PdfiumMacDylib)" Link="libpdfium.dylib" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

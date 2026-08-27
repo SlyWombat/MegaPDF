@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- ADR-002 Option B: the cross-platform UI over MegaPDF.Core. Named for the
+       technology, not a platform — it runs on Windows too, which is the whole
+       point of the no-Mac constraint (ADR-002 criterion 3): the UI is developed
+       and run on Windows, and macOS is a bundle-and-notarize step.
+
+       Deliberately NOT in MegaPDF.sln yet. ci.yml runs `dotnet build
+       MegaPDF.sln` on windows-latest and an in-progress port should not be able
+       to break product CI. Add it to the solution once it builds green. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MegaPDF.Avalonia</RootNamespace>
+    <AssemblyName>MegaPDF</AssemblyName>
+    <!-- Its own version line, not the Windows app's 1.6.2: this is a new app with
+         a viewer's worth of features so far, and claiming 1.6.2 would promise
+         parity it does not have yet. -->
+    <Version>0.1.0</Version>
+    <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.*" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.*" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.*" />
+    <!-- Same MVVM library the WinUI app uses, so MainViewModel's [ObservableProperty]
+         and [RelayCommand] attributes mean the same thing on both sides when the
+         extraction in ADR-002 happens. -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.2.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The engine, unmodified — 120 tests green on macOS (ADR-002 spike).
+         Note Core's unconditional win-x64 pdfium.dll copy item: correct on
+         Windows, and the OS condition it needs for macOS is tracked in ADR-002
+         fact 2. Not changed here — this project is additive until the port
+         proper begins. -->
+    <ProjectReference Include="..\MegaPDF.Core\MegaPDF.Core.csproj" />
+  </ItemGroup>
+
+</Project>
