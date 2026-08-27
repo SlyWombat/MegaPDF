@@ -232,6 +232,42 @@ internal static class Program
             if (File.Exists(signedPath)) File.Delete(signedPath);
         }
 
+        // --- Find in document (SDD §3.6) ---
+        Console.WriteLine("find in document:");
+        try
+        {
+            using var vm = new MainViewModel();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            // fixture.pdf page 1 says "The square below is a drawn checkbox candidate."
+            vm.Search("checkbox");
+            Check("a term in the document is found", vm.MatchCount > 0);
+            Check("and the first hit is selected", vm.CurrentMatchIndex == 0);
+            Check("the summary counts it", vm.MatchSummary == $"1 of {vm.MatchCount}");
+
+            var first = vm.CurrentMatchIndex;
+            vm.FindNextCommand.Execute(null);
+            Check("next advances, wrapping when there is only one",
+                  vm.CurrentMatchIndex == (first + 1) % vm.MatchCount);
+
+            vm.Search("case-insensitivity");
+            var lower = vm.MatchCount;
+            vm.Search("CHECKBOX");
+            Check("search is case-insensitive", vm.MatchCount > 0);
+
+            vm.Search("zzz-not-in-this-document");
+            Check("a term that is absent reports none", vm.MatchCount == 0);
+            Check("and says so in words", vm.MatchSummary == "Not found");
+
+            vm.CloseFind();
+            Check("closing find clears the term", vm.SearchTerm.Length == 0);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::find: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

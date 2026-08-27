@@ -114,6 +114,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         _document = document;
+        _matches.Clear();
+        MatchCount = 0;
+        CurrentMatchIndex = -1;
         LoadSignatures();
         for (var i = 0; i < document.PageCount; i++)
         {
@@ -229,6 +232,118 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    // --- Find in document (SDD §3.6 / F6) ---
+
+    /// <summary>One hit: which page it is on and the rectangles covering it.</summary>
+    private sealed record Match(int PageIndex, IReadOnlyList<PdfRect> Rects);
+
+    private readonly List<Match> _matches = [];
+
+    [ObservableProperty]
+    private string _searchTerm = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MatchSummary))]
+    private int _currentMatchIndex = -1;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MatchSummary))]
+    private int _matchCount;
+
+    [ObservableProperty]
+    private bool _isFindOpen;
+
+    /// <summary>
+    /// What the find bar reads. Deliberately words rather than a bare "0/0": an empty
+    /// box is not the same as a term that genuinely is not in the document, and the
+    /// person filling in a form should not have to infer which they are looking at.
+    /// </summary>
+    public string MatchSummary => string.IsNullOrEmpty(SearchTerm)
+        ? ""
+        : MatchCount == 0
+            ? "Not found"
+            : $"{CurrentMatchIndex + 1} of {MatchCount}";
+
+    /// <summary>Raised when the view should bring a page rectangle into view.</summary>
+    public event Action<int, PdfRect>? ScrollToRequested;
+
+    public void Search(string term)
+    {
+        SearchTerm = term;
+        _matches.Clear();
+        CurrentMatchIndex = -1;
+
+        if (_document is not null && !string.IsNullOrWhiteSpace(term))
+        {
+            for (var i = 0; i < Pages.Count; i++)
+            {
+                using var page = _document.GetPage(i);
+                foreach (var hit in page.FindText(term))
+                    _matches.Add(new Match(i, hit.Rects));
+            }
+        }
+
+        MatchCount = _matches.Count;
+        ApplyHighlights();
+
+        if (MatchCount > 0)
+            GoToMatch(0);
+    }
+
+    [RelayCommand]
+    private void FindNext()
+    {
+        if (MatchCount == 0)
+            return;
+        GoToMatch((CurrentMatchIndex + 1) % MatchCount);
+    }
+
+    [RelayCommand]
+    private void FindPrevious()
+    {
+        if (MatchCount == 0)
+            return;
+        GoToMatch((CurrentMatchIndex - 1 + MatchCount) % MatchCount);
+    }
+
+    public void CloseFind()
+    {
+        IsFindOpen = false;
+        SearchTerm = "";
+        _matches.Clear();
+        MatchCount = 0;
+        CurrentMatchIndex = -1;
+        ApplyHighlights();
+    }
+
+    private void GoToMatch(int index)
+    {
+        CurrentMatchIndex = index;
+        ApplyHighlights();
+
+        var match = _matches[index];
+        if (match.Rects.Count > 0)
+            ScrollToRequested?.Invoke(match.PageIndex, match.Rects[0]);
+    }
+
+    private void ApplyHighlights()
+    {
+        foreach (var page in Pages)
+        {
+            var rects = new List<PdfRect>();
+            var current = -1;
+            for (var i = 0; i < _matches.Count; i++)
+            {
+                if (_matches[i].PageIndex != page.Index)
+                    continue;
+                if (i == CurrentMatchIndex)
+                    current = rects.Count;
+                rects.AddRange(_matches[i].Rects);
+            }
+            page.SetMatches(rects, current);
+        }
     }
 
     // --- Signatures (SDD §3.3) ---

@@ -26,6 +26,7 @@ public partial class MainWindow : Window
 
         BindShortcuts();
         WireSignatures();
+        WireFind();
 
         // Only realised pages rasterise. ContainerPrepared/ContainerClearing are the
         // virtualization hooks — this is where "render what you can see" happens, and
@@ -54,15 +55,26 @@ public partial class MainWindow : Window
     {
         base.OnDataContextChanged(e);
         if (ViewModel is { } vm)
+        {
             vm.SaveRequested += () => _ = SaveAsync();
+            vm.ScrollToRequested += ScrollToMatch;
+        }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // Escape is how every desktop app leaves a placement mode.
+        // Escape is how every desktop app leaves a mode. Placement first: if both are
+        // active, the one the user most recently entered is the one they mean.
         if (e.Key == Key.Escape && ViewModel is { IsPlacingSignature: true } vm)
         {
             vm.CancelPlacing();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && ViewModel is { IsFindOpen: true })
+        {
+            CloseFind();
             e.Handled = true;
             return;
         }
@@ -156,6 +168,68 @@ public partial class MainWindow : Window
         }
     }
 
+    // --- Find (SDD §3.6) ---
+
+    private void WireFind()
+    {
+        FindBox.TextChanged += (_, _) => ViewModel?.Search(FindBox.Text ?? "");
+
+        // Enter advances, Shift+Enter goes back — the convention every find bar uses.
+        FindBox.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Enter)
+                return;
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+                ViewModel?.FindPreviousCommand.Execute(null);
+            else
+                ViewModel?.FindNextCommand.Execute(null);
+            e.Handled = true;
+        };
+
+        CloseFindButton.Click += (_, _) => CloseFind();
+    }
+
+    private void OpenFind()
+    {
+        if (ViewModel is not { } vm)
+            return;
+        vm.IsFindOpen = true;
+        FindBox.Focus();
+        FindBox.SelectAll();
+    }
+
+    private void CloseFind()
+    {
+        ViewModel?.CloseFind();
+        FindBox.Text = "";
+    }
+
+    /// <summary>
+    /// Brings a hit into view. Scrolls the match to a third of the way down rather
+    /// than to the very top, so there is context above it — a hit pinned to the top
+    /// edge reads as if the document starts there.
+    /// </summary>
+    private void ScrollToMatch(int pageIndex, PdfRect rect)
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var offsetBefore = 0.0;
+        foreach (var page in vm.Pages)
+        {
+            if (page.Index == pageIndex)
+                break;
+            offsetBefore += page.LayoutHeight + PageGap;
+        }
+
+        var scale = PageBitmap.PointsToPixels * vm.Zoom;
+        var target = offsetBefore + (rect.Y * scale) - (PageScroller.Viewport.Height / 3);
+        PageScroller.Offset = PageScroller.Offset.WithY(Math.Max(0, target));
+    }
+
+    /// <summary>Bottom margin on each page surface in MainWindow.axaml.</summary>
+    private const double PageGap = 16;
+
     // --- Shortcuts ---
 
     /// <summary>
@@ -183,6 +257,14 @@ public partial class MainWindow : Window
         Bind(ZoomOutButton, Key.OemMinus, KeyModifiers.None, "Zoom out", () => ViewModel?.ZoomOutCommand.Execute(null));
         Bind(ZoomInButton, Key.OemPlus, KeyModifiers.None, "Zoom in", () => ViewModel?.ZoomInCommand.Execute(null));
         Bind(ZoomResetButton, Key.D0, KeyModifiers.None, "Actual size", () => ViewModel?.ZoomResetCommand.Execute(null));
+
+        // Cmd/Ctrl+F has no toolbar button to hang a tooltip on — the find bar is
+        // its own affordance once open.
+        KeyBindings.Add(new KeyBinding
+        {
+            Gesture = new KeyGesture(Key.F, CommandModifier),
+            Command = new RelayCommand(OpenFind),
+        });
 
         void Bind(Button button, Key key, KeyModifiers extra, string description, Action invoke)
         {

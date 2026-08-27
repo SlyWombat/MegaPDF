@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MegaPDF.Avalonia.Rendering;
@@ -49,6 +50,36 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(LayoutHeight))]
     private double _zoom = 1.0;
 
+    // Highlights are positioned in the same space as the page surface rather than
+    // baked into the raster, so a zoom change repositions them without forcing a
+    // re-render — and searching never invalidates a single bitmap.
+    partial void OnZoomChanged(double value) => RebuildHighlights();
+
+    /// <summary>Search hits on this page, in device-independent pixels.</summary>
+    public ObservableCollection<Highlight> Highlights { get; } = [];
+
+    private IReadOnlyList<PdfRect> _matchRects = [];
+    private int _currentMatch = -1;
+
+    internal void SetMatches(IReadOnlyList<PdfRect> rects, int currentIndex)
+    {
+        _matchRects = rects;
+        _currentMatch = currentIndex;
+        RebuildHighlights();
+    }
+
+    private void RebuildHighlights()
+    {
+        Highlights.Clear();
+        var scale = PageBitmap.PointsToPixels * Zoom;
+        for (var i = 0; i < _matchRects.Count; i++)
+        {
+            var r = _matchRects[i];
+            Highlights.Add(new Highlight(
+                r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale, i == _currentMatch));
+        }
+    }
+
     [ObservableProperty]
     private WriteableBitmap? _image;
 
@@ -95,4 +126,25 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         Image = null;
         image?.Dispose();
     }
+}
+
+/// <summary>
+/// One search hit, already in device-independent pixels relative to the page
+/// surface. <paramref name="IsCurrent"/> distinguishes the hit the user is on from
+/// the rest, which is the difference between "there are 40 matches" and "you are
+/// looking at match 7".
+/// </summary>
+public sealed record Highlight(double X, double Y, double Width, double Height, bool IsCurrent)
+{
+    /// <summary>
+    /// Position expressed as a margin inside a top-left aligned panel, rather than
+    /// Canvas.Left/Top. An attached property set from an ItemContainerTheme resolves
+    /// its binding against the enclosing x:DataType — the page, not the hit — so
+    /// compiled bindings reject it. A margin is bound on the item itself and needs
+    /// no container theme at all.
+    /// </summary>
+    public global::Avalonia.Thickness Margin => new(X, Y, 0, 0);
+
+    /// <summary>The hit you are on is stronger than the ones you are not.</summary>
+    public double Opacity => IsCurrent ? 0.55 : 0.28;
 }

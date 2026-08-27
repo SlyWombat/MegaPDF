@@ -63,6 +63,20 @@
       </StackPanel>
     </Border>
 
+    <!-- Find bar (SDD §3.6). Hidden until asked for, so it costs nothing until it
+         is wanted, and Escape closes it. -->
+    <Border DockPanel.Dock="Top" Padding="8,6" IsVisible="{Binding IsFindOpen}"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBox Name="FindBox" Width="260" Watermark="Find in document" />
+        <Button Name="FindPreviousButton" Content="Previous" Command="{Binding FindPreviousCommand}" />
+        <Button Name="FindNextButton" Content="Next" Command="{Binding FindNextCommand}" />
+        <TextBlock Text="{Binding MatchSummary}" VerticalAlignment="Center" Opacity="0.8" />
+        <Button Name="CloseFindButton" Content="Done" />
+      </StackPanel>
+    </Border>
+
     <!-- Status bar. One line, plain words: SDD §2.2 wants the app to say what
          happened without a dialog. -->
     <Border DockPanel.Dock="Bottom" Padding="10,5" BorderThickness="0,1,0,0"
@@ -95,7 +109,28 @@
               <!-- Stretch=Fill, not Uniform: the bitmap is rasterised at exactly this
                    size, so any scaling here would mean a stale render is being smeared
                    to fit rather than re-rendered. -->
-              <Image Source="{Binding Image}" Stretch="Fill" IsHitTestVisible="False" />
+              <Panel>
+                <Image Source="{Binding Image}" Stretch="Fill" IsHitTestVisible="False" />
+
+                <!-- Search hits drawn over the page rather than into it: the raster
+                     never changes, so highlighting and clearing cost no re-render. -->
+                <ItemsControl ItemsSource="{Binding Highlights}" IsHitTestVisible="False">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <Panel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:Highlight">
+                      <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                 Margin="{Binding Margin}"
+                                 Opacity="{Binding Opacity}"
+                                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                                 Fill="#3B82F6" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Panel>
             </Border>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
