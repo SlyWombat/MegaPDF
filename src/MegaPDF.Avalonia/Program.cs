@@ -366,18 +366,35 @@ internal static class Program
         try
         {
             using var vm = new MainViewModel();
-            vm.Open(Path.Combine(dir, "forms.pdf"));
+            vm.Open(Path.Combine(dir, "formtext.pdf"));
 
-            using var probe = new PdfiumEngine();
-            using var probeDoc = probe.Open(Path.Combine(dir, "forms.pdf"));
-            using var probePage = probeDoc.GetPage(0);
-            var field = probePage.GetFormFields().FirstOrDefault(f => f.Kind == FormFieldKind.Checkbox);
-            Check("the form's fields are readable", field is not null);
+            // formtext.pdf's "fullname" widget is (100,600)-(300,620) in PDF space
+            // on a 792-tall page => 172..192 from the top.
+            var inTheBox = new PdfPoint(200, 182);
+            var hit = vm.HitTest(0, inTheBox);
+            Check("the widget reads as a form text field", hit.Kind == PageHitKind.FormTextField);
+            Check("and starts empty", hit.Field is { Value: "" });
 
-            vm.Open(Path.Combine(dir, "forms.pdf"));
-            using (var file = File.Create(filledPath))
-                vm.SaveTo(file);
-            Check("a form document round-trips through save", File.Exists(filledPath));
+            if (hit.Field is { } field)
+            {
+                vm.SetFieldValue(0, field, "Pat Adams");
+                Check("filling it marks the document dirty", vm.IsDirty);
+                Check("and the value is readable back",
+                      vm.HitTest(0, inTheBox).Field is { Value: "Pat Adams" });
+
+                using (var file = File.Create(filledPath))
+                    vm.SaveTo(file);
+
+                using var engine = new PdfiumEngine();
+                using var reopened = engine.Open(filledPath);
+                using var page = reopened.GetPage(0);
+                var saved = page.GetFormFields().FirstOrDefault(f => f.Name == "fullname");
+                Check("the value survived save and reopen", saved is { Value: "Pat Adams" });
+
+                vm.UndoCommand.Execute(null);
+                Check("undo empties it again",
+                      vm.HitTest(0, inTheBox).Field is { Value: "" });
+            }
         }
         catch (Exception ex)
         {

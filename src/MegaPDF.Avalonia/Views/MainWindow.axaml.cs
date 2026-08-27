@@ -635,8 +635,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        _openedFile = null;
+        // Ask the platform for a real file handle rather than nulling _openedFile.
+        // Without one Save has nothing to write through, and because CanSave only
+        // looks at "open and dirty" the button would stay enabled and do nothing —
+        // silently losing the user's work, which is worse than refusing outright.
+        var fromPath = await StorageProvider.TryGetFileFromPathAsync(entry.Path);
+        if (fromPath is null)
+        {
+            vm.Status = "That file cannot be opened for editing from here. Use Open to pick it again.";
+            return;
+        }
+
+        _openedFile = fromPath;
         vm.Open(entry.Path);
+        await RememberAsync(vm, fromPath, entry.Path);
     }
 
     /// <summary>
@@ -670,8 +682,16 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task SaveAsync()
     {
-        if (ViewModel is not { } vm || _openedFile is null)
+        if (ViewModel is not { } vm)
             return;
+
+        if (_openedFile is null)
+        {
+            // Should not happen — but a Save that does nothing at all is the worst
+            // possible outcome, so it says something and offers the way out.
+            vm.Status = "There is nowhere to save this back to. Use Save As to choose a file.";
+            return;
+        }
 
         try
         {
