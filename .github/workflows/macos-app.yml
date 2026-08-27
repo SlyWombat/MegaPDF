@@ -39,6 +39,17 @@ jobs:
           dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release `
             --logger "console;verbosity=minimal"
 
+      # The same end-to-end check the macOS bundle runs. Clicking is the one thing
+      # CI cannot do, so this drives the real view model's click routing and then
+      # verifies through a fresh engine open of the saved file. Running it on both
+      # desktops is what makes "parity" a claim with evidence behind it.
+      - name: Fill-check-sign self-test
+        shell: bash
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          dotnet run --project src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release --no-build -- \
+            --self-test "$RUNNER_TEMP/fixtures"
+
   macos-app:
     name: MegaPDF.app (${{ matrix.rid }})
     runs-on: macos-latest
@@ -73,6 +84,12 @@ jobs:
       # libHarfBuzzSharp now sit outside the apphost — a combination no spike
       # ever exercised. Without this step a bundle whose window cannot open
       # would ship having passed every check.
+      # Editing, verified inside the shipped bundle: tick a checkbox, save, reopen,
+      # undo. "The app launches" says nothing about whether ticking a box works.
+      - name: Fill-check-sign self-test (in the bundle)
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
+
       - name: The UI actually starts
         run: |
           APP="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"

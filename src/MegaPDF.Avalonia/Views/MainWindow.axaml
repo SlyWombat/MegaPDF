@@ -3,31 +3,32 @@
         xmlns:vm="using:MegaPDF.Avalonia.ViewModels"
         x:Class="MegaPDF.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="MegaPDF"
+        Title="{Binding WindowTitle}"
         Width="1000" Height="800"
         MinWidth="480" MinHeight="360">
 
   <DockPanel>
 
-    <!-- Toolbar. Text labels, no icons yet: the WinUI app draws these with
-         FontIcon over Segoe MDL2 glyphs, a font that does not exist on macOS.
-         New icon sources are a tracked ADR-002 §7 work item; shipping wrong
-         glyphs or empty boxes in the meantime would be worse than words. -->
+    <!-- Toolbar. Text labels, no icons yet: the WinUI app draws these with FontIcon
+         over Segoe MDL2 glyphs, a font that does not exist on macOS. New icon
+         sources are a tracked ADR-002 §7 work item; shipping empty boxes in the
+         meantime would be worse than words.
+
+         No HotKey= either: the shortcut modifier differs per platform (Cmd on
+         macOS, Ctrl elsewhere), so the gestures and these tooltips are both built
+         in code-behind. A Mac app with Ctrl+O is a Windows app with round corners. -->
     <Border DockPanel.Dock="Top" Padding="8,6" BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <!-- No HotKey= here: the shortcut modifier differs per platform (Cmd on
-             macOS, Ctrl elsewhere), so the gestures and these tooltips are both
-             built in code-behind. A Mac app with Ctrl+O is a Windows app with
-             round corners. -->
         <Button Name="OpenButton" Content="Open" />
+        <Button Name="SaveButton" Content="Save" Command="{Binding SaveCommand}" />
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-        <Button Name="ZoomOutButton" Content="Zoom out" Command="{Binding ZoomOutCommand}"
-                IsEnabled="{Binding IsDocumentOpen}" />
-        <Button Name="ZoomInButton" Content="Zoom in" Command="{Binding ZoomInCommand}"
-                IsEnabled="{Binding IsDocumentOpen}" />
-        <Button Name="ZoomResetButton" Content="Actual size" Command="{Binding ZoomResetCommand}"
-                IsEnabled="{Binding IsDocumentOpen}" />
+        <Button Name="UndoButton" Content="Undo" Command="{Binding UndoCommand}" />
+        <Button Name="RedoButton" Content="Redo" Command="{Binding RedoCommand}" />
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        <Button Name="ZoomOutButton" Content="Zoom out" Command="{Binding ZoomOutCommand}" />
+        <Button Name="ZoomInButton" Content="Zoom in" Command="{Binding ZoomInCommand}" />
+        <Button Name="ZoomResetButton" Content="Actual size" Command="{Binding ZoomResetCommand}" />
       </StackPanel>
     </Border>
 
@@ -45,23 +46,25 @@
       <ItemsControl Name="PageList" ItemsSource="{Binding Pages}" Margin="0,16">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
-            <!-- Virtualizing: only realised pages hold a raster, which is what
-                 keeps a 200-page document from costing 200 renders on open. -->
+            <!-- Virtualizing: only realised pages hold a raster, which is what keeps a
+                 200-page document from costing 200 renders on open. -->
             <VirtualizingStackPanel Orientation="Vertical" />
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="vm:PageViewModel">
-            <Border Margin="0,0,0,16"
+            <Border Name="PageSurface"
+                    Margin="0,0,0,16"
                     HorizontalAlignment="Center"
                     Background="White"
                     Width="{Binding LayoutWidth}"
                     Height="{Binding LayoutHeight}"
-                    BoxShadow="0 2 8 0 #22000000">
-              <!-- Stretch=Fill, not Uniform: the bitmap is rasterised at exactly
-                   this size, so any scaling here would mean a stale render is
-                   being smeared to fit rather than re-rendered. -->
-              <Image Source="{Binding Image}" Stretch="Fill" />
+                    BoxShadow="0 2 8 0 #22000000"
+                    Cursor="Hand">
+              <!-- Stretch=Fill, not Uniform: the bitmap is rasterised at exactly this
+                   size, so any scaling here would mean a stale render is being smeared
+                   to fit rather than re-rendered. -->
+              <Image Source="{Binding Image}" Stretch="Fill" IsHitTestVisible="False" />
             </Border>
           </DataTemplate>
         </ItemsControl.ItemTemplate>

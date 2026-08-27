@@ -3,7 +3,17 @@ using System.Text.Json;
 namespace MegaPDF.Core.Services;
 
 /// <summary>A recent document plus its last view state (SDD §3.4: restore scroll position).</summary>
-public sealed record RecentEntry(string Path, double ScrollOffset = 0, int ZoomPercent = 100);
+/// <param name="Bookmark">
+/// Opaque, platform-supplied handle for re-opening this file on a platform where a
+/// stored path is not sufficient. On macOS under the App Sandbox an absolute path
+/// from a previous launch cannot be opened at all — the grant is to the file the
+/// user picked, in that session — so the host stores a security-scoped bookmark here
+/// (Avalonia's IStorageProvider.SaveBookmarkAsync) and re-opens through it.
+///
+/// Null on Windows, which never sets it and never reads it: a path is enough there,
+/// and this round-trips through the JSON untouched.
+/// </param>
+public sealed record RecentEntry(string Path, double ScrollOffset = 0, int ZoomPercent = 100, string? Bookmark = null);
 
 /// <summary>
 /// Most-recently-used document list (SDD §2.2 empty state). Stored per-user as JSON;
