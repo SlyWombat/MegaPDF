@@ -40,8 +40,13 @@ rm -rf "$APP"
 PUBLISH="$(mktemp -d)"
 trap 'rm -rf "$PUBLISH"' EXIT
 
+# DebugType=none: a .pdb in Contents/MacOS makes codesign refuse the executable
+# with "code object is not signed at all / In subcomponent: MegaPDF.pdb" — it
+# treats every file beside the binary as something it must account for. Symbols
+# have no place in a shipped bundle anyway.
 dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile=false -o "$PUBLISH"
+    -p:PublishSingleFile=false -p:DebugType=none -p:DebugSymbols=false \
+    -o "$PUBLISH"
 
 if [ ! -f "$PUBLISH/libpdfium.dylib" ]; then
     echo "::error::libpdfium.dylib is not in the publish output — the Core copy item did not fire." >&2
@@ -50,6 +55,9 @@ fi
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp -R "$PUBLISH/." "$APP/Contents/MacOS/"
+# Belt and braces: publish settings above should mean there are none, but a
+# stray .pdb is the difference between a signable bundle and a failed build.
+find "$APP/Contents/MacOS" -name '*.pdb' -delete
 
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -88,7 +96,7 @@ echo '</plist>' >> "$APP/Contents/Info.plist"
 # at all / In subcomponent: <some>.dll" until every nested binary is signed first.
 echo "signing nested binaries..."
 find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) -print0 \
-    | xargs -0 -n1 codesign --force --timestamp=none --sign - 2>/dev/null || true
+    | xargs -0 -n1 codesign --force --timestamp=none --sign -
 codesign --force --timestamp=none --sign - "$APP/Contents/MacOS/MegaPDF"
 codesign --force --timestamp=none --sign - "$APP"
 
