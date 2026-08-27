@@ -111,7 +111,21 @@ find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' \) -print0 \
 # not code and cannot have one. Signing the .app instead lets codesign sign the
 # main executable itself and seal everything else as resources, which is what
 # CodeResources is for.
-codesign --force --timestamp=none --sign - "$APP"
+# MACOS_ENTITLEMENTS opts the bundle into the App Sandbox (Mac App Store
+# requires it). Off by default so the plain build keeps working while the
+# sandbox is still being proven out.
+SIGN_ARGS=(--force --timestamp=none --sign -)
+if [ -n "${MACOS_ENTITLEMENTS:-}" ]; then
+    [ -f "$MACOS_ENTITLEMENTS" ] || { echo "::error::entitlements file not found: $MACOS_ENTITLEMENTS" >&2; exit 1; }
+    echo "signing with entitlements: $MACOS_ENTITLEMENTS"
+    SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
+fi
+codesign "${SIGN_ARGS[@]}" "$APP"
+
+echo "--- entitlements actually embedded in the signature:"
+codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null \
+    || codesign -d --entitlements - "$APP" 2>&1 | head -20 \
+    || echo "(none)"
 
 echo "--- verify:"
 codesign --verify --deep --verbose=2 "$APP" 2>&1 | head -10 || echo "::warning::ad-hoc verification reported problems (expected until Developer ID signing lands)"

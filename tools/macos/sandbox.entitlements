@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Mac App Store distribution makes the App Sandbox mandatory. This is the
+         MINIMAL set on purpose: each entitlement here is one the app is known to
+         need, and anything added later should be added because something failed
+         without it, not because a guide listed it.
+
+         Deliberately absent: com.apple.security.cs.allow-unsigned-executable-memory.
+         Avalonia's docs list it for .NET, but it is the entitlement most likely to
+         draw App Review friction, and .NET 8 uses W^X on arm64 so it may not be
+         needed at all. Add it only if the app crashes without it — and record
+         which failure forced it. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- CoreCLR JITs managed code. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+
+    <!-- The sandbox grants access to the FILE the user picks, not its folder.
+         This is what makes the file picker work at all — and what makes
+         AtomicFileWriter's sibling-temp strategy a problem (SDD §3.4). -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+</dict>
+</plist>

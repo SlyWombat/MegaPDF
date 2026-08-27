@@ -103,3 +103,85 @@ jobs:
           name: MegaPDF-macos-${{ matrix.rid }}
           path: ${{ runner.temp }}/MegaPDF-${{ matrix.rid }}.zip
           if-no-files-found: error
+
+  # ==========================================================================
+  # Mac App Store viability probe. MAS makes the App Sandbox mandatory, and
+  # Avalonia has a standing report of sandboxed .NET apps crashing on arm64
+  # (AvaloniaUI/Avalonia#9764). Every other piece of a MAS pipeline — the
+  # certificates, the provisioning profile, productbuild, the .pkg upload — is
+  # wasted effort if the answer here is no. So this runs first and alone.
+  #
+  # It is written to be falsifiable. Under a real sandbox, --render-check must
+  # be DENIED: that fixture is neither user-selected nor in the app container.
+  # A render-check that passes means the sandbox is not actually engaged and
+  # the result proves nothing, which is why the embedded entitlements are
+  # dumped and checked rather than assumed.
+  # ==========================================================================
+  sandbox-probe:
+    name: App Sandbox viability (${{ matrix.rid }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build a sandboxed bundle
+        env:
+          MACOS_ENTITLEMENTS: tools/macos/sandbox.entitlements
+        run: tools/build-macos-app.sh ${{ matrix.rid }} "$RUNNER_TEMP/sandboxed"
+
+      - name: Is the sandbox actually engaged?
+        run: |
+          APP="$RUNNER_TEMP/sandboxed/MegaPDF.app"
+          echo "--- embedded entitlements:"
+          codesign -d --entitlements - "$APP" 2>&1 | tee "$RUNNER_TEMP/ents.txt"
+          if grep -q "app-sandbox" "$RUNNER_TEMP/ents.txt"; then
+            echo "app-sandbox IS present in the signature"
+          else
+            echo "::error::app-sandbox is NOT in the signature — every result below is meaningless"
+            exit 1
+          fi
+
+      # Expected to FAIL. A pass means the sandbox is not restricting file access.
+      - name: File access outside the container should be DENIED
+        continue-on-error: true
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          if "$RUNNER_TEMP/sandboxed/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
+               "$RUNNER_TEMP/fixtures/stamped.pdf"; then
+            echo "::warning::render-check SUCCEEDED — the sandbox is not restricting file reads."
+            echo "SANDBOX_FILE_ACCESS=unrestricted" >> "$GITHUB_ENV"
+          else
+            echo "render-check was denied, which is the sandbox working as designed."
+            echo "SANDBOX_FILE_ACCESS=restricted" >> "$GITHUB_ENV"
+          fi
+
+      # THE question. If this fails we have hit Avalonia#9764 and MAS is blocked
+      # on an upstream bug rather than on anything in this repo.
+      - name: Does the UI survive the sandbox?
+        run: |
+          APP="$RUNNER_TEMP/sandboxed/MegaPDF.app/Contents/MacOS/MegaPDF"
+          "$APP" > "$RUNNER_TEMP/ui.log" 2>&1 &
+          PID=$!
+          sleep 12
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "SANDBOX UI: PASS — Avalonia is alive after 12s under the sandbox"
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          else
+            echo "::error::SANDBOX UI: the app died under the sandbox (see Avalonia#9764)."
+            cat "$RUNNER_TEMP/ui.log"
+            exit 1
+          fi
+          echo "--- app output:"; cat "$RUNNER_TEMP/ui.log"
+
+      - name: Verdict
+        if: always()
+        run: |
+          echo "sandbox file access: ${SANDBOX_FILE_ACCESS:-unknown}"
+          echo "See the step results above: UI survival is the go/no-go for Mac App Store."
