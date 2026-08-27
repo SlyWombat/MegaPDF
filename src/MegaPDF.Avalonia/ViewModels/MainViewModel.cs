@@ -152,13 +152,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
-        // Placement mode wins over everything: the click is choosing a spot, not
+        // Placement modes win over everything: the click is choosing a spot, not
         // asking what is under it.
         if (PendingSignature is { } pending)
         {
             PlacePendingSignature(pageIndex, point, pending);
             return;
         }
+
+        if (Mode is PageMode.AddText or PageMode.Whiteout)
+            return;   // the view drives these — an editor and a drag respectively
 
         var hit = HitTest(pageIndex, point);
         switch (hit.Kind)
@@ -185,9 +188,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                       "Signature removed.");
                 break;
 
+            case PageHitKind.Whiteout:
+                Apply(new RemoveWhiteoutOperation(_document, pageIndex, hit.ObjectIndex!.Value, hit.Bounds!.Value),
+                      "Cover removed.");
+                break;
+
+            case PageHitKind.TextBox when hit.TextRun is { } run:
+                // Clicking added text removes it. Editing in place is the richer
+                // desktop behaviour and comes with the selection chrome; until then
+                // remove-and-retype is honest and fully undoable.
+                Apply(new RemoveTextBoxOperation(_document, pageIndex, run.ObjectIndex, run),
+                      "Text removed.");
+                break;
+
             default:
-                // Text boxes and whiteout are later increments. Saying nothing is
-                // better than pretending something happened.
                 break;
         }
     }
@@ -232,6 +246,101 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    // --- Placement modes (SDD §3.1, §3.3) ---
+
+    /// <summary>
+    /// What the next click on the page will do. Only one can be armed at a time —
+    /// arming one cancels the others, because a click cannot mean two things.
+    /// </summary>
+    public enum PageMode
+    {
+        Select,
+        AddText,
+        Whiteout,
+    }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAddingText))]
+    [NotifyPropertyChangedFor(nameof(IsWhiteoutMode))]
+    [NotifyPropertyChangedFor(nameof(ModeHint))]
+    [NotifyPropertyChangedFor(nameof(IsModeActive))]
+    private PageMode _mode = PageMode.Select;
+
+    public bool IsAddingText => Mode == PageMode.AddText;
+    public bool IsWhiteoutMode => Mode == PageMode.Whiteout;
+    public bool IsModeActive => Mode != PageMode.Select || IsPlacingSignature;
+
+    /// <summary>
+    /// A banner telling the user what the next click does, and how to get out. A
+    /// mode with no visible affordance is a mode people get stuck in (SDD §2.2).
+    /// </summary>
+    public string ModeHint => Mode switch
+    {
+        PageMode.AddText => "Click where the new text should go — Esc cancels",
+        PageMode.Whiteout => "Drag over what you want to cover — Esc cancels",
+        _ => IsPlacingSignature ? "Click where the signature should go — Esc cancels" : "",
+    };
+
+    /// <summary>The face and size the next text box is written in (SDD §3.1: three faces).</summary>
+    [ObservableProperty]
+    private string _textFont = StandardTextBoxFonts.Default;
+
+    [ObservableProperty]
+    private double _textSize = 12;
+
+    public IReadOnlyList<string> TextFonts { get; } = StandardTextBoxFonts.All;
+    public IReadOnlyList<double> TextSizes { get; } = [8, 9, 10, 11, 12, 14, 16, 18, 24];
+
+    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    private void ToggleAddText() => SetMode(Mode == PageMode.AddText ? PageMode.Select : PageMode.AddText);
+
+    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    private void ToggleWhiteout() => SetMode(Mode == PageMode.Whiteout ? PageMode.Select : PageMode.Whiteout);
+
+    private void SetMode(PageMode mode)
+    {
+        // Arming one mode disarms everything else, signature placement included.
+        if (PendingSignature is not null && mode != PageMode.Select)
+            PendingSignature = null;
+
+        Mode = mode;
+        OnPropertyChanged(nameof(ModeHint));
+        OnPropertyChanged(nameof(IsModeActive));
+        if (mode == PageMode.Select)
+            Status = "Ready.";
+    }
+
+    public void CancelModes()
+    {
+        PendingSignature = null;
+        SetMode(PageMode.Select);
+    }
+
+    /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
+    public void AddTextBox(int pageIndex, PdfPoint topLeft, string text)
+    {
+        if (_document is null || string.IsNullOrWhiteSpace(text))
+            return;
+
+        Apply(new AddTextBoxOperation(_document, pageIndex, text, TextSize, topLeft, TextFont),
+              "Text added.");
+        SetMode(PageMode.Select);
+    }
+
+    /// <summary>Covers page content with a white rectangle (SDD §3.3).</summary>
+    public void AddWhiteout(int pageIndex, PdfRect bounds)
+    {
+        // A stray click while the tool is armed should not stamp an invisible speck.
+        if (_document is null || bounds.Width < 2 || bounds.Height < 2)
+        {
+            SetMode(PageMode.Select);
+            return;
+        }
+
+        Apply(new AddWhiteoutOperation(_document, pageIndex, bounds), "Covered.");
+        SetMode(PageMode.Select);
     }
 
     // --- Find in document (SDD §3.6 / F6) ---
@@ -358,6 +467,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsPlacingSignature))]
+    [NotifyPropertyChangedFor(nameof(ModeHint))]
+    [NotifyPropertyChangedFor(nameof(IsModeActive))]
     private SignatureEntry? _pendingSignature;
 
     public bool IsPlacingSignature => PendingSignature is not null;
@@ -405,6 +516,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (PendingSignature is null)
             return;
         PendingSignature = null;
+        OnPropertyChanged(nameof(ModeHint));
+        OnPropertyChanged(nameof(IsModeActive));
         Status = "Placement cancelled.";
     }
 
@@ -501,6 +614,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save() => SaveRequested?.Invoke();
+
+    /// <summary>After Save As, the copy becomes the document being edited.</summary>
+    public void AdoptSavedAs(string fileName)
+    {
+        DocumentName = fileName;
+        IsDirty = false;
+        Status = $"Saved {fileName}.";
+    }
 
     public void ReportSaveFailure(Exception ex) =>
         Status = $"Could not save: {ex.Message}";

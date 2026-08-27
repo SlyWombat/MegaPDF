@@ -1,5 +1,10 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Rectangle = Avalonia.Controls.Shapes.Rectangle;
 using Avalonia.Input;
+using Avalonia.Media;
+using Avalonia.VisualTree;
 using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Avalonia.Rendering;
@@ -23,6 +28,7 @@ public partial class MainWindow : Window
         // construct, Avalonia's IStorageProvider is reached through the TopLevel and
         // is async. Keeping it in the view is what lets the view model stay UI-free.
         OpenButton.Click += async (_, _) => await OpenDocumentAsync();
+        SaveAsButton.Click += async (_, _) => await SaveAsAsync();
 
         BindShortcuts();
         WireSignatures();
@@ -39,11 +45,17 @@ public partial class MainWindow : Window
             page.EnsureRendered(RenderScaling);
             e.Container.PointerPressed -= OnPagePointerPressed;
             e.Container.PointerPressed += OnPagePointerPressed;
+            e.Container.PointerMoved -= OnPagePointerMoved;
+            e.Container.PointerMoved += OnPagePointerMoved;
+            e.Container.PointerReleased -= OnPagePointerReleased;
+            e.Container.PointerReleased += OnPagePointerReleased;
         };
 
         PageList.ContainerClearing += (_, e) =>
         {
             e.Container.PointerPressed -= OnPagePointerPressed;
+            e.Container.PointerMoved -= OnPagePointerMoved;
+            e.Container.PointerReleased -= OnPagePointerReleased;
             if (e.Container.DataContext is PageViewModel page)
                 page.Unrender();
         };
@@ -68,6 +80,14 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape && ViewModel is { IsPlacingSignature: true } vm)
         {
             vm.CancelPlacing();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && ViewModel is { IsModeActive: true } modal)
+        {
+            DismissInlineEditor();
+            modal.CancelModes();
             e.Handled = true;
             return;
         }
@@ -97,6 +117,96 @@ public partial class MainWindow : Window
         ViewModel?.Dispose();
     }
 
+    // --- Text boxes and whiteout on the page (SDD §3.1, §3.3) ---
+
+    /// <summary>The in-place editor, while one is open. Only ever one at a time.</summary>
+    private TextBox? _inlineEditor;
+
+    /// <summary>Rubber band for the whiteout drag, and where it started.</summary>
+    private Rectangle? _band;
+    private Point _bandOrigin;
+    private Control? _bandHost;
+
+    /// <summary>
+    /// An editor placed where the user clicked, showing the face and size the text
+    /// will actually be written in. Typing into a dialog and hoping is the thing
+    /// SDD §2.2 is against — you should see the words land where they will sit.
+    /// </summary>
+    private void ShowInlineEditor(Control container, PageViewModel page, Point at, PdfPoint pagePoint)
+    {
+        if (ViewModel is not { } vm || container is not ContentPresenter presenter)
+            return;
+
+        DismissInlineEditor();
+
+        var dip = PageBitmap.PointsToPixels * vm.Zoom;
+        var editor = new TextBox
+        {
+            MinWidth = 140,
+            FontSize = vm.TextSize * dip,
+            FontFamily = new FontFamily(FamilyFor(vm.TextFont)),
+            Margin = new Thickness(at.X, at.Y - (vm.TextSize * dip), 0, 0),
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
+            Watermark = "Type, then press Enter",
+        };
+
+        void Commit()
+        {
+            var text = editor.Text;
+            DismissInlineEditor();
+            if (!string.IsNullOrWhiteSpace(text))
+                vm.AddTextBox(page.Index, pagePoint, text);
+            else
+                vm.CancelModes();
+        }
+
+        editor.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                Commit();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                DismissInlineEditor();
+                vm.CancelModes();
+                e.Handled = true;
+            }
+        };
+        // Clicking away commits rather than discarding: losing typing to a stray
+        // click is the more annoying failure.
+        editor.LostFocus += (_, _) => { if (_inlineEditor == editor) Commit(); };
+
+        if (OverlayOf(presenter) is { } overlay)
+        {
+            overlay.Children.Add(editor);
+            _inlineEditor = editor;
+            editor.Focus();
+        }
+    }
+
+    private void DismissInlineEditor()
+    {
+        if (_inlineEditor is null)
+            return;
+        (_inlineEditor.Parent as Panel)?.Children.Remove(_inlineEditor);
+        _inlineEditor = null;
+    }
+
+    /// <summary>Maps the three permitted base-14 names to fonts the OS actually has.</summary>
+    private static string FamilyFor(string standardFont) => standardFont switch
+    {
+        "Times-Roman" => "Times New Roman, Times, serif",
+        "Courier" => "Courier New, Courier, monospace",
+        _ => "Helvetica, Arial, sans-serif",
+    };
+
+    /// <summary>The Panel inside a page's Border that overlays the raster.</summary>
+    private static Panel? OverlayOf(ContentPresenter presenter) =>
+        presenter.GetVisualDescendants().OfType<Panel>().FirstOrDefault(p => p is not StackPanel);
+
     // --- Clicking the page (SDD §3.2) ---
 
     private void OnPagePointerPressed(object? sender, PointerPressedEventArgs e)
@@ -116,8 +226,80 @@ public partial class MainWindow : Window
         var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
         var pagePoint = new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint);
 
-        vm.HandlePageClick(page.Index, pagePoint);
+        switch (vm.Mode)
+        {
+            case MainViewModel.PageMode.AddText:
+                ShowInlineEditor(container, page, position, pagePoint);
+                break;
+
+            case MainViewModel.PageMode.Whiteout:
+                BeginBand(container, position, e);
+                break;
+
+            default:
+                DismissInlineEditor();
+                vm.HandlePageClick(page.Index, pagePoint);
+                break;
+        }
+
         e.Handled = true;
+    }
+
+    // --- Whiteout drag ---
+
+    private void BeginBand(Control container, Point origin, PointerPressedEventArgs e)
+    {
+        if (container is not ContentPresenter presenter || OverlayOf(presenter) is not { } overlay)
+            return;
+
+        _bandOrigin = origin;
+        _bandHost = container;
+        _band = new Rectangle
+        {
+            Fill = Brushes.White,
+            Opacity = 0.75,
+            Stroke = Brushes.Gray,
+            StrokeThickness = 1,
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(origin.X, origin.Y, 0, 0),
+            Width = 0,
+            Height = 0,
+        };
+        overlay.Children.Add(_band);
+        e.Pointer.Capture(container);
+    }
+
+    private void OnPagePointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_band is null || _bandHost is null)
+            return;
+
+        var p = e.GetPosition(_bandHost);
+        var x = Math.Min(p.X, _bandOrigin.X);
+        var y = Math.Min(p.Y, _bandOrigin.Y);
+        _band.Margin = new Thickness(x, y, 0, 0);
+        _band.Width = Math.Abs(p.X - _bandOrigin.X);
+        _band.Height = Math.Abs(p.Y - _bandOrigin.Y);
+    }
+
+    private void OnPagePointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_band is null || _bandHost is null || ViewModel is not { } vm)
+            return;
+
+        if (_bandHost.DataContext is PageViewModel page)
+        {
+            var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
+            vm.AddWhiteout(page.Index, new PdfRect(
+                _band.Margin.Left * dipToPoint, _band.Margin.Top * dipToPoint,
+                _band.Width * dipToPoint, _band.Height * dipToPoint));
+        }
+
+        (_band.Parent as Panel)?.Children.Remove(_band);
+        _band = null;
+        _bandHost = null;
+        e.Pointer.Capture(null);
     }
 
     // --- Signatures (SDD §3.3) ---
@@ -345,6 +527,47 @@ public partial class MainWindow : Window
 
             await using var stream = await _openedFile.OpenWriteAsync();
             vm.SaveTo(stream);
+        }
+        catch (Exception ex)
+        {
+            vm.ReportSaveFailure(ex);
+        }
+    }
+
+    /// <summary>
+    /// Save a copy (SDD §3.4). The picker gives back a file the sandbox has granted
+    /// us, so this writes through its stream — the same path the sandboxed Save
+    /// takes — and then adopts it as the document's home, which is what "Save As"
+    /// means everywhere else.
+    /// </summary>
+    private async Task SaveAsAsync()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var suggested = vm.DocumentName is { } name
+            ? Path.GetFileNameWithoutExtension(name) + " copy.pdf"
+            : "document.pdf";
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save a copy",
+            SuggestedFileName = suggested,
+            DefaultExtension = "pdf",
+            FileTypeChoices = [PdfFileType],
+            ShowOverwritePrompt = true,
+        });
+
+        if (file is null)
+            return;
+
+        try
+        {
+            await using (var stream = await file.OpenWriteAsync())
+                vm.SaveTo(stream);
+
+            _openedFile = file;
+            vm.AdoptSavedAs(file.Name);
         }
         catch (Exception ex)
         {

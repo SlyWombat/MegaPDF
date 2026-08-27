@@ -268,6 +268,53 @@ internal static class Program
             failures++;
         }
 
+        // --- Text boxes and whiteout (SDD §3.1, §3.3) ---
+        Console.WriteLine("text boxes and cover:");
+        var editedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-edit-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            vm.TextFont = StandardTextBoxFonts.Serif;
+            vm.TextSize = 18;
+            vm.AddTextBox(0, new PdfPoint(120, 300), "Filled in on a Mac");
+            Check("adding text marks the document dirty", vm.IsDirty);
+            Check("and leaves placement mode", vm.Mode == MainViewModel.PageMode.Select);
+
+            vm.AddWhiteout(0, new PdfRect(200, 200, 80, 20));
+
+            using (var file = File.Create(editedPath))
+                vm.SaveTo(file);
+
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(editedPath);
+            using var page = reopened.GetPage(0);
+
+            var boxes = page.GetTextBoxes();
+            var mine = boxes.FirstOrDefault(b => b.Text.Contains("Filled in on a Mac", StringComparison.Ordinal));
+            Check("the text box survived save and reopen", mine is not null);
+            // SDD §6.2 contract 4: the face is recorded on the mark, so every
+            // platform reads back exactly what was chosen rather than whatever
+            // pdfium normalised the font name to.
+            Check("it records the face that was chosen",
+                  mine?.TextBoxFont == StandardTextBoxFonts.Serif);
+            Check("the cover rectangle survived too", page.GetWhiteouts().Count > 0);
+
+            vm.UndoCommand.Execute(null);
+            vm.UndoCommand.Execute(null);
+            Check("undo unwinds both edits", !vm.CanUndo);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::text/cover: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(editedPath)) File.Delete(editedPath);
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

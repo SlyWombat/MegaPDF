@@ -22,6 +22,7 @@
       <StackPanel Orientation="Horizontal" Spacing="6">
         <Button Name="OpenButton" Content="Open" />
         <Button Name="SaveButton" Content="Save" Command="{Binding SaveCommand}" />
+        <Button Name="SaveAsButton" Content="Save As" IsEnabled="{Binding IsDocumentOpen}" />
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
@@ -53,6 +54,17 @@
           </Button.Flyout>
         </Button>
 
+        <ToggleButton Name="AddTextButton" Content="Add text"
+                      IsChecked="{Binding IsAddingText, Mode=OneWay}"
+                      Command="{Binding ToggleAddTextCommand}" />
+        <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFonts}"
+                  SelectedItem="{Binding TextFont}" IsEnabled="{Binding IsDocumentOpen}" />
+        <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
+                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding IsDocumentOpen}" />
+        <ToggleButton Name="WhiteoutButton" Content="Cover"
+                      IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
+                      Command="{Binding ToggleWhiteoutCommand}" />
+
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
         <Button Name="UndoButton" Content="Undo" Command="{Binding UndoCommand}" />
         <Button Name="RedoButton" Content="Redo" Command="{Binding RedoCommand}" />
@@ -61,6 +73,12 @@
         <Button Name="ZoomInButton" Content="Zoom in" Command="{Binding ZoomInCommand}" />
         <Button Name="ZoomResetButton" Content="Actual size" Command="{Binding ZoomResetCommand}" />
       </StackPanel>
+    </Border>
+
+    <!-- What the next click will do, and how to get out of it. -->
+    <Border DockPanel.Dock="Top" Padding="10,6" IsVisible="{Binding IsModeActive}"
+            Background="{DynamicResource SystemAccentColor}">
+      <TextBlock Text="{Binding ModeHint}" Foreground="White" />
     </Border>
 
     <!-- Find bar (SDD §3.6). Hidden until asked for, so it costs nothing until it
