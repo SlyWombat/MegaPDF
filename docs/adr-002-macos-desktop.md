@@ -300,10 +300,52 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
   build, large for a consumer download. `PublishTrimmed` is the obvious lever
   and the risky one — Avalonia and the MVVM toolkit lean on reflection — so
   treat it as its own measured change, not a flag to flip.
-- **Distribution shape.** Windows ships both Store (MSIX) and direct download
-  with a self-disabling updater. Mac needs the equivalent decision: `.dmg` +
-  Sparkle-style updates, Mac App Store, or both. `UpdateChecker`'s MSIX
-  self-disable logic needs a Mac analogue.
+- **Distribution shape — DECIDED 2026-08-27: Mac App Store**, matching the
+  phone apps rather than the Windows direct-download path. Consequences, in
+  order of how much they cost:
+
+  1. **The App Sandbox is mandatory — and it is survivable.** Probe run
+     33085979305 (`sandbox-probe` in `macos-app.yml`) built an
+     `app-sandbox`-entitled bundle and Avalonia **stayed alive under it**, so
+     `AvaloniaUI/Avalonia#9764` does not reproduce here. The probe is
+     falsifiable rather than reassuring: it fails outright if `app-sandbox` is
+     missing from the signature, and it confirms restriction is real by
+     requiring a read outside the container to be **denied** — which it was
+     (`UnauthorizedAccessException` on the fixture).
+  2. **The minimal entitlement set is enough.** `app-sandbox`, `allow-jit`,
+     `files.user-selected.read-write`. Notably **not**
+     `allow-unsigned-executable-memory`, which Avalonia's docs list for .NET —
+     .NET 8's W^X on arm64 means it is not needed, and it is the entitlement
+     most likely to draw review friction. Do not add it without a failure that
+     forces it.
+  3. **`AtomicFileWriter` is structurally incompatible with the sandbox.** SDD
+     §3.4 writes `.<name>.<guid>.megapdf-tmp` *in the destination's directory*,
+     then `File.Replace`. The sandbox grants the **file** the user picked, not
+     its folder, so creating that sibling is denied. This must not be "fixed"
+     by changing Windows semantics — the atomic-save contract there is correct.
+     Give it a platform strategy: macOS writes to the container temp and
+     replaces; Windows keeps `File.Replace`.
+  4. **`RecentFiles` needs security-scoped bookmarks.** It stores absolute
+     paths and reopens them; under the sandbox a path from a previous launch is
+     not accessible. Additive fix: a nullable `Bookmark` on `RecentEntry` that
+     Windows never sets and never reads, populated on macOS from Avalonia's
+     `IStorageProvider.SaveBookmarkAsync`.
+  5. **`UpdateChecker` must self-disable on Store builds**, exactly as it does
+     for MSIX — the Store forbids self-updating.
+  6. **Certificates are automatable this time.** MAS needs
+     `MAC_APP_DISTRIBUTION` ("3rd Party Mac Developer Application") and
+     `MAC_INSTALLER_DISTRIBUTION` plus a `MAC_APP_STORE` provisioning profile.
+     Unlike Developer ID these are ordinary ASC API types, so the existing
+     `ASC_KEY_P8` automation mints them with no portal step.
+
+  **The Developer ID Application certificate created on 2026-08-27 is not used
+  by this route.** It cost one of the account's five slots and is valid to
+  2031-08-28. Keep it: it is exactly what a direct download alongside the Store
+  build would need, and revoking it does not return the slot.
+
+- **A free win from the sandbox.** `Environment.SpecialFolder.LocalApplicationData`
+  redirects into the app container under the sandbox, which resolves fact 7's
+  `~/Library/Application Support` nit for the Store build without a path branch.
 - **Printing replacement** for `PdfPrinter`'s `Windows.Graphics.Printing`.
 - **New icon sources for the toolbar.** `MainWindow.xaml` draws every toolbar
   button with `FontIcon` over Segoe MDL2 glyphs (`&#xE8E5;` open, `&#xE74E;`
