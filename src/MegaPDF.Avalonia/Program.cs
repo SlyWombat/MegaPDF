@@ -315,6 +315,51 @@ internal static class Program
             if (File.Exists(editedPath)) File.Delete(editedPath);
         }
 
+        // --- Body text editing (SDD §3.1 — F1) ---
+        Console.WriteLine("body text editing:");
+        var retypedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-text-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel();
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            var lines = vm.LinesOn(0);
+            Check("the page's body text reads as lines", lines.Count > 0);
+
+            var line = lines.FirstOrDefault(l => l.Text.Contains("fixture", StringComparison.OrdinalIgnoreCase));
+            Check("a known line is found", line is not null);
+
+            if (line is not null)
+            {
+                vm.EditLine(0, line, "Retyped on a Mac");
+                Check("editing marks the document dirty", vm.IsDirty);
+
+                using (var file = File.Create(retypedPath))
+                    vm.SaveTo(file);
+
+                using var engine = new PdfiumEngine();
+                using var reopened = engine.Open(retypedPath);
+                using var page = reopened.GetPage(0);
+                var text = string.Join(" ", page.GetTextLines().Select(l => l.Text));
+                Check("the new words are in the saved file", text.Contains("Retyped on a Mac", StringComparison.Ordinal));
+                Check("and the old ones are gone", !text.Contains("engine fixture", StringComparison.Ordinal));
+
+                vm.UndoCommand.Execute(null);
+                var afterUndo = string.Join(" ", vm.LinesOn(0).Select(l => l.Text));
+                Check("undo puts the original text back",
+                      afterUndo.Contains("fixture", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::body text: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(retypedPath)) File.Delete(retypedPath);
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

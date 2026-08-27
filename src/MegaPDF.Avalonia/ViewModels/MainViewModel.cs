@@ -96,17 +96,35 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnDpiScaleChanged(double value) => RerenderRealisedPages();
 
-    public void Open(string path)
+    /// <summary>Raised when a document needs a password before it can be opened.</summary>
+    public event Func<string, Task<string?>>? PasswordRequested;
+
+    public void Open(string path) => Open(path, password: null);
+
+    public void Open(string path, string? password)
     {
         CloseDocument();
 
         IPdfDocument document;
         try
         {
-            document = _engine.Open(path);
+            document = _engine.Open(path, password);
         }
         catch (PdfLoadException ex)
         {
+            if (ex.IsPasswordError && PasswordRequested is { } ask)
+            {
+                // Ask, then retry. Deliberately not a loop here — the view keeps
+                // asking, so a wrong password re-prompts with the reason showing
+                // rather than dumping the user back to an empty window.
+                Status = password is null
+                    ? "This PDF is password-protected."
+                    : "That password did not work.";
+                PendingPasswordPath = path;
+                _ = RetryWithPasswordAsync(path, ask);
+                return;
+            }
+
             // Engine messages are already written for the person holding the document,
             // not the developer (SDD §2.2) — surface as-is.
             Status = ex.Message;
@@ -130,6 +148,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsDirty = false;
         Status = $"{DocumentName} — {document.PageCount} page{(document.PageCount == 1 ? "" : "s")}. "
                  + "Click a checkbox to tick it.";
+    }
+
+    /// <summary>The document waiting on a password, if any.</summary>
+    public string? PendingPasswordPath { get; private set; }
+
+    private async Task RetryWithPasswordAsync(string path, Func<string, Task<string?>> ask)
+    {
+        var password = await ask(Path.GetFileName(path));
+        PendingPasswordPath = null;
+
+        if (string.IsNullOrEmpty(password))
+        {
+            Status = "Opening cancelled.";
+            return;
+        }
+
+        Open(path, password);
+    }
+
+    /// <summary>Visual lines of body text on a page — what F1 edits (SDD §3.1).</summary>
+    internal IReadOnlyList<PdfTextLine> LinesOn(int pageIndex)
+    {
+        if (_document is null)
+            return [];
+        using var page = _document.GetPage(pageIndex);
+        return page.GetTextLines();
     }
 
     // --- Interaction (SDD §3.2) ---
@@ -191,6 +235,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case PageHitKind.Whiteout:
                 Apply(new RemoveWhiteoutOperation(_document, pageIndex, hit.ObjectIndex!.Value, hit.Bounds!.Value),
                       "Cover removed.");
+                break;
+
+            case PageHitKind.TextRun when hit.TextLine is { } line:
+                // The view opens an editor over the line; the commit comes back
+                // through EditLine.
+                EditLineRequested?.Invoke(pageIndex, line);
                 break;
 
             case PageHitKind.TextBox when hit.TextRun is { } run:
@@ -318,6 +368,43 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         SetMode(PageMode.Select);
     }
 
+    /// <summary>
+    /// Edits a line of the document's own body text (SDD §3.1 — F1, the feature the
+    /// product is named for). Tiered: the document's own font is used where it can
+    /// render the new text, a similar standard font where it cannot, and scanned
+    /// text is refused outright rather than silently mangled.
+    /// </summary>
+    public void EditLine(int pageIndex, PdfTextLine line, string newText)
+    {
+        if (_document is null || newText == line.Text)
+            return;
+
+        var operation = new LineEditOperation(_document, pageIndex, line, newText);
+        try
+        {
+            _undoStack.Do(operation);
+        }
+        catch (TextEditException ex)
+        {
+            // These are the two honest refusals, and the wording matters more than
+            // the exception: the person is holding a form, not a stack trace.
+            Status = ex.Reason switch
+            {
+                TextEditFailure.NotExtractable =>
+                    "That text is part of a scanned image, so it cannot be edited. "
+                    + "You can cover it and type over the top instead.",
+                _ => "That text uses a font that cannot write those characters, "
+                     + "and no close substitute was available.",
+            };
+            return;
+        }
+
+        var note = operation.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont
+            ? "Text edited — the original font could not write that, so a close match was used."
+            : "Text edited.";
+        AfterEdit(pageIndex, note);
+    }
+
     /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
     public void AddTextBox(int pageIndex, PdfPoint topLeft, string text)
     {
@@ -374,6 +461,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         : MatchCount == 0
             ? "Not found"
             : $"{CurrentMatchIndex + 1} of {MatchCount}";
+
+    /// <summary>Raised when the view should open an editor over a line of body text.</summary>
+    public event Action<int, PdfTextLine>? EditLineRequested;
 
     /// <summary>Raised when the view should bring a page rectangle into view.</summary>
     public event Action<int, PdfRect>? ScrollToRequested;

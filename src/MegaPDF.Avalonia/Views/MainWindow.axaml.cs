@@ -70,6 +70,8 @@ public partial class MainWindow : Window
         {
             vm.SaveRequested += () => _ = SaveAsync();
             vm.ScrollToRequested += ScrollToMatch;
+            vm.EditLineRequested += ShowLineEditor;
+            vm.PasswordRequested += AskForPasswordAsync;
         }
     }
 
@@ -132,7 +134,9 @@ public partial class MainWindow : Window
     /// will actually be written in. Typing into a dialog and hoping is the thing
     /// SDD §2.2 is against — you should see the words land where they will sit.
     /// </summary>
-    private void ShowInlineEditor(Control container, PageViewModel page, Point at, PdfPoint pagePoint)
+    private void ShowInlineEditor(
+        Control container, Point at, double fontSizePoints, string fontFamily,
+        string initialText, double minWidth, Action<string> commit)
     {
         if (ViewModel is not { } vm || container is not ContentPresenter presenter)
             return;
@@ -142,10 +146,11 @@ public partial class MainWindow : Window
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
         var editor = new TextBox
         {
-            MinWidth = 140,
-            FontSize = vm.TextSize * dip,
-            FontFamily = new FontFamily(FamilyFor(vm.TextFont)),
-            Margin = new Thickness(at.X, at.Y - (vm.TextSize * dip), 0, 0),
+            MinWidth = Math.Max(140, minWidth),
+            Text = initialText,
+            FontSize = fontSizePoints * dip,
+            FontFamily = new FontFamily(fontFamily),
+            Margin = new Thickness(at.X, at.Y, 0, 0),
             HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
             Watermark = "Type, then press Enter",
@@ -153,12 +158,9 @@ public partial class MainWindow : Window
 
         void Commit()
         {
-            var text = editor.Text;
+            var text = editor.Text ?? "";
             DismissInlineEditor();
-            if (!string.IsNullOrWhiteSpace(text))
-                vm.AddTextBox(page.Index, pagePoint, text);
-            else
-                vm.CancelModes();
+            commit(text);
         }
 
         editor.KeyDown += (_, e) =>
@@ -184,7 +186,61 @@ public partial class MainWindow : Window
             overlay.Children.Add(editor);
             _inlineEditor = editor;
             editor.Focus();
+            editor.SelectAll();
         }
+    }
+
+    /// <summary>New text at the click point, in the toolbar's chosen face and size.</summary>
+    private void ShowNewTextEditor(Control container, PageViewModel page, Point at, PdfPoint pagePoint)
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var dip = PageBitmap.PointsToPixels * vm.Zoom;
+        ShowInlineEditor(
+            container, new Point(at.X, at.Y - (vm.TextSize * dip)),
+            vm.TextSize, FamilyFor(vm.TextFont), "", 0,
+            text =>
+            {
+                if (!string.IsNullOrWhiteSpace(text))
+                    vm.AddTextBox(page.Index, pagePoint, text);
+                else
+                    vm.CancelModes();
+            });
+    }
+
+    /// <summary>
+    /// Editing the document's own text (SDD §3.1). The editor sits on the line, at
+    /// its size, so the replacement is judged where it will live rather than in a
+    /// dialog somewhere else.
+    /// </summary>
+    private void ShowLineEditor(int pageIndex, PdfTextLine line)
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var container = ContainerFor(pageIndex);
+        if (container is null)
+            return;
+
+        var dip = PageBitmap.PointsToPixels * vm.Zoom;
+        ShowInlineEditor(
+            container,
+            new Point(line.Bounds.X * dip, line.Bounds.Y * dip),
+            line.FontSize, "Helvetica, Arial, sans-serif",
+            line.Text, line.Bounds.Width * dip,
+            text => vm.EditLine(pageIndex, line, text));
+    }
+
+    private Control? ContainerFor(int pageIndex)
+    {
+        for (var i = 0; i < PageList.ItemCount; i++)
+        {
+            if (PageList.ContainerFromIndex(i) is { DataContext: PageViewModel page } container
+                && page.Index == pageIndex)
+                return container;
+        }
+        return null;
     }
 
     private void DismissInlineEditor()
@@ -229,7 +285,7 @@ public partial class MainWindow : Window
         switch (vm.Mode)
         {
             case MainViewModel.PageMode.AddText:
-                ShowInlineEditor(container, page, position, pagePoint);
+                ShowNewTextEditor(container, page, position, pagePoint);
                 break;
 
             case MainViewModel.PageMode.Whiteout:
@@ -573,6 +629,20 @@ public partial class MainWindow : Window
         {
             vm.ReportSaveFailure(ex);
         }
+    }
+
+    private bool _passwordRetry;
+
+    private async Task<string?> AskForPasswordAsync(string fileName)
+    {
+        var dialog = new PasswordWindow();
+        dialog.SetPrompt(fileName, _passwordRetry);
+        await dialog.ShowDialog(this);
+
+        // Remember that we have asked once, so a second prompt says why it is back
+        // rather than looking like the first one failed to register.
+        _passwordRetry = dialog.Password is not null;
+        return dialog.Password;
     }
 
     private static FilePickerFileType PdfFileType => new("PDF document")
