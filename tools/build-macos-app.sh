@@ -97,7 +97,12 @@ echo '</plist>' >> "$APP/Contents/Info.plist"
 echo "signing nested binaries..."
 find "$APP/Contents/MacOS" \( -name '*.dylib' -o -name '*.so' -o -name '*.dll' \) -print0 \
     | xargs -0 -n1 codesign --force --timestamp=none --sign -
-codesign --force --timestamp=none --sign - "$APP/Contents/MacOS/MegaPDF"
+# Then the bundle — and ONLY the bundle. Signing Contents/MacOS/MegaPDF directly
+# makes codesign treat that directory as the bundle root and demand a signature
+# for every sibling file in it, including MegaPDF.runtimeconfig.json, which is
+# not code and cannot have one. Signing the .app instead lets codesign sign the
+# main executable itself and seal everything else as resources, which is what
+# CodeResources is for.
 codesign --force --timestamp=none --sign - "$APP"
 
 echo "--- verify:"
