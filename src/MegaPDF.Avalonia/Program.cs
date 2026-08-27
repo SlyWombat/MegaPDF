@@ -360,6 +360,35 @@ internal static class Program
             if (File.Exists(retypedPath)) File.Delete(retypedPath);
         }
 
+        // --- AcroForm text fields ---
+        Console.WriteLine("form text fields:");
+        var filledPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-form-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel();
+            vm.Open(Path.Combine(dir, "forms.pdf"));
+
+            using var probe = new PdfiumEngine();
+            using var probeDoc = probe.Open(Path.Combine(dir, "forms.pdf"));
+            using var probePage = probeDoc.GetPage(0);
+            var field = probePage.GetFormFields().FirstOrDefault(f => f.Kind == FormFieldKind.Checkbox);
+            Check("the form's fields are readable", field is not null);
+
+            vm.Open(Path.Combine(dir, "forms.pdf"));
+            using (var file = File.Create(filledPath))
+                vm.SaveTo(file);
+            Check("a form document round-trips through save", File.Exists(filledPath));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::form fields: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(filledPath)) File.Delete(filledPath);
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

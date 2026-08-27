@@ -11,6 +11,7 @@ using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.Views;
 
@@ -29,6 +30,15 @@ public partial class MainWindow : Window
         // is async. Keeping it in the view is what lets the view model stay UI-free.
         OpenButton.Click += async (_, _) => await OpenDocumentAsync();
         SaveAsButton.Click += async (_, _) => await SaveAsAsync();
+        EmptyOpenButton.Click += async (_, _) => await OpenDocumentAsync();
+
+        RecentList.SelectionChanged += async (_, _) =>
+        {
+            if (RecentList.SelectedItem is not RecentEntry entry)
+                return;
+            RecentList.SelectedItem = null;
+            await OpenRecentAsync(entry);
+        };
 
         BindShortcuts();
         WireSignatures();
@@ -72,6 +82,7 @@ public partial class MainWindow : Window
             vm.ScrollToRequested += ScrollToMatch;
             vm.EditLineRequested += ShowLineEditor;
             vm.PasswordRequested += AskForPasswordAsync;
+            vm.EditFieldRequested += ShowFieldEditor;
         }
     }
 
@@ -110,7 +121,10 @@ public partial class MainWindow : Window
         // it to the view model is what makes a page sharp on a retina Mac rather than
         // upscaled from a 96 DPI raster.
         if (ViewModel is { } vm)
+        {
             vm.DpiScale = RenderScaling;
+            vm.LoadRecents();
+        }
     }
 
     protected override void OnClosed(EventArgs e)
@@ -230,6 +244,28 @@ public partial class MainWindow : Window
             line.FontSize, "Helvetica, Arial, sans-serif",
             line.Text, line.Bounds.Width * dip,
             text => vm.EditLine(pageIndex, line, text));
+    }
+
+    /// <summary>
+    /// Editing an AcroForm text field. The editor is sized to the widget so it reads
+    /// as filling in the box that is already printed on the form, rather than as
+    /// typing somewhere near it.
+    /// </summary>
+    private void ShowFieldEditor(int pageIndex, PdfFormField field)
+    {
+        if (ViewModel is not { } vm || ContainerFor(pageIndex) is not { } container)
+            return;
+
+        var dip = PageBitmap.PointsToPixels * vm.Zoom;
+        // A widget's height is the box; the text inside it sits a little smaller.
+        var fontSize = Math.Max(6, field.Bounds.Height * 0.7);
+
+        ShowInlineEditor(
+            container,
+            new Point(field.Bounds.X * dip, field.Bounds.Y * dip),
+            fontSize, "Helvetica, Arial, sans-serif",
+            field.Value, field.Bounds.Width * dip,
+            text => vm.SetFieldValue(pageIndex, field, text));
     }
 
     private Control? ContainerFor(int pageIndex)
@@ -554,6 +590,71 @@ public partial class MainWindow : Window
 
         _openedFile = files[0];
         vm.Open(path);
+        await RememberAsync(vm, files[0], path);
+    }
+
+    /// <summary>
+    /// Reopens a document from the recents list.
+    ///
+    /// On macOS under the App Sandbox the stored path is not a key to anything — the
+    /// grant was to the file the user picked, in that session. The security-scoped
+    /// bookmark is what carries permission across launches, so it is tried first and
+    /// the path is only a fallback for platforms that do not need one.
+    /// </summary>
+    private async Task OpenRecentAsync(RecentEntry entry)
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        if (entry.Bookmark is { } bookmark)
+        {
+            try
+            {
+                if (await StorageProvider.OpenFileBookmarkAsync(bookmark) is { } file)
+                {
+                    var bookmarked = file.TryGetLocalPath();
+                    if (bookmarked is not null)
+                    {
+                        _openedFile = file;
+                        vm.Open(bookmarked);
+                        await RememberAsync(vm, file, bookmarked);
+                        return;
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // A stale bookmark is an ordinary outcome — the file moved, or the
+                // grant expired. Fall through and try the path.
+            }
+        }
+
+        if (!File.Exists(entry.Path))
+        {
+            vm.Status = "That file has moved or been deleted. Open it again to restore access.";
+            return;
+        }
+
+        _openedFile = null;
+        vm.Open(entry.Path);
+    }
+
+    /// <summary>
+    /// Records the document in recents, with a bookmark where the platform supports
+    /// one. Failing to mint a bookmark must not stop the document being remembered.
+    /// </summary>
+    private static async Task RememberAsync(MainViewModel vm, IStorageFile file, string path)
+    {
+        string? bookmark = null;
+        try
+        {
+            bookmark = await file.SaveBookmarkAsync();
+        }
+        catch (Exception)
+        {
+        }
+
+        vm.RememberRecent(path, bookmark);
     }
 
     /// <summary>

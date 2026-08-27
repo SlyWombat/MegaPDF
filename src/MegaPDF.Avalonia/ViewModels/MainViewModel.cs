@@ -38,6 +38,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly IPdfEngine _engine = new PdfiumEngine();
     private readonly UndoStack _undoStack = new();
     private readonly ISignatureLibrary _signatures = new SignatureLibrary();
+    private readonly RecentFiles _recents = new();
     private IPdfDocument? _document;
 
     public ObservableCollection<PageViewModel> Pages { get; } = [];
@@ -53,6 +54,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
     private bool _isDirty;
+
+    /// <summary>The welcome panel shows until there is something to look at.</summary>
+    public bool ShowEmptyState => !IsDocumentOpen;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ZoomInCommand))]
@@ -145,6 +149,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DocumentPath = path;
         DocumentName = Path.GetFileName(path);
         IsDocumentOpen = true;
+        OnPropertyChanged(nameof(ShowEmptyState));
         IsDirty = false;
         Status = $"{DocumentName} — {document.PageCount} page{(document.PageCount == 1 ? "" : "s")}. "
                  + "Click a checkbox to tick it.";
@@ -237,6 +242,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                       "Cover removed.");
                 break;
 
+            case PageHitKind.FormTextField when hit.Field is { } field:
+                EditFieldRequested?.Invoke(pageIndex, field);
+                break;
+
             case PageHitKind.TextRun when hit.TextLine is { } line:
                 // The view opens an editor over the line; the commit comes back
                 // through EditLine.
@@ -296,6 +305,31 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanRedo));
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    // --- Recent documents (SDD §2.2 empty state) ---
+
+    public ObservableCollection<RecentEntry> Recents { get; } = [];
+
+    public bool HasRecents => Recents.Count > 0;
+
+    public void LoadRecents()
+    {
+        Recents.Clear();
+        foreach (var entry in _recents.Entries)
+            Recents.Add(entry);
+        OnPropertyChanged(nameof(HasRecents));
+    }
+
+    /// <summary>
+    /// Records a document as recently opened. The bookmark is what lets macOS
+    /// reopen it in a later session at all — under the sandbox a stored path is not
+    /// a key to anything.
+    /// </summary>
+    public void RememberRecent(string path, string? bookmark)
+    {
+        _recents.Add(path, bookmark);
+        LoadRecents();
     }
 
     // --- Placement modes (SDD §3.1, §3.3) ---
@@ -405,6 +439,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AfterEdit(pageIndex, note);
     }
 
+    /// <summary>Fills an AcroForm text field (SDD §3.1, the form path).</summary>
+    public void SetFieldValue(int pageIndex, PdfFormField field, string value)
+    {
+        if (_document is null || value == field.Value)
+            return;
+
+        Apply(new FormTextEditOperation(_document, pageIndex, field, value),
+              string.IsNullOrEmpty(value) ? "Field cleared." : "Field filled.");
+    }
+
     /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
     public void AddTextBox(int pageIndex, PdfPoint topLeft, string text)
     {
@@ -464,6 +508,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Raised when the view should open an editor over a line of body text.</summary>
     public event Action<int, PdfTextLine>? EditLineRequested;
+
+    /// <summary>Raised when the view should open an editor over an AcroForm text field.</summary>
+    public event Action<int, PdfFormField>? EditFieldRequested;
 
     /// <summary>Raised when the view should bring a page rectangle into view.</summary>
     public event Action<int, PdfRect>? ScrollToRequested;
@@ -774,6 +821,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DocumentName = null;
         IsDocumentOpen = false;
         IsDirty = false;
+        OnPropertyChanged(nameof(ShowEmptyState));
     }
 
     public void Dispose()
