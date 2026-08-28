@@ -1,0 +1,88 @@
+# Builds the sandboxed, Apple-Distribution-signed MegaPDF.app, wraps it in the
+# signed .pkg the Mac App Store takes, and — only when asked — uploads it.
+#
+# workflow_dispatch only, and the upload is a separate opt-in input. Building a
+# package is cheap and repeatable; delivering a build to App Store Connect is
+# neither, so it is never the default.
+#
+# ADR-002 decided Mac App Store distribution. The Developer ID / notarized path
+# in macos-tester-build.yml is for getting builds to testers, not for shipping.
+name: macOS App Store package
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Deliver the package to App Store Connect (not just build it)
+        required: true
+        default: false
+        type: boolean
+  # Also on changes to the signing chain itself, so the one thing that cannot be
+  # tested any other way — real certificates, a real provisioning profile,
+  # productbuild — is exercised before it is needed rather than at submission
+  # time. `inputs.upload` is undefined on a pull request, so the upload step is
+  # off: this builds and validates a package, it never delivers one.
+  pull_request:
+    paths:
+      - '.github/workflows/macos-appstore.yml'
+      - 'tools/build-macos-app.sh'
+      - 'tools/package-macos-pkg.sh'
+      - 'tools/macos/**'
+
+jobs:
+  appstore-package:
+    name: MegaPDF.pkg for the Mac App Store
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore the provisioning profile
+        env:
+          MAS_PROVISION_PROFILE_B64: ${{ secrets.MAS_PROVISION_PROFILE_B64 }}
+        run: |
+          echo "$MAS_PROVISION_PROFILE_B64" | base64 -d > "$RUNNER_TEMP/MegaPDF.provisionprofile"
+          ls -l "$RUNNER_TEMP/MegaPDF.provisionprofile"
+
+      # Apple Distribution signs the app; the sandbox entitlements are what make
+      # it a Store build. IOS_DIST_P12 deliberately: "Apple Distribution" is the
+      # modern unified certificate that signs both iOS and Mac App Store apps, so
+      # there is one certificate here, not two that could drift.
+      - name: Build the sandboxed, Store-signed app
+        env:
+          MACOS_SIGN_P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
+          MACOS_SIGN_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          MACOS_SIGN_IDENTITY: ${{ secrets.MAS_APP_IDENTITY }}
+          MACOS_INSTALLER_P12_B64: ${{ secrets.MAS_INSTALLER_P12_B64 }}
+          MACOS_INSTALLER_P12_PASSWORD: ${{ secrets.MAS_INSTALLER_P12_PASSWORD }}
+          MACOS_ENTITLEMENTS: tools/macos/sandbox.entitlements
+        run: |
+          MACOS_PROVISION_PROFILE="$RUNNER_TEMP/MegaPDF.provisionprofile" \
+            tools/build-macos-app.sh osx-arm64 "$RUNNER_TEMP/app"
+
+      # The same checks the ordinary build runs — a Store build that cannot open a
+      # document is not worth uploading.
+      - name: It works before we ship it
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --print-check \
+            "$RUNNER_TEMP/fixtures/fixture.pdf"
+
+      - name: Package (and upload, if asked)
+        env:
+          MACOS_INSTALLER_IDENTITY: ${{ secrets.MAS_INSTALLER_IDENTITY }}
+          MACOS_UPLOAD: ${{ inputs.upload && '1' || '0' }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          tools/package-macos-pkg.sh "$RUNNER_TEMP/app/MegaPDF.app" "$RUNNER_TEMP/MegaPDF.pkg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-appstore-pkg
+          path: ${{ runner.temp }}/MegaPDF.pkg
+          if-no-files-found: error
