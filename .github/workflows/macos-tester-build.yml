@@ -20,10 +20,18 @@ on:
         default: osx-arm64
         type: choice
         options: [osx-arm64, osx-x64]
+  # Also on changes to this workflow or the build script. workflow_dispatch only
+  # works once a workflow is on the default branch, and a tester should not have
+  # to wait for a merge to get a build.
+  pull_request:
+    paths:
+      - '.github/workflows/macos-tester-build.yml'
+      - 'tools/build-macos-app.sh'
+      - 'tools/notarize-macos-app.sh'
 
 jobs:
   tester-build:
-    name: Notarized MegaPDF.app (${{ inputs.rid }})
+    name: Notarized MegaPDF.app (${{ inputs.rid || 'osx-arm64' }})
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,23 +39,43 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      # Hardened runtime (required by notarization), real identity, secure
-      # timestamp. No sandbox: this build is for testing outside the Store, and
-      # sandboxing it would impose the file restrictions without the bookmark
-      # plumbing that makes them survivable.
-      - name: Build and sign with Developer ID
+      # Developer ID + Hardened Runtime (notarization requires both) AND the
+      # sandbox.
+      #
+      # The sandbox is the point. The behaviours most needing a human on real
+      # hardware — security-scoped bookmarks holding recent files across
+      # launches, saving back to a file the sandbox granted, the print panel —
+      # only exist under it. A comfortable unsandboxed build would test the
+      # parts we already have CI for and none of the parts we do not.
+      #
+      # Developer ID + app-sandbox needs no provisioning profile; that is a Mac
+      # App Store requirement, not a sandbox one. So this is the shipping
+      # configuration, delivered outside the Store.
+      - name: Build, sandbox, and sign with Developer ID
         env:
           MACOS_DEVID_P12_B64: ${{ secrets.MACOS_DEVID_P12_B64 }}
           MACOS_DEVID_P12_PASSWORD: ${{ secrets.MACOS_DEVID_P12_PASSWORD }}
           MACOS_DEVID_IDENTITY: ${{ secrets.MACOS_DEVID_IDENTITY }}
-          MACOS_ENTITLEMENTS: tools/macos/hardened.entitlements
-        run: tools/build-macos-app.sh ${{ inputs.rid }} "$RUNNER_TEMP/app"
+          MACOS_ENTITLEMENTS: tools/macos/sandbox.entitlements
+        run: tools/build-macos-app.sh ${{ inputs.rid || 'osx-arm64' }} "$RUNNER_TEMP/app"
 
-      - name: It runs before we ask Apple about it
+      # Inside the container, because the app is sandboxed and cannot read
+      # $RUNNER_TEMP — the same reason the Store build's checks moved there.
+      - name: It works before we ask Apple about it
         run: |
+          BIN="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
+          CONTAINER="$HOME/Library/Containers/com.megapdf.mac/Data"
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
-          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
-            "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+          "$BIN" > "$RUNNER_TEMP/first-launch.log" 2>&1 &
+          PID=$!; sleep 8; kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true
+
+          [ -d "$CONTAINER" ] || { echo "::error::no sandbox container — the build is not sandboxed"; exit 1; }
+          mkdir -p "$CONTAINER/tmp/fixtures"
+          cp "$RUNNER_TEMP"/fixtures/*.pdf "$CONTAINER/tmp/fixtures/"
+
+          "$BIN" --self-test "$CONTAINER/tmp/fixtures"
+          "$BIN" --print-check "$CONTAINER/tmp/fixtures/fixture.pdf"
 
       - name: Notarize and staple
         env:
@@ -61,11 +89,11 @@ jobs:
       - name: Package for the tester
         run: |
           ditto -c -k --keepParent "$RUNNER_TEMP/app/MegaPDF.app" \
-            "$RUNNER_TEMP/MegaPDF-${{ inputs.rid }}-notarized.zip"
-          ls -lh "$RUNNER_TEMP/MegaPDF-${{ inputs.rid }}-notarized.zip"
+            "$RUNNER_TEMP/MegaPDF-${{ inputs.rid || 'osx-arm64' }}-notarized.zip"
+          ls -lh "$RUNNER_TEMP/MegaPDF-${{ inputs.rid || 'osx-arm64' }}-notarized.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MegaPDF-notarized-${{ inputs.rid }}
-          path: ${{ runner.temp }}/MegaPDF-${{ inputs.rid }}-notarized.zip
+          name: MegaPDF-notarized-${{ inputs.rid || 'osx-arm64' }}
+          path: ${{ runner.temp }}/MegaPDF-${{ inputs.rid || 'osx-arm64' }}-notarized.zip
           if-no-files-found: error
