@@ -336,11 +336,49 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
      `IStorageProvider.SaveBookmarkAsync`.
   5. **`UpdateChecker` must self-disable on Store builds**, exactly as it does
      for MSIX — the Store forbids self-updating.
-  6. **Certificates are automatable this time.** MAS needs
-     `MAC_APP_DISTRIBUTION` ("3rd Party Mac Developer Application") and
-     `MAC_INSTALLER_DISTRIBUTION` plus a `MAC_APP_STORE` provisioning profile.
-     Unlike Developer ID these are ordinary ASC API types, so the existing
-     `ASC_KEY_P8` automation mints them with no portal step.
+  6. **Certificates were automatable this time — DONE 2026-08-28.** Unlike
+     Developer ID, `MAC_INSTALLER_DISTRIBUTION` and `MAC_APP_STORE` are ordinary
+     ASC API types, so no portal step and no Account Holder role was needed:
+
+     | | |
+     |---|---|
+     | `com.megapdf.mac` | bundle id (ASC `RHC532R4ZY`) — `ca.electricrv.megapdf` was taken by the iOS diagnostic build |
+     | 3rd Party Mac Developer Installer | minted (`9DXF43885M`), expires **2027-08-28** |
+     | MegaPDF Mac App Store | `MAC_APP_STORE` profile, ACTIVE, expires 2027-08-08 |
+
+     **App signing reuses the existing "Apple Distribution" certificate.** That
+     is the modern unified type — it signs iOS and Mac App Store apps alike —
+     so only the installer certificate had to be created; signing a `.pkg` has
+     no unified equivalent.
+
+     **But it needed a different PKCS#12 container.** `IOS_DIST_P12_B64` carries
+     an OpenSSL 3 SHA-256 MAC, and macOS `security import` rejects that outright
+     with "MAC verification failed" — the SlyLED lesson in
+     `docs/mobile-app-blueprint.md`, met for real. `MAS_APP_P12_B64` is the same
+     key and certificate repackaged with a SHA-1 MAC and 3DES. One identity, two
+     containers, because the platforms disagree about what a PKCS#12 may hold.
+
+  7. **The pipeline is built and verified** (`macos-appstore.yml`, run
+     33139595626): sandboxed Apple-Distribution-signed `.app` with an embedded
+     provisioning profile → 44 MB `.pkg` signed by the installer certificate.
+     Uploading is opt-in twice (dispatch, then a boolean), and the workflow also
+     runs on pull requests touching the signing chain with the upload off —
+     real certificates and `productbuild` cannot be exercised any other way, and
+     submission time is the worst moment to discover they are wrong.
+
+     The Store build's checks run **inside the app's sandbox container**. The
+     first attempt ran them against `$RUNNER_TEMP` and failed with
+     `UnauthorizedAccessException` on every fixture, which was the sandbox
+     working. Running them unsandboxed instead would have been a vacuous green —
+     proof that the code works in a configuration we do not ship.
+
+  8. **The one thing still needing a human: the App Store Connect app record**
+     for `com.megapdf.mac`. Apple's API cannot create app records; that is
+     console-only, as `megapdf-store-submission-api` already notes. The
+     alternative is *universal purchase* — reusing the iOS app's bundle id so one
+     record covers both platforms — which was deliberately not chosen: the iOS
+     app has an open guideline 2.1 rejection, and entangling the Mac app in that
+     same record would couple two reviews that are better kept independent.
 
   **The Developer ID Application certificate created on 2026-08-27 is not used
   by this route.** It cost one of the account's five slots and is valid to
