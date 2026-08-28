@@ -47,13 +47,17 @@ jobs:
           ls -l "$RUNNER_TEMP/MegaPDF.provisionprofile"
 
       # Apple Distribution signs the app; the sandbox entitlements are what make
-      # it a Store build. IOS_DIST_P12 deliberately: "Apple Distribution" is the
-      # modern unified certificate that signs both iOS and Mac App Store apps, so
-      # there is one certificate here, not two that could drift.
+      # it a Store build. It is the SAME certificate the iOS pipeline uses — the
+      # modern unified type signs both — but a separate secret, because the two
+      # platforms need different PKCS#12 containers: IOS_DIST_P12 carries an
+      # OpenSSL 3 SHA-256 MAC, which macOS `security import` rejects outright
+      # ("MAC verification failed"). MAS_APP_P12 is the same key and certificate
+      # repackaged with a SHA-1 MAC and 3DES, which is what macOS accepts. Same
+      # identity, different wrapper — the blueprint's SlyLED lesson, hit for real.
       - name: Build the sandboxed, Store-signed app
         env:
-          MACOS_SIGN_P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
-          MACOS_SIGN_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          MACOS_SIGN_P12_B64: ${{ secrets.MAS_APP_P12_B64 }}
+          MACOS_SIGN_P12_PASSWORD: ${{ secrets.MAS_APP_P12_PASSWORD }}
           MACOS_SIGN_IDENTITY: ${{ secrets.MAS_APP_IDENTITY }}
           MACOS_INSTALLER_P12_B64: ${{ secrets.MAS_INSTALLER_P12_B64 }}
           MACOS_INSTALLER_P12_PASSWORD: ${{ secrets.MAS_INSTALLER_P12_PASSWORD }}

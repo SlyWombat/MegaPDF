@@ -11,7 +11,6 @@ using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine;
-using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.Views;
