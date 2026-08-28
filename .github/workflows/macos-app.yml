@@ -32,6 +32,22 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      # A shell script committed without its executable bit fails with "Permission
+      # denied" only on the runner that uses it — which for the release scripts
+      # means at the worst possible moment. This has now bitten twice; it is
+      # cheaper to check than to remember.
+      - name: Scripts are executable
+        shell: bash
+        run: |
+          bad=$(git ls-files -s tools/*.sh | grep -v '^100755' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::these scripts are committed without the executable bit:"
+            echo "$bad"
+            echo "fix with: git update-index --chmod=+x <path>"
+            exit 1
+          fi
+          echo "all tools/*.sh are executable"
+
       - name: Build
         run: dotnet build src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release
       - name: Core tests still green on Windows
