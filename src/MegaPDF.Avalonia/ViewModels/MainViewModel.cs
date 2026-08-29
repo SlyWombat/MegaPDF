@@ -84,16 +84,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
+    [NotifyPropertyChangedFor(nameof(CanShrink))]
     private bool _isDirty;
 
     /// <summary>The welcome panel shows until there is something to look at.</summary>
     public bool ShowEmptyState => !IsDocumentOpen;
 
+    // Every command whose CanExecute reads IsDocumentOpen must be listed here. The
+    // generator notifies only what it is told to, and a command left off the list
+    // never raises CanExecuteChanged — so its button evaluates IsEnabled once, at
+    // startup, and stays grey for the life of the window (#58). Add a command that
+    // guards on this property, add it here too.
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ZoomInCommand))]
     [NotifyCanExecuteChangedFor(nameof(ZoomOutCommand))]
     [NotifyCanExecuteChangedFor(nameof(ZoomResetCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PrintCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAddTextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
+    [NotifyCanExecuteChangedFor(nameof(FitWidthCommand))]
+    [NotifyCanExecuteChangedFor(nameof(FitPageCommand))]
+    [NotifyPropertyChangedFor(nameof(CanShrink))]
     private bool _isDocumentOpen;
 
     /// <summary>
@@ -412,18 +424,29 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// on a fresh copy from disk so the open document is never degraded, which is
     /// also why it insists on a saved file first.
     /// </summary>
-    public ImageShrinker.Result? ShrinkForEmail(Stream destination)
+    /// <summary>
+    /// Prepares a smaller copy, without touching any destination.
+    ///
+    /// Returns bytes only when something was actually re-encoded, and the caller
+    /// must not open a destination before it has that answer. Opening one is
+    /// destructive on its own — Avalonia's writable stream truncates — so deciding
+    /// afterwards meant a document with nothing to shrink left a 0-byte file
+    /// behind, or destroyed whichever file the user chose to overwrite, while the
+    /// status line said nothing had happened (#59).
+    /// </summary>
+    public (ImageShrinker.Result Result, byte[]? Bytes) PrepareShrunkCopy()
     {
         if (DocumentPath is null)
-            return null;
+            return (new ImageShrinker.Result(0), null);
 
         using var copy = _engine.Open(DocumentPath);
         var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
         if (result.ImagesReplaced == 0)
-            return result;
+            return (result, null);
 
-        VerifiedSave.ToStream(_engine, copy, destination);
-        return result;
+        using var buffer = new MemoryStream();
+        VerifiedSave.ToStream(_engine, copy, buffer);
+        return (result, buffer.ToArray());
     }
 
     public bool CanShrink => IsDocumentOpen && !IsDirty;
@@ -725,6 +748,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             };
             return;
         }
+
+        // Journalled here rather than via Apply, which EditLine does not route
+        // through because it needs its own try/catch — but the recovery journal
+        // must not have a hole where F1 should be (#61). Inside the success path,
+        // so a refused edit records nothing, which is right: nothing happened.
+        _journal.Record(operation.ToJournalEntry(inverse: false));
 
         var note = operation.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont
             ? "Text edited — the original font could not write that, so a close match was used."
@@ -1087,10 +1116,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
-        // Flattening is irreversible, so it must not touch the document the user
-        // still has open — only the bytes on their way out.
         if (FlattenOnSave)
-            _document.FlattenAllPages();
+            FlattenOpenDocument();
 
         // Verified rather than merely staged (#56): the bytes are reopened with the
         // engine before the user's file is touched, so a save that produced an
@@ -1114,7 +1141,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         if (FlattenOnSave)
-            _document.FlattenAllPages();
+            FlattenOpenDocument();
 
         VerifiedSave.ToPath(_engine, _document, path);
         _journal.MarkSaved(path);
@@ -1122,6 +1149,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DocumentName = Path.GetFileName(path);
         IsDirty = false;
         Status = $"Saved {DocumentName}.";
+    }
+
+    /// <summary>
+    /// Bakes annotations into page content (SDD §3.3), and cleans up after itself.
+    ///
+    /// This mutates the document that is still open. FPDFPage_Flatten rewrites
+    /// content streams in place, and there is no way to flatten "only the bytes on
+    /// their way out" while sharing one document handle — an earlier comment here
+    /// claimed exactly that, and the gap between the claim and the code was the bug
+    /// (#60). Every stamp id on the undo stack pointed at an annotation that no
+    /// longer existed, so the next Undo threw KeyNotFoundException, and the page on
+    /// screen kept showing stamps the document no longer had.
+    ///
+    /// So the undo history is dropped — it genuinely cannot be replayed against a
+    /// flattened document — the selection is cleared for the same reason, and every
+    /// realised page is re-rastered. The WinUI app's OnDocumentFlattenedAsync does
+    /// the same thing for the same reason.
+    /// </summary>
+    private void FlattenOpenDocument()
+    {
+        if (_document is null)
+            return;
+
+        _document.FlattenAllPages();
+
+        _undoStack.Clear();
+        Selection = null;
+        RaiseUndoRedo();
+
+        foreach (var page in Pages)
+            if (page.IsRealised)
+                page.Rerender(DpiScale);
     }
 
     private bool CanSave() => IsDocumentOpen && IsDirty;
