@@ -19,6 +19,9 @@ public static class ImageShrinker
     /// <summary>JPEG quality for the re-encode — visually fine for scans, much smaller.</summary>
     public const double JpegQuality = 0.75;
 
+    /// <summary>Smallest edge worth re-encoding, and the floor the target clamps to.</summary>
+    public const int MinTargetPixels = 8;
+
     /// <summary>Encodes BGRA pixels as JPEG at the given quality (0..1).</summary>
     public delegate byte[] JpegEncoder(byte[] bgra, int width, int height, double quality);
 
@@ -47,8 +50,16 @@ public static class ImageShrinker
             if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
                 continue;
 
-            targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
-            targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
+            // Nothing this small is worth re-encoding, and clamping it would throw:
+            // Math.Clamp requires min <= max, so Clamp(n, 8, 4) is an
+            // ArgumentException that escapes the loop and abandons every remaining
+            // image in the document (#64). A 4x4 divider carrying a fat ICC profile
+            // is enough to reach here.
+            if (image.PixelWidth < MinTargetPixels || image.PixelHeight < MinTargetPixels)
+                continue;
+
+            targetWidth = Math.Clamp(targetWidth, MinTargetPixels, image.PixelWidth);
+            targetHeight = Math.Clamp(targetHeight, MinTargetPixels, image.PixelHeight);
 
             var pixels = document.RenderImageAt(image, targetWidth, targetHeight);
             var jpeg = encodeJpeg(pixels.Bgra, pixels.PixelWidth, pixels.PixelHeight, JpegQuality);

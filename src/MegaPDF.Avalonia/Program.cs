@@ -549,6 +549,54 @@ internal static class Program
         {
         }
 
+        // --- Toolbar wiring (#58) ---
+        //
+        // This exists because the rest of the self-test could not have caught #58.
+        // Every other check drives the view model directly, so it proves the logic
+        // and never touches the command -> CanExecute -> IsEnabled chain that a
+        // button actually binds to. Five features worked perfectly and could not be
+        // clicked.
+        //
+        // A missing [NotifyCanExecuteChangedFor] does not change what CanExecute
+        // RETURNS — it stops CanExecuteChanged from ever being raised, so the button
+        // never re-queries. Only observing the event catches it.
+        Console.WriteLine("toolbar wiring:");
+        try
+        {
+            using var vm = new MainViewModel(state);
+
+            var watched = new (string Name, System.Windows.Input.ICommand Command)[]
+            {
+                ("Save", vm.SaveCommand), ("Print", vm.PrintCommand),
+                ("Add text", vm.ToggleAddTextCommand), ("Cover", vm.ToggleWhiteoutCommand),
+                ("Zoom in", vm.ZoomInCommand), ("Zoom out", vm.ZoomOutCommand),
+                ("Actual size", vm.ZoomResetCommand),
+                ("Fit width", vm.FitWidthCommand), ("Fit page", vm.FitPageCommand),
+            };
+
+            var notified = new HashSet<string>();
+            foreach (var (name, command) in watched)
+                command.CanExecuteChanged += (_, _) => notified.Add(name);
+
+            var shrinkNotified = false;
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.CanShrink))
+                    shrinkNotified = true;
+            };
+
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            foreach (var (name, _) in watched)
+                Check($"opening a document re-enables \"{name}\"", notified.Contains(name));
+            Check("and re-evaluates whether Shrink is available", shrinkNotified);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::toolbar wiring: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

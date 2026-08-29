@@ -20,7 +20,11 @@ APP="${1:?usage: notarize-macos-app.sh <path-to-MegaPDF.app>}"
 : "${ASC_ISSUER_ID:?ASC_ISSUER_ID is required}"
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+# Preserve the real status: on macOS runners /bin/bash is 3.2, where the status
+# after an EXIT trap can become the trap's own last command — so a successful
+# `rm` turns a failed notarization into a green step, and an unstapled bundle
+# ships to a tester whose Mac then refuses to open it (#62).
+trap 'code=$?; rm -rf "$TMP"; exit $code' EXIT
 
 # The secret may hold the .p8 verbatim or base64-encoded; accept either rather
 # than depending on how it happened to be set.

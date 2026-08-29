@@ -193,9 +193,12 @@ public partial class MainWindow
             body.Width / scale, body.Height / scale);
 
         // A click that never moved is a selection, not a drag — committing it would
-        // put a no-op on the undo stack.
+        // put a no-op on the undo stack. All FOUR bounds, including Height: dragging
+        // a bottom corner straight down changes height and nothing else, so a guard
+        // without it silently discarded the commonest resize gesture (#63).
         if (Math.Abs(moved.X - sel.Bounds.X) < 0.5 && Math.Abs(moved.Y - sel.Bounds.Y) < 0.5
-            && Math.Abs(moved.Width - sel.Bounds.Width) < 0.5)
+            && Math.Abs(moved.Width - sel.Bounds.Width) < 0.5
+            && Math.Abs(moved.Height - sel.Bounds.Height) < 0.5)
             return;
 
         vm.CommitSelectionBounds(moved);
