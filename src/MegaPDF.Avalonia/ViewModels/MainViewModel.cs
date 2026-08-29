@@ -445,7 +445,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return (result, null);
 
         using var buffer = new MemoryStream();
-        StagedStreamWriter.Write(buffer, stream => copy.Save(stream));
+        VerifiedSave.ToStream(_engine, copy, buffer);
         return (result, buffer.ToArray());
     }
 
@@ -1119,7 +1119,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (FlattenOnSave)
             FlattenOpenDocument();
 
-        StagedStreamWriter.Write(destination, stream => _document.Save(stream));
+        // Verified rather than merely staged (#56): the bytes are reopened with the
+        // engine before the user's file is touched, so a save that produced an
+        // unreadable document leaves the original alone.
+        VerifiedSave.ToStream(_engine, _document, destination);
         if (DocumentPath is { } saved)
             _journal.MarkSaved(saved);
         IsDirty = false;
@@ -1140,7 +1143,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (FlattenOnSave)
             FlattenOpenDocument();
 
-        AtomicFileWriter.Write(path, stream => _document.Save(stream));
+        VerifiedSave.ToPath(_engine, _document, path);
         _journal.MarkSaved(path);
         DocumentPath = path;
         DocumentName = Path.GetFileName(path);

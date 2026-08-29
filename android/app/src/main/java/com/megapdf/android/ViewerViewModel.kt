@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -916,7 +915,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             val temp = File(app.cacheDir, "save-${System.currentTimeMillis()}.pdf")
             try {
                 withContext(Dispatchers.IO) { temp.parentFile?.mkdirs() }
-                java.io.FileOutputStream(temp).use { doc.save(it) }
+                // Opening and closing the stream is disk I/O and belongs off the
+                // main thread like its neighbours (#55) — doc.save suspends onto
+                // the engine thread, but the open, and the flush at close, did not.
+                withContext(Dispatchers.IO) {
+                    java.io.FileOutputStream(temp).use { doc.save(it) }
+                }
 
                 val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
                 check(bytes.isNotEmpty()) { "engine produced an empty document" }
@@ -1013,12 +1017,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
-        // viewModelScope is already cancelled here; close synchronously on the
-        // engine thread to not leak the native document.
+        // viewModelScope is already cancelled here, so the close cannot ride on it
+        // without being cancelled — but it must NOT block the main thread either
+        // (#53). runBlocking did, and because the engine dispatcher is a single
+        // thread and renderJob.cancel() cannot interrupt a native render already
+        // running, the wait was as long as that render took.
+        //
+        // PdfEngine.teardownScope outlives every ViewModel, so the document is
+        // still closed exactly once and nothing is leaked.
         renderJob?.cancel()
         val doc = document
         document = null
-        if (doc != null) runBlocking { doc.close() }
+        if (doc != null) {
+            PdfEngine.closeDetached(doc)
+        }
     }
 
     private companion object {
