@@ -930,7 +930,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         {
             var flattened = await FlattenIfConfiguredAsync(document);
             // Atomic save protocol (SDD §3.4): temp file in place, flush, swap.
-            await Task.Run(() => AtomicFileWriter.Write(path, stream => document.Save(stream)));
+            await Task.Run(() => VerifiedSave.ToPath(Engine, document, path));
             HasUnsavedChanges = false;
             _journal.MarkSaved(path);
             if (flattened)
@@ -984,7 +984,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         try
         {
             var flattened = await FlattenIfConfiguredAsync(document);
-            await Task.Run(() => AtomicFileWriter.Write(file.Path, stream => document.Save(stream)));
+            await Task.Run(() => VerifiedSave.ToPath(Engine, document, file.Path));
             // The newly saved file becomes the active document (SDD §3.4).
             DocumentPath = file.Path;
             HasUnsavedChanges = false;
@@ -1067,7 +1067,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             if (file is null)
                 return;
 
-            await Task.Run(() => AtomicFileWriter.Write(file.Path, stream => copy.Save(stream)));
+            await Task.Run(() => VerifiedSave.ToPath(Engine, copy, file.Path));
 
             var newBytes = new FileInfo(file.Path).Length;
             await ShowErrorAsync("Smaller copy saved",

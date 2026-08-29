@@ -2,7 +2,10 @@ package com.megapdf.engine
 
 import android.graphics.Bitmap
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
 import java.io.OutputStream
@@ -17,8 +20,7 @@ import java.util.concurrent.Executors
  * is `suspend` throughout and callers may use any dispatcher.
  */
 class PdfEngine {
-    internal val dispatcher: CoroutineDispatcher =
-        Executors.newSingleThreadExecutor { r -> Thread(r, "pdfium") }.asCoroutineDispatcher()
+    internal val dispatcher: CoroutineDispatcher get() = pdfiumDispatcher
 
     init {
         ensureInitialized()
@@ -41,8 +43,42 @@ class PdfEngine {
             PdfDocument(this@PdfEngine, handle)
         }
 
-    private companion object {
+    companion object {
         private var initialized = false
+
+        /**
+         * The one thread every native call runs on, for the whole process (#54).
+         *
+         * Deliberately shared rather than one per engine. PDFium is initialised
+         * once per process — `nativeInit` below is static and guarded — so a
+         * per-engine thread bought no isolation, and nothing ever shut those
+         * executors down: every PdfEngine left a live non-daemon thread behind.
+         *
+         * A daemon thread, so it can never hold the process open by itself.
+         */
+        internal val pdfiumDispatcher: CoroutineDispatcher =
+            Executors.newSingleThreadExecutor { r ->
+                Thread(r, "pdfium").apply { isDaemon = true }
+            }.asCoroutineDispatcher()
+
+        /**
+         * Scope for teardown that must finish even though the caller is gone.
+         * Process-lifetime by design: the work it runs is short, native, and
+         * releasing memory that would otherwise leak.
+         */
+        private val teardownScope = CoroutineScope(pdfiumDispatcher + SupervisorJob())
+
+        /**
+         * Closes a document without waiting for it (#53).
+         *
+         * For callers whose own scope has already been cancelled — a ViewModel in
+         * `onCleared`, say — where riding on that scope would skip the close and
+         * leak the native document, but blocking to wait for it would stall the
+         * caller's thread behind whatever the single engine thread is doing.
+         */
+        fun closeDetached(document: PdfDocument) {
+            teardownScope.launch { document.close() }
+        }
 
         @Synchronized
         fun ensureInitialized() {
