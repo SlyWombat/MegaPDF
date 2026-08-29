@@ -61,7 +61,9 @@ if printf '%s' "$ASC_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
 else
     printf '%s' "$ASC_KEY_P8" | base64 -d > "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
 fi
-trap 'rm -f "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"' EXIT
+# Same reason as build-macos-app.sh: a successful cleanup must not mask a
+# failed productbuild or upload (#62).
+trap 'code=$?; rm -f "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"; exit $code' EXIT
 
 echo "validating with App Store Connect..."
 xcrun altool --validate-app -f "$OUT" -t macos \

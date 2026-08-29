@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
@@ -633,15 +634,45 @@ public partial class MainWindow : Window
 
     // --- Find (SDD §3.6) ---
 
+    /// <summary>
+    /// Debounce for search-as-you-type (#66). Search walks every page and opens a
+    /// pdfium handle per page, on the UI thread — so without this, an eight-letter
+    /// word typed into a 200-page document is 1,600 sequential page opens and the
+    /// UI cannot repaint between them. The WinUI app has used 250ms for the same
+    /// reason since F6 landed.
+    /// </summary>
+    private DispatcherTimer? _findDebounce;
+
     private void WireFind()
     {
-        FindBox.TextChanged += (_, _) => ViewModel?.Search(FindBox.Text ?? "");
+        _findDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _findDebounce.Tick += (_, _) =>
+        {
+            _findDebounce!.Stop();
+            ViewModel?.Search(FindBox.Text ?? "");
+        };
+
+        FindBox.TextChanged += (_, _) =>
+        {
+            // Restarted on each keystroke, so the search runs once the typing
+            // pauses rather than once per character.
+            _findDebounce!.Stop();
+            _findDebounce.Start();
+        };
 
         // Enter advances, Shift+Enter goes back — the convention every find bar uses.
         FindBox.KeyDown += (_, e) =>
         {
             if (e.Key != Key.Enter)
                 return;
+
+            // Enter means "now" — run any pending search before advancing, or the
+            // first Enter after typing would cycle stale matches.
+            if (_findDebounce is { IsEnabled: true })
+            {
+                _findDebounce.Stop();
+                ViewModel?.Search(FindBox.Text ?? "");
+            }
             if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
                 ViewModel?.FindPreviousCommand.Execute(null);
             else
@@ -663,6 +694,7 @@ public partial class MainWindow : Window
 
     private void CloseFind()
     {
+        _findDebounce?.Stop();
         ViewModel?.CloseFind();
         FindBox.Text = "";
     }
@@ -942,16 +974,27 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Which document the retry state below belongs to.</summary>
+    private string? _passwordAskedFor;
     private bool _passwordRetry;
 
     private async Task<string?> AskForPasswordAsync(string fileName)
     {
+        // Scoped to the file, not to the window. The flag used to persist for the
+        // window's lifetime, so after unlocking one document the FIRST prompt for
+        // the next one claimed a password had failed that was never entered (#65).
+        if (_passwordAskedFor != fileName)
+        {
+            _passwordAskedFor = fileName;
+            _passwordRetry = false;
+        }
+
         var dialog = new PasswordWindow();
         dialog.SetPrompt(fileName, _passwordRetry);
         await dialog.ShowDialog(this);
 
-        // Remember that we have asked once, so a second prompt says why it is back
-        // rather than looking like the first one failed to register.
+        // Remember that we have asked once, so a second prompt for THIS file says
+        // why it is back rather than looking like the first failed to register.
         _passwordRetry = dialog.Password is not null;
         return dialog.Password;
     }
@@ -972,28 +1015,37 @@ public partial class MainWindow : Window
             return;
         }
 
-        var baseName = vm.DocumentName is { } n ? Path.GetFileNameWithoutExtension(n) : "document";
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-        {
-            Title = "Save a smaller copy",
-            SuggestedFileName = $"{baseName} - smaller.pdf",
-            DefaultExtension = "pdf",
-            FileTypeChoices = [PdfFileType],
-            ShowOverwritePrompt = true,
-        });
-
-        if (file is null)
-            return;
-
         try
         {
-            ImageShrinker.Result? result;
-            await using (var stream = await file.OpenWriteAsync())
-                result = vm.ShrinkForEmail(stream);
+            // Do the work FIRST, and only ask for a destination if there is
+            // something to put in it. Opening a writable stream truncates whatever
+            // is there, so asking first meant a document with nothing to shrink
+            // left a 0-byte file behind — or destroyed the file the user picked to
+            // overwrite — while reporting that nothing had happened (#59).
+            var (result, bytes) = vm.PrepareShrunkCopy();
+            if (bytes is null)
+            {
+                vm.Status = "The pictures in this document are already small — nothing to shrink.";
+                return;
+            }
 
-            vm.Status = result is null || result.ImagesReplaced == 0
-                ? "The pictures in this document are already small — nothing to shrink."
-                : $"Saved a smaller copy: {result.ImagesReplaced} picture(s) re-encoded.";
+            var baseName = vm.DocumentName is { } n ? Path.GetFileNameWithoutExtension(n) : "document";
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save a smaller copy",
+                SuggestedFileName = $"{baseName} - smaller.pdf",
+                DefaultExtension = "pdf",
+                FileTypeChoices = [PdfFileType],
+                ShowOverwritePrompt = true,
+            });
+
+            if (file is null)
+                return;
+
+            await using (var stream = await file.OpenWriteAsync())
+                await stream.WriteAsync(bytes);
+
+            vm.Status = $"Saved a smaller copy: {result.ImagesReplaced} picture(s) re-encoded.";
         }
         catch (Exception ex)
         {
