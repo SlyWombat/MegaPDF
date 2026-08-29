@@ -10,6 +10,7 @@ namespace MegaPDF.Core.Tests;
 /// Atomicity and validity are different guarantees, and only one of them was
 /// covered before.
 /// </summary>
+[Collection("temp-staging")]
 public class VerifiedSaveTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("megapdf-verified-").FullName;

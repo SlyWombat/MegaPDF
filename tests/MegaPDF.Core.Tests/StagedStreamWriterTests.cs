@@ -10,6 +10,16 @@ namespace MegaPDF.Core.Tests;
 /// stream the host already holds, and it must not leave the tail of a longer
 /// previous document behind.
 /// </summary>
+/// <summary>
+/// Both classes create and delete temp files matching a shared glob, and
+/// VerifiedSave calls StagedStreamWriter internally — so run in parallel they
+/// race on each other's counts. This is what an xUnit collection is for: it
+/// serialises them without weakening either assertion.
+/// </summary>
+[CollectionDefinition("temp-staging")]
+public sealed class TempStagingCollection;
+
+[Collection("temp-staging")]
 public class StagedStreamWriterTests : IDisposable
 {
     private readonly string _dir = Directory.CreateTempSubdirectory("megapdf-tests-").FullName;
