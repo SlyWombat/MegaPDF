@@ -7,6 +7,10 @@ Writes:
                 square at (72,600)-(84,612): a drawn-checkbox candidate.
   forms.pdf   - 1 page with one AcroForm checkbox widget "agree",
                 rect (100,600)-(115,615), initially /Off.
+  formtext.pdf- 1 page with one AcroForm TEXT field "fullname",
+                rect (100,600)-(300,620), initially empty. Separate from
+                forms.pdf so that shared fixture (and its committed copy under
+                android/) does not drift for a desktop-only test.
   stamped.pdf - 1 page with two MegaPDF-style stamp annots (the SDD 6.2
                 MegaPDF_Id contract): "sig:interop-1" at (100,500)-(190,560)
                 and "mark:interop-2" at (72,600)-(84,612), each with an /AP
@@ -97,6 +101,42 @@ def gen_forms():
     assert pages == pages_num
     add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R] >> >>"
         % (pages, widget))
+    return build(objs)
+
+
+def gen_formtext():
+    """One AcroForm TEXT field, which forms.pdf deliberately does not have.
+
+    A separate fixture rather than an extra widget on forms.pdf: that file is a
+    SDD 6.2 shared fixture with a committed copy under android/, so changing it
+    risks silently diverging from Android's asserts for the sake of a
+    desktop-only test.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    content = add(stream(
+        b"", b"BT /F1 14 Tf 72 720 Td (Write your name in the box.) Tj ET\n"))
+    ap = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 200 20]",
+        b"0.13 0.13 0.13 RG 1 w 0.5 0.5 199 19 re S\n"))
+    pages_num = len(objs) + 3
+    widget = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R "
+               b"/Annots [%d 0 R] >>"
+               % (pages_num, font, content, widget))
+    w = add(b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /V () "
+            b"/DA (/Helv 12 Tf 0 g) /Rect [100 600 300 620] /F 4 /P %d 0 R "
+            b"/AP << /N %d 0 R >> >>"
+            % (page, ap))
+    assert w == widget
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R] "
+        b"/DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv %d 0 R >> >> >> >>"
+        % (pages, widget, font))
     return build(objs)
 
 
@@ -317,6 +357,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
                        ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
+                       ("formtext.pdf", gen_formtext()),
                               ("cropped.pdf", gen_cropped()),
                        ("textbox.pdf", gen_textbox())):
         path = os.path.join(outdir, name)

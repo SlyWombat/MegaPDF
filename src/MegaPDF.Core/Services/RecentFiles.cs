@@ -3,7 +3,17 @@ using System.Text.Json;
 namespace MegaPDF.Core.Services;
 
 /// <summary>A recent document plus its last view state (SDD §3.4: restore scroll position).</summary>
-public sealed record RecentEntry(string Path, double ScrollOffset = 0, int ZoomPercent = 100);
+/// <param name="Bookmark">
+/// Opaque, platform-supplied handle for re-opening this file on a platform where a
+/// stored path is not sufficient. On macOS under the App Sandbox an absolute path
+/// from a previous launch cannot be opened at all — the grant is to the file the
+/// user picked, in that session — so the host stores a security-scoped bookmark here
+/// (Avalonia's IStorageProvider.SaveBookmarkAsync) and re-opens through it.
+///
+/// Null on Windows, which never sets it and never reads it: a path is enough there,
+/// and this round-trips through the JSON untouched.
+/// </param>
+public sealed record RecentEntry(string Path, double ScrollOffset = 0, int ZoomPercent = 100, string? Bookmark = null);
 
 /// <summary>
 /// Most-recently-used document list (SDD §2.2 empty state). Stored per-user as JSON;
@@ -28,13 +38,27 @@ public sealed class RecentFiles
 
     public IReadOnlyList<string> All => _entries.Select(e => e.Path).ToList();
 
-    public void Add(string documentPath)
+    /// <summary>Full entries, newest first — what a recents list needs to reopen them.</summary>
+    public IReadOnlyList<RecentEntry> Entries => _entries;
+
+    public void Add(string documentPath) => Add(documentPath, bookmark: null);
+
+    /// <param name="bookmark">
+    /// Platform handle for re-opening the file where a path alone will not do — a
+    /// macOS security-scoped bookmark under the App Sandbox. Null on Windows, and a
+    /// null here never clears a bookmark already recorded for the same file.
+    /// </param>
+    public void Add(string documentPath, string? bookmark)
     {
         var full = Path.GetFullPath(documentPath);
         var existing = FindEntry(full);
         _entries.RemoveAll(e => string.Equals(e.Path, full, StringComparison.OrdinalIgnoreCase));
-        // Re-opening keeps the remembered view state.
-        _entries.Insert(0, existing ?? new RecentEntry(full));
+        // Re-opening keeps the remembered view state, and its bookmark if this call
+        // did not bring a fresher one.
+        var entry = existing ?? new RecentEntry(full);
+        if (bookmark is not null)
+            entry = entry with { Bookmark = bookmark };
+        _entries.Insert(0, entry);
         if (_entries.Count > Capacity)
             _entries.RemoveRange(Capacity, _entries.Count - Capacity);
         Save();

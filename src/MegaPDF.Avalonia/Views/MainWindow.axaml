@@ -1,0 +1,299 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MegaPDF.Avalonia.ViewModels"
+        x:Class="MegaPDF.Avalonia.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding WindowTitle}"
+        Width="1000" Height="800"
+        MinWidth="480" MinHeight="360">
+
+  <DockPanel>
+
+    <!-- Toolbar. Text labels, no icons yet: the WinUI app draws these with FontIcon
+         over Segoe MDL2 glyphs, a font that does not exist on macOS. New icon
+         sources are a tracked ADR-002 §7 work item; shipping empty boxes in the
+         meantime would be worse than words.
+
+         No HotKey= either: the shortcut modifier differs per platform (Cmd on
+         macOS, Ctrl elsewhere), so the gestures and these tooltips are both built
+         in code-behind. A Mac app with Ctrl+O is a Windows app with round corners. -->
+    <Border DockPanel.Dock="Top" Padding="8,6" BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Button Name="OpenButton" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconOpen}" Width="18" Height="18" />
+            <TextBlock Text="Open" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="SaveButton" Command="{Binding SaveCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconSave}" Width="18" Height="18" />
+            <TextBlock Text="Save" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="SaveAsButton" IsEnabled="{Binding IsDocumentOpen}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconSaveAs}" Width="18" Height="18" />
+            <TextBlock Text="Save As" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="PrintButton" Command="{Binding PrintCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconPrint}" Width="18" Height="18" />
+            <TextBlock Text="Print" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="ShrinkButton" IsEnabled="{Binding CanShrink}"
+                ToolTip.Tip="Save a smaller copy for email" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconShrink}" Width="18" Height="18" />
+            <TextBlock Text="Shrink" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+        <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
+             placement, and the next click on the page puts it there. -->
+        <Button Name="SignButton" IsEnabled="{Binding IsDocumentOpen}">
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconSign}" Width="18" Height="18" />
+            <TextBlock Text="Sign" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel Width="260" Spacing="8">
+                <TextBlock Text="Your signatures" FontWeight="SemiBold" />
+                <TextBlock Text="Nothing saved yet — draw one below."
+                           TextWrapping="Wrap" Opacity="0.7"
+                           IsVisible="{Binding !HasSignatures}" />
+                <ListBox Name="SignatureList" ItemsSource="{Binding Signatures}"
+                         MaxHeight="220" IsVisible="{Binding HasSignatures}">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel Spacing="2" Margin="0,4">
+                        <Image Source="{Binding Thumbnail}" Height="40"
+                               HorizontalAlignment="Left" Stretch="Uniform" />
+                        <TextBlock Text="{Binding Name}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Button Name="DrawSignatureButton" Content="Draw a new signature…"
+                        HorizontalAlignment="Stretch" />
+                <Button Name="ImportSignatureButton" Content="Use a photo of your signature…"
+                        HorizontalAlignment="Stretch" />
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+
+        <ToggleButton Name="AddTextButton"
+                      IsChecked="{Binding IsAddingText, Mode=OneWay}"
+                      Command="{Binding ToggleAddTextCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconText}" Width="18" Height="18" />
+            <TextBlock Text="Add text" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
+        <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFonts}"
+                  SelectedItem="{Binding TextFont}" IsEnabled="{Binding IsDocumentOpen}" />
+        <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
+                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding IsDocumentOpen}" />
+        <ToggleButton Name="WhiteoutButton"
+                      IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
+                      Command="{Binding ToggleWhiteoutCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconCover}" Width="18" Height="18" />
+            <TextBlock Text="Cover" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
+
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        <Button Name="UndoButton" Command="{Binding UndoCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconUndo}" Width="18" Height="18" />
+            <TextBlock Text="Undo" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="RedoButton" Command="{Binding RedoCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconRedo}" Width="18" Height="18" />
+            <TextBlock Text="Redo" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        <Button Name="ZoomOutButton" Command="{Binding ZoomOutCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconZoomOut}" Width="18" Height="18" />
+            <TextBlock Text="Zoom out" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconZoomIn}" Width="18" Height="18" />
+            <TextBlock Text="Zoom in" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="ZoomResetButton" Command="{Binding ZoomResetCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconActualSize}" Width="18" Height="18" />
+            <TextBlock Text="Actual size" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="FitWidthButton" Command="{Binding FitWidthCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconFitWidth}" Width="18" Height="18" />
+            <TextBlock Text="Fit width" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="FitPageButton" Command="{Binding FitPageCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconFitPage}" Width="18" Height="18" />
+            <TextBlock Text="Fit page" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+        <!-- Preferences that change what an edit does, kept out of the main flow
+             because most people never touch them (SDD §4.4). -->
+        <Button Name="SettingsButton">
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconOptions}" Width="18" Height="18" />
+            <TextBlock Text="Options" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel Width="260" Spacing="10">
+                <TextBlock Text="Tick marks look like" FontWeight="SemiBold" />
+                <ComboBox Name="MarkStyleBox" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding MarkStyles}" SelectedItem="{Binding MarkStyle}" />
+                <CheckBox Name="FlattenBox" IsChecked="{Binding FlattenOnSave}"
+                          Content="Flatten when saving" />
+                <TextBlock Text="Flattening bakes ticks and signatures into the page. They cannot be moved or removed afterwards."
+                           TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <!-- What the next click will do, and how to get out of it. -->
+    <Border DockPanel.Dock="Top" Padding="10,6" IsVisible="{Binding IsModeActive}"
+            Background="{DynamicResource SystemAccentColor}">
+      <TextBlock Text="{Binding ModeHint}" Foreground="White" />
+    </Border>
+
+    <!-- Find bar (SDD §3.6). Hidden until asked for, so it costs nothing until it
+         is wanted, and Escape closes it. -->
+    <Border DockPanel.Dock="Top" Padding="8,6" IsVisible="{Binding IsFindOpen}"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBox Name="FindBox" Width="260" Watermark="Find in document" />
+        <Button Name="FindPreviousButton" Content="Previous" Command="{Binding FindPreviousCommand}" />
+        <Button Name="FindNextButton" Content="Next" Command="{Binding FindNextCommand}" />
+        <TextBlock Text="{Binding MatchSummary}" VerticalAlignment="Center" Opacity="0.8" />
+        <Button Name="CloseFindButton" Content="Done" />
+      </StackPanel>
+    </Border>
+
+    <!-- Status bar. One line, plain words: SDD §2.2 wants the app to say what
+         happened without a dialog. -->
+    <Border DockPanel.Dock="Bottom" Padding="10,5" BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding PageIndicator}"
+                   VerticalAlignment="Center" Opacity="0.75" Margin="12,0,0,0" />
+        <TextBlock Text="{Binding Status}" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+    </Border>
+
+    <!-- Empty state (SDD §2.2): an app with nothing open should offer the two
+         things you might want, not an empty grey rectangle. -->
+    <Panel>
+      <ScrollViewer Name="PageScroller"
+                  HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+      <ItemsControl Name="PageList" ItemsSource="{Binding Pages}" Margin="0,16">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <!-- Virtualizing: only realised pages hold a raster, which is what keeps a
+                 200-page document from costing 200 renders on open. -->
+            <VirtualizingStackPanel Orientation="Vertical" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="vm:PageViewModel">
+            <Border Name="PageSurface"
+                    Margin="0,0,0,16"
+                    HorizontalAlignment="Center"
+                    Background="White"
+                    Width="{Binding LayoutWidth}"
+                    Height="{Binding LayoutHeight}"
+                    BoxShadow="0 2 8 0 #22000000">
+              <!-- Stretch=Fill, not Uniform: the bitmap is rasterised at exactly this
+                   size, so any scaling here would mean a stale render is being smeared
+                   to fit rather than re-rendered. -->
+              <Panel>
+                <Image Source="{Binding Image}" Stretch="Fill" IsHitTestVisible="False" />
+
+                <!-- Search hits drawn over the page rather than into it: the raster
+                     never changes, so highlighting and clearing cost no re-render. -->
+                <ItemsControl ItemsSource="{Binding Highlights}" IsHitTestVisible="False">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <Panel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:Highlight">
+                      <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                 Margin="{Binding Margin}"
+                                 Opacity="{Binding Opacity}"
+                                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                                 Fill="#3B82F6" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Panel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+      <Border IsVisible="{Binding ShowEmptyState}"
+              Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Spacing="14" MaxWidth="420">
+          <TextBlock Text="MegaPDF" FontSize="28" FontWeight="SemiBold"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="Fill in a form, tick the boxes, sign it, and save."
+                     Opacity="0.75" HorizontalAlignment="Center" TextWrapping="Wrap" />
+          <Button Name="EmptyOpenButton" Content="Open a PDF…"
+                  HorizontalAlignment="Center" />
+
+          <TextBlock Text="Recent" FontWeight="SemiBold" Margin="0,10,0,0"
+                     IsVisible="{Binding HasRecents}" />
+          <ListBox Name="RecentList" ItemsSource="{Binding Recents}"
+                   IsVisible="{Binding HasRecents}" MaxHeight="200"
+                   Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+      </Border>
+    </Panel>
+
+  </DockPanel>
+</Window>

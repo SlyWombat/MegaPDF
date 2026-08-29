@@ -11,8 +11,14 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
     <PackageReference Include="xunit" Version="2.8.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1" />
-    <!-- JPEG encoding for image-compression tests (Windows-only, tests-only). -->
-    <PackageReference Include="System.Drawing.Common" Version="8.0.8" />
+    <!-- JPEG encoding for the image-compression tests. SkiaSharp, not
+         System.Drawing.Common: that one throws PlatformNotSupportedException off
+         Windows and was the only reason this suite could not run green on macOS
+         (ADR-002 fact 5). Pinned to the version Avalonia resolves, so the app and
+         the tests never disagree about which libSkiaSharp to load. -->
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="2.88.9" />
+    <PackageReference Include="SkiaSharp.NativeAssets.macOS" Version="2.88.9" />
   </ItemGroup>
 
   <ItemGroup>

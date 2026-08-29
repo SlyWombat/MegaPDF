@@ -1,0 +1,464 @@
+# ADR-002: macOS desktop app — UI framework and code sharing
+
+**Status: ACCEPTED — Option B (.NET 8 + Avalonia over `MegaPDF.Core`), 2026-08-27.**
+Spike run: PR #52, workflow run 33079843332.
+**Feature parity with the Windows app reached 2026-08-27** (run 33119805192):
+view, checkboxes, form fields, body-text editing, text boxes, whiteout,
+signatures, find, save/save-as, print, shrink-for-email, recents, passwords,
+undo/redo.
+
+## Decision & spike results
+
+All three spike jobs passed on the first run.
+
+**Job 1 — engine (the load-bearing one): 120 tests passed on macOS, zero
+failures in the gate.** `MegaPDF.Core` built and ran unmodified on a
+`macos-latest` runner against `libpdfium.dylib`, with the fetch script's version
+check confirming the slice matched the Windows pin exactly. §6.2 contracts 1, 2
+and 4 all hold on macOS — `SignatureStampTests`, `DrawnCheckboxTests`,
+`WhiteoutAndTextBoxTests`, `AcroFormTests`, `FontSubstitutionTests`. **Option B's
+premise is confirmed: the engine ports for zero engine-code change.**
+
+**Job 2 — surface: Avalonia renders Core's output identically on both
+platforms.** Page 1 of `stamped.pdf` rendered to `816x1056 px / 3,446,784 BGRA
+bytes / 9 distinct pixel values` on *both* `macos-latest` and `windows-latest`,
+and the composited frame captured on both. The artifact PNGs are visually
+correct — body text, the ✗ mark stamp and the signature stamp all present. They
+are not byte-identical (12,344 vs 11,977 bytes), which is font antialiasing and
+PNG encoding, not geometry. The `Avalonia.Headless` capture — the half expected
+to need iteration — worked first try on both.
+
+**Corrections to the facts below, from the run:**
+
+- Fact 5 overstated the damage: **1** test fails on macOS
+  (`ReplaceImageWithJpeg_ShrinksTheFile_AndStillRenders`), not 3. The other two
+  `ImageCompressionTests` pass. The failure is exactly the predicted
+  `PlatformNotSupportedException: System.Drawing.Common is not supported on
+  non-Windows platforms`.
+- **New finding — bundle signing needs every nested assembly signed
+  individually.** Ad-hoc signing the dylib then the bundle failed with `code
+  object is not signed at all / In subcomponent: Avalonia.Markup.Xaml.dll`, then
+  `code has no resources but signature indicates they must be present`. A .NET
+  app bundle carries dozens of managed DLLs and `codesign` will not accept the
+  bundle until each is signed, inside-out. This is now a concrete, evidenced
+  input to the notarization work item in §7 rather than a guess — and it is
+  ordinary .NET-on-macOS packaging work, not a blocker.
+- The dylib in `Contents/MacOS/` was found by .NET's bare-name probing and the
+  app ran from the bundle, so probing and Apple's layout preference do not
+  conflict for an *unsigned* bundle. Whether library validation forces
+  `Contents/Frameworks/` under a real Developer ID signature is still open.
+
+## Context
+
+Windows has a full-scope desktop app (`src/MegaPDF.App`, WinUI 3). Apple users
+have only the iOS/iPadOS app, which is the reduced fill-check-sign scope and, on
+Apple Silicon, can at best run scaled as a "Designed for iPad" app. Stakeholder
+decision 2026-08-27: **a native Mac desktop app at full Windows feature parity**
+— text editing, whiteout, shrink-for-email, printing, find, recovery journal,
+signature library.
+
+Two constraints frame the choice, both confirmed with the stakeholder:
+
+- **No Mac hardware.** Development runs Mac-less through GitHub Actions macOS
+  runners, exactly as iOS does today (SDD §6.1). This is the tighter of the two.
+  iOS survived it because the app is essentially one scrolling view covered by
+  `ios-screenshots.yml`; a desktop app has menus, multi-window, keyboard
+  navigation, printing and drag-and-drop, and iterating all of that blind
+  through CI round-trips is a materially different proposition.
+- **Full parity, not mobile scope.** This decides *which* codebase gets shared,
+  because `MegaPDF.Core` is the reference implementation that *defines* the
+  §6.2 cross-platform contracts.
+
+**This ADR requires an SDD amendment on acceptance.** §1.4 lists "macOS/Linux
+desktop versions" as an explicit v1 non-goal — true on every option below.
+§6.1's "native per platform, no shared code" does **not** bar Option B: that
+section states it "governs the new platforms only" and that "`src/` remains
+.NET/Windows". Core is already Windows's engine; the no-sharing rule was
+written about the mobile ports. The argument for each option is made on merits
+below, not on doctrine.
+
+## Facts established before writing this (2026-08-27)
+
+1. **The PDFium pin holds on macOS.** bblanchon publishes `pdfium-mac-univ`,
+   `pdfium-mac-arm64` and `pdfium-mac-x64` at the exact pinned build
+   (`chromium/7934`, `libs/pdfium/win-x64/VERSION` → MAJOR=152 BUILD=7934).
+   Verified further: `pdfium-mac-univ` is a genuine 2-slice fat Mach-O
+   (x86_64 + arm64, 14.6 MB), its `VERSION` file is byte-identical to the
+   Windows pin, and its `licenses/` filenames match `win-x64`'s exactly — so
+   `THIRD-PARTY-NOTICES` would not change. The §6.1 "same PDFium major on all
+   platforms" doctrine survives day one, in one download.
+2. **`MegaPDF.Core` is already portable, at the cost of one project-file edit.**
+   Pure `net8.0`, no Windows references (`System.*` + P/Invoke only), and
+   `PdfiumNative.Dll` is the bare name `"pdfium"` — .NET's probing resolves that
+   to `libpdfium.dylib` on macOS with no *code* change. 3,651 LOC, ~85 tests.
+   The one edit: `MegaPDF.Core.csproj` copies `libs/pdfium/win-x64/pdfium.dll`
+   unconditionally, so on macOS it would copy a Windows DLL and no dylib. That
+   item needs an OS condition. Engine code itself is untouched.
+3. **`MainViewModel` is barely coupled to WinUI.** 1,199 LOC with roughly 17
+   framework touch points: `SolidColorBrush` (2), `Visibility` (6),
+   `ContentDialog` (2), `FileSavePicker` (2), `FileOpenPicker`, `BitmapImage`,
+   `WriteableBitmap`, `TextBlock`, `Application.Current`. Every one has a direct
+   Avalonia counterpart. This is the single biggest input to the estimate.
+4. **The App layer's Windows-only pieces are small and known.**
+   `PdfPrinter` (127, `Windows.Graphics.Printing`), `SignatureImageProcessor`
+   (121, `Windows.Graphics.Imaging`), `UpdateChecker` (114, uses
+   `Windows.Management.Deployment` only to self-disable on MSIX builds),
+   `PageCanvas` (21, `ProtectedCursor`), `MainWindow.xaml`/`.xaml.cs` (1,906).
+5. **The test project itself is portable; three of its tests are not.**
+   `MegaPDF.Core.Tests` targets `net8.0`, references Core only, and builds its
+   fixtures in memory (`SamplePdf.cs`) rather than reading committed PDFs — so
+   it needs nothing fetched. But it pulls `System.Drawing.Common` 8.0.8 (its own
+   csproj comment: "Windows-only, tests-only") for JPEG encoding in
+   `ImageCompressionTests`. On .NET 8 that package throws
+   `PlatformNotSupportedException` off Windows. *Measured on the spike run: **1**
+   of the 3 actually fails* — `ReplaceImageWithJpeg_ShrinksTheFile_AndStillRenders`
+   — for reasons unrelated to the engine. It needs a cross-platform encoder
+   (SkiaSharp/ImageSharp) or a macOS skip.
+6. **§6.2 contract 3 has no .NET test.** `SignatureImageProcessor` — the SDD's
+   own named reference for the signature cleanup pixel math — lives in
+   `src/MegaPDF.App`, is Windows-only (`Windows.Graphics.Imaging`), and the App
+   layer has no test project at all. Searching `tests/` for the processor or its
+   luminance threshold returns nothing. Android's
+   `SignatureImageProcessorTest.kt` is the only executable oracle for this
+   contract. It is therefore the contract most exposed to silent drift on a
+   Mac port, and the one the engine spike does **not** cover.
+7. **A portability nit.** Core's stores resolve
+   `Environment.SpecialFolder.LocalApplicationData`, which on macOS is
+   `~/.local/share`, not the conventional `~/Library/Application Support`.
+   Needs a platform branch in `AppSettings`, `RecentFiles`, `SignatureLibrary`
+   and `RecoveryJournal` — four call sites, all already parameterised.
+
+## Criteria the choice must satisfy
+
+1. **§6.2 contracts unchanged.** Stamp identity, drawn-checkbox heuristic,
+   signature cleanup pixel math, text-box identity/font/anchor. A Mac app that
+   re-derives these in a fourth language is a fourth chance to drift.
+2. **Full Windows feature parity**, per the scope decision above.
+3. **Developable without a Mac**, with CI as the only macOS execution
+   environment.
+4. **Native Mac feel** — menu bar, standard shortcuts, system file dialogs,
+   printing, retina rendering. The stakeholder explicitly rejected a scaled
+   iPad app.
+5. **Distributable** — notarized, and ideally Mac App Store capable.
+
+## Option A — Swift + SwiftUI/AppKit
+
+*For:* the most genuinely native result; shares ~825 LOC of iOS engine code
+(`ios/MegaPDF/Engine/PdfEngine*.swift`), already contract-conformant; reuses the
+existing Apple developer account, XcodeGen setup and `fetch-pdfium.sh` pattern.
+
+*Against:* fails criterion 3 hardest — every UI iteration is a CI round-trip
+with no local run. Fails criterion 2 economically: the iOS engine covers
+fill-check-sign only, so whiteout, text editing, shrink-for-email, incremental
+save and the recovery journal must all be re-ported from Core into Swift, and
+criterion 1 says each of those is a fresh opportunity to diverge. Largest total
+build of the four.
+
+## Option B — .NET 8 + Avalonia over `MegaPDF.Core`
+
+*For:* takes criteria 1 and 2 nearly for free — Core ships with the `mac-univ`
+dylib for zero engine-code change (one OS-conditioned copy item, fact 2), so the
+contracts are not re-implemented, they are *the same code*. Uniquely good on
+criterion 3: the entire UI is developed and run **on Windows**, with macOS
+entering only to bundle, sign and notarize — and that half must run on a macOS
+runner, since `codesign` and `notarytool` are macOS-only. `MainViewModel` ports
+with ~17 edits (fact 3). Avalonia renders through Skia identically on both
+platforms, so one UI codebase could eventually replace the WinUI one rather than
+sitting beside it.
+
+*Against:* a fourth UI framework in the stack, and a new one for this team.
+Avalonia's Mac chrome is good but not AppKit — native menu bar and system
+dialogs work, though some Mac idioms need explicit wiring. `MainWindow.xaml` +
+code-behind (~1,900 LOC) is a rewrite, not a port: WinUI and Avalonia XAML are
+different dialects. Printing and image processing need non-Windows replacements
+(see §7). Risk of the Mac app looking like a Windows app with round corners if
+the Mac idioms aren't deliberately designed in.
+
+## Option C — .NET 8 + Uno Platform over `MegaPDF.Core`
+
+*For:* same Core sharing as B, and Uno consumes WinUI XAML directly, so
+`MainWindow.xaml` might port rather than be rewritten.
+
+*Against:* the code-behind is where the Windows coupling actually lives
+(`Windows.Graphics.Printing`, `Windows.Storage.Pickers`,
+`Microsoft.UI.Windowing`, `Windows.Management.Deployment`, four
+`WindowsRuntime` marshalling imports) — so the promised XAML reuse saves the
+cheaper half. Heavier toolchain, and macOS is not its strongest target. The
+XAML-reuse claim should be tested in the spike before it's believed.
+
+## Option D — Mac Catalyst from the iOS app
+
+*For:* nearly free — `pdfium-ios-catalyst-arm64`/`-x64` slices exist at the
+pinned build, and the existing app would run.
+
+*Against:* **dismissed.** It delivers mobile scope (criterion 2 fails outright)
+in the recognisably non-native Catalyst idiom (criterion 4), which is the exact
+outcome the stakeholder rejected when they asked for "a native app, like
+Windows". Worth keeping only as a same-week stopgap if Apple-side demand needs
+answering before a real Mac app can ship.
+
+## Leaning (not a decision)
+
+**Option B.** Criterion 3 is the constraint that actually bites, and B is the
+only option where the daily development loop runs on hardware that exists.
+Criteria 1 and 2 compound the point: the parity scope means the *engine* is the
+majority of the value, and B ships the engine without rewriting it. The
+counterweight — a fourth UI framework, and ~1,900 LOC of XAML to rebuild — is
+real but bounded, and it buys a UI layer that could later serve Windows too.
+
+## 6. Spike before deciding (target: 1–2 days on CI)
+
+Implemented as `.github/workflows/macos-spike.yml` (`workflow_dispatch`, plus
+`pull_request` on the spike paths) with `tools/fetch-pdfium-mac.sh` and
+`spike/macos-shell/`. The jobs are deliberately independent — no `needs:` — so
+the exploratory half can never obscure the load-bearing answer.
+
+1. **Engine spike (the load-bearing one).** Fetch `pdfium-mac-univ` at the
+   pinned build, place `libpdfium.dylib` beside the test assembly, and run **the
+   test project explicitly** — not the solution:
+
+   ```
+   dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj
+   ```
+
+   `dotnet test MegaPDF.sln` is what `ci.yml` runs and it would **fail on macOS
+   for the wrong reason**: the solution includes `MegaPDF.App`, which is
+   `WinExe`/`net8.0-windows10.0.19041.0` and will not restore off Windows.
+   Order matters — build, *then* place the dylib, *then* `dotnet test
+   --no-build`, because bare-name probing resolves relative to the assembly
+   directory. If probing fails anyway, `DYLD_LIBRARY_PATH` is the fallback; it
+   is deliberately not set up front, so it can't mask a real finding.
+
+   That project asserts §6.2 contracts 1, 2 and 4 — `SignatureStampTests`,
+   `DrawnCheckboxTests`, `WhiteoutAndTextBoxTests`, `AcroFormTests`,
+   `FontSubstitutionTests`. **Contract 3 is not covered** (fact 6), and
+   `ImageCompressionTests`' 3 tests are excluded from the gate and run
+   separately as non-gating evidence (fact 5). Everything else green means the
+   engine ports for zero engine-code change, and Options B/C become mostly a UI
+   exercise. Any *other* failure is a fact both this ADR and the §6.1 pinning
+   doctrine must absorb.
+
+   The fetch script verifies the macOS slice's `VERSION` against
+   `libs/pdfium/win-x64/VERSION` and fails the job on mismatch, which makes the
+   §6.1 pinning doctrine machine-enforced rather than a comment.
+
+2. **Shell spike.** A code-only (no XAML) Avalonia app that renders page 1 of
+   `stamped.pdf` through `PdfiumEngine`. Two halves, deliberately split to prove
+   the Option B development loop:
+   - **On Windows:** build and run it, asserting the render through
+     `Avalonia.Headless` — more reliable in CI than launching a GUI app, and it
+     is the loop that would be used daily.
+   - **On macOS:** publish `osx-arm64`, assemble a minimal `.app`, ad-hoc
+     `codesign`, launch headless. Its real question is **where the dylib has to
+     live**: .NET's bare-name probing wants it beside the assembly
+     (`Contents/MacOS/`), while Apple convention and library validation for a
+     notarized app want it in `Contents/Frameworks/` signed with the same
+     identity. The job tries the former and logs what signing makes of it. **No
+     specific outcome is asserted** — expect to iterate; the log is the
+     deliverable, and it feeds the notarization work item in §7.
+
+   The engine assertion runs before the Avalonia one and a surface failure is
+   non-fatal, so a version wobble in Avalonia's headless API cannot cost us the
+   engine answer.
+
+If Option C is to stay live, add a third job attempting `MainWindow.xaml` under
+Uno; if it doesn't build near-unmodified, C's only advantage over B is gone.
+
+**If job 1 fails confusingly:** `pdfium-linux-x64` exists at the same build, so a
+one-off `ubuntu-latest` run of the same suite discriminates "pdfium interop
+problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is a
+§1.4 non-goal and does not belong in the committed workflow.
+
+## 7. Work items this creates regardless of option (not blockers)
+
+- **Signing and notarization is new plumbing.** `docs/mobile-app-blueprint.md`
+  mints `IOS_APP_STORE` profiles via the ASC API. macOS needs a **Developer ID
+  Application** certificate plus `notarytool` stapling for direct download, or
+  a Mac App Store profile for the Store — same Team ID, different certificate
+  type and different pipeline. The iOS automation does not carry over as-is.
+- **Bundle signing — SOLVED, and the answer was structural.** `codesign` treats
+  every loose file in `Contents/MacOS/` as code it must account for. A .NET
+  publish drops `.pdb`, `.runtimeconfig.json` and `.deps.json` there, none of
+  which can carry a signature, and it surfaces as a misleading `code object is
+  not signed at all / In subcomponent: <file>` — naming a new file each time one
+  is removed. Three build attempts chased it that way before the real fix:
+  **`PublishSingleFile=true`**, which embeds the managed assemblies and runtime
+  config into the apphost and leaves only Mach-O binaries beside it. The bundle
+  becomes signable by construction rather than by exclusion list. Two further
+  rules that matter: sign nested `.dylib`s *first*, then sign the `.app` itself
+  and **never** the executable inside it (signing
+  `Contents/MacOS/<exe>` makes `codesign` treat that directory as the bundle
+  root and demand signatures for its siblings). `tools/build-macos-app.sh`
+  encodes all of this; the resulting bundle reports `valid on disk` and
+  `satisfies its Designated Requirement`.
+- **Hardened runtime and library validation — still open.** The above is ad-hoc
+  signing. A *notarized* app loading a vendored `libpdfium.dylib` must have the
+  dylib signed with the same Developer ID, and may need it in
+  `Contents/Frameworks/` or else carry
+  `com.apple.security.cs.disable-library-validation`. The "Dylib Law" landmine
+  in `docs/mobile-app-blueprint.md` applies. Evidence so far: the dylib sits in
+  `Contents/MacOS/` beside the apphost, is found by .NET's bare-name probing,
+  and the bundle verifies — under ad-hoc signing only.
+- **Bundle size: 110 MB unpacked, ~46 MB zipped**, from a self-contained publish
+  (the .NET runtime, Skia, HarfBuzz and PDFium). Acceptable for an internal
+  build, large for a consumer download. `PublishTrimmed` is the obvious lever
+  and the risky one — Avalonia and the MVVM toolkit lean on reflection — so
+  treat it as its own measured change, not a flag to flip.
+- **Distribution shape — DECIDED 2026-08-27: Mac App Store**, matching the
+  phone apps rather than the Windows direct-download path. Consequences, in
+  order of how much they cost:
+
+  1. **The App Sandbox is mandatory — and it is survivable.** Probe run
+     33085979305 (`sandbox-probe` in `macos-app.yml`) built an
+     `app-sandbox`-entitled bundle and Avalonia **stayed alive under it**, so
+     `AvaloniaUI/Avalonia#9764` does not reproduce here. The probe is
+     falsifiable rather than reassuring: it fails outright if `app-sandbox` is
+     missing from the signature, and it confirms restriction is real by
+     requiring a read outside the container to be **denied** — which it was
+     (`UnauthorizedAccessException` on the fixture).
+  2. **The minimal entitlement set is enough.** `app-sandbox`, `allow-jit`,
+     `files.user-selected.read-write`. Notably **not**
+     `allow-unsigned-executable-memory`, which Avalonia's docs list for .NET —
+     .NET 8's W^X on arm64 means it is not needed, and it is the entitlement
+     most likely to draw review friction. Do not add it without a failure that
+     forces it.
+  3. **`AtomicFileWriter` is structurally incompatible with the sandbox.** SDD
+     §3.4 writes `.<name>.<guid>.megapdf-tmp` *in the destination's directory*,
+     then `File.Replace`. The sandbox grants the **file** the user picked, not
+     its folder, so creating that sibling is denied. This must not be "fixed"
+     by changing Windows semantics — the atomic-save contract there is correct.
+     Give it a platform strategy: macOS writes to the container temp and
+     replaces; Windows keeps `File.Replace`.
+  4. **`RecentFiles` needs security-scoped bookmarks.** It stores absolute
+     paths and reopens them; under the sandbox a path from a previous launch is
+     not accessible. Additive fix: a nullable `Bookmark` on `RecentEntry` that
+     Windows never sets and never reads, populated on macOS from Avalonia's
+     `IStorageProvider.SaveBookmarkAsync`.
+  5. **`UpdateChecker` must self-disable on Store builds**, exactly as it does
+     for MSIX — the Store forbids self-updating.
+  6. **Certificates were automatable this time — DONE 2026-08-28.** Unlike
+     Developer ID, `MAC_INSTALLER_DISTRIBUTION` and `MAC_APP_STORE` are ordinary
+     ASC API types, so no portal step and no Account Holder role was needed:
+
+     | | |
+     |---|---|
+     | `com.megapdf.mac` | bundle id (ASC `RHC532R4ZY`) — `ca.electricrv.megapdf` was taken by the iOS diagnostic build |
+     | 3rd Party Mac Developer Installer | minted (`9DXF43885M`), expires **2027-08-28** |
+     | MegaPDF Mac App Store | `MAC_APP_STORE` profile, ACTIVE, expires 2027-08-08 |
+
+     **App signing reuses the existing "Apple Distribution" certificate.** That
+     is the modern unified type — it signs iOS and Mac App Store apps alike —
+     so only the installer certificate had to be created; signing a `.pkg` has
+     no unified equivalent.
+
+     **But it needed a different PKCS#12 container.** `IOS_DIST_P12_B64` carries
+     an OpenSSL 3 SHA-256 MAC, and macOS `security import` rejects that outright
+     with "MAC verification failed" — the SlyLED lesson in
+     `docs/mobile-app-blueprint.md`, met for real. `MAS_APP_P12_B64` is the same
+     key and certificate repackaged with a SHA-1 MAC and 3DES. One identity, two
+     containers, because the platforms disagree about what a PKCS#12 may hold.
+
+  7. **The pipeline is built and verified** (`macos-appstore.yml`, run
+     33139595626): sandboxed Apple-Distribution-signed `.app` with an embedded
+     provisioning profile → 44 MB `.pkg` signed by the installer certificate.
+     Uploading is opt-in twice (dispatch, then a boolean), and the workflow also
+     runs on pull requests touching the signing chain with the upload off —
+     real certificates and `productbuild` cannot be exercised any other way, and
+     submission time is the worst moment to discover they are wrong.
+
+     The Store build's checks run **inside the app's sandbox container**. The
+     first attempt ran them against `$RUNNER_TEMP` and failed with
+     `UnauthorizedAccessException` on every fixture, which was the sandbox
+     working. Running them unsandboxed instead would have been a vacuous green —
+     proof that the code works in a configuration we do not ship.
+
+  8. **The one thing still needing a human: the App Store Connect app record**
+     for `com.megapdf.mac`. Apple's API cannot create app records; that is
+     console-only, as `megapdf-store-submission-api` already notes. The
+     alternative is *universal purchase* — reusing the iOS app's bundle id so one
+     record covers both platforms — which was deliberately not chosen: the iOS
+     app has an open guideline 2.1 rejection, and entangling the Mac app in that
+     same record would couple two reviews that are better kept independent.
+
+  **The Developer ID Application certificate created on 2026-08-27 is not used
+  by this route.** It cost one of the account's five slots and is valid to
+  2031-08-28. Keep it: it is exactly what a direct download alongside the Store
+  build would need, and revoking it does not return the slot.
+
+- **A free win from the sandbox.** `Environment.SpecialFolder.LocalApplicationData`
+  redirects into the app container under the sandbox, which resolves fact 7's
+  `~/Library/Application Support` nit for the Store build without a path branch.
+- **Printing — SOLVED, via PDFKit and NSPrintOperation.** Avalonia has no print
+  API, and the obvious workaround (write a temp PDF, let Preview print it) is
+  unavailable in the build being shipped: a sandboxed app cannot scatter files
+  for another app to read, nor launch one to finish the job. So printing runs
+  in-process through PDFKit's `PDFDocument` and AppKit's `NSPrintOperation`, by
+  Objective-C runtime interop, giving the real system print panel.
+
+  **This does not contradict ADR-001.** That ADR rejected PDFKit as an *engine*
+  because it rewrites annotation appearance streams on save, which would strand
+  stamps placed on other platforms. Printing never saves, and ADR-001 explicitly
+  permits PDFKit for reading. Nothing in `MacPrinter` opens a write path.
+
+  Three things the interop had to get right, two of which it got wrong first and
+  which `--print-check` caught before anyone pressed Print:
+
+  1. **One `objc_msgSend` declaration per distinct signature.** The ABI varies by
+     return and argument type; on arm64 a mismatch is silent corruption, not an
+     exception.
+  2. **`fileURLWithPath:` takes an `NSString*`, not a `char*`.** Marshalling a C#
+     string as `LPUTF8Str` hands Objective-C a pointer that is not an object, and
+     the process segfaults. `stringWithUTF8String:` is the bridge.
+  3. **`dlopen` AppKit as well as PDFKit** before any class lookup — `NSPrintInfo`
+     and `NSPrintOperation` live in AppKit, and a console-mode run has not linked
+     it, so `objc_getClass` returns nil.
+
+  `com.apple.security.print` is in `sandbox.entitlements`. Without it printing
+  fails silently in the sandboxed build, and the sandbox probe would not catch
+  it, because nothing about printing is exercised by starting the app.
+
+  Printing prints the **live** document, unsaved edits included, through a temp
+  file inside the container that is deleted when the operation returns.
+- **New icon sources for the toolbar.** `MainWindow.xaml` draws every toolbar
+  button with `FontIcon` over Segoe MDL2 glyphs (`&#xE8E5;` open, `&#xE74E;`
+  save, `&#xE749;` print, …). That font does not exist on macOS, so each button
+  needs an inline path or a bundled icon font. A visible slice of the ~1,900 LOC
+  rebuild that the option write-ups did not itemise.
+- **Two of the 17 `MainViewModel` touch points are reshapes, not renames.**
+  `FileOpenPicker`/`FileSavePicker` become Avalonia's `IStorageProvider`, which
+  is async and reached through the `TopLevel`; `ContentDialog` has no Avalonia
+  equivalent at all and becomes a custom `Window`. Small, but real work.
+- **Image processing replacement** for `SignatureImageProcessor`'s
+  `Windows.Graphics.Imaging` (SkiaSharp or ImageSharp). It must reproduce §6.2
+  contract 3's pixel math exactly — and per fact 6 **there are no .NET tests to
+  port it against; they must be written**, using Android's
+  `SignatureImageProcessorTest.kt` as the oracle. Do this as part of the port,
+  not after: it is the contract with no cross-platform fixture PDF to catch
+  drift later.
+- **Shrink-for-email — SOLVED, and fact 5 with it.** SkiaSharp was already in
+  the tree: Avalonia renders through it, so `libSkiaSharp` ships in the bundle
+  either way and this cost no new native dependency. The reference is pinned to
+  the exact version `Avalonia.Skia` resolves — a floating one that drifts ahead
+  gives two SkiaSharp versions wanting different `libSkiaSharp` ABIs in one app,
+  and that fails at runtime on macOS rather than at build.
+
+  The decision rules (which images are worth re-encoding, at what size, and when
+  the saving is too small to be worth the quality loss) moved to
+  `MegaPDF.Core.Imaging.ImageShrinker`, with only the encoder injected — that
+  part genuinely differs per platform, the rules should not.
+
+  The same encoder replaced `System.Drawing.Common` in the test project, which
+  **retires fact 5**: the whole Core suite now runs green on macOS with nothing
+  excluded (135 tests, verified in `core-tests-macos`).
+- **Vendor-vs-fetch for the shipping app.** The spike *fetches* the dylib
+  (`tools/fetch-pdfium-mac.sh`) rather than committing 14.6 MB to answer a
+  question — the iOS tree already establishes fetch-and-gitignore as an accepted
+  pattern. If the shipping app vendors `libs/pdfium/mac-univ/` instead, re-run
+  `tools/gen_third_party_notices.py` and commit the result in the same change:
+  the `notices` CI job hard-fails on drift. Per fact 1 the notices content would
+  not actually change, but the job checks regardless.
+- **Path convention branch** for `~/Library/Application Support` (fact 7).
+- **CI path filters.** `ci.yml`'s `paths-ignore` now also lists `spike/**`, so
+  the spike tree cannot fire the Windows product CI. A future `macos/**` app
+  tree needs the same treatment plus its own workflow.
+- **SDD amendments:** §1.4 non-goal, and a §6 subsection for desktop platforms.

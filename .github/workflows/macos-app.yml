@@ -1,0 +1,269 @@
+# Builds the macOS app (ADR-002 Option B: Avalonia over MegaPDF.Core) and
+# publishes a runnable .app as a workflow artifact.
+#
+# The bundles are AD-HOC SIGNED ONLY — runnable by someone who trusts them, not
+# distributable. Developer ID signing and notarytool stapling are ADR-002 §7.
+# To open one on a Mac the first time: right-click the app and choose Open, or
+# `xattr -dr com.apple.quarantine MegaPDF.app`.
+name: macOS app
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/macos-app.yml'
+      - 'tools/build-macos-app.sh'
+      - 'tools/fetch-pdfium-mac.sh'
+      - 'src/MegaPDF.Avalonia/**'
+      # Core is shared with the Windows app, so a Core change that breaks the Mac
+      # build has to surface here rather than at release time. This is the one
+      # path that makes the job fire on unrelated PRs; it is deliberate.
+      - 'src/MegaPDF.Core/**'
+
+jobs:
+  # Fast feedback on the same code, on the cheaper runner. This is ADR-002
+  # criterion 3 in CI form: the Avalonia UI builds and runs on Windows, so the
+  # daily loop never needs a Mac.
+  windows-build:
+    name: Build on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      # A shell script committed without its executable bit fails with "Permission
+      # denied" only on the runner that uses it — which for the release scripts
+      # means at the worst possible moment. This has now bitten twice; it is
+      # cheaper to check than to remember.
+      - name: Scripts are executable
+        shell: bash
+        run: |
+          bad=$(git ls-files -s tools/*.sh | grep -v '^100755' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::these scripts are committed without the executable bit:"
+            echo "$bad"
+            echo "fix with: git update-index --chmod=+x <path>"
+            exit 1
+          fi
+          echo "all tools/*.sh are executable"
+
+      - name: Build
+        run: dotnet build src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release
+      - name: Core tests still green on Windows
+        run: |
+          dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release `
+            --logger "console;verbosity=minimal"
+
+      # The same end-to-end check the macOS bundle runs. Clicking is the one thing
+      # CI cannot do, so this drives the real view model's click routing and then
+      # verifies through a fresh engine open of the saved file. Running it on both
+      # desktops is what makes "parity" a claim with evidence behind it.
+      - name: Fill-check-sign self-test
+        shell: bash
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          dotnet run --project src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release --no-build -- \
+            --self-test "$RUNNER_TEMP/fixtures"
+
+  macos-app:
+    name: MegaPDF.app (${{ matrix.rid }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # Fetches pdfium into libs/pdfium/mac-univ (where MegaPDF.Core.csproj looks)
+      # and fails if the slice is not the pinned build.
+      - name: Build MegaPDF.app
+        run: tools/build-macos-app.sh ${{ matrix.rid }} "$RUNNER_TEMP/app"
+
+      # Two smoke tests, because they prove different things and only one of them
+      # is obvious.
+      #
+      # --render-check returns before Avalonia is ever initialised, so it proves
+      # Core and libpdfium.dylib load inside the bundle and nothing more.
+      - name: Engine loads inside the bundle
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
+            "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+      # The UI has to be started for real. PublishSingleFile changed how the
+      # runtime resolves native libraries, and libAvaloniaNative/libSkiaSharp/
+      # libHarfBuzzSharp now sit outside the apphost — a combination no spike
+      # ever exercised. Without this step a bundle whose window cannot open
+      # would ship having passed every check.
+      # Editing, verified inside the shipped bundle: tick a checkbox, save, reopen,
+      # undo. "The app launches" says nothing about whether ticking a box works.
+      - name: Fill-check-sign self-test (in the bundle)
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
+
+      # Printing goes through PDFKit and AppKit by Objective-C runtime interop, so
+      # the binding surface is the risk: a wrong objc_msgSend signature returns a
+      # plausible-looking pointer rather than throwing. This resolves every class
+      # and selector, builds a real PDFDocument, and requires its page count to
+      # agree with PdfiumEngine. It stops before the print panel, which CI cannot
+      # reach.
+      - name: Printing interop is sound
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --print-check \
+            "$RUNNER_TEMP/fixtures/fixture.pdf"
+
+      - name: The UI actually starts
+        run: |
+          APP="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
+          "$APP" "$RUNNER_TEMP/fixtures/stamped.pdf" > "$RUNNER_TEMP/ui.log" 2>&1 &
+          PID=$!
+          sleep 10
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "UI start: PASS — still running after 10s"
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          else
+            echo "::error::UI start: the app exited on its own. Output follows."
+            cat "$RUNNER_TEMP/ui.log"
+            exit 1
+          fi
+          echo "--- app output:"; cat "$RUNNER_TEMP/ui.log"
+
+      # Zip explicitly: upload-artifact does not preserve the executable bit, which
+      # would leave the downloaded .app unable to launch.
+      - name: Package
+        run: |
+          cd "$RUNNER_TEMP/app"
+          zip -qry "$RUNNER_TEMP/MegaPDF-${{ matrix.rid }}.zip" MegaPDF.app
+          ls -lh "$RUNNER_TEMP/MegaPDF-${{ matrix.rid }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-macos-${{ matrix.rid }}
+          path: ${{ runner.temp }}/MegaPDF-${{ matrix.rid }}.zip
+          if-no-files-found: error
+
+  # ==========================================================================
+  # Mac App Store viability probe. MAS makes the App Sandbox mandatory, and
+  # Avalonia has a standing report of sandboxed .NET apps crashing on arm64
+  # (AvaloniaUI/Avalonia#9764). Every other piece of a MAS pipeline — the
+  # certificates, the provisioning profile, productbuild, the .pkg upload — is
+  # wasted effort if the answer here is no. So this runs first and alone.
+  #
+  # It is written to be falsifiable. Under a real sandbox, --render-check must
+  # be DENIED: that fixture is neither user-selected nor in the app container.
+  # A render-check that passes means the sandbox is not actually engaged and
+  # the result proves nothing, which is why the embedded entitlements are
+  # dumped and checked rather than assumed.
+  # ==========================================================================
+  sandbox-probe:
+    name: App Sandbox viability (${{ matrix.rid }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build a sandboxed bundle
+        env:
+          MACOS_ENTITLEMENTS: tools/macos/sandbox.entitlements
+        run: tools/build-macos-app.sh ${{ matrix.rid }} "$RUNNER_TEMP/sandboxed"
+
+      - name: Is the sandbox actually engaged?
+        run: |
+          APP="$RUNNER_TEMP/sandboxed/MegaPDF.app"
+          echo "--- embedded entitlements:"
+          codesign -d --entitlements - "$APP" 2>&1 | tee "$RUNNER_TEMP/ents.txt"
+          if grep -q "app-sandbox" "$RUNNER_TEMP/ents.txt"; then
+            echo "app-sandbox IS present in the signature"
+          else
+            echo "::error::app-sandbox is NOT in the signature — every result below is meaningless"
+            exit 1
+          fi
+
+      # Expected to FAIL. A pass means the sandbox is not restricting file access.
+      - name: File access outside the container should be DENIED
+        continue-on-error: true
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          if "$RUNNER_TEMP/sandboxed/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
+               "$RUNNER_TEMP/fixtures/stamped.pdf"; then
+            echo "::warning::render-check SUCCEEDED — the sandbox is not restricting file reads."
+            echo "SANDBOX_FILE_ACCESS=unrestricted" >> "$GITHUB_ENV"
+          else
+            echo "render-check was denied, which is the sandbox working as designed."
+            echo "SANDBOX_FILE_ACCESS=restricted" >> "$GITHUB_ENV"
+          fi
+
+      # THE question. If this fails we have hit Avalonia#9764 and MAS is blocked
+      # on an upstream bug rather than on anything in this repo.
+      - name: Does the UI survive the sandbox?
+        run: |
+          APP="$RUNNER_TEMP/sandboxed/MegaPDF.app/Contents/MacOS/MegaPDF"
+          "$APP" > "$RUNNER_TEMP/ui.log" 2>&1 &
+          PID=$!
+          sleep 12
+          if kill -0 "$PID" 2>/dev/null; then
+            echo "SANDBOX UI: PASS — Avalonia is alive after 12s under the sandbox"
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          else
+            echo "::error::SANDBOX UI: the app died under the sandbox (see Avalonia#9764)."
+            cat "$RUNNER_TEMP/ui.log"
+            exit 1
+          fi
+          echo "--- app output:"; cat "$RUNNER_TEMP/ui.log"
+
+      - name: Verdict
+        if: always()
+        run: |
+          echo "sandbox file access: ${SANDBOX_FILE_ACCESS:-unknown}"
+          echo "See the step results above: UI survival is the go/no-go for Mac App Store."
+
+  # ==========================================================================
+  # The engine, on macOS. This ran in the ADR-002 spike and lost its home when
+  # that workflow was retired — leaving Core covered on Windows only, which is
+  # the wrong way round for a port whose whole premise is that Core is shared.
+  #
+  # Nothing is excluded. ImageCompressionTests used to be carved out because the
+  # test project pulled System.Drawing.Common, which throws
+  # PlatformNotSupportedException off Windows (ADR-002 fact 5). It now encodes
+  # through SkiaSharp — already in the tree, since Avalonia renders with it — so
+  # there is no longer anything this suite can do on Windows and not on macOS.
+  # ==========================================================================
+  core-tests-macos:
+    name: Core tests on macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Fetch pinned PDFium
+        run: tools/fetch-pdfium-mac.sh "$RUNNER_TEMP/pdfium-mac"
+
+      - name: Build the test project
+        run: dotnet build tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
+
+      # Build, then place the dylib, then run with --no-build: .NET resolves the
+      # bare name "pdfium" relative to the assembly directory.
+      - name: Place libpdfium.dylib beside the test assembly
+        run: |
+          cp "$RUNNER_TEMP/pdfium-mac/lib/libpdfium.dylib" \
+             tests/MegaPDF.Core.Tests/bin/Release/net8.0/
+
+      - name: Run the whole Core suite
+        run: |
+          dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj \
+            -c Release --no-build --logger "console;verbosity=normal"

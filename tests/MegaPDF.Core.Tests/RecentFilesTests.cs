@@ -87,4 +87,21 @@ public class RecentFilesTests : IDisposable
         Assert.Equal([doc], recent.All);
         Assert.Equal(100, recent.FindEntry(doc)!.ZoomPercent);
     }
+
+    [Fact]
+    public void Add_RecordsABookmark_AndKeepsItWhenReAddedWithout()
+    {
+        // macOS under the sandbox cannot reopen a stored path; it needs the
+        // security-scoped bookmark. Re-opening the file later (which goes through
+        // the path-only overload) must not throw that handle away.
+        var path = Path.Combine(_dir, "bookmarked.pdf");
+        File.WriteAllText(path, "%PDF-1.7");
+        var recents = new RecentFiles(Path.Combine(_dir, "recent.json"));
+
+        recents.Add(path, "bookmark-blob");
+        Assert.Equal("bookmark-blob", recents.Entries[0].Bookmark);
+
+        recents.Add(path);
+        Assert.Equal("bookmark-blob", recents.Entries[0].Bookmark);
+    }
 }
