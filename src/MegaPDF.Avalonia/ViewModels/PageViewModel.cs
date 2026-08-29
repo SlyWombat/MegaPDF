@@ -98,11 +98,63 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         Rerender(dpiScale);
     }
 
+    /// <summary>
+    /// What is interactive on this page, in HitTest priority order. Built once per
+    /// raster and consulted in memory, so telling the cursor what it is over costs
+    /// nothing — hit-testing the engine on every pointer move would mean opening a
+    /// page per mouse movement (SDD §2.2: the cursor is the mode).
+    /// </summary>
+    internal IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> Regions { get; private set; } = [];
+
+    private static List<(PdfRect, PageHitKind)> BuildRegions(IPdfPage page)
+    {
+        var regions = new List<(PdfRect, PageHitKind)>();
+
+        foreach (var stamp in page.GetStamps())
+            regions.Add((stamp.Bounds, PageHitKind.StampAnnotation));
+        // Before body text, so hovering added text offers the move affordance rather
+        // than a caret.
+        foreach (var box in page.GetTextBoxes())
+            regions.Add((box.Bounds, PageHitKind.TextBox));
+        foreach (var field in page.GetFormFields())
+        {
+            var kind = field.Kind switch
+            {
+                FormFieldKind.Text => PageHitKind.FormTextField,
+                FormFieldKind.Checkbox or FormFieldKind.RadioButton => PageHitKind.FormCheckbox,
+                _ => PageHitKind.None,
+            };
+            if (kind != PageHitKind.None)
+                regions.Add((field.Bounds, kind));
+        }
+        foreach (var line in page.GetTextLines())
+            regions.Add((line.Bounds, PageHitKind.TextRun));
+        foreach (var whiteout in page.GetWhiteouts())
+            regions.Add((whiteout.Bounds, PageHitKind.Whiteout));
+        foreach (var square in page.DetectCheckboxSquares())
+            regions.Add((square, PageHitKind.DrawnCheckbox));
+
+        return regions;
+    }
+
+    /// <summary>What is under this point, in page space. Empty means bare page.</summary>
+    internal PageHitKind KindAt(PdfPoint point)
+    {
+        foreach (var (bounds, kind) in Regions)
+        {
+            if (point.X >= bounds.X && point.X <= bounds.X + bounds.Width
+                && point.Y >= bounds.Y && point.Y <= bounds.Y + bounds.Height)
+                return kind;
+        }
+        return PageHitKind.None;
+    }
+
     /// <summary>Unconditional re-raster — what an edit needs, since the zoom hasn't changed.</summary>
     internal void Rerender(double dpiScale)
     {
         using var page = _document.GetPage(Index);
         var next = PageBitmap.Render(page, Zoom, dpiScale);
+        Regions = BuildRegions(page);
 
         var previous = Image;
         Image = next;

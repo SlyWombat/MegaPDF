@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MegaPDF.Avalonia.Views.RecoveryWindow"
+        Title="Unsaved changes"
+        Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="20" Spacing="14">
+    <TextBlock Name="Headline" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <TextBlock Name="Detail" TextWrapping="Wrap" Opacity="0.8" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="DiscardButton" Content="Discard them" />
+      <Button Name="LaterButton" Content="Decide later" />
+      <Button Name="RestoreButton" Content="Restore" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

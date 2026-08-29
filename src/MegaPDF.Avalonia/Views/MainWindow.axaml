@@ -20,17 +20,47 @@
     <Border DockPanel.Dock="Top" Padding="8,6" BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <StackPanel Orientation="Horizontal" Spacing="6">
-        <Button Name="OpenButton" Content="Open" />
-        <Button Name="SaveButton" Content="Save" Command="{Binding SaveCommand}" />
-        <Button Name="SaveAsButton" Content="Save As" IsEnabled="{Binding IsDocumentOpen}" />
-        <Button Name="PrintButton" Content="Print" Command="{Binding PrintCommand}" />
-        <Button Name="ShrinkButton" Content="Shrink" IsEnabled="{Binding CanShrink}"
-                ToolTip.Tip="Save a smaller copy for email" />
+        <Button Name="OpenButton" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconOpen}" Width="18" Height="18" />
+            <TextBlock Text="Open" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="SaveButton" Command="{Binding SaveCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconSave}" Width="18" Height="18" />
+            <TextBlock Text="Save" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="SaveAsButton" IsEnabled="{Binding IsDocumentOpen}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconSaveAs}" Width="18" Height="18" />
+            <TextBlock Text="Save As" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="PrintButton" Command="{Binding PrintCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconPrint}" Width="18" Height="18" />
+            <TextBlock Text="Print" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="ShrinkButton" IsEnabled="{Binding CanShrink}"
+                ToolTip.Tip="Save a smaller copy for email" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconShrink}" Width="18" Height="18" />
+            <TextBlock Text="Shrink" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
              placement, and the next click on the page puts it there. -->
-        <Button Name="SignButton" Content="Sign" IsEnabled="{Binding IsDocumentOpen}">
+        <Button Name="SignButton" IsEnabled="{Binding IsDocumentOpen}">
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconSign}" Width="18" Height="18" />
+            <TextBlock Text="Sign" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        
           <Button.Flyout>
             <Flyout Placement="BottomEdgeAlignedLeft">
               <StackPanel Width="260" Spacing="8">
@@ -52,29 +82,103 @@
                 </ListBox>
                 <Button Name="DrawSignatureButton" Content="Draw a new signature…"
                         HorizontalAlignment="Stretch" />
+                <Button Name="ImportSignatureButton" Content="Use a photo of your signature…"
+                        HorizontalAlignment="Stretch" />
               </StackPanel>
             </Flyout>
           </Button.Flyout>
         </Button>
 
-        <ToggleButton Name="AddTextButton" Content="Add text"
+        <ToggleButton Name="AddTextButton"
                       IsChecked="{Binding IsAddingText, Mode=OneWay}"
-                      Command="{Binding ToggleAddTextCommand}" />
+                      Command="{Binding ToggleAddTextCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconText}" Width="18" Height="18" />
+            <TextBlock Text="Add text" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
         <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFonts}"
                   SelectedItem="{Binding TextFont}" IsEnabled="{Binding IsDocumentOpen}" />
         <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
                   SelectedItem="{Binding TextSize}" IsEnabled="{Binding IsDocumentOpen}" />
-        <ToggleButton Name="WhiteoutButton" Content="Cover"
+        <ToggleButton Name="WhiteoutButton"
                       IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
-                      Command="{Binding ToggleWhiteoutCommand}" />
+                      Command="{Binding ToggleWhiteoutCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconCover}" Width="18" Height="18" />
+            <TextBlock Text="Cover" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
 
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-        <Button Name="UndoButton" Content="Undo" Command="{Binding UndoCommand}" />
-        <Button Name="RedoButton" Content="Redo" Command="{Binding RedoCommand}" />
+        <Button Name="UndoButton" Command="{Binding UndoCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconUndo}" Width="18" Height="18" />
+            <TextBlock Text="Undo" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="RedoButton" Command="{Binding RedoCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconRedo}" Width="18" Height="18" />
+            <TextBlock Text="Redo" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-        <Button Name="ZoomOutButton" Content="Zoom out" Command="{Binding ZoomOutCommand}" />
-        <Button Name="ZoomInButton" Content="Zoom in" Command="{Binding ZoomInCommand}" />
-        <Button Name="ZoomResetButton" Content="Actual size" Command="{Binding ZoomResetCommand}" />
+        <Button Name="ZoomOutButton" Command="{Binding ZoomOutCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconZoomOut}" Width="18" Height="18" />
+            <TextBlock Text="Zoom out" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconZoomIn}" Width="18" Height="18" />
+            <TextBlock Text="Zoom in" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="ZoomResetButton" Command="{Binding ZoomResetCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconActualSize}" Width="18" Height="18" />
+            <TextBlock Text="Actual size" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="FitWidthButton" Command="{Binding FitWidthCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconFitWidth}" Width="18" Height="18" />
+            <TextBlock Text="Fit width" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Name="FitPageButton" Command="{Binding FitPageCommand}" >
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconFitPage}" Width="18" Height="18" />
+            <TextBlock Text="Fit page" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
+
+        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+
+        <!-- Preferences that change what an edit does, kept out of the main flow
+             because most people never touch them (SDD §4.4). -->
+        <Button Name="SettingsButton">
+          <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
+            <PathIcon Data="{StaticResource IconOptions}" Width="18" Height="18" />
+            <TextBlock Text="Options" FontSize="11" HorizontalAlignment="Center" />
+          </StackPanel>
+        
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+              <StackPanel Width="260" Spacing="10">
+                <TextBlock Text="Tick marks look like" FontWeight="SemiBold" />
+                <ComboBox Name="MarkStyleBox" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding MarkStyles}" SelectedItem="{Binding MarkStyle}" />
+                <CheckBox Name="FlattenBox" IsChecked="{Binding FlattenOnSave}"
+                          Content="Flatten when saving" />
+                <TextBlock Text="Flattening bakes ticks and signatures into the page. They cannot be moved or removed afterwards."
+                           TextWrapping="Wrap" FontSize="12" Opacity="0.75" />
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
       </StackPanel>
     </Border>
 
@@ -102,7 +206,12 @@
          happened without a dialog. -->
     <Border DockPanel.Dock="Bottom" Padding="10,5" BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-      <TextBlock Text="{Binding Status}" VerticalAlignment="Center" />
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Right" Text="{Binding PageIndicator}"
+                   VerticalAlignment="Center" Opacity="0.75" Margin="12,0,0,0" />
+        <TextBlock Text="{Binding Status}" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+      </DockPanel>
     </Border>
 
     <!-- Empty state (SDD §2.2): an app with nothing open should offer the two
@@ -128,8 +237,7 @@
                     Background="White"
                     Width="{Binding LayoutWidth}"
                     Height="{Binding LayoutHeight}"
-                    BoxShadow="0 2 8 0 #22000000"
-                    Cursor="Hand">
+                    BoxShadow="0 2 8 0 #22000000">
               <!-- Stretch=Fill, not Uniform: the bitmap is rasterised at exactly this
                    size, so any scaling here would mean a stale render is being smeared
                    to fit rather than re-rendered. -->

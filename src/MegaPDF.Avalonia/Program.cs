@@ -154,6 +154,11 @@ internal static class Program
             return 2;
         }
 
+        // Isolated state, wiped afterwards: the checks change settings (flatten,
+        // mark style) and add signatures, and none of that belongs in the real
+        // per-user files of whoever runs this.
+        var state = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-state-{Guid.NewGuid():N}");
+
         var failures = 0;
         void Check(string what, bool ok)
         {
@@ -167,7 +172,7 @@ internal static class Program
         var savedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
             Check("document opened", vm.IsDocumentOpen);
             Check("the square reads as a drawn checkbox",
@@ -208,7 +213,7 @@ internal static class Program
         Console.WriteLine("AcroForm checkbox:");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "forms.pdf"));
             var widgetCentre = new PdfPoint(107, 184);
             var hit = vm.HitTest(0, widgetCentre);
@@ -234,7 +239,7 @@ internal static class Program
         var signedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-sig-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             // A 40x20 block of opaque ink. Synthesised rather than loaded so this runs
@@ -289,7 +294,7 @@ internal static class Program
         Console.WriteLine("find in document:");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             // fixture.pdf page 1 says "The square below is a drawn checkbox candidate."
@@ -326,7 +331,7 @@ internal static class Program
         var editedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-edit-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             vm.TextFont = StandardTextBoxFonts.Serif;
@@ -373,7 +378,7 @@ internal static class Program
         var retypedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-text-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             var lines = vm.LinesOn(0);
@@ -418,7 +423,7 @@ internal static class Program
         var filledPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-form-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel();
+            using var vm = new MainViewModel(state);
             vm.Open(Path.Combine(dir, "formtext.pdf"));
 
             // formtext.pdf's "fullname" widget is (100,600)-(300,620) in PDF space
@@ -457,6 +462,91 @@ internal static class Program
         finally
         {
             if (File.Exists(filledPath)) File.Delete(filledPath);
+        }
+
+        // --- Selection, move, resize, restyle, delete, flatten, mark style ---
+        Console.WriteLine("adjusting what has been placed:");
+        var adjustedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-adj-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel(state);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            // Place a signature, then select it by clicking it.
+            const int w = 40, h = 20;
+            var bgra = new byte[w * h * 4];
+            for (var i = 0; i < bgra.Length; i += 4)
+            {
+                bgra[i] = bgra[i + 1] = bgra[i + 2] = 0x20;
+                bgra[i + 3] = 255;
+            }
+            var at = new PdfPoint(300, 400);
+            vm.PlaceSignature(0, at, new SignatureBitmap(bgra, w, h), "placed");
+
+            vm.HandlePageClick(0, at);
+            Check("clicking a signature selects it rather than deleting it",
+                  vm.Selection is { Kind: MainViewModel.SelectionKind.Signature });
+            Check("and it offers move and resize", vm.Selection is { CanMove: true, CanResize: true });
+
+            var moved = new PdfRect(120, 500, 200, 100);
+            vm.CommitSelectionBounds(moved);
+            Check("moving and resizing it is committed",
+                  vm.Selection is { } s2 && Math.Abs(s2.Bounds.X - 120) < 0.5 && Math.Abs(s2.Bounds.Width - 200) < 0.5);
+
+            vm.UndoCommand.Execute(null);
+            Check("undo puts it back", vm.HitTest(0, at).Kind == PageHitKind.StampAnnotation);
+
+            // Text box: select, restyle, delete.
+            vm.TextFont = StandardTextBoxFonts.Sans;
+            vm.TextSize = 12;
+            vm.AddTextBox(0, new PdfPoint(100, 300), "before");
+            var boxes = vm.BoxesOn(0);
+            var mine = boxes.FirstOrDefault(b => b.Text.Contains("before", StringComparison.Ordinal));
+            Check("the added box is found", mine is not null);
+
+            if (mine is not null)
+            {
+                vm.RestyleTextBox(0, mine, "after", StandardTextBoxFonts.Mono, 16);
+                var restyled = vm.BoxesOn(0).FirstOrDefault(b => b.Text.Contains("after", StringComparison.Ordinal));
+                Check("restyling changes the words", restyled is not null);
+                Check("and records the new face", restyled?.TextBoxFont == StandardTextBoxFonts.Mono);
+                Check("keeping the box's id, which is contract 4's handle",
+                      restyled?.TextBoxId is { Length: > 0 });
+            }
+
+            // Mark style is honoured when ticking a drawn square.
+            vm.MarkStyle = CheckMarkStyle.Check;
+            Check("the mark style setting persists", vm.MarkStyle == CheckMarkStyle.Check);
+            vm.HandlePageClick(0, new PdfPoint(78, 186));
+            Check("a square still ticks with a non-default mark", vm.IsDirty);
+
+            // Flatten on save bakes it in.
+            vm.FlattenOnSave = true;
+            using (var file = File.Create(adjustedPath))
+                vm.SaveTo(file);
+
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(adjustedPath);
+            using var page = reopened.GetPage(0);
+            Check("flattening leaves no interactive stamps behind", page.GetStamps().Count == 0);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::adjusting: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(adjustedPath)) File.Delete(adjustedPath);
+        }
+
+        try
+        {
+            if (Directory.Exists(state))
+                Directory.Delete(state, recursive: true);
+        }
+        catch (IOException)
+        {
         }
 
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");

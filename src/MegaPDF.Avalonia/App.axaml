@@ -4,6 +4,14 @@
              RequestedThemeVariant="Default">
   <!-- Default, not Light/Dark: the app follows the OS, which on macOS is what
        people expect and on Windows matches the WinUI app's behaviour. -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://MegaPDF/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>

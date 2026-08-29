@@ -84,11 +84,32 @@ public partial class MainWindow : Window
             vm.EditLineRequested += ShowLineEditor;
             vm.PasswordRequested += AskForPasswordAsync;
             vm.EditFieldRequested += ShowFieldEditor;
+            vm.PropertyChanged += (_, args) =>
+            {
+                // The chrome is positioned in device-independent pixels, so it has to
+                // be rebuilt when the selection changes and when zoom moves it.
+                if (args.PropertyName is nameof(MainViewModel.Selection) or nameof(MainViewModel.Zoom))
+                    OnSelectionChanged();
+            };
         }
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key is Key.Delete or Key.Back && ViewModel is { Selection: not null } selected)
+        {
+            selected.DeleteSelection();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && ViewModel is { Selection: not null } hasSelection)
+        {
+            hasSelection.ClearSelection();
+            e.Handled = true;
+            return;
+        }
+
         // Escape is how every desktop app leaves a mode. Placement first: if both are
         // active, the one the user most recently entered is the one they mean.
         if (e.Key == Key.Escape && ViewModel is { IsPlacingSignature: true } vm)
@@ -125,7 +146,13 @@ public partial class MainWindow : Window
         {
             vm.DpiScale = RenderScaling;
             vm.LoadRecents();
+            UpdateViewport();
         }
+
+        PageScroller.ScrollChanged += (_, _) => UpdateViewport();
+        PageScroller.SizeChanged += (_, _) => UpdateViewport();
+
+        _ = OfferRecoveryAsync();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -300,6 +327,71 @@ public partial class MainWindow : Window
     private static Panel? OverlayOf(ContentPresenter presenter) =>
         presenter.GetVisualDescendants().OfType<Panel>().FirstOrDefault(p => p is not StackPanel);
 
+    /// <summary>
+    /// Keeps the view model told how big the viewport is and which page is in it —
+    /// what fit-to-width, fit-to-page and the "Page 3 of 12" readout all need.
+    /// </summary>
+    private void UpdateViewport()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        vm.ViewportWidth = PageScroller.Viewport.Width;
+        vm.ViewportHeight = PageScroller.Viewport.Height;
+
+        if (vm.Pages.Count == 0)
+            return;
+
+        // Whichever page covers the middle of the viewport is the one being read —
+        // the topmost visible page is the wrong answer when a short page is
+        // scrolling off the top.
+        var middle = PageScroller.Offset.Y + (PageScroller.Viewport.Height / 2);
+        var y = 0.0;
+        foreach (var page in vm.Pages)
+        {
+            y += page.LayoutHeight + PageGap;
+            if (middle <= y)
+            {
+                vm.CurrentPage = page.Index + 1;
+                return;
+            }
+        }
+        vm.CurrentPage = vm.Pages.Count;
+    }
+
+    /// <summary>
+    /// Offers to recover work that was never saved (SDD §3.4).
+    ///
+    /// Asked rather than done: silently reopening a document and replaying edits
+    /// onto it is startling, and the person may have abandoned those changes on
+    /// purpose. Only asked when a document is not already open, so a file opened
+    /// from Finder is never pushed aside by a prompt.
+    /// </summary>
+    private async Task OfferRecoveryAsync()
+    {
+        if (ViewModel is not { IsDocumentOpen: false } vm)
+            return;
+
+        var sessions = vm.FindRecoverableSessions();
+        if (sessions.Count == 0)
+            return;
+
+        var session = sessions[0];
+        var dialog = new RecoveryWindow();
+        dialog.SetSession(Path.GetFileName(session.DocumentPath), session.EntryCount, session.LastWriteUtc);
+        await dialog.ShowDialog(this);
+
+        switch (dialog.Choice)
+        {
+            case RecoveryWindow.Decision.Restore:
+                vm.RestoreSession(session);
+                break;
+            case RecoveryWindow.Decision.Discard:
+                vm.DiscardSession(session);
+                break;
+        }
+    }
+
     // --- Clicking the page (SDD §3.2) ---
 
     private void OnPagePointerPressed(object? sender, PointerPressedEventArgs e)
@@ -331,11 +423,56 @@ public partial class MainWindow : Window
 
             default:
                 DismissInlineEditor();
+                // A click that lands on nothing deselects, which is what every
+                // desktop app does and what makes the chrome feel like chrome.
+                if (vm.Selection is not null && vm.HitTest(page.Index, pagePoint).Kind == PageHitKind.None)
+                {
+                    vm.ClearSelection();
+                    break;
+                }
                 vm.HandlePageClick(page.Index, pagePoint);
                 break;
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// The cursor says what a click will do before you make it (SDD §2.2). Read off
+    /// the page's in-memory interaction map, so this costs a rectangle scan rather
+    /// than an engine hit-test per mouse movement.
+    /// </summary>
+    private void UpdateCursor(object? sender, PointerEventArgs e)
+    {
+        if (sender is not Control container || container.DataContext is not PageViewModel page)
+            return;
+        if (ViewModel is not { } vm)
+            return;
+
+        // In a placement mode the cursor describes the mode, not what is underneath.
+        var shape = vm.Mode switch
+        {
+            MainViewModel.PageMode.AddText => StandardCursorType.Ibeam,
+            MainViewModel.PageMode.Whiteout => StandardCursorType.Cross,
+            _ when vm.IsPlacingSignature => StandardCursorType.Cross,
+            _ => CursorForContent(),
+        };
+
+        container.Cursor = new Cursor(shape);
+
+        StandardCursorType CursorForContent()
+        {
+            var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
+            var at = e.GetPosition(container);
+            return page.KindAt(new PdfPoint(at.X * dipToPoint, at.Y * dipToPoint)) switch
+            {
+                PageHitKind.TextRun or PageHitKind.FormTextField => StandardCursorType.Ibeam,
+                PageHitKind.FormCheckbox or PageHitKind.DrawnCheckbox
+                    or PageHitKind.StampAnnotation or PageHitKind.Whiteout
+                    or PageHitKind.TextBox => StandardCursorType.Hand,
+                _ => StandardCursorType.Arrow,
+            };
+        }
     }
 
     // --- Whiteout drag ---
@@ -365,6 +502,9 @@ public partial class MainWindow : Window
 
     private void OnPagePointerMoved(object? sender, PointerEventArgs e)
     {
+        OnSelectionPointerMoved(e);
+        UpdateCursor(sender, e);
+
         if (_band is null || _bandHost is null)
             return;
 
@@ -378,6 +518,8 @@ public partial class MainWindow : Window
 
     private void OnPagePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        OnSelectionPointerReleased(e);
+
         if (_band is null || _bandHost is null || ViewModel is not { } vm)
             return;
 
@@ -416,6 +558,52 @@ public partial class MainWindow : Window
             SignButton.Flyout?.Hide();
             await CaptureSignatureAsync();
         };
+
+        ImportSignatureButton.Click += async (_, _) =>
+        {
+            SignButton.Flyout?.Hide();
+            await ImportSignatureAsync();
+        };
+    }
+
+    /// <summary>
+    /// Takes a signature from a photograph or scan (SDD §3.3). Most people have a
+    /// signature on paper long before they have one they are willing to draw with a
+    /// trackpad, so this is the path that actually gets used.
+    /// </summary>
+    private async Task ImportSignatureAsync()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Choose a photo of your signature",
+            AllowMultiple = false,
+            FileTypeFilter = [FilePickerFileTypes.ImageAll],
+        });
+
+        if (files.Count == 0)
+            return;
+
+        try
+        {
+            SignatureBitmap decoded;
+            await using (var stream = await files[0].OpenReadAsync())
+                decoded = Rendering.SignatureImages.LoadBgra(stream);
+
+            var name = Path.GetFileNameWithoutExtension(files[0].Name);
+            var entry = vm.AddSignatureFromImage(
+                string.IsNullOrWhiteSpace(name) ? "Signature" : name,
+                decoded,
+                Rendering.SignatureImages.EncodePng);
+
+            vm.BeginPlacing(entry);
+        }
+        catch (Exception ex)
+        {
+            vm.Status = $"Could not read that image: {ex.Message}";
+        }
     }
 
     private async Task CaptureSignatureAsync()

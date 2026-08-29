@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Core.Editing;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Imaging;
+using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Engine.Pdfium;
 using MegaPDF.Core.Services;
 
@@ -37,9 +38,39 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private readonly IPdfEngine _engine = new PdfiumEngine();
     private readonly UndoStack _undoStack = new();
-    private readonly ISignatureLibrary _signatures = new SignatureLibrary();
-    private readonly RecentFiles _recents = new();
+    private readonly ISignatureLibrary _signatures;
+    private readonly RecentFiles _recents;
+    private readonly AppSettings _settings;
+    private readonly RecoveryJournal _journal;
     private IPdfDocument? _document;
+
+    /// <param name="stateDirectory">
+    /// Where settings, recents, signatures and the recovery journal live. Null means
+    /// the real per-user locations, which is what the app uses.
+    ///
+    /// It exists because --self-test used to run against those real locations: it
+    /// wrote to the user's signature library and recent files, and — worse — left
+    /// FlattenOnSave switched on, which then broke the *next* run's checks. A test
+    /// that mutates the state of the machine it runs on is not a test.
+    /// </param>
+    public MainViewModel(string? stateDirectory = null)
+    {
+        if (stateDirectory is null)
+        {
+            _settings = new AppSettings();
+            _recents = new RecentFiles();
+            _signatures = new SignatureLibrary();
+            _journal = new RecoveryJournal();
+        }
+        else
+        {
+            Directory.CreateDirectory(stateDirectory);
+            _settings = new AppSettings(Path.Combine(stateDirectory, "settings.json"));
+            _recents = new RecentFiles(Path.Combine(stateDirectory, "recent.json"));
+            _signatures = new SignatureLibrary(Path.Combine(stateDirectory, "Signatures"));
+            _journal = new RecoveryJournal(Path.Combine(stateDirectory, "Recovery"));
+        }
+    }
 
     public ObservableCollection<PageViewModel> Pages { get; } = [];
 
@@ -149,6 +180,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DocumentPath = path;
         DocumentName = Path.GetFileName(path);
         IsDocumentOpen = true;
+        CurrentPage = 1;
+        // Starting a session truncates any previous journal for this document, which
+        // is why it happens after a successful open and not before.
+        _journal.BeginSession(path);
+        OnPropertyChanged(nameof(PageIndicator));
         OnPropertyChanged(nameof(ShowEmptyState));
         IsDirty = false;
         Status = $"{DocumentName} — {document.PageCount} page{(document.PageCount == 1 ? "" : "s")}. "
@@ -170,6 +206,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         Open(path, password);
+    }
+
+    /// <summary>MegaPDF-added text boxes on a page — what restyle and move address.</summary>
+    internal IReadOnlyList<PdfTextRun> BoxesOn(int pageIndex)
+    {
+        if (_document is null)
+            return [];
+        using var page = _document.GetPage(pageIndex);
+        return page.GetTextBoxes();
     }
 
     /// <summary>Visual lines of body text on a page — what F1 edits (SDD §3.1).</summary>
@@ -220,26 +265,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 break;
 
             case PageHitKind.DrawnCheckbox:
-                Apply(new AddMarkOperation(_document, pageIndex, hit.Bounds!.Value), "Checked.");
+                Apply(new AddMarkOperation(_document, pageIndex, hit.Bounds!.Value, MarkStyle), "Checked.");
                 break;
 
             case PageHitKind.StampAnnotation when !hit.AnnotationId!.StartsWith("sig:", StringComparison.Ordinal):
-                // Check marks are click-to-toggle: clicking one clears it (SDD §3.2).
-                Apply(new RemoveMarkOperation(_document, pageIndex, hit.AnnotationId, hit.Bounds!.Value),
+                // Check marks stay click-to-toggle: one size, one place, so there is
+                // nothing to select them for (SDD §3.2).
+                Apply(new RemoveMarkOperation(_document, pageIndex, hit.AnnotationId, hit.Bounds!.Value, MarkStyle),
                       "Unchecked.");
                 break;
 
             case PageHitKind.StampAnnotation:
-                // A placed signature. Move/resize chrome is a later increment; until
-                // then clicking one removes it, which at least makes a misplaced
-                // signature recoverable without reaching for undo.
-                Apply(new RemoveSignatureOperation(_document, pageIndex, hit.AnnotationId!, hit.Bounds!.Value),
-                      "Signature removed.");
+                // A placed signature selects for move, resize and delete (SDD §3.3).
+                Select(new PageSelection(pageIndex, SelectionKind.Signature, hit.Bounds!.Value,
+                                         AnnotationId: hit.AnnotationId));
                 break;
 
             case PageHitKind.Whiteout:
-                Apply(new RemoveWhiteoutOperation(_document, pageIndex, hit.ObjectIndex!.Value, hit.Bounds!.Value),
-                      "Cover removed.");
+                // Remove-only chrome: a cover is redrawn rather than nudged, which is
+                // simpler and is how the Windows app behaves.
+                Select(new PageSelection(pageIndex, SelectionKind.Whiteout, hit.Bounds!.Value,
+                                         ObjectIndex: hit.ObjectIndex!.Value));
                 break;
 
             case PageHitKind.FormTextField when hit.Field is { } field:
@@ -253,11 +299,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 break;
 
             case PageHitKind.TextBox when hit.TextRun is { } run:
-                // Clicking added text removes it. Editing in place is the richer
-                // desktop behaviour and comes with the selection chrome; until then
-                // remove-and-retype is honest and fully undoable.
-                Apply(new RemoveTextBoxOperation(_document, pageIndex, run.ObjectIndex, run),
-                      "Text removed.");
+                // Added text moves and can be restyled, but not resized — its size is
+                // a font size, not a rectangle.
+                Select(new PageSelection(pageIndex, SelectionKind.TextBox, run.Bounds, Run: run));
                 break;
 
             default:
@@ -268,6 +312,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void Apply(IPageEditOperation operation, string doneMessage)
     {
         _undoStack.Do(operation);
+        // Journalled after Apply, because an operation's entry can only be written
+        // once it knows what it did — a placed stamp's id, for instance.
+        _journal.Record(operation.ToJournalEntry(inverse: false));
         AfterEdit(operation.PageIndex, doneMessage);
     }
 
@@ -286,6 +333,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         var op = _undoStack.PeekUndo as IPageEditOperation;
         _undoStack.Undo();
+        // An undo is journalled as its own inverse entry: replaying the journal
+        // after a crash must reproduce what was on screen, not what was ever done.
+        if (op is not null)
+            _journal.Record(op.ToJournalEntry(inverse: true));
         AfterEdit(op?.PageIndex ?? 0, "Undone.");
     }
 
@@ -296,6 +347,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         var op = _undoStack.PeekRedo as IPageEditOperation;
         _undoStack.Redo();
+        if (op is not null)
+            _journal.Record(op.ToJournalEntry(inverse: false));
         AfterEdit(op?.PageIndex ?? 0, "Redone.");
     }
 
@@ -400,6 +453,177 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         LoadRecents();
     }
 
+    // --- Crash recovery (SDD §3.4) ---
+
+    /// <summary>
+    /// Documents that were being edited when the app last stopped without saving.
+    /// Empty in the ordinary case, which is why the view only asks about it once.
+    /// </summary>
+    public IReadOnlyList<RecoverableSession> FindRecoverableSessions() =>
+        _journal.FindRecoverableSessions();
+
+    /// <summary>
+    /// Reopens a document and replays the edits that were never saved.
+    ///
+    /// The entries are read BEFORE opening, because opening begins a new session and
+    /// that truncates this very journal — a detail the Windows implementation calls
+    /// out too, and one that silently loses the recovery if it is got wrong.
+    /// </summary>
+    public void RestoreSession(RecoverableSession session)
+    {
+        var entries = RecoveryJournal.LoadEntries(session.JournalPath);
+
+        Open(session.DocumentPath);
+        if (_document is null || entries.Count == 0)
+            return;
+
+        var applied = JournalReplayer.Replay(_document, entries);
+
+        // Re-journal the restored edits, so a second crash before the first save is
+        // still covered.
+        foreach (var entry in entries)
+            _journal.Record(entry);
+
+        IsDirty = applied > 0;
+        // Every rendered page predates the replay.
+        foreach (var page in Pages)
+            if (page.IsRealised)
+                page.Rerender(DpiScale);
+
+        Status = applied > 0
+            ? $"Recovered {applied} unsaved change{(applied == 1 ? "" : "s")} to {DocumentName}."
+            : $"Reopened {DocumentName}; there was nothing left to recover.";
+    }
+
+    public void DiscardSession(RecoverableSession session)
+    {
+        RecoveryJournal.Discard(session.JournalPath);
+        Status = "Discarded the unsaved changes.";
+    }
+
+    // --- Selection (SDD §3.3: place it, then adjust it) ---
+
+    public enum SelectionKind { Signature, TextBox, Whiteout }
+
+    /// <summary>
+    /// Something placed on the page that the user has selected. One record for all
+    /// three kinds because the chrome is one mechanism — what differs is which
+    /// handles it offers and what committing a drag calls.
+    /// </summary>
+    public sealed record PageSelection(
+        int PageIndex, SelectionKind Kind, PdfRect Bounds,
+        string? AnnotationId = null, int ObjectIndex = -1, PdfTextRun? Run = null)
+    {
+        /// <summary>Only a signature has a rectangle worth resizing.</summary>
+        public bool CanResize => Kind == SelectionKind.Signature;
+
+        /// <summary>A cover is redrawn rather than nudged.</summary>
+        public bool CanMove => Kind is SelectionKind.Signature or SelectionKind.TextBox;
+    }
+
+    [ObservableProperty]
+    private PageSelection? _selection;
+
+    private void Select(PageSelection selection)
+    {
+        Selection = selection;
+        Status = selection.Kind switch
+        {
+            SelectionKind.Signature => "Drag to move, corners to resize, Delete to remove.",
+            SelectionKind.TextBox => "Drag to move, double-click to edit, Delete to remove.",
+            _ => "Press Delete to remove this cover.",
+        };
+    }
+
+    public void ClearSelection() => Selection = null;
+
+    /// <summary>Removes whatever is selected, whichever kind it is.</summary>
+    public void DeleteSelection()
+    {
+        if (_document is null || Selection is not { } sel)
+            return;
+
+        IPageEditOperation op = sel.Kind switch
+        {
+            SelectionKind.Signature =>
+                new RemoveSignatureOperation(_document, sel.PageIndex, sel.AnnotationId!, sel.Bounds),
+            SelectionKind.Whiteout =>
+                new RemoveWhiteoutOperation(_document, sel.PageIndex, sel.ObjectIndex, sel.Bounds),
+            _ => new RemoveTextBoxOperation(_document, sel.PageIndex, sel.Run!.ObjectIndex, sel.Run),
+        };
+
+        Selection = null;
+        Apply(op, sel.Kind switch
+        {
+            SelectionKind.Signature => "Signature removed.",
+            SelectionKind.Whiteout => "Cover removed.",
+            _ => "Text removed.",
+        });
+    }
+
+    /// <summary>Commits a drag or resize of whatever is selected.</summary>
+    public void CommitSelectionBounds(PdfRect newBounds)
+    {
+        if (Selection is not { } sel || newBounds == sel.Bounds)
+            return;
+
+        switch (sel.Kind)
+        {
+            case SelectionKind.Signature:
+                MoveSignature(sel.PageIndex, sel.AnnotationId!, sel.Bounds, newBounds);
+                break;
+            case SelectionKind.TextBox:
+                MoveTextBox(sel.PageIndex, sel.Run!, newBounds);
+                break;
+            default:
+                return;
+        }
+
+        // Re-anchor the chrome; the id and object index survive a move, so the
+        // selection is still valid afterwards.
+        Selection = sel with { Bounds = newBounds };
+    }
+
+    // --- Preferences (SDD §3.2, §3.3, §4.4) ---
+
+    /// <summary>
+    /// Which mark a ticked box gets: ✗ by default, per the 2026-07-08 stakeholder
+    /// decision (SDD Appendix B #3). ✓ and ■ exist because a tick means "yes" in
+    /// some countries and "this one" in others, and a filled square is what some
+    /// official forms ask for.
+    /// </summary>
+    public CheckMarkStyle MarkStyle
+    {
+        get => _settings.MarkStyle;
+        set
+        {
+            if (_settings.MarkStyle == value)
+                return;
+            _settings.MarkStyle = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public IReadOnlyList<CheckMarkStyle> MarkStyles { get; } =
+        [CheckMarkStyle.Cross, CheckMarkStyle.Check, CheckMarkStyle.FilledSquare];
+
+    /// <summary>
+    /// Bakes marks, signatures and form values permanently into the page on save
+    /// (SDD §3.3). Off by default: flattening is irreversible, and someone who
+    /// ticks a box today may need to untick it tomorrow.
+    /// </summary>
+    public bool FlattenOnSave
+    {
+        get => _settings.FlattenOnSave;
+        set
+        {
+            if (_settings.FlattenOnSave == value)
+                return;
+            _settings.FlattenOnSave = value;
+            OnPropertyChanged();
+        }
+    }
+
     // --- Placement modes (SDD §3.1, §3.3) ---
 
     /// <summary>
@@ -453,6 +677,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void SetMode(PageMode mode)
     {
+        Selection = null;
         // Arming one mode disarms everything else, signature placement included.
         if (PendingSignature is not null && mode != PageMode.Select)
             PendingSignature = null;
@@ -515,6 +740,63 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         Apply(new FormTextEditOperation(_document, pageIndex, field, value),
               string.IsNullOrEmpty(value) ? "Field cleared." : "Field filled.");
+    }
+
+    /// <summary>
+    /// Removes a line of the document's own text (SDD §3.1). Separate from an edit
+    /// to empty string: Core detaches the runs and keeps them alive, so undo
+    /// restores the original fragmentation and fonts byte-identical rather than
+    /// leaving an empty run behind.
+    /// </summary>
+    public void DeleteLine(int pageIndex, PdfTextLine line)
+    {
+        if (_document is null)
+            return;
+
+        Apply(new DeleteLineOperation(_document, pageIndex, line), "Text deleted.");
+    }
+
+    /// <summary>
+    /// Rewrites an added text box in a new face, size or wording (#43, SDD §6.2
+    /// contract 4). The box keeps its id across the change, which is what lets the
+    /// mobile apps still address it afterwards.
+    /// </summary>
+    public void RestyleTextBox(int pageIndex, PdfTextRun box, string newText, string fontName, double fontSize)
+    {
+        if (_document is null)
+            return;
+
+        if (!StandardTextBoxFonts.IsSupported(fontName))
+        {
+            // The engine rejects anything outside the three, and it should: a
+            // substituted face would silently break the cross-platform contract.
+            Status = $"\"{fontName}\" is not one of the three available faces.";
+            return;
+        }
+
+        Apply(new RestyleTextBoxOperation(_document, pageIndex, box.ObjectIndex, box,
+                                          newText, fontName, fontSize),
+              "Text updated.");
+    }
+
+    /// <summary>Moves an added text box (SDD §3.3 drag/nudge).</summary>
+    public void MoveTextBox(int pageIndex, PdfTextRun box, PdfRect newBounds)
+    {
+        if (_document is null || newBounds == box.Bounds)
+            return;
+
+        Apply(new MoveTextBoxOperation(_document, pageIndex, box.ObjectIndex, box.Bounds, newBounds),
+              "Text moved.");
+    }
+
+    /// <summary>Moves or resizes a placed signature (SDD §3.3).</summary>
+    public void MoveSignature(int pageIndex, string annotationId, PdfRect oldBounds, PdfRect newBounds)
+    {
+        if (_document is null || newBounds == oldBounds)
+            return;
+
+        Apply(new MoveSignatureOperation(_document, pageIndex, annotationId, oldBounds, newBounds),
+              "Signature moved.");
     }
 
     /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
@@ -693,6 +975,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private bool _hasSignatures;
 
+    /// <summary>
+    /// Adds a signature from a photograph or scan (SDD §3.3). The cleanup is the
+    /// §6.2 contract-3 pipeline: near-white becomes transparent, then trim to the
+    /// ink — but only when the image does not already carry transparency. A drawn
+    /// PNG that arrives here would be damaged by white-removal, since its
+    /// background is already nothing.
+    /// </summary>
+    public SignatureEntry AddSignatureFromImage(string name, SignatureBitmap image, Func<SignatureBitmap, byte[]> encodePng)
+    {
+        var cleaned = SignatureCleanup.HasTransparency(image.Bgra)
+            ? SignatureCleanup.TrimToInk(image.Bgra, image.Width, image.Height)
+            : SignatureCleanup.Clean(image);
+
+        return AddSignature(name, encodePng(cleaned));
+    }
+
     public SignatureEntry AddSignature(string name, byte[] png)
     {
         var entry = _signatures.Add(name, png);
@@ -789,7 +1087,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
+        // Flattening is irreversible, so it must not touch the document the user
+        // still has open — only the bytes on their way out.
+        if (FlattenOnSave)
+            _document.FlattenAllPages();
+
         StagedStreamWriter.Write(destination, stream => _document.Save(stream));
+        if (DocumentPath is { } saved)
+            _journal.MarkSaved(saved);
         IsDirty = false;
         Status = $"Saved {DocumentName}.";
     }
@@ -805,7 +1110,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
+        if (FlattenOnSave)
+            _document.FlattenAllPages();
+
         AtomicFileWriter.Write(path, stream => _document.Save(stream));
+        _journal.MarkSaved(path);
         DocumentPath = path;
         DocumentName = Path.GetFileName(path);
         IsDirty = false;
@@ -841,6 +1150,46 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
     private void ZoomReset() => Zoom = 1.0;
+
+    /// <summary>
+    /// Viewport size in device-independent pixels, set by the view. Fit-to-width and
+    /// fit-to-page are meaningless without it.
+    /// </summary>
+    public double ViewportWidth { get; set; }
+    public double ViewportHeight { get; set; }
+
+    /// <summary>Widest page in the document — fit-to-width must suit all of them.</summary>
+    private double WidestPagePoints => Pages.Count == 0 ? 0 : Pages.Max(p => p.PointWidth);
+    private double TallestPagePoints => Pages.Count == 0 ? 0 : Pages.Max(p => p.PointHeight);
+
+    /// <summary>Page margins in the item template, so a fitted page is not clipped.</summary>
+    private const double FitPadding = 32;
+
+    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    private void FitWidth()
+    {
+        if (WidestPagePoints <= 0 || ViewportWidth <= 0)
+            return;
+        Zoom = Clamp((ViewportWidth - FitPadding) / (WidestPagePoints * Rendering.PageBitmap.PointsToPixels));
+    }
+
+    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    private void FitPage()
+    {
+        if (TallestPagePoints <= 0 || ViewportHeight <= 0)
+            return;
+        Zoom = Clamp((ViewportHeight - FitPadding) / (TallestPagePoints * Rendering.PageBitmap.PointsToPixels));
+    }
+
+    /// <summary>Fitted zooms are free-form, but still bounded by the stops' range.</summary>
+    private static double Clamp(double zoom) => Math.Clamp(zoom, ZoomStops[0], ZoomStops[^1]);
+
+    /// <summary>Which page is in view, 1-based. Set by the view as it scrolls.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageIndicator))]
+    private int _currentPage = 1;
+
+    public string PageIndicator => Pages.Count > 0 ? $"Page {CurrentPage} of {Pages.Count}" : "";
 
     private static double NextStop(double current, bool forward)
     {
@@ -881,6 +1230,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Pages.Clear();
 
         _undoStack.Clear();
+        Selection = null;
         RaiseUndoRedo();
 
         _document?.Dispose();
@@ -894,6 +1244,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        // A clean exit ends the session, so the next launch does not offer to
+        // recover a document the user deliberately finished with.
+        _journal.EndSession();
+        _journal.Dispose();
         CloseDocument();
         _engine.Dispose();
     }
