@@ -29,6 +29,31 @@
            they are shade, and they read correctly over any background. -->
       <SolidColorBrush x:Key="BrandRule" Color="#40000000" />
       <BoxShadows x:Key="BrandCardShadow">0 2 8 0 #22000000</BoxShadows>
+
+      <!--
+        FluentTheme's own accent, overridden to the brand.
+
+        Without this the app wears two accents at once. The mode banner is
+        #0E6FD8 because the markup says so, while the toggled "Add text" button
+        beside it came out #007AFF — macOS system blue — because Fluent styles
+        it from SystemAccentColor and nothing had replaced that. Measured from
+        the screenshot artifact, not deduced (#80).
+
+        Theme-scoped, which the first attempt got wrong. Defining one shared
+        ramp on the assumption that Fluent derives its own dark treatment left
+        the dark screenshot with a #4F9BEA banner beside a #0E6FD8 button —
+        the same defect one layer down. Fluent takes these as given.
+
+        The Light/Dark steps are the base moved 20% at a time toward white and
+        black, which is the shape Fluent expects.
+      -->
+      <Color x:Key="SystemAccentColor">#0E6FD8</Color>
+      <Color x:Key="SystemAccentColorLight1">#3E8CE0</Color>
+      <Color x:Key="SystemAccentColorLight2">#6EA9E8</Color>
+      <Color x:Key="SystemAccentColorLight3">#9FC5EF</Color>
+      <Color x:Key="SystemAccentColorDark1">#0B59AD</Color>
+      <Color x:Key="SystemAccentColorDark2">#084382</Color>
+      <Color x:Key="SystemAccentColorDark3">#062C56</Color>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -42,34 +67,17 @@
       <SolidColorBrush x:Key="BrandInk" Color="#F2F7FC" />
       <SolidColorBrush x:Key="BrandRule" Color="#59FFFFFF" />
       <BoxShadows x:Key="BrandCardShadow">0 2 8 0 #59000000</BoxShadows>
+
+      <Color x:Key="SystemAccentColor">#4F9BEA</Color>
+      <Color x:Key="SystemAccentColorLight1">#72B0EF</Color>
+      <Color x:Key="SystemAccentColorLight2">#95C5F3</Color>
+      <Color x:Key="SystemAccentColorLight3">#B9DAF8</Color>
+      <Color x:Key="SystemAccentColorDark1">#3F7CBB</Color>
+      <Color x:Key="SystemAccentColorDark2">#2F5D8C</Color>
+      <Color x:Key="SystemAccentColorDark3">#203E5E</Color>
     </ResourceDictionary>
 
   </ResourceDictionary.ThemeDictionaries>
-
-  <!--
-    FluentTheme's own accent, overridden to the brand.
-
-    Without this the app wears two accents at once. The mode banner is
-    #0E6FD8 because the markup says so, while the toggled "Add text" button
-    beside it comes out #007AFF — macOS system blue — because Fluent styles it
-    from SystemAccentColor and nothing had replaced that. Measured from the
-    screenshot artifact, not deduced (#80).
-
-    Two accents on screen is worse than either choice on its own, so the same
-    decision docs/design-tokens.md §1.2 makes for product chrome applies to the
-    controls: brand over OS. The Light/Dark ramps are the base stepped 20% at a
-    time toward white and black, which is how Fluent expects to receive them.
-
-    Not theme-scoped: Fluent derives its own light and dark treatments from
-    these, so one set serves both.
-  -->
-  <Color x:Key="SystemAccentColor">#0E6FD8</Color>
-  <Color x:Key="SystemAccentColorLight1">#3E8CE0</Color>
-  <Color x:Key="SystemAccentColorLight2">#6EA9E8</Color>
-  <Color x:Key="SystemAccentColorLight3">#9FC5EF</Color>
-  <Color x:Key="SystemAccentColorDark1">#0B59AD</Color>
-  <Color x:Key="SystemAccentColorDark2">#084382</Color>
-  <Color x:Key="SystemAccentColorDark3">#062C56</Color>
 
   <!-- Type. Semantic steps; these are the macOS column of docs/design-tokens.md
        §2. Smaller than the Windows column on purpose — 11pt toolbar labels are
