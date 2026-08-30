@@ -70,6 +70,7 @@ jobs:
             xcrun simctl status_bar "$udid" override --time "9:41" \
               --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
             xcrun simctl install "$udid" "$APP"
+            xcrun simctl ui "$udid" appearance light || true
             for state in home viewer search sign draw text; do
               xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state"
               sleep 8
@@ -77,6 +78,22 @@ jobs:
               xcrun simctl terminate "$udid" com.megapdf.ios || true
               sleep 1
             done
+
+            # Dark, for the two states that carry colour. Every token is defined
+            # twice and the dark half is where a wrong value survives longest —
+            # the Mac app had exactly that, a right banner beside a wrong button,
+            # and only a dark screenshot showed it (#80). Two states rather than
+            # six: these are the ones with accent in them.
+            xcrun simctl ui "$udid" appearance dark || true
+            for state in search sign; do
+              xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state"
+              sleep 8
+              xcrun simctl io "$udid" screenshot "$OUT/${label}-${state}-dark.png"
+              xcrun simctl terminate "$udid" com.megapdf.ios || true
+              sleep 1
+            done
+            xcrun simctl ui "$udid" appearance light || true
+
             xcrun simctl shutdown "$udid" || true
           }
 
