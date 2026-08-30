@@ -79,6 +79,27 @@
 
   </ResourceDictionary.ThemeDictionaries>
 
+  <!--
+    The Fluent accent ramp again, at the dictionary's own level.
+
+    Both levels, because the two behave differently and neither alone is
+    enough — measured, not reasoned:
+
+      shared only  ->  light button #0E6FD8 (right), dark button #0E6FD8 (wrong)
+      themed only  ->  light button #007AFF (wrong), dark button #4F9BEA (right)
+
+    Avalonia resolves the theme block first, so dark keeps its own values and
+    these serve as the light fallback that the theme block, for whatever reason
+    in Fluent's own resolution order, does not win.
+  -->
+  <Color x:Key="SystemAccentColor">#0E6FD8</Color>
+  <Color x:Key="SystemAccentColorLight1">#3E8CE0</Color>
+  <Color x:Key="SystemAccentColorLight2">#6EA9E8</Color>
+  <Color x:Key="SystemAccentColorLight3">#9FC5EF</Color>
+  <Color x:Key="SystemAccentColorDark1">#0B59AD</Color>
+  <Color x:Key="SystemAccentColorDark2">#084382</Color>
+  <Color x:Key="SystemAccentColorDark3">#062C56</Color>
+
   <!-- Type. Semantic steps; these are the macOS column of docs/design-tokens.md
        §2. Smaller than the Windows column on purpose — 11pt toolbar labels are
        what a Mac user expects, and matching Windows here would be the wrong kind
