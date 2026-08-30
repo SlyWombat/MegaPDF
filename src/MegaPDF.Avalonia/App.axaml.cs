@@ -13,12 +13,50 @@ namespace MegaPDF.Avalonia;
 
 public partial class App : Application
 {
-    private static string? ScreenshotArgument(IReadOnlyList<string>? args)
+    private static string? ArgumentAfter(IReadOnlyList<string>? args, string flag)
     {
         if (args is null)
             return null;
-        var index = args.ToList().IndexOf("--screenshot");
+        var index = args.ToList().IndexOf(flag);
         return index >= 0 && index + 1 < args.Count ? args[index + 1] : null;
+    }
+
+    /// <summary>
+    /// Drives the app into a state worth photographing, for --screenshot.
+    ///
+    /// The three states captured before this — empty, document open, form — have
+    /// nothing selected and no search running, so not one pixel of the brand
+    /// accent appeared in any of them. Every colour token except the page card
+    /// shadow was invisible to review (#80). iOS and Android have had states like
+    /// these since their store screenshots were first captured; macOS is catching
+    /// up with them.
+    /// </summary>
+    private static void ApplyScreenshotState(MainViewModel viewModel, string state)
+    {
+        switch (state)
+        {
+            // Search hits: cyan for every match, brand blue for the one you are on.
+            case "find":
+                viewModel.IsFindOpen = true;
+                viewModel.Search("equipment");
+                break;
+
+            // The keyboard focus ring (#2): brand accent-pressed stroke over an
+            // accent-subtle fill.
+            case "focus":
+                viewModel.MoveFocus(forward: true);
+                break;
+
+            // The mode banner — the largest area of brand accent in the app, and
+            // the only place BrandAccentOn is used.
+            case "mode":
+                viewModel.ToggleAddTextCommand.Execute(null);
+                break;
+
+            default:
+                Console.Error.WriteLine($"::error::unknown --screenshot-state '{state}'");
+                break;
+        }
     }
 
     /// <summary>
@@ -155,9 +193,13 @@ public partial class App : Application
             // photographed — which is exactly what happened to the first set. This
             // also yields the window alone, with no desktop or dock around it,
             // which is what a design review wants.
-            var shot = ScreenshotArgument(desktop.Args);
+            var shot = ArgumentAfter(desktop.Args, "--screenshot");
             if (shot is not null)
+            {
+                if (ArgumentAfter(desktop.Args, "--screenshot-state") is { } state)
+                    ApplyScreenshotState(viewModel, state);
                 CaptureAndExit(desktop, shot);
+            }
         }
 
         base.OnFrameworkInitializationCompleted();
