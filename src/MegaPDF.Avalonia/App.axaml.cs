@@ -31,7 +31,7 @@ public partial class App : Application
     /// these since their store screenshots were first captured; macOS is catching
     /// up with them.
     /// </summary>
-    private static void ApplyScreenshotState(MainViewModel viewModel, string state)
+    private static bool ApplyScreenshotState(MainViewModel viewModel, string state)
     {
         switch (state)
         {
@@ -39,23 +39,45 @@ public partial class App : Application
             case "find":
                 viewModel.IsFindOpen = true;
                 viewModel.Search("equipment");
-                break;
+                if (viewModel.MatchCount == 0)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state find matched nothing. The fixture no "
+                        + "longer contains \"equipment\", so the capture would be an ordinary "
+                        + "document view under a name that claims otherwise.");
+                    return false;
+                }
+                return true;
 
             // The keyboard focus ring (#2): brand accent-pressed stroke over an
             // accent-subtle fill.
             case "focus":
                 viewModel.MoveFocus(forward: true);
-                break;
+                if (viewModel.PageFocus is null)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state focus reached no region. The fixture has "
+                        + "nothing focusable, so no ring would be drawn.");
+                    return false;
+                }
+                return true;
 
             // The mode banner — the largest area of brand accent in the app, and
             // the only place BrandAccentOn is used.
             case "mode":
                 viewModel.ToggleAddTextCommand.Execute(null);
-                break;
+                if (!viewModel.IsModeActive)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state mode left no mode active, so there is no "
+                        + "banner to photograph.");
+                    return false;
+                }
+                return true;
 
             default:
                 Console.Error.WriteLine($"::error::unknown --screenshot-state '{state}'");
-                break;
+                return false;
         }
     }
 
@@ -106,7 +128,17 @@ public partial class App : Application
         ("BrandInk", typeof(IBrush)),
         ("BrandRule", typeof(IBrush)),
         ("BrandCardShadow", typeof(BoxShadows)),
-        // The brand accent ramp SyncFluentAccent copies into Fluent's own keys.
+        // Both ends of SyncFluentAccent. The Brand* keys are what Brand.axaml
+        // declares; the plain ones are what Fluent actually reads, and they
+        // exist only because the sync ran. Checking the source alone would let a
+        // silently no-op sync pass here and fail only in a pixel comparison.
+        ("SystemAccentColor", typeof(Color)),
+        ("SystemAccentColorLight1", typeof(Color)),
+        ("SystemAccentColorLight2", typeof(Color)),
+        ("SystemAccentColorLight3", typeof(Color)),
+        ("SystemAccentColorDark1", typeof(Color)),
+        ("SystemAccentColorDark2", typeof(Color)),
+        ("SystemAccentColorDark3", typeof(Color)),
         ("BrandSystemAccentColor", typeof(Color)),
         ("BrandSystemAccentColorLight1", typeof(Color)),
         ("BrandSystemAccentColorLight2", typeof(Color)),
@@ -257,10 +289,18 @@ public partial class App : Application
                 if (ArgumentAfter(desktop.Args, "--theme") is "dark")
                     RequestedThemeVariant = ThemeVariant.Dark;
 
+                // A state that silently does not fire is worse than no state at
+                // all: the workflow still writes 06-mode-banner.png, and the next
+                // person compares three innocuous screenshots and concludes the
+                // colours are fine. Each case now asserts it actually reached the
+                // state, and a miss exits non-zero.
                 if (ArgumentAfter(desktop.Args, "--screenshot-state") is { } state)
                 {
-                    DispatcherTimer.RunOnce(() => ApplyScreenshotState(viewModel, state),
-                                            TimeSpan.FromSeconds(2));
+                    DispatcherTimer.RunOnce(() =>
+                    {
+                        if (!ApplyScreenshotState(viewModel, state))
+                            desktop.Shutdown(1);
+                    }, TimeSpan.FromSeconds(2));
                 }
                 CaptureAndExit(desktop, shot);
             }
