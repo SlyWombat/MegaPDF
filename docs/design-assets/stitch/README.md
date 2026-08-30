@@ -26,6 +26,37 @@ one makes a concrete suggestion about a weakness `design.md` names:
 | `12-mobile-text-formatting` | mobile | Formatting controls docked above the bottom bar while a text box is selected |
 | `09-brand-logo` | — | Stitch's raster of the lockup. **Not usable** — 1:1 with heavy padding and an off-white ground, so it renders as a speck in any toolbar. The screens use inline SVG from `assets/branding/logo.svg` instead |
 
+## The platform split
+
+The desktop design is split in two. Same palette, same lockup; different chrome.
+
+| | Windows (WinUI 3, Fluent) | macOS (AppKit conventions) |
+|---|---|---|
+| | `windows-welcome.png` | `macos-welcome.png` |
+| | `windows-document.png` | `macos-document.png` |
+| | `windows-signature.png` | `macos-signature.png` |
+| Window controls | caption buttons, top right | traffic lights, top left |
+| Title bar | merged into the command bar | unified translucent toolbar |
+| Status | bar along the bottom edge | floating page/zoom pill, no bar |
+| Dialogs | centred ContentDialog | sheet attached to the window top |
+| Radii | 4px control / 8px surface | 6px / 10px |
+| Labels | 12px Segoe UI | 11px SF Pro Text |
+
+`docs/design-tokens.md` is the normative version of that table. These renders are
+the illustration.
+
+**Logo placement in these renders is not a specification.** It is set in each app
+against that platform's conventions; the renders only fix the palette and the fact
+that the lockup is the inline SVG.
+
+Two caveats on the Windows set: `windows-document.png` came back in dark theme
+with the page itself dark, which is wrong — a PDF page is white paper in both
+themes. And a first pass at the Windows variant invented an Acrobat-style ribbon,
+a Library/Cloud/Templates sidebar, "MegaPDF Professional" and an engine version
+string; the regenerated files here have none of it, but it is a standing reminder
+that generated screens drift toward the category average and have to be read
+before they are trusted.
+
 **The logo is inline SVG, never an image.** Stitch's first pass placed a
 generated raster in the toolbar; because that raster is square and mostly
 padding, an `h-8` slot showed a ~14px speck. Every screen now pastes

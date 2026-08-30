@@ -86,6 +86,11 @@ the machine you are on* — still holds; the wording does not.
 
 ## Visual identity, as it exists
 
+> **The framework built from this document is `docs/design-tokens.md`.** This
+> file describes what exists; that one says what to build, and names the type and
+> spacing scale that is missing below. Where the two disagree, the token file wins.
+
+
 ### The mark
 
 `assets/branding/icon.svg`, with its own comments describing the construction:
@@ -126,9 +131,22 @@ the user's marks are drawn in:
 #202020   check marks, drawn signature ink
 ```
 
-It appears in `PdfiumEngine` (mark stroke), `SignaturePad` (drawn ink), and the
-Android and iOS engines. Near-black rather than black, so a mark reads as ink on
-paper rather than as UI.
+Near-black rather than black, so a mark reads as ink on paper rather than as UI.
+
+**Only the check mark honours it.** Drawn signature ink is a different colour on
+every platform — `PdfiumEngine` and `PdfEngine+Checkboxes` stroke marks at
+`0x202020`, but the pads do not:
+
+| | Value | |
+|---|---|---|
+| macOS | `SignaturePad.cs:26` — `0x202020` | correct |
+| Windows | `MainWindow.xaml.cs:1308` — `Colors.Black` | `#000000` |
+| iOS | `SignatureViews.swift:76,146` — `0.10` grey | `#1A1A1A` |
+| Android | `DrawSignatureDialog.kt:38` — `0xFF1A1A1A` | `#1A1A1A` |
+
+Background removal and trimming survive all four, so nothing is broken — but a
+signature and a tick placed on the same page are drawn in different inks on three
+of the four apps.
 
 ### Contract values that are not style
 
