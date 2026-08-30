@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices.WindowsRuntime;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -1002,26 +1003,17 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void ScrollMatchIntoView(MainViewModel.SearchScrollTarget target)
     {
-        const double margin = 24;   // don't land the hit hard against an edge
-        double? horizontal = null, vertical = null;
+        // The decision lives in Core so it can be tested and so macOS uses the same
+        // rules (#32) — watching this work needs a window, which is why it went
+        // unverified for a release.
+        var decision = MatchScroll.Reveal(
+            new PdfRect(target.X, target.Y, target.Width, target.Height),
+            PagesScroll.HorizontalOffset, PagesScroll.VerticalOffset,
+            PagesScroll.ViewportWidth, PagesScroll.ViewportHeight,
+            PagesScroll.ExtentWidth);
 
-        // Only when the content actually overflows: below that the panel is centred,
-        // so content coordinates don't line up with the scroll offset.
-        if (PagesScroll.ExtentWidth > PagesScroll.ViewportWidth + 0.5)
-        {
-            var left = PagesScroll.HorizontalOffset;
-            var right = left + PagesScroll.ViewportWidth;
-            if (target.X < left + margin || target.X + target.Width > right - margin)
-                horizontal = Math.Max(0, target.X + target.Width / 2 - PagesScroll.ViewportWidth / 2);
-        }
-
-        var top = PagesScroll.VerticalOffset;
-        var bottom = top + PagesScroll.ViewportHeight;
-        if (target.Y < top + margin || target.Y + target.Height > bottom - margin)
-            vertical = Math.Max(0, target.Y - PagesScroll.ViewportHeight / 3);
-
-        if (horizontal is not null || vertical is not null)
-            PagesScroll.ChangeView(horizontal, vertical, null);
+        if (decision.MovesAnything)
+            PagesScroll.ChangeView(decision.Horizontal, decision.Vertical, null);
     }
 
     private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>

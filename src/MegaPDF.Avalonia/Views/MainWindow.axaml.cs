@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Imaging;
+using MegaPDF.Core.Viewing;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Services;
 
@@ -700,26 +701,53 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Brings a hit into view. Scrolls the match to a third of the way down rather
-    /// than to the very top, so there is context above it — a hit pinned to the top
-    /// edge reads as if the document starts there.
+    /// Brings a hit into view, using the same rules as Windows (#32).
+    ///
+    /// This used to scroll vertically, always, and never horizontally — which is
+    /// the bug #28 reported and Windows fixed: on a zoomed page a hit off to the
+    /// side was highlighted where it could not be seen, and pressing Next jolted
+    /// the view even when the hit was already on screen. Sharing the decision means
+    /// the two desktops cannot drift apart on it again.
     /// </summary>
     private void ScrollToMatch(int pageIndex, PdfRect rect)
     {
         if (ViewModel is not { } vm)
             return;
 
-        var offsetBefore = 0.0;
+        // Pages stack vertically and are centred horizontally, so a hit's content
+        // position is the pages above it plus its own offset within its page.
+        var above = 0.0;
+        var pageWidth = 0.0;
         foreach (var page in vm.Pages)
         {
             if (page.Index == pageIndex)
+            {
+                pageWidth = page.LayoutWidth;
                 break;
-            offsetBefore += page.LayoutHeight + PageGap;
+            }
+            above += page.LayoutHeight + PageGap;
         }
 
         var scale = PageBitmap.PointsToPixels * vm.Zoom;
-        var target = offsetBefore + (rect.Y * scale) - (PageScroller.Viewport.Height / 3);
-        PageScroller.Offset = PageScroller.Offset.WithY(Math.Max(0, target));
+        var extentWidth = PageScroller.Extent.Width;
+        // Where the page's own left edge sits in content space when it is narrower
+        // than the extent (the panel centres it).
+        var pageLeft = Math.Max(0, (extentWidth - pageWidth) / 2);
+
+        var target = new PdfRect(
+            pageLeft + (rect.X * scale), above + (rect.Y * scale),
+            rect.Width * scale, rect.Height * scale);
+
+        var decision = MatchScroll.Reveal(
+            target,
+            PageScroller.Offset.X, PageScroller.Offset.Y,
+            PageScroller.Viewport.Width, PageScroller.Viewport.Height,
+            extentWidth);
+
+        if (decision.MovesAnything)
+            PageScroller.Offset = new Vector(
+                decision.Horizontal ?? PageScroller.Offset.X,
+                decision.Vertical ?? PageScroller.Offset.Y);
     }
 
     /// <summary>Bottom margin on each page surface in MainWindow.axaml.</summary>
