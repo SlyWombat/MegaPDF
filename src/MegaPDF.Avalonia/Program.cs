@@ -635,6 +635,74 @@ internal static class Program
             if (File.Exists(copyPath)) File.Delete(copyPath);
         }
 
+        // --- Keyboard traversal (SDD §2.2, #2) ---
+        //
+        // The acceptance criterion is "the persona task completes keyboard-only".
+        // The view half — Tab reaching the handler, the focus ring drawing — needs
+        // a window. What is checkable here is the part that decides everything:
+        // that traversal reaches the interactive regions in reading order and that
+        // activating one does the same thing a click does.
+        Console.WriteLine("keyboard traversal:");
+        var kbPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-kb-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel(state);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+
+            Check("focus starts off the page", vm.PageFocus is null);
+
+            vm.MoveFocus(forward: true);
+            Check("Tab puts focus on something", vm.PageFocus is not null);
+
+            // Walk until the drawn checkbox is focused. fixture.pdf has a handful of
+            // regions, so a bounded walk is enough and cannot spin.
+            var found = false;
+            for (var i = 0; i < 40 && !found; i++)
+            {
+                if (vm.PageFocus?.Kind == PageHitKind.DrawnCheckbox)
+                    found = true;
+                else
+                    vm.MoveFocus(forward: true);
+            }
+            Check("tabbing reaches the drawn checkbox", found);
+
+            if (found)
+            {
+                Check("and it announces itself meaningfully",
+                      vm.PageFocus!.Describe(false) == "Box to tick");
+
+                vm.ActivateFocus();
+                Check("Enter ticks it, exactly as a click would", vm.IsDirty);
+
+                using (var file = File.Create(kbPath))
+                    vm.SaveTo(file);
+
+                using var engine = new PdfiumEngine();
+                using var reopened = engine.Open(kbPath);
+                using var page = reopened.GetPage(0);
+                Check("and the tick is in the saved file",
+                      page.GetStamps().Any(st => st.Id.StartsWith("mark:", StringComparison.Ordinal)));
+            }
+
+            // Reverse traversal has to be the inverse, or Shift+Tab strands people.
+            var before = vm.PageFocus?.RegionIndex;
+            vm.MoveFocus(forward: true);
+            vm.MoveFocus(forward: false);
+            Check("Shift+Tab undoes a Tab", vm.PageFocus?.RegionIndex == before);
+
+            vm.ClearPageFocus();
+            Check("Escape releases the page", vm.PageFocus is null);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::keyboard: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(kbPath)) File.Delete(kbPath);
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

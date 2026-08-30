@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Rectangle = Avalonia.Controls.Shapes.Rectangle;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Avalonia.Platform.Storage;
@@ -42,6 +43,8 @@ public partial class MainWindow : Window
             RecentList.SelectedItem = null;
             await OpenRecentAsync(entry);
         };
+
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
 
         BindShortcuts();
         WireSignatures();
@@ -83,6 +86,9 @@ public partial class MainWindow : Window
         {
             vm.SaveRequested += () => _ = SaveAsync();
             vm.ScrollToRequested += ScrollToMatch;
+            // The focused region is brought into view by the same rules a search hit
+            // is — tabbing to something off screen has to show it (#2, #32).
+            vm.FocusScrollRequested += ScrollToMatch;
             vm.EditLineRequested += ShowLineEditor;
             vm.PasswordRequested += AskForPasswordAsync;
             vm.EditFieldRequested += ShowFieldEditor;
@@ -92,8 +98,21 @@ public partial class MainWindow : Window
                 // be rebuilt when the selection changes and when zoom moves it.
                 if (args.PropertyName is nameof(MainViewModel.Selection) or nameof(MainViewModel.Zoom))
                     OnSelectionChanged();
+                if (args.PropertyName is nameof(MainViewModel.PageFocus) or nameof(MainViewModel.Zoom))
+                    OnPageFocusChanged();
             };
         }
+    }
+
+    /// <summary>
+    /// Tunnelling, not bubbling: Avalonia's focus manager handles Tab before a
+    /// bubbling handler would ever see it, so page traversal has to be claimed on
+    /// the way down (#2).
+    /// </summary>
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (HandlePageKey(e))
+            e.Handled = true;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
