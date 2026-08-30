@@ -17,6 +17,9 @@ internal static class Program
          : args.Contains("--print-check") ? PrintCheck(args)
          : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
 
+    /// <summary>Where --screenshot writes, read by App once the window is up.</summary>
+    internal static string? ScreenshotPath;
+
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()

@@ -1,0 +1,64 @@
+# Captures what the macOS app actually looks like, so it can be reviewed by
+# someone who does not have a Mac and has not built it.
+#
+# iOS and Android already have this (ios-screenshots.yml, android-screenshots.yml)
+# and Windows has tools/screenshots-windows/. macOS was the gap — which meant the
+# newest and least-seen of the four apps was also the only one nobody could look
+# at without checking out the repo and building it.
+#
+# Not store screenshots: those need a feature-complete listing pass and their own
+# sizes. These are for design review and for pull requests that change the UI.
+name: macOS screenshots
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/MegaPDF.Avalonia/**'
+      - '.github/workflows/macos-screenshots.yml'
+
+jobs:
+  screenshots:
+    name: What the app looks like
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build
+        run: tools/build-macos-app.sh osx-arm64 "$RUNNER_TEMP/app"
+
+      - name: Fixtures
+        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+
+      - name: Capture
+        run: |
+          APP="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
+          OUT="$RUNNER_TEMP/screenshots"
+          mkdir -p "$OUT"
+
+          # The app renders its own window rather than the OS capturing the screen.
+          # screencapture needs Screen Recording permission, and on a runner that
+          # means a system prompt that appears ON TOP of the thing being
+          # photographed — which is what spoiled the first set. This also gives the
+          # window alone, with no desktop or dock around it.
+          #
+          # Sandboxed, so fixtures have to live in the app's own container.
+          CONTAINER="$HOME/Library/Containers/com.megapdf.mac/Data"
+          "$APP" --self-test "$RUNNER_TEMP/fixtures" >/dev/null 2>&1 || true
+          mkdir -p "$CONTAINER/tmp/fixtures"
+          cp "$RUNNER_TEMP"/fixtures/*.pdf "$CONTAINER/tmp/fixtures/" 2>/dev/null || true
+
+          "$APP" --screenshot "$OUT/01-empty-state.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot "$OUT/02-document-open.png"
+          "$APP" "$CONTAINER/tmp/fixtures/formtext.pdf" --screenshot "$OUT/03-form.png"
+
+          ls -la "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-screenshots
+          path: ${{ runner.temp }}/screenshots/*.png
+          if-no-files-found: warn
