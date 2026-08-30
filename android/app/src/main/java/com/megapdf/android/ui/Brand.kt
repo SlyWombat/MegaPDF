@@ -56,11 +56,42 @@ object Brand {
     val SignaturePad = Color(0xFFF6F6F6)
 }
 
+/**
+ * Surfaces, not just the accent.
+ *
+ * Overriding `primary` alone leaves Material's baseline tonal palette in place
+ * for everything else, and that palette is purple: the search bar came out
+ * #FEF7FF and the signature dialog #ECE6F0, both measured from the Play
+ * screenshot run, with brand-blue text sitting on them (#80). Two palettes on
+ * one screen is the same defect the desktop apps had with their framework
+ * accents.
+ *
+ * These neutrals are cool rather than true grey — pulled toward the brand ink
+ * #16324F — so chrome sits under the blue rather than fighting it.
+ */
 private val LightColours = lightColorScheme(
     primary = Brand.Accent,
     onPrimary = Brand.AccentOn,
+    primaryContainer = Color(0xFFD7E7FA),
+    onPrimaryContainer = Brand.Ink,
     secondary = Brand.Cyan,
+    onSecondary = Brand.AccentOn,
     error = Brand.Danger,
+    onError = Brand.AccentOn,
+
+    background = Color(0xFFFFFFFF),
+    onBackground = Brand.Ink,
+    surface = Color(0xFFFFFFFF),
+    onSurface = Brand.Ink,
+    surfaceVariant = Color(0xFFEEF2F6),
+    onSurfaceVariant = Color(0xFF46586B),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF8FAFC),
+    surfaceContainer = Color(0xFFF4F7FA),
+    surfaceContainerHigh = Color(0xFFEDF2F7),
+    surfaceContainerHighest = Color(0xFFE7EEF4),
+    outline = Color(0xFF7A8B9C),
+    outlineVariant = Color(0xFFC9D6E2),
 )
 
 /**
@@ -75,6 +106,15 @@ private val DarkColours = darkColorScheme(
     onPrimary = Color(0xFF0B1B2B),
     secondary = Brand.Cyan,
     error = Color(0xFFE2685E),
+
+    background = Color(0xFF0F1720),
+    onBackground = Brand.InkOnDark,
+    surface = Color(0xFF0F1720),
+    onSurface = Brand.InkOnDark,
+    surfaceVariant = Color(0xFF27333F),
+    onSurfaceVariant = Color(0xFFB6C4D2),
+    outline = Color(0xFF7A8B9C),
+    outlineVariant = Color(0xFF3A4753),
 )
 
 /**
