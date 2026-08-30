@@ -1286,10 +1286,13 @@ internal sealed class PdfiumPage : IPdfPage
                 PdfiumNative.FPDFPageObj_SetMatrix(newObj, ref matrix);
             if (PdfiumNative.FPDFPageObj_GetFillColor(oldObj, out var r, out var g, out var b, out var a) != 0)
                 PdfiumNative.FPDFPageObj_SetFillColor(newObj, r, g, b, a);
-            // Preserve the text-box tag so an edited text box stays movable (font
-            // substitution rebuilds the object, which would otherwise drop the mark).
-            if (HasMark(oldObj, TextBoxMarkName))
-                PdfiumNative.FPDFPageObj_AddMark(newObj, TextBoxMarkName);
+
+            // Read the box's identity off the OLD object while it still exists —
+            // it is destroyed a few lines below, and the mark has to be rebuilt on
+            // the replacement from these values (#45).
+            var wasTextBox = HasMark(oldObj, TextBoxMarkName);
+            var boxId = wasTextBox ? ReadTextBoxId(oldObj) : null;
+            var boxFont = wasTextBox ? ReadTextBoxFont(oldObj) : null;
 
             if (PdfiumNative.FPDFPage_RemoveObject(_handle, oldObj) == 0)
                 throw new InvalidOperationException("Could not remove the original text object.");
@@ -1298,6 +1301,36 @@ internal sealed class PdfiumPage : IPdfPage
             if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, newObj, (nuint)objectIndex) == 0)
                 throw new InvalidOperationException("Could not insert the replacement text object.");
             newObj = IntPtr.Zero; // ownership transferred to the page
+
+            // Re-tag AFTER insertion, off the object the page now owns — the same
+            // order AppendTextBox uses, and the order the params actually stick in.
+            //
+            // Re-adding the mark alone is not enough, which is what #45 was: the
+            // replacement read as a text box but carried no id, so SDD §6.2
+            // contract 4's handle was gone and both phones refused to select it,
+            // reporting it as written by an older version. It had been silently
+            // downgraded by a desktop edit. The face went the same way, so the box
+            // also reverted to reading as Helvetica.
+            if (wasTextBox)
+            {
+                var inserted = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
+                if (inserted != IntPtr.Zero)
+                {
+                    var mark = PdfiumNative.FPDFPageObj_AddMark(inserted, TextBoxMarkName);
+                    if (mark != IntPtr.Zero)
+                    {
+                        // A box written before the id param existed has none to carry;
+                        // it stays untagged rather than gaining a fabricated identity,
+                        // because a new id would not match what any phone recorded.
+                        if (boxId is not null)
+                            PdfiumNative.FPDFPageObjMark_SetStringParam(
+                                _document, inserted, mark, TextBoxIdKey, boxId);
+                        if (boxFont is not null)
+                            PdfiumNative.FPDFPageObjMark_SetStringParam(
+                                _document, inserted, mark, TextBoxFontKey, boxFont);
+                    }
+                }
+            }
         }
         finally
         {
