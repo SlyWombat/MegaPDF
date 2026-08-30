@@ -22,32 +22,42 @@
       <StackPanel Orientation="Horizontal" Spacing="6">
         <Button Name="OpenButton" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconOpen}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Open" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="SaveButton" Command="{Binding SaveCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconSave}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconSave}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Save" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="SaveAsButton" IsEnabled="{Binding IsDocumentOpen}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconSaveAs}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconSaveAs}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Save As" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="PrintButton" Command="{Binding PrintCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconPrint}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconPrint}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Print" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="ShrinkButton" IsEnabled="{Binding CanShrink}"
                 ToolTip.Tip="Save a smaller copy for email" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconShrink}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconShrink}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Shrink" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
@@ -57,7 +67,9 @@
              placement, and the next click on the page puts it there. -->
         <Button Name="SignButton" IsEnabled="{Binding IsDocumentOpen}">
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconSign}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconSign}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Sign" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         
@@ -93,7 +105,9 @@
                       IsChecked="{Binding IsAddingText, Mode=OneWay}"
                       Command="{Binding ToggleAddTextCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconText}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconText}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Add text" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
@@ -105,7 +119,9 @@
                       IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
                       Command="{Binding ToggleWhiteoutCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconCover}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconCover}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Cover" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
@@ -113,44 +129,58 @@
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
         <Button Name="UndoButton" Command="{Binding UndoCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconUndo}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconUndo}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Undo" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="RedoButton" Command="{Binding RedoCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconRedo}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconRedo}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Redo" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
         <Button Name="ZoomOutButton" Command="{Binding ZoomOutCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconZoomOut}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconZoomOut}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Zoom out" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconZoomIn}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconZoomIn}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Zoom in" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="ZoomResetButton" Command="{Binding ZoomResetCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconActualSize}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconActualSize}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Actual size" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="FitWidthButton" Command="{Binding FitWidthCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconFitWidth}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconFitWidth}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Fit width" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="FitPageButton" Command="{Binding FitPageCommand}" >
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconFitPage}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconFitPage}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Fit page" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
@@ -161,7 +191,9 @@
              because most people never touch them (SDD §4.4). -->
         <Button Name="SettingsButton">
           <StackPanel Orientation="Vertical" Spacing="3" HorizontalAlignment="Center">
-            <PathIcon Data="{StaticResource IconOptions}" Width="18" Height="18" />
+            <Path Data="{StaticResource IconOptions}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="None" />
             <TextBlock Text="Options" FontSize="11" HorizontalAlignment="Center" />
           </StackPanel>
         

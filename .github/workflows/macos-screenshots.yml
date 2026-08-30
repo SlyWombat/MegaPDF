@@ -39,29 +39,21 @@ jobs:
           OUT="$RUNNER_TEMP/screenshots"
           mkdir -p "$OUT"
 
-          shoot() {
-            local name="$1"; shift
-            "$APP" "$@" > "$OUT/$name.log" 2>&1 &
-            local pid=$!
-            # Long enough for the window to lay out and the first page to raster.
-            sleep 9
-            if kill -0 "$pid" 2>/dev/null; then
-              # -x suppresses the capture sound; no -w, because we want whatever is
-              # on screen rather than a window the runner may not let us pick.
-              screencapture -x "$OUT/$name.png" || echo "::warning::capture failed for $name"
-              kill "$pid" 2>/dev/null || true
-              wait "$pid" 2>/dev/null || true
-            else
-              echo "::warning::$name exited before it could be captured"
-              cat "$OUT/$name.log"
-            fi
-          }
+          # The app renders its own window rather than the OS capturing the screen.
+          # screencapture needs Screen Recording permission, and on a runner that
+          # means a system prompt that appears ON TOP of the thing being
+          # photographed — which is what spoiled the first set. This also gives the
+          # window alone, with no desktop or dock around it.
+          #
+          # Sandboxed, so fixtures have to live in the app's own container.
+          CONTAINER="$HOME/Library/Containers/com.megapdf.mac/Data"
+          "$APP" --self-test "$RUNNER_TEMP/fixtures" >/dev/null 2>&1 || true
+          mkdir -p "$CONTAINER/tmp/fixtures"
+          cp "$RUNNER_TEMP"/fixtures/*.pdf "$CONTAINER/tmp/fixtures/" 2>/dev/null || true
 
-          # The empty state is a designed screen in its own right (SDD §2.2), and
-          # the one a new user sees first.
-          shoot 01-empty-state
-          shoot 02-document-open "$RUNNER_TEMP/fixtures/demo.pdf"
-          shoot 03-form "$RUNNER_TEMP/fixtures/formtext.pdf"
+          "$APP" --screenshot "$OUT/01-empty-state.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot "$OUT/02-document-open.png"
+          "$APP" "$CONTAINER/tmp/fixtures/formtext.pdf" --screenshot "$OUT/03-form.png"
 
           ls -la "$OUT"
 
