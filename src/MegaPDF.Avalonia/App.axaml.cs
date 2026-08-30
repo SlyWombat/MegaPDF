@@ -211,6 +211,15 @@ public partial class App : Application
                 // draws nothing, silently. The find and mode states happen to
                 // survive being set early because they are bound view-model data,
                 // which is exactly why the difference is easy to miss.
+                // --theme dark forces the variant rather than asking the runner to
+                // switch appearance. A CI machine's Appearance setting does not
+                // reliably reach an already-launched process, and the dark half of
+                // the token file is exactly where a value can be wrong without
+                // anyone noticing — the key-set parity test proves both themes
+                // define a token, not that the dark one is right.
+                if (ArgumentAfter(desktop.Args, "--theme") is "dark")
+                    RequestedThemeVariant = ThemeVariant.Dark;
+
                 if (ArgumentAfter(desktop.Args, "--screenshot-state") is { } state)
                 {
                     DispatcherTimer.RunOnce(() => ApplyScreenshotState(viewModel, state),

@@ -65,6 +65,15 @@ jobs:
           "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot-state mode \
               --screenshot "$OUT/06-mode-banner.png"
 
+          # Dark. Every token is defined twice and only the light half has ever
+          # been looked at; the parity test proves both halves define a token,
+          # not that the dark value is right.
+          "$APP" --theme dark --screenshot "$OUT/07-dark-empty.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark \
+              --screenshot-state find --screenshot "$OUT/08-dark-find.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark \
+              --screenshot-state mode --screenshot "$OUT/09-dark-mode-banner.png"
+
           ls -la "$OUT"
 
       - uses: actions/upload-artifact@v4
