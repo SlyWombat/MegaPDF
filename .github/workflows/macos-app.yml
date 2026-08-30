@@ -106,6 +106,15 @@ jobs:
         run: |
           "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
 
+      # The design tokens are looked up by name at runtime, and a name that does
+      # not resolve fails silently — Brand.Brush hands back a transparent brush,
+      # so the selection border and focus ring stop being drawn while every other
+      # check still passes. Building proves Brand.axaml parses; only this proves
+      # the keys are reachable, in both theme variants.
+      - name: Design tokens resolve
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --brand-check
+
       # Printing goes through PDFKit and AppKit by Objective-C runtime interop, so
       # the binding surface is the risk: a wrong objc_msgSend signature returns a
       # plausible-looking pointer rather than throwing. This resolves every class

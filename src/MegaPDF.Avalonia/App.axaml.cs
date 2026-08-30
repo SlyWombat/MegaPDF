@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.Markup.Xaml;
 using MegaPDF.Avalonia.ViewModels;
@@ -49,12 +51,87 @@ public partial class App : Application
         }, TimeSpan.FromSeconds(4));
     }
 
+    /// <summary>
+    /// Every token <c>Brand.axaml</c> is expected to define, and the type each
+    /// one must come back as. Ordered as docs/design-tokens.md lists them.
+    /// </summary>
+    private static readonly (string Key, Type Type)[] BrandTokens =
+    [
+        ("BrandAccent", typeof(IBrush)),
+        ("BrandAccentPressed", typeof(IBrush)),
+        ("BrandAccentSubtle", typeof(IBrush)),
+        ("BrandAccentOn", typeof(IBrush)),
+        ("BrandFindMatch", typeof(IBrush)),
+        ("BrandFindMatchCurrent", typeof(IBrush)),
+        ("BrandDanger", typeof(IBrush)),
+        ("BrandInk", typeof(IBrush)),
+        ("BrandRule", typeof(IBrush)),
+        ("BrandCardShadow", typeof(BoxShadows)),
+        ("TypeCaption", typeof(double)),
+        ("TypeBody", typeof(double)),
+        ("TypeSubtitle", typeof(double)),
+        ("TypeTitle", typeof(double)),
+        ("SpaceXs", typeof(double)),
+        ("SpaceS", typeof(double)),
+        ("SpaceM", typeof(double)),
+        ("SpaceL", typeof(double)),
+        ("SpaceXl", typeof(double)),
+        ("SpaceXxl", typeof(double)),
+    ];
+
+    /// <summary>
+    /// --brand-check: resolve every design token in both theme variants and
+    /// report.
+    ///
+    /// This exists because the failure it catches is silent. Brand.Brush returns
+    /// a transparent brush for a key it cannot find, so a renamed or mistyped
+    /// token does not throw — the selection border, the resize handles and the
+    /// focus ring simply stop being drawn, and every other check still passes. A
+    /// build proves Brand.axaml parses; only a lookup proves the keys are
+    /// reachable, and nothing else in CI performs one.
+    ///
+    /// Both variants, because the theme dictionaries are separate: a token added
+    /// to Light and forgotten in Dark is invisible until someone switches
+    /// appearance.
+    /// </summary>
+    private static int BrandCheck()
+    {
+        var failures = 0;
+        foreach (var variant in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+        {
+            Console.WriteLine($"{variant} theme:");
+            foreach (var (key, type) in BrandTokens)
+            {
+                var found = Current is { } app
+                    && app.TryFindResource(key, variant, out var value)
+                    && value is not null
+                    && type.IsInstanceOfType(value);
+                Console.WriteLine($"  [{(found ? "PASS" : "FAIL")}] {key} resolves as {type.Name}");
+                if (!found) failures++;
+            }
+        }
+
+        Console.WriteLine(failures == 0
+            ? "brand-check: PASS"
+            : $"::error::brand-check: {failures} token(s) unresolved");
+        return failures == 0 ? 0 : 1;
+    }
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // No window for this one: the resources are loaded by Initialize, so
+            // the check has everything it needs before anything is shown.
+            if (desktop.Args?.Contains("--brand-check") == true)
+            {
+                DispatcherTimer.RunOnce(() => desktop.Shutdown(BrandCheck()), TimeSpan.Zero);
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+
             var viewModel = new MainViewModel();
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
 
