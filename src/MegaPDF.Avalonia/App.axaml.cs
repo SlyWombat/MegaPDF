@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;   // ResourceNodeExtensions.TryFindResource
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
