@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using Xunit;
 
 namespace MegaPDF.Core.Tests;
 
