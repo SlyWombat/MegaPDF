@@ -1,0 +1,72 @@
+# Captures what the macOS app actually looks like, so it can be reviewed by
+# someone who does not have a Mac and has not built it.
+#
+# iOS and Android already have this (ios-screenshots.yml, android-screenshots.yml)
+# and Windows has tools/screenshots-windows/. macOS was the gap — which meant the
+# newest and least-seen of the four apps was also the only one nobody could look
+# at without checking out the repo and building it.
+#
+# Not store screenshots: those need a feature-complete listing pass and their own
+# sizes. These are for design review and for pull requests that change the UI.
+name: macOS screenshots
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/MegaPDF.Avalonia/**'
+      - '.github/workflows/macos-screenshots.yml'
+
+jobs:
+  screenshots:
+    name: What the app looks like
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build
+        run: tools/build-macos-app.sh osx-arm64 "$RUNNER_TEMP/app"
+
+      - name: Fixtures
+        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+
+      - name: Capture
+        run: |
+          APP="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
+          OUT="$RUNNER_TEMP/screenshots"
+          mkdir -p "$OUT"
+
+          shoot() {
+            local name="$1"; shift
+            "$APP" "$@" > "$OUT/$name.log" 2>&1 &
+            local pid=$!
+            # Long enough for the window to lay out and the first page to raster.
+            sleep 9
+            if kill -0 "$pid" 2>/dev/null; then
+              # -x suppresses the capture sound; no -w, because we want whatever is
+              # on screen rather than a window the runner may not let us pick.
+              screencapture -x "$OUT/$name.png" || echo "::warning::capture failed for $name"
+              kill "$pid" 2>/dev/null || true
+              wait "$pid" 2>/dev/null || true
+            else
+              echo "::warning::$name exited before it could be captured"
+              cat "$OUT/$name.log"
+            fi
+          }
+
+          # The empty state is a designed screen in its own right (SDD §2.2), and
+          # the one a new user sees first.
+          shoot 01-empty-state
+          shoot 02-document-open "$RUNNER_TEMP/fixtures/demo.pdf"
+          shoot 03-form "$RUNNER_TEMP/fixtures/formtext.pdf"
+
+          ls -la "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-screenshots
+          path: ${{ runner.temp }}/screenshots/*.png
+          if-no-files-found: warn
