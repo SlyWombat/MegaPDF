@@ -28,9 +28,9 @@ struct AboutView: View {
                 }
                 Section {
                     Text("Copyright © 2026 ElectricRV.ca Corporation. All rights reserved.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(Brand.Text.caption).foregroundStyle(.secondary)
                     Text("Special thanks to Mega Woman.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(Brand.Text.caption).foregroundStyle(.secondary)
                 }
                 Section {
                     Link("MegaPDF on GitHub",

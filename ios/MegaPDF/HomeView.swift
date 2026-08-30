@@ -13,7 +13,7 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 12) {
             Spacer().frame(height: 48)
-            Text("MegaPDF").font(.largeTitle.bold())
+            Text("MegaPDF").font(Brand.Text.title.bold())
             Text("Open. Fix. Save. Done.").foregroundStyle(.secondary)
             Button("Open PDF") { importing = true }
                 .buttonStyle(.borderedProminent)
@@ -35,7 +35,7 @@ struct HomeView: View {
                                     Text(entry.displayName).foregroundStyle(.primary)
                                     Text(Date(timeIntervalSince1970: Double(entry.lastOpenedEpochMs) / 1000),
                                          style: .date)
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(Brand.Text.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }

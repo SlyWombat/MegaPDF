@@ -73,7 +73,9 @@ struct DrawSignatureView: View {
     @State private var canvasSize: CGSize = .zero
     private let screenshotMode = DemoContent.requestedState == "draw"
 
-    private let inkColor = Color(red: 0.10, green: 0.10, blue: 0.10)
+    // SDD §6.2 fixes the user's mark at #202020. This was 0.10 — #1A1A1A — so a
+    // signature and a check mark on the same page came out in different inks.
+    private let inkColor = Color(red: Brand.inkLevel, green: Brand.inkLevel, blue: Brand.inkLevel)
 
     var body: some View {
         NavigationStack {
@@ -98,7 +100,7 @@ struct DrawSignatureView: View {
                             .padding(28)
                     }
                 }
-                .background(Color(white: 0.96))
+                .background(Brand.signaturePad)
                 .frame(height: 220)
                 .gesture(
                     DragGesture(minimumDistance: 0)
@@ -143,7 +145,9 @@ struct DrawSignatureView: View {
         // Flip: CGContext origin is bottom-left; stroke points are top-left.
         ctx.translateBy(x: 0, y: CGFloat(h))
         ctx.scaleBy(x: scale, y: -scale)
-        ctx.setStrokeColor(red: 0.10, green: 0.10, blue: 0.10, alpha: 1)
+        // The same §6.2 ink as the live stroke above; the raster is what gets
+        // placed into the PDF, so the two must not drift apart.
+        ctx.setStrokeColor(red: Brand.inkLevel, green: Brand.inkLevel, blue: Brand.inkLevel, alpha: 1)
         ctx.setLineWidth(max(220 / 36, 3))
         ctx.setLineCap(.round)
         ctx.setLineJoin(.round)
@@ -246,7 +250,7 @@ struct SelectionOverlay: View {
 
         ZStack(alignment: .topTrailing) {
             Rectangle()
-                .strokeBorder(Color.blue, lineWidth: 2)
+                .strokeBorder(Brand.accent, lineWidth: 2)
             Button {
                 onRemove()
             } label: {
@@ -266,7 +270,7 @@ struct SelectionOverlay: View {
             }
             if resizable {
                 Rectangle()
-                    .fill(Color.blue)
+                    .fill(Brand.accent)
                     .frame(width: 16, height: 16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity,
                            alignment: .bottomTrailing)
