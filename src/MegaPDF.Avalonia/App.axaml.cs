@@ -106,6 +106,15 @@ public partial class App : Application
         ("BrandInk", typeof(IBrush)),
         ("BrandRule", typeof(IBrush)),
         ("BrandCardShadow", typeof(BoxShadows)),
+        // Fluent's own accent ramp, overridden to the brand. A Color, not a
+        // brush — Fluent builds its brushes from these.
+        ("SystemAccentColor", typeof(Color)),
+        ("SystemAccentColorLight1", typeof(Color)),
+        ("SystemAccentColorLight2", typeof(Color)),
+        ("SystemAccentColorLight3", typeof(Color)),
+        ("SystemAccentColorDark1", typeof(Color)),
+        ("SystemAccentColorDark2", typeof(Color)),
+        ("SystemAccentColorDark3", typeof(Color)),
         ("TypeCaption", typeof(double)),
         ("TypeBody", typeof(double)),
         ("TypeSubtitle", typeof(double)),
@@ -196,8 +205,17 @@ public partial class App : Application
             var shot = ArgumentAfter(desktop.Args, "--screenshot");
             if (shot is not null)
             {
+                // After layout, not here. The focus ring is built by the view
+                // against a realised page container, and at this point the window
+                // has not been shown — OnPageFocusChanged finds no container and
+                // draws nothing, silently. The find and mode states happen to
+                // survive being set early because they are bound view-model data,
+                // which is exactly why the difference is easy to miss.
                 if (ArgumentAfter(desktop.Args, "--screenshot-state") is { } state)
-                    ApplyScreenshotState(viewModel, state);
+                {
+                    DispatcherTimer.RunOnce(() => ApplyScreenshotState(viewModel, state),
+                                            TimeSpan.FromSeconds(2));
+                }
                 CaptureAndExit(desktop, shot);
             }
         }

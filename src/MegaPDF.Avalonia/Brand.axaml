@@ -46,6 +46,31 @@
 
   </ResourceDictionary.ThemeDictionaries>
 
+  <!--
+    FluentTheme's own accent, overridden to the brand.
+
+    Without this the app wears two accents at once. The mode banner is
+    #0E6FD8 because the markup says so, while the toggled "Add text" button
+    beside it comes out #007AFF — macOS system blue — because Fluent styles it
+    from SystemAccentColor and nothing had replaced that. Measured from the
+    screenshot artifact, not deduced (#80).
+
+    Two accents on screen is worse than either choice on its own, so the same
+    decision docs/design-tokens.md §1.2 makes for product chrome applies to the
+    controls: brand over OS. The Light/Dark ramps are the base stepped 20% at a
+    time toward white and black, which is how Fluent expects to receive them.
+
+    Not theme-scoped: Fluent derives its own light and dark treatments from
+    these, so one set serves both.
+  -->
+  <Color x:Key="SystemAccentColor">#0E6FD8</Color>
+  <Color x:Key="SystemAccentColorLight1">#3E8CE0</Color>
+  <Color x:Key="SystemAccentColorLight2">#6EA9E8</Color>
+  <Color x:Key="SystemAccentColorLight3">#9FC5EF</Color>
+  <Color x:Key="SystemAccentColorDark1">#0B59AD</Color>
+  <Color x:Key="SystemAccentColorDark2">#084382</Color>
+  <Color x:Key="SystemAccentColorDark3">#062C56</Color>
+
   <!-- Type. Semantic steps; these are the macOS column of docs/design-tokens.md
        §2. Smaller than the Windows column on purpose — 11pt toolbar labels are
        what a Mac user expects, and matching Windows here would be the wrong kind
