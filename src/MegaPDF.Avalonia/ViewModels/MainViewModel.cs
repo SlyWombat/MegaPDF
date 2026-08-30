@@ -437,7 +437,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public (ImageShrinker.Result Result, byte[]? Bytes) PrepareShrunkCopy()
     {
         if (DocumentPath is null)
+        {
+            // Not the same as "nothing to shrink": we have no file to read. Saying
+            // so beats reporting that the pictures are already small (#68).
+            Status = "Reopen this document before shrinking it.";
             return (new ImageShrinker.Result(0), null);
+        }
 
         using var copy = _engine.Open(DocumentPath);
         var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
@@ -1191,12 +1196,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSave))]
     private void Save() => SaveRequested?.Invoke();
 
-    /// <summary>After Save As, the copy becomes the document being edited.</summary>
-    public void AdoptSavedAs(string fileName)
+    /// <summary>
+    /// Saves a copy and adopts it, in one operation (#68).
+    ///
+    /// One operation rather than a save followed by an adopt, because the journal
+    /// must be marked against the file the bytes actually went to. Splitting them
+    /// meant SaveTo marked the OLD path as saved and the adopt then changed only
+    /// the display name — so DocumentPath kept pointing at the file the user opened
+    /// from. Shrink reopened that stale original and produced a "smaller copy"
+    /// missing the edits that had just been saved, with no error to show for it.
+    /// </summary>
+    /// <param name="newPath">
+    /// Where the copy landed, or null when the platform gives back no usable local
+    /// path. Null is recorded as null rather than left stale: a Shrink that refuses
+    /// is better than one that silently reads the wrong document.
+    /// </param>
+    public void SaveAsTo(Stream destination, string? newPath, string fileName)
     {
+        if (_document is null)
+            return;
+
+        if (FlattenOnSave)
+            FlattenOpenDocument();
+
+        VerifiedSave.ToStream(_engine, _document, destination);
+
+        DocumentPath = newPath;
         DocumentName = fileName;
+        if (newPath is not null)
+            _journal.MarkSaved(newPath);
+
         IsDirty = false;
-        Status = $"Saved {fileName}.";
+        Status = newPath is null
+            ? $"Saved {fileName}. It cannot be shrunk from here — reopen it first."
+            : $"Saved {fileName}.";
     }
 
     public void ReportSaveFailure(Exception ex) =>

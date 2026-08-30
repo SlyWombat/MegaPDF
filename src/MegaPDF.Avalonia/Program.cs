@@ -597,6 +597,44 @@ internal static class Program
             failures++;
         }
 
+        // --- Save As adopts the copy (#68) ---
+        Console.WriteLine("save as:");
+        var copyPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-copy-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel(state);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            vm.HandlePageClick(0, new PdfPoint(78, 186));   // tick a box so the copy differs
+            Check("the document is dirty before saving a copy", vm.IsDirty);
+
+            using (var file = File.Create(copyPath))
+                vm.SaveAsTo(file, copyPath, Path.GetFileName(copyPath));
+
+            Check("saving a copy clears the dirty flag", !vm.IsDirty);
+            Check("and the copy becomes the document being edited",
+                  vm.DocumentPath == copyPath);
+            Check("named after the copy, not the original",
+                  vm.DocumentName == Path.GetFileName(copyPath));
+
+            // The bug this guards: Shrink reopens DocumentPath, so a stale path
+            // silently shrinks the file the user saved FROM rather than the one
+            // they just wrote.
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(vm.DocumentPath!);
+            using var page = reopened.GetPage(0);
+            Check("so re-reading it finds the edit that was just saved",
+                  page.GetStamps().Any(st => st.Id.StartsWith("mark:", StringComparison.Ordinal)));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::save as: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(copyPath)) File.Delete(copyPath);
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }

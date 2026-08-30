@@ -962,11 +962,12 @@ public partial class MainWindow : Window
 
         try
         {
+            // One call, so the journal is marked against the file the bytes went to
+            // and DocumentPath follows the copy (#68).
             await using (var stream = await file.OpenWriteAsync())
-                vm.SaveTo(stream);
+                vm.SaveAsTo(stream, file.TryGetLocalPath(), file.Name);
 
             _openedFile = file;
-            vm.AdoptSavedAs(file.Name);
         }
         catch (Exception ex)
         {
