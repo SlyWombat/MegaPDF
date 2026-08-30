@@ -55,6 +55,25 @@ jobs:
           "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot "$OUT/02-document-open.png"
           "$APP" "$CONTAINER/tmp/fixtures/formtext.pdf" --screenshot "$OUT/03-form.png"
 
+          # The three above have nothing selected and no search running, so not
+          # one pixel of the brand accent appears in any of them (#80). These are
+          # the states that show the colour tokens actually reaching the screen.
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot-state find \
+              --screenshot "$OUT/04-find.png"
+          "$APP" "$CONTAINER/tmp/fixtures/formtext.pdf" --screenshot-state focus \
+              --screenshot "$OUT/05-focus-ring.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot-state mode \
+              --screenshot "$OUT/06-mode-banner.png"
+
+          # Dark. Every token is defined twice and only the light half has ever
+          # been looked at; the parity test proves both halves define a token,
+          # not that the dark value is right.
+          "$APP" --theme dark --screenshot "$OUT/07-dark-empty.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark \
+              --screenshot-state find --screenshot "$OUT/08-dark-find.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark \
+              --screenshot-state mode --screenshot "$OUT/09-dark-mode-banner.png"
+
           ls -la "$OUT"
 
       - uses: actions/upload-artifact@v4

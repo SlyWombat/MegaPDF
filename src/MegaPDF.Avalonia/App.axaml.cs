@@ -13,12 +13,50 @@ namespace MegaPDF.Avalonia;
 
 public partial class App : Application
 {
-    private static string? ScreenshotArgument(IReadOnlyList<string>? args)
+    private static string? ArgumentAfter(IReadOnlyList<string>? args, string flag)
     {
         if (args is null)
             return null;
-        var index = args.ToList().IndexOf("--screenshot");
+        var index = args.ToList().IndexOf(flag);
         return index >= 0 && index + 1 < args.Count ? args[index + 1] : null;
+    }
+
+    /// <summary>
+    /// Drives the app into a state worth photographing, for --screenshot.
+    ///
+    /// The three states captured before this — empty, document open, form — have
+    /// nothing selected and no search running, so not one pixel of the brand
+    /// accent appeared in any of them. Every colour token except the page card
+    /// shadow was invisible to review (#80). iOS and Android have had states like
+    /// these since their store screenshots were first captured; macOS is catching
+    /// up with them.
+    /// </summary>
+    private static void ApplyScreenshotState(MainViewModel viewModel, string state)
+    {
+        switch (state)
+        {
+            // Search hits: cyan for every match, brand blue for the one you are on.
+            case "find":
+                viewModel.IsFindOpen = true;
+                viewModel.Search("equipment");
+                break;
+
+            // The keyboard focus ring (#2): brand accent-pressed stroke over an
+            // accent-subtle fill.
+            case "focus":
+                viewModel.MoveFocus(forward: true);
+                break;
+
+            // The mode banner — the largest area of brand accent in the app, and
+            // the only place BrandAccentOn is used.
+            case "mode":
+                viewModel.ToggleAddTextCommand.Execute(null);
+                break;
+
+            default:
+                Console.Error.WriteLine($"::error::unknown --screenshot-state '{state}'");
+                break;
+        }
     }
 
     /// <summary>
@@ -68,6 +106,14 @@ public partial class App : Application
         ("BrandInk", typeof(IBrush)),
         ("BrandRule", typeof(IBrush)),
         ("BrandCardShadow", typeof(BoxShadows)),
+        // The brand accent ramp SyncFluentAccent copies into Fluent's own keys.
+        ("BrandSystemAccentColor", typeof(Color)),
+        ("BrandSystemAccentColorLight1", typeof(Color)),
+        ("BrandSystemAccentColorLight2", typeof(Color)),
+        ("BrandSystemAccentColorLight3", typeof(Color)),
+        ("BrandSystemAccentColorDark1", typeof(Color)),
+        ("BrandSystemAccentColorDark2", typeof(Color)),
+        ("BrandSystemAccentColorDark3", typeof(Color)),
         ("TypeCaption", typeof(double)),
         ("TypeBody", typeof(double)),
         ("TypeSubtitle", typeof(double)),
@@ -118,7 +164,45 @@ public partial class App : Application
         return failures == 0 ? 0 : 1;
     }
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    /// <summary>The seven colours FluentTheme builds its control accents from.</summary>
+    private static readonly string[] FluentAccentKeys =
+    [
+        "SystemAccentColor",
+        "SystemAccentColorLight1", "SystemAccentColorLight2", "SystemAccentColorLight3",
+        "SystemAccentColorDark1", "SystemAccentColorDark2", "SystemAccentColorDark3",
+    ];
+
+    /// <summary>
+    /// Copies the brand accent ramp for the current theme into the resources
+    /// Fluent reads, so its controls match the chrome the markup paints.
+    ///
+    /// It has to be done in code. Fluent defines SystemAccentColor in its own
+    /// theme dictionaries; for a key it owns, its theme dictionary beats ours,
+    /// while a direct entry in Application.Resources beats everything. So a
+    /// theme-scoped override never wins and a shared one cannot vary by theme —
+    /// which is why the dark screenshot showed a #4F9BEA banner beside a
+    /// #0E6FD8 button. Brand.axaml holds the values under Brand-prefixed keys,
+    /// where nothing competes, and this writes the right ones across.
+    /// </summary>
+    private void SyncFluentAccent()
+    {
+        foreach (var key in FluentAccentKeys)
+        {
+            if (this.TryFindResource("Brand" + key, ActualThemeVariant, out var value)
+                && value is Color colour)
+            {
+                Resources[key] = colour;
+            }
+        }
+    }
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        SyncFluentAccent();
+        // macOS switches appearance under a running app, so this is not one-shot.
+        ActualThemeVariantChanged += (_, _) => SyncFluentAccent();
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -155,9 +239,31 @@ public partial class App : Application
             // photographed — which is exactly what happened to the first set. This
             // also yields the window alone, with no desktop or dock around it,
             // which is what a design review wants.
-            var shot = ScreenshotArgument(desktop.Args);
+            var shot = ArgumentAfter(desktop.Args, "--screenshot");
             if (shot is not null)
+            {
+                // After layout, not here. The focus ring is built by the view
+                // against a realised page container, and at this point the window
+                // has not been shown — OnPageFocusChanged finds no container and
+                // draws nothing, silently. The find and mode states happen to
+                // survive being set early because they are bound view-model data,
+                // which is exactly why the difference is easy to miss.
+                // --theme dark forces the variant rather than asking the runner to
+                // switch appearance. A CI machine's Appearance setting does not
+                // reliably reach an already-launched process, and the dark half of
+                // the token file is exactly where a value can be wrong without
+                // anyone noticing — the key-set parity test proves both themes
+                // define a token, not that the dark one is right.
+                if (ArgumentAfter(desktop.Args, "--theme") is "dark")
+                    RequestedThemeVariant = ThemeVariant.Dark;
+
+                if (ArgumentAfter(desktop.Args, "--screenshot-state") is { } state)
+                {
+                    DispatcherTimer.RunOnce(() => ApplyScreenshotState(viewModel, state),
+                                            TimeSpan.FromSeconds(2));
+                }
                 CaptureAndExit(desktop, shot);
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -29,6 +29,40 @@
            they are shade, and they read correctly over any background. -->
       <SolidColorBrush x:Key="BrandRule" Color="#40000000" />
       <BoxShadows x:Key="BrandCardShadow">0 2 8 0 #22000000</BoxShadows>
+
+      <!--
+        FluentTheme's own accent, overridden to the brand.
+
+        Without this the app wears two accents at once. The mode banner is
+        #0E6FD8 because the markup says so, while the toggled "Add text" button
+        beside it came out #007AFF — macOS system blue — because Fluent styles
+        it from SystemAccentColor and nothing had replaced that. Measured from
+        the screenshot artifact, not deduced (#80).
+
+        Named Brand*, not SystemAccentColor*, and copied across at runtime by
+        App.SyncFluentAccent. Four measurements established why:
+
+          shared only  ->  light #0E6FD8 (right), dark #0E6FD8 (wrong)
+          themed only  ->  light #007AFF (wrong), dark #4F9BEA (right)
+          both         ->  light #0E6FD8 (right), dark #0E6FD8 (wrong)
+
+        Fluent defines SystemAccentColor in its own theme dictionaries, and for
+        a key it owns, its theme dictionary beats ours while a direct entry in
+        Application.Resources beats everything. So a theme-scoped override
+        cannot win and a shared one cannot vary. Under a key Fluent does not
+        own, nothing competes, and the app writes the right one into the direct
+        entry whenever the variant changes.
+
+        The Light/Dark steps are the base moved 20% at a time toward white and
+        black, which is the shape Fluent expects.
+      -->
+      <Color x:Key="BrandSystemAccentColor">#0E6FD8</Color>
+      <Color x:Key="BrandSystemAccentColorLight1">#3E8CE0</Color>
+      <Color x:Key="BrandSystemAccentColorLight2">#6EA9E8</Color>
+      <Color x:Key="BrandSystemAccentColorLight3">#9FC5EF</Color>
+      <Color x:Key="BrandSystemAccentColorDark1">#0B59AD</Color>
+      <Color x:Key="BrandSystemAccentColorDark2">#084382</Color>
+      <Color x:Key="BrandSystemAccentColorDark3">#062C56</Color>
     </ResourceDictionary>
 
     <ResourceDictionary x:Key="Dark">
@@ -42,6 +76,14 @@
       <SolidColorBrush x:Key="BrandInk" Color="#F2F7FC" />
       <SolidColorBrush x:Key="BrandRule" Color="#59FFFFFF" />
       <BoxShadows x:Key="BrandCardShadow">0 2 8 0 #59000000</BoxShadows>
+
+      <Color x:Key="BrandSystemAccentColor">#4F9BEA</Color>
+      <Color x:Key="BrandSystemAccentColorLight1">#72B0EF</Color>
+      <Color x:Key="BrandSystemAccentColorLight2">#95C5F3</Color>
+      <Color x:Key="BrandSystemAccentColorLight3">#B9DAF8</Color>
+      <Color x:Key="BrandSystemAccentColorDark1">#3F7CBB</Color>
+      <Color x:Key="BrandSystemAccentColorDark2">#2F5D8C</Color>
+      <Color x:Key="BrandSystemAccentColorDark3">#203E5E</Color>
     </ResourceDictionary>
 
   </ResourceDictionary.ThemeDictionaries>

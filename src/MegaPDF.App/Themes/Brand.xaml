@@ -31,6 +31,29 @@
             <SolidColorBrush x:Key="BrandInkBrush" Color="#16324F" />
             <!-- Splash credit lines, over the artwork. A scrim, not a brand hue. -->
             <SolidColorBrush x:Key="BrandOverlayTextBrush" Color="#99FFFFFF" />
+
+            <!-- Fluent's own accent, overridden to the brand.
+                 Changing only the chrome the markup names leaves the app wearing
+                 two accents at once: a #0E6FD8 banner beside a system-blue
+                 toggled button that Fluent styled from SystemAccentColor. The Mac
+                 app had exactly that, measured out of a screenshot (#80); Windows
+                 has the same shape and no way to photograph it in CI, so this is
+                 the fix applied on the strength of the macOS evidence.
+                 Both the ramp and the derived brushes: WinUI builds the brushes
+                 from the colours when XamlControlsResources loads, which is
+                 before this dictionary is merged. -->
+            <Color x:Key="SystemAccentColor">#0E6FD8</Color>
+            <Color x:Key="SystemAccentColorLight1">#3E8CE0</Color>
+            <Color x:Key="SystemAccentColorLight2">#6EA9E8</Color>
+            <Color x:Key="SystemAccentColorLight3">#9FC5EF</Color>
+            <Color x:Key="SystemAccentColorDark1">#0B59AD</Color>
+            <Color x:Key="SystemAccentColorDark2">#084382</Color>
+            <Color x:Key="SystemAccentColorDark3">#062C56</Color>
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#0E6FD8" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#0E6FD8" Opacity="0.9" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#0E6FD8" Opacity="0.8" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#0B59AD" />
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#084382" />
         </ResourceDictionary>
 
         <ResourceDictionary x:Key="Dark">
@@ -45,6 +68,19 @@
             <SolidColorBrush x:Key="BrandDangerBrush" Color="#E2685E" />
             <SolidColorBrush x:Key="BrandInkBrush" Color="#F2F7FC" />
             <SolidColorBrush x:Key="BrandOverlayTextBrush" Color="#99FFFFFF" />
+
+            <Color x:Key="SystemAccentColor">#4F9BEA</Color>
+            <Color x:Key="SystemAccentColorLight1">#72B0EF</Color>
+            <Color x:Key="SystemAccentColorLight2">#95C5F3</Color>
+            <Color x:Key="SystemAccentColorLight3">#B9DAF8</Color>
+            <Color x:Key="SystemAccentColorDark1">#3F7CBB</Color>
+            <Color x:Key="SystemAccentColorDark2">#2F5D8C</Color>
+            <Color x:Key="SystemAccentColorDark3">#203E5E</Color>
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#4F9BEA" />
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#4F9BEA" Opacity="0.9" />
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#4F9BEA" Opacity="0.8" />
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#95C5F3" />
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#B9DAF8" />
         </ResourceDictionary>
 
     </ResourceDictionary.ThemeDictionaries>

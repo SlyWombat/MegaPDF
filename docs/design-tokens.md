@@ -48,11 +48,18 @@ raw hex value; it names one of these.
 
 Two notes on choices made here:
 
-- **`accent` is the brand blue, not the OS accent.** Windows currently borrows the
-  user's personalisation colour, which can be any hue at all; the Mac app uses
-  Tailwind's `#3B82F6`. Neither is MegaPDF. On Windows this means *not* using
-  `SystemAccentColor` for product chrome — an accepted, deliberate divergence from
-  Fluent's default, because brand identity across four platforms outranks it.
+- **`accent` is the brand blue, not the OS accent.** Windows borrowed the user's
+  personalisation colour, which can be any hue at all; the Mac app used Tailwind's
+  `#3B82F6`. Neither is MegaPDF. This means *not* using `SystemAccentColor` for
+  product chrome — an accepted, deliberate divergence, because brand identity
+  across four platforms outranks matching the host on one of them.
+
+  **This extends to the framework's own controls.** The first pass changed only
+  the chrome the markup names, which left the app wearing two accents at once: a
+  `#0E6FD8` mode banner beside a `#007AFF` toggled toolbar button that Fluent had
+  styled from the OS. Two accents is worse than either choice alone, so each
+  desktop app also overrides the framework accent ramp — `SystemAccentColor` and
+  its six Light/Dark steps — in its own token file.
 - **Find highlighting uses cyan for hits and blue for the current one.** Android
   currently uses Material blue for hits and *amber* for the current hit. Amber is
   not in the brand, and two brand hues distinguish the states without importing a
