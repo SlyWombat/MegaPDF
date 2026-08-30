@@ -106,6 +106,94 @@ jobs:
         run: |
           "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
 
+      # A hand-rolled ICNS that PIL wrote and PIL reads back is not evidence
+      # macOS accepts it. iconutil is macOS's own reader: if it can explode the
+      # container into an iconset, Finder and the Dock can read it too. The
+      # bundle showed the blank generic document before this (#73), so the check
+      # also asserts the plist key that points at it.
+      - name: The app has an icon macOS can read
+        run: |
+          APP="$RUNNER_TEMP/app/MegaPDF.app"
+          ICNS="$APP/Contents/Resources/MegaPDF.icns"
+
+          test -f "$ICNS" || { echo "::error::no $ICNS in the bundle"; exit 1; }
+
+          name=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist" 2>/dev/null || true)
+          if [ "$name" != "MegaPDF" ]; then
+            echo "::error::CFBundleIconFile is '$name', expected 'MegaPDF'"
+            exit 1
+          fi
+
+          iconutil -c iconset "$ICNS" -o "$RUNNER_TEMP/icon.iconset"
+          echo "representations macOS read back:"
+          ls -1 "$RUNNER_TEMP/icon.iconset"
+
+          # Ten in, ten out. A container that parses but drops sizes leaves
+          # Finder upscaling a small one, which looks like a blurry icon rather
+          # than a broken build.
+          count=$(ls -1 "$RUNNER_TEMP/icon.iconset" | wc -l | tr -d ' ')
+          if [ "$count" -lt 10 ]; then
+            echo "::error::only $count representations survived the round trip, expected 10"
+            exit 1
+          fi
+
+          # macOS does not mask app icons: the rounded shape and its margin have
+          # to be in the pixels. Apple's grid puts the shape in the middle 824 of
+          # 1024, so a fully-opaque bounding box that reaches the canvas edge
+          # means the icon will render square and oversized in the Dock.
+          sips -g pixelWidth -g pixelHeight "$RUNNER_TEMP/icon.iconset/icon_512x512.png"
+          python3 - "$RUNNER_TEMP/icon.iconset/icon_512x512.png" <<'PYCHECK'
+          import sys, struct, zlib
+          # No PIL on the runner; read the PNG's alpha directly.
+          data = open(sys.argv[1], 'rb').read()
+          pos, idat, w, h = 8, b'', 0, 0
+          while pos < len(data):
+              ln = struct.unpack('>I', data[pos:pos+4])[0]
+              kind = data[pos+4:pos+8]
+              body = data[pos+8:pos+8+ln]
+              if kind == b'IHDR':
+                  w, h, depth, colour = struct.unpack('>IIBB', body[:10])
+                  assert depth == 8 and colour == 6, f'expected 8-bit RGBA, got {depth}/{colour}'
+              elif kind == b'IDAT':
+                  idat += body
+              elif kind == b'IEND':
+                  break
+              pos += 12 + ln
+          raw = zlib.decompress(idat)
+          stride = w * 4
+          prev = bytearray(stride)
+          top = left = None
+          bottom = right = 0
+          for y in range(h):
+              ft = raw[y * (stride + 1)]
+              line = bytearray(raw[y * (stride + 1) + 1:(y + 1) * (stride + 1)])
+              for i in range(stride):
+                  a = line[i - 4] if i >= 4 else 0
+                  b = prev[i]
+                  c = prev[i - 4] if i >= 4 else 0
+                  if ft == 1: line[i] = (line[i] + a) & 0xFF
+                  elif ft == 2: line[i] = (line[i] + b) & 0xFF
+                  elif ft == 3: line[i] = (line[i] + (a + b) // 2) & 0xFF
+                  elif ft == 4:
+                      p = a + b - c
+                      pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                      pr = a if (pa <= pb and pa <= pc) else (b if pb <= pc else c)
+                      line[i] = (line[i] + pr) & 0xFF
+              for x in range(w):
+                  if line[x * 4 + 3] > 250:
+                      if top is None: top = y
+                      left = x if left is None else min(left, x)
+                      right = max(right, x)
+                      bottom = y
+              prev = line
+          margin = min(left, top, w - 1 - right, h - 1 - bottom)
+          expected = round(100 * w / 1024)
+          print(f'opaque shape: {left},{top}..{right},{bottom} in {w}x{h}; margin {margin}px, expected ~{expected}px')
+          if abs(margin - expected) > 4:
+              print(f"::error::icon margin is {margin}px against Apple's ~{expected}px grid, so it will render the wrong size beside other Dock icons")
+              raise SystemExit(1)
+          PYCHECK
+
       # The design tokens are looked up by name at runtime, and a name that does
       # not resolve fails silently — Brand.Brush hands back a transparent brush,
       # so the selection border and focus ring stop being drawn while every other

@@ -71,6 +71,19 @@ cp -R "$PUBLISH/." "$APP/Contents/MacOS/"
 # stray .pdb is the difference between a signable bundle and a failed build.
 find "$APP/Contents/MacOS" -name '*.pdb' -delete
 
+# The icon, before signing. A file dropped into Contents/Resources afterwards
+# invalidates the seal, and given this bundle's signing history that failure
+# would surface as something else entirely.
+#
+# Committed rather than generated here: tools/gen_macos_icon.py needs PIL, and
+# this script runs in four workflows. Regenerate it when the branding changes.
+ICON="$ROOT/assets/branding/MegaPDF.icns"
+if [ ! -f "$ICON" ]; then
+    echo "::error::$ICON is missing — regenerate with tools/gen_macos_icon.py" >&2
+    exit 1
+fi
+cp "$ICON" "$APP/Contents/Resources/MegaPDF.icns"
+
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -80,6 +93,9 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>CFBundleDisplayName</key><string>MegaPDF</string>
     <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
     <key>CFBundleExecutable</key><string>MegaPDF</string>
+    <!-- Without this the app shows the blank generic document in Finder, the
+         Dock and the app switcher, and the App Store rejects it (#73). -->
+    <key>CFBundleIconFile</key><string>MegaPDF</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>

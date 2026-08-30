@@ -36,7 +36,7 @@
     is worse than one that spells itself out.
   -->
   <ControlTheme x:Key="ToolbarButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-    <Setter Property="Padding" Value="10,6" />
+    <Setter Property="Padding" Value="8,8" />
     <Setter Property="MinWidth" Value="58" />
   </ControlTheme>
 </ResourceDictionary>
