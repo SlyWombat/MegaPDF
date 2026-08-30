@@ -13,20 +13,25 @@
         <StackPanel
             HorizontalAlignment="Left"
             VerticalAlignment="Bottom"
-            Margin="14,0,0,8"
+            Margin="16,0,0,8"
             MaxWidth="200"
             IsHitTestVisible="False"
             AutomationProperties.Name="Copyright 2026 ElectricRV.ca Corporation. Special thanks to Mega Woman.">
+            <!-- 10, below the type scale's smallest step, and 14 line height with it.
+                 Raising these to TypeCaption widens both lines by about a fifth, which
+                 pushes them past the MaxWidth above and back across the artwork's own
+                 "FREE & OPEN SOURCE". docs/design-tokens.md §2 is a UI scale; this is
+                 a credit line sitting on top of a fixed image. -->
             <TextBlock
                 Text="© 2026 ElectricRV.ca Corporation"
                 FontSize="10"
                 LineHeight="14"
-                Foreground="#99FFFFFF" />
+                Foreground="{ThemeResource BrandOverlayTextBrush}" />
             <TextBlock
                 Text="Special thanks to Mega Woman"
                 FontSize="10"
                 LineHeight="14"
-                Foreground="#99FFFFFF" />
+                Foreground="{ThemeResource BrandOverlayTextBrush}" />
         </StackPanel>
     </Grid>
 </Window>

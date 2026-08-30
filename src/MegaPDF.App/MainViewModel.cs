@@ -41,15 +41,20 @@ public sealed record PageView(
 /// <summary>One find-match rectangle on a page, in DIPs (zoom baked in at creation).</summary>
 public sealed record SearchHighlight(double X, double Y, double Width, double Height, bool IsCurrent)
 {
-    private static Windows.UI.Color Accent => (Windows.UI.Color)Application.Current.Resources["SystemAccentColor"];
-
     public Thickness Margin => new(X, Y, 0, 0);
 
-    /// <summary>Translucent accent fill; the current match reads stronger (issue #26).</summary>
-    public Brush Fill => new SolidColorBrush(Accent) { Opacity = IsCurrent ? 0.42 : 0.18 };
+    /// <summary>
+    /// Hue, not opacity, separates "one of forty hits" from "the hit you are on":
+    /// cyan for every match, brand blue for the current one (issue #26, and
+    /// docs/design-tokens.md §1.2). Two strengths of one colour are hard to tell
+    /// apart on a dark scan; two colours are not. The tokens carry their own alpha.
+    /// </summary>
+    public Brush Fill => Brand.Brush(IsCurrent ? "BrandFindMatchCurrentBrush" : "BrandFindMatchBrush");
 
     /// <summary>The current match is also outlined so it stands out beside its neighbors.</summary>
-    public Brush Stroke => new SolidColorBrush(Accent) { Opacity = IsCurrent ? 1 : 0 };
+    public Brush Stroke => IsCurrent
+        ? Brand.Brush("BrandAccentBrush")
+        : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
 
     public double StrokeThickness => IsCurrent ? 1.5 : 0;
 }

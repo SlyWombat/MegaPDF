@@ -6,6 +6,9 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- After XamlControlsResources, so the brand tokens are additions
+                     to Fluent rather than something Fluent can overwrite. -->
+                <ResourceDictionary Source="ms-appx:///Themes/Brand.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>
