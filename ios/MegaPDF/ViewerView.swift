@@ -52,7 +52,7 @@ struct ViewerView: View {
                     .frame(minWidth: geo.size.width, minHeight: geo.size.height,
                            alignment: .center)
                 }
-                .background(Color(white: 0.25))
+                .background(Brand.backdrop)
                 .gesture(
                     MagnificationGesture()
                         .onChanged { gestureZoom = $0 }
@@ -252,12 +252,15 @@ struct ViewerView: View {
                         y: (Double(pageSize.height) - rect.top) * scaleY,
                         width: (rect.right - rect.left) * scaleX,
                         height: (rect.top - rect.bottom) * scaleY)
+                    // Hue, not opacity: cyan for every hit, brand blue for the one
+                    // you are on. Two strengths of one colour are hard to tell apart
+                    // on a dark scan; two colours are not. The tokens carry their own
+                    // alpha, so nothing is layered on here.
                     context.fill(
                         Path(r),
-                        with: .color(Color.accentColor.opacity(isCurrent ? 0.45 : 0.25)))
+                        with: .color(isCurrent ? Brand.findMatchCurrent : Brand.findMatch))
                     if isCurrent {
-                        context.stroke(Path(r), with: .color(Color.accentColor),
-                                       lineWidth: 2)
+                        context.stroke(Path(r), with: .color(Brand.accent), lineWidth: 2)
                     }
                 }
             }

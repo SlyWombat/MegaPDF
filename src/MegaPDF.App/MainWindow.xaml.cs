@@ -428,7 +428,7 @@ public sealed partial class MainWindow : Window
         _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable);
 
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
-        var accent = new Microsoft.UI.Xaml.Media.SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]);
+        var accent = Brand.Brush("BrandAccentBrush");
         var aspect = bounds.Height / bounds.Width;
 
         var chrome = new Grid
@@ -638,8 +638,11 @@ public sealed partial class MainWindow : Window
         _whiteoutStart = e.GetCurrentPoint(canvas).Position;
         _whiteoutPreview = new Border
         {
+            // White because whiteout covers the page with paper. Not a theme
+            // colour: it must stay white when the app is dark, or the preview
+            // would show something the saved PDF will not contain.
             Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) { Opacity = 0.75 },
-            BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]),
+            BorderBrush = Brand.Brush("BrandAccentBrush"),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
@@ -749,7 +752,7 @@ public sealed partial class MainWindow : Window
 
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var bounds = region.Bounds;
-        var accent = new Microsoft.UI.Xaml.Media.SolidColorBrush((Windows.UI.Color)Application.Current.Resources["SystemAccentColor"]) { Opacity = 0.75 };
+        var accent = Brand.Brush("BrandAccentBrush", 0.75);
 
         _hoverOverlay = region.Kind == PageHitKind.TextRun
             // Faint dotted underline beneath hovered text (SDD §2.2).
@@ -1294,6 +1297,9 @@ public sealed partial class MainWindow : Window
         {
             Width = 460,
             Height = 180,
+            // White, and not themeable: the drawn signature is rasterised from this
+            // surface and then background-removed at luminance > 235 (SDD §6.2). A
+            // dark pad would survive the cleanup as a black rectangle.
             Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White),
             CornerRadius = new CornerRadius(4),
         };
@@ -1305,7 +1311,10 @@ public sealed partial class MainWindow : Window
             drawHost.CapturePointer(args.Pointer);
             currentStroke = new Microsoft.UI.Xaml.Shapes.Polyline
             {
-                Stroke = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
+                // SDD §6.2: the user's mark is #202020, near-black, so it reads as
+                // ink on paper rather than as UI. Not a theme colour, not a token.
+                Stroke = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Windows.UI.Color.FromArgb(0xFF, 0x20, 0x20, 0x20)),
                 StrokeThickness = 3,
                 StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Round,
                 StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,

@@ -231,7 +231,4 @@ public sealed record Highlight(double X, double Y, double Width, double Height, 
     /// no container theme at all.
     /// </summary>
     public global::Avalonia.Thickness Margin => new(X, Y, 0, 0);
-
-    /// <summary>The hit you are on is stronger than the ones you are not.</summary>
-    public double Opacity => IsCurrent ? 0.55 : 0.28;
 }

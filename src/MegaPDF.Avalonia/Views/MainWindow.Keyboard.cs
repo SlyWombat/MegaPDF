@@ -52,10 +52,10 @@ public partial class MainWindow
             // Two-tone: a light halo under a dark stroke, so the ring is visible on
             // white paper and on a dark scan alike. A single colour disappears
             // against one or the other.
-            Stroke = new SolidColorBrush(Color.FromRgb(0x1D, 0x4E, 0xD8)),
+            Stroke = Brand.Brush("BrandAccentPressed"),
             StrokeThickness = 2,
             StrokeDashArray = [3, 2],
-            Fill = new SolidColorBrush(Color.FromArgb(0x22, 0x3B, 0x82, 0xF6)),
+            Fill = Brand.Brush("BrandAccentSubtle"),
             IsHitTestVisible = false,
         };
 

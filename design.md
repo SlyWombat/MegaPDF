@@ -117,10 +117,16 @@ From `assets/branding/*.svg` — the only place a deliberate palette exists:
 | Page | `#D6E7F8` | document face in the mark |
 | Page lines | `#C9DCEF` | text lines in the mark |
 
-**None of these colours appear in any of the four applications.** The macOS app
-uses `#3B82F6` and `#1D4ED8` for selection and focus, chosen by a developer with
-no reference to the brand. That is the single largest identity gap in the
-product: there is a palette, it is good, and nothing uses it.
+When this was written, **none of these colours appeared in any of the four
+applications** — the Mac app used `#3B82F6` and `#1D4ED8` for selection and
+focus, chosen by a developer with no reference to the brand, and it was the
+single largest identity gap in the product.
+
+That is fixed. Each app now has one file that holds the palette and is the only
+place in it that names a colour: `Themes/Brand.xaml`, `Brand.axaml`, `Brand.swift`
+alongside `Assets.xcassets`, and `ui/Brand.kt`. `docs/design-tokens.md` §5 is the
+map. The gap this section described is closed; what remains open is the icon work
+in #73 and the QA sweep in #80.
 
 ### Ink
 

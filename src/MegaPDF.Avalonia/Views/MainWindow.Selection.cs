@@ -56,7 +56,7 @@ public partial class MainWindow
         var body = new Border
         {
             BorderThickness = new Thickness(1.5),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3B, 0x82, 0xF6)),
+            BorderBrush = Brand.Brush("BrandAccent"),
             Background = Brushes.Transparent,
             Margin = new Thickness(rect.X, rect.Y, 0, 0),
             Width = rect.Width,
@@ -93,7 +93,7 @@ public partial class MainWindow
                     Width = HandleSize,
                     Height = HandleSize,
                     Fill = Brushes.White,
-                    Stroke = new SolidColorBrush(Color.FromRgb(0x3B, 0x82, 0xF6)),
+                    Stroke = Brand.Brush("BrandAccent"),
                     StrokeThickness = 1.5,
                     HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
                     VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,

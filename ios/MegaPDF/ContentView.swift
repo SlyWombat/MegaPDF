@@ -38,7 +38,7 @@ struct ContentView: View {
 
             case let .passwordNeeded(_, displayName, _, wrongPassword):
                 VStack {
-                    Text(displayName).font(.headline)
+                    Text(displayName).font(Brand.Text.subtitle)
                 }
                 .alert("Password required", isPresented: .constant(true)) {
                     SecureField("Password", text: $password)

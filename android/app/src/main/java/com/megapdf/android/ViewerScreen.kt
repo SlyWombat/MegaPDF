@@ -60,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import com.megapdf.android.ui.Brand
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -97,10 +98,12 @@ private val UndoIcon: ImageVector = materialIcon(name = "Filled.Undo") {
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
 
-// Search highlight fills (#26): every match gets the translucent accent; the
-// current match is set apart in translucent orange.
-private val MATCH_HIGHLIGHT = Color(0x4D1E88E5)
-private val CURRENT_MATCH_HIGHLIGHT = Color(0x66FF8F00)
+// Search highlight fills (#26): every match gets translucent brand cyan; the
+// current match is set apart in translucent brand blue. Amber used to carry the
+// current match, which read well but is not a colour MegaPDF owns
+// (docs/design-tokens.md §1.2).
+private val MATCH_HIGHLIGHT = Brand.FindMatch
+private val CURRENT_MATCH_HIGHLIGHT = Brand.FindMatchCurrent
 
 @OptIn(ExperimentalMaterial3Api::class, kotlinx.coroutines.FlowPreview::class)
 @Composable
@@ -307,7 +310,7 @@ fun ViewerScreen(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF404040))
+                .background(Brand.Backdrop)
                 // Pinch zoom: only multi-touch is consumed, so single-finger
                 // vertical scrolling still belongs to the LazyColumn.
                 .pointerInput(Unit) {
@@ -397,7 +400,7 @@ fun ViewerScreen(
                     .fillMaxSize()
                     .horizontalScroll(hScroll, enabled = zoom > 1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                // Centred, not top-packed (#48): the 0xFF404040 behind the list is
+                // Centred, not top-packed (#48): the Brand.Backdrop behind the list is
                 // the document surround every PDF viewer draws so you can see where
                 // the page ends. Top-packed and full-bleed, it could only ever show
                 // below the last page — a third of the viewport in one dead block on
@@ -642,7 +645,7 @@ private fun <T> ChipRow(
     Column {
         Text(label, style = MaterialTheme.typography.labelMedium)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState()),
         ) {
             options.forEach { option ->
@@ -716,7 +719,10 @@ private fun SelectionOverlay(
                     with(density) { (baseW * scale).toDp() },
                     with(density) { (baseH * scale).toDp() },
                 )
-                .border(2.dp, Color(0xFF1E88E5))
+                // 2.dp is a stroke width and 6/2 below is badge padding sized to
+                // its glyph — neither is layout spacing, so docs/design-tokens.md
+                // §3's grid does not apply to them.
+                .border(2.dp, Brand.Accent)
                 .pointerInput(key) {
                     detectDragGestures(
                         onDrag = { change, delta -> change.consume(); drag += delta },
@@ -729,7 +735,7 @@ private fun SelectionOverlay(
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .background(Color(0xFFD32F2F))
+                    .background(Brand.Danger)
                     .padding(horizontal = 6.dp, vertical = 2.dp)
                     .clickable { onRemove() },
             )
@@ -739,7 +745,7 @@ private fun SelectionOverlay(
                     color = Color.White,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .background(Color(0xFF1E88E5))
+                        .background(Brand.Accent)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                         .clickable { onEdit() },
                 )
@@ -748,8 +754,11 @@ private fun SelectionOverlay(
                 androidx.compose.foundation.layout.Box(
                     Modifier
                         .align(Alignment.BottomEnd)
+                        // 18.dp: a resize grip, sized to be grabbable without
+                        // covering what it resizes. Rounding it to the grid would
+                        // shrink an already-small touch target.
                         .size(18.dp)
-                        .background(Color(0xFF1E88E5))
+                        .background(Brand.Accent)
                         .pointerInput(key) {
                             detectDragGestures(
                                 onDrag = { change, delta ->

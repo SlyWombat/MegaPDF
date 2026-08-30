@@ -8,6 +8,7 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://MegaPDF/Brand.axaml" />
         <ResourceInclude Source="avares://MegaPDF/Icons.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>

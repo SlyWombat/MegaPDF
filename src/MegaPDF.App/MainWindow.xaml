@@ -32,17 +32,17 @@
         </Grid.RowDefinitions>
 
         <!-- Single slim toolbar — the app's entire command surface (SDD §2.2) -->
-        <Grid Grid.Row="0" Padding="8,4" ColumnSpacing="4">
+        <Grid Grid.Row="0" Padding="8,4" ColumnSpacing="{ThemeResource SpaceXs}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}">
                 <Button Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" ToolTipService.ToolTip="Open a PDF (Ctrl+O)" AutomationProperties.Name="Open">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE8E5;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE8E5;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelOpen" Text="Open" />
                     </StackPanel>
                     <Button.KeyboardAccelerators>
@@ -53,8 +53,8 @@
                 <!-- The visible label carries the unsaved-changes dot; the UIA name
                      stays plain "Save" so Narrator announces a stable control name. -->
                 <Button Command="{x:Bind ViewModel.SaveCommand}" AccessKey="S" ToolTipService.ToolTip="Save (Ctrl+S)" AutomationProperties.Name="Save">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE74E;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE74E;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelSave" Text="{x:Bind ViewModel.SaveButtonLabel, Mode=OneWay}" />
                     </StackPanel>
                     <Button.KeyboardAccelerators>
@@ -63,8 +63,8 @@
                 </Button>
 
                 <Button Command="{x:Bind ViewModel.SaveAsCommand}" ToolTipService.ToolTip="Save a copy (Ctrl+Shift+S)" AutomationProperties.Name="Save As">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE792;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE792;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelSaveAs" Text="Save As" />
                     </StackPanel>
                     <Button.KeyboardAccelerators>
@@ -73,15 +73,15 @@
                 </Button>
 
                 <Button Command="{x:Bind ViewModel.ShrinkForEmailCommand}" ToolTipService.ToolTip="Save a smaller copy for email" AutomationProperties.Name="Shrink for email">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE715;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE715;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelShrink" Text="Shrink" />
                     </StackPanel>
                 </Button>
 
                 <Button Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" ToolTipService.ToolTip="Print" AutomationProperties.Name="Print">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE749;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE749;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelPrint" Text="Print" />
                     </StackPanel>
                     <Button.KeyboardAccelerators>
@@ -92,8 +92,8 @@
                 <AppBarSeparator />
 
                 <Button Command="{x:Bind ViewModel.UndoCommand}" ToolTipService.ToolTip="Undo (Ctrl+Z)" AutomationProperties.Name="Undo">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE7A7;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE7A7;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelUndo" Text="Undo" />
                     </StackPanel>
                     <Button.KeyboardAccelerators>
@@ -102,8 +102,8 @@
                 </Button>
 
                 <Button Command="{x:Bind ViewModel.RedoCommand}" ToolTipService.ToolTip="Redo (Ctrl+Y)" AutomationProperties.Name="Redo">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE7A6;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE7A6;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelRedo" Text="Redo" />
                     </StackPanel>
                     <Button.KeyboardAccelerators>
@@ -114,13 +114,13 @@
                 <AppBarSeparator />
 
                 <Button ToolTipService.ToolTip="Your signatures" AutomationProperties.Name="Signatures">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xEE56;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelSignatures" Text="Signatures" />
                     </StackPanel>
                     <Button.Flyout>
                         <Flyout x:Name="SignaturesFlyout" Placement="BottomEdgeAlignedLeft">
-                            <StackPanel Spacing="8" MinWidth="260">
+                            <StackPanel Spacing="{ThemeResource SpaceS}" MinWidth="260">
                                 <TextBlock Text="Your signatures" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 <ItemsControl ItemsSource="{x:Bind ViewModel.Signatures}">
                                     <ItemsControl.ItemTemplate>
@@ -130,7 +130,7 @@
                                                 HorizontalContentAlignment="Left"
                                                 Margin="0,2"
                                                 Click="OnSignatureClicked">
-                                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceM}">
                                                     <Border Background="White" CornerRadius="4" Padding="4">
                                                         <Image Source="{x:Bind Thumbnail}" Height="28" MaxWidth="110" Stretch="Uniform" />
                                                     </Border>
@@ -150,20 +150,20 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                                 <Button Click="OnAddSignatureFromImageClicked" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="&#xEB9F;" FontSize="14" />
+                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                                        <FontIcon Glyph="&#xEB9F;" FontSize="{ThemeResource TypeBody}" />
                                         <TextBlock Text="Add from image…" />
                                     </StackPanel>
                                 </Button>
                                 <Button Click="OnTypeSignatureClicked" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                                        <FontIcon Glyph="&#xE70F;" FontSize="{ThemeResource TypeBody}" />
                                         <TextBlock Text="Type signature…" />
                                     </StackPanel>
                                 </Button>
                                 <Button Click="OnDrawSignatureClicked" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="&#xEE56;" FontSize="14" />
+                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                                        <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeBody}" />
                                         <TextBlock Text="Draw signature…" />
                                     </StackPanel>
                                 </Button>
@@ -173,15 +173,15 @@
                 </Button>
 
                 <Button Click="OnWhiteoutModeClicked" ToolTipService.ToolTip="Cover an area with whiteout" AutomationProperties.Name="Whiteout">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE75C;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE75C;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelWhiteout" Text="Whiteout" />
                     </StackPanel>
                 </Button>
 
                 <Button Click="OnTextBoxModeClicked" ToolTipService.ToolTip="Add new text anywhere" AutomationProperties.Name="Add text">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE8D2;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE8D2;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelAddText" Text="Add text" />
                     </StackPanel>
                 </Button>
@@ -189,25 +189,25 @@
                 <AppBarSeparator />
 
                 <Button Click="OnFindClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" ToolTipService.ToolTip="Find in document (Ctrl+F)" AutomationProperties.Name="Find">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE721;" FontSize="16" />
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE721;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelFind" Text="Find" />
                     </StackPanel>
                 </Button>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                <StackPanel x:Name="ViewControls" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                    <Button Command="{x:Bind ViewModel.ZoomOutCommand}" Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom out" AutomationProperties.Name="Zoom out" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
+                <StackPanel x:Name="ViewControls" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
+                    <Button Command="{x:Bind ViewModel.ZoomOutCommand}" Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Zoom out" AutomationProperties.Name="Zoom out" />
                     <TextBlock
                         Text="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}"
                         VerticalAlignment="Center"
                         MinWidth="42"
                         TextAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Zoom in" AutomationProperties.Name="Zoom in" />
-                    <Button Click="OnFitWidthClicked" Content="&#xE9A6;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Fit width" AutomationProperties.Name="Fit width" />
-                    <Button Click="OnFitPageClicked" Content="&#xE740;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Fit page" AutomationProperties.Name="Fit page" />
+                    <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Zoom in" AutomationProperties.Name="Zoom in" />
+                    <Button Click="OnFitWidthClicked" Content="&#xE9A6;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Fit width" AutomationProperties.Name="Fit width" />
+                    <Button Click="OnFitPageClicked" Content="&#xE740;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Fit page" AutomationProperties.Name="Fit page" />
                     <TextBlock
                         Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
                         VerticalAlignment="Center"
@@ -248,8 +248,8 @@
                 <Button Content="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings">
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedRight" Opening="OnSettingsOpening">
-                            <StackPanel Spacing="14" MinWidth="230">
-                                <StackPanel Spacing="6">
+                            <StackPanel Spacing="{ThemeResource SpaceL}" MinWidth="230">
+                                <StackPanel Spacing="{ThemeResource SpaceS}">
                                     <TextBlock Text="Checkbox mark" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <RadioButtons x:Name="MarkStyleChoice" SelectionChanged="OnMarkStyleChanged">
                                         <x:String>✗  Cross</x:String>
@@ -257,7 +257,7 @@
                                         <x:String>■  Filled square</x:String>
                                     </RadioButtons>
                                 </StackPanel>
-                                <StackPanel Spacing="6">
+                                <StackPanel Spacing="{ThemeResource SpaceS}">
                                     <TextBlock Text="Theme" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                     <RadioButtons x:Name="ThemeChoice" SelectionChanged="OnThemeChanged">
                                         <x:String>Use system setting</x:String>
@@ -277,7 +277,7 @@
                                     x:Name="UpdateCheckToggle"
                                     Header="Check for updates at startup"
                                     Toggled="OnUpdateCheckToggled" />
-                                <StackPanel Spacing="2" Margin="0,4,0,0" MaxWidth="260" AutomationProperties.Name="About Mega PDF">
+                                <StackPanel Spacing="{ThemeResource SpaceXs}" Margin="0,4,0,0" MaxWidth="260" AutomationProperties.Name="About Mega PDF">
                                     <TextBlock Text="About Mega PDF" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,4" />
                                     <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                     <TextBlock Text="Free &amp; open source · Apache-2.0" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
@@ -296,14 +296,14 @@
                                         Content="github.com/SlyWombat/MegaPDF"
                                         ToolTipService.ToolTip="https://github.com/SlyWombat/MegaPDF"
                                         AutomationProperties.Name="Mega PDF on GitHub"
-                                        FontSize="12"
+                                        FontSize="{ThemeResource TypeCaption}"
                                         Padding="0,2"
                                         Margin="0,2,0,0" />
                                     <HyperlinkButton
                                         Click="OnThirdPartyNoticesClicked"
                                         Content="Third-party notices"
                                         AutomationProperties.Name="Third-party notices"
-                                        FontSize="12"
+                                        FontSize="{ThemeResource TypeCaption}"
                                         Padding="0,2" />
                                 </StackPanel>
                             </StackPanel>
@@ -323,19 +323,19 @@
             <StackPanel
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Spacing="12"
+                Spacing="{ThemeResource SpaceM}"
                 Visibility="{x:Bind ViewModel.EmptyStateVisibility, Mode=OneWay}">
-                <FontIcon Glyph="&#xE8A5;" FontSize="48" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <FontIcon Glyph="&#xE8A5;" FontSize="{ThemeResource TypeDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <TextBlock
                     Text="Drag a PDF here, or click Open"
                     Style="{StaticResource SubtitleTextBlockStyle}"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     HorizontalAlignment="Center" />
 
-                <StackPanel Spacing="2" Margin="0,20,0,0" Visibility="{x:Bind ViewModel.RecentDocumentsVisibility, Mode=OneWay}">
+                <StackPanel Spacing="{ThemeResource SpaceXs}" Margin="0,20,0,0" Visibility="{x:Bind ViewModel.RecentDocumentsVisibility, Mode=OneWay}">
                     <TextBlock
                         Text="RECENT"
-                        FontSize="11"
+                        FontSize="{ThemeResource TypeCaption}"
                         CharacterSpacing="80"
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         HorizontalAlignment="Center"
@@ -344,8 +344,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="local:RecentDocument">
                                 <HyperlinkButton Click="OnRecentDocumentClicked" HorizontalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon Glyph="&#xE8A5;" FontSize="13" />
+                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                                        <FontIcon Glyph="&#xE8A5;" FontSize="{ThemeResource TypeBody}" />
                                         <TextBlock Text="{x:Bind Name}" />
                                     </StackPanel>
                                 </HyperlinkButton>
@@ -365,7 +365,7 @@
                 <ItemsControl x:Name="PagesItems" ItemsSource="{x:Bind ViewModel.Pages}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <StackPanel Spacing="16" Padding="24" HorizontalAlignment="Center" />
+                            <StackPanel Spacing="{ThemeResource SpaceL}" Padding="24" HorizontalAlignment="Center" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
@@ -413,7 +413,7 @@
                 </ItemsControl>
             </ScrollViewer>
 
-            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="8">
+            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="{ThemeResource SpaceS}">
                 <InfoBar
                     IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
                     Severity="Informational"
@@ -426,7 +426,7 @@
                     IsClosable="True" />
             </StackPanel>
 
-            <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="8">
+            <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
                 <InfoBar
                     Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
                     IsOpen="True"
@@ -463,13 +463,13 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Margin="0,8,24,0"
-                Padding="8,6"
+                Padding="8,8"
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
                 PreviewKeyDown="OnFindBarKeyDown">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                     <TextBox
                         x:Name="FindQuery"
                         MinWidth="180"
@@ -483,15 +483,19 @@
                         TextAlignment="Center"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                         AutomationProperties.LiveSetting="Polite" />
-                    <Button Click="OnFindPreviousClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Previous match (Shift+Enter)" AutomationProperties.Name="Previous match" />
-                    <Button Click="OnFindNextClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Next match (Enter)" AutomationProperties.Name="Next match" />
-                    <Button Click="OnFindCloseClicked" Content="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="12" ToolTipService.ToolTip="Close (Esc)" AutomationProperties.Name="Close find" />
+                    <Button Click="OnFindPreviousClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Previous match (Shift+Enter)" AutomationProperties.Name="Previous match" />
+                    <Button Click="OnFindNextClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Next match (Enter)" AutomationProperties.Name="Next match" />
+                    <Button Click="OnFindCloseClicked" Content="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" ToolTipService.ToolTip="Close (Esc)" AutomationProperties.Name="Close find" />
                 </StackPanel>
             </Border>
 
             <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). -->
             <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
-                <TextBlock x:Name="TypedSignatureText" FontFamily="Segoe Script" FontSize="64" Foreground="Black" Padding="16,8" />
+                <!-- 64 is outside the type scale on purpose: this is sample ink at signature
+                     size, not UI type. Foreground is the SDD §6.2 contract value, the same
+                     #202020 a drawn signature and a check mark are stroked in. -->
+                <TextBlock x:Name="TypedSignatureText" FontFamily="Segoe Script" FontSize="64"
+                           Foreground="#FF202020" Padding="16,8" />
             </Border>
         </Grid>
     </Grid>
