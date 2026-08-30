@@ -42,6 +42,59 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// A page whose text is drawn in a SUBSET font — a BaseFont carrying the
+    /// six-letter prefix real producers emit when they embed only the glyphs a
+    /// document uses.
+    ///
+    /// This is what makes tier 2 of SDD §3.1 reachable in a test: the engine only
+    /// substitutes when the font is a subset AND the replacement needs glyphs the
+    /// page never drew. Without a fixture like this, the substitution path could
+    /// only be tested through its name-detection helper, which is why #45 lived in
+    /// it unnoticed.
+    /// </summary>
+    public static byte[] BuildWithSubsetFont(string text = "abc")
+    {
+        var content = $"BT /F1 24 Tf 72 700 Td ({text}) Tj ET\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica >>\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
+    /// A MegaPDF text box that a producer has since re-saved with a SUBSET font —
+    /// the exact shape #45 is about.
+    ///
+    /// The box carries its `MegaPDFTextBox` content mark with both params, written
+    /// as a BDC/EMC pair the way pdfium emits them, while the font it draws in has
+    /// the six-letter subset prefix. That combination is unreachable through this
+    /// app's own API (AppendTextBox always uses a standard-14 face, which is never
+    /// subset) and is exactly what happens when a MegaPDF-written PDF passes
+    /// through another tool.
+    /// </summary>
+    public static byte[] BuildSubsetTextBox(string id = "text:fixture-subset",
+                                            string font = "Times-Roman",
+                                            string text = "abc")
+    {
+        var content =
+            $"/MegaPDFTextBox << /id ({id}) /font ({font}) >> BDC\n"
+            + $"BT /F1 24 Tf 72 700 Td ({text}) Tj ET\n"
+            + "EMC\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica >>\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// One-page PDF with an AcroForm: a text field (FullName, rect 100,600–300,630)
     /// and a checkbox (Agree, rect 100,500–118,518) with Yes/Off appearance streams.
     /// </summary>
