@@ -1,0 +1,66 @@
+<!-- The MegaPDF design tokens, macOS leg. docs/design-tokens.md is the spec;
+     this file is the only place in the Avalonia app that names a colour.
+
+     Two exceptions live outside it, both deliberate:
+       - SignaturePad.InkColour is #202020, an SDD §6.2 contract, not a theme
+         colour. It is what the user's mark is drawn in — ink on paper, inside
+         the document — so it is the same value in both themes and in the saved
+         PDF. It never inverts and it is not a token.
+       - FluentTheme's own brushes (text, surfaces, borders, disabled states)
+         stay as they are. Only product chrome is brand-coloured. -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Light">
+      <!-- Brand blue, not the OS accent. docs/design-tokens.md §1.2 argues the
+           trade: the Mac app used Tailwind's #3B82F6 because a developer picked
+           it, and identity across four apps outranks matching the system hue. -->
+      <SolidColorBrush x:Key="BrandAccent" Color="#0E6FD8" />
+      <SolidColorBrush x:Key="BrandAccentPressed" Color="#0A5BC4" />
+      <SolidColorBrush x:Key="BrandAccentSubtle" Color="#210E6FD8" />
+      <SolidColorBrush x:Key="BrandAccentOn" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="BrandFindMatch" Color="#4D18B6C8" />
+      <SolidColorBrush x:Key="BrandFindMatchCurrent" Color="#730E6FD8" />
+      <SolidColorBrush x:Key="BrandDanger" Color="#C0362C" />
+      <SolidColorBrush x:Key="BrandInk" Color="#16324F" />
+      <!-- Neutral scrims: a hairline rule and a card shadow. Not brand hues —
+           they are shade, and they read correctly over any background. -->
+      <SolidColorBrush x:Key="BrandRule" Color="#40000000" />
+      <BoxShadows x:Key="BrandCardShadow">0 2 8 0 #22000000</BoxShadows>
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="BrandAccent" Color="#4F9BEA" />
+      <SolidColorBrush x:Key="BrandAccentPressed" Color="#2D7FD4" />
+      <SolidColorBrush x:Key="BrandAccentSubtle" Color="#2E4F9BEA" />
+      <SolidColorBrush x:Key="BrandAccentOn" Color="#0B1B2B" />
+      <SolidColorBrush x:Key="BrandFindMatch" Color="#6118B6C8" />
+      <SolidColorBrush x:Key="BrandFindMatchCurrent" Color="#804F9BEA" />
+      <SolidColorBrush x:Key="BrandDanger" Color="#E2685E" />
+      <SolidColorBrush x:Key="BrandInk" Color="#F2F7FC" />
+      <SolidColorBrush x:Key="BrandRule" Color="#59FFFFFF" />
+      <BoxShadows x:Key="BrandCardShadow">0 2 8 0 #59000000</BoxShadows>
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- Type. Semantic steps; these are the macOS column of docs/design-tokens.md
+       §2. Smaller than the Windows column on purpose — 11pt toolbar labels are
+       what a Mac user expects, and matching Windows here would be the wrong kind
+       of consistency. -->
+  <x:Double x:Key="TypeCaption">11</x:Double>
+  <x:Double x:Key="TypeBody">13</x:Double>
+  <x:Double x:Key="TypeSubtitle">16</x:Double>
+  <x:Double x:Key="TypeTitle">28</x:Double>
+
+  <!-- Spacing, on a 4pt grid. §3. -->
+  <x:Double x:Key="SpaceXs">4</x:Double>
+  <x:Double x:Key="SpaceS">8</x:Double>
+  <x:Double x:Key="SpaceM">12</x:Double>
+  <x:Double x:Key="SpaceL">16</x:Double>
+  <x:Double x:Key="SpaceXl">24</x:Double>
+  <x:Double x:Key="SpaceXxl">32</x:Double>
+
+</ResourceDictionary>

@@ -5,10 +5,10 @@
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
-  <StackPanel Margin="20" Spacing="14">
-    <TextBlock Name="Headline" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" />
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceL}">
+    <TextBlock Name="Headline" FontSize="{DynamicResource TypeSubtitle}" FontWeight="SemiBold" TextWrapping="Wrap" />
     <TextBlock Name="Detail" TextWrapping="Wrap" Opacity="0.8" />
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
       <Button Name="DiscardButton" Content="Discard them" />
       <Button Name="LaterButton" Content="Decide later" />
       <Button Name="RestoreButton" Content="Restore" IsDefault="True" />
