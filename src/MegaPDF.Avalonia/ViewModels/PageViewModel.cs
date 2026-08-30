@@ -106,6 +106,22 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     /// </summary>
     internal IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> Regions { get; private set; } = [];
 
+    /// <summary>
+    /// Builds the interaction map if it is missing, WITHOUT rasterising.
+    ///
+    /// The two were coupled at first — the map was a by-product of Rerender — which
+    /// made keyboard traversal (#2) force a full page render just to learn what was
+    /// on a page, and made it impossible to test at all without a graphics stack.
+    /// The map only needs the engine; the raster is a separate concern.
+    /// </summary>
+    internal void EnsureRegions()
+    {
+        if (Regions.Count > 0)
+            return;
+        using var page = _document.GetPage(Index);
+        Regions = BuildRegions(page);
+    }
+
     private static List<(PdfRect, PageHitKind)> BuildRegions(IPdfPage page)
     {
         var regions = new List<(PdfRect, PageHitKind)>();
@@ -137,6 +153,24 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         return regions;
     }
 
+    /// <summary>
+    /// The same regions in reading order — top to bottom, then left to right within
+    /// a line — which is what Tab traversal needs (#2). <see cref="Regions"/> is
+    /// ordered by hit-test priority instead, because a click wants the topmost
+    /// thing and the keyboard wants the next thing.
+    ///
+    /// Rows are banded rather than sorted on raw Y: glyphs on one line rarely share
+    /// an exact baseline, and sorting on Y alone would zig-zag across a row.
+    /// </summary>
+    internal IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> RegionsInReadingOrder()
+    {
+        const double rowBand = 6;   // points; a line's worth of baseline wobble
+        return Regions
+            .OrderBy(r => Math.Round(r.Bounds.Y / rowBand))
+            .ThenBy(r => r.Bounds.X)
+            .ToList();
+    }
+
     /// <summary>What is under this point, in page space. Empty means bare page.</summary>
     internal PageHitKind KindAt(PdfPoint point)
     {
@@ -154,6 +188,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     {
         using var page = _document.GetPage(Index);
         var next = PageBitmap.Render(page, Zoom, dpiScale);
+        // Refreshed alongside the raster, because an edit changes both.
         Regions = BuildRegions(page);
 
         var previous = Image;

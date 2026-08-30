@@ -529,6 +529,132 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Status = "Discarded the unsaved changes.";
     }
 
+    // --- Keyboard traversal of the page (SDD §2.2 — required, #2) ---
+
+    /// <summary>
+    /// Where keyboard focus is on the page: which page, and which of its regions in
+    /// reading order. Null means focus is not on the page at all.
+    ///
+    /// Built on the per-page interaction maps that already exist for the cursor, so
+    /// tabbing costs a list walk rather than an engine hit-test — the same reason
+    /// the cursor reads from them.
+    /// </summary>
+    public sealed record FocusedRegion(int PageIndex, int RegionIndex, PdfRect Bounds, PageHitKind Kind)
+    {
+        /// <summary>What a screen reader should say about this region.</summary>
+        public string Describe(bool isChecked) => Kind switch
+        {
+            PageHitKind.FormCheckbox => isChecked ? "Checkbox, ticked" : "Checkbox, not ticked",
+            PageHitKind.DrawnCheckbox => "Box to tick",
+            PageHitKind.FormTextField => "Form field",
+            PageHitKind.TextRun => "Text, editable",
+            PageHitKind.TextBox => "Added text",
+            PageHitKind.StampAnnotation => "Signature or tick mark",
+            PageHitKind.Whiteout => "Cover",
+            _ => "Page",
+        };
+    }
+
+    [ObservableProperty]
+    private FocusedRegion? _pageFocus;
+
+    /// <summary>Raised when the view should bring the focused region into view.</summary>
+    public event Action<int, PdfRect>? FocusScrollRequested;
+
+    /// <summary>
+    /// Moves keyboard focus to the next interactive region, crossing page
+    /// boundaries and wrapping at the end. Pages that have not been rasterised have
+    /// no interaction map yet, so they are realised on demand by asking for it.
+    /// </summary>
+    public void MoveFocus(bool forward)
+    {
+        if (Pages.Count == 0)
+            return;
+
+        // FromEnd means "start at this page's last region" — the count is not known
+        // until the page's map is built inside the loop, and a sentinel index of
+        // int.MaxValue does not work: MaxValue - 1 is never a valid index, so going
+        // backwards skipped whole pages instead of entering them at the end.
+        const int FromEnd = -2;
+
+        var pageIndex = PageFocus?.PageIndex ?? (forward ? 0 : Pages.Count - 1);
+        var regionIndex = PageFocus?.RegionIndex ?? (forward ? -1 : FromEnd);
+
+        // At most one full lap, so a document with nothing interactive terminates
+        // rather than spinning.
+        for (var visited = 0; visited <= Pages.Count; visited++)
+        {
+            var regions = RegionsFor(pageIndex);
+            var next = regionIndex == FromEnd
+                ? regions.Count - 1
+                : forward ? regionIndex + 1 : regionIndex - 1;
+
+            if (next >= 0 && next < regions.Count)
+            {
+                var (bounds, kind) = regions[next];
+                PageFocus = new FocusedRegion(pageIndex, next, bounds, kind);
+                FocusScrollRequested?.Invoke(pageIndex, bounds);
+                Status = PageFocus.Describe(IsCheckedAt(pageIndex, bounds, kind));
+                return;
+            }
+
+            pageIndex = forward
+                ? (pageIndex + 1) % Pages.Count
+                : (pageIndex - 1 + Pages.Count) % Pages.Count;
+            regionIndex = forward ? -1 : FromEnd;
+        }
+
+        PageFocus = null;
+        Status = "Nothing on this document can be changed from the keyboard.";
+    }
+
+    /// <summary>Activates the focused region — the keyboard's equivalent of a click.</summary>
+    public void ActivateFocus()
+    {
+        if (PageFocus is not { } focus)
+            return;
+
+        // Routed through the same handler a click uses, aimed at the region's
+        // centre, so the keyboard can never diverge from the mouse.
+        HandlePageClick(focus.PageIndex,
+            new PdfPoint(focus.Bounds.X + (focus.Bounds.Width / 2),
+                         focus.Bounds.Y + (focus.Bounds.Height / 2)));
+
+        // The map is rebuilt by the edit, so re-read the region under focus rather
+        // than trusting the bounds we came in with.
+        var regions = RegionsFor(focus.PageIndex);
+        if (focus.RegionIndex < regions.Count)
+        {
+            var (bounds, kind) = regions[focus.RegionIndex];
+            PageFocus = focus with { Bounds = bounds, Kind = kind };
+        }
+    }
+
+    public void ClearPageFocus() => PageFocus = null;
+
+    private IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> RegionsFor(int pageIndex)
+    {
+        var page = Pages.FirstOrDefault(p => p.Index == pageIndex);
+        if (page is null)
+            return [];
+
+        // A page the view has never realised has no map. Tab must still reach it,
+        // so build the map — which needs the engine, not a raster. Rendering here
+        // would rasterise a page nobody is looking at.
+        page.EnsureRegions();
+        return page.RegionsInReadingOrder();
+    }
+
+    private bool IsCheckedAt(int pageIndex, PdfRect bounds, PageHitKind kind)
+    {
+        if (kind != PageHitKind.FormCheckbox || _document is null)
+            return false;
+
+        var hit = HitTest(pageIndex,
+            new PdfPoint(bounds.X + (bounds.Width / 2), bounds.Y + (bounds.Height / 2)));
+        return hit.Field is { IsChecked: true };
+    }
+
     // --- Selection (SDD §3.3: place it, then adjust it) ---
 
     public enum SelectionKind { Signature, TextBox, Whiteout }
