@@ -106,15 +106,14 @@ public partial class App : Application
         ("BrandInk", typeof(IBrush)),
         ("BrandRule", typeof(IBrush)),
         ("BrandCardShadow", typeof(BoxShadows)),
-        // Fluent's own accent ramp, overridden to the brand. A Color, not a
-        // brush — Fluent builds its brushes from these.
-        ("SystemAccentColor", typeof(Color)),
-        ("SystemAccentColorLight1", typeof(Color)),
-        ("SystemAccentColorLight2", typeof(Color)),
-        ("SystemAccentColorLight3", typeof(Color)),
-        ("SystemAccentColorDark1", typeof(Color)),
-        ("SystemAccentColorDark2", typeof(Color)),
-        ("SystemAccentColorDark3", typeof(Color)),
+        // The brand accent ramp SyncFluentAccent copies into Fluent's own keys.
+        ("BrandSystemAccentColor", typeof(Color)),
+        ("BrandSystemAccentColorLight1", typeof(Color)),
+        ("BrandSystemAccentColorLight2", typeof(Color)),
+        ("BrandSystemAccentColorLight3", typeof(Color)),
+        ("BrandSystemAccentColorDark1", typeof(Color)),
+        ("BrandSystemAccentColorDark2", typeof(Color)),
+        ("BrandSystemAccentColorDark3", typeof(Color)),
         ("TypeCaption", typeof(double)),
         ("TypeBody", typeof(double)),
         ("TypeSubtitle", typeof(double)),
@@ -165,7 +164,45 @@ public partial class App : Application
         return failures == 0 ? 0 : 1;
     }
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    /// <summary>The seven colours FluentTheme builds its control accents from.</summary>
+    private static readonly string[] FluentAccentKeys =
+    [
+        "SystemAccentColor",
+        "SystemAccentColorLight1", "SystemAccentColorLight2", "SystemAccentColorLight3",
+        "SystemAccentColorDark1", "SystemAccentColorDark2", "SystemAccentColorDark3",
+    ];
+
+    /// <summary>
+    /// Copies the brand accent ramp for the current theme into the resources
+    /// Fluent reads, so its controls match the chrome the markup paints.
+    ///
+    /// It has to be done in code. Fluent defines SystemAccentColor in its own
+    /// theme dictionaries; for a key it owns, its theme dictionary beats ours,
+    /// while a direct entry in Application.Resources beats everything. So a
+    /// theme-scoped override never wins and a shared one cannot vary by theme —
+    /// which is why the dark screenshot showed a #4F9BEA banner beside a
+    /// #0E6FD8 button. Brand.axaml holds the values under Brand-prefixed keys,
+    /// where nothing competes, and this writes the right ones across.
+    /// </summary>
+    private void SyncFluentAccent()
+    {
+        foreach (var key in FluentAccentKeys)
+        {
+            if (this.TryFindResource("Brand" + key, ActualThemeVariant, out var value)
+                && value is Color colour)
+            {
+                Resources[key] = colour;
+            }
+        }
+    }
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        SyncFluentAccent();
+        // macOS switches appearance under a running app, so this is not one-shot.
+        ActualThemeVariantChanged += (_, _) => SyncFluentAccent();
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

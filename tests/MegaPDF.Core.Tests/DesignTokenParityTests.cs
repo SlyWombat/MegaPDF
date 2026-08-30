@@ -49,8 +49,24 @@ public class DesignTokenParityTests
     /// first. <c>...Color</c> keys keep theirs — those really are Windows-only
     /// companions, and collapsing them would hide a genuine difference.
     /// </summary>
-    private static string Normalise(string key) =>
-        key.EndsWith("Brush", StringComparison.Ordinal) ? key[..^"Brush".Length] : key;
+    private static string Normalise(string key)
+    {
+        if (key.EndsWith("Brush", StringComparison.Ordinal))
+            key = key[..^"Brush".Length];
+
+        // The framework accent ramp is the same seven concepts on both, under
+        // names each framework forces. WinUI reads SystemAccentColor* out of a
+        // ThemeDictionaries block, so Windows names them literally. Avalonia's
+        // FluentTheme owns those keys and wins the theme-scoped lookup, so the
+        // Mac app holds them under Brand* and copies them across at runtime —
+        // App.SyncFluentAccent, and the reasoning is in Brand.axaml. Comparing
+        // the concept rather than the spelling is what makes the assertion real
+        // instead of an exemption.
+        if (key.StartsWith("BrandSystemAccentColor", StringComparison.Ordinal))
+            key = key["Brand".Length..];
+
+        return key;
+    }
 
     private static string RepoRoot()
     {
