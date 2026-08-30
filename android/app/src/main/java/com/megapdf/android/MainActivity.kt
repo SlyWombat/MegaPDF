@@ -10,7 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
+import com.megapdf.android.ui.MegaPdfTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,9 +25,11 @@ class MainActivity : ComponentActivity() {
         // means every OS version behaves the same way instead of only the new ones.
         //
         // Both bars are forced to the *light* style: MegaPDF has no dark theme
-        // (`MaterialTheme {}` takes the default light scheme regardless of the
-        // system setting), so the automatic style would paint white icons onto a
-        // white app whenever the device is in dark mode.
+        // (MegaPdfTheme applies the light brand scheme regardless of the system
+        // setting), so the automatic style would paint white icons onto a white
+        // app whenever the device is in dark mode. ui/Brand.kt carries a dark
+        // scheme that is deliberately not wired up — turning it on means
+        // revisiting this, not just swapping the argument.
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
@@ -35,7 +37,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val screenshotState = intent.getStringExtra("screenshot")
         setContent {
-            MaterialTheme {
+            MegaPdfTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     MegaPdfApp(screenshotState = screenshotState)
                 }

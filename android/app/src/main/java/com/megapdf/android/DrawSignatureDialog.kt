@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import com.megapdf.android.ui.Brand
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -35,7 +36,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 
-private const val INK_COLOR = 0xFF1A1A1A
+// SDD §6.2: the user's mark is #202020, the same value the engine strokes check
+// marks in and the same the other three apps draw. This was 0xFF1A1A1A, so a
+// tick and a signature on one page came out in different inks.
+private const val INK_COLOR = 0xFF202020
 
 /**
  * Finger/stylus signature capture (#16). Strokes render onto a transparent
@@ -69,7 +73,7 @@ fun DrawSignatureDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
-                    .background(Color(0xFFF6F6F6))
+                    .background(Brand.SignaturePad)
                     .onSizeChanged { canvasSize = it }
                     .pointerInput(Unit) {
                         detectDragGestures(
