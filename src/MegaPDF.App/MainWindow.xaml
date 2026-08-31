@@ -413,13 +413,22 @@
                 </ItemsControl>
             </ScrollViewer>
 
+            <!-- These InfoBars float over the document page, not over app chrome,
+                 and InfoBar's severity backgrounds are translucent: #80F6F6F6 in
+                 light, #08FFFFFF in dark. Over a white PDF page the light one
+                 survives by luck and the dark one does not — 3% white over white
+                 paper, with white text on it, so the message is invisible (#87).
+                 An opaque background makes them chrome, which is what the find bar
+                 below already does. -->
             <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="{ThemeResource SpaceS}">
                 <InfoBar
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
                     Severity="Informational"
                     Message="This document's font isn't available, so a similar one was used."
                     IsClosable="True" />
                 <InfoBar
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     IsOpen="{x:Bind ViewModel.IsScannedHintOpen, Mode=TwoWay}"
                     Severity="Informational"
                     Message="This page is a scanned image — its text is a picture and can't be edited."
@@ -428,12 +437,14 @@
 
             <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
                 <InfoBar
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
                     IsOpen="True"
                     Severity="Informational"
                     Message="{x:Bind ViewModel.PlacementHint, Mode=OneWay}"
                     CloseButtonClick="OnCancelPlacementClicked" />
                 <InfoBar
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     IsOpen="{x:Bind ViewModel.IsDefaultAppCardOpen, Mode=OneWay}"
                     Severity="Informational"
                     Message="Make MegaPDF your PDF app?"
@@ -443,6 +454,7 @@
                     </InfoBar.ActionButton>
                 </InfoBar>
                 <InfoBar
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     x:Name="UpdateBar"
                     Severity="Success"
                     Message="{x:Bind ViewModel.UpdateMessage, Mode=OneWay}"
