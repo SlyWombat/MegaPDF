@@ -1,4 +1,4 @@
-# Captures what the Windows app looks like, using the app's own --screenshot
+﻿# Captures what the Windows app looks like, using the app's own --screenshot
 # mode (#84). The macOS, iOS and Android equivalents run in CI; this one does
 # not, and cannot:
 #
@@ -31,7 +31,7 @@ $dotnet = if ($env:DOTNET_ROOT) { "$env:DOTNET_ROOT\dotnet.exe" }
 & $dotnet build "$repo\src\MegaPDF.App\MegaPDF.App.csproj" -c Release -r win-x64 --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
 
-New-Item -ItemType Directory -Force -Path $Fixtures, $Out | Out-Null
+New-Item -ItemType Directory -Force -Path $Fixtures | Out-Null
 python3 "$repo\tools\gen_test_fixtures.py" $Fixtures
 
 $exe = "$repo\src\MegaPDF.App\bin\Release\net8.0-windows10.0.19041.0\win-x64\MegaPDF.exe"
@@ -48,14 +48,28 @@ $shots = @(
     @{ name = "05-dark-find";     args = @($pdf, "--theme", "dark", "--screenshot-state", "find") }
 )
 
+$Out = (New-Item -ItemType Directory -Force -Path $Out).FullName
+
 foreach ($shot in $shots) {
     $path = Join-Path $Out "$($shot.name).png"
-    & $exe @($shot.args) --screenshot $path
-    # A zero-byte or missing PNG is the failure this script exists to make loud:
-    # the app creates the file before it renders into it.
-    if ($LASTEXITCODE -ne 0) { throw "$($shot.name): exit $LASTEXITCODE" }
+    Remove-Item $path -ErrorAction SilentlyContinue
+
+    # Start-Process -Wait, not "& $exe". MegaPDF is a windowed subsystem app, so
+    # the call operator returns the moment it launches and every check below runs
+    # against a file that is not there yet.
+    # Quoted by hand. The repo path contains a space ("My Documents"), and
+    # -ArgumentList splits an unquoted array element on it, so the app received a
+    # truncated --screenshot value and wrote nothing where it was asked to.
+    $quoted = ($shot.args + @("--screenshot", $path)) | ForEach-Object { '"' + $_ + '"' }
+    $proc = Start-Process -FilePath $exe -Wait -PassThru -ArgumentList ($quoted -join " ")
+
+    # A missing or zero-byte PNG is the failure this script exists to make loud:
+    # the app creates the file before it renders into it, so "the file exists" is
+    # not the same as "a screenshot was taken". That is exactly how the CI
+    # attempt went green on an empty artifact.
+    if ($proc.ExitCode -ne 0) { throw "$($shot.name): exit $($proc.ExitCode)" }
     if (-not (Test-Path $path)) { throw "$($shot.name): no file written" }
-    if ((Get-Item $path).Length -eq 0) { throw "$($shot.name): wrote an empty PNG — RenderAsync produced nothing" }
+    if ((Get-Item $path).Length -eq 0) { throw "$($shot.name): wrote an empty PNG, so RenderAsync produced nothing" }
 }
 
 Get-ChildItem $Out | Select-Object Name, Length
