@@ -45,7 +45,11 @@ $shots = @(
     @{ name = "02-find";          args = @($pdf, "--screenshot-state", "find") },
     @{ name = "03-mode-banner";   args = @($pdf, "--screenshot-state", "mode") },
     @{ name = "04-dark-document"; args = @($pdf, "--theme", "dark") },
-    @{ name = "05-dark-find";     args = @($pdf, "--theme", "dark", "--screenshot-state", "find") }
+    @{ name = "05-dark-find";     args = @($pdf, "--theme", "dark", "--screenshot-state", "find") },
+    # #32: zooms until the page overflows both axes, scrolls the hit off screen
+    # in both directions, searches, and fails if either axis stays put. It prints
+    # the offsets it measured, so the run is the evidence rather than the image.
+    @{ name = "06-find-zoomed";   args = @($pdf, "--screenshot-state", "find-zoomed") }
 )
 
 $Out = (New-Item -ItemType Directory -Force -Path $Out).FullName

@@ -1004,6 +1004,13 @@ public sealed partial class MainWindow : Window
     /// only moves when the match is actually outside the viewport, so stepping
     /// through hits that are already on screen doesn't jolt the page around.
     /// </summary>
+    /// <summary>
+    /// The page scroller, for --screenshot-state find-zoomed (#32). x:Name fields
+    /// are private, and that check is about scroll offsets: it has to read them
+    /// before and after a search to say whether both axes actually moved.
+    /// </summary>
+    internal ScrollViewer PageScroller => PagesScroll;
+
     private void ScrollMatchIntoView(MainViewModel.SearchScrollTarget target)
     {
         // The decision lives in Core so it can be tested and so macOS uses the same
