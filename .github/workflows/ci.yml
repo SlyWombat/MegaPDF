@@ -39,6 +39,35 @@ jobs:
       - name: Test
         run: dotnet test MegaPDF.sln --configuration Release --no-build --logger "trx;LogFileName=results.trx"
 
+      # Windows was the one platform that could not photograph itself (#84), which
+      # is why its half of the brand-token work was the only one applied without
+      # anyone seeing the result. --screenshot renders the XAML tree, so unlike
+      # tools/screenshots-windows/ it needs no synthetic input and no desktop to
+      # itself. Whether that holds on a runner as well as on a real desktop is
+      # exactly what this step is here to establish.
+      - name: What the Windows app looks like
+        run: |
+          dotnet build src\MegaPDF.App\MegaPDF.App.csproj -c Release -r win-x64 --nologo -v q
+          python tools\gen_test_fixtures.py "${env:RUNNER_TEMP}\fixtures"
+          $exe = "src\MegaPDF.App\bin\Release\net8.0-windows10.0.19041.0\win-x64\MegaPDF.exe"
+          $out = "${env:RUNNER_TEMP}\shots"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $pdf = "${env:RUNNER_TEMP}\fixtures\demo.pdf"
+
+          & $exe --screenshot "$out\01-empty-state.png"
+          & $exe $pdf --screenshot-state find --screenshot "$out\02-find.png"
+          & $exe $pdf --screenshot-state mode --screenshot "$out\03-mode-banner.png"
+          & $exe $pdf --theme dark --screenshot "$out\04-dark-document.png"
+          & $exe $pdf --theme dark --screenshot-state find --screenshot "$out\05-dark-find.png"
+          Get-ChildItem $out
+
+      - name: Upload Windows screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-screenshots
+          path: '${{ runner.temp }}\shots'
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
