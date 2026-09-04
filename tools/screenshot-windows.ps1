@@ -24,9 +24,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repo = Resolve-Path "$PSScriptRoot\.."
-$dotnet = if ($env:DOTNET_ROOT) { "$env:DOTNET_ROOT\dotnet.exe" }
-          elseif (Test-Path "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe") { "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" }
-          else { "dotnet" }
+# Both per-user SDK locations, because this machine has two and neither is on
+# PATH: "C:\Program Files\dotnet" is runtime-only, so a bare `dotnet` finds no
+# SDK at all.
+$candidates = @(
+    $(if ($env:DOTNET_ROOT) { "$env:DOTNET_ROOT\dotnet.exe" }),
+    "$env:USERPROFILE\.dotnet\dotnet.exe",
+    "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe"
+) | Where-Object { $_ -and (Test-Path $_) }
+$dotnet = if ($candidates) { $candidates[0] } else { "dotnet" }
 
 & $dotnet build "$repo\src\MegaPDF.App\MegaPDF.App.csproj" -c Release -r win-x64 --nologo -v q
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
