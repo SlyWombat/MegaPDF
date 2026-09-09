@@ -40,7 +40,17 @@ public class Win {
 $global:AE = [System.Windows.Automation.AutomationElement]
 $global:TS = [System.Windows.Automation.TreeScope]
 $global:CT = [System.Windows.Automation.ControlType]
-$global:AUMID = "ElectricRV.MegaPDF_spcj169vsxppp!App"
+# Derived, not hardcoded: "spcj169vsxppp" was the old self-signed sideload
+# identity, and the package has carried the Store identity
+# (ElectricRV.MegaPDF_fba94j4nmgb9y) since 2026-07-22. The stale literal made
+# Start-App launch nothing at all. tools/Setup.cs still names the old AUMID on
+# purpose -- that one is for the sideload Setup.exe path.
+$global:AUMID = $(
+    $pkg = Get-AppxPackage ElectricRV.MegaPDF -ErrorAction SilentlyContinue |
+           Select-Object -First 1
+    if ($pkg) { "$($pkg.PackageFamilyName)!App" }
+    else { throw "MegaPDF is not installed -- install the package before driving it." }
+)
 # Shots land in the repo's (gitignored) artifacts dir, never beside these scripts.
 $global:REPO = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $global:SHOTDIR = if ($env:MEGAPDF_SHOTDIR) { $env:MEGAPDF_SHOTDIR } else { Join-Path $global:REPO "artifacts\store\screenshots" }

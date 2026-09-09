@@ -1072,7 +1072,21 @@ public partial class MainViewModel(Window window) : ObservableObject
             if (file is null)
                 return;
 
-            await Task.Run(() => VerifiedSave.ToPath(Engine, copy, file.Path));
+            try
+            {
+                await Task.Run(() => VerifiedSave.ToPath(Engine, copy, file.Path));
+            }
+            catch (Exception ex)
+            {
+                // Save and Save As both catch here; this one did not, and the
+                // difference was not cosmetic. App.UnhandledException sets
+                // Handled = false, so a throw after the save dialog terminated
+                // the process — no message, no file, and nothing in WER because
+                // the crash log goes to GetTempPath(). Observed 2026-07-24 in the
+                // packaged build and mistaken for a shrink-specific failure.
+                await ShowErrorAsync("Couldn't shrink", ex.Message);
+                return;
+            }
 
             var newBytes = new FileInfo(file.Path).Length;
             await ShowErrorAsync("Smaller copy saved",
