@@ -25,7 +25,9 @@ step) all disappear, and the Store handles updates.
 - Builds now also work on the Sly machine: per-user Windows .NET SDK in
   `%LOCALAPPDATA%\Microsoft\dotnet` (no full VS needed; symbols package skipped —
   `mspdbcmf.exe` ships with VS only). Store-mode `dotnet build` produces an
-  unsigned `.msix` (no `.msixupload` headlessly; Partner Center accepts `.msix`).
+  unsigned `.msix`, and `makeappx.exe` produces the `.msixbundle`/`.msixupload` if
+  ever needed — the whole chain is headless (verified 2026-09-09). Partner Center
+  accepts the plain `.msix` for a single-architecture submission.
 - Everything below marked "code — done" is already in the repo. Steps marked
   "needs account" or "needs reserved identity" are blocked until login.
 
@@ -37,9 +39,10 @@ step) all disappear, and the Store handles updates.
 - **Store packaging mode validated to build.** A Release build with
   `-p:WindowsPackageType=MSIX -p:AppxPackageSigningEnabled=false
   -p:UapAppxPackageBuildMode=StoreUpload -p:SelfContained=true
-  -p:WindowsAppSDKSelfContained=true` compiles cleanly. (Producing the final
-  `.msixupload` bundle headlessly is finicky — use the VS wizard below, which also
-  writes the Store identity.)
+  -p:WindowsAppSDKSelfContained=true` compiles cleanly, and with
+  `-p:GenerateAppxPackageOnBuild=true` emits the `.msix` itself. The Store identity
+  is already written into `Package.appxmanifest`, so the VS "Associate App with the
+  Store" step is not needed either. See "Build the upload package" below.
 
 ## One-time account + identity steps (needs account)
 1. Register Partner Center — **Company** account recommended (real publisher name +
@@ -59,12 +62,64 @@ step) all disappear, and the Store handles updates.
      not affect Store installs, but update it if you keep shipping sideload builds.
 
 ## Build the upload package (needs reserved identity)
-- Preferred: VS → `MegaPDF.App` → Publish → **Create App Packages → Microsoft Store**
-  → select architectures (x64) → produces `…_x64.msixupload`. This handles bundling +
-  identity correctly.
-- The equivalent MSBuild flags (validated to build in Store mode; bundle output is
-  wizard-dependent for this WinUI 3 self-contained project) are the `-p:` set listed
-  under "Already done" above, plus `-p:AppxBundle=Always -p:AppxBundlePlatforms=x64`.
+
+**No Visual Studio required.** Verified end to end on GPD-DAVE 2026-09-09 with only the
+per-user .NET SDK and the Windows SDK. The earlier note that the `.msixupload` bundle was
+"wizard-dependent" was wrong: `AppxBundle=Always` alone does not emit a bundle, but
+`makeappx.exe bundle` produces one directly, and a `.msixupload` is just a zip around the
+`.msixbundle`.
+
+For a single-architecture (x64) submission the plain `.msix` is enough — Partner Center
+accepts it and the bundle adds nothing. Build a bundle only if you ship more than one
+architecture.
+
+### 1. Build the Store package
+
+Produces an unsigned `.msix` (~40s), which is what the Store wants — it re-signs on
+ingestion:
+
+```
+dotnet build src/MegaPDF.App/MegaPDF.App.csproj \
+  -c Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64 \
+  -p:WindowsPackageType=MSIX -p:AppxPackageSigningEnabled=false \
+  -p:UapAppxPackageBuildMode=StoreUpload \
+  -p:SelfContained=true -p:WindowsAppSDKSelfContained=true \
+  -p:GenerateAppxPackageOnBuild=true
+```
+
+Output: `src/MegaPDF.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/AppPackages/MegaPDF.App_<ver>_Test/MegaPDF.App_<ver>_x64.msix`.
+The `_Test` folder name is cosmetic — the package inside carries the Store identity.
+
+### 2. Bundle it (optional, multi-arch only)
+
+Put the `.msix` alone in a directory whose path has no spaces (`C:\temp\…` — makeappx
+chokes on the OneDrive path), then:
+
+```
+makeappx.exe bundle /d C:\temp\<dir> /bv <ver> /p C:\temp\MegaPDF.App_<ver>_x64.msixbundle /o
+```
+
+`makeappx.exe` lives in `C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\`.
+Pass `/bv` explicitly or the bundle version defaults to `0.0.0.0` and the Store rejects it.
+A `.msixupload` is then just a zip containing that `.msixbundle` (plus the `.appxsym`
+symbols file when one exists).
+
+### 3. Verify before submitting
+
+Read the identity out of the built package rather than trusting the filename:
+
+```
+python3 -c "import zipfile,re;m=zipfile.ZipFile('<pkg>.msix').read('AppxManifest.xml').decode();print(re.findall(r'<Identity[^>]*>',m))"
+```
+
+Expect `Name="ElectricRV.MegaPDF"`, `Publisher="CN=AF0F2AB7-88E9-4EB3-A296-189E990F689E"`,
+the version you intended, and no `AppxSignature.p7x` entry in the zip.
+
+### What VS would add, and why it does not matter
+
+`mspdbcmf.exe` ships only with full VS, so the **symbols** (`.appxsym`) package is not
+generated and the build warns about it. Symbols are optional for submission — they only
+improve crash-report readability in Partner Center. Not a reason to install VS.
 
 ## Certification prep
 - Run the **Windows App Certification Kit (WACK)** against the built package; fix
