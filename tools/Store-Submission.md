@@ -124,9 +124,17 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
 ## Certification prep
 - Run the **Windows App Certification Kit (WACK)** against the built package; fix
   anything it flags before submitting.
-- **Done 2026-07-22: overall PASS** (report: `artifacts/store/wack-report.xml`, run
-  against a dev-signed copy of the Store package). Two *optional* tests report
-  FAIL — both are known Windows App SDK / self-contained .NET noise, not app code:
+- **Done 2026-09-09 for 1.7.0.0: overall PASS**, 22 tests passed, the same 2
+  optional FAILs as before (report: `artifacts/store/wack-report.xml`, run against
+  a dev-signed copy of the Store package; the 2026-07-22 1.5.0.0 report is kept
+  beside it as `wack-report-1.5.0.0-2026-07-22.xml`).
+- ⚠️ **`appcert` refuses to overwrite an existing report** — it prints "Please
+  specify a unique report file name", exits `-1` without running a single test,
+  and does so *after* the runner has trusted the cert and enabled sideloading, so
+  a stale report costs a whole elevated round-trip. `wack-run.ps1` now deletes the
+  previous report first.
+- The two *optional* FAILs are known Windows App SDK / self-contained .NET noise,
+  not app code:
   - "General metadata correctness": `Microsoft.UI.Xaml.winmd` references WebView2
     types not present in the package (we don't use WebView2).
   - "Blocked executables": CreateProcess/ShellExecute references in `coreclr.dll`,
