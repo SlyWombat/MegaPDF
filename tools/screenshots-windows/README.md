@@ -35,8 +35,8 @@ the result before continuing. Paths must be **Windows** paths.
     # 5. shot 4 — save, open the scan, Shrink for email
     .\Shot-Shrink.ps1 -Pdf "<repo>\...\scanned-agreement.pdf" -Out "<repo>\...\scanned-agreement - smaller.pdf"
 
-    # 6. shot 5 — NOT YET SCRIPTED, see below
-    #    Add text with the size and face pickers showing (#43).
+    # 6. shot 5 — Add text with the size and face pickers showing (#43)
+    .\Shot-AddText.ps1 -X 1430 -Y 1080
 
 `Test-FullBreakpoint.ps1` captures toolbar strips right at the full-label
 breakpoint with a document open and edited, so `Save ●` is showing — the widest
@@ -47,37 +47,41 @@ Verified 2026-08-13 at 1489 / 1494 / 1509 effective px: clean at all three.
 signature library (needed once per machine). `Test-ToolbarWidths.ps1` captures
 toolbar strips across a list of widths. `Shot-Now.ps1` grabs the current state.
 
-**The coordinates above are for a 3060x2000 window on a 3240x2160 display at 200%
-scale.** They are read off the previous screenshot, not computed: `Click-InShot`
+**The coordinates above are for a 2500x1550 window on a 2560x1600 display at 150%
+scale** (GPD-DAVE, 2026-09-09); the previous set was a 3060x2000 window on a
+3240x2160 display at 200%.
+
+**Set the display scale, not just the resolution.** `ApplyToolbarLayout` switches
+on *effective* pixels, so a 2500 px window at 200% is 1250 effective and drops the
+toolbar labels; at 150% it is 1667 and keeps them. Getting this wrong produces
+shots that look fine until you notice the toolbar is icon-only. They are read off the previous screenshot, not computed: `Click-InShot`
 maps image coordinates to screen because the shot *is* the DWM frame rect. On any
 other frame, take a shot first and re-read them.
 
-## Shot 5 — Add text, with the pickers (#43): still to be written
+## Shot 5 — Add text, with the pickers (#43)
 
-`tools/Store-Listing.md` now describes ADD TEXT and lists a fifth screenshot,
-`05-add-text.png`. **There is no script for it yet, and the four shots on disk
-predate the feature.** Both need doing before the listing is submitted, or it
-describes a build its screenshots do not show.
+Written 2026-09-09; `Shot-AddText.ps1`. It shows the inline editor open on the
+Date line with the size box and font box above it — the state `ShowInlineEditor`
+produces when handed a non-null `style`, which happens only for MegaPDF's own
+text boxes.
 
-What the shot has to show: the inline editor open on a blank line with the size
-box and font box above it — the state `ShowInlineEditor` produces when it is
-handed a non-null `style`, which happens only for MegaPDF's own text boxes (the
-Add text button's click, or a double-click on an existing box).
+Run it after `Place-Signature.ps1`, so the signature is already on its line and
+the date reads as the next thing you would fill in.
 
-Why it is not scripted here: every coordinate in this harness is *read off the
-previous screenshot*, not computed, and the pickers are new UI that has never
-been captured — so there is no frame to read them from. The sequence is
-`Setup-Frame.ps1`, click the **Add text** toolbar button, click the blank line
-under the signature rule, type, then open the size box before shooting. Write it
-the way `Shot-TextEdit.ps1` is written, taking `-X`/`-Y` from a probe shot.
+**Do not click the size box open before shooting**, which an earlier version of
+this file advised. Clicking it commits the inline edit, dismisses both pickers,
+and can leave an access-key tooltip painted over the page. Both boxes are legible
+closed, which is all the caption promises.
 
-It also cannot be done from CI: unlike iOS and Android, whose screenshots come
-from the Actions workflows, this harness drives a real installed package on a
-real desktop.
+The editor's top-left lands ON the click, so aim about 60 px above the rule you
+want the text to sit on, at that rule's left end.
 
-## Why 3060x2000
+It cannot be done from CI: unlike iOS and Android, whose screenshots come from the
+Actions workflows, this harness drives a real installed package on a real desktop.
 
-That is 1530 effective px, above the toolbar's `ToolbarFullWidth` breakpoint
+## Why this frame
+
+2500x1550 at 150% is 1667 effective px, above the toolbar's `ToolbarFullWidth` breakpoint
 (1500, see `ApplyToolbarLayout` in `MainWindow.xaml.cs`), so the toolbar shows
 icon + label. Shoot narrower and the listing's screenshots show a different
 toolbar than its description. Narrower than ~980 the zoom cluster folds into the

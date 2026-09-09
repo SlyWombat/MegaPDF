@@ -74,7 +74,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 - Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
 
 ## Screenshots
-`artifacts/store/screenshots/` (3038×1989, well over the 1366×768 minimum; 1–4
+`artifacts/store/screenshots/` (2482×1541, well over the 1366×768 minimum; 1–4
 required). Upload in this order, one caption each:
 
 | File | Caption (≤ 200 chars) |
@@ -85,15 +85,29 @@ required). Upload in this order, one caption each:
 | `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
 | `05-add-text.png` | Type on a blank line, in the size and face that matches the form. |
 
-⚠️ **The four shots on disk are from 1.6.2 and predate the ADD TEXT copy above.**
-They show a toolbar without the size and font pickers, and there is no
-`05-add-text.png` yet. Re-shoot all five before submitting, or the listing
-describes a build the screenshots do not show — the same mismatch NEXT-STEPS.md
-already flags between the shots and the staged upload package.
+All five shots were re-taken 2026-09-09 from the packaged **1.7.0** build on
+GPD-DAVE, so they match the binary being submitted and show the size and font
+pickers (#43). `05-add-text.png` now exists.
 
-Re-shooting needs a Windows desktop with the new build installed; the harness is
+They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
+at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the
+Store's minimum on both axes, and all five share one frame.
+
+**Display scale matters as much as resolution.** `ApplyToolbarLayout` switches on
+*effective* pixels, so at 200% scale a 2500 px window is only 1250 effective —
+below the 1500 `ToolbarFullWidth` breakpoint, and the toolbar loses its labels.
+The capture machine was set to **150%** so 2500 px reads as 1667 effective and the
+toolbar keeps icon + label, which is what these captions and the description
+assume. Check the toolbar in the shots before uploading; if the labels are gone,
+the scale is wrong, not the resolution.
+
+Re-shooting needs a Windows desktop with the build installed; the harness is
 `tools/screenshots-windows/` (start with its README). It cannot be done from CI —
 unlike iOS and Android, whose screenshots come from the Actions workflows.
+
+The signature in shot 3 is **MegaWoman** (`tools/assets/megawoman-sig.jpg`), seeded
+with `Add-SignatureToLibrary.ps1`. If the library on the capture machine has other
+entries, place the MegaWoman one — it is the brand signature for the listing.
 
 Shot 3 is click-to-place, not drag: picking a signature from the library arms
 placement and the next click on the page drops it there, selected for nudging.
