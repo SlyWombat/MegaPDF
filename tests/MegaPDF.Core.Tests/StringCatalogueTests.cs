@@ -8,6 +8,10 @@ namespace MegaPDF.Core.Tests;
 /// <summary>
 /// The four platforms' string catalogues, held against themselves (#91).
 ///
+/// Two French variants: Canada (translated by hand) and France (derived from
+/// it by <c>tools/gen_strings.py fr-fr</c>). Both are checked against the
+/// English, so a derivation that dropped a key or a placeholder fails here.
+///
 /// None of the apps can be launched from a test, so this is static, in the
 /// shape of <see cref="DesignTokenParityTests"/>: it reads each catalogue off
 /// disk and checks the three things a missing translation looks like —
@@ -32,6 +36,7 @@ public class StringCatalogueTests
         ["SignaturesButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "same",
         ["LanguageEnglish.Text"] = "language names are written in their own language",
         ["LanguageFrench.Text"] = "same",
+        ["LanguageFrenchFrance.Text"] = "same",
         ["OK"] = "OK is OK",
         ["PageN"] = "\"Page {0}\" is the same in both",
         ["SplashCopyright.Text"] = "a copyright line with no words to translate",
@@ -63,12 +68,14 @@ public class StringCatalogueTests
 
     // --- Windows: Strings/<lang>/Resources.resw ---
 
-    [Fact]
-    public void WindowsCatalogueIsComplete()
+    [Theory]
+    [InlineData("fr-CA")]
+    [InlineData("fr-FR")]
+    public void WindowsCatalogueIsComplete(string language)
     {
         var en = ResxValues("src/MegaPDF.App/Strings/en-US/Resources.resw");
-        var fr = ResxValues("src/MegaPDF.App/Strings/fr-CA/Resources.resw");
-        AssertParity("Windows", en, fr, DotNetPlaceholder);
+        var fr = ResxValues($"src/MegaPDF.App/Strings/{language}/Resources.resw");
+        AssertParity($"Windows {language}", en, fr, DotNetPlaceholder);
     }
 
     [Fact]
@@ -77,12 +84,14 @@ public class StringCatalogueTests
 
     // --- macOS: Strings/Strings.resx, Strings.fr.resx ---
 
-    [Fact]
-    public void MacCatalogueIsComplete()
+    [Theory]
+    [InlineData("fr-CA")]
+    [InlineData("fr")]
+    public void MacCatalogueIsComplete(string culture)
     {
         var en = ResxValues("src/MegaPDF.Avalonia/Strings/Strings.resx");
-        var fr = ResxValues("src/MegaPDF.Avalonia/Strings/Strings.fr.resx");
-        AssertParity("macOS", en, fr, DotNetPlaceholder);
+        var fr = ResxValues($"src/MegaPDF.Avalonia/Strings/Strings.{culture}.resx");
+        AssertParity($"macOS {culture}", en, fr, DotNetPlaceholder);
     }
 
     [Fact]
@@ -91,18 +100,22 @@ public class StringCatalogueTests
 
     // --- Android: res/values/strings.xml, res/values-fr/strings.xml ---
 
-    [Fact]
-    public void AndroidCatalogueIsComplete()
+    [Theory]
+    [InlineData("values-fr-rCA")]
+    [InlineData("values-fr")]
+    public void AndroidCatalogueIsComplete(string folder)
     {
         var en = AndroidValues("android/app/src/main/res/values/strings.xml");
-        var fr = AndroidValues("android/app/src/main/res/values-fr/strings.xml");
-        AssertParity("Android", en, fr, JavaPlaceholder);
+        var fr = AndroidValues($"android/app/src/main/res/{folder}/strings.xml");
+        AssertParity($"Android {folder}", en, fr, JavaPlaceholder);
     }
 
     // --- iOS: Localizable.xcstrings ---
 
-    [Fact]
-    public void IosCatalogueIsComplete()
+    [Theory]
+    [InlineData("fr-CA")]
+    [InlineData("fr")]
+    public void IosCatalogueIsComplete(string localization)
     {
         using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ios/MegaPDF/Localizable.xcstrings")));
         var strings = doc.RootElement.GetProperty("strings");
@@ -115,14 +128,14 @@ public class StringCatalogueTests
                 continue;
             en[entry.Name] = entry.Name; // SwiftUI convention: the English text is the key
             if (entry.Value.TryGetProperty("localizations", out var locs)
-                && locs.TryGetProperty("fr-CA", out var frCa)
-                && frCa.GetProperty("stringUnit") is var unit
+                && locs.TryGetProperty(localization, out var localized)
+                && localized.GetProperty("stringUnit") is var unit
                 && unit.GetProperty("state").GetString() == "translated")
             {
                 fr[entry.Name] = unit.GetProperty("value").GetString() ?? "";
             }
         }
-        AssertParity("iOS", en, fr, ApplePlaceholder);
+        AssertParity($"iOS {localization}", en, fr, ApplePlaceholder);
     }
 
     // --- The exemption list must not rot ---
@@ -138,8 +151,8 @@ public class StringCatalogueTests
                     all[k] = (v, f);
         }
         Add(ResxValues("src/MegaPDF.App/Strings/en-US/Resources.resw"), ResxValues("src/MegaPDF.App/Strings/fr-CA/Resources.resw"));
-        Add(ResxValues("src/MegaPDF.Avalonia/Strings/Strings.resx"), ResxValues("src/MegaPDF.Avalonia/Strings/Strings.fr.resx"));
-        Add(AndroidValues("android/app/src/main/res/values/strings.xml"), AndroidValues("android/app/src/main/res/values-fr/strings.xml"));
+        Add(ResxValues("src/MegaPDF.Avalonia/Strings/Strings.resx"), ResxValues("src/MegaPDF.Avalonia/Strings/Strings.fr-CA.resx"));
+        Add(AndroidValues("android/app/src/main/res/values/strings.xml"), AndroidValues("android/app/src/main/res/values-fr-rCA/strings.xml"));
 
         var stale = SameInFrench.Keys
             .Where(k => all.TryGetValue(k, out var pair) && pair.en != pair.fr)

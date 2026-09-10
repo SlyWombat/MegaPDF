@@ -187,14 +187,15 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
 
 ## Languages (added 2026-09-10, #91)
 
-The manifest now declares `en-us`, `en-ca` **and `fr-ca`**, and the package
-carries `Strings/en-US` and `Strings/fr-CA` in its PRI. The next submission after
-1.7.0.0 therefore needs:
+The manifest now declares `en-us`, `en-ca`, **`fr-ca` and `fr-fr`**, and the
+package carries `Strings/en-US`, `Strings/fr-CA` and `Strings/fr-FR` in its PRI.
+The next submission after 1.7.0.0 therefore needs:
 
 1. Both architectures rebuilt (the PRI is built with the package).
-2. A **French (Canada)** listing in Partner Center, filled from
-   `docs/microsoft-store-listing.md` § Français (Canada) — description, nine
-   features, search terms, captions. It starts as *Incomplete* and blocks
+2. A **French (Canada)** and a **French (France)** listing in Partner Center,
+   filled from `docs/microsoft-store-listing.md` § Français (Canada) (France:
+   the same copy with the glossary's France substitutions) — description, nine
+   features, search terms, captions. Each starts as *Incomplete* and blocks
    submission until it is filled, exactly like en-CA did.
 3. The five English screenshots reused under the French listing until a French
    set exists (`tools/screenshots-windows/README.md` § French screenshots).

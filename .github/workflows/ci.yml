@@ -26,11 +26,13 @@ jobs:
       # The typed string accessors are generated from the English catalogues
       # (#91); an edited .resw/.resx without a regenerated Strings.g.cs would
       # otherwise compile against a key that is not there.
-      - name: Regenerate string accessors and check for drift
+      - name: Regenerate string accessors and the France catalogues, check for drift
         run: |
-          python3 tools/gen_strings.py
-          git diff --exit-code -- '*Strings.g.cs' \
-            || { echo "::error::Strings.g.cs is stale — run tools/gen_strings.py and commit the result"; exit 1; }
+          python3 tools/gen_strings.py fr-fr
+          git diff --exit-code -- '*Strings.g.cs' 'src/MegaPDF.App/Strings/fr-FR' \
+            'src/MegaPDF.Avalonia/Strings/Strings.fr.resx' 'android/app/src/main/res/values-fr' \
+            'ios/MegaPDF/Localizable.xcstrings' \
+            || { echo "::error::Generated strings are stale — run 'python3 tools/gen_strings.py fr-fr' and commit the result"; exit 1; }
 
   build-and-test:
     runs-on: windows-latest

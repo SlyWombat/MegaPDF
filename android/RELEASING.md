@@ -52,8 +52,10 @@
 
 ## Play listing — Français (Canada)
 
-The app is localised in French since #91 (`res/values-fr/`), so the Play
-listing gets a **French (Canada) – fr-CA** language in the Console (Main store
+The app is localised in French since #91 (`res/values-fr-rCA/` for Canada,
+`res/values-fr/` for France, derived), so the Play listing gets a **French
+(Canada) – fr-CA** language in the Console (and optionally **French (France) –
+fr-FR** with the France substitutions from `docs/localisation-glossary.md`) (Main store
 listing → Manage translations → Add). `tools/play_submit.py` uploads binaries
 only; listing text is pasted by hand. Limits: title 30, short 80, full 4000.
 Translated by the build assistant against `docs/localisation-glossary.md`;

@@ -179,7 +179,9 @@ copy: the Store runbook. Keep the three tellings of the story consistent.*
 ## Français (Canada)
 
 App Store Connect → the version page → **Localizations** → add **French
-(Canada)**. Every field below is the French counterpart of the one above, with
+(Canada)**. The app also carries a France localisation (`fr`), so a **French**
+listing can be added with the same copy and the France substitutions from
+`docs/localisation-glossary.md` § Français (France). Every field below is the French counterpart of the one above, with
 the same character limit (#91). Translated by the build assistant against
 `docs/localisation-glossary.md`; have a francophone read it before it goes live.
 Screenshots stay the English set until a French run of the screenshot workflow

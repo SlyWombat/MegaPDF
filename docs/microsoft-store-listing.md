@@ -4,12 +4,15 @@
 block only — no `>`, `-` or `1.` prefixes, since Partner Center takes those
 literally. The Description below is plain prose and pastes as-is.
 
-**Three listings, two sets of copy.** The packages declare `en-us`, `en-ca` and
-`fr-ca` (#91), so Partner Center asks for an **English (United States)**, an
-**English (Canada)** and a **French (Canada)** listing. The English below is
-used verbatim for both English listings — it carries no US-vs-CA spelling.
-The French listing takes the copy under [Français (Canada)](#français-canada)
-at the end of this file: a translation, not a paste.
+**Four listings, two sets of copy.** The packages declare `en-us`, `en-ca`,
+`fr-ca` and `fr-fr` (#91), so Partner Center asks for **English (United
+States)**, **English (Canada)**, **French (Canada)** and **French (France)**
+listings. The English below is used verbatim for both English listings — it
+carries no US-vs-CA spelling. The French (Canada) listing takes the copy under
+[Français (Canada)](#français-canada) at the end of this file; the French
+(France) listing is the same copy with the France substitutions from
+`docs/localisation-glossary.md` § Français (France) applied — *e-mail* for
+*courriel*, *cloud* for *infonuagique*, and a space before `?`, `!` and `;`.
 
 ## Short description / first line
 (The first sentence shows in search results — it carries the whole pitch.)

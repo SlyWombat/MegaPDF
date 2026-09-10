@@ -25,9 +25,11 @@
          US-vs-CA spelling. -->
     <Resource Language="en-us" />
     <Resource Language="en-ca" />
-    <!-- fr-ca: Strings\fr-CA\Resources.resw (#91). A French Windows falls back to
-         it for fr-FR too — MRT matches on language before region. -->
+    <!-- fr-ca: Strings\fr-CA\Resources.resw, fr-fr: Strings\fr-FR\Resources.resw,
+         derived from it by tools/gen_strings.py (#91). Each declared language is
+         a listing Partner Center asks for. -->
     <Resource Language="fr-ca" />
+    <Resource Language="fr-fr" />
   </Resources>
 
   <Applications>

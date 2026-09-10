@@ -1,6 +1,8 @@
 # Localisation — how the strings work on each platform
 
-MegaPDF ships in English and French (Canada) since issue #91. This is the
+MegaPDF ships in English, French (Canada) and French (France) since issue #91.
+Canadian French is the translated one; France French is derived from it by
+rule (see the glossary's last section), so there is one French to maintain. This is the
 reference for where the strings live, how a platform picks a language, and what
 to do when you add a string or a language. The vocabulary itself is in
 [localisation-glossary.md](localisation-glossary.md): same English concept, same
@@ -19,17 +21,14 @@ sentence in the user's language before showing anything.
 
 | Platform | Catalogue | Locale folder | Code access | Language comes from |
 |---|---|---|---|---|
-| Windows (WinUI 3) | `src/MegaPDF.App/Strings/en-US/Resources.resw` | `Strings/fr-CA/` | generated `Strings.g.cs` over MRT | Windows display language; `--language`; the Language setting |
-| macOS (Avalonia) | `src/MegaPDF.Avalonia/Strings/Strings.resx` | `Strings.fr.resx` (neutral `fr`) | generated `Strings.g.cs` over `ResourceManager` | macOS preferred language (CoreFoundation); `--language` |
-| Android (Compose) | `android/app/src/main/res/values/strings.xml` | `values-fr/` | `stringResource`, `getString` | system / per-app language (Android 13+) |
-| iOS (SwiftUI) | `ios/MegaPDF/Localizable.xcstrings` | `fr-CA` inside the catalog | implicit `LocalizedStringKey`, `String(localized:)` | system / per-app language |
+| Windows (WinUI 3) | `src/MegaPDF.App/Strings/en-US/Resources.resw` | `Strings/fr-CA/`, `Strings/fr-FR/` (derived) | generated `Strings.g.cs` over MRT | Windows display language; `--language`; the Language setting |
+| macOS (Avalonia) | `src/MegaPDF.Avalonia/Strings/Strings.resx` | `Strings.fr-CA.resx`, `Strings.fr.resx` (derived, neutral) | generated `Strings.g.cs` over `ResourceManager` | macOS preferred language (CoreFoundation); `--language` |
+| Android (Compose) | `android/app/src/main/res/values/strings.xml` | `values-fr-rCA/`, `values-fr/` (derived, neutral) | `stringResource`, `getString` | system / per-app language (Android 13+) |
+| iOS (SwiftUI) | `ios/MegaPDF/Localizable.xcstrings` | `fr-CA` and `fr` (derived) inside the catalog | implicit `LocalizedStringKey`, `String(localized:)` | system / per-app language |
 
-Why the locale folders differ: Windows and iOS match a `fr-FR` user to `fr-CA`
-resources on their own (language before region), so the folder can say exactly
-what the Store listing says. Android and .NET do not — `values-fr-rCA` would
-serve only fr-CA devices and `Strings.fr-CA.resx` only fr-CA cultures — so those
-two use neutral French, which every French locale falls back to. The copy is
-Canadian French in all four.
+The neutral French (`fr`, `values-fr`) is the France variant, because that is
+what every other French locale (Belgium, Switzerland, Africa) falls back to on
+Android and .NET; Canada is the exact-match region on all four platforms.
 
 ## Windows
 
@@ -47,7 +46,7 @@ Canadian French in all four.
   or the exception type, with the engine's message underneath only when nothing
   better is known. Windows' own IO messages are already in the user's language
   and are shown as they are.
-- **The Store package** declares `en-us`, `en-ca` and `fr-ca` in
+- **The Store package** declares `en-us`, `en-ca`, `fr-ca` and `fr-fr` in
   `Package.appxmanifest`; the app description and the `.pdf` file-type name are
   `ms-resource:` references so Explorer localises them too.
 - **Language override.** `--language fr-CA` on the command line, or the
@@ -73,9 +72,9 @@ Canadian French in all four.
 - **AXAML** uses `{x:Static loc:Strings.Key}` with `xmlns:loc="using:MegaPDF.Avalonia"`.
 - **Code** calls the same generated `Strings` class; plurals use
   `Strings.Plural(n, one, other)` (French treats 0 and 1 as singular).
-- The `fr` satellite assembly is embedded in the single-file publish, so the
+- The `fr` and `fr-CA` satellite assemblies are embedded in the single-file publish, so the
   bundle needs no `fr/` folder; `tools/build-macos-app.sh` writes
-  `CFBundleDevelopmentRegion`, `CFBundleLocalizations` and the two
+  `CFBundleDevelopmentRegion`, `CFBundleLocalizations` and the three
   `.lproj/InfoPlist.strings` (Finder's "Document PDF") before signing, and
   `macos-app.yml` checks they are there.
 - At startup `Program.ApplyLanguage` honours `--language <tag>` and otherwise
@@ -109,9 +108,11 @@ Canadian French in all four.
 
 ## Adding a string
 
-1. Add it to the English catalogue of the platform, then to the French one
-   with the same key. Follow the glossary; if the term is new, add a row.
-2. Desktop: run `python3 tools/gen_strings.py` and use `Strings.Key` in code.
+1. Add it to the English catalogue of the platform, then to the Canadian
+   French one with the same key. Follow the glossary; if the term is new, add
+   a row, and a France row if the word differs there.
+2. Run `python3 tools/gen_strings.py fr-fr`: it regenerates the desktop
+   accessors and derives the France catalogues. Use `Strings.Key` in code.
 3. Run the Core tests (`dotnet test MegaPDF.sln`) — `StringCatalogueTests`
    tells you exactly which key is missing or untranslated on which platform.
 
@@ -119,7 +120,8 @@ Canadian French in all four.
 
 1. Windows: `Strings/<tag>/Resources.resw` and `<Resource Language="<tag>" />`
    in `Package.appxmanifest`; a Store listing in that language (Partner Center
-   asks for one per declared language); rebuild x64 and ARM64.
+   asks for one per declared language — today en-US, en-CA, fr-CA, fr-FR);
+   rebuild x64 and ARM64.
 2. macOS: `Strings/Strings.<lang>.resx`; add the tag to `CFBundleLocalizations`
    and an `InfoPlist.strings` in `tools/build-macos-app.sh`.
 3. Android: `values-<lang>/strings.xml`; a Play listing in the Console.

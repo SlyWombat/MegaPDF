@@ -25,7 +25,7 @@ namespace MegaPDF.App;
 internal static class AppLanguage
 {
     /// <summary>The languages the Settings flyout offers, in radio order. "" = follow Windows.</summary>
-    public static readonly string[] Choices = ["", "en-US", "fr-CA"];
+    public static readonly string[] Choices = ["", "en-US", "fr-CA", "fr-FR"];
 
     private static readonly ResourceManager Manager = new();
     private static ResourceContext? _context;

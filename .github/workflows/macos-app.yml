@@ -212,7 +212,7 @@ jobs:
 
           langs=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleLocalizations' "$PLIST" 2>/dev/null || true)
           echo "CFBundleLocalizations: $(echo "$langs" | tr -s '[:space:]' ' ')"
-          for lang in en fr; do
+          for lang in en fr fr-CA; do
             if ! echo "$langs" | grep -qx "[[:space:]]*$lang[[:space:]]*"; then
               echo "::error::CFBundleLocalizations does not list '$lang'"
               exit 1

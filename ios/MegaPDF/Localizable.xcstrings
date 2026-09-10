@@ -3,6 +3,12 @@
   "strings" : {
     "%lld of %lld" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld sur %2$lld"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -13,6 +19,12 @@
     },
     "About" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À propos"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -23,6 +35,12 @@
     },
     "About MegaPDF" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À propos de MegaPDF"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -33,6 +51,12 @@
     },
     "Add" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -43,6 +67,12 @@
     },
     "Add text" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter du texte"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -53,6 +83,12 @@
     },
     "Cancel" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annuler"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -63,6 +99,12 @@
     },
     "Clear" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effacer"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -73,6 +115,12 @@
     },
     "Close" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fermer"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -83,6 +131,12 @@
     },
     "Copyright © 2026 ElectricRV.ca Corporation. All rights reserved." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 ElectricRV.ca Corporation. Tous droits réservés."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -93,6 +147,12 @@
     },
     "Couldn't add that text." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'ajouter ce texte."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -103,6 +163,12 @@
     },
     "Couldn't capture the drawing." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de capturer le dessin."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -113,6 +179,12 @@
     },
     "Couldn't change that text." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de modifier ce texte."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -123,6 +195,12 @@
     },
     "Couldn't change the document." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de modifier le document."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -133,6 +211,12 @@
     },
     "Couldn't decode that image." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire cette image."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -143,6 +227,12 @@
     },
     "Couldn't draw the page." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'afficher la page."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -153,6 +243,12 @@
     },
     "Couldn't load page %lld." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de charger la page %lld."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -163,6 +259,12 @@
     },
     "Couldn't move that text." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déplacer ce texte."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -173,6 +275,12 @@
     },
     "Couldn't move the signature." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déplacer la signature."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -183,6 +291,12 @@
     },
     "Couldn't open that file (error %lld)." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'ouvrir ce fichier (erreur %lld)."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -193,6 +307,12 @@
     },
     "Couldn't open that file." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'ouvrir ce fichier."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -203,6 +323,12 @@
     },
     "Couldn't place the signature." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de placer la signature."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -213,6 +339,12 @@
     },
     "Couldn't prepare the copy." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de préparer la copie."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -223,6 +355,12 @@
     },
     "Couldn't read that file." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire ce fichier."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -233,6 +371,12 @@
     },
     "Couldn't read this signature's image." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire l'image de cette signature."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -243,6 +387,12 @@
     },
     "Couldn't redo that." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de rétablir."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -253,6 +403,12 @@
     },
     "Couldn't remove that text." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de retirer ce texte."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -263,6 +419,12 @@
     },
     "Couldn't remove this signature." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de retirer cette signature."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -273,6 +435,12 @@
     },
     "Couldn't save the document." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'enregistrer le document."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -283,6 +451,12 @@
     },
     "Couldn't save the signature." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'enregistrer la signature."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -293,6 +467,12 @@
     },
     "Couldn't undo that." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'annuler."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -303,6 +483,12 @@
     },
     "Discard" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abandonner"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -313,6 +499,12 @@
     },
     "Document" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Document"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -323,6 +515,12 @@
     },
     "Done" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminé"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -333,6 +531,12 @@
     },
     "Draw" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dessiner"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -343,6 +547,12 @@
     },
     "Draw your signature" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dessinez votre signature"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -353,6 +563,12 @@
     },
     "Edit text" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier le texte"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -363,6 +579,12 @@
     },
     "Find in document" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher dans le document"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -373,6 +595,12 @@
     },
     "Font" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Police"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -386,6 +614,12 @@
     },
     "MegaPDF on GitHub" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF sur GitHub"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -396,6 +630,12 @@
     },
     "Next match" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résultat suivant"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -406,6 +646,12 @@
     },
     "No results" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun résultat"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -416,6 +662,12 @@
     },
     "No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune signature pour l'instant. Dessinez-en une avec votre doigt, ou ajoutez une photo de votre signature sur du papier blanc — l'arrière-plan est retiré automatiquement."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -426,6 +678,12 @@
     },
     "OK" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -436,6 +694,12 @@
     },
     "Open" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -446,6 +710,12 @@
     },
     "Open PDF" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir un PDF"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -456,6 +726,12 @@
     },
     "Open. Fix. Save. Done." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir. Corriger. Enregistrer. Terminé."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -466,6 +742,12 @@
     },
     "Page %lld" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %lld"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -476,6 +758,12 @@
     },
     "Password" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -486,6 +774,12 @@
     },
     "Password required" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe requis"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -496,6 +790,12 @@
     },
     "Password required." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe requis."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -506,6 +806,12 @@
     },
     "Photos" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -516,6 +822,12 @@
     },
     "Previous match" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résultat précédent"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -526,6 +838,12 @@
     },
     "Recent" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Récents"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -536,6 +854,12 @@
     },
     "Redo" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rétablir"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -546,6 +870,12 @@
     },
     "Save" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -556,6 +886,12 @@
     },
     "Save a copy" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -566,6 +902,12 @@
     },
     "Save failed — use Save a copy." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'enregistrer. Utilisez « Enregistrer une copie »."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -576,6 +918,12 @@
     },
     "Saved" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistré"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -586,6 +934,12 @@
     },
     "Saving…" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrement…"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -596,6 +950,12 @@
     },
     "Sign" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signer"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -606,6 +966,12 @@
     },
     "Signature %lld" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature %lld"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -616,6 +982,12 @@
     },
     "Signature added" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature ajoutée"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -626,6 +998,12 @@
     },
     "Signatures" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signatures"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -636,6 +1014,12 @@
     },
     "Size" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taille"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -646,6 +1030,12 @@
     },
     "Special thanks to Mega Woman." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Un grand merci à Mega Woman."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -656,6 +1046,12 @@
     },
     "Tap a signature, then tap the page" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez une signature, puis touchez la page"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -666,6 +1062,12 @@
     },
     "Tap the page where the signature should go" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez la page à l'endroit où placer la signature"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -676,6 +1078,12 @@
     },
     "Tap the page where the text should go" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez la page à l'endroit où placer le texte"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -686,6 +1094,12 @@
     },
     "Text" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texte"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -696,6 +1110,12 @@
     },
     "That entry was unreadable and has been removed." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette entrée était illisible et a été retirée."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -706,6 +1126,12 @@
     },
     "That file is no longer accessible. Pick it again to reopen it." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n'est plus accessible. Sélectionnez-le de nouveau pour le rouvrir."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -716,6 +1142,12 @@
     },
     "That password didn't work. Try again." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce mot de passe est incorrect. Réessayez."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -726,6 +1158,12 @@
     },
     "That signature's image is missing." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'image de cette signature est introuvable."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -736,6 +1174,12 @@
     },
     "The notices file is missing from this build." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le fichier des avis est absent de cette version."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -746,6 +1190,12 @@
     },
     "Third-party notices" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avis de tiers"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -756,6 +1206,12 @@
     },
     "This document has unsaved changes." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document contient des modifications non enregistrées."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -766,6 +1222,12 @@
     },
     "This document is protected." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est protégé."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -776,6 +1238,12 @@
     },
     "This replaces the text you tapped." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ceci remplace le texte que vous avez touché."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -786,6 +1254,12 @@
     },
     "This text was added by an older version and can't be edited here." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce texte a été ajouté par une version antérieure et ne peut pas être modifié ici."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -796,6 +1270,12 @@
     },
     "This will be added where you tapped." : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ceci sera ajouté là où vous avez touché."
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -806,6 +1286,12 @@
     },
     "Undo" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annuler"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -816,6 +1302,12 @@
     },
     "Unsaved changes" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifications non enregistrées"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -826,6 +1318,12 @@
     },
     "Version %@" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
@@ -836,6 +1334,12 @@
     },
     "Version %@ (%@)" : {
       "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %1$@ (%2$@)"
+          }
+        },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",

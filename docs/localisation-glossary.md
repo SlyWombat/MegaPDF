@@ -131,3 +131,20 @@ Conventions (OQLF, Canadian French):
 | Tap the page where the signature should go | Touchez la page à l'endroit où placer la signature | mobile |
 | Signature added | Signature ajoutée | |
 | Signature {0} | Signature {0} | default mobile name, persisted |
+
+## Français (France)
+
+France French is not translated separately: `tools/gen_strings.py fr-fr`
+derives it from the Canadian catalogues with the table below, then applies
+France punctuation (a non-breaking space before `?`, `!` and `;` as well as
+`:`). Add a row here **and** to `FR_CA_TO_FR_FR` in the script when a new
+Canadian term needs a France counterpart; never edit a derived file.
+
+| Français (Canada) | Français (France) |
+|---|---|
+| courriel | e-mail |
+| pour courriel / pour le courriel | pour l'e-mail |
+| infonuagique | cloud |
+| crochet | coche |
+| Merci tout spécial à | Un grand merci à |
+| fin de semaine | week-end |

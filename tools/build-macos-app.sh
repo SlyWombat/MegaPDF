@@ -92,13 +92,15 @@ cp "$ICON" "$APP/Contents/Resources/MegaPDF.icns"
 # CFBundleLocalizations list is what tells the system, and the App Store
 # listing, which languages the app has. Written before signing, like the icon:
 # a resource added afterwards breaks the seal.
-mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/fr.lproj"
+mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/fr.lproj" "$APP/Contents/Resources/fr-CA.lproj"
 cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" << 'STRINGS'
 CFBundleTypeName = "PDF document";
 STRINGS
-cat > "$APP/Contents/Resources/fr.lproj/InfoPlist.strings" << 'STRINGS'
+for lproj in fr fr-CA; do
+cat > "$APP/Contents/Resources/$lproj.lproj/InfoPlist.strings" << 'STRINGS'
 CFBundleTypeName = "Document PDF";
 STRINGS
+done
 
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -116,13 +118,15 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-    <!-- English is the development language; French is the one translation so
-         far (#91). Both lists must agree with the .lproj folders above. -->
+    <!-- English is the development language; French (France, the neutral fr)
+         and French (Canada) are the translations (#91). This list must agree
+         with the .lproj folders above and the Strings.*.resx catalogues. -->
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleLocalizations</key>
     <array>
         <string>en</string>
         <string>fr</string>
+        <string>fr-CA</string>
     </array>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>NSHighResolutionCapable</key><true/>

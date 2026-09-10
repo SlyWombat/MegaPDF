@@ -226,6 +226,9 @@
   <data name="LanguageFrench.Text" xml:space="preserve">
     <value>Français (Canada)</value>
   </data>
+  <data name="LanguageFrenchFrance.Text" xml:space="preserve">
+    <value>Français (France)</value>
+  </data>
   <data name="LanguageRestartNote.Text" xml:space="preserve">
     <value>Takes effect the next time MegaPDF opens.</value>
   </data>
