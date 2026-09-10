@@ -87,6 +87,14 @@ dotnet build src/MegaPDF.App/MegaPDF.App.csproj \
   -p:GenerateAppxPackageOnBuild=true
 ```
 
+⚠️ If it fails with **MSB3231 "Unable to remove directory … Access to the path …
+`Add-AppDevPackage.resources\cs-CZ` is denied"**, OneDrive is holding a lock on the
+previous `AppPackages` output (this repo lives under OneDrive). Delete the
+`AppPackages` directory and build again — it is pure build output, nothing is lost.
+The trap is not the failure: the **stale package stays on disk afterwards**, so a
+`Build FAILED` that scrolls past leaves a file that still looks like the artifact
+to upload. Check the manifest of what you are shipping, not that the file exists.
+
 Output: `src/MegaPDF.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/AppPackages/MegaPDF.App_<ver>_x64_Test/MegaPDF.App_<ver>_x64.msix`.
 The `_Test` folder name is cosmetic — the package inside carries the Store identity.
 
