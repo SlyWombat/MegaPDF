@@ -1,5 +1,9 @@
 # Mega PDF — Store listing copy (paste into Partner Center)
 
+**Everything meant for pasting is in a fenced code block.** Copy from inside the
+block only — no `>`, `-` or `1.` prefixes, since Partner Center takes those
+literally. The Description below is plain prose and pastes as-is.
+
 **Two listings, one set of copy.** The packages declare `en-us` and `en-ca`, so
 Partner Center asks for an **English (United States)** and an **English (Canada)**
 listing. Everything below is used verbatim for both — the copy carries no
@@ -9,7 +13,9 @@ into the other.
 ## Short description / first line
 (The first sentence shows in search results — it carries the whole pitch.)
 
-> The lightweight PDF editor for Windows. Open. Fix. Save. Done.
+```
+The lightweight PDF editor for Windows. Open. Fix. Save. Done.
+```
 
 ## Description
 (Partner Center → Store listing → Description. Plain text; blank lines between
@@ -51,34 +57,50 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ## Feature bullets
 (Store listing → "App features", up to 20 × 200 chars. Use all nine.)
 
-- Edit text in any PDF by clicking and typing — like a Word document
-- Add text on any blank line, in the size and face that matches the form
-- Click empty squares to check boxes on any form
-- Place a signature from your personal library with a click, then nudge and resize it
-- Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
-- Save overwrites, Save As copies — no export wizards or flatten dialogs
-- Shrink oversized scans for email with one click
-- Print directly from the app
-- 100% local processing: no account, no cloud, no subscription, no telemetry
+One feature per box in Partner Center. Paste them one line at a time — the
+lines below carry no bullet character:
+
+```
+Edit text in any PDF by clicking and typing — like a Word document
+Add text on any blank line, in the size and face that matches the form
+Click empty squares to check boxes on any form
+Place a signature from your personal library with a click, then nudge and resize it
+Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
+Save overwrites, Save As copies — no export wizards or flatten dialogs
+Shrink oversized scans for email with one click
+Print directly from the app
+100% local processing: no account, no cloud, no subscription, no telemetry
+```
 
 ## Search terms
 (Max 7; no term over 30 chars.)
 
-1. PDF editor
-2. edit PDF
-3. sign PDF
-4. fill PDF form
-5. PDF signature
-6. compress PDF
-7. lightweight PDF
+```
+PDF editor
+edit PDF
+sign PDF
+fill PDF form
+PDF signature
+compress PDF
+lightweight PDF
+```
 
 ## Other fields
-- Category: **Productivity**
-- Pricing: **Free**
-- Privacy policy URL: https://electricrv.ca/megapdf/privacy/
-- Website: https://electricrv.ca/megapdf/
-- Support contact: dave@drscapital.com
-- Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
+Category: **Productivity**. Pricing: **Free**. The rest are paste values:
+
+```
+https://electricrv.ca/megapdf/privacy/
+```
+```
+https://electricrv.ca/megapdf/
+```
+```
+dave@drscapital.com
+```
+```
+© 2026 Electric RV. Licensed under Apache-2.0.
+```
+(privacy policy URL, website, support contact, copyright — in that order)
 
 ## Screenshots
 `artifacts/store/screenshots/` (2482×1541, well over the 1366×768 minimum; at
