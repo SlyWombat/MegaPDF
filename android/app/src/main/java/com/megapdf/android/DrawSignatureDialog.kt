@@ -35,6 +35,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 
 // SDD §6.2: the user's mark is #202020, the same value the engine strokes check
 // marks in and the same the other three apps draw. This was 0xFF1A1A1A, so a
@@ -58,7 +59,7 @@ fun DrawSignatureDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Draw your signature") },
+        title = { Text(stringResource(R.string.draw_your_signature)) },
         text = {
             val context = LocalContext.current
             val demoSig = remember(screenshotMode) {
@@ -125,12 +126,12 @@ fun DrawSignatureDialog(
                     onSave(renderStrokes(strokes, canvasSize))
                     onDismiss()
                 },
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.save)) }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = { strokes.clear() }) { Text("Clear") }
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = { strokes.clear() }) { Text(stringResource(R.string.clear)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
             }
         },
     )

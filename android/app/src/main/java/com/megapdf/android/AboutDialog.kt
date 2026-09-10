@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.res.stringResource
 
 private const val PROJECT_URL = "https://github.com/SlyWombat/MegaPDF"
 private const val NOTICES_ASSET = "THIRD-PARTY-NOTICES.txt"
@@ -55,33 +56,33 @@ fun AboutDialog(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("MegaPDF") },
+        title = { Text(stringResource(R.string.app_name)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (versionName != null) {
                     Text(
-                        "Version $versionName",
+                        stringResource(R.string.version_label, versionName),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
-                    "Copyright © 2026 ElectricRV.ca Corporation. All rights reserved.",
+                    stringResource(R.string.copyright),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    "Special thanks to Mega Woman.",
+                    stringResource(R.string.special_thanks),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 TextButton(onClick = { uriHandler.openUri(PROJECT_URL) }) {
-                    Text("github.com/SlyWombat/MegaPDF")
+                    Text(stringResource(R.string.project_link))
                 }
                 TextButton(onClick = onShowNotices) {
-                    Text("Third-party notices")
+                    Text(stringResource(R.string.third_party_notices))
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }
 
@@ -104,10 +105,10 @@ fun ThirdPartyNoticesScreen(onClose: () -> Unit) {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Third-party notices") },
+                    title = { Text(stringResource(R.string.third_party_notices)) },
                     navigationIcon = {
                         IconButton(onClick = onClose) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                         }
                     },
                 )

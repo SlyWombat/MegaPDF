@@ -1,4 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Every user-facing string in the app (#91). The French set lives in
+  values-fr/strings.xml and follows docs/localisation-glossary.md; a term that
+  is in the glossary is not re-translated here.
+-->
 <resources>
-    <string name="app_name">MegaPDF</string>
+    <!-- Brand and links: never translated. -->
+    <string name="app_name" translatable="false">MegaPDF</string>
+    <string name="project_link" translatable="false">github.com/SlyWombat/MegaPDF</string>
+
+    <!-- Common actions -->
+    <string name="open">Open</string>
+    <string name="open_pdf">Open PDF</string>
+    <string name="save">Save</string>
+    <string name="saving">Saving…</string>
+    <string name="save_a_copy">Save a copy</string>
+    <string name="undo">Undo</string>
+    <string name="redo">Redo</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+    <string name="add">Add</string>
+    <string name="clear">Clear</string>
+    <string name="delete">Delete</string>
+    <string name="discard">Discard</string>
+    <string name="more_options">More options</string>
+
+    <!-- Home -->
+    <string name="tagline">Open. Fix. Save. Done.</string>
+    <string name="recent">Recent</string>
+    <string name="about_megapdf">About MegaPDF</string>
+
+    <!-- About -->
+    <string name="version_label">Version %1$s</string>
+    <string name="copyright">Copyright © 2026 ElectricRV.ca Corporation. All rights reserved.</string>
+    <string name="special_thanks">Special thanks to Mega Woman.</string>
+    <string name="third_party_notices">Third-party notices</string>
+
+    <!-- Password -->
+    <string name="password">Password</string>
+    <string name="password_required">Password required</string>
+    <string name="wrong_password">That password didn\'t work. Try again.</string>
+
+    <!-- Opening -->
+    <string name="open_failed">Couldn\'t open this file.</string>
+    <string name="open_failed_code">Couldn\'t open this file (error %1$d).</string>
+    <string name="open_access_revoked">Access to this file was revoked. Pick it again to reopen it.</string>
+    <!-- Display name when the provider gives none. -->
+    <string name="document">Document</string>
+
+    <!-- Viewer toolbar -->
+    <string name="close_document">Close document</string>
+    <string name="sign">Sign</string>
+    <string name="text">Text</string>
+    <string name="page_n">Page %1$d</string>
+
+    <!-- Search -->
+    <string name="search">Search</string>
+    <string name="close_search">Close search</string>
+    <string name="no_results">No results</string>
+    <!-- Current match / match count, e.g. "3 of 12". -->
+    <string name="match_counter">%1$d of %2$d</string>
+    <string name="previous_match">Previous match</string>
+    <string name="next_match">Next match</string>
+
+    <!-- Unsaved changes -->
+    <string name="unsaved_changes">Unsaved changes</string>
+    <string name="unsaved_changes_body">This document has unsaved changes.</string>
+
+    <!-- Saving -->
+    <string name="saved">Saved</string>
+    <string name="save_no_permission">No permission to write here anymore — use Save a copy.</string>
+    <string name="save_failed">Couldn\'t save. Use Save a copy.</string>
+
+    <!-- Added text -->
+    <string name="add_text">Add text</string>
+    <string name="edit_text">Edit text</string>
+    <string name="add_text_hint">This will be added where you tapped.</string>
+    <string name="edit_text_hint">This replaces the text you tapped.</string>
+    <string name="size">Size</string>
+    <string name="font">Font</string>
+    <string name="tap_to_place_text">Tap the page where the text should go</string>
+    <string name="text_untagged">This text was added by an older version and can\'t be edited here</string>
+    <string name="text_add_failed">Couldn\'t add that text</string>
+    <string name="text_change_failed">Couldn\'t change that text</string>
+    <string name="text_move_failed">Couldn\'t move that text</string>
+    <string name="text_remove_failed">Couldn\'t remove that text</string>
+    <string name="undo_failed">Couldn\'t undo that</string>
+    <string name="redo_failed">Couldn\'t redo that</string>
+
+    <!-- Signatures -->
+    <string name="signatures">Signatures</string>
+    <string name="draw">Draw</string>
+    <string name="draw_your_signature">Draw your signature</string>
+    <string name="add_from_photos">Add from Photos</string>
+    <string name="no_signatures_yet">No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.</string>
+    <string name="pick_signature_hint">Tap a signature, then tap the page where it should go.</string>
+    <string name="tap_to_place_signature">Tap the page where the signature should go</string>
+    <!-- Default library name; persisted at creation time, so it keeps the language it was created in. -->
+    <string name="signature_default_name">Signature %1$d</string>
+    <string name="signature_added">Signature added</string>
+    <string name="signature_import_failed">Couldn\'t import the signature.</string>
+    <string name="signature_save_failed">Couldn\'t save the signature.</string>
+    <string name="signature_image_missing">That signature\'s image is missing</string>
+    <string name="signature_image_unreadable">Couldn\'t read this signature\'s image</string>
+    <string name="signature_remove_failed">Couldn\'t remove this signature</string>
 </resources>

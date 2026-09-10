@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Français (Canada) — #91. Vocabulary follows docs/localisation-glossary.md
+  (OQLF: U+00A0 before ":" only, guillemets « » with U+00A0 inside, written
+  here as &#160; so the non-breaking space survives editors).
+-->
+<resources>
+    <!-- Common actions -->
+    <string name="open">Ouvrir</string>
+    <string name="open_pdf">Ouvrir un PDF</string>
+    <string name="save">Enregistrer</string>
+    <string name="saving">Enregistrement…</string>
+    <string name="save_a_copy">Enregistrer une copie</string>
+    <string name="undo">Annuler</string>
+    <string name="redo">Rétablir</string>
+    <string name="cancel">Annuler</string>
+    <string name="close">Fermer</string>
+    <string name="back">Retour</string>
+    <string name="add">Ajouter</string>
+    <string name="clear">Effacer</string>
+    <string name="delete">Supprimer</string>
+    <string name="discard">Abandonner</string>
+    <string name="more_options">Plus d\'options</string>
+
+    <!-- Home -->
+    <string name="tagline">Ouvrir. Corriger. Enregistrer. Terminé.</string>
+    <string name="recent">Récents</string>
+    <string name="about_megapdf">À propos de MegaPDF</string>
+
+    <!-- About -->
+    <string name="version_label">Version %1$s</string>
+    <string name="copyright">© 2026 ElectricRV.ca Corporation. Tous droits réservés.</string>
+    <string name="special_thanks">Merci tout spécial à Mega Woman.</string>
+    <string name="third_party_notices">Avis de tiers</string>
+
+    <!-- Password -->
+    <string name="password">Mot de passe</string>
+    <string name="password_required">Mot de passe requis</string>
+    <string name="wrong_password">Ce mot de passe est incorrect. Réessayez.</string>
+
+    <!-- Opening -->
+    <string name="open_failed">Impossible d\'ouvrir ce fichier.</string>
+    <string name="open_failed_code">Impossible d\'ouvrir ce fichier (erreur %1$d).</string>
+    <string name="open_access_revoked">L\'accès à ce fichier a été révoqué. Sélectionnez-le de nouveau pour le rouvrir.</string>
+    <string name="document">Document</string>
+
+    <!-- Viewer toolbar -->
+    <string name="close_document">Fermer le document</string>
+    <string name="sign">Signer</string>
+    <string name="text">Texte</string>
+    <string name="page_n">Page %1$d</string>
+
+    <!-- Search -->
+    <string name="search">Rechercher</string>
+    <string name="close_search">Fermer la recherche</string>
+    <string name="no_results">Aucun résultat</string>
+    <string name="match_counter">%1$d sur %2$d</string>
+    <string name="previous_match">Résultat précédent</string>
+    <string name="next_match">Résultat suivant</string>
+
+    <!-- Unsaved changes -->
+    <string name="unsaved_changes">Modifications non enregistrées</string>
+    <string name="unsaved_changes_body">Ce document contient des modifications non enregistrées.</string>
+
+    <!-- Saving -->
+    <string name="saved">Enregistré</string>
+    <string name="save_no_permission">Vous n\'avez plus la permission d\'écrire ici. Utilisez «&#160;Enregistrer une copie&#160;».</string>
+    <string name="save_failed">Impossible d\'enregistrer. Utilisez «&#160;Enregistrer une copie&#160;».</string>
+
+    <!-- Added text -->
+    <string name="add_text">Ajouter du texte</string>
+    <string name="edit_text">Modifier le texte</string>
+    <string name="add_text_hint">Ceci sera ajouté là où vous avez touché.</string>
+    <string name="edit_text_hint">Ceci remplace le texte que vous avez touché.</string>
+    <string name="size">Taille</string>
+    <string name="font">Police</string>
+    <string name="tap_to_place_text">Touchez la page à l\'endroit où placer le texte</string>
+    <string name="text_untagged">Ce texte a été ajouté par une version antérieure et ne peut pas être modifié ici</string>
+    <string name="text_add_failed">Impossible d\'ajouter ce texte</string>
+    <string name="text_change_failed">Impossible de modifier ce texte</string>
+    <string name="text_move_failed">Impossible de déplacer ce texte</string>
+    <string name="text_remove_failed">Impossible de retirer ce texte</string>
+    <string name="undo_failed">Impossible d\'annuler</string>
+    <string name="redo_failed">Impossible de rétablir</string>
+
+    <!-- Signatures -->
+    <string name="signatures">Signatures</string>
+    <string name="draw">Dessiner</string>
+    <string name="draw_your_signature">Dessinez votre signature</string>
+    <string name="add_from_photos">Ajouter à partir des photos</string>
+    <string name="no_signatures_yet">Aucune signature pour l\'instant. Dessinez-en une avec votre doigt, ou ajoutez une photo de votre signature sur du papier blanc — l\'arrière-plan est retiré automatiquement.</string>
+    <string name="pick_signature_hint">Touchez une signature, puis touchez la page à l\'endroit où la placer.</string>
+    <string name="tap_to_place_signature">Touchez la page à l\'endroit où placer la signature</string>
+    <string name="signature_default_name">Signature %1$d</string>
+    <string name="signature_added">Signature ajoutée</string>
+    <string name="signature_import_failed">Impossible d\'importer la signature.</string>
+    <string name="signature_save_failed">Impossible d\'enregistrer la signature.</string>
+    <string name="signature_image_missing">L\'image de cette signature est introuvable</string>
+    <string name="signature_image_unreadable">Impossible de lire l\'image de cette signature</string>
+    <string name="signature_remove_failed">Impossible de retirer cette signature</string>
+</resources>

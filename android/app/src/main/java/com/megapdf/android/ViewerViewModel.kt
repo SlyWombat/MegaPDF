@@ -350,12 +350,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             } catch (_: PdfPasswordException) {
                 uiState = ViewerUiState.PasswordNeeded(uri, wrongPassword = password != null)
             } catch (e: PdfLoadException) {
-                toHome("Couldn't open this file (error ${e.errorCode}).")
+                toHome(str(R.string.open_failed_code, e.errorCode))
             } catch (_: SecurityException) {
                 recentsStore.remove(uri.toString())
-                toHome("Access to this file was revoked. Pick it again to reopen it.")
-            } catch (e: Exception) {
-                toHome("Couldn't open this file: ${e.message}")
+                toHome(str(R.string.open_access_revoked))
+            } catch (_: Exception) {
+                toHome(str(R.string.open_failed))
             }
         }
     }
@@ -464,7 +464,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         // or delete the wrong box. Swallow the tap rather than let
                         // it fall through and toggle whatever is underneath.
                         selectedTextBox = null
-                        statusMessage = "This text was added by an older version and can't be edited here"
+                        statusMessage = str(R.string.text_untagged)
                         return@launch
                     }
                     val selected = SelectedTextBox(
@@ -517,7 +517,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         selectedStamp = null
         selectedTextBox = null
         isPlacingText = true
-        statusMessage = "Tap the page where the text should go"
+        statusMessage = str(R.string.tap_to_place_text)
     }
 
     fun cancelTextPlacement() {
@@ -562,8 +562,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
             } catch (e: Exception) {
                 statusMessage =
-                    if (pending.editingId != null) "Couldn't change that text"
-                    else "Couldn't add that text"
+                    str(if (pending.editingId != null) R.string.text_change_failed else R.string.text_add_failed)
             }
         }
     }
@@ -594,7 +593,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     doc)
                 reselectTextBox(doc, sel.pageIndex, sel.id)
             } catch (e: Exception) {
-                statusMessage = "Couldn't move that text"
+                statusMessage = str(R.string.text_move_failed)
             }
         }
     }
@@ -626,7 +625,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         boundsAnchored = true, fontName = sel.fontName),
                     doc)
             } catch (e: Exception) {
-                statusMessage = "Couldn't remove that text"
+                statusMessage = str(R.string.text_remove_failed)
             }
         }
     }
@@ -655,7 +654,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 history.undo(doc)?.let { afterHistoryChange(it) }
             } catch (e: Exception) {
-                statusMessage = "Couldn't undo that"
+                statusMessage = str(R.string.undo_failed)
             }
         }
     }
@@ -666,7 +665,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 history.redo(doc)?.let { afterHistoryChange(it) }
             } catch (e: Exception) {
-                statusMessage = "Couldn't redo that"
+                statusMessage = str(R.string.redo_failed)
             }
         }
     }
@@ -722,12 +721,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 out.setPixels(result.pixels, 0, result.width, 0, 0, result.width, result.height)
 
                 val entry = withContext(Dispatchers.IO) {
-                    signatureStore.add("Signature ${signatures.size + 1}", out)
+                    signatureStore.add(defaultSignatureName(), out)
                 }
                 signatures.add(entry)
-                statusMessage = "Signature added"
-            } catch (e: Exception) {
-                statusMessage = "Couldn't import the signature: ${e.message}"
+                statusMessage = str(R.string.signature_added)
+            } catch (_: Exception) {
+                statusMessage = str(R.string.signature_import_failed)
             }
         }
     }
@@ -744,12 +743,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val out = Bitmap.createBitmap(result.width, result.height, Bitmap.Config.ARGB_8888)
                 out.setPixels(result.pixels, 0, result.width, 0, 0, result.width, result.height)
                 val entry = withContext(Dispatchers.IO) {
-                    signatureStore.add("Signature ${signatures.size + 1}", out)
+                    signatureStore.add(defaultSignatureName(), out)
                 }
                 signatures.add(entry)
-                statusMessage = "Signature added"
-            } catch (e: Exception) {
-                statusMessage = "Couldn't save the signature: ${e.message}"
+                statusMessage = str(R.string.signature_added)
+            } catch (_: Exception) {
+                statusMessage = str(R.string.signature_save_failed)
             }
         }
     }
@@ -762,7 +761,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun startPlacement(entry: SignatureEntry) {
         selectedTextBox = null
         pendingSignature = entry
-        statusMessage = "Tap the page where the signature should go"
+        statusMessage = str(R.string.tap_to_place_signature)
     }
 
     fun cancelPlacement() {
@@ -775,7 +774,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val bitmap = withContext(Dispatchers.IO) { signatureStore.loadBitmap(entry) }
         if (bitmap == null) {
-            statusMessage = "That signature's image is missing"
+            statusMessage = str(R.string.signature_image_missing)
             return
         }
         // Default size: a third of the page width, aspect preserved (desktop default).
@@ -828,7 +827,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 page.close()
             }
             if (packed == null) {
-                statusMessage = "Couldn't read this signature's image"
+                statusMessage = str(R.string.signature_image_unreadable)
                 return@launch
             }
             perform(
@@ -861,7 +860,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 page.close()
             }
             if (packed == null) {
-                statusMessage = "Couldn't remove this signature"
+                statusMessage = str(R.string.signature_remove_failed)
                 return@launch
             }
             perform(
@@ -949,11 +948,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
                 isDirty = false
-                statusMessage = "Saved"
+                statusMessage = str(R.string.saved)
             } catch (_: SecurityException) {
-                statusMessage = "No permission to write here anymore — use Save a copy."
-            } catch (e: Exception) {
-                statusMessage = "Save failed: ${e.message}"
+                statusMessage = str(R.string.save_no_permission)
+            } catch (_: Exception) {
+                statusMessage = str(R.string.save_failed)
             } finally {
                 temp.delete()
                 isSaving = false
@@ -995,6 +994,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { doc.close() }
     }
 
+    /** A user-facing string in the app's current locale, for toasts and statuses. */
+    private fun str(id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
+
+    /**
+     * "Signature N" for a new library entry. The name is persisted at creation
+     * time, so it keeps the language the app was in when the signature was
+     * added and does not re-translate if the locale changes later — accepted.
+     */
+    private fun defaultSignatureName(): String =
+        str(R.string.signature_default_name, signatures.size + 1)
+
     private fun persistReadPermission(uri: Uri) {
         try {
             getApplication<Application>().contentResolver.takePersistableUriPermission(
@@ -1013,7 +1024,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (col >= 0 && cursor.moveToFirst()) return cursor.getString(col)
             }
-        return uri.lastPathSegment ?: "Document"
+        return uri.lastPathSegment ?: str(R.string.document)
     }
 
     override fun onCleared() {

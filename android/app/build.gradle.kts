@@ -48,6 +48,12 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        // Emits the LocaleConfig from the values-* folders (#91) so Android 13+
+        // lists MegaPDF under Settings > Languages > App languages. The default
+        // locale comes from res/resources.properties.
+        generateLocaleConfig = true
+    }
 }
 
 dependencies {

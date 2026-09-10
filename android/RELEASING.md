@@ -50,6 +50,42 @@
    - **Ads:** none.
 5. Roll out the internal-testing release.
 
+## Play listing — Français (Canada)
+
+The app is localised in French since #91 (`res/values-fr/`), so the Play
+listing gets a **French (Canada) – fr-CA** language in the Console (Main store
+listing → Manage translations → Add). `tools/play_submit.py` uploads binaries
+only; listing text is pasted by hand. Limits: title 30, short 80, full 4000.
+Translated by the build assistant against `docs/localisation-glossary.md`;
+have a francophone read it before it goes live. Screenshots stay the English
+set until the screenshot workflow can run with a French demo document.
+
+**Titre** [30]
+
+```
+MegaPDF
+```
+
+**Description courte** [80]
+
+```
+Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.
+```
+
+**Description complète** [4000] — the French description in
+`docs/app-store-listing.md` § Français (Canada), with "Mail, Fichiers, iCloud
+Drive" replaced by "Gmail, Fichiers, Google Drive" and "MegaPDF pour Windows et
+Android" by "MegaPDF pour Windows et iOS".
+
+**Notes de version** (fr-CA, ≤ 500 caractères), for the release that first
+carries it:
+
+```
+MegaPDF parle maintenant français. L'application suit la langue de votre
+appareil; sur Android 13 et plus, vous pouvez aussi la choisir dans
+Paramètres → Applications → MegaPDF → Langue.
+```
+
 ## Headless Play submission (one-time service-account setup)
 
 With a Play service account, releases become tag-only: CI (or Claude via the

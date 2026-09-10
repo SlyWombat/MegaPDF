@@ -73,6 +73,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material.icons.materialIcon
 import androidx.compose.material.icons.materialPath
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 
 /**
  * The undo arrow. `material-icons-core` does not carry it and one glyph is not
@@ -187,12 +188,13 @@ fun ViewerScreen(
         var face by remember(pendingTextTap) { mutableStateOf(pendingTextTap.fontName) }
         AlertDialog(
             onDismissRequest = onCancelTextPlacement,
-            title = { Text(if (editing) "Edit text" else "Add text") },
+            title = { Text(stringResource(if (editing) R.string.edit_text else R.string.add_text)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        if (editing) "This replaces the text you tapped."
-                        else "This will be added where you tapped."
+                        stringResource(
+                            if (editing) R.string.edit_text_hint else R.string.add_text_hint
+                        )
                     )
                     OutlinedTextField(
                         value = typed,
@@ -201,14 +203,14 @@ fun ViewerScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     ChipRow(
-                        label = "Size",
+                        label = stringResource(R.string.size),
                         options = TEXT_SIZES,
                         selected = size,
                         labelOf = { it.toInt().toString() },
                         onSelect = { size = it },
                     )
                     ChipRow(
-                        label = "Font",
+                        label = stringResource(R.string.font),
                         options = com.megapdf.engine.STANDARD_FONTS,
                         selected = face,
                         labelOf = ::fontLabel,
@@ -221,11 +223,11 @@ fun ViewerScreen(
                     onClick = { onCommitText(typed, size, face) },
                     enabled = typed.isNotBlank(),
                 ) {
-                    Text(if (editing) "Save" else "Add")
+                    Text(stringResource(if (editing) R.string.save else R.string.add))
                 }
             },
             dismissButton = {
-                TextButton(onClick = onCancelTextPlacement) { Text("Cancel") }
+                TextButton(onClick = onCancelTextPlacement) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -241,13 +243,13 @@ fun ViewerScreen(
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
-            title = { Text("Unsaved changes") },
-            text = { Text("This document has unsaved changes.") },
+            title = { Text(stringResource(R.string.unsaved_changes)) },
+            text = { Text(stringResource(R.string.unsaved_changes_body)) },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; onSave() }) { Text("Save") }
+                TextButton(onClick = { confirmDiscard = false; onSave() }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false; onClose() }) { Text("Discard") }
+                TextButton(onClick = { confirmDiscard = false; onClose() }) { Text(stringResource(R.string.discard)) }
             },
         )
     }
@@ -271,32 +273,32 @@ fun ViewerScreen(
                     title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
                     navigationIcon = {
                         IconButton(onClick = requestClose) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close document")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close_document))
                         }
                     },
                     actions = {
                         IconButton(onClick = onUndo, enabled = canUndo) {
-                            Icon(UndoIcon, contentDescription = "Undo")
+                            Icon(UndoIcon, contentDescription = stringResource(R.string.undo))
                         }
                         IconButton(onClick = { searchOpen = true }) {
-                            Icon(Icons.Filled.Search, contentDescription = "Search")
+                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
                         }
-                        TextButton(onClick = { signDialogOpen = true }) { Text("Sign") }
-                        TextButton(onClick = onStartTextPlacement) { Text("Text") }
+                        TextButton(onClick = { signDialogOpen = true }) { Text(stringResource(R.string.sign)) }
+                        TextButton(onClick = onStartTextPlacement) { Text(stringResource(R.string.text)) }
                         TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
-                            Text(if (isSaving) "Saving…" else "Save")
+                            Text(stringResource(if (isSaving) R.string.saving else R.string.save))
                         }
                         IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "More options")
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
-                                text = { Text("Save a copy") },
+                                text = { Text(stringResource(R.string.save_a_copy)) },
                                 enabled = !isSaving,
                                 onClick = { menuOpen = false; onSaveAs() },
                             )
                             DropdownMenuItem(
-                                text = { Text("Redo") },
+                                text = { Text(stringResource(R.string.redo)) },
                                 enabled = canRedo,
                                 onClick = { menuOpen = false; onRedo() },
                             )
@@ -434,7 +436,7 @@ fun ViewerScreen(
                         if (bitmap != null) {
                             Image(
                                 bitmap = bitmap.asImageBitmap(),
-                                contentDescription = "Page ${index + 1}",
+                                contentDescription = stringResource(R.string.page_n, index + 1),
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit,
                             )
@@ -501,7 +503,7 @@ private fun SearchTopBar(
             TextField(
                 value = query,
                 onValueChange = onQueryChange,
-                placeholder = { Text("Search") },
+                placeholder = { Text(stringResource(R.string.search)) },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -514,23 +516,23 @@ private fun SearchTopBar(
         },
         navigationIcon = {
             IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, contentDescription = "Close search")
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close_search))
             }
         },
         actions = {
             Text(
                 when {
                     query.isEmpty() || isSearching -> ""
-                    hitCount == 0 -> "No results"
-                    else -> "${currentHitIndex + 1} of $hitCount"
+                    hitCount == 0 -> stringResource(R.string.no_results)
+                    else -> stringResource(R.string.match_counter, currentHitIndex + 1, hitCount)
                 },
                 maxLines = 1,
             )
             IconButton(onClick = onPrevious, enabled = hitCount > 0) {
-                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Previous match")
+                Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.previous_match))
             }
             IconButton(onClick = onNext, enabled = hitCount > 0) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Next match")
+                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.next_match))
             }
         },
     )
@@ -585,13 +587,13 @@ private fun SignatureDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Signatures") },
+        title = { Text(stringResource(R.string.signatures)) },
         text = {
             androidx.compose.foundation.layout.Column {
                 if (signatures.isEmpty()) {
-                    Text("No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.")
+                    Text(stringResource(R.string.no_signatures_yet))
                 } else {
-                    Text("Tap a signature, then tap the page where it should go.")
+                    Text(stringResource(R.string.pick_signature_hint))
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 280.dp),
                     ) {
@@ -604,7 +606,7 @@ private fun SignatureDialog(
                                     onClick = { onPick(entry) },
                                     modifier = Modifier.weight(1f),
                                 ) { Text(entry.displayName) }
-                                TextButton(onClick = { onDelete(entry.id) }) { Text("Delete") }
+                                TextButton(onClick = { onDelete(entry.id) }) { Text(stringResource(R.string.delete)) }
                             }
                         }
                     }
@@ -613,11 +615,11 @@ private fun SignatureDialog(
         },
         confirmButton = {
             androidx.compose.foundation.layout.Row {
-                TextButton(onClick = onDraw) { Text("Draw") }
-                TextButton(onClick = onAdd) { Text("Add from Photos") }
+                TextButton(onClick = onDraw) { Text(stringResource(R.string.draw)) }
+                TextButton(onClick = onAdd) { Text(stringResource(R.string.add_from_photos)) }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
 }
 

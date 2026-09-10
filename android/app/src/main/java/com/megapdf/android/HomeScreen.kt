@@ -34,6 +34,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun HomeScreen(
@@ -61,7 +62,7 @@ fun HomeScreen(
         ) {
             Icon(
                 Icons.Outlined.Info,
-                contentDescription = "About MegaPDF",
+                contentDescription = stringResource(R.string.about_megapdf),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -96,14 +97,14 @@ private fun HomeContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(48.dp))
-        Text("MegaPDF", style = MaterialTheme.typography.headlineLarge)
+        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineLarge)
         Text(
-            "Open. Fix. Save. Done.",
+            stringResource(R.string.tagline),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onOpenClick) { Text("Open PDF") }
+        Button(onClick = onOpenClick) { Text(stringResource(R.string.open_pdf)) }
 
         if (error != null) {
             Spacer(Modifier.height(16.dp))
@@ -117,7 +118,7 @@ private fun HomeContent(
         if (recents.isNotEmpty()) {
             Spacer(Modifier.height(32.dp))
             Text(
-                "Recent",
+                stringResource(R.string.recent),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -160,12 +161,12 @@ fun PasswordDialog(
     var password by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Password required") },
+        title = { Text(stringResource(R.string.password_required)) },
         text = {
             Column {
                 if (wrongPassword) {
                     Text(
-                        "That password didn't work. Try again.",
+                        stringResource(R.string.wrong_password),
                         color = MaterialTheme.colorScheme.error,
                     )
                     Spacer(Modifier.height(8.dp))
@@ -173,13 +174,13 @@ fun PasswordDialog(
                 OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.password)) },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSubmit(password) }) { Text("Open") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSubmit(password) }) { Text(stringResource(R.string.open)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
