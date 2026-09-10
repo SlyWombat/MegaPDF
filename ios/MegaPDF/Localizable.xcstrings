@@ -1,0 +1,849 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%lld of %lld" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld sur %2$lld"
+          }
+        }
+      }
+    },
+    "About" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À propos"
+          }
+        }
+      }
+    },
+    "About MegaPDF" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "À propos de MegaPDF"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter"
+          }
+        }
+      }
+    },
+    "Add text" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajouter du texte"
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annuler"
+          }
+        }
+      }
+    },
+    "Clear" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effacer"
+          }
+        }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fermer"
+          }
+        }
+      }
+    },
+    "Copyright © 2026 ElectricRV.ca Corporation. All rights reserved." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "© 2026 ElectricRV.ca Corporation. Tous droits réservés."
+          }
+        }
+      }
+    },
+    "Couldn't add that text." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'ajouter ce texte."
+          }
+        }
+      }
+    },
+    "Couldn't capture the drawing." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de capturer le dessin."
+          }
+        }
+      }
+    },
+    "Couldn't change that text." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de modifier ce texte."
+          }
+        }
+      }
+    },
+    "Couldn't change the document." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de modifier le document."
+          }
+        }
+      }
+    },
+    "Couldn't decode that image." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire cette image."
+          }
+        }
+      }
+    },
+    "Couldn't draw the page." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'afficher la page."
+          }
+        }
+      }
+    },
+    "Couldn't load page %lld." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de charger la page %lld."
+          }
+        }
+      }
+    },
+    "Couldn't move that text." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déplacer ce texte."
+          }
+        }
+      }
+    },
+    "Couldn't move the signature." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déplacer la signature."
+          }
+        }
+      }
+    },
+    "Couldn't open that file (error %lld)." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'ouvrir ce fichier (erreur %lld)."
+          }
+        }
+      }
+    },
+    "Couldn't open that file." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'ouvrir ce fichier."
+          }
+        }
+      }
+    },
+    "Couldn't place the signature." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de placer la signature."
+          }
+        }
+      }
+    },
+    "Couldn't prepare the copy." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de préparer la copie."
+          }
+        }
+      }
+    },
+    "Couldn't read that file." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire ce fichier."
+          }
+        }
+      }
+    },
+    "Couldn't read this signature's image." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de lire l'image de cette signature."
+          }
+        }
+      }
+    },
+    "Couldn't redo that." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de rétablir."
+          }
+        }
+      }
+    },
+    "Couldn't remove that text." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de retirer ce texte."
+          }
+        }
+      }
+    },
+    "Couldn't remove this signature." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de retirer cette signature."
+          }
+        }
+      }
+    },
+    "Couldn't save the document." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'enregistrer le document."
+          }
+        }
+      }
+    },
+    "Couldn't save the signature." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'enregistrer la signature."
+          }
+        }
+      }
+    },
+    "Couldn't undo that." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'annuler."
+          }
+        }
+      }
+    },
+    "Discard" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abandonner"
+          }
+        }
+      }
+    },
+    "Document" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Document"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Terminé"
+          }
+        }
+      }
+    },
+    "Draw" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dessiner"
+          }
+        }
+      }
+    },
+    "Draw your signature" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dessinez votre signature"
+          }
+        }
+      }
+    },
+    "Edit text" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier le texte"
+          }
+        }
+      }
+    },
+    "Find in document" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechercher dans le document"
+          }
+        }
+      }
+    },
+    "Font" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Police"
+          }
+        }
+      }
+    },
+    "MegaPDF" : {
+      "shouldTranslate" : false
+    },
+    "MegaPDF on GitHub" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF sur GitHub"
+          }
+        }
+      }
+    },
+    "Next match" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résultat suivant"
+          }
+        }
+      }
+    },
+    "No results" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucun résultat"
+          }
+        }
+      }
+    },
+    "No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aucune signature pour l'instant. Dessinez-en une avec votre doigt, ou ajoutez une photo de votre signature sur du papier blanc — l'arrière-plan est retiré automatiquement."
+          }
+        }
+      }
+    },
+    "OK" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "Open" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir"
+          }
+        }
+      }
+    },
+    "Open PDF" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir un PDF"
+          }
+        }
+      }
+    },
+    "Open. Fix. Save. Done." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir. Corriger. Enregistrer. Terminé."
+          }
+        }
+      }
+    },
+    "Page %lld" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Page %lld"
+          }
+        }
+      }
+    },
+    "Password" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe"
+          }
+        }
+      }
+    },
+    "Password required" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe requis"
+          }
+        }
+      }
+    },
+    "Password required." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe requis."
+          }
+        }
+      }
+    },
+    "Photos" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Photos"
+          }
+        }
+      }
+    },
+    "Previous match" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Résultat précédent"
+          }
+        }
+      }
+    },
+    "Recent" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Récents"
+          }
+        }
+      }
+    },
+    "Redo" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rétablir"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer"
+          }
+        }
+      }
+    },
+    "Save a copy" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie"
+          }
+        }
+      }
+    },
+    "Save failed — use Save a copy." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'enregistrer. Utilisez « Enregistrer une copie »."
+          }
+        }
+      }
+    },
+    "Saved" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistré"
+          }
+        }
+      }
+    },
+    "Saving…" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrement…"
+          }
+        }
+      }
+    },
+    "Sign" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signer"
+          }
+        }
+      }
+    },
+    "Signature %lld" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature %lld"
+          }
+        }
+      }
+    },
+    "Signature added" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signature ajoutée"
+          }
+        }
+      }
+    },
+    "Signatures" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signatures"
+          }
+        }
+      }
+    },
+    "Size" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taille"
+          }
+        }
+      }
+    },
+    "Special thanks to Mega Woman." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merci tout spécial à Mega Woman."
+          }
+        }
+      }
+    },
+    "Tap a signature, then tap the page" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez une signature, puis touchez la page"
+          }
+        }
+      }
+    },
+    "Tap the page where the signature should go" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez la page à l'endroit où placer la signature"
+          }
+        }
+      }
+    },
+    "Tap the page where the text should go" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touchez la page à l'endroit où placer le texte"
+          }
+        }
+      }
+    },
+    "Text" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texte"
+          }
+        }
+      }
+    },
+    "That entry was unreadable and has been removed." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette entrée était illisible et a été retirée."
+          }
+        }
+      }
+    },
+    "That file is no longer accessible. Pick it again to reopen it." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier n'est plus accessible. Sélectionnez-le de nouveau pour le rouvrir."
+          }
+        }
+      }
+    },
+    "That password didn't work. Try again." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce mot de passe est incorrect. Réessayez."
+          }
+        }
+      }
+    },
+    "That signature's image is missing." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "L'image de cette signature est introuvable."
+          }
+        }
+      }
+    },
+    "The notices file is missing from this build." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le fichier des avis est absent de cette version."
+          }
+        }
+      }
+    },
+    "Third-party notices" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avis de tiers"
+          }
+        }
+      }
+    },
+    "This document has unsaved changes." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document contient des modifications non enregistrées."
+          }
+        }
+      }
+    },
+    "This document is protected." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est protégé."
+          }
+        }
+      }
+    },
+    "This replaces the text you tapped." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ceci remplace le texte que vous avez touché."
+          }
+        }
+      }
+    },
+    "This text was added by an older version and can't be edited here." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce texte a été ajouté par une version antérieure et ne peut pas être modifié ici."
+          }
+        }
+      }
+    },
+    "This will be added where you tapped." : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ceci sera ajouté là où vous avez touché."
+          }
+        }
+      }
+    },
+    "Undo" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annuler"
+          }
+        }
+      }
+    },
+    "Unsaved changes" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifications non enregistrées"
+          }
+        }
+      }
+    },
+    "Version %@" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %@"
+          }
+        }
+      }
+    },
+    "Version %@ (%@)" : {
+      "localizations" : {
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version %1$@ (%2$@)"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

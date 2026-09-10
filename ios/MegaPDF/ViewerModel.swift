@@ -166,7 +166,7 @@ final class ViewerModel: ObservableObject {
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             guard let bytes = try? Data(contentsOf: url) else {
-                toHome("Couldn't read that file.")
+                toHome(String(localized: "Couldn't read that file."))
                 return
             }
             await open(bytes: bytes, password: nil,
@@ -179,7 +179,7 @@ final class ViewerModel: ObservableObject {
         Task {
             guard let bookmark = entry.bookmarkData else {
                 recents.remove(id: entry.id)
-                toHome("That entry was unreadable and has been removed.")
+                toHome(String(localized: "That entry was unreadable and has been removed."))
                 return
             }
             var stale = false
@@ -188,7 +188,7 @@ final class ViewerModel: ObservableObject {
                 relativeTo: nil, bookmarkDataIsStale: &stale)
             else {
                 recents.remove(id: entry.id)
-                toHome("That file is no longer accessible. Pick it again to reopen it.")
+                toHome(String(localized: "That file is no longer accessible. Pick it again to reopen it."))
                 return
             }
             openPicked(url: url)
@@ -226,7 +226,9 @@ final class ViewerModel: ObservableObject {
             state = .passwordNeeded(bytes: bytes, displayName: displayName,
                                     sourceURL: sourceURL, wrongPassword: password != nil)
         } catch {
-            toHome("Couldn't open this file: \(error)")
+            // A plain sentence, not the raw error: the engine's own description is
+            // not something the home screen should print.
+            toHome(String(localized: "Couldn't open that file."))
         }
     }
 
@@ -322,7 +324,7 @@ final class ViewerModel: ObservableObject {
                         // or delete the wrong box. Swallow the tap rather than let
                         // it fall through and toggle whatever is underneath.
                         selectedTextBox = nil
-                        statusMessage = "This text was added by an older version and can't be edited here."
+                        statusMessage = String(localized: "This text was added by an older version and can't be edited here.")
                         return
                     }
                     let wasSelected = selectedTextBox?.id == box.id
@@ -380,7 +382,7 @@ final class ViewerModel: ObservableObject {
         selectedStamp = nil
         selectedTextBox = nil
         isPlacingText = true
-        statusMessage = "Tap the page where the text should go"
+        statusMessage = String(localized: "Tap the page where the text should go")
     }
 
     func cancelTextPlacement() {
@@ -425,9 +427,11 @@ final class ViewerModel: ObservableObject {
                         doc: doc)
                 }
             } catch {
-                statusMessage = pending.editingId != nil
-                    ? "Couldn't change that text."
-                    : "Couldn't add that text."
+                if pending.editingId != nil {
+                    statusMessage = String(localized: "Couldn't change that text.")
+                } else {
+                    statusMessage = String(localized: "Couldn't add that text.")
+                }
             }
         }
     }
@@ -454,7 +458,7 @@ final class ViewerModel: ObservableObject {
                     doc: doc)
                 await reselectTextBox(doc, pageIndex: sel.pageIndex, id: sel.id)
             } catch {
-                statusMessage = "Couldn't move that text."
+                statusMessage = String(localized: "Couldn't move that text.")
             }
         }
     }
@@ -487,7 +491,7 @@ final class ViewerModel: ObservableObject {
                                      fontName: sel.fontName),
                     doc: doc)
             } catch {
-                statusMessage = "Couldn't remove that text."
+                statusMessage = String(localized: "Couldn't remove that text.")
             }
         }
     }
@@ -513,7 +517,7 @@ final class ViewerModel: ObservableObject {
                     afterHistoryChange(page)
                 }
             } catch {
-                statusMessage = "Couldn't undo that."
+                statusMessage = String(localized: "Couldn't undo that.")
             }
         }
     }
@@ -526,7 +530,7 @@ final class ViewerModel: ObservableObject {
                     afterHistoryChange(page)
                 }
             } catch {
-                statusMessage = "Couldn't redo that."
+                statusMessage = String(localized: "Couldn't redo that.")
             }
         }
     }
@@ -616,7 +620,7 @@ final class ViewerModel: ObservableObject {
         guard let ui = UIImage(data: imageData), let cg = ui.cgImage,
               var (pixels, w, h) = PixelBuffers.argbPixels(from: downscaled(cg))
         else {
-            statusMessage = "Couldn't decode that image."
+            statusMessage = String(localized: "Couldn't decode that image.")
             return
         }
         if !SignatureProcessor.hasTransparency(pixels) {
@@ -630,7 +634,7 @@ final class ViewerModel: ObservableObject {
     /// Stores a drawn signature: already transparent, so only trim applies.
     func addDrawnSignature(image: CGImage) {
         guard var (pixels, w, h) = PixelBuffers.argbPixels(from: image) else {
-            statusMessage = "Couldn't capture the drawing."
+            statusMessage = String(localized: "Couldn't capture the drawing.")
             return
         }
         let trimmed = SignatureProcessor.trimToInk(pixels, width: w, height: h)
@@ -646,7 +650,7 @@ final class ViewerModel: ObservableObject {
     func startPlacement(_ entry: SignatureEntry) {
         selectedTextBox = nil
         pendingSignature = entry
-        statusMessage = "Tap the page where the signature should go"
+        statusMessage = String(localized: "Tap the page where the signature should go")
     }
 
     func cancelPlacement() {
@@ -662,7 +666,7 @@ final class ViewerModel: ObservableObject {
                 let engine = PdfEngine.shared
                 guard let image = try await engine.stampImage(
                     doc, pageIndex: sel.pageIndex, annotIndex: sel.annotIndex) else {
-                    statusMessage = "Couldn't read this signature's image."
+                    statusMessage = String(localized: "Couldn't read this signature's image.")
                     return
                 }
                 try await perform(
@@ -679,7 +683,7 @@ final class ViewerModel: ObservableObject {
                                                   id: sel.id, rect: placed.rect)
                 }
             } catch {
-                statusMessage = "Couldn't move the signature."
+                statusMessage = String(localized: "Couldn't move the signature.")
             }
         }
     }
@@ -693,7 +697,7 @@ final class ViewerModel: ObservableObject {
                 // same signature back.
                 guard let image = try await engine.stampImage(
                     doc, pageIndex: sel.pageIndex, annotIndex: sel.annotIndex) else {
-                    statusMessage = "Couldn't remove this signature."
+                    statusMessage = String(localized: "Couldn't remove this signature.")
                     return
                 }
                 try await perform(
@@ -703,7 +707,7 @@ final class ViewerModel: ObservableObject {
                                    rect: sel.rect, adding: false),
                     doc: doc)
             } catch {
-                statusMessage = "Couldn't remove this signature."
+                statusMessage = String(localized: "Couldn't remove this signature.")
             }
         }
     }
@@ -716,7 +720,7 @@ final class ViewerModel: ObservableObject {
                                 pageIndex: Int, pageSize: CGSize, x: Double, y: Double) {
         guard let image = signatureStore.loadImage(entry),
               let (pixels, w, h) = PixelBuffers.argbPixels(from: image) else {
-            statusMessage = "That signature's image is missing."
+            statusMessage = String(localized: "That signature's image is missing.")
             return
         }
         // Default size: a third of the page width, aspect preserved.
@@ -747,20 +751,24 @@ final class ViewerModel: ObservableObject {
                                                   id: id, rect: placed.rect)
                 }
             } catch {
-                statusMessage = "Couldn't place the signature."
+                statusMessage = String(localized: "Couldn't place the signature.")
             }
         }
     }
 
     private func storeSignature(pixels: [UInt32], width: Int, height: Int) {
+        // The default name is localised once, at creation, and persisted as-is in
+        // the signature store: it does not re-translate if the device language
+        // changes later. Catalog key "Signature %lld".
         guard let image = PixelBuffers.image(from: pixels, width: width, height: height),
               let entry = signatureStore.add(
-                  displayName: "Signature \(signatures.count + 1)", image: image) else {
-            statusMessage = "Couldn't save the signature."
+                  displayName: String(localized: "Signature \(signatures.count + 1)"),
+                  image: image) else {
+            statusMessage = String(localized: "Couldn't save the signature.")
             return
         }
         signatures.append(entry)
-        statusMessage = "Signature added"
+        statusMessage = String(localized: "Signature added")
     }
 
     private func downscaled(_ image: CGImage, maxDim: Int = 1500) -> CGImage {
@@ -815,9 +823,12 @@ final class ViewerModel: ObservableObject {
                 if let error = coordError { throw error }
                 if let error = writeError { throw error }
                 isDirty = false
-                statusMessage = "Saved"
+                statusMessage = String(localized: "Saved")
             } catch {
-                statusMessage = "Save failed — use Save a copy. (\(error.localizedDescription))"
+                // The OS/engine description follows as its own sentence; it is
+                // already localised (PdfError is a LocalizedError).
+                statusMessage = String(localized: "Save failed — use Save a copy.")
+                    + " " + error.localizedDescription
             }
         }
     }
@@ -832,14 +843,14 @@ final class ViewerModel: ObservableObject {
             await engine.close(verify)
             return data
         } catch {
-            statusMessage = "Couldn't prepare the copy."
+            statusMessage = String(localized: "Couldn't prepare the copy.")
             return nil
         }
     }
 
     func markSavedCopy() {
         isDirty = false
-        statusMessage = "Saved"
+        statusMessage = String(localized: "Saved")
     }
 
     // MARK: - closing

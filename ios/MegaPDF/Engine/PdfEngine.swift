@@ -19,6 +19,27 @@ enum PdfError: Error, Equatable {
     case editFailed
 }
 
+/// What `error.localizedDescription` says for an engine failure — short and
+/// plain, because it reaches the user (the save-failed status shows it).
+extension PdfError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .passwordRequired:
+            return String(localized: "Password required.")
+        case let .load(code):
+            return String(localized: "Couldn't open that file (error \(code)).")
+        case let .pageLoad(index):
+            return String(localized: "Couldn't load page \(index + 1).")
+        case .renderFailed:
+            return String(localized: "Couldn't draw the page.")
+        case .saveFailed:
+            return String(localized: "Couldn't save the document.")
+        case .editFailed:
+            return String(localized: "Couldn't change the document.")
+        }
+    }
+}
+
 /// Rectangle in PDF points, bottom-left origin.
 struct PdfRect: Equatable {
     var left: Double

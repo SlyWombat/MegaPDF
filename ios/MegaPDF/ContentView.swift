@@ -20,7 +20,8 @@ struct ContentView: View {
     @State private var password = ""
     @State private var exporting = false
     @State private var exportDoc: PdfExportDocument?
-    @State private var exportName = "Document"
+    // Default file name for Save a copy until a document is open.
+    @State private var exportName = String(localized: "Document")
 
     var body: some View {
         NavigationStack {
@@ -51,9 +52,12 @@ struct ContentView: View {
                         model.close()
                     }
                 } message: {
-                    Text(wrongPassword
-                        ? "That password didn't work. Try again."
-                        : "This document is protected.")
+                    // Two literals, not a ternary, so the catalog sees both.
+                    if wrongPassword {
+                        Text("That password didn't work. Try again.")
+                    } else {
+                        Text("This document is protected.")
+                    }
                 }
 
             case let .viewing(displayName, pageSizes):

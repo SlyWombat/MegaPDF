@@ -24,6 +24,9 @@ struct ViewerView: View {
     /// Identity of the zero-size view pinned to the current search match.
     private let matchAnchorID = "megapdf.current-match"
 
+    /// Typed as a key so both branches are looked up in the catalog.
+    private var saveLabel: LocalizedStringKey { model.isSaving ? "Saving…" : "Save" }
+
     var body: some View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
@@ -114,7 +117,7 @@ struct ViewerView: View {
                 Button("Sign") { signaturesOpen = true }
                 Button("Text") { model.startTextPlacement() }
                     .accessibilityLabel("Add text")
-                Button(model.isSaving ? "Saving…" : "Save") { model.save() }
+                Button(saveLabel) { model.save() }
                     .disabled(!model.isDirty || model.isSaving)
                 Menu {
                     Button("Save a copy", action: onSaveCopy)
@@ -225,8 +228,11 @@ struct ViewerView: View {
 
     private var matchCountLabel: String {
         if searchText.isEmpty || model.isSearching { return "" }
-        guard let current = model.currentMatchIndex else { return "No results" }
-        return "\(current + 1) of \(model.searchMatches.count)"
+        guard let current = model.currentMatchIndex else {
+            return String(localized: "No results")
+        }
+        // Catalog key "%lld of %lld"; the French value reorders positionally.
+        return String(localized: "\(current + 1) of \(model.searchMatches.count)")
     }
 
     private func closeSearch() {

@@ -161,7 +161,8 @@ struct DrawSignatureView: View {
 }
 
 /// What a base-14 face is called in the UI. The PDF names are exact and must not
-/// change (SDD §6.2 contract 4); these are only what the buttons say.
+/// change (SDD §6.2 contract 4); these are only what the buttons say. Not
+/// localised on purpose: Helvetica, Times and Courier are names in every language.
 func textBoxFontLabel(_ fontName: String) -> String {
     fontName == "Times-Roman" ? "Times" : fontName
 }
@@ -179,6 +180,10 @@ struct TextBoxSheet: View {
     let onCommit: () -> Void
     let onCancel: () -> Void
 
+    // Typed as keys so both branches are looked up in the catalog.
+    private var title: LocalizedStringKey { isEditing ? "Edit text" : "Add text" }
+    private var commitLabel: LocalizedStringKey { isEditing ? "Save" : "Add" }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -186,12 +191,16 @@ struct TextBoxSheet: View {
                     TextField("Text", text: $text)
                         .autocorrectionDisabled()
                 } footer: {
-                    Text(isEditing ? "This replaces the text you tapped."
-                                   : "This will be added where you tapped.")
+                    // Two literals, not a ternary, so the catalog sees both.
+                    if isEditing {
+                        Text("This replaces the text you tapped.")
+                    } else {
+                        Text("This will be added where you tapped.")
+                    }
                 }
                 Picker("Size", selection: $fontSize) {
                     ForEach(textSizes, id: \.self) { size in
-                        Text("\(Int(size))").tag(size)
+                        Text(verbatim: "\(Int(size))").tag(size)
                     }
                 }
                 Picker("Font", selection: $fontName) {
@@ -200,14 +209,14 @@ struct TextBoxSheet: View {
                     }
                 }
             }
-            .navigationTitle(isEditing ? "Edit text" : "Add text")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditing ? "Save" : "Add", action: onCommit)
+                    Button(commitLabel, action: onCommit)
                         .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }

@@ -4,6 +4,9 @@
 name: MegaPDF
 options:
   bundleIdPrefix: com.megapdf
+  # Source language of MegaPDF/Localizable.xcstrings (#91); becomes the
+  # project's development region and CFBundleDevelopmentRegion.
+  developmentLanguage: en
   deploymentTarget:
     iOS: "16.0"
 settings:
@@ -31,6 +34,9 @@ targets:
         # app wears iOS's colour instead of its own (docs/design-tokens.md §5).
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         GENERATE_INFOPLIST_FILE: YES
+        # Lets Xcode's Export Localizations / string-catalog sync pick up
+        # SwiftUI literals and String(localized:) calls (#91).
+        SWIFT_EMIT_LOC_STRINGS: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         # Real storyboard, not UILaunchScreen generation: the iPad-multitasking
         # validator demands UILaunchStoryboardName (SlyLED pipeline treaty —

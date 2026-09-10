@@ -9,9 +9,9 @@ struct AboutView: View {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "—"
         guard let build = info?["CFBundleVersion"] as? String else {
-            return "Version \(version)"
+            return String(localized: "Version \(version)")
         }
-        return "Version \(version) (\(build))"
+        return String(localized: "Version \(version) (\(build))")
     }
 
     var body: some View {
@@ -83,6 +83,6 @@ struct ThirdPartyNoticesView: View {
                                             withExtension: "txt") else { return nil }
             return try? String(contentsOf: url, encoding: .utf8)
         }.value
-        return text ?? "The notices file is missing from this build."
+        return text ?? String(localized: "The notices file is missing from this build.")
     }
 }
