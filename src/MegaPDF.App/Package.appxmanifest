@@ -25,13 +25,16 @@
          US-vs-CA spelling. -->
     <Resource Language="en-us" />
     <Resource Language="en-ca" />
+    <!-- fr-ca: Strings\fr-CA\Resources.resw (#91). A French Windows falls back to
+         it for fr-FR too — MRT matches on language before region. -->
+    <Resource Language="fr-ca" />
   </Resources>
 
   <Applications>
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="Mega PDF"
-        Description="A lightweight PDF editor — open, fix, save, done."
+        Description="ms-resource:AppDescription"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
@@ -51,7 +54,7 @@
             <uap:SupportedFileTypes>
               <uap:FileType>.pdf</uap:FileType>
             </uap:SupportedFileTypes>
-            <uap:DisplayName>PDF document</uap:DisplayName>
+            <uap:DisplayName>ms-resource:PdfFileTypeName</uap:DisplayName>
             <uap:Logo>Assets\Square44x44Logo.png</uap:Logo>
           </uap:FileTypeAssociation>
         </uap:Extension>

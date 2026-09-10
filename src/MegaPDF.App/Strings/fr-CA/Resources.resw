@@ -1,0 +1,544 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Français (Canada). Same keys as en-US/Resources.resw, in the same order; see
+  that file for what each key is. Vocabulary: docs/localisation-glossary.md.
+  Typography: espace insécable (U+00A0) devant « : » seulement; guillemets « »
+  avec espaces insécables.
+-->
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- ===== Barre d'outils ===== -->
+  <data name="OpenButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Ouvrir un PDF (Ctrl+O)</value>
+  </data>
+  <data name="OpenButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Ouvrir</value>
+  </data>
+  <data name="LabelOpen.Text" xml:space="preserve">
+    <value>Ouvrir</value>
+  </data>
+  <data name="SaveButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Enregistrer (Ctrl+S)</value>
+  </data>
+  <data name="SaveButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Enregistrer</value>
+  </data>
+  <data name="SaveAsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Enregistrer une copie (Ctrl+Maj+S)</value>
+  </data>
+  <data name="SaveAsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Enregistrer sous</value>
+  </data>
+  <data name="LabelSaveAs.Text" xml:space="preserve">
+    <value>Enregistrer sous</value>
+  </data>
+  <data name="ShrinkButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Enregistrer une copie réduite pour courriel</value>
+  </data>
+  <data name="ShrinkButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Réduire pour courriel</value>
+  </data>
+  <data name="LabelShrink.Text" xml:space="preserve">
+    <value>Réduire</value>
+  </data>
+  <data name="PrintButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Imprimer (Ctrl+P)</value>
+  </data>
+  <data name="PrintButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Imprimer</value>
+  </data>
+  <data name="LabelPrint.Text" xml:space="preserve">
+    <value>Imprimer</value>
+  </data>
+  <data name="UndoButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Annuler (Ctrl+Z)</value>
+  </data>
+  <data name="UndoButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="LabelUndo.Text" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="RedoButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rétablir (Ctrl+Y)</value>
+  </data>
+  <data name="RedoButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Rétablir</value>
+  </data>
+  <data name="LabelRedo.Text" xml:space="preserve">
+    <value>Rétablir</value>
+  </data>
+  <data name="SignaturesButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Vos signatures</value>
+  </data>
+  <data name="SignaturesButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Signatures</value>
+  </data>
+  <data name="LabelSignatures.Text" xml:space="preserve">
+    <value>Signatures</value>
+  </data>
+  <data name="SignaturesHeading.Text" xml:space="preserve">
+    <value>Vos signatures</value>
+  </data>
+  <data name="RemoveSignatureItem.Text" xml:space="preserve">
+    <value>Retirer de la bibliothèque</value>
+  </data>
+  <data name="AddFromImageLabel.Text" xml:space="preserve">
+    <value>Ajouter à partir d'une image…</value>
+  </data>
+  <data name="TypeSignatureLabel.Text" xml:space="preserve">
+    <value>Taper une signature…</value>
+  </data>
+  <data name="DrawSignatureLabel.Text" xml:space="preserve">
+    <value>Dessiner une signature…</value>
+  </data>
+  <data name="WhiteoutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Masquer une zone avec du correcteur</value>
+  </data>
+  <data name="WhiteoutButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Correcteur</value>
+  </data>
+  <data name="LabelWhiteout.Text" xml:space="preserve">
+    <value>Correcteur</value>
+  </data>
+  <data name="AddTextButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Ajouter du texte n'importe où</value>
+  </data>
+  <data name="AddTextButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Ajouter du texte</value>
+  </data>
+  <data name="LabelAddText.Text" xml:space="preserve">
+    <value>Ajouter du texte</value>
+  </data>
+  <data name="FindButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rechercher dans le document (Ctrl+F)</value>
+  </data>
+  <data name="FindButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Rechercher</value>
+  </data>
+  <data name="LabelFind.Text" xml:space="preserve">
+    <value>Rechercher</value>
+  </data>
+
+  <!-- Zoom -->
+  <data name="ZoomOutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom arrière</value>
+  </data>
+  <data name="ZoomOutButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Zoom arrière</value>
+  </data>
+  <data name="ZoomInButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom avant</value>
+  </data>
+  <data name="ZoomInButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Zoom avant</value>
+  </data>
+  <data name="FitWidthButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Ajuster à la largeur</value>
+  </data>
+  <data name="FitWidthButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Ajuster à la largeur</value>
+  </data>
+  <data name="FitPageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Page entière</value>
+  </data>
+  <data name="FitPageButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Page entière</value>
+  </data>
+  <data name="ViewMenuButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom et ajustement</value>
+  </data>
+  <data name="ViewMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Zoom et ajustement</value>
+  </data>
+  <data name="ZoomInItem.Text" xml:space="preserve">
+    <value>Zoom avant</value>
+  </data>
+  <data name="ZoomOutItem.Text" xml:space="preserve">
+    <value>Zoom arrière</value>
+  </data>
+  <data name="FitWidthItem.Text" xml:space="preserve">
+    <value>Ajuster à la largeur</value>
+  </data>
+  <data name="FitPageItem.Text" xml:space="preserve">
+    <value>Page entière</value>
+  </data>
+
+  <!-- Paramètres -->
+  <data name="SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="SettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Paramètres</value>
+  </data>
+  <data name="CheckboxMarkHeading.Text" xml:space="preserve">
+    <value>Marque des cases à cocher</value>
+  </data>
+  <data name="MarkCross.Text" xml:space="preserve">
+    <value>✗  Croix</value>
+  </data>
+  <data name="MarkCheck.Text" xml:space="preserve">
+    <value>✓  Crochet</value>
+  </data>
+  <data name="MarkFilledSquare.Text" xml:space="preserve">
+    <value>■  Carré plein</value>
+  </data>
+  <data name="ThemeHeading.Text" xml:space="preserve">
+    <value>Thème</value>
+  </data>
+  <data name="ThemeSystem.Text" xml:space="preserve">
+    <value>Selon le système</value>
+  </data>
+  <data name="ThemeLight.Text" xml:space="preserve">
+    <value>Clair</value>
+  </data>
+  <data name="ThemeDark.Text" xml:space="preserve">
+    <value>Sombre</value>
+  </data>
+  <data name="LanguageHeading.Text" xml:space="preserve">
+    <value>Langue</value>
+  </data>
+  <data name="LanguageSystem.Text" xml:space="preserve">
+    <value>Selon Windows</value>
+  </data>
+  <data name="LanguageEnglish.Text" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="LanguageFrench.Text" xml:space="preserve">
+    <value>Français (Canada)</value>
+  </data>
+  <data name="LanguageRestartNote.Text" xml:space="preserve">
+    <value>Prend effet à la prochaine ouverture de MegaPDF.</value>
+  </data>
+  <data name="ReopenToggle.Header" xml:space="preserve">
+    <value>Rouvrir le dernier fichier au démarrage</value>
+  </data>
+  <data name="FlattenToggle.Header" xml:space="preserve">
+    <value>Rendre les marques et signatures permanentes à l'enregistrement</value>
+  </data>
+  <data name="UpdateCheckToggle.Header" xml:space="preserve">
+    <value>Vérifier les mises à jour au démarrage</value>
+  </data>
+  <data name="AboutPanel.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>À propos de Mega PDF</value>
+  </data>
+  <data name="AboutHeading.Text" xml:space="preserve">
+    <value>À propos de Mega PDF</value>
+  </data>
+  <data name="AboutLicense.Text" xml:space="preserve">
+    <value>Libre et à code source ouvert · Apache-2.0</value>
+  </data>
+  <data name="AboutCopyright.Text" xml:space="preserve">
+    <value>© 2026 ElectricRV.ca Corporation. Tous droits réservés.</value>
+  </data>
+  <data name="AboutThanks.Text" xml:space="preserve">
+    <value>Merci tout spécial à Mega Woman.</value>
+  </data>
+  <data name="GitHubLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Mega PDF sur GitHub</value>
+  </data>
+  <data name="NoticesLink.Content" xml:space="preserve">
+    <value>Avis de tiers</value>
+  </data>
+  <data name="NoticesLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Avis de tiers</value>
+  </data>
+
+  <!-- Zone du document -->
+  <data name="EmptyStateText.Text" xml:space="preserve">
+    <value>Glissez un PDF ici ou cliquez sur Ouvrir</value>
+  </data>
+  <data name="RecentHeading.Text" xml:space="preserve">
+    <value>RÉCENTS</value>
+  </data>
+  <data name="FontNoticeBar.Message" xml:space="preserve">
+    <value>La police de ce document n'est pas disponible; une police semblable a été utilisée.</value>
+  </data>
+  <data name="ScannedHintBar.Message" xml:space="preserve">
+    <value>Cette page est une image numérisée : son texte est une image et ne peut pas être modifié.</value>
+  </data>
+  <data name="DefaultAppBar.Message" xml:space="preserve">
+    <value>Faire de MegaPDF votre application PDF?</value>
+  </data>
+  <data name="ChooseDefaultAppsButton.Content" xml:space="preserve">
+    <value>Choisir les applications par défaut</value>
+  </data>
+
+  <!-- Barre de recherche -->
+  <data name="FindQuery.PlaceholderText" xml:space="preserve">
+    <value>Rechercher</value>
+  </data>
+  <data name="FindQuery.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Rechercher dans le document</value>
+  </data>
+  <data name="FindPreviousButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Résultat précédent (Maj+Entrée)</value>
+  </data>
+  <data name="FindPreviousButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Résultat précédent</value>
+  </data>
+  <data name="FindNextButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Résultat suivant (Entrée)</value>
+  </data>
+  <data name="FindNextButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Résultat suivant</value>
+  </data>
+  <data name="FindCloseButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Fermer (Échap)</value>
+  </data>
+  <data name="FindCloseButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Fermer la recherche</value>
+  </data>
+
+  <!-- Écran de démarrage : deux lignes courtes, moins de 200 px à 10 px -->
+  <data name="SplashCredit.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>© 2026 ElectricRV.ca Corporation. Merci tout spécial à Mega Woman.</value>
+  </data>
+  <data name="SplashCopyright.Text" xml:space="preserve">
+    <value>© 2026 ElectricRV.ca Corporation</value>
+  </data>
+  <data name="SplashThanks.Text" xml:space="preserve">
+    <value>Merci tout spécial à Mega Woman</value>
+  </data>
+
+  <!-- ===== Manifeste ===== -->
+  <data name="AppDescription" xml:space="preserve">
+    <value>Un éditeur PDF léger : ouvrir, corriger, enregistrer, terminé.</value>
+  </data>
+  <data name="PdfFileTypeName" xml:space="preserve">
+    <value>Document PDF</value>
+  </data>
+
+  <!-- ===== Code (MainViewModel.cs) ===== -->
+  <data name="PageN" xml:space="preserve">
+    <value>Page {0}</value>
+  </data>
+  <data name="PageOf" xml:space="preserve">
+    <value>Page {0} sur {1}</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Enregistrer</value>
+  </data>
+  <data name="SaveWithDot" xml:space="preserve">
+    <value>Enregistrer ●</value>
+  </data>
+  <data name="UpdateReady" xml:space="preserve">
+    <value>MegaPDF {0} est prêt : il sera utilisé à la prochaine ouverture de MegaPDF.</value>
+  </data>
+  <data name="UpdateDownloading" xml:space="preserve">
+    <value>Téléchargement de MegaPDF {0}…</value>
+  </data>
+  <data name="UpdateAvailable" xml:space="preserve">
+    <value>Une nouvelle version de MegaPDF est disponible ({0}).</value>
+  </data>
+  <data name="RestartNow" xml:space="preserve">
+    <value>Redémarrer maintenant</value>
+  </data>
+  <data name="Update" xml:space="preserve">
+    <value>Mettre à jour</value>
+  </data>
+  <data name="NoResults" xml:space="preserve">
+    <value>Aucun résultat</value>
+  </data>
+  <data name="MatchOf" xml:space="preserve">
+    <value>{0} sur {1}</value>
+  </data>
+  <data name="PlaceSignatureHint" xml:space="preserve">
+    <value>Cliquez sur la page pour placer « {0} »</value>
+  </data>
+  <data name="WhiteoutHint" xml:space="preserve">
+    <value>Glissez sur la zone à masquer. Échap pour annuler</value>
+  </data>
+  <data name="TextBoxHint" xml:space="preserve">
+    <value>Cliquez à l'endroit où placer le nouveau texte. Échap pour annuler</value>
+  </data>
+  <data name="CouldNotOpenTitle" xml:space="preserve">
+    <value>Impossible d'ouvrir ce fichier</value>
+  </data>
+  <data name="CouldNotAddSignatureTitle" xml:space="preserve">
+    <value>Impossible d'ajouter cette signature</value>
+  </data>
+  <data name="CouldNotPlaceSignatureTitle" xml:space="preserve">
+    <value>Impossible de placer la signature</value>
+  </data>
+  <data name="CannotEditTextTitle" xml:space="preserve">
+    <value>Impossible de modifier ce texte</value>
+  </data>
+  <data name="CouldNotSaveTitle" xml:space="preserve">
+    <value>Impossible d'enregistrer</value>
+  </data>
+  <data name="TrySaveAsHint" xml:space="preserve">
+    <value>Essayez « Enregistrer sous » pour enregistrer une copie.</value>
+  </data>
+  <data name="PdfDocumentFilter" xml:space="preserve">
+    <value>Document PDF</value>
+  </data>
+  <data name="EditedFileName" xml:space="preserve">
+    <value>{0} - modifié</value>
+  </data>
+  <data name="SmallerFileName" xml:space="preserve">
+    <value>{0} - réduit</value>
+  </data>
+  <data name="SaveFirstTitle" xml:space="preserve">
+    <value>Enregistrez d'abord</value>
+  </data>
+  <data name="SaveFirstBody" xml:space="preserve">
+    <value>Enregistrez vos modifications, puis réduisez le fichier enregistré.</value>
+  </data>
+  <data name="CouldNotShrinkTitle" xml:space="preserve">
+    <value>Impossible de réduire</value>
+  </data>
+  <data name="NothingToShrinkTitle" xml:space="preserve">
+    <value>Rien à réduire</value>
+  </data>
+  <data name="NothingToShrinkBody" xml:space="preserve">
+    <value>Les images de ce document sont déjà petites.</value>
+  </data>
+  <data name="SmallerCopySavedTitle" xml:space="preserve">
+    <value>Copie réduite enregistrée</value>
+  </data>
+  <data name="SmallerCopySavedBody" xml:space="preserve">
+    <value>Avant : {0:F1} Mo, après : {1:F1} Mo.
+
+Enregistrée sous {2}, prête pour le courriel.</value>
+  </data>
+  <data name="PasswordPlaceholder" xml:space="preserve">
+    <value>Mot de passe</value>
+  </data>
+  <data name="PasswordWrong" xml:space="preserve">
+    <value>Ce mot de passe est incorrect. Réessayez.</value>
+  </data>
+  <data name="PasswordPrompt" xml:space="preserve">
+    <value>« {0} » est protégé. Entrez son mot de passe pour l'ouvrir.</value>
+  </data>
+  <data name="PasswordRequiredTitle" xml:space="preserve">
+    <value>Mot de passe requis</value>
+  </data>
+  <data name="Open" xml:space="preserve">
+    <value>Ouvrir</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+
+  <!-- ===== Code (MainWindow.xaml.cs) ===== -->
+  <data name="TextSizeName" xml:space="preserve">
+    <value>Taille du texte</value>
+  </data>
+  <data name="TextFontName" xml:space="preserve">
+    <value>Police du texte</value>
+  </data>
+  <data name="EditTextName" xml:space="preserve">
+    <value>Modifier le texte</value>
+  </data>
+  <data name="CouldNotUpdateTitle" xml:space="preserve">
+    <value>Impossible de mettre à jour</value>
+  </data>
+  <data name="UpdateFailedHint" xml:space="preserve">
+    <value>Vous pouvez plutôt télécharger la nouvelle version depuis la page des versions de MegaPDF.</value>
+  </data>
+  <data name="RestoreTitle" xml:space="preserve">
+    <value>Restaurer les modifications non enregistrées?</value>
+  </data>
+  <data name="RestoreBody" xml:space="preserve">
+    <value>{0} s'est fermé de façon inattendue avec des modifications non enregistrées dans {1}.</value>
+  </data>
+  <data name="Restore" xml:space="preserve">
+    <value>Restaurer</value>
+  </data>
+  <data name="Discard" xml:space="preserve">
+    <value>Abandonner</value>
+  </data>
+  <data name="SaveChangesTitle" xml:space="preserve">
+    <value>Enregistrer les modifications de {0}?</value>
+  </data>
+  <data name="SaveChangesBody" xml:space="preserve">
+    <value>Vos modifications seront perdues si vous ne les enregistrez pas.</value>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>Ne pas enregistrer</value>
+  </data>
+  <data name="AboutVersion" xml:space="preserve">
+    <value>MegaPDF {0}</value>
+  </data>
+  <data name="NoticesLoadFailed" xml:space="preserve">
+    <value>Le fichier des avis de tiers n'a pas pu être chargé.</value>
+  </data>
+  <data name="NoticesTextName" xml:space="preserve">
+    <value>Texte des avis de tiers</value>
+  </data>
+  <data name="NoticesTitle" xml:space="preserve">
+    <value>Avis de tiers</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Fermer</value>
+  </data>
+  <data name="YourNamePlaceholder" xml:space="preserve">
+    <value>Votre nom</value>
+  </data>
+  <data name="TypeSignatureTitle" xml:space="preserve">
+    <value>Tapez votre signature</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Ajouter</value>
+  </data>
+  <data name="SignatureNamePlaceholder" xml:space="preserve">
+    <value>Nom de la signature</value>
+  </data>
+  <data name="MySignature" xml:space="preserve">
+    <value>Ma signature</value>
+  </data>
+  <data name="Clear" xml:space="preserve">
+    <value>Effacer</value>
+  </data>
+  <data name="DrawHint" xml:space="preserve">
+    <value>Dessinez avec la souris, le doigt ou un stylet.</value>
+  </data>
+  <data name="DrawSignatureTitle" xml:space="preserve">
+    <value>Dessinez votre signature</value>
+  </data>
+
+  <!-- ===== Messages d'erreur ===== -->
+  <data name="NoUpdateAvailable" xml:space="preserve">
+    <value>Aucune mise à jour disponible.</value>
+  </data>
+  <data name="ErrorFileUnreadable" xml:space="preserve">
+    <value>Le fichier n'a pas pu être lu.</value>
+  </data>
+  <data name="ErrorNotAPdf" xml:space="preserve">
+    <value>Ce fichier n'est pas un PDF.</value>
+  </data>
+  <data name="ErrorPasswordProtected" xml:space="preserve">
+    <value>Le fichier est protégé par un mot de passe.</value>
+  </data>
+  <data name="ErrorCouldNotOpen" xml:space="preserve">
+    <value>Le fichier n'a pas pu être ouvert (erreur {0}).</value>
+  </data>
+  <data name="ErrorSavedCopyUnreadable" xml:space="preserve">
+    <value>Le document enregistré n'a pas pu être relu; l'original a donc été laissé intact.</value>
+  </data>
+  <data name="ErrorNoUsableFont" xml:space="preserve">
+    <value>Aucune police disponible ne peut écrire ce texte.</value>
+  </data>
+  <data name="ErrorNotExtractable" xml:space="preserve">
+    <value>Ce texte fait partie d'une image numérisée et ne peut pas être modifié. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
+  </data>
+  <data name="ErrorGeneric" xml:space="preserve">
+    <value>Une erreur s'est produite.</value>
+  </data>
+</root>

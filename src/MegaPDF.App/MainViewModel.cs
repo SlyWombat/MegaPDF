@@ -32,7 +32,7 @@ public sealed record PageView(
     IReadOnlyList<InteractiveRegion> Regions)
 {
     /// <summary>Narrator/UIA name for the page surface.</summary>
-    public string AccessibleName => $"Page {Index + 1}";
+    public string AccessibleName => Strings.PageN(Index + 1);
 
     /// <summary>Find-match highlights at this slot's zoom; empty when no search is active.</summary>
     public IReadOnlyList<SearchHighlight> Highlights { get; init; } = [];
@@ -88,6 +88,13 @@ public partial class MainViewModel(Window window) : ObservableObject
         set => _settings.Theme = value;
     }
 
+    /// <summary>"" follows Windows; otherwise a BCP-47 tag such as "fr-CA". Applied at startup by App.</summary>
+    public string LanguageSetting
+    {
+        get => _settings.Language;
+        set => _settings.Language = value;
+    }
+
     public bool ReopenLastFile
     {
         get => _settings.ReopenLastFile;
@@ -137,11 +144,11 @@ public partial class MainViewModel(Window window) : ObservableObject
     public bool IsUpdateBarOpen => UpdateAvailableVersion is not null;
 
     public string UpdateMessage =>
-        UpdateStaged ? $"MegaPDF {UpdateAvailableVersion} is ready — it will be used the next time you open MegaPDF."
-        : UpdateDownloading ? $"Getting MegaPDF {UpdateAvailableVersion}…"
-        : $"A new version of MegaPDF is available ({UpdateAvailableVersion}).";
+        UpdateStaged ? Strings.UpdateReady(UpdateAvailableVersion)
+        : UpdateDownloading ? Strings.UpdateDownloading(UpdateAvailableVersion)
+        : Strings.UpdateAvailable(UpdateAvailableVersion);
 
-    public string UpdateActionLabel => UpdateStaged ? "Restart now" : "Update";
+    public string UpdateActionLabel => UpdateStaged ? Strings.RestartNow : Strings.Update;
 
     public bool CheckForUpdates
     {
@@ -213,9 +220,9 @@ public partial class MainViewModel(Window window) : ObservableObject
         DocumentPath is null ? AppName
         : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName} — {AppName}";
 
-    public string SaveButtonLabel => HasUnsavedChanges ? "Save ●" : "Save";
+    public string SaveButtonLabel => HasUnsavedChanges ? Strings.SaveWithDot : Strings.Save;
 
-    public string PageIndicator => PageCount > 0 ? $"Page {CurrentPage} of {PageCount}" : "";
+    public string PageIndicator => PageCount > 0 ? Strings.PageOf(CurrentPage, PageCount) : "";
 
     public Visibility EmptyStateVisibility => IsDocumentOpen ? Visibility.Collapsed : Visibility.Visible;
     public Visibility DocumentVisibility => IsDocumentOpen ? Visibility.Visible : Visibility.Collapsed;
@@ -256,7 +263,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             }
             catch (Exception ex)
             {
-                await ShowErrorAsync("Couldn't open that file", ex.Message);
+                await ShowErrorAsync(Strings.CouldNotOpenTitle, UserFacing.Describe(ex));
                 return;
             }
         }
@@ -507,8 +514,8 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <summary>The find bar's readout: "N of M", "No results", or blank without a term.</summary>
     public string SearchStatus =>
         _searchTerm.Length == 0 ? ""
-        : SearchMatchCount == 0 ? "No results"
-        : $"{CurrentSearchMatch} of {SearchMatchCount}";
+        : SearchMatchCount == 0 ? Strings.NoResults
+        : Strings.MatchOf(CurrentSearchMatch, SearchMatchCount);
 
     /// <summary>Raised when navigation lands on a match — the view scrolls it into view.</summary>
     /// <summary>Where the current match sits in the scroll content, in DIPs.</summary>
@@ -709,9 +716,9 @@ public partial class MainViewModel(Window window) : ObservableObject
         PendingSignature is not null || IsWhiteoutMode || IsTextBoxMode ? Visibility.Visible : Visibility.Collapsed;
 
     public string PlacementHint =>
-        PendingSignature is not null ? $"Click on the page to place “{PendingSignature.Name}”"
-        : IsWhiteoutMode ? "Drag across the area you want to cover — Esc cancels"
-        : IsTextBoxMode ? "Click where the new text should go — Esc cancels"
+        PendingSignature is not null ? Strings.PlaceSignatureHint(PendingSignature.Name)
+        : IsWhiteoutMode ? Strings.WhiteoutHint
+        : IsTextBoxMode ? Strings.TextBoxHint
         : "";
 
     public void StartWhiteoutMode()
@@ -831,7 +838,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Couldn't add that signature", ex.Message);
+            await ShowErrorAsync(Strings.CouldNotAddSignatureTitle, UserFacing.Describe(ex));
         }
     }
 
@@ -872,7 +879,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Couldn't place the signature", ex.Message);
+            await ShowErrorAsync(Strings.CouldNotPlaceSignatureTitle, UserFacing.Describe(ex));
         }
     }
 
@@ -898,7 +905,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         catch (TextEditException ex)
         {
-            await ShowErrorAsync("Can't edit this text", ex.Message);
+            await ShowErrorAsync(Strings.CannotEditTextTitle, UserFacing.Describe(ex));
             return;
         }
 
@@ -943,7 +950,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Couldn't save", $"{ex.Message}\n\nTry \"Save As\" to save a copy instead.");
+            await ShowErrorAsync(Strings.CouldNotSaveTitle, $"{UserFacing.Describe(ex)}\n\n{Strings.TrySaveAsHint}");
         }
     }
 
@@ -977,8 +984,8 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
 
         var picker = new FileSavePicker();
-        picker.FileTypeChoices.Add("PDF document", [".pdf"]);
-        picker.SuggestedFileName = $"{Path.GetFileNameWithoutExtension(DocumentPath)} - edited";
+        picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
+        picker.SuggestedFileName = Strings.EditedFileName(Path.GetFileNameWithoutExtension(DocumentPath));
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
 
         var file = await picker.PickSaveFileAsync();
@@ -999,7 +1006,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Couldn't save", ex.Message);
+            await ShowErrorAsync(Strings.CouldNotSaveTitle, UserFacing.Describe(ex));
         }
     }
 
@@ -1015,7 +1022,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
         if (HasUnsavedChanges)
         {
-            await ShowErrorAsync("Save first", "Save your changes, then shrink the saved file.");
+            await ShowErrorAsync(Strings.SaveFirstTitle, Strings.SaveFirstBody);
             return;
         }
 
@@ -1030,7 +1037,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync("Couldn't shrink", ex.Message);
+            await ShowErrorAsync(Strings.CouldNotShrinkTitle, UserFacing.Describe(ex));
             return;
         }
 
@@ -1060,13 +1067,13 @@ public partial class MainViewModel(Window window) : ObservableObject
 
             if (replaced == 0)
             {
-                await ShowErrorAsync("Nothing to shrink", "The pictures in this document are already small.");
+                await ShowErrorAsync(Strings.NothingToShrinkTitle, Strings.NothingToShrinkBody);
                 return;
             }
 
             var picker = new FileSavePicker();
-            picker.FileTypeChoices.Add("PDF document", [".pdf"]);
-            picker.SuggestedFileName = $"{Path.GetFileNameWithoutExtension(sourcePath)} - smaller";
+            picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
+            picker.SuggestedFileName = Strings.SmallerFileName(Path.GetFileNameWithoutExtension(sourcePath));
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
             var file = await picker.PickSaveFileAsync();
             if (file is null)
@@ -1084,13 +1091,13 @@ public partial class MainViewModel(Window window) : ObservableObject
                 // the process — no message, no file, and nothing in WER because
                 // the crash log goes to GetTempPath(). Observed 2026-07-24 in the
                 // packaged build and mistaken for a shrink-specific failure.
-                await ShowErrorAsync("Couldn't shrink", ex.Message);
+                await ShowErrorAsync(Strings.CouldNotShrinkTitle, UserFacing.Describe(ex));
                 return;
             }
 
             var newBytes = new FileInfo(file.Path).Length;
-            await ShowErrorAsync("Smaller copy saved",
-                $"Was {originalBytes / 1024.0 / 1024:F1} MB, now {newBytes / 1024.0 / 1024:F1} MB.\n\nSaved as {Path.GetFileName(file.Path)} — ready to email.");
+            await ShowErrorAsync(Strings.SmallerCopySavedTitle,
+                Strings.SmallerCopySavedBody(originalBytes / 1024.0 / 1024, newBytes / 1024.0 / 1024, Path.GetFileName(file.Path)));
         }
         finally
         {
@@ -1172,23 +1179,23 @@ public partial class MainViewModel(Window window) : ObservableObject
         if (window.Content?.XamlRoot is not { } xamlRoot)
             return null;
 
-        var box = new PasswordBox { PlaceholderText = "Password" };
+        var box = new PasswordBox { PlaceholderText = Strings.PasswordPlaceholder };
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(new TextBlock
         {
             Text = wrongPassword
-                ? "That password wasn't right — try again."
-                : $"“{fileName}” is protected. Enter its password to open it.",
+                ? Strings.PasswordWrong
+                : Strings.PasswordPrompt(fileName),
             TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
         });
         panel.Children.Add(box);
 
         var dialog = new ContentDialog
         {
-            Title = "Password required",
+            Title = Strings.PasswordRequiredTitle,
             Content = panel,
-            PrimaryButtonText = "Open",
-            CloseButtonText = "Cancel",
+            PrimaryButtonText = Strings.Open,
+            CloseButtonText = Strings.Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
         };
@@ -1207,7 +1214,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         {
             Title = title,
             Content = message,
-            CloseButtonText = "OK",
+            CloseButtonText = Strings.OK,
             XamlRoot = xamlRoot,
         };
         await dialog.ShowAsync();

@@ -308,13 +308,13 @@ public sealed partial class MainWindow : Window
             foreach (var size in ViewModel.TextSizes)
                 sizeBox.Items.Add(new ComboBoxItem { Content = ((int)size).ToString(), Tag = size });
             sizeBox.SelectedIndex = Math.Max(0, ViewModel.TextSizes.ToList().IndexOf(style.FontSize));
-            AutomationProperties.SetName(sizeBox, "Text size");
+            AutomationProperties.SetName(sizeBox, Strings.TextSizeName);
 
             fontBox = new ComboBox { MinWidth = 110 };
             foreach (var face in StandardTextBoxFonts.All)
                 fontBox.Items.Add(new ComboBoxItem { Content = FontLabel(face), Tag = face });
             fontBox.SelectedIndex = Math.Max(0, StandardTextBoxFonts.All.ToList().IndexOf(style.FontName));
-            AutomationProperties.SetName(fontBox, "Text font");
+            AutomationProperties.SetName(fontBox, Strings.TextFontName);
 
             styleBar = new StackPanel
             {
@@ -373,7 +373,7 @@ public sealed partial class MainWindow : Window
             await CommitAsync();
         };
 
-        AutomationProperties.SetName(editor, "Edit text");
+        AutomationProperties.SetName(editor, Strings.EditTextName);
         if (styleBar is not null)
         {
             pageGrid.Children.Add(styleBar);
@@ -949,9 +949,9 @@ public sealed partial class MainWindow : Window
             UpdateBar.IsOpen = false;
             var dialog = new ContentDialog
             {
-                Title = "Couldn't update",
-                Content = $"{ex.Message}\n\nYou can download the new version from the MegaPDF releases page instead.",
-                CloseButtonText = "OK",
+                Title = Strings.CouldNotUpdateTitle,
+                Content = $"{UserFacing.Describe(ex)}\n\n{Strings.UpdateFailedHint}",
+                CloseButtonText = Strings.OK,
                 XamlRoot = Content.XamlRoot,
             };
             await dialog.ShowAsync();
@@ -966,13 +966,26 @@ public sealed partial class MainWindow : Window
     // Toolbar breakpoints, in effective pixels (the states themselves live in
     // MainWindow.xaml). Above Full the toolbar shows icon + label; below it the labels
     // go and every button stays; below Icons the zoom cluster folds into the single
-    // View flyout. Sized against the widest the bar ever gets — every command enabled
-    // and Save carrying its unsaved-changes dot — so nothing is ever clipped.
-    private const double ToolbarFullWidth = 1500;
+    // View flyout.
+    //
+    // Full is measured, not assumed. It was a constant (1500) sized against the
+    // English labels; French runs about a fifth longer and every language would
+    // have needed its own number, re-measured by hand (#91). Instead the bar reports
+    // its own desired width with every label showing and Save wearing its
+    // unsaved-changes dot — the widest it ever gets — and that is the breakpoint.
+    // Icons is still a constant: icons do not change with language.
     private const double ToolbarIconsWidth = 980;
+    private const double ToolbarFullSlack = 24;
+    private double? _toolbarFullWidth;
 
     private void OnRootSizeChanged(object sender, SizeChangedEventArgs e) =>
         ApplyToolbarLayout(e.NewSize.Width);
+
+    private TextBlock[] ToolbarLabels =>
+    [
+        LabelOpen, LabelSave, LabelSaveAs, LabelShrink, LabelPrint, LabelUndo,
+        LabelRedo, LabelSignatures, LabelWhiteout, LabelAddText, LabelFind,
+    ];
 
     /// <summary>
     /// Sheds toolbar detail as the window narrows so no command is ever clipped:
@@ -982,19 +995,46 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private void ApplyToolbarLayout(double width)
     {
-        var labels = width >= ToolbarFullWidth ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var label in new[]
-                 {
-                     LabelOpen, LabelSave, LabelSaveAs, LabelShrink, LabelPrint, LabelUndo,
-                     LabelRedo, LabelSignatures, LabelWhiteout, LabelAddText, LabelFind,
-                 })
-        {
+        var full = _toolbarFullWidth ??= MeasureFullToolbarWidth();
+        var labels = width >= full ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var label in ToolbarLabels)
             label.Visibility = labels;
-        }
 
         var compact = width < ToolbarIconsWidth;
         ViewControls.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
         ViewMenuButton.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// For --screenshot diagnostics: the resolved toolbar labels and the measured
+    /// Full breakpoint, so a language's breakpoint can be read off a run without a
+    /// display wide enough to show the labels.
+    /// </summary>
+    internal string DescribeToolbar() =>
+        $"toolbar: labels [{string.Join(", ", ToolbarLabels.Select(l => l.Text))}] "
+        + $"full={(_toolbarFullWidth ??= MeasureFullToolbarWidth()):F0} effective px, "
+        + $"window={RootGrid.ActualWidth:F0} effective px";
+
+    /// <summary>
+    /// The toolbar's natural width in its widest state: labels on, zoom cluster
+    /// expanded, Save carrying its dot. Measured once; label text only changes
+    /// with the language, and that is fixed for the life of the process.
+    /// </summary>
+    private double MeasureFullToolbarWidth()
+    {
+        foreach (var label in ToolbarLabels)
+            label.Visibility = Visibility.Visible;
+        ViewControls.Visibility = Visibility.Visible;
+        ViewMenuButton.Visibility = Visibility.Collapsed;
+
+        var saveLabel = LabelSave.Text;
+        LabelSave.Text = Strings.SaveWithDot;
+        Toolbar.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+        var width = Toolbar.DesiredSize.Width;
+        LabelSave.Text = saveLabel;
+
+        // Slack covers the page indicator growing from "Page 1 of 9" to three digits.
+        return width + ToolbarFullSlack;
     }
 
     /// <summary>
@@ -1052,10 +1092,10 @@ public sealed partial class MainWindow : Window
 
         var dialog = new ContentDialog
         {
-            Title = "Restore unsaved changes?",
-            Content = $"{MainViewModel.AppName} closed unexpectedly with unsaved changes to {Path.GetFileName(session.DocumentPath)}.",
-            PrimaryButtonText = "Restore",
-            CloseButtonText = "Discard",
+            Title = Strings.RestoreTitle,
+            Content = Strings.RestoreBody(MainViewModel.AppName, Path.GetFileName(session.DocumentPath)),
+            PrimaryButtonText = Strings.Restore,
+            CloseButtonText = Strings.Discard,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
@@ -1085,11 +1125,11 @@ public sealed partial class MainWindow : Window
     {
         var dialog = new ContentDialog
         {
-            Title = $"Save changes to {ViewModel.OpenDocumentName}?",
-            Content = "Your changes will be lost if you don't save them.",
-            PrimaryButtonText = "Save",
-            SecondaryButtonText = "Don't save",
-            CloseButtonText = "Cancel",
+            Title = Strings.SaveChangesTitle(ViewModel.OpenDocumentName),
+            Content = Strings.SaveChangesBody,
+            PrimaryButtonText = Strings.Save,
+            SecondaryButtonText = Strings.DontSave,
+            CloseButtonText = Strings.Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
@@ -1126,11 +1166,12 @@ public sealed partial class MainWindow : Window
         _settingsLoading = true;
         MarkStyleChoice.SelectedIndex = (int)ViewModel.MarkStyle;
         ThemeChoice.SelectedIndex = ViewModel.ThemeSetting switch { "Light" => 1, "Dark" => 2, _ => 0 };
+        LanguageChoice.SelectedIndex = AppLanguage.ChoiceIndex(ViewModel.LanguageSetting);
         ReopenToggle.IsOn = ViewModel.ReopenLastFile;
         FlattenToggle.IsOn = ViewModel.FlattenOnSave;
         UpdateCheckToggle.IsOn = ViewModel.CheckForUpdates;
         var version = typeof(MainWindow).Assembly.GetName().Version;
-        AboutVersion.Text = $"MegaPDF {version?.ToString(3) ?? "dev"}";
+        AboutVersion.Text = Strings.AboutVersion(version?.ToString(3) ?? "dev");
         _settingsLoading = false;
     }
 
@@ -1146,6 +1187,15 @@ public sealed partial class MainWindow : Window
             return;
         ViewModel.ThemeSetting = ThemeChoice.SelectedIndex switch { 1 => "Light", 2 => "Dark", _ => "" };
         ApplyTheme();
+    }
+
+    private void OnLanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settingsLoading || LanguageChoice.SelectedIndex < 0)
+            return;
+        ViewModel.LanguageSetting = AppLanguage.TagForChoice(LanguageChoice.SelectedIndex);
+        // Resolved at startup, not live: the note says so instead of pretending.
+        LanguageRestartNote.Visibility = Visibility.Visible;
     }
 
     private void OnReopenToggled(object sender, RoutedEventArgs e)
@@ -1177,7 +1227,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            text = "The third-party notices file could not be loaded.\n\n" + ex.Message;
+            text = Strings.NoticesLoadFailed + "\n\n" + ex.Message;
         }
 
         var viewer = new TextBox
@@ -1192,13 +1242,13 @@ public sealed partial class MainWindow : Window
             MinHeight = 360,
         };
         Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollBarVisibility(viewer, ScrollBarVisibility.Auto);
-        viewer.SetValue(AutomationProperties.NameProperty, "Third-party notices text");
+        viewer.SetValue(AutomationProperties.NameProperty, Strings.NoticesTextName);
 
         var dialog = new ContentDialog
         {
-            Title = "Third-party notices",
+            Title = Strings.NoticesTitle,
             Content = viewer,
-            CloseButtonText = "Close",
+            CloseButtonText = Strings.Close,
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
         };
@@ -1273,13 +1323,13 @@ public sealed partial class MainWindow : Window
     private async void OnTypeSignatureClicked(object sender, RoutedEventArgs e)
     {
         SignaturesFlyout.Hide();
-        var input = new TextBox { PlaceholderText = "Your name", FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Script"), FontSize = 24 };
+        var input = new TextBox { PlaceholderText = Strings.YourNamePlaceholder, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Script"), FontSize = 24 };
         var dialog = new ContentDialog
         {
-            Title = "Type your signature",
+            Title = Strings.TypeSignatureTitle,
             Content = input,
-            PrimaryButtonText = "Add",
-            CloseButtonText = "Cancel",
+            PrimaryButtonText = Strings.Add,
+            CloseButtonText = Strings.Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
@@ -1347,14 +1397,14 @@ public sealed partial class MainWindow : Window
         };
         drawHost.PointerCanceled += (_, _) => currentStroke = null;
 
-        var nameInput = new TextBox { PlaceholderText = "Signature name", Text = "My signature" };
-        var clear = new Button { Content = "Clear" };
+        var nameInput = new TextBox { PlaceholderText = Strings.SignatureNamePlaceholder, Text = Strings.MySignature };
+        var clear = new Button { Content = Strings.Clear };
         clear.Click += (_, _) => strokes.Children.Clear();
 
         var content = new StackPanel { Spacing = 10 };
         content.Children.Add(new TextBlock
         {
-            Text = "Draw with your mouse, finger, or pen.",
+            Text = Strings.DrawHint,
             Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
         });
         content.Children.Add(drawHost);
@@ -1363,10 +1413,10 @@ public sealed partial class MainWindow : Window
 
         var dialog = new ContentDialog
         {
-            Title = "Draw your signature",
+            Title = Strings.DrawSignatureTitle,
             Content = content,
-            PrimaryButtonText = "Add",
-            CloseButtonText = "Cancel",
+            PrimaryButtonText = Strings.Add,
+            CloseButtonText = Strings.Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
@@ -1398,7 +1448,7 @@ public sealed partial class MainWindow : Window
         if (await dialog.ShowAsync() != ContentDialogResult.Primary || captured is null)
             return;
 
-        var name = string.IsNullOrWhiteSpace(nameInput.Text) ? "My signature" : nameInput.Text.Trim();
+        var name = string.IsNullOrWhiteSpace(nameInput.Text) ? Strings.MySignature : nameInput.Text.Trim();
         await ViewModel.AddSignatureFromImageAsync(captured, name);
     }
 

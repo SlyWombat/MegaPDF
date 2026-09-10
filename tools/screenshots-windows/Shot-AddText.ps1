@@ -17,7 +17,7 @@ param([int]$X = 1430, [int]$Y = 1080, [string]$Text = "March 18, 2026")
 . (Join-Path $PSScriptRoot "lib.ps1")
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
 Front $h
-Click-Btn ($AE::FromHandle($h)) "Add text" | Out-Null
+Click-Btn ($AE::FromHandle($h)) "AddTextButton" | Out-Null
 Start-Sleep -Seconds 2
 Click-InShot $h $X $Y
 Start-Sleep -Seconds 2

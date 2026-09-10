@@ -95,15 +95,25 @@ function Shot($h, $name) {
     $g.Dispose(); $bmp.Dispose()
     Write-Host ("{0}.png  {1}x{2}  mean={3}" -f $name, ($r.Right-$r.Left), ($r.Bottom-$r.Top), $mean)
 }
+# Buttons are found by AutomationId, not Name (#91): the UIA Name is what Narrator
+# reads and is localised, so it changes with the app's language. The ids are set
+# in MainWindow.xaml ("OpenButton", "ShrinkButton", ...) and never translate, so
+# the same script shoots English and French.
+function BtnById($root, $id) {
+    $c1 = New-Object System.Windows.Automation.PropertyCondition($global:AE::AutomationIdProperty, $id)
+    $c2 = New-Object System.Windows.Automation.PropertyCondition($global:AE::ControlTypeProperty, $global:CT::Button)
+    $and = New-Object System.Windows.Automation.AndCondition($c1, $c2)
+    return $root.FindFirst($global:TS::Descendants, $and)
+}
 function BtnByName($root, $name) {
     $c1 = New-Object System.Windows.Automation.PropertyCondition($global:AE::NameProperty, $name)
     $c2 = New-Object System.Windows.Automation.PropertyCondition($global:AE::ControlTypeProperty, $global:CT::Button)
     $and = New-Object System.Windows.Automation.AndCondition($c1, $c2)
     return $root.FindFirst($global:TS::Descendants, $and)
 }
-function Click-Btn($root, $name) {
-    $b = BtnByName $root $name
-    if (-not $b) { Write-Host "!! no button '$name'"; return $false }
+function Click-Btn($root, $id) {
+    $b = BtnById $root $id
+    if (-not $b) { Write-Host "!! no button with AutomationId '$id'"; return $false }
     $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     Start-Sleep -Milliseconds 900
     return $true
@@ -131,7 +141,9 @@ function Send-Path($path) {
     $dlg = [IntPtr]::Zero
     for ($i = 0; $i -lt 20; $i++) {
         Start-Sleep -Milliseconds 700
-        $dlg = Find-Dialog @("Open", "Save As", "Save a smaller copy")
+        # English and French titles: the picker is Windows' own, so it follows the
+        # display language, not the app's Language setting.
+        $dlg = Find-Dialog @("Open", "Save As", "Save a smaller copy", "Ouvrir", "Enregistrer sous")
         if ($dlg -ne [IntPtr]::Zero) { break }
     }
     if ($dlg -ne [IntPtr]::Zero) {

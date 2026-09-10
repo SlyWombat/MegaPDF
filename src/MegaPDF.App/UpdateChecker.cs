@@ -85,7 +85,7 @@ public sealed class UpdateChecker
     public async Task DownloadAndStageAsync()
     {
         if (_msixDownloadUrl is null)
-            throw new InvalidOperationException("No update available.");
+            throw new InvalidOperationException(Strings.NoUpdateAvailable);
 
         var tempPath = Path.Combine(Path.GetTempPath(), $"MegaPDF-update-{AvailableVersion}.msix");
         using (var http = new HttpClient())

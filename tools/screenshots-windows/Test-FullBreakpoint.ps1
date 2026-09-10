@@ -7,13 +7,13 @@ $h = $p.MainWindowHandle
 Start-Sleep -Seconds 3
 Set-Size $h 3060 2000 0 0
 Clear-Badges $h
-Click-Btn ($AE::FromHandle($h)) "Open" | Out-Null
+Click-Btn ($AE::FromHandle($h)) "OpenButton" | Out-Null
 Send-Path $Pdf
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
 Set-Size $h 3060 2000 0 0
 Front $h
-Click-Btn ($AE::FromHandle($h)) "Fit page" | Out-Null
-Click-Btn ($AE::FromHandle($h)) "Zoom in" | Out-Null
+Click-Btn ($AE::FromHandle($h)) "FitPageButton" | Out-Null
+Click-Btn ($AE::FromHandle($h)) "ZoomInButton" | Out-Null
 Start-Sleep -Seconds 1
 Click-InShot $h 870 978          # tick a box so Save shows its dot and Undo enables
 Start-Sleep -Seconds 2

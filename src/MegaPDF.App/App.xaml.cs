@@ -24,6 +24,11 @@ public partial class App : Application
         if (Screenshot.ArgumentAfter("--theme") is "dark")
             RequestedTheme = ApplicationTheme.Dark;
 
+        // --language fr-CA, or the Language setting, before any XAML is loaded:
+        // x:Uid resolution happens as each element is created, so an override set
+        // any later leaves the first window in the previous language (#91).
+        AppLanguage.ApplyOverride(Screenshot.ArgumentAfter("--language") ?? new MegaPDF.Core.Services.AppSettings().Language);
+
         InitializeComponent();
     }
 
@@ -98,7 +103,17 @@ public partial class App : Application
 
         // Fixed size, so a screenshot compared against a previous one differs
         // because the app changed rather than because the window did.
-        mainWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(1400, 950));
+        // --window 1900x950 overrides it: 1400 is below the toolbar's Full
+        // breakpoint, so the labels — the part that changes with language — are
+        // never in the default frame (#91).
+        var (width, height) = (1400, 950);
+        if (Screenshot.ArgumentAfter("--window") is { } size
+            && size.Split('x') is [var w, var h]
+            && int.TryParse(w, out var parsedWidth) && int.TryParse(h, out var parsedHeight))
+        {
+            (width, height) = (parsedWidth, parsedHeight);
+        }
+        mainWindow.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(width, height));
         mainWindow.Activate();
 
         var ok = true;
@@ -111,6 +126,7 @@ public partial class App : Application
         // page rendering is asynchronous with respect to layout, and a find with
         // no rendered page to highlight photographs nothing.
         await Task.Delay(TimeSpan.FromSeconds(3));
+        Console.Error.WriteLine(mainWindow.DescribeToolbar());
 
         if (Screenshot.ArgumentAfter("--screenshot-state") is { } state)
             ok = await Screenshot.ApplyStateAsync(mainWindow, state);

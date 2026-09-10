@@ -30,6 +30,10 @@
     <!-- Unpackaged builds skip PRI generation by default, but unpackaged WinUI still
          needs resources.pri next to the exe to resolve XAML theme resources. -->
     <AppxGeneratePriEnabled>true</AppxGeneratePriEnabled>
+    <!-- Strings\<lang>\Resources.resw are indexed into resources.pri by the same
+         tasks (verified with makepri dump, 2026-09-10); en-US is the default
+         qualifier every other language falls back to (#91). -->
+    <DefaultLanguage>en-US</DefaultLanguage>
   </PropertyGroup>
 
   <ItemGroup>

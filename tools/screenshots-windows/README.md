@@ -19,7 +19,7 @@ the result before continuing. Paths must be **Windows** paths.
 
     # 1. launch, size the window, open the agreement
     .\Setup-Frame.ps1 -W 3060 -T 2000 -Pdf "<repo>\artifacts\store\screenshots\blank-agreement.pdf" `
-                      -Fit "Fit page" -ZoomIn 1 -Name probe-frame
+                      -Fit "FitPageButton" -ZoomIn 1 -Name probe-frame
 
     # 2. shot 1 — click the misspelled name, retype it (caret must be visible)
     .\Shot-TextEdit.ps1 -X 1013 -Y 735
@@ -42,6 +42,10 @@ the result before continuing. Paths must be **Windows** paths.
 breakpoint with a document open and edited, so `Save ●` is showing — the widest
 the bar ever gets, and the one state where clipping could survive the fix.
 Verified 2026-08-13 at 1489 / 1494 / 1509 effective px: clean at all three.
+Since #91 the breakpoint is measured from the labels rather than fixed at 1500
+(about 1430 effective px in English, 1475 in French — `MegaPDF.exe --screenshot`
+prints the number for the current language), so pass `-Widths` straddling the
+right value for the language being shot.
 
 `Add-SignatureToLibrary.ps1` seeds `tools/assets/megawoman-sig.jpg` into the
 signature library (needed once per machine). `Test-ToolbarWidths.ps1` captures
@@ -81,9 +85,9 @@ Actions workflows, this harness drives a real installed package on a real deskto
 
 ## Why this frame
 
-2500x1550 at 150% is 1667 effective px, above the toolbar's `ToolbarFullWidth` breakpoint
-(1500, see `ApplyToolbarLayout` in `MainWindow.xaml.cs`), so the toolbar shows
-icon + label. Shoot narrower and the listing's screenshots show a different
+2500x1550 at 150% is 1667 effective px, above the toolbar's Full breakpoint
+(measured from the labels — about 1430 in English and 1475 in French; see
+`ApplyToolbarLayout` in `MainWindow.xaml.cs`), so the toolbar shows icon + label. Shoot narrower and the listing's screenshots show a different
 toolbar than its description. Narrower than ~980 the zoom cluster folds into the
 View flyout.
 
@@ -114,6 +118,15 @@ belongs only to shot 1's story.
   window title through `EnumWindows`, takes foreground with a title-bar click, then
   types the path. Typing without that click sends the path to whatever window
   actually had focus.
+- **Buttons are found by `AutomationId`, never by name** (#91). The UIA Name is
+  localised — "Shrink for email" is "Réduire pour courriel" under the French
+  setting — so `Click-Btn` takes the ids set in `MainWindow.xaml`: `OpenButton`,
+  `SaveButton`, `SaveAsButton`, `ShrinkButton`, `PrintButton`, `UndoButton`,
+  `RedoButton`, `SignaturesButton`, `WhiteoutButton`, `AddTextButton`,
+  `FindButton`, `ZoomInButton`, `ZoomOutButton`, `FitWidthButton`,
+  `FitPageButton`, `ViewMenuButton`, `SettingsButton`, and in the signature
+  flyout `AddSignatureFromImageButton`, `TypeSignatureButton`,
+  `DrawSignatureButton`. `BtnByName` still exists for anything else.
 - **Flyout contents are not in the main window's UIA tree** (separate popup HWND),
   so flyout items are clicked by coordinate, not found by name.
 - **Flyout button names end in a real ellipsis (U+2026)** and PowerShell 5.1 reads
@@ -123,6 +136,21 @@ belongs only to shot 1's story.
 - **The app restores its remembered window size** a moment after launch, so size
   the window *after* that settles, and again after opening a document.
 - **Mouse wheel deltas are unsigned**: scrolling down is `[uint32]4294967176`.
+
+## French screenshots (#91)
+
+The installed package has no command line, so the language comes from the
+Language setting: before launching, set `"Language": "fr-CA"` in
+`%LOCALAPPDATA%\MegaPDF\settings.json` (or pick *Français (Canada)* in the
+Settings flyout and relaunch). Everything else is the same run — the scripts
+find buttons by `AutomationId`, and `Send-Path` knows the French picker titles.
+Set it back to `""` afterwards.
+
+Two things are not French yet, and the shots will show it: the staging
+documents from `gen_store_docs.py` are English forms, and the text typed by
+`Shot-TextEdit.ps1` / `Shot-AddText.ps1` is English. A French set for the
+listing needs French staging documents first; until then the French listing
+reuses the English screenshots (`docs/microsoft-store-listing.md`).
 
 ## Privacy — this is not optional
 
