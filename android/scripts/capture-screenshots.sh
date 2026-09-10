@@ -40,6 +40,10 @@ demo_status_bar() {
     adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false || true
 }
 demo_status_bar
+# The first capture of a run has come out with the real clock even so (a
+# fr-CA run, 2026-09-10): assert once more after SystemUI has had a moment.
+sleep 5
+demo_status_bar
 
 OUT="/tmp/shots/$LANG_TAG"
 mkdir -p "$OUT"

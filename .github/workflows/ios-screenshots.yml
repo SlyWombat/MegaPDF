@@ -81,6 +81,11 @@ jobs:
             echo "capturing on: $name"
             xcrun simctl boot "$udid" || true
             xcrun simctl bootstatus "$udid" -b
+            # A freshly booted simulator posts first-boot system banners ("Ready
+            # for Apple Intelligence") for a while after bootstatus returns; one
+            # landed on an iPad search shot. Let them come and go before any
+            # capture, and launch the app once so its own first-run work is done.
+            sleep 45
             xcrun simctl status_bar "$udid" override --time "9:41" \
               --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
             xcrun simctl install "$udid" "$APP"
