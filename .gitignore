@@ -64,3 +64,8 @@ libs/pdfium/mac-univ/
 
 # Local fixture output from tools/gen_test_fixtures.py
 .fixtures/
+
+# Pseudo-locale written by `tools/gen_strings.py pseudo` for layout checks (#91);
+# picked up by the build when present, never shipped.
+src/MegaPDF.App/Strings/qps-ploc/
+src/MegaPDF.Avalonia/Strings/Strings.qps-ploc.resx

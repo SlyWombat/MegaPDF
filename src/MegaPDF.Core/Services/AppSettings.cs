@@ -63,6 +63,16 @@ public sealed class AppSettings
         set { _model = _model with { CheckForUpdates = value }; Save(); }
     }
 
+    /// <summary>
+    /// UI language as a BCP-47 tag ("fr-CA"), or "" to follow the operating
+    /// system (#91). Storage only: the apps apply it at startup, Core never reads it.
+    /// </summary>
+    public string Language
+    {
+        get => _model.Language;
+        set { _model = _model with { Language = value }; Save(); }
+    }
+
     private Model Load()
     {
         if (!File.Exists(_path))
@@ -94,5 +104,6 @@ public sealed class AppSettings
         public bool DefaultAppCardShown { get; init; }
         public bool FlattenOnSave { get; init; }
         public bool CheckForUpdates { get; init; } = true;
+        public string Language { get; init; } = "";
     }
 }

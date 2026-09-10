@@ -10,6 +10,12 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
     /// <summary>True when a password is required or the supplied one was wrong.</summary>
     public bool IsPasswordError => ErrorCode == PdfiumNative.FPDF_ERR_PASSWORD;
 
+    /// <summary>True when the file itself could not be read (missing, locked, unreadable).</summary>
+    public bool IsFileError => ErrorCode == PdfiumNative.FPDF_ERR_FILE;
+
+    /// <summary>True when the bytes are not a PDF at all.</summary>
+    public bool IsFormatError => ErrorCode == PdfiumNative.FPDF_ERR_FORMAT;
+
     private static string MessageFor(string path, uint code) => code switch
     {
         PdfiumNative.FPDF_ERR_FILE => $"The file could not be read: {path}",
