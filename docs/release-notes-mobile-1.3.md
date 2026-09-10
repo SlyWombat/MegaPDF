@@ -75,5 +75,5 @@ the existing ones; captions are in `docs/app-store-listing.md` §Screenshots.
 
 The Windows Store screenshots are **not** covered by that — they need a real
 desktop with the new build installed (`tools/screenshots-windows/`), and the four
-on disk are still from 1.6.2. `tools/Store-Listing.md` §Screenshots carries the
+on disk are still from 1.6.2. `docs/microsoft-store-listing.md` §Screenshots carries the
 warning.

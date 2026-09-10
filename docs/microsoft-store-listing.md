@@ -102,6 +102,30 @@ dave@drscapital.com
 ```
 (privacy policy URL, website, support contact, copyright — in that order)
 
+## Store logo
+
+**Optional for MSIX apps — the package already carries its own logos.** Both
+`.msix` files ship the full tile set (`StoreLogo.png` 50×50, `Square44x44Logo`
+with every targetsize variant, `Square71x71`, `Square150x150`, `Square310x310`,
+`Wide310x150`), declared in `Package.appxmanifest`, and the Store derives listing
+and tile imagery from those. Leaving the listing's Store logo field empty is
+valid and the listing will still show the app icon.
+
+If you want to supply one explicitly — it gives you control over the listing
+thumbnail rather than letting the Store pick — use:
+
+    dist/store-assets/store-logo-300.png    (300×300)
+
+Generated 2026-09-09 by Lanczos-downscaling the canonical 512×512 brand icon
+(`website/megapdf/icon.png`, byte-identical to `dist/play-assets/icon-512.png`,
+so Windows, Play and the website all show the same mark). Regenerate with:
+
+    python3 -c "from PIL import Image; Image.open('website/megapdf/icon.png').convert('RGBA').resize((300,300), Image.LANCZOS).save('dist/store-assets/store-logo-300.png')"
+
+Vector source is `assets/branding/icon.svg` / `logo.svg` if a different size is
+ever needed. Partner Center lists the sizes it accepts on the page itself —
+check there before assuming 300×300 is the only one.
+
 ## Screenshots
 `artifacts/store/screenshots/` (2482×1541, well over the 1366×768 minimum; at
 least one required, up to nine allowed). Upload all five in this order, one
