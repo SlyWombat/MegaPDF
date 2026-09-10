@@ -87,8 +87,21 @@ dotnet build src/MegaPDF.App/MegaPDF.App.csproj \
   -p:GenerateAppxPackageOnBuild=true
 ```
 
-Output: `src/MegaPDF.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/AppPackages/MegaPDF.App_<ver>_Test/MegaPDF.App_<ver>_x64.msix`.
+Output: `src/MegaPDF.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/AppPackages/MegaPDF.App_<ver>_x64_Test/MegaPDF.App_<ver>_x64.msix`.
 The `_Test` folder name is cosmetic — the package inside carries the Store identity.
+
+**ARM64:** the same command with `-p:Platform=ARM64 -p:RuntimeIdentifier=win-arm64`.
+It cross-compiles from an x64 machine with no extra toolchain and lands under
+`bin/ARM64/.../win-arm64/AppPackages/`. Upload **both** packages to the same
+submission — same identity and version, different `ProcessorArchitecture` — and the
+Store serves each device the right one, so ARM64 machines run native code instead
+of x64 emulation. WACK cannot test the ARM64 package on x64 hardware (appcert runs
+against the host architecture); Store certification tests both server-side.
+
+Note: the build rewrites `MaxVersionTested` from `TargetFramework`, so shipped
+packages carry **10.0.19041.0** even though `Package.appxmanifest` says
+`10.0.26100.0`. Harmless — it records what was tested and does not gate
+installation — but the manifest is not what ships.
 
 ### 2. Bundle it (optional, multi-arch only)
 
