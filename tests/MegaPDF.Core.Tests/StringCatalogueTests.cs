@@ -53,6 +53,8 @@ public class StringCatalogueTests
         ["signature_default_name"] = "\"Signature %1$d\"",
         ["signatures"] = "same word",
         ["version_label"] = "\"Version %1$s\"",
+        ["screenshot_text"] = "a person's name typed into the demo agreement",
+        ["screenshot_signature_name"] = "the demo signature's library name",
         // iOS
         ["Document"] = "file name stem",
         ["Page %lld"] = "same",

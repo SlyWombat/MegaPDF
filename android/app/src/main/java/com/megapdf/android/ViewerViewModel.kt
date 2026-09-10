@@ -147,7 +147,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     android.graphics.BitmapFactory.decodeStream(input)
                 }
             }.getOrNull()?.let { bmp ->
-                signatureStore.add("Mega W.", bmp)
+                signatureStore.add(app.getString(R.string.screenshot_signature_name), bmp)
                 signatures.clear()
                 signatures.addAll(signatureStore.load())
             }
@@ -157,16 +157,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val now = System.currentTimeMillis()
                 val day = 86_400_000L
                 uiState = ViewerUiState.Home(listOf(
-                    RecentEntry("demo://1", "Rental Agreement.pdf", now - day / 2),
-                    RecentEntry("demo://2", "Field Trip Permission.pdf", now - 2 * day),
-                    RecentEntry("demo://3", "Insurance Claim Form.pdf", now - 6 * day),
+                    RecentEntry("demo://1", app.getString(R.string.screenshot_document_name), now - day / 2),
+                    RecentEntry("demo://2", app.getString(R.string.screenshot_recent_2), now - 2 * day),
+                    RecentEntry("demo://3", app.getString(R.string.screenshot_recent_3), now - 6 * day),
                 ), null)
             }
             "viewer", "sign", "draw", "search", "text" -> {
                 screenshotSheet = if (state == "viewer") null else state
                 viewModelScope.launch {
                     val bytes = withContext(Dispatchers.IO) {
-                        app.assets.open("demo.pdf").use { it.readBytes() }
+                        app.assets.open(app.getString(R.string.screenshot_demo_asset)).use { it.readBytes() }
                     }
                     val doc = engine.open(bytes)
                     val count = doc.pageCount()
@@ -178,14 +178,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     closeCurrent()
                     document = doc
-                    uiState = ViewerUiState.Viewing("Rental Agreement.pdf", sizes)
+                    uiState = ViewerUiState.Viewing(app.getString(R.string.screenshot_document_name), sizes)
                     if (state == "search") {
                         // Seed here, not from the UI: the document and the
                         // Viewing state are both already set, so the sweep can
                         // never hit updateSearchQuery's "nothing open" early
                         // return, and the debounce is skipped so the hits and
                         // the "N of M" count are on screen without any wait.
-                        startSearch(SCREENSHOT_SEARCH_TERM, debounceMs = 0L)
+                        startSearch(app.getString(R.string.screenshot_search_term), debounceMs = 0L)
                     }
                     if (state == "text") {
                         // The Add text dialog, open on a typed name with the size
@@ -195,7 +195,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         // printed name belongs on this agreement.
                         pendingTextTap = PendingTextTap(
                             0, SCREENSHOT_TEXT_X, SCREENSHOT_TEXT_Y,
-                            initialText = SCREENSHOT_TEXT)
+                            initialText = app.getString(R.string.screenshot_text))
                     }
                 }
             }
@@ -1055,13 +1055,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
         const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
-        // Marketing screenshot query: "rental" is the most-repeated real word in
-        // the demo agreement (title, then twice in the opening paragraph).
-        const val SCREENSHOT_SEARCH_TERM = "rental"
+        // The screenshot search term, document names and typed text are string
+        // resources (screenshot_*), so a French run shows French content (#91).
 
         // Marketing "Add text" shot: the name the customer would print under the
         // signature rule the demo agreement draws at y=400.
-        const val SCREENSHOT_TEXT = "Jane Whitfield"
         const val SCREENSHOT_TEXT_X = 72.0
         const val SCREENSHOT_TEXT_Y = 372.0
     }

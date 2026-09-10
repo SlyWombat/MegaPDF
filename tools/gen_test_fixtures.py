@@ -195,30 +195,69 @@ def _squiggle_ops(x0, y0, w, h):
     return b" ".join(ops)
 
 
-def gen_demo():
+DEMO_TEXT = {
+    # The English is the original; the French is the same page translated
+    # (#91), same geometry, so the screenshot tap points and the search term's
+    # three hits ("location": title, "Location d'outils", "de location") line up.
+    "en": {
+        "title": "Equipment Rental Agreement",
+        "p1": "This agreement is made between Sunrise Tool Rental and the customer named",
+        "p2": "below, covering the rental equipment, delivery options, and insurance terms",
+        "p3": "described in sections 1 through 4 of this document.",
+        "options": "Options",
+        "box1": "Include delivery and pickup",
+        "box2": "Damage insurance accepted",
+        "box3": "Extended weekend rate",
+        "sig": "Customer signature",
+        "line": "Sign above the line",
+    },
+    "fr": {
+        "title": "Contrat de location d'\u00e9quipement",
+        "p1": "Le pr\u00e9sent contrat est conclu entre Location d'outils Soleil Levant et le client",
+        "p2": "nomm\u00e9 ci-dessous et couvre l'\u00e9quipement de location, les options de livraison",
+        "p3": "et les conditions d'assurance d\u00e9crites aux sections 1 \u00e0 4 du pr\u00e9sent document.",
+        "options": "Options",
+        "box1": "Livraison et ramassage inclus",
+        "box2": "Assurance dommages accept\u00e9e",
+        "box3": "Tarif fin de semaine prolong\u00e9e",
+        "sig": "Signature du client",
+        "line": "Signez au-dessus de la ligne",
+    },
+}
+
+
+def _winansi(text):
+    """A PDF string literal in WinAnsi (cp1252), so accents render in the base-14 faces."""
+    raw = text.encode("cp1252")
+    return raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
+
+
+def gen_demo(lang="en"):
     """One-page 'filled agreement' used for App Store screenshots: real
-    MegaPDF-style artifacts (mark:/sig: annots tagged MegaPDF_Id)."""
+    MegaPDF-style artifacts (mark:/sig: annots tagged MegaPDF_Id).
+    `lang` picks the page's language (DEMO_TEXT); the layout is identical."""
     objs = []
     add = lambda b: (objs.append(b), len(objs))[1]
+    t = DEMO_TEXT[lang]
 
-    helv = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-    bold = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
+    helv = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    bold = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
     body = [
-        b"BT /F2 22 Tf 72 716 Td (Equipment Rental Agreement) Tj ET",
-        b"BT /F1 11 Tf 72 688 Td (This agreement is made between Sunrise Tool Rental and the customer named) Tj ET",
-        b"BT /F1 11 Tf 72 672 Td (below, covering the rental equipment, delivery options, and insurance terms) Tj ET",
-        b"BT /F1 11 Tf 72 656 Td (described in sections 1 through 4 of this document.) Tj ET",
-        b"BT /F2 13 Tf 72 616 Td (Options) Tj ET",
+        b"BT /F2 22 Tf 72 716 Td (%s) Tj ET" % _winansi(t["title"]),
+        b"BT /F1 11 Tf 72 688 Td (%s) Tj ET" % _winansi(t["p1"]),
+        b"BT /F1 11 Tf 72 672 Td (%s) Tj ET" % _winansi(t["p2"]),
+        b"BT /F1 11 Tf 72 656 Td (%s) Tj ET" % _winansi(t["p3"]),
+        b"BT /F2 13 Tf 72 616 Td (%s) Tj ET" % _winansi(t["options"]),
         # three drawn checkboxes
         b"1 w 0.13 0.13 0.13 RG 72 584 13 13 re S",
-        b"BT /F1 12 Tf 94 587 Td (Include delivery and pickup) Tj ET",
+        b"BT /F1 12 Tf 94 587 Td (%s) Tj ET" % _winansi(t["box1"]),
         b"1 w 0.13 0.13 0.13 RG 72 558 13 13 re S",
-        b"BT /F1 12 Tf 94 561 Td (Damage insurance accepted) Tj ET",
+        b"BT /F1 12 Tf 94 561 Td (%s) Tj ET" % _winansi(t["box2"]),
         b"1 w 0.13 0.13 0.13 RG 72 532 13 13 re S",
-        b"BT /F1 12 Tf 94 535 Td (Extended weekend rate) Tj ET",
-        b"BT /F2 13 Tf 72 484 Td (Customer signature) Tj ET",
+        b"BT /F1 12 Tf 94 535 Td (%s) Tj ET" % _winansi(t["box3"]),
+        b"BT /F2 13 Tf 72 484 Td (%s) Tj ET" % _winansi(t["sig"]),
         b"0.6 w 0.4 0.4 0.4 RG 72 400 m 320 400 l S",
-        b"BT /F1 9 Tf 72 388 Td (Sign above the line) Tj ET",
+        b"BT /F1 9 Tf 72 388 Td (%s) Tj ET" % _winansi(t["line"]),
     ]
     content = add(stream(b"", b"\n".join(body) + b"\n"))
 
@@ -357,6 +396,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
                        ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
+                       ("demo-fr.pdf", gen_demo("fr")),
                        ("formtext.pdf", gen_formtext()),
                               ("cropped.pdf", gen_cropped()),
                        ("textbox.pdf", gen_textbox())):

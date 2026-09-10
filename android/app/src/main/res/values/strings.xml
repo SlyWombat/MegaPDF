@@ -105,4 +105,16 @@
     <string name="signature_image_missing">That signature\'s image is missing</string>
     <string name="signature_image_unreadable">Couldn\'t read this signature\'s image</string>
     <string name="signature_remove_failed">Couldn\'t remove this signature</string>
+
+    <!-- Screenshot mode (the "screenshot <state>" launch extra): marketing content that
+         follows the app language, so a French run shows a French agreement (#91).
+         The asset names a bundled PDF; the recents are file names on the home
+         screen; the search term must occur in the demo page. -->
+    <string name="screenshot_demo_asset">demo.pdf</string>
+    <string name="screenshot_document_name">Rental Agreement.pdf</string>
+    <string name="screenshot_recent_2">Field Trip Permission.pdf</string>
+    <string name="screenshot_recent_3">Insurance Claim Form.pdf</string>
+    <string name="screenshot_search_term">rental</string>
+    <string name="screenshot_text">Jane Whitfield</string>
+    <string name="screenshot_signature_name">Mega W.</string>
 </resources>

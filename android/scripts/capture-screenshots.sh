@@ -18,6 +18,16 @@ done
 
 adb shell settings put global sysui_demo_allowed 1
 
+# MEGAPDF_LANG=fr-CA (or fr-FR) switches the app's language through Android 13's
+# per-app locale (#91): the app then loads demo-fr.pdf and the French names, and
+# every label is French. The system UI stays in the emulator's language, which
+# is fine — the listing crops to the app. Unset or "en" leaves the default.
+LANG_TAG="${MEGAPDF_LANG:-en}"
+if [ "$LANG_TAG" != "en" ]; then
+    adb shell cmd locale set-app-locales ca.electricrv.megapdf --user 0 --locales "$LANG_TAG"
+    adb shell cmd locale get-app-locales ca.electricrv.megapdf --user 0 || true
+fi
+
 # ...and re-assert the demo status bar before every capture rather than once at
 # the start. The commands are idempotent and cost nothing, and by the time a
 # screenshot is taken SystemUI is certainly running — which is what actually
@@ -31,12 +41,13 @@ demo_status_bar() {
 }
 demo_status_bar
 
-mkdir -p /tmp/shots
+OUT="/tmp/shots/$LANG_TAG"
+mkdir -p "$OUT"
 for state in home viewer search sign draw text; do
     adb shell am force-stop ca.electricrv.megapdf || true
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10
     demo_status_bar
-    adb exec-out screencap -p > "/tmp/shots/android-$state.png"
+    adb exec-out screencap -p > "$OUT/android-$state.png"
 done
-ls -la /tmp/shots
+ls -la "$OUT"

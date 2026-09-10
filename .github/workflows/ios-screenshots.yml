@@ -2,14 +2,19 @@ name: iOS Screenshots
 
 # Manual: captures App Store screenshots from real simulators using the app's
 # `-screenshot <state>` launch mode (home / viewer / search / sign / draw / text), at the two
-# required sizes: 6.9" iPhone and 13" iPad. Download the artifact and upload
-# the PNGs to App Store Connect (docs/app-store-listing.md maps them).
+# required sizes: 6.9" iPhone and 13" iPad, once per listing language (#91):
+# en, fr-CA and fr (France) each get their own artifact. Download the artifact
+# and upload the PNGs to App Store Connect (docs/app-store-listing.md maps them).
 on:
   workflow_dispatch:
 
 jobs:
   capture:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [en, fr-CA, fr]
     defaults:
       run:
         working-directory: ios
@@ -44,8 +49,17 @@ jobs:
       - name: Capture screenshots
         run: |
           APP="$RUNNER_TEMP/dd/Build/Products/Debug-iphonesimulator/MegaPDF.app"
-          OUT="$RUNNER_TEMP/shots"
+          OUT="$RUNNER_TEMP/shots/${{ matrix.language }}"
           mkdir -p "$OUT"
+
+          # The language is a launch argument (user-defaults override), so the
+          # simulator's own language never has to change: -AppleLanguages picks
+          # the catalog, -AppleLocale the number and date formats.
+          LANG_ARGS=()
+          case "${{ matrix.language }}" in
+            fr-CA) LANG_ARGS=(-AppleLanguages "(fr-CA)" -AppleLocale fr_CA) ;;
+            fr)    LANG_ARGS=(-AppleLanguages "(fr)" -AppleLocale fr_FR) ;;
+          esac
 
           pick_device() {
             xcrun simctl list devices available -j | python3 -c "
@@ -72,7 +86,7 @@ jobs:
             xcrun simctl install "$udid" "$APP"
             xcrun simctl ui "$udid" appearance light || true
             for state in home viewer search sign draw text; do
-              xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state"
+              xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" "${LANG_ARGS[@]}"
               sleep 8
               xcrun simctl io "$udid" screenshot "$OUT/${label}-${state}.png"
               xcrun simctl terminate "$udid" com.megapdf.ios || true
@@ -86,7 +100,7 @@ jobs:
             # six: these are the ones with accent in them.
             xcrun simctl ui "$udid" appearance dark || true
             for state in search sign; do
-              xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state"
+              xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" "${LANG_ARGS[@]}"
               sleep 8
               xcrun simctl io "$udid" screenshot "$OUT/${label}-${state}-dark.png"
               xcrun simctl terminate "$udid" com.megapdf.ios || true
@@ -104,5 +118,5 @@ jobs:
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: appstore-screenshots
-          path: ${{ runner.temp }}/shots/
+          name: appstore-screenshots-${{ matrix.language }}
+          path: ${{ runner.temp }}/shots/${{ matrix.language }}/

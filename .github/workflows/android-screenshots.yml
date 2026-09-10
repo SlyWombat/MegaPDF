@@ -2,7 +2,8 @@ name: Android Screenshots
 
 # Manual: captures Play Store phone screenshots from an emulator using the
 # app's `--es screenshot <state>` launch extra
-# (home / viewer / search / sign / draw / text).
+# (home / viewer / search / sign / draw / text), once per listing language
+# (#91): en, fr-CA and fr-FR each get their own artifact.
 # Download the artifact; tools/play_submit.py-style API upload puts them on
 # the listing.
 on:
@@ -11,6 +12,10 @@ on:
 jobs:
   capture:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [en, fr-CA, fr-FR]
     defaults:
       run:
         working-directory: android
@@ -42,10 +47,10 @@ jobs:
           arch: x86_64
           profile: pixel_6
           working-directory: android
-          script: bash scripts/capture-screenshots.sh
+          script: MEGAPDF_LANG=${{ matrix.language }} bash scripts/capture-screenshots.sh
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         with:
-          name: play-screenshots
-          path: /tmp/shots/
+          name: play-screenshots-${{ matrix.language }}
+          path: /tmp/shots/${{ matrix.language }}/

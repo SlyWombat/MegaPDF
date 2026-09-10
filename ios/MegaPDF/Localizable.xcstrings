@@ -577,6 +577,22 @@
         }
       }
     },
+    "Field Trip Permission.pdf" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorisation de sortie scolaire.pdf"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autorisation de sortie scolaire.pdf"
+          }
+        }
+      }
+    },
     "Find in document" : {
       "localizations" : {
         "fr" : {
@@ -605,6 +621,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Police"
+          }
+        }
+      }
+    },
+    "Insurance Claim Form.pdf" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Formulaire de réclamation d'assurance.pdf"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Formulaire de réclamation d'assurance.pdf"
           }
         }
       }
@@ -864,6 +896,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rétablir"
+          }
+        }
+      }
+    },
+    "Rental Agreement.pdf" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrat de location.pdf"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrat de location.pdf"
           }
         }
       }
@@ -1344,6 +1392,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Version %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "demo" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "demo-fr"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "demo-fr"
+          }
+        }
+      }
+    },
+    "rental" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "location"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "location"
           }
         }
       }

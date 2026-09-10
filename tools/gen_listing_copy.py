@@ -326,8 +326,9 @@ PLAY_BODY = "\n".join([
     "and **French (France) – fr-FR** beside the default **English (Canada) – en-CA**. "
     "`tools/play_submit.py` uploads binaries only; this text is pasted by hand. "
     "Every field for every language is below as a block that pastes as-is. "
-    "Screenshots: `dist/play-assets/screenshots/` per language once a French set "
-    "exists; the English set otherwise.\n",
+    "Screenshots: the **Android Screenshots** workflow captures once per language "
+    "(artifacts `play-screenshots-en`, `-fr-CA`, `-fr-FR`); the French runs set the "
+    "app's per-app locale on the emulator and open the French demo agreement.\n",
     REVIEW_NOTE,
     play_section("English (Canada)", "en-CA", PLAY_EN),
     play_section("Français (Canada)", "fr-CA", PLAY_FR_CA),

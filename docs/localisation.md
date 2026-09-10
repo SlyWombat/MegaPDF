@@ -145,6 +145,10 @@ gitignored and picked up by the next build; run the Windows app with
 French copy for the three stores is in `docs/microsoft-store-listing.md`,
 `docs/app-store-listing.md` and `android/RELEASING.md`, each under a
 "Français (Canada)" heading. It was translated by the build assistant; have a
-francophone read it before pasting it into a store. French screenshots are a
-separate job: the demo documents the screenshot flows open are English, so a
-French run would show French chrome over an English form.
+francophone read it before pasting it into a store. Screenshots exist per language on every
+platform: Windows sets live in `artifacts/store/screenshots/{fr-CA,fr-FR}/`
+(harness README § French screenshots); the Android and iOS capture workflows run
+a language matrix and open a French demo agreement (`demo-fr.pdf`, from
+`tools/gen_test_fixtures.py`) whose names and search term come from the string
+catalogues (`screenshot_*` keys on Android, the demo keys in the String Catalog
+on iOS).

@@ -13,13 +13,25 @@ enum DemoContent {
         return args[i + 1]
     }
 
+    /// Everything the screenshots show follows the app language through the
+    /// String Catalog (#91): a `-AppleLanguages (fr-CA)` launch opens the French
+    /// agreement (`demo-fr.pdf`) under French names, and searches for a French
+    /// word. The keys are the English values.
+
+    /// The bundled demo agreement's resource name, without extension.
+    static var demoResource: String { String(localized: "demo", comment: "screenshot demo PDF resource name") }
+
+    /// The demo agreement's display name in the title bar and the recents list.
+    static var documentName: String { String(localized: "Rental Agreement.pdf") }
+
     /// Term seeded into the find bar by `-screenshot search`. "rental" is the
     /// most-repeated word on the demo agreement's only page — it hits the
     /// "Equipment Rental Agreement" heading, "Sunrise Tool Rental" and "the
     /// rental equipment" — so the capture shows three highlights clustered
     /// under the bar with the counter reading "1 of 3". Search is
     /// case-insensitive, so the lower-case term matches the capitalized ones.
-    static let searchTerm = "rental"
+    /// The French page repeats "location" the same three times.
+    static var searchTerm: String { String(localized: "rental", comment: "screenshot search term; must occur three times on the demo page") }
 
     /// Marketing "Add text" shot (#43): the name the customer would print under
     /// the signature rule the demo agreement draws at y=400, and where it sits.
@@ -39,9 +51,9 @@ enum DemoContent {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let day: Int64 = 86_400_000
         return [
-            ("Rental Agreement.pdf", now - day / 2),
-            ("Field Trip Permission.pdf", now - 2 * day),
-            ("Insurance Claim Form.pdf", now - 6 * day),
+            (documentName, now - day / 2),
+            (String(localized: "Field Trip Permission.pdf"), now - 2 * day),
+            (String(localized: "Insurance Claim Form.pdf"), now - 6 * day),
         ].map { name, at in
             RecentEntry(bookmarkBase64: Data(name.utf8).base64EncodedString(),
                         displayName: name, lastOpenedEpochMs: at)

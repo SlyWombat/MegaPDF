@@ -245,7 +245,11 @@ entirely on-device.
 ## Screenshots
 
 Run the **iOS Screenshots** workflow (Actions → iOS Screenshots → Run
-workflow), download the `appstore-screenshots` artifact, and upload:
+workflow). It captures once per listing language — artifacts
+`appstore-screenshots-en`, `-fr-CA` and `-fr` (#91): the French runs launch the
+app with `-AppleLanguages`, so the chrome is French and the document is the
+French agreement (`demo-fr.pdf`, searched for "location"). Upload each set under
+its own localisation, same slots:
 
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|

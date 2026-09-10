@@ -98,4 +98,13 @@
     <string name="signature_image_missing">L\'image de cette signature est introuvable</string>
     <string name="signature_image_unreadable">Impossible de lire l\'image de cette signature</string>
     <string name="signature_remove_failed">Impossible de retirer cette signature</string>
+
+    <!-- Mode capture d\'écran (#91) -->
+    <string name="screenshot_demo_asset">demo-fr.pdf</string>
+    <string name="screenshot_document_name">Contrat de location.pdf</string>
+    <string name="screenshot_recent_2">Autorisation de sortie scolaire.pdf</string>
+    <string name="screenshot_recent_3">Formulaire de réclamation d\'assurance.pdf</string>
+    <string name="screenshot_search_term">location</string>
+    <string name="screenshot_text">Jane Whitfield</string>
+    <string name="screenshot_signature_name">Mega W.</string>
 </resources>

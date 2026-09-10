@@ -131,14 +131,14 @@ final class ViewerModel: ObservableObject {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
         case "viewer", "sign", "draw", "search", "text":
-            if let url = Bundle.main.url(forResource: "demo", withExtension: "pdf"),
+            if let url = Bundle.main.url(forResource: DemoContent.demoResource, withExtension: "pdf"),
                let bytes = try? Data(contentsOf: url) {
                 if mode == "sign" { screenshotSheet = .signatures }
                 if mode == "draw" { screenshotSheet = .draw }
                 if mode == "search" { screenshotSearchTerm = DemoContent.searchTerm }
                 Task {
                     await open(bytes: bytes, password: nil,
-                               displayName: "Rental Agreement.pdf", sourceURL: nil)
+                               displayName: DemoContent.documentName, sourceURL: nil)
                     if mode == "text" {
                         // The Add text sheet, open on a typed name with the size
                         // and face pickers showing (#43). Armed after the open so
