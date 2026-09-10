@@ -70,7 +70,7 @@ public partial class MainWindow
     private static string DescribeFocus(MainViewModel vm, MainViewModel.FocusedRegion focus)
     {
         var what = focus.Describe(false);
-        return $"Page {focus.PageIndex + 1}, {what}";
+        return Strings.PageRegionDescription(focus.PageIndex + 1, what);
     }
 
     private void RemoveFocusRing()

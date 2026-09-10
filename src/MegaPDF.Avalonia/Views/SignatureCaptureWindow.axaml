@@ -1,7 +1,8 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
         x:Class="MegaPDF.Avalonia.Views.SignatureCaptureWindow"
-        Title="Add a signature"
+        Title="{x:Static loc:Strings.AddASignature}"
         Width="560" Height="380"
         WindowStartupLocation="CenterOwner"
         CanResize="False">
@@ -9,18 +10,18 @@
   <DockPanel Margin="16">
 
     <TextBlock DockPanel.Dock="Top" Margin="0,0,0,16"
-               Text="Sign in the box below, the way you would on paper." />
+               Text="{x:Static loc:Strings.SignInTheBox}" />
 
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                 HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}" Margin="0,12,0,0">
-      <Button Name="ClearButton" Content="Clear" />
-      <Button Name="CancelButton" Content="Cancel" />
-      <Button Name="SaveButton" Content="Save" IsDefault="True" IsEnabled="False" />
+      <Button Name="ClearButton" Content="{x:Static loc:Strings.Clear}" />
+      <Button Name="CancelButton" Content="{x:Static loc:Strings.Cancel}" />
+      <Button Name="SaveButton" Content="{x:Static loc:Strings.Save}" IsDefault="True" IsEnabled="False" />
     </StackPanel>
 
     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="{DynamicResource SpaceS}" Margin="0,12,0,0">
-      <TextBlock Text="Name" VerticalAlignment="Center" />
-      <TextBox Name="NameBox" Width="240" Watermark="e.g. Dave" />
+      <TextBlock Text="{x:Static loc:Strings.Name}" VerticalAlignment="Center" />
+      <TextBox Name="NameBox" Width="240" Watermark="{x:Static loc:Strings.NameExample}" />
     </StackPanel>
 
     <!-- White field with a rule to sign on, so it reads as a signing line rather

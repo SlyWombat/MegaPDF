@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia.Controls;
 
 namespace MegaPDF.Avalonia.Views;
@@ -27,10 +28,13 @@ public partial class RecoveryWindow : Window
 
     internal void SetSession(string fileName, int edits, DateTime lastWriteUtc)
     {
-        Headline.Text = $"MegaPDF closed with unsaved changes to \"{fileName}\".";
-        Detail.Text = $"{edits} change{(edits == 1 ? "" : "s")} were made and never saved, "
-                      + $"last on {lastWriteUtc.ToLocalTime():d MMMM 'at' h:mm tt}. "
-                      + "Restoring reopens the document and puts them back; nothing is written "
-                      + "to the file until you save.";
+        Headline.Text = Strings.RecoveryHeadline(fileName);
+        // The person's own date and time conventions, not a hard-coded English
+        // pattern: "f" is the culture's long date with its short time.
+        var lastWrite = lastWriteUtc.ToLocalTime().ToString("f", CultureInfo.CurrentCulture);
+        Detail.Text = Strings.Plural(edits,
+                          Strings.RecoveryChangesOne(edits, lastWrite),
+                          Strings.RecoveryChangesOther(edits, lastWrite))
+                      + " " + Strings.RecoveryExplanation;
     }
 }

@@ -84,6 +84,22 @@ if [ ! -f "$ICON" ]; then
 fi
 cp "$ICON" "$APP/Contents/Resources/MegaPDF.icns"
 
+# Languages (#91). The app's own strings ship inside the single-file apphost —
+# .NET 8 bundles the fr/MegaPDF.resources.dll satellite into it, so nothing
+# loose lands in Contents/MacOS for codesign to trip over. What macOS itself
+# shows on the app's behalf — the document type in Finder's Get Info and the
+# Open With menu — comes from InfoPlist.strings per .lproj, and the
+# CFBundleLocalizations list is what tells the system, and the App Store
+# listing, which languages the app has. Written before signing, like the icon:
+# a resource added afterwards breaks the seal.
+mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/fr.lproj"
+cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" << 'STRINGS'
+CFBundleTypeName = "PDF document";
+STRINGS
+cat > "$APP/Contents/Resources/fr.lproj/InfoPlist.strings" << 'STRINGS'
+CFBundleTypeName = "Document PDF";
+STRINGS
+
 cat > "$APP/Contents/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -100,6 +116,14 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$VERSION</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <!-- English is the development language; French is the one translation so
+         far (#91). Both lists must agree with the .lproj folders above. -->
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>fr</string>
+    </array>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSHumanReadableCopyright</key><string>Electric RV</string>

@@ -159,36 +159,36 @@ internal static class MacPrinter
     internal static Outcome Print(string pdfPath)
     {
         if (!OperatingSystem.IsMacOS())
-            return new Outcome(false, "Printing is only available on macOS in this build.");
+            return new Outcome(false, Strings.PrintingMacOnly);
 
         if (!EnsureFrameworks())
-            return new Outcome(false, "Could not load the system printing components.");
+            return new Outcome(false, Strings.PrintComponentsNotLoaded);
 
         var nsUrl = objc_getClass("NSURL");
         var pdfDocument = objc_getClass("PDFDocument");
         var nsPrintInfo = objc_getClass("NSPrintInfo");
         if (nsUrl == IntPtr.Zero || pdfDocument == IntPtr.Zero || nsPrintInfo == IntPtr.Zero)
-            return new Outcome(false, "The system print components are unavailable.");
+            return new Outcome(false, Strings.PrintComponentsUnavailable);
 
         var pathString = NSString(pdfPath);
         if (pathString == IntPtr.Zero)
-            return new Outcome(false, "The document path could not be prepared.");
+            return new Outcome(false, Strings.PrintPathNotPrepared);
 
         var url = MsgSend_Ptr(nsUrl, sel_registerName("fileURLWithPath:"), pathString);
         var document = MsgSend_Ptr(
             MsgSend(pdfDocument, sel_registerName("alloc")), sel_registerName("initWithURL:"), url);
         if (document == IntPtr.Zero)
-            return new Outcome(false, "The document could not be prepared for printing.");
+            return new Outcome(false, Strings.PrintDocumentNotPrepared);
 
         var printInfo = MsgSend(nsPrintInfo, sel_registerName("sharedPrintInfo"));
         var operation = MsgSend_PrintOp(
             document, sel_registerName("printOperationForPrintInfo:scalingMode:autoRotate:"),
             printInfo, ScaleDownToFit, true);
         if (operation == IntPtr.Zero)
-            return new Outcome(false, "The print operation could not be created.");
+            return new Outcome(false, Strings.PrintOperationNotCreated);
 
         // Returns false when the user cancels the panel, which is not an error.
         var ran = MsgSend_Bool(operation, sel_registerName("runOperation"));
-        return new Outcome(true, ran ? "Sent to the printer." : "Printing cancelled.");
+        return new Outcome(true, ran ? Strings.SentToPrinter : Strings.PrintingCancelled);
     }
 }

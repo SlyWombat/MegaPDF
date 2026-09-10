@@ -12,7 +12,7 @@ public partial class SignatureCaptureWindow : Window
     private readonly SignaturePad _pad = new();
 
     internal SignatureBitmap? Result { get; private set; }
-    internal string ResultName { get; private set; } = "Signature";
+    internal string ResultName { get; private set; } = Strings.SignatureDefaultName;
 
     public SignatureCaptureWindow()
     {
@@ -36,7 +36,7 @@ public partial class SignatureCaptureWindow : Window
         {
             Result = _pad.ToSignature();
             var typed = NameBox.Text;
-            ResultName = string.IsNullOrWhiteSpace(typed) ? "Signature" : typed.Trim();
+            ResultName = string.IsNullOrWhiteSpace(typed) ? Strings.SignatureDefaultName : typed.Trim();
             Close();
         };
     }

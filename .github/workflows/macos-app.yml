@@ -194,6 +194,41 @@ jobs:
               raise SystemExit(1)
           PYCHECK
 
+      # French (#91). The catalogue itself is bundled into the single-file
+      # apphost, so what can go missing at bundle time is the plist declaration
+      # and the per-language InfoPlist.strings — which is what the App Store
+      # reads to list the app's languages, and what Finder reads for the
+      # document type name. Checked the way CFBundleIconFile is above.
+      - name: The bundle declares its languages
+        run: |
+          APP="$RUNNER_TEMP/app/MegaPDF.app"
+          PLIST="$APP/Contents/Info.plist"
+
+          region=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDevelopmentRegion' "$PLIST" 2>/dev/null || true)
+          if [ "$region" != "en" ]; then
+            echo "::error::CFBundleDevelopmentRegion is '$region', expected 'en'"
+            exit 1
+          fi
+
+          langs=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleLocalizations' "$PLIST" 2>/dev/null || true)
+          echo "CFBundleLocalizations: $(echo "$langs" | tr -s '[:space:]' ' ')"
+          for lang in en fr; do
+            if ! echo "$langs" | grep -qx "[[:space:]]*$lang[[:space:]]*"; then
+              echo "::error::CFBundleLocalizations does not list '$lang'"
+              exit 1
+            fi
+            test -f "$APP/Contents/Resources/$lang.lproj/InfoPlist.strings" \
+              || { echo "::error::no $lang.lproj/InfoPlist.strings in the bundle"; exit 1; }
+          done
+
+          # The satellite must be inside the apphost, not loose beside it — a
+          # loose fr/ folder in Contents/MacOS is unsigned code the seal would
+          # reject, and it would mean PublishSingleFile stopped bundling it.
+          if [ -d "$APP/Contents/MacOS/fr" ]; then
+            echo "::error::Contents/MacOS/fr exists — the French satellite was not bundled into the single file"
+            exit 1
+          fi
+
       # The design tokens are looked up by name at runtime, and a name that does
       # not resolve fails silently — Brand.Brush hands back a transparent brush,
       # so the selection border and focus ring stop being drawn while every other

@@ -25,7 +25,7 @@ public partial class PasswordWindow : Window
     internal void SetPrompt(string fileName, bool retry)
     {
         PromptText.Text = retry
-            ? $"That password did not open \"{fileName}\". Try again?"
-            : $"\"{fileName}\" is password-protected. Enter its password to open it.";
+            ? Strings.PasswordRetryPrompt(fileName)
+            : Strings.PasswordPrompt(fileName);
     }
 }

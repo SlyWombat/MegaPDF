@@ -216,7 +216,7 @@ public partial class MainWindow : Window
             Margin = new Thickness(at.X, at.Y, 0, 0),
             HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
-            Watermark = "Type, then press Enter",
+            Watermark = Strings.TypeThenEnter,
         };
 
         void Commit()
@@ -599,7 +599,7 @@ public partial class MainWindow : Window
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Choose a photo of your signature",
+            Title = Strings.ChoosePhotoOfSignature,
             AllowMultiple = false,
             FileTypeFilter = [FilePickerFileTypes.ImageAll],
         });
@@ -615,7 +615,7 @@ public partial class MainWindow : Window
 
             var name = Path.GetFileNameWithoutExtension(files[0].Name);
             var entry = vm.AddSignatureFromImage(
-                string.IsNullOrWhiteSpace(name) ? "Signature" : name,
+                string.IsNullOrWhiteSpace(name) ? Strings.SignatureDefaultName : name,
                 decoded,
                 Rendering.SignatureImages.EncodePng);
 
@@ -623,7 +623,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            vm.Status = $"Could not read that image: {ex.Message}";
+            vm.Status = Strings.WithDetail(Strings.CouldNotReadImage, ex.Message);
         }
     }
 
@@ -648,7 +648,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            vm.Status = $"Could not save that signature: {ex.Message}";
+            vm.Status = Strings.WithDetail(Strings.CouldNotSaveSignature, ex.Message);
         }
     }
 
@@ -787,19 +787,19 @@ public partial class MainWindow : Window
 
     private void BindShortcuts()
     {
-        Bind(OpenButton, Key.O, KeyModifiers.None, "Open a PDF", () => _ = OpenDocumentAsync());
-        Bind(SaveButton, Key.S, KeyModifiers.None, "Save", () => ViewModel?.SaveCommand.Execute(null));
-        Bind(PrintButton, Key.P, KeyModifiers.None, "Print", () => ViewModel?.PrintCommand.Execute(null));
-        Bind(UndoButton, Key.Z, KeyModifiers.None, "Undo", () => ViewModel?.UndoCommand.Execute(null));
+        Bind(OpenButton, Key.O, KeyModifiers.None, Strings.OpenAPdf, () => _ = OpenDocumentAsync());
+        Bind(SaveButton, Key.S, KeyModifiers.None, Strings.Save, () => ViewModel?.SaveCommand.Execute(null));
+        Bind(PrintButton, Key.P, KeyModifiers.None, Strings.Print, () => ViewModel?.PrintCommand.Execute(null));
+        Bind(UndoButton, Key.Z, KeyModifiers.None, Strings.Undo, () => ViewModel?.UndoCommand.Execute(null));
         // Redo is Shift+Cmd+Z on macOS and Ctrl+Y on Windows — genuinely different
         // conventions, not just a different modifier.
         if (OperatingSystem.IsMacOS())
-            Bind(RedoButton, Key.Z, KeyModifiers.Shift, "Redo", () => ViewModel?.RedoCommand.Execute(null));
+            Bind(RedoButton, Key.Z, KeyModifiers.Shift, Strings.Redo, () => ViewModel?.RedoCommand.Execute(null));
         else
-            Bind(RedoButton, Key.Y, KeyModifiers.None, "Redo", () => ViewModel?.RedoCommand.Execute(null));
-        Bind(ZoomOutButton, Key.OemMinus, KeyModifiers.None, "Zoom out", () => ViewModel?.ZoomOutCommand.Execute(null));
-        Bind(ZoomInButton, Key.OemPlus, KeyModifiers.None, "Zoom in", () => ViewModel?.ZoomInCommand.Execute(null));
-        Bind(ZoomResetButton, Key.D0, KeyModifiers.None, "Actual size", () => ViewModel?.ZoomResetCommand.Execute(null));
+            Bind(RedoButton, Key.Y, KeyModifiers.None, Strings.Redo, () => ViewModel?.RedoCommand.Execute(null));
+        Bind(ZoomOutButton, Key.OemMinus, KeyModifiers.None, Strings.ZoomOut, () => ViewModel?.ZoomOutCommand.Execute(null));
+        Bind(ZoomInButton, Key.OemPlus, KeyModifiers.None, Strings.ZoomIn, () => ViewModel?.ZoomInCommand.Execute(null));
+        Bind(ZoomResetButton, Key.D0, KeyModifiers.None, Strings.ActualSize, () => ViewModel?.ZoomResetCommand.Execute(null));
 
         // Cmd/Ctrl+F has no toolbar button to hang a tooltip on — the find bar is
         // its own affordance once open.
@@ -839,7 +839,7 @@ public partial class MainWindow : Window
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Open a PDF",
+            Title = Strings.OpenAPdf,
             AllowMultiple = false,
             FileTypeFilter = [PdfFileType],
         });
@@ -853,7 +853,7 @@ public partial class MainWindow : Window
         var path = files[0].TryGetLocalPath();
         if (path is null)
         {
-            vm.Status = "That file is not on the local disk. Copy it somewhere local and try again.";
+            vm.Status = Strings.FileNotLocal;
             return;
         }
 
@@ -900,7 +900,7 @@ public partial class MainWindow : Window
 
         if (!File.Exists(entry.Path))
         {
-            vm.Status = "That file has moved or been deleted. Open it again to restore access.";
+            vm.Status = Strings.FileMovedOrDeleted;
             return;
         }
 
@@ -911,7 +911,7 @@ public partial class MainWindow : Window
         var fromPath = await StorageProvider.TryGetFileFromPathAsync(entry.Path);
         if (fromPath is null)
         {
-            vm.Status = "That file cannot be opened for editing from here. Use Open to pick it again.";
+            vm.Status = Strings.FileCannotBeOpenedFromHere;
             return;
         }
 
@@ -958,7 +958,7 @@ public partial class MainWindow : Window
         {
             // Should not happen — but a Save that does nothing at all is the worst
             // possible outcome, so it says something and offers the way out.
-            vm.Status = "There is nowhere to save this back to. Use Save As to choose a file.";
+            vm.Status = Strings.NowhereToSave;
             return;
         }
 
@@ -992,12 +992,12 @@ public partial class MainWindow : Window
             return;
 
         var suggested = vm.DocumentName is { } name
-            ? Path.GetFileNameWithoutExtension(name) + " copy.pdf"
-            : "document.pdf";
+            ? Strings.SuggestedCopyName(Path.GetFileNameWithoutExtension(name)) + ".pdf"
+            : Strings.DefaultDocumentName + ".pdf";
 
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Save a copy",
+            Title = Strings.SaveACopy,
             SuggestedFileName = suggested,
             DefaultExtension = "pdf",
             FileTypeChoices = [PdfFileType],
@@ -1059,7 +1059,7 @@ public partial class MainWindow : Window
 
         if (vm.IsDirty)
         {
-            vm.Status = "Save your changes first, then shrink the saved file.";
+            vm.Status = Strings.SaveBeforeShrinking;
             return;
         }
 
@@ -1073,15 +1073,15 @@ public partial class MainWindow : Window
             var (result, bytes) = vm.PrepareShrunkCopy();
             if (bytes is null)
             {
-                vm.Status = "The pictures in this document are already small — nothing to shrink.";
+                vm.Status = Strings.NothingToShrink;
                 return;
             }
 
-            var baseName = vm.DocumentName is { } n ? Path.GetFileNameWithoutExtension(n) : "document";
+            var baseName = vm.DocumentName is { } n ? Path.GetFileNameWithoutExtension(n) : Strings.DefaultDocumentName;
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
-                Title = "Save a smaller copy",
-                SuggestedFileName = $"{baseName} - smaller.pdf",
+                Title = Strings.SaveASmallerCopy,
+                SuggestedFileName = Strings.SuggestedSmallerName(baseName) + ".pdf",
                 DefaultExtension = "pdf",
                 FileTypeChoices = [PdfFileType],
                 ShowOverwritePrompt = true,
@@ -1093,15 +1093,17 @@ public partial class MainWindow : Window
             await using (var stream = await file.OpenWriteAsync())
                 await stream.WriteAsync(bytes);
 
-            vm.Status = $"Saved a smaller copy: {result.ImagesReplaced} picture(s) re-encoded.";
+            vm.Status = Strings.Plural(result.ImagesReplaced,
+                Strings.SmallerCopySavedOne(result.ImagesReplaced),
+                Strings.SmallerCopySavedOther(result.ImagesReplaced));
         }
         catch (Exception ex)
         {
-            vm.Status = $"Could not shrink: {ex.Message}";
+            vm.Status = Strings.WithDetail(Strings.CouldNotShrink, ex.Message);
         }
     }
 
-    private static FilePickerFileType PdfFileType => new("PDF document")
+    private static FilePickerFileType PdfFileType => new(Strings.PdfDocument)
     {
         Patterns = ["*.pdf"],
         AppleUniformTypeIdentifiers = ["com.adobe.pdf"],

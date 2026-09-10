@@ -20,6 +20,20 @@ public sealed record SignatureItem(SignatureEntry Entry, global::Avalonia.Media.
 }
 
 /// <summary>
+/// A check-mark style with the words the Options flyout shows for it (#91). The
+/// enum is what the engine and the settings file speak; the label is what a
+/// person reads, and it is translated.
+/// </summary>
+public sealed record MarkStyleChoice(CheckMarkStyle Style, string Label);
+
+/// <summary>
+/// A text-box face with its display name. The PostScript name ("Times-Roman") is
+/// the cross-platform contract with the engine; the label ("Times") is what the
+/// toolbar shows. Brand names, so the label is the same in every language.
+/// </summary>
+public sealed record FontChoice(string PostScriptName, string Label);
+
+/// <summary>
 /// The document shell: open, view, check, save.
 ///
 /// The editing behaviour is not reimplemented here — MegaPDF.Core's reversible
@@ -114,10 +128,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public string WindowTitle => DocumentName is null
         ? "MegaPDF"
-        : $"{(IsDirty ? "• " : "")}{DocumentName} — MegaPDF";
+        : Strings.WindowTitleFormat($"{(IsDirty ? "• " : "")}{DocumentName}");
 
     [ObservableProperty]
-    private string _status = "Open a PDF to get started.";
+    private string _status = Strings.OpenToGetStarted;
 
     /// <summary>
     /// Display scale of the monitor the window is on. Set by the view; feeding it into
@@ -165,16 +179,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 // asking, so a wrong password re-prompts with the reason showing
                 // rather than dumping the user back to an empty window.
                 Status = password is null
-                    ? "This PDF is password-protected."
-                    : "That password did not work.";
+                    ? Strings.PdfIsPasswordProtected
+                    : Strings.PasswordDidNotWork;
                 PendingPasswordPath = path;
                 _ = RetryWithPasswordAsync(path, ask);
                 return;
             }
 
-            // Engine messages are already written for the person holding the document,
-            // not the developer (SDD §2.2) — surface as-is.
-            Status = ex.Message;
+            // The engine's message is English and carries the path; the person
+            // holding the document gets the reason in their own words (#91).
+            Status = DescribeLoadFailure(ex);
             return;
         }
 
@@ -199,9 +213,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PageIndicator));
         OnPropertyChanged(nameof(ShowEmptyState));
         IsDirty = false;
-        Status = $"{DocumentName} — {document.PageCount} page{(document.PageCount == 1 ? "" : "s")}. "
-                 + "Click a checkbox to tick it.";
+        Status = Strings.Plural(document.PageCount,
+            Strings.DocumentOpenedOne(DocumentName, document.PageCount),
+            Strings.DocumentOpenedOther(DocumentName, document.PageCount));
     }
+
+    /// <summary>
+    /// Words for a load failure, from the typed reason rather than the engine's
+    /// English message. The password case only lands here when there is no
+    /// prompt wired up to ask for one.
+    /// </summary>
+    private static string DescribeLoadFailure(PdfLoadException ex) => ex switch
+    {
+        { IsPasswordError: true } => Strings.PdfIsPasswordProtected,
+        { IsFileError: true } => Strings.FileCouldNotBeRead,
+        { IsFormatError: true } => Strings.FileNotValidPdf,
+        _ => Strings.FileCouldNotBeOpened(ex.ErrorCode),
+    };
 
     /// <summary>The document waiting on a password, if any.</summary>
     public string? PendingPasswordPath { get; private set; }
@@ -213,7 +241,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (string.IsNullOrEmpty(password))
         {
-            Status = "Opening cancelled.";
+            Status = Strings.OpeningCancelled;
             return;
         }
 
@@ -273,18 +301,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         switch (hit.Kind)
         {
             case PageHitKind.FormCheckbox:
-                Apply(new CheckboxToggleOperation(_document, pageIndex, hit.Field!), "Checkbox toggled.");
+                Apply(new CheckboxToggleOperation(_document, pageIndex, hit.Field!), Strings.CheckboxToggled);
                 break;
 
             case PageHitKind.DrawnCheckbox:
-                Apply(new AddMarkOperation(_document, pageIndex, hit.Bounds!.Value, MarkStyle), "Checked.");
+                Apply(new AddMarkOperation(_document, pageIndex, hit.Bounds!.Value, MarkStyle), Strings.Checked);
                 break;
 
             case PageHitKind.StampAnnotation when !hit.AnnotationId!.StartsWith("sig:", StringComparison.Ordinal):
                 // Check marks stay click-to-toggle: one size, one place, so there is
                 // nothing to select them for (SDD §3.2).
                 Apply(new RemoveMarkOperation(_document, pageIndex, hit.AnnotationId, hit.Bounds!.Value, MarkStyle),
-                      "Unchecked.");
+                      Strings.Unchecked);
                 break;
 
             case PageHitKind.StampAnnotation:
@@ -349,7 +377,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // after a crash must reproduce what was on screen, not what was ever done.
         if (op is not null)
             _journal.Record(op.ToJournalEntry(inverse: true));
-        AfterEdit(op?.PageIndex ?? 0, "Undone.");
+        AfterEdit(op?.PageIndex ?? 0, Strings.Undone);
     }
 
     [RelayCommand]
@@ -361,7 +389,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _undoStack.Redo();
         if (op is not null)
             _journal.Record(op.ToJournalEntry(inverse: false));
-        AfterEdit(op?.PageIndex ?? 0, "Redone.");
+        AfterEdit(op?.PageIndex ?? 0, Strings.Redone);
     }
 
     private void RaiseUndoRedo()
@@ -395,7 +423,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // Deliberately not implemented for Avalonia-on-Windows: MegaPDF.App is
             // the Windows product and already prints. A second, half-working
             // implementation would be a liability for a case that does not exist.
-            Status = "Printing from this build is available on macOS only.";
+            Status = Strings.PrintingMacOnly;
             return;
         }
 
@@ -410,7 +438,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            Status = $"Could not print: {ex.Message}";
+            Status = Strings.WithDetail(Strings.CouldNotPrint, ex.Message);
         }
         finally
         {
@@ -440,7 +468,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             // Not the same as "nothing to shrink": we have no file to read. Saying
             // so beats reporting that the pictures are already small (#68).
-            Status = "Reopen this document before shrinking it.";
+            Status = Strings.ReopenBeforeShrinking;
             return (new ImageShrinker.Result(0), null);
         }
 
@@ -519,14 +547,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 page.Rerender(DpiScale);
 
         Status = applied > 0
-            ? $"Recovered {applied} unsaved change{(applied == 1 ? "" : "s")} to {DocumentName}."
-            : $"Reopened {DocumentName}; there was nothing left to recover.";
+            ? Strings.Plural(applied,
+                Strings.RecoveredChangesOne(applied, DocumentName),
+                Strings.RecoveredChangesOther(applied, DocumentName))
+            : Strings.ReopenedNothingToRecover(DocumentName);
     }
 
     public void DiscardSession(RecoverableSession session)
     {
         RecoveryJournal.Discard(session.JournalPath);
-        Status = "Discarded the unsaved changes.";
+        Status = Strings.DiscardedUnsavedChanges;
     }
 
     // --- Keyboard traversal of the page (SDD §2.2 — required, #2) ---
@@ -544,14 +574,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         /// <summary>What a screen reader should say about this region.</summary>
         public string Describe(bool isChecked) => Kind switch
         {
-            PageHitKind.FormCheckbox => isChecked ? "Checkbox, ticked" : "Checkbox, not ticked",
-            PageHitKind.DrawnCheckbox => "Box to tick",
-            PageHitKind.FormTextField => "Form field",
-            PageHitKind.TextRun => "Text, editable",
-            PageHitKind.TextBox => "Added text",
-            PageHitKind.StampAnnotation => "Signature or tick mark",
-            PageHitKind.Whiteout => "Cover",
-            _ => "Page",
+            PageHitKind.FormCheckbox => isChecked ? Strings.RegionCheckboxTicked : Strings.RegionCheckboxNotTicked,
+            PageHitKind.DrawnCheckbox => Strings.RegionBoxToTick,
+            PageHitKind.FormTextField => Strings.RegionFormField,
+            PageHitKind.TextRun => Strings.RegionTextEditable,
+            PageHitKind.TextBox => Strings.RegionAddedText,
+            PageHitKind.StampAnnotation => Strings.RegionSignatureOrMark,
+            PageHitKind.Whiteout => Strings.RegionCover,
+            _ => Strings.RegionPage,
         };
     }
 
@@ -605,7 +635,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
 
         PageFocus = null;
-        Status = "Nothing on this document can be changed from the keyboard.";
+        Status = Strings.NothingKeyboardEditable;
     }
 
     /// <summary>Activates the focused region — the keyboard's equivalent of a click.</summary>
@@ -683,9 +713,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Selection = selection;
         Status = selection.Kind switch
         {
-            SelectionKind.Signature => "Drag to move, corners to resize, Delete to remove.",
-            SelectionKind.TextBox => "Drag to move, double-click to edit, Delete to remove.",
-            _ => "Press Delete to remove this cover.",
+            SelectionKind.Signature => Strings.SignatureSelectedHint,
+            SelectionKind.TextBox => Strings.TextBoxSelectedHint,
+            _ => Strings.CoverSelectedHint,
         };
     }
 
@@ -709,9 +739,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Selection = null;
         Apply(op, sel.Kind switch
         {
-            SelectionKind.Signature => "Signature removed.",
-            SelectionKind.Whiteout => "Cover removed.",
-            _ => "Text removed.",
+            SelectionKind.Signature => Strings.SignatureRemoved,
+            SelectionKind.Whiteout => Strings.CoverRemoved,
+            _ => Strings.TextRemoved,
         });
     }
 
@@ -758,8 +788,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    public IReadOnlyList<CheckMarkStyle> MarkStyles { get; } =
-        [CheckMarkStyle.Cross, CheckMarkStyle.Check, CheckMarkStyle.FilledSquare];
+    public IReadOnlyList<MarkStyleChoice> MarkStyleChoices { get; } =
+    [
+        new(CheckMarkStyle.Cross, Strings.MarkStyleCross),
+        new(CheckMarkStyle.Check, Strings.MarkStyleCheck),
+        new(CheckMarkStyle.FilledSquare, Strings.MarkStyleFilledSquare),
+    ];
+
+    /// <summary>What the Options flyout binds: the choice whose style is current.</summary>
+    public MarkStyleChoice? SelectedMarkStyle
+    {
+        get => MarkStyleChoices.FirstOrDefault(c => c.Style == MarkStyle);
+        set
+        {
+            if (value is null || value.Style == MarkStyle)
+                return;
+            MarkStyle = value.Style;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>
     /// Bakes marks, signatures and form values permanently into the page on save
@@ -808,9 +855,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public string ModeHint => Mode switch
     {
-        PageMode.AddText => "Click where the new text should go — Esc cancels",
-        PageMode.Whiteout => "Drag over what you want to cover — Esc cancels",
-        _ => IsPlacingSignature ? "Click where the signature should go — Esc cancels" : "",
+        PageMode.AddText => Strings.ModeHintAddText,
+        PageMode.Whiteout => Strings.ModeHintWhiteout,
+        _ => IsPlacingSignature ? Strings.ModeHintPlaceSignature : "",
     };
 
     /// <summary>The face and size the next text box is written in (SDD §3.1: three faces).</summary>
@@ -821,6 +868,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private double _textSize = 12;
 
     public IReadOnlyList<string> TextFonts { get; } = StandardTextBoxFonts.All;
+
+    /// <summary>The three faces with the names the toolbar shows for them.</summary>
+    public IReadOnlyList<FontChoice> TextFontChoices { get; } =
+    [
+        new(StandardTextBoxFonts.Sans, "Helvetica"),
+        new(StandardTextBoxFonts.Serif, "Times"),
+        new(StandardTextBoxFonts.Mono, "Courier"),
+    ];
+
+    /// <summary>What the font box binds: the choice whose face is current.</summary>
+    public FontChoice? SelectedTextFont
+    {
+        get => TextFontChoices.FirstOrDefault(c => c.PostScriptName == TextFont);
+        set
+        {
+            if (value is null || value.PostScriptName == TextFont)
+                return;
+            TextFont = value.PostScriptName;
+            OnPropertyChanged();
+        }
+    }
     public IReadOnlyList<double> TextSizes { get; } = [8, 9, 10, 11, 12, 14, 16, 18, 24];
 
     [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
@@ -840,7 +908,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ModeHint));
         OnPropertyChanged(nameof(IsModeActive));
         if (mode == PageMode.Select)
-            Status = "Ready.";
+            Status = Strings.Ready;
     }
 
     public void CancelModes()
@@ -871,11 +939,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // the exception: the person is holding a form, not a stack trace.
             Status = ex.Reason switch
             {
-                TextEditFailure.NotExtractable =>
-                    "That text is part of a scanned image, so it cannot be edited. "
-                    + "You can cover it and type over the top instead.",
-                _ => "That text uses a font that cannot write those characters, "
-                     + "and no close substitute was available.",
+                TextEditFailure.NotExtractable => Strings.TextIsScanned,
+                _ => Strings.TextFontCannotWrite,
             };
             return;
         }
@@ -887,8 +952,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _journal.Record(operation.ToJournalEntry(inverse: false));
 
         var note = operation.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont
-            ? "Text edited — the original font could not write that, so a close match was used."
-            : "Text edited.";
+            ? Strings.TextEditedSubstitutedFont
+            : Strings.TextEdited;
         AfterEdit(pageIndex, note);
     }
 
@@ -899,7 +964,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         Apply(new FormTextEditOperation(_document, pageIndex, field, value),
-              string.IsNullOrEmpty(value) ? "Field cleared." : "Field filled.");
+              string.IsNullOrEmpty(value) ? Strings.FieldCleared : Strings.FieldFilled);
     }
 
     /// <summary>
@@ -913,7 +978,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
-        Apply(new DeleteLineOperation(_document, pageIndex, line), "Text deleted.");
+        Apply(new DeleteLineOperation(_document, pageIndex, line), Strings.TextDeleted);
     }
 
     /// <summary>
@@ -930,13 +995,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             // The engine rejects anything outside the three, and it should: a
             // substituted face would silently break the cross-platform contract.
-            Status = $"\"{fontName}\" is not one of the three available faces.";
+            Status = Strings.FontNotAvailable(fontName);
             return;
         }
 
         Apply(new RestyleTextBoxOperation(_document, pageIndex, box.ObjectIndex, box,
                                           newText, fontName, fontSize),
-              "Text updated.");
+              Strings.TextUpdated);
     }
 
     /// <summary>Moves an added text box (SDD §3.3 drag/nudge).</summary>
@@ -946,7 +1011,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         Apply(new MoveTextBoxOperation(_document, pageIndex, box.ObjectIndex, box.Bounds, newBounds),
-              "Text moved.");
+              Strings.TextMoved);
     }
 
     /// <summary>Moves or resizes a placed signature (SDD §3.3).</summary>
@@ -956,7 +1021,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         Apply(new MoveSignatureOperation(_document, pageIndex, annotationId, oldBounds, newBounds),
-              "Signature moved.");
+              Strings.SignatureMoved);
     }
 
     /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
@@ -966,7 +1031,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         Apply(new AddTextBoxOperation(_document, pageIndex, text, TextSize, topLeft, TextFont),
-              "Text added.");
+              Strings.TextAdded);
         SetMode(PageMode.Select);
     }
 
@@ -980,7 +1045,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        Apply(new AddWhiteoutOperation(_document, pageIndex, bounds), "Covered.");
+        Apply(new AddWhiteoutOperation(_document, pageIndex, bounds), Strings.Covered);
         SetMode(PageMode.Select);
     }
 
@@ -1013,8 +1078,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string MatchSummary => string.IsNullOrEmpty(SearchTerm)
         ? ""
         : MatchCount == 0
-            ? "Not found"
-            : $"{CurrentMatchIndex + 1} of {MatchCount}";
+            ? Strings.NotFound
+            : Strings.MatchOf(CurrentMatchIndex + 1, MatchCount);
 
     /// <summary>Raised when the view should open an editor over a line of body text.</summary>
     public event Action<int, PdfTextLine>? EditLineRequested;
@@ -1155,7 +1220,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         var entry = _signatures.Add(name, png);
         LoadSignatures();
-        Status = $"Saved the signature \"{entry.Name}\". Click where it should go.";
+        Status = Strings.SignatureSavedClickToPlace(entry.Name);
         return entry;
     }
 
@@ -1163,7 +1228,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         _signatures.Remove(id);
         LoadSignatures();
-        Status = "Signature deleted.";
+        Status = Strings.SignatureDeleted;
     }
 
     public void BeginPlacing(SignatureItem item) => BeginPlacing(item.Entry);
@@ -1171,7 +1236,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void BeginPlacing(SignatureEntry entry)
     {
         PendingSignature = entry;
-        Status = $"Click where \"{entry.Name}\" should go.";
+        Status = Strings.ClickWhereSignatureGoes(entry.Name);
     }
 
     public void CancelPlacing()
@@ -1181,7 +1246,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         PendingSignature = null;
         OnPropertyChanged(nameof(ModeHint));
         OnPropertyChanged(nameof(IsModeActive));
-        Status = "Placement cancelled.";
+        Status = Strings.PlacementCancelled;
     }
 
     /// <summary>
@@ -1200,11 +1265,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            Status = $"Could not read that signature: {ex.Message}";
+            Status = Strings.WithDetail(Strings.CouldNotReadSignature, ex.Message);
             return;
         }
 
-        PlaceSignature(pageIndex, point, image, $"Placed \"{pending.Name}\".");
+        PlaceSignature(pageIndex, point, image, Strings.PlacedSignature(pending.Name));
     }
 
     /// <summary>
@@ -1257,7 +1322,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (DocumentPath is { } saved)
             _journal.MarkSaved(saved);
         IsDirty = false;
-        Status = $"Saved {DocumentName}.";
+        Status = Strings.SavedFile(DocumentName);
     }
 
     /// <summary>
@@ -1279,7 +1344,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DocumentPath = path;
         DocumentName = Path.GetFileName(path);
         IsDirty = false;
-        Status = $"Saved {DocumentName}.";
+        Status = Strings.SavedFile(DocumentName);
     }
 
     /// <summary>
@@ -1354,12 +1419,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         IsDirty = false;
         Status = newPath is null
-            ? $"Saved {fileName}. It cannot be shrunk from here — reopen it first."
-            : $"Saved {fileName}.";
+            ? Strings.SavedCannotShrink(fileName)
+            : Strings.SavedFile(fileName);
     }
 
+    /// <summary>
+    /// A save that failed, in words. The one typed failure — the engine could not
+    /// read back what it wrote, so the original was left alone — has its own
+    /// sentence; anything else gets the lead sentence and the exception's message.
+    /// </summary>
     public void ReportSaveFailure(Exception ex) =>
-        Status = $"Could not save: {ex.Message}";
+        Status = ex is VerifiedSave.UnreadableOutputException
+            ? Strings.SavedDocumentUnreadable
+            : Strings.WithDetail(Strings.CouldNotSave, ex.Message);
 
     // --- Zoom ---
 
@@ -1410,7 +1482,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(PageIndicator))]
     private int _currentPage = 1;
 
-    public string PageIndicator => Pages.Count > 0 ? $"Page {CurrentPage} of {Pages.Count}" : "";
+    public string PageIndicator => Pages.Count > 0 ? Strings.PageOf(CurrentPage, Pages.Count) : "";
 
     private static double NextStop(double current, bool forward)
     {

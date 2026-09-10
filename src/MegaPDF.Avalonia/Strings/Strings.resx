@@ -1,0 +1,575 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    English catalogue for the macOS (Avalonia) app (#91). The source of truth:
+    tools/gen_strings.py generates Strings.g.cs from it, and Strings.fr.resx must
+    carry the same keys. Keys are PascalCase and never contain a dot; placeholders
+    are {0}, {1}. Plural forms are two keys, ...One and ...Other, chosen by
+    Strings.Plural. A key whose comment says "technical detail follows" is a lead
+    sentence that Strings.WithDetail appends an exception message to.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Open" xml:space="preserve">
+    <value>Open</value>
+    <comment>Toolbar button and password dialog button</comment>
+  </data>
+  <data name="OpenAPdf" xml:space="preserve">
+    <value>Open a PDF</value>
+    <comment>Open tooltip and picker title</comment>
+  </data>
+  <data name="OpenAPdfEllipsis" xml:space="preserve">
+    <value>Open a PDF…</value>
+    <comment>Empty-state button</comment>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SaveAs" xml:space="preserve">
+    <value>Save As</value>
+  </data>
+  <data name="SaveACopy" xml:space="preserve">
+    <value>Save a copy</value>
+    <comment>Save As picker title</comment>
+  </data>
+  <data name="SaveASmallerCopy" xml:space="preserve">
+    <value>Save a smaller copy</value>
+    <comment>Shrink picker title</comment>
+  </data>
+  <data name="SaveSmallerCopyForEmail" xml:space="preserve">
+    <value>Save a smaller copy for email</value>
+    <comment>Shrink tooltip</comment>
+  </data>
+  <data name="Shrink" xml:space="preserve">
+    <value>Shrink</value>
+    <comment>Toolbar label</comment>
+  </data>
+  <data name="Print" xml:space="preserve">
+    <value>Print</value>
+  </data>
+  <data name="Sign" xml:space="preserve">
+    <value>Sign</value>
+  </data>
+  <data name="AddText" xml:space="preserve">
+    <value>Add text</value>
+  </data>
+  <data name="Cover" xml:space="preserve">
+    <value>Cover</value>
+    <comment>Toolbar verb: cover an area with whiteout</comment>
+  </data>
+  <data name="Undo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="Redo" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="ZoomOut" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="ZoomIn" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="ActualSize" xml:space="preserve">
+    <value>Actual size</value>
+  </data>
+  <data name="FitWidth" xml:space="preserve">
+    <value>Fit width</value>
+  </data>
+  <data name="FitPage" xml:space="preserve">
+    <value>Fit page</value>
+  </data>
+  <data name="Options" xml:space="preserve">
+    <value>Options</value>
+  </data>
+  <data name="Recent" xml:space="preserve">
+    <value>Recent</value>
+    <comment>Empty-state heading</comment>
+  </data>
+  <data name="EmptyStateTagline" xml:space="preserve">
+    <value>Fill in a form, tick the boxes, sign it, and save.</value>
+    <comment>Empty state</comment>
+  </data>
+  <data name="YourSignatures" xml:space="preserve">
+    <value>Your signatures</value>
+  </data>
+  <data name="NoSignaturesYet" xml:space="preserve">
+    <value>Nothing saved yet — draw one below.</value>
+  </data>
+  <data name="DrawNewSignature" xml:space="preserve">
+    <value>Draw a new signature…</value>
+  </data>
+  <data name="UsePhotoOfSignature" xml:space="preserve">
+    <value>Use a photo of your signature…</value>
+  </data>
+  <data name="ChoosePhotoOfSignature" xml:space="preserve">
+    <value>Choose a photo of your signature</value>
+    <comment>Image picker title</comment>
+  </data>
+  <data name="SignatureDefaultName" xml:space="preserve">
+    <value>Signature</value>
+    <comment>Name given to a signature when none was typed</comment>
+  </data>
+  <data name="TickMarksLookLike" xml:space="preserve">
+    <value>Tick marks look like</value>
+  </data>
+  <data name="MarkStyleCross" xml:space="preserve">
+    <value>Cross</value>
+    <comment>CheckMarkStyle.Cross</comment>
+  </data>
+  <data name="MarkStyleCheck" xml:space="preserve">
+    <value>Check</value>
+    <comment>CheckMarkStyle.Check</comment>
+  </data>
+  <data name="MarkStyleFilledSquare" xml:space="preserve">
+    <value>Filled square</value>
+    <comment>CheckMarkStyle.FilledSquare</comment>
+  </data>
+  <data name="FlattenWhenSaving" xml:space="preserve">
+    <value>Flatten when saving</value>
+  </data>
+  <data name="FlattenExplanation" xml:space="preserve">
+    <value>Flattening bakes ticks and signatures into the page. They cannot be moved or removed afterwards.</value>
+  </data>
+  <data name="FindInDocument" xml:space="preserve">
+    <value>Find in document</value>
+    <comment>Find box watermark</comment>
+  </data>
+  <data name="Previous" xml:space="preserve">
+    <value>Previous</value>
+    <comment>Find bar: previous match</comment>
+  </data>
+  <data name="Next" xml:space="preserve">
+    <value>Next</value>
+    <comment>Find bar: next match</comment>
+  </data>
+  <data name="Done" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="NotFound" xml:space="preserve">
+    <value>Not found</value>
+    <comment>Find summary</comment>
+  </data>
+  <data name="MatchOf" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>Find summary: current match of total</comment>
+  </data>
+  <data name="PageOf" xml:space="preserve">
+    <value>Page {0} of {1}</value>
+    <comment>Status bar page indicator</comment>
+  </data>
+  <data name="WindowTitleFormat" xml:space="preserve">
+    <value>{0} — MegaPDF</value>
+    <comment>{0} is the document name, possibly prefixed with the unsaved bullet</comment>
+  </data>
+  <data name="ModeHintAddText" xml:space="preserve">
+    <value>Click where the new text should go — Esc cancels</value>
+  </data>
+  <data name="ModeHintWhiteout" xml:space="preserve">
+    <value>Drag over what you want to cover — Esc cancels</value>
+  </data>
+  <data name="ModeHintPlaceSignature" xml:space="preserve">
+    <value>Click where the signature should go — Esc cancels</value>
+  </data>
+  <data name="TypeThenEnter" xml:space="preserve">
+    <value>Type, then press Enter</value>
+    <comment>Inline editor watermark</comment>
+  </data>
+  <data name="OpenToGetStarted" xml:space="preserve">
+    <value>Open a PDF to get started.</value>
+    <comment>Initial status</comment>
+  </data>
+  <data name="PdfIsPasswordProtected" xml:space="preserve">
+    <value>This PDF is password-protected.</value>
+  </data>
+  <data name="PasswordDidNotWork" xml:space="preserve">
+    <value>That password did not work.</value>
+  </data>
+  <data name="FileCouldNotBeRead" xml:space="preserve">
+    <value>That file could not be read.</value>
+    <comment>PdfLoadException FPDF_ERR_FILE</comment>
+  </data>
+  <data name="FileNotValidPdf" xml:space="preserve">
+    <value>That file is not a valid PDF.</value>
+    <comment>PdfLoadException FPDF_ERR_FORMAT</comment>
+  </data>
+  <data name="FileCouldNotBeOpened" xml:space="preserve">
+    <value>That file could not be opened (error {0}).</value>
+    <comment>PdfLoadException, any other code</comment>
+  </data>
+  <data name="OpeningCancelled" xml:space="preserve">
+    <value>Opening cancelled.</value>
+  </data>
+  <data name="DocumentOpenedOne" xml:space="preserve">
+    <value>{0} — {1} page. Click a checkbox to tick it.</value>
+    <comment>Status after opening; {0} file name, {1} page count (singular)</comment>
+  </data>
+  <data name="DocumentOpenedOther" xml:space="preserve">
+    <value>{0} — {1} pages. Click a checkbox to tick it.</value>
+    <comment>Status after opening; {0} file name, {1} page count (plural)</comment>
+  </data>
+  <data name="FileNotLocal" xml:space="preserve">
+    <value>That file is not on the local disk. Copy it somewhere local and try again.</value>
+  </data>
+  <data name="FileMovedOrDeleted" xml:space="preserve">
+    <value>That file has moved or been deleted. Open it again to restore access.</value>
+    <comment>Recents</comment>
+  </data>
+  <data name="FileCannotBeOpenedFromHere" xml:space="preserve">
+    <value>That file cannot be opened for editing from here. Use Open to pick it again.</value>
+    <comment>Recents</comment>
+  </data>
+  <data name="Ready" xml:space="preserve">
+    <value>Ready.</value>
+  </data>
+  <data name="CheckboxToggled" xml:space="preserve">
+    <value>Checkbox toggled.</value>
+    <comment>Form checkbox flipped either way</comment>
+  </data>
+  <data name="Checked" xml:space="preserve">
+    <value>Checked.</value>
+  </data>
+  <data name="Unchecked" xml:space="preserve">
+    <value>Unchecked.</value>
+  </data>
+  <data name="Undone" xml:space="preserve">
+    <value>Undone.</value>
+  </data>
+  <data name="Redone" xml:space="preserve">
+    <value>Redone.</value>
+  </data>
+  <data name="TextEdited" xml:space="preserve">
+    <value>Text edited.</value>
+  </data>
+  <data name="TextEditedSubstitutedFont" xml:space="preserve">
+    <value>Text edited — the original font could not write that, so a close match was used.</value>
+  </data>
+  <data name="TextIsScanned" xml:space="preserve">
+    <value>That text is part of a scanned image, so it cannot be edited. You can cover it and type over the top instead.</value>
+    <comment>TextEditFailure.NotExtractable</comment>
+  </data>
+  <data name="TextFontCannotWrite" xml:space="preserve">
+    <value>That text uses a font that cannot write those characters, and no close substitute was available.</value>
+    <comment>TextEditFailure.NoUsableFont</comment>
+  </data>
+  <data name="FieldCleared" xml:space="preserve">
+    <value>Field cleared.</value>
+  </data>
+  <data name="FieldFilled" xml:space="preserve">
+    <value>Field filled.</value>
+  </data>
+  <data name="TextDeleted" xml:space="preserve">
+    <value>Text deleted.</value>
+  </data>
+  <data name="TextUpdated" xml:space="preserve">
+    <value>Text updated.</value>
+  </data>
+  <data name="TextMoved" xml:space="preserve">
+    <value>Text moved.</value>
+  </data>
+  <data name="TextAdded" xml:space="preserve">
+    <value>Text added.</value>
+  </data>
+  <data name="TextRemoved" xml:space="preserve">
+    <value>Text removed.</value>
+  </data>
+  <data name="FontNotAvailable" xml:space="preserve">
+    <value>"{0}" is not one of the three available faces.</value>
+  </data>
+  <data name="Covered" xml:space="preserve">
+    <value>Covered.</value>
+    <comment>Whiteout placed</comment>
+  </data>
+  <data name="CoverRemoved" xml:space="preserve">
+    <value>Cover removed.</value>
+  </data>
+  <data name="SignatureMoved" xml:space="preserve">
+    <value>Signature moved.</value>
+  </data>
+  <data name="SignatureRemoved" xml:space="preserve">
+    <value>Signature removed.</value>
+    <comment>Removed from the page</comment>
+  </data>
+  <data name="SignatureDeleted" xml:space="preserve">
+    <value>Signature deleted.</value>
+    <comment>Removed from the library</comment>
+  </data>
+  <data name="SignatureSelectedHint" xml:space="preserve">
+    <value>Drag to move, corners to resize, Delete to remove.</value>
+  </data>
+  <data name="TextBoxSelectedHint" xml:space="preserve">
+    <value>Drag to move, double-click to edit, Delete to remove.</value>
+  </data>
+  <data name="CoverSelectedHint" xml:space="preserve">
+    <value>Press Delete to remove this cover.</value>
+  </data>
+  <data name="NothingKeyboardEditable" xml:space="preserve">
+    <value>Nothing on this document can be changed from the keyboard.</value>
+  </data>
+  <data name="RegionCheckboxTicked" xml:space="preserve">
+    <value>Checkbox, ticked</value>
+  </data>
+  <data name="RegionCheckboxNotTicked" xml:space="preserve">
+    <value>Checkbox, not ticked</value>
+  </data>
+  <data name="RegionBoxToTick" xml:space="preserve">
+    <value>Box to tick</value>
+    <comment>A drawn (non-form) box</comment>
+  </data>
+  <data name="RegionFormField" xml:space="preserve">
+    <value>Form field</value>
+  </data>
+  <data name="RegionTextEditable" xml:space="preserve">
+    <value>Text, editable</value>
+  </data>
+  <data name="RegionAddedText" xml:space="preserve">
+    <value>Added text</value>
+  </data>
+  <data name="RegionSignatureOrMark" xml:space="preserve">
+    <value>Signature or tick mark</value>
+  </data>
+  <data name="RegionCover" xml:space="preserve">
+    <value>Cover</value>
+    <comment>A placed whiteout</comment>
+  </data>
+  <data name="RegionPage" xml:space="preserve">
+    <value>Page</value>
+  </data>
+  <data name="PageRegionDescription" xml:space="preserve">
+    <value>Page {0}, {1}</value>
+    <comment>{0} page number, {1} region description</comment>
+  </data>
+  <data name="SignatureSavedClickToPlace" xml:space="preserve">
+    <value>Saved the signature "{0}". Click where it should go.</value>
+  </data>
+  <data name="ClickWhereSignatureGoes" xml:space="preserve">
+    <value>Click where "{0}" should go.</value>
+  </data>
+  <data name="PlacedSignature" xml:space="preserve">
+    <value>Placed "{0}".</value>
+  </data>
+  <data name="PlacementCancelled" xml:space="preserve">
+    <value>Placement cancelled.</value>
+  </data>
+  <data name="CouldNotReadSignature" xml:space="preserve">
+    <value>Could not read that signature.</value>
+    <comment>Technical detail follows</comment>
+  </data>
+  <data name="CouldNotReadImage" xml:space="preserve">
+    <value>Could not read that image.</value>
+    <comment>Technical detail follows</comment>
+  </data>
+  <data name="CouldNotSaveSignature" xml:space="preserve">
+    <value>Could not save that signature.</value>
+    <comment>Technical detail follows</comment>
+  </data>
+  <data name="SavedFile" xml:space="preserve">
+    <value>Saved {0}.</value>
+  </data>
+  <data name="SavedCannotShrink" xml:space="preserve">
+    <value>Saved {0}. It cannot be shrunk from here — reopen it first.</value>
+  </data>
+  <data name="CouldNotSave" xml:space="preserve">
+    <value>Could not save.</value>
+    <comment>Technical detail follows</comment>
+  </data>
+  <data name="SavedDocumentUnreadable" xml:space="preserve">
+    <value>The saved document could not be read back, so the original was left untouched.</value>
+    <comment>VerifiedSave.UnreadableOutputException</comment>
+  </data>
+  <data name="NowhereToSave" xml:space="preserve">
+    <value>There is nowhere to save this back to. Use Save As to choose a file.</value>
+  </data>
+  <data name="SuggestedCopyName" xml:space="preserve">
+    <value>{0} copy</value>
+    <comment>Save As suggested file name, without extension</comment>
+  </data>
+  <data name="SuggestedSmallerName" xml:space="preserve">
+    <value>{0} - smaller</value>
+    <comment>Shrink suggested file name, without extension</comment>
+  </data>
+  <data name="DefaultDocumentName" xml:space="preserve">
+    <value>document</value>
+    <comment>Suggested file name when the document has none</comment>
+  </data>
+  <data name="PdfDocument" xml:space="preserve">
+    <value>PDF document</value>
+    <comment>File-type name in pickers</comment>
+  </data>
+  <data name="SaveBeforeShrinking" xml:space="preserve">
+    <value>Save your changes first, then shrink the saved file.</value>
+  </data>
+  <data name="ReopenBeforeShrinking" xml:space="preserve">
+    <value>Reopen this document before shrinking it.</value>
+  </data>
+  <data name="NothingToShrink" xml:space="preserve">
+    <value>The pictures in this document are already small — nothing to shrink.</value>
+  </data>
+  <data name="SmallerCopySavedOne" xml:space="preserve">
+    <value>Saved a smaller copy: {0} picture re-encoded.</value>
+  </data>
+  <data name="SmallerCopySavedOther" xml:space="preserve">
+    <value>Saved a smaller copy: {0} pictures re-encoded.</value>
+  </data>
+  <data name="CouldNotShrink" xml:space="preserve">
+    <value>Could not shrink.</value>
+    <comment>Technical detail follows</comment>
+  </data>
+  <data name="PrintingMacOnly" xml:space="preserve">
+    <value>Printing from this build is available on macOS only.</value>
+  </data>
+  <data name="CouldNotPrint" xml:space="preserve">
+    <value>Could not print.</value>
+    <comment>Technical detail follows</comment>
+  </data>
+  <data name="PrintComponentsNotLoaded" xml:space="preserve">
+    <value>Could not load the system printing components.</value>
+  </data>
+  <data name="PrintComponentsUnavailable" xml:space="preserve">
+    <value>The system print components are unavailable.</value>
+  </data>
+  <data name="PrintPathNotPrepared" xml:space="preserve">
+    <value>The document path could not be prepared.</value>
+  </data>
+  <data name="PrintDocumentNotPrepared" xml:space="preserve">
+    <value>The document could not be prepared for printing.</value>
+  </data>
+  <data name="PrintOperationNotCreated" xml:space="preserve">
+    <value>The print operation could not be created.</value>
+  </data>
+  <data name="SentToPrinter" xml:space="preserve">
+    <value>Sent to the printer.</value>
+  </data>
+  <data name="PrintingCancelled" xml:space="preserve">
+    <value>Printing cancelled.</value>
+  </data>
+  <data name="RecoveredChangesOne" xml:space="preserve">
+    <value>Recovered {0} unsaved change to {1}.</value>
+  </data>
+  <data name="RecoveredChangesOther" xml:space="preserve">
+    <value>Recovered {0} unsaved changes to {1}.</value>
+  </data>
+  <data name="ReopenedNothingToRecover" xml:space="preserve">
+    <value>Reopened {0}; there was nothing left to recover.</value>
+  </data>
+  <data name="DiscardedUnsavedChanges" xml:space="preserve">
+    <value>Discarded the unsaved changes.</value>
+  </data>
+  <data name="UnsavedChanges" xml:space="preserve">
+    <value>Unsaved changes</value>
+    <comment>Recovery window title</comment>
+  </data>
+  <data name="RecoveryHeadline" xml:space="preserve">
+    <value>MegaPDF closed with unsaved changes to "{0}".</value>
+  </data>
+  <data name="RecoveryChangesOne" xml:space="preserve">
+    <value>{0} change was made and never saved, last on {1}.</value>
+    <comment>{1} is a culture-formatted date and time</comment>
+  </data>
+  <data name="RecoveryChangesOther" xml:space="preserve">
+    <value>{0} changes were made and never saved, last on {1}.</value>
+    <comment>{1} is a culture-formatted date and time</comment>
+  </data>
+  <data name="RecoveryExplanation" xml:space="preserve">
+    <value>Restoring reopens the document and puts them back; nothing is written to the file until you save.</value>
+  </data>
+  <data name="DiscardThem" xml:space="preserve">
+    <value>Discard them</value>
+  </data>
+  <data name="DecideLater" xml:space="preserve">
+    <value>Decide later</value>
+  </data>
+  <data name="Restore" xml:space="preserve">
+    <value>Restore</value>
+  </data>
+  <data name="PasswordNeeded" xml:space="preserve">
+    <value>Password needed</value>
+    <comment>Window title</comment>
+  </data>
+  <data name="Password" xml:space="preserve">
+    <value>Password</value>
+    <comment>Watermark</comment>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="PasswordPrompt" xml:space="preserve">
+    <value>"{0}" is password-protected. Enter its password to open it.</value>
+  </data>
+  <data name="PasswordRetryPrompt" xml:space="preserve">
+    <value>That password did not open "{0}". Try again?</value>
+  </data>
+  <data name="AddASignature" xml:space="preserve">
+    <value>Add a signature</value>
+    <comment>Window title</comment>
+  </data>
+  <data name="SignInTheBox" xml:space="preserve">
+    <value>Sign in the box below, the way you would on paper.</value>
+  </data>
+  <data name="Clear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Name" xml:space="preserve">
+    <value>Name</value>
+    <comment>Signature name label</comment>
+  </data>
+  <data name="NameExample" xml:space="preserve">
+    <value>e.g. Dave</value>
+    <comment>Signature name watermark</comment>
+  </data>
+</root>

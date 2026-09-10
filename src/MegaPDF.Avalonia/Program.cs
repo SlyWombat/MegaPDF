@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
@@ -12,10 +13,55 @@ internal static class Program
     // designer and `dotnet run` both look for BuildAvaloniaApp by convention.
     [STAThread]
     public static int Main(string[] args)
-        => args.Contains("--render-check") ? RenderCheck(args)
-         : args.Contains("--self-test") ? SelfTest(args)
-         : args.Contains("--print-check") ? PrintCheck(args)
-         : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    {
+        // Before anything reads a string: the toolbar labels are resolved when the
+        // window is built, and the diagnostics below print Strings.* too.
+        ApplyLanguage(args);
+
+        return args.Contains("--render-check") ? RenderCheck(args)
+             : args.Contains("--self-test") ? SelfTest(args)
+             : args.Contains("--print-check") ? PrintCheck(args)
+             : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>
+    /// Which language the app runs in (#91). `--language fr-CA` wins, so a
+    /// French run can be checked on an English machine; otherwise, on macOS, the
+    /// language the person chose in System Settings — .NET's own default comes
+    /// from the POSIX locale, which a Dock-launched .app is not given. Anywhere
+    /// else .NET's default stands.
+    ///
+    /// Never fatal: a tag that does not parse is ignored, and the app comes up in
+    /// whatever .NET picked. There is no English-only fallback to force, because
+    /// the neutral catalogue *is* English.
+    /// </summary>
+    private static void ApplyLanguage(string[] args)
+    {
+        try
+        {
+            string? tag = null;
+            var flag = Array.IndexOf(args, "--language");
+            if (flag >= 0 && flag + 1 < args.Length)
+                tag = args[flag + 1];
+            else if (OperatingSystem.IsMacOS())
+                tag = Platform.MacLanguage.PreferredLanguageTag();
+
+            if (string.IsNullOrWhiteSpace(tag))
+                return;
+
+            var culture = CultureInfo.GetCultureInfo(tag);
+            // Both halves: the UI culture picks the catalogue, the culture formats
+            // the numbers and dates that go into it.
+            CultureInfo.DefaultThreadCurrentUICulture = culture;
+            CultureInfo.DefaultThreadCurrentCulture = culture;
+            CultureInfo.CurrentUICulture = culture;
+            CultureInfo.CurrentCulture = culture;
+        }
+        catch (Exception)
+        {
+            // A bad tag must never stop the app.
+        }
+    }
 
     /// <summary>Where --screenshot writes, read by App once the window is up.</summary>
     internal static string? ScreenshotPath;
@@ -156,6 +202,15 @@ internal static class Program
             Console.Error.WriteLine("usage: MegaPDF --self-test <fixtures-dir>");
             return 2;
         }
+
+        // English, whatever the machine speaks: the checks compare against
+        // Strings.* so they hold in any language, but the PASS/FAIL lines are read
+        // by people in CI logs, and a French runner must not make them differ.
+        var english = CultureInfo.GetCultureInfo("en-US");
+        CultureInfo.DefaultThreadCurrentUICulture = english;
+        CultureInfo.DefaultThreadCurrentCulture = english;
+        CultureInfo.CurrentUICulture = english;
+        CultureInfo.CurrentCulture = english;
 
         // Isolated state, wiped afterwards: the checks change settings (flatten,
         // mark style) and add signatures, and none of that belongs in the real
@@ -304,7 +359,7 @@ internal static class Program
             vm.Search("checkbox");
             Check("a term in the document is found", vm.MatchCount > 0);
             Check("and the first hit is selected", vm.CurrentMatchIndex == 0);
-            Check("the summary counts it", vm.MatchSummary == $"1 of {vm.MatchCount}");
+            Check("the summary counts it", vm.MatchSummary == Strings.MatchOf(1, vm.MatchCount));
 
             var first = vm.CurrentMatchIndex;
             vm.FindNextCommand.Execute(null);
@@ -318,7 +373,7 @@ internal static class Program
 
             vm.Search("zzz-not-in-this-document");
             Check("a term that is absent reports none", vm.MatchCount == 0);
-            Check("and says so in words", vm.MatchSummary == "Not found");
+            Check("and says so in words", vm.MatchSummary == Strings.NotFound);
 
             vm.CloseFind();
             Check("closing find clears the term", vm.SearchTerm.Length == 0);
@@ -672,7 +727,7 @@ internal static class Program
             if (found)
             {
                 Check("and it announces itself meaningfully",
-                      vm.PageFocus!.Describe(false) == "Box to tick");
+                      vm.PageFocus!.Describe(false) == Strings.RegionBoxToTick);
 
                 vm.ActivateFocus();
                 Check("Enter ticks it, exactly as a click would", vm.IsDirty);

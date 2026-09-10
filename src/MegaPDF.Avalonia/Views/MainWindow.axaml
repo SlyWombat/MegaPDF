@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
         xmlns:vm="using:MegaPDF.Avalonia.ViewModels"
         x:Class="MegaPDF.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
@@ -25,7 +26,7 @@
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Open" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Open}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="SaveButton" Command="{Binding SaveCommand}" >
@@ -33,7 +34,7 @@
             <Path Data="{StaticResource IconSave}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Save" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Save}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="SaveAsButton" IsEnabled="{Binding IsDocumentOpen}" >
@@ -41,7 +42,7 @@
             <Path Data="{StaticResource IconSaveAs}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Save As" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.SaveAs}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="PrintButton" Command="{Binding PrintCommand}" >
@@ -49,16 +50,16 @@
             <Path Data="{StaticResource IconPrint}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Print" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Print}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="ShrinkButton" IsEnabled="{Binding CanShrink}"
-                ToolTip.Tip="Save a smaller copy for email" >
+                ToolTip.Tip="{x:Static loc:Strings.SaveSmallerCopyForEmail}" >
           <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconShrink}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Shrink" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Shrink}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
@@ -70,14 +71,14 @@
             <Path Data="{StaticResource IconSign}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Sign" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Sign}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         
           <Button.Flyout>
             <Flyout Placement="BottomEdgeAlignedLeft">
               <StackPanel Width="260" Spacing="{DynamicResource SpaceS}">
-                <TextBlock Text="Your signatures" FontWeight="SemiBold" />
-                <TextBlock Text="Nothing saved yet — draw one below."
+                <TextBlock Text="{x:Static loc:Strings.YourSignatures}" FontWeight="SemiBold" />
+                <TextBlock Text="{x:Static loc:Strings.NoSignaturesYet}"
                            TextWrapping="Wrap" Opacity="0.7"
                            IsVisible="{Binding !HasSignatures}" />
                 <ListBox Name="SignatureList" ItemsSource="{Binding Signatures}"
@@ -95,9 +96,9 @@
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
-                <Button Name="DrawSignatureButton" Content="Draw a new signature…"
+                <Button Name="DrawSignatureButton" Content="{x:Static loc:Strings.DrawNewSignature}"
                         HorizontalAlignment="Stretch" />
-                <Button Name="ImportSignatureButton" Content="Use a photo of your signature…"
+                <Button Name="ImportSignatureButton" Content="{x:Static loc:Strings.UsePhotoOfSignature}"
                         HorizontalAlignment="Stretch" />
               </StackPanel>
             </Flyout>
@@ -111,11 +112,19 @@
             <Path Data="{StaticResource IconText}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Add text" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.AddText}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
-        <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFonts}"
-                  SelectedItem="{Binding TextFont}" IsEnabled="{Binding IsDocumentOpen}" />
+        <!-- Display names, not the raw PostScript names and enum values the
+             engine speaks: "Times", not "Times-Roman"; "Croix", not "Cross". -->
+        <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
+                  SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding IsDocumentOpen}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate DataType="vm:FontChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
         <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
                   SelectedItem="{Binding TextSize}" IsEnabled="{Binding IsDocumentOpen}" />
         <ToggleButton Name="WhiteoutButton"
@@ -125,7 +134,7 @@
             <Path Data="{StaticResource IconCover}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Cover" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Cover}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
 
@@ -135,7 +144,7 @@
             <Path Data="{StaticResource IconUndo}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Undo" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Undo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="RedoButton" Command="{Binding RedoCommand}" >
@@ -143,7 +152,7 @@
             <Path Data="{StaticResource IconRedo}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Redo" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Redo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
@@ -152,7 +161,7 @@
             <Path Data="{StaticResource IconZoomOut}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Zoom out" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.ZoomOut}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}" >
@@ -160,7 +169,7 @@
             <Path Data="{StaticResource IconZoomIn}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Zoom in" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.ZoomIn}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="ZoomResetButton" Command="{Binding ZoomResetCommand}" >
@@ -168,7 +177,7 @@
             <Path Data="{StaticResource IconActualSize}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Actual size" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.ActualSize}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="FitWidthButton" Command="{Binding FitWidthCommand}" >
@@ -176,7 +185,7 @@
             <Path Data="{StaticResource IconFitWidth}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Fit width" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.FitWidth}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
         <Button Name="FitPageButton" Command="{Binding FitPageCommand}" >
@@ -184,7 +193,7 @@
             <Path Data="{StaticResource IconFitPage}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Fit page" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.FitPage}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
 
@@ -197,18 +206,24 @@
             <Path Data="{StaticResource IconOptions}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="Options" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Text="{x:Static loc:Strings.Options}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         
           <Button.Flyout>
             <Flyout Placement="BottomEdgeAlignedLeft">
               <StackPanel Width="260" Spacing="{DynamicResource SpaceM}">
-                <TextBlock Text="Tick marks look like" FontWeight="SemiBold" />
+                <TextBlock Text="{x:Static loc:Strings.TickMarksLookLike}" FontWeight="SemiBold" />
                 <ComboBox Name="MarkStyleBox" HorizontalAlignment="Stretch"
-                          ItemsSource="{Binding MarkStyles}" SelectedItem="{Binding MarkStyle}" />
+                          ItemsSource="{Binding MarkStyleChoices}" SelectedItem="{Binding SelectedMarkStyle}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="vm:MarkStyleChoice">
+                      <TextBlock Text="{Binding Label}" />
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
                 <CheckBox Name="FlattenBox" IsChecked="{Binding FlattenOnSave}"
-                          Content="Flatten when saving" />
-                <TextBlock Text="Flattening bakes ticks and signatures into the page. They cannot be moved or removed afterwards."
+                          Content="{x:Static loc:Strings.FlattenWhenSaving}" />
+                <TextBlock Text="{x:Static loc:Strings.FlattenExplanation}"
                            TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
               </StackPanel>
             </Flyout>
@@ -229,11 +244,11 @@
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
-        <TextBox Name="FindBox" Width="260" Watermark="Find in document" />
-        <Button Name="FindPreviousButton" Content="Previous" Command="{Binding FindPreviousCommand}" />
-        <Button Name="FindNextButton" Content="Next" Command="{Binding FindNextCommand}" />
+        <TextBox Name="FindBox" Width="260" Watermark="{x:Static loc:Strings.FindInDocument}" />
+        <Button Name="FindPreviousButton" Content="{x:Static loc:Strings.Previous}" Command="{Binding FindPreviousCommand}" />
+        <Button Name="FindNextButton" Content="{x:Static loc:Strings.Next}" Command="{Binding FindNextCommand}" />
         <TextBlock Text="{Binding MatchSummary}" VerticalAlignment="Center" Opacity="0.8" />
-        <Button Name="CloseFindButton" Content="Done" />
+        <Button Name="CloseFindButton" Content="{x:Static loc:Strings.Done}" />
       </StackPanel>
     </Border>
 
@@ -320,12 +335,12 @@
                     Spacing="{DynamicResource SpaceL}" MaxWidth="420">
           <TextBlock Text="MegaPDF" FontSize="{DynamicResource TypeTitle}" FontWeight="SemiBold"
                      HorizontalAlignment="Center" />
-          <TextBlock Text="Fill in a form, tick the boxes, sign it, and save."
+          <TextBlock Text="{x:Static loc:Strings.EmptyStateTagline}"
                      Opacity="0.75" HorizontalAlignment="Center" TextWrapping="Wrap" />
-          <Button Name="EmptyOpenButton" Content="Open a PDF…"
+          <Button Name="EmptyOpenButton" Content="{x:Static loc:Strings.OpenAPdfEllipsis}"
                   HorizontalAlignment="Center" />
 
-          <TextBlock Text="Recent" FontWeight="SemiBold" Margin="0,16,0,0"
+          <TextBlock Text="{x:Static loc:Strings.Recent}" FontWeight="SemiBold" Margin="0,16,0,0"
                      IsVisible="{Binding HasRecents}" />
           <ListBox Name="RecentList" ItemsSource="{Binding Recents}"
                    IsVisible="{Binding HasRecents}" MaxHeight="200"
