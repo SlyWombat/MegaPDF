@@ -1,24 +1,25 @@
-# Mobile release notes — text you can move, correct and style
+# Mobile release notes drafted for 1.3 — SPENT, published as 1.2.0
 
-Written when the work merged (#36, #43) so the store copy is not composed under
-time pressure on approval day. Paste as-is; both are within their length limits.
+> ⚠️ **The release-note copy in this file has already been published.** It was
+> drafted for #36 and #43 as a separate 1.3, but that work folded into **1.2.0
+> (vc9 never happened)** and went to Google Play production on **2026-09-04**.
+> Verified by ancestry: `daa0b07` (#36 drag), `9ae70cb` and `4fdc0a3` (#43 faces)
+> are all ancestors of the `android-v1.2.0` tag.
+>
+> **Do not paste the Play or App Store blocks below into a future release.**
+> They describe features the public already has. Android's next release is
+> 1.3.0 / vc9 and needs its own copy — as of 2026-09-10 the only unreleased
+> Android work is brand tokens and the design conformance pass (#76-#80), which
+> is cosmetic.
+>
+> The file is kept for the two sections that have **not** expired: *What the copy
+> deliberately does not say* and *Not in this release, on purpose*. Those are
+> standing editorial and design decisions, and they still apply.
 
-Continues `docs/release-notes-mobile-1.2.md`, which shipped Add text and undo
-and listed **"moving a placed text box (#36)"** under *Not in this release, on
-purpose*. That caveat is now spent.
+Continues `docs/release-notes-mobile-1.2.md`, which is the copy that actually
+shipped (`android/RELEASING.md` records it as the en-CA source for vc8).
 
-## Version numbers — check before you paste
-
-`android/app/build.gradle.kts` currently reads **1.2.0, versionCode 8**, which is
-the release 1.2 prepared and has not yet been superseded. Whether this work goes
-out as 1.3.0/vc9 or folds into an unshipped 1.2 depends on whether vc8 actually
-reached Play — **look before bumping.**
-
-iOS is the same story as last time: `MARKETING_VERSION` comes from the tag, so
-there is nothing in the repo to bump, and nothing here should be folded into a
-submission that is waiting on review. See `docs/app-review-notes.md`.
-
-## Google Play — release notes (en-CA, ≤500 chars)
+## Google Play — release notes (en-CA) — ALREADY PUBLISHED as 1.2.0
 
 ```
 Text you placed is no longer stuck. Tap it to select it, drag it where it
@@ -33,7 +34,7 @@ Everything is still one undo away.
 
 *(around 330 characters)*
 
-## App Store — "What's New"
+## App Store — "What's New" — ALREADY PUBLISHED
 
 ```
 Text you placed is no longer stuck. Tap it to select it, drag it where it
@@ -53,7 +54,7 @@ you have already placed, and it is all one undo away.
   set was considered and cut: §3.1 keeps formatting controls out, and a choice
   between three faces is not a formatting toolbar.
 - **Nothing about editing the document's own text.** Still Windows-only, still
-  waiting on the shared engine core (#33 / ADR-002). Both stores' descriptions
+  waiting on the shared engine core (#33 / ADR-003 — ADR-002 is the macOS desktop one). Both stores' descriptions
   already avoid claiming it on mobile — keep it that way.
 
 ## Not in this release, on purpose
@@ -74,6 +75,6 @@ and **Android Screenshots** workflows and upload the `-text` capture alongside
 the existing ones; captions are in `docs/app-store-listing.md` §Screenshots.
 
 The Windows Store screenshots are **not** covered by that — they need a real
-desktop with the new build installed (`tools/screenshots-windows/`), and the four
-on disk are still from 1.6.2. `docs/microsoft-store-listing.md` §Screenshots carries the
-warning.
+desktop with the build installed (`tools/screenshots-windows/`). **Done
+2026-09-09:** all five re-shot at 2482x1541 from the packaged 1.7.0 build and
+submitted with it. `docs/microsoft-store-listing.md` §Screenshots is current.
