@@ -185,6 +185,24 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
     https://slywombat.github.io/MegaPDF/privacy.html, is Windows-only and still
     served. Do not cite it in a submission.
 
+## Languages (added 2026-09-10, #91)
+
+The manifest now declares `en-us`, `en-ca` **and `fr-ca`**, and the package
+carries `Strings/en-US` and `Strings/fr-CA` in its PRI. The next submission after
+1.7.0.0 therefore needs:
+
+1. Both architectures rebuilt (the PRI is built with the package).
+2. A **French (Canada)** listing in Partner Center, filled from
+   `docs/microsoft-store-listing.md` § Français (Canada) — description, nine
+   features, search terms, captions. It starts as *Incomplete* and blocks
+   submission until it is filled, exactly like en-CA did.
+3. The five English screenshots reused under the French listing until a French
+   set exists (`tools/screenshots-windows/README.md` § French screenshots).
+
+To add another language later: `Strings/<tag>/Resources.resw`, one more
+`<Resource Language="…" />`, one more listing. `docs/localisation.md` has the
+per-platform steps.
+
 ## Testers during rollout
 - Use a **package flight** (Partner Center) or a **hidden listing** ("available but
   not discoverable," install via direct link) to give current testers

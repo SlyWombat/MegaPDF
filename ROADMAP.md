@@ -120,12 +120,14 @@ disabled. Until then the Setup.exe bootstrapper covers friction.
 
 ---
 
-## #10 · Localization readiness
-**Labels:** infra, candidate · **Size:** L
+## #10 · Localization readiness — done as #91
+**Labels:** infra · **Size:** L
 
-All strings are inline English. If distribution goes beyond en-US, move UI
-strings to resw, pseudo-localize, and verify layout at +30% string length.
-Blocked on distribution plans; don't start speculatively.
+Superseded by #91 (French, fr-CA) and shipped 2026-09-10: every platform reads
+its strings from a catalogue, French is complete on all four, a static test
+holds the catalogues to each other, and `tools/gen_strings.py pseudo` produces
+the pseudo-locale for the +30 % layout check. How it works:
+`docs/localisation.md`.
 
 ---
 

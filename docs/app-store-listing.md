@@ -175,3 +175,101 @@ not do.
 
 *Android/Play counterpart: `android/RELEASING.md`. Windows/Microsoft Store
 copy: the Store runbook. Keep the three tellings of the story consistent.*
+
+## Français (Canada)
+
+App Store Connect → the version page → **Localizations** → add **French
+(Canada)**. Every field below is the French counterpart of the one above, with
+the same character limit (#91). Translated by the build assistant against
+`docs/localisation-glossary.md`; have a francophone read it before it goes live.
+Screenshots stay the English set until a French run of the screenshot workflow
+exists (the demo document is English).
+
+| Field | Value |
+|---|---|
+| **Name** [30] | `MegaPDF` |
+| **Subtitle** [30] | `Remplir, cocher, signer` *(23)* |
+
+### Texte promotionnel [170]
+
+> On vous a envoyé un PDF à signer? Ouvrez-le, cochez les cases, apposez votre
+> signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
+
+*(155 caractères)*
+
+### Description [4000]
+
+> **Ouvrir. Corriger. Enregistrer. Terminé.**
+>
+> MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec
+> un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer
+> rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique.
+> Tout se passe sur votre appareil.
+>
+> **Cochez n'importe quelle case**
+> Touchez une case et elle est cochée : les vrais champs de formulaire
+> interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases
+> dessinées que d'autres applications prennent pour de la décoration.
+>
+> **Écrivez sur n'importe quelle ligne**
+> Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la
+> police (sans empattement, avec empattement ou à chasse fixe) pour que votre
+> ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau
+> pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans
+> lequel on peut chercher, pas un autocollant posé sur la page.
+>
+> **Signez pour de vrai**
+> Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond
+> blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque
+> privée sur votre appareil; déposez-en une sur n'importe quel document,
+> déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+>
+> **Enregistrez sans crainte**
+> Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie
+> chaque document avant de toucher à votre original : un enregistrement raté ne
+> peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et
+> enregistrez une copie.
+>
+> **Trouvez n'importe quel mot**
+> Cherchez dans tout le document à mesure que vous tapez. Chaque résultat
+> s'allume et le compteur vous dit combien il y en a, pour que la seule clause
+> dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
+>
+> **Confidentiel par conception**
+> MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos
+> documents et votre signature ne quittent jamais votre appareil : il n'y a
+> aucun serveur où ils pourraient aller. L'application est un logiciel libre;
+> n'importe qui peut le vérifier.
+>
+> **Compatible avec tout**
+> Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive, Google Drive ou toute
+> application qui partage des fichiers. Les documents remplis et signés ici
+> s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de
+> bureau, et dans MegaPDF pour Windows et Android : même moteur, même résultat,
+> sur toutes les plateformes.
+>
+> MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas
+> de reconnaissance de caractères et ne vous noie pas sous les barres d'outils.
+> Il ouvre, il corrige, il enregistre. Terminé.
+
+### Mots-clés [100]
+
+> `pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter`
+
+*(86 caractères)*
+
+### Nouveautés
+
+> MegaPDF parle maintenant français. L'application suit la langue de votre
+> appareil; vous pouvez aussi la choisir dans Réglages → MegaPDF → Langue.
+
+### Captures d'écran — légendes
+
+| Fichier | Légende suggérée |
+|---|---|
+| `iphone-6_9-viewer.png` | *Coché et signé en moins d'une minute* |
+| `iphone-6_9-text.png` | *Écrivez sur la ligne vide : votre taille, votre police* |
+| `iphone-6_9-search.png` | *Trouvez n'importe quel mot, sur chaque page* |
+| `iphone-6_9-sign.png` | *Vos signatures, enregistrées sur votre appareil* |
+| `iphone-6_9-draw.png` | *Dessinez-la une fois, utilisez-la partout* |
+| `iphone-6_9-home.png` | *Pas de compte. Pas d'infonuagique. Pas de suivi.* |

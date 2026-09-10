@@ -78,7 +78,8 @@ opens the public GitHub repository in Safari.
 **6. Regional differences**
 None. The app behaves identically in every region. There is no geo-gating, no
 region-specific content, pricing or feature set, and no server that could vary by
-region. It is localised in English (en-CA) only.
+region. It is localised in English (en-CA) and French (fr-CA); the language
+follows the device setting and nothing else differs between the two.
 
 **7. Regulated industry / protected third-party material**
 Not applicable. MegaPDF is a general-purpose document utility. It operates only on

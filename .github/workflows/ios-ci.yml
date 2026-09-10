@@ -50,6 +50,18 @@ jobs:
             -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
             CODE_SIGNING_ALLOWED=NO
 
+      # The same suite under the French (Canada) localisation (#91). No test
+      # asserts UI text, so this proves the fr-CA catalog compiles and the app
+      # launches with it — a broken .xcstrings fails here rather than in review.
+      - name: Test again in French (Canada)
+        run: |
+          xcodebuild test-without-building \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDF \
+            -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
+            -testLanguage fr -testRegion CA \
+            CODE_SIGNING_ALLOWED=NO
+
   # ADR-001 evidence: PDFKit vs the MegaPDF_Id interop contract (macOS PDFKit
   # is the same framework family as iOS). Read the SPIKE: lines in the log.
   pdfkit-spike:

@@ -4,11 +4,12 @@
 block only — no `>`, `-` or `1.` prefixes, since Partner Center takes those
 literally. The Description below is plain prose and pastes as-is.
 
-**Two listings, one set of copy.** The packages declare `en-us` and `en-ca`, so
-Partner Center asks for an **English (United States)** and an **English (Canada)**
-listing. Everything below is used verbatim for both — the copy carries no
-US-vs-CA spelling, so there is nothing to translate or re-word. Fill one, paste
-into the other.
+**Three listings, two sets of copy.** The packages declare `en-us`, `en-ca` and
+`fr-ca` (#91), so Partner Center asks for an **English (United States)**, an
+**English (Canada)** and a **French (Canada)** listing. The English below is
+used verbatim for both English listings — it carries no US-vs-CA spelling.
+The French listing takes the copy under [Français (Canada)](#français-canada)
+at the end of this file: a translation, not a paste.
 
 ## Short description / first line
 (The first sentence shows in search results — it carries the whole pitch.)
@@ -149,11 +150,13 @@ Store's minimum on both axes, and all five share one frame.
 
 **Display scale matters as much as resolution.** `ApplyToolbarLayout` switches on
 *effective* pixels, so at 200% scale a 2500 px window is only 1250 effective —
-below the 1500 `ToolbarFullWidth` breakpoint, and the toolbar loses its labels.
-The capture machine was set to **150%** so 2500 px reads as 1667 effective and the
-toolbar keeps icon + label, which is what these captions and the description
-assume. Check the toolbar in the shots before uploading; if the labels are gone,
-the scale is wrong, not the resolution.
+below the toolbar's Full breakpoint, and the toolbar loses its labels. The
+breakpoint is measured from the labels themselves since #91 (about 1430
+effective px in English, 1475 in French). The capture machine was set to **150%**
+so 2500 px reads as 1667 effective and the toolbar keeps icon + label in either
+language, which is what these captions and the description assume. Check the
+toolbar in the shots before uploading; if the labels are gone, the scale is
+wrong, not the resolution.
 
 Re-shooting needs a Windows desktop with the build installed; the harness is
 `tools/screenshots-windows/` (start with its README). It cannot be done from CI —
@@ -166,3 +169,103 @@ entries, place the MegaWoman one — it is the brand signature for the listing.
 Shot 3 is click-to-place, not drag: picking a signature from the library arms
 placement and the next click on the page drops it there, selected for nudging.
 Don't write a caption that promises a drag.
+
+## Français (Canada)
+
+The **French (Canada)** listing (#91). Same rules as the English: paste from
+inside the code blocks only. Translated by the build assistant against
+`docs/localisation-glossary.md`; have a francophone read it before it goes live.
+The screenshots are the English ones until a French set is shot — see
+`tools/screenshots-windows/README.md` § French screenshots.
+
+### Description courte / première ligne
+
+```
+L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
+```
+
+### Description
+
+Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les
+grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses
+exceptionnellement bien, et volontairement rien d'autre.
+
+MODIFIER LE TEXTE — Cliquez sur n'importe quel texte du document et tapez,
+comme dans un document Word. Corrigez une coquille, changez une date, mettez un
+montant à jour. Terminé.
+
+AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la
+taille et la police (sans empattement, avec empattement ou à chasse fixe) pour
+que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou
+double-cliquez dessus plus tard pour le modifier.
+
+COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. Des
+formulaires jamais conçus pour être remplis à l'écran, remplis à l'écran.
+
+APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images de
+signature. Choisissez-en une et cliquez à l'endroit voulu. Déplacez-la,
+ajustez-la, redimensionnez-la jusqu'à ce qu'elle soit exactement à sa place.
+
+ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une
+copie. Pas d'assistant d'exportation, pas de boîte de dialogue
+d'« aplatissement », pas de surprise.
+
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot
+avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer
+le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic
+(sous-échantillonnage des images et recompression JPEG).
+
+CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas
+d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur
+votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats,
+les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur
+de quelqu'un d'autre.
+
+Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
+
+### Fonctionnalités
+(« App features », jusqu'à 20 × 200 caractères. Une par case, sans puce.)
+
+```
+Modifiez le texte de n'importe quel PDF en cliquant et en tapant, comme dans un document Word
+Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
+Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
+Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
+Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
+Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
+Réduisez les numérisations trop lourdes pour le courriel en un clic
+Imprimez directement depuis l'application
+Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie
+```
+
+### Termes de recherche
+(7 au maximum; 30 caractères au plus chacun.)
+
+```
+éditeur PDF
+modifier PDF
+signer PDF
+remplir formulaire PDF
+signature PDF
+compresser PDF
+PDF léger
+```
+
+### Autres champs
+
+The URLs and the support contact are the same as the English listing. Copyright:
+
+```
+© 2026 Electric RV. Sous licence Apache-2.0.
+```
+
+### Captures d'écran
+Same five files, same order, one caption each (≤ 200 caractères):
+
+| Fichier | Légende |
+|---|---|
+| `01-edit-text.png` | Cliquez sur n'importe quel texte et tapez : modifier un PDF comme un document Word. |
+| `02-checkbox.png` | Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire. |
+| `03-signature.png` | Déposez une signature enregistrée sur la ligne, puis ajustez-la en place. |
+| `04-shrink.png` | Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic. |
+| `05-add-text.png` | Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire. |
