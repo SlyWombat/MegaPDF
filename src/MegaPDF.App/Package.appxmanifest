@@ -18,7 +18,13 @@
   </Dependencies>
 
   <Resources>
+    <!-- First entry is the package's default language. en-us stays first so the
+         Store falls back to it for any locale without an exact match; en-ca is
+         declared because this is a Canadian app and Google Play already uses
+         en-CA. The listing copy is identical for both — it carries no
+         US-vs-CA spelling. -->
     <Resource Language="en-us" />
+    <Resource Language="en-ca" />
   </Resources>
 
   <Applications>

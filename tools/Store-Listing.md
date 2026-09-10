@@ -1,5 +1,11 @@
 # Mega PDF — Store listing copy (paste into Partner Center)
 
+**Two listings, one set of copy.** The packages declare `en-us` and `en-ca`, so
+Partner Center asks for an **English (United States)** and an **English (Canada)**
+listing. Everything below is used verbatim for both — the copy carries no
+US-vs-CA spelling, so there is nothing to translate or re-word. Fill one, paste
+into the other.
+
 ## Short description / first line
 (The first sentence shows in search results — it carries the whole pitch.)
 
