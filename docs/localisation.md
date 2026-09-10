@@ -61,7 +61,9 @@ Android and .NET; Canada is the exact-match region on all four platforms.
   its dot, and sheds labels below that. `--screenshot` prints the resolved
   labels and the measured breakpoint to stderr (`toolbar: …`) so a language's
   number can be read off a run. English measures about 1430 effective px,
-  French about 1475.
+  French about 1610 (measured on the installed package, where every label is
+  French; the dev build's figure is lower because its x:Uid labels stay
+  English). The Store frame, 2500 px at 150 % = 1667 effective, clears it.
 - **Automation.** Every toolbar and flyout control the screenshot harness
   touches has an `AutomationProperties.AutomationId` (`OpenButton`,
   `ShrinkButton`, `SignaturesButton`, …). The UIA `Name` is what Narrator

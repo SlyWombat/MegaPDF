@@ -43,9 +43,9 @@ breakpoint with a document open and edited, so `Save ●` is showing — the wid
 the bar ever gets, and the one state where clipping could survive the fix.
 Verified 2026-08-13 at 1489 / 1494 / 1509 effective px: clean at all three.
 Since #91 the breakpoint is measured from the labels rather than fixed at 1500
-(about 1430 effective px in English, 1475 in French — `MegaPDF.exe --screenshot`
-prints the number for the current language), so pass `-Widths` straddling the
-right value for the language being shot.
+(about 1430 effective px in English, 1610 in French, bracketed 2026-09-10 with
+this script at 1603 / 1619 effective), so pass `-Widths` straddling the right
+value for the language being shot.
 
 `Add-SignatureToLibrary.ps1` seeds `tools/assets/megawoman-sig.jpg` into the
 signature library (needed once per machine). `Test-ToolbarWidths.ps1` captures
@@ -58,7 +58,11 @@ scale** (GPD-DAVE, 2026-09-09); the previous set was a 3060x2000 window on a
 **Set the display scale, not just the resolution.** `ApplyToolbarLayout` switches
 on *effective* pixels, so a 2500 px window at 200% is 1250 effective and drops the
 toolbar labels; at 150% it is 1667 and keeps them. Getting this wrong produces
-shots that look fine until you notice the toolbar is icon-only. They are read off the previous screenshot, not computed: `Click-InShot`
+shots that look fine until you notice the toolbar is icon-only. `Set-Scale.ps1 150`
+switches the primary display without a sign-out (`Set-Scale.ps1` alone prints the
+current value; put it back to 200 afterwards). Run it in its **own** PowerShell
+process, then start the capture scripts in a fresh one: a process that changes
+the scale keeps measuring windows at the old DPI, and every width comes out wrong. They are read off the previous screenshot, not computed: `Click-InShot`
 maps image coordinates to screen because the shot *is* the DWM frame rect. On any
 other frame, take a shot first and re-read them.
 
@@ -139,18 +143,33 @@ belongs only to shot 1's story.
 
 ## French screenshots (#91)
 
-The installed package has no command line, so the language comes from the
-Language setting: before launching, set `"Language": "fr-CA"` in
-`%LOCALAPPDATA%\MegaPDF\settings.json` (or pick *Français (Canada)* in the
-Settings flyout and relaunch). Everything else is the same run — the scripts
-find buttons by `AutomationId`, and `Send-Path` knows the French picker titles.
-Set it back to `""` afterwards.
+Shot 2026-09-10 for fr-CA and fr-FR; the sets live in
+`artifacts/store/screenshots/fr-CA/` and `fr-FR/`. The installed package has no
+command line, so the language comes from the Language setting: before launching,
+set `"Language": "fr-CA"` (or `"fr-FR"`) in `%LOCALAPPDATA%\MegaPDF\settings.json`,
+and set it back to `""` afterwards. Everything else is the same run — the
+scripts find buttons by `AutomationId`, and `Send-Path` knows the French picker
+titles. The recipe that produced both sets, with the coordinates read off the
+French probe frame (the layout is the English one, translated):
 
-Two things are not French yet, and the shots will show it: the staging
-documents from `gen_store_docs.py` are English forms, and the text typed by
-`Shot-TextEdit.ps1` / `Shot-AddText.ps1` is English. A French set for the
-listing needs French staging documents first; until then the French listing
-reuses the English screenshots (`docs/microsoft-store-listing.md`).
+    python3 tools/screenshots-windows/gen_store_docs.py artifacts/store/screenshots/fr-CA --lang fr
+    $env:MEGAPDF_SHOTDIR = "<repo>\artifacts\store\screenshots\fr-CA"
+    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<shotdir>\blank-agreement.pdf" -Fit FitPageButton -ZoomIn 1 -Name probe-frame
+    .\Shot-TextEdit.ps1 -X 887 -Y 563 -Text 'Nom : Dana Whitfield'
+    .\Shot-Checkboxes.ps1 -X 741 -Y1 750 -Y2 807
+    .\Open-SignatureFlyout.ps1                      # MegaWoman is the second row
+    .\Arm-Signature.ps1 -X 1440 -Y 292 -Notches 7
+    .\Place-Signature.ps1 -X 960 -Y 1105            # the click is the signature's centre
+    .\Shot-AddText.ps1 -X 1420 -Y 1090 -Text '18 mars 2026'   # press Esc first if the signature is still selected
+    .\Shot-Shrink.ps1 -Pdf "<shotdir>\scanned-agreement.pdf" -Out "<shotdir>\scanned-agreement - reduit.pdf"
+
+Two more landmines paid for on that run: **arrow keys with nothing selected
+scroll the page**, so nudge only while the signature shows its handles; and
+**a click on the page while the signature is selected only deselects it** — the
+Add-text click after `Place-Signature` needs an Esc in between, or it does
+nothing and the placement banner stays up. Park the pointer *off the window*
+(`SetCursorPos(2556, 900)` on this display) before a shot; parking inside the
+window can leave a "Ctrl+F" accelerator tip painted over the page.
 
 ## Privacy — this is not optional
 
