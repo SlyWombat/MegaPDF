@@ -23,8 +23,9 @@ it into place, or double-click it later to change it.
 CHECK BOXES — Click an empty square and it becomes a checked box. Forms that
 were never meant to be filled digitally, filled digitally.
 
-APPLY SIGNATURES — Keep a small personal library of signature images and drag
-one onto the page. Move it, nudge it, resize it until it sits exactly right.
+APPLY SIGNATURES — Keep a small personal library of signature images. Pick one
+and click where it goes. Move it, nudge it, resize it until it sits exactly
+right.
 
 SAVE — Save overwrites, Save As creates a copy. No export wizards, no
 "flatten" dialogs, no surprises.
@@ -42,12 +43,12 @@ someone else's server.
 Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 
 ## Feature bullets
-(Store listing → "App features", up to 20 × 200 chars. Use these eight.)
+(Store listing → "App features", up to 20 × 200 chars. Use all nine.)
 
 - Edit text in any PDF by clicking and typing — like a Word document
 - Add text on any blank line, in the size and face that matches the form
 - Click empty squares to check boxes on any form
-- Drag signatures from your personal library onto the page, then nudge and resize
+- Place a signature from your personal library with a click, then nudge and resize it
 - Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
 - Save overwrites, Save As copies — no export wizards or flatten dialogs
 - Shrink oversized scans for email with one click
@@ -74,8 +75,9 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 - Copyright: © 2026 Electric RV. Licensed under Apache-2.0.
 
 ## Screenshots
-`artifacts/store/screenshots/` (2482×1541, well over the 1366×768 minimum; 1–4
-required). Upload in this order, one caption each:
+`artifacts/store/screenshots/` (2482×1541, well over the 1366×768 minimum; at
+least one required, up to nine allowed). Upload all five in this order, one
+caption each:
 
 | File | Caption (≤ 200 chars) |
 |---|---|
