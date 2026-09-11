@@ -144,4 +144,158 @@ final class DemoFlowUITests: XCTestCase {
         // would raise the Files picker over the final frame.
         pause(3.0)
     }
+
+    /// Diagnostic: the viewer's accessibility tree once a document is dirty.
+    /// Run alone with -only-testing; the dump goes to the xcodebuild log.
+    func testDumpViewerHierarchy() {
+        app.launch()
+        _ = page()
+        tapPage(x: 78.5, yFromBottom: 590.5)
+        pause(1.0)
+        print("HIERARCHY-BEGIN")
+        print(app.debugDescription)
+        print("HIERARCHY-END")
+    }
+
+    // MARK: - App Review walkthrough
+
+    /// The recording App Review asked for under Guideline 2.1
+    /// (docs/app-review-notes.md, item 1): every step of the core flow in one
+    /// take, from a cold launch, on a real file opened through the Files
+    /// picker. tools/ios-review-video.sh stages docs/review/MegaPDF-Test-Form.pdf
+    /// into the simulator's "On My iPhone" first. Normal launch, no demo mode:
+    /// what the reviewer sees is exactly what a user gets.
+    ///
+    /// The test form (tools/gen_review_form.py) is 612x792 with three printed
+    /// squares at x=72, y=564/538/512 (bottom-left origin), two AcroForm
+    /// checkboxes at x=72, y=438 and 412, a signature rule at y=300, and the
+    /// word "insurance" four times.
+    func testAppReviewWalkthrough() {
+        app.launchArguments = []   // a normal launch: no demo mode
+        app.launch()
+        pause(2.0)
+
+        // 2. Open PDF through the Files picker.
+        app.buttons["Open PDF"].firstMatch.tap()
+        pause(2.5)
+        openTestFormInPicker(app)
+        _ = page()
+        pause(2.0)
+
+        // 3. Tick two boxes: a printed square and a real form checkbox.
+        tapPage(x: 78.5, yFromBottom: 570.5); pause(1.5)
+        tapPage(x: 79.5, yFromBottom: 445.5); pause(1.8)
+
+        // 4. Clear one and tick it again.
+        tapPage(x: 78.5, yFromBottom: 570.5); pause(1.5)
+        tapPage(x: 78.5, yFromBottom: 570.5); pause(1.8)
+
+        // 5. Sign: draw, save, pick, place, drag onto the line.
+        app.buttons["Sign"].firstMatch.tap(); pause(1.5)
+        app.buttons["Draw"].firstMatch.tap(); pause(1.5)
+        drawSignature(app); pause(1.0)
+        lastButton(app, "Save").tap(); pause(1.0)
+        // Saving closes the library and confirms with a "Signature added" alert;
+        // read it, dismiss it, then open the library again to pick the entry.
+        let added = app.alerts.firstMatch
+        if added.waitForExistence(timeout: 3) { pause(1.2); added.buttons.firstMatch.tap() }
+        pause(0.8)
+        app.buttons["Sign"].firstMatch.tap(); pause(1.5)
+        let drawn = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Signature'")).firstMatch
+        XCTAssertTrue(drawn.waitForExistence(timeout: 5), "the drawn signature is not in the library")
+        drawn.tap()
+        let hint = app.alerts.firstMatch
+        if hint.waitForExistence(timeout: 2) { pause(1.2); hint.buttons.firstMatch.tap() }
+        pause(0.8)
+        tapPage(x: 190, yFromBottom: 380); pause(1.5)          // placed a little high…
+        let p = page()
+        let from = p.coordinate(withNormalizedOffset: CGVector(dx: 190 / 612.0, dy: (792 - 380) / 792.0))
+        let to = p.coordinate(withNormalizedOffset: CGVector(dx: 190 / 612.0, dy: (792 - 335) / 792.0))
+        from.press(forDuration: 0.4, thenDragTo: to)            // …then dragged down onto the line
+        pause(1.5)
+        tapPage(x: 500, yFromBottom: 150); pause(1.5)           // deselect
+
+        // 6. Search and step through the matches.
+        app.buttons["Find in document"].firstMatch.tap()
+        let field = app.textFields["Find in document"].firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.typeText("insurance"); pause(1.0)
+        // A fresh simulator shows the "slide to type" keyboard tip once.
+        let tip = app.buttons["Continue"].firstMatch
+        if tip.waitForExistence(timeout: 1) { tip.tap() }
+        pause(1.5)
+        let next = app.buttons["Next match"].firstMatch
+        if next.waitForExistence(timeout: 3) { next.tap(); pause(1.2); next.tap(); pause(1.2) }
+        app.buttons["Done"].firstMatch.tap(); pause(1.2)
+
+        // 7. Save, see the confirmation, close, reopen from Recents. On iOS 26
+        // the iPhone toolbar folds Save into the system "More" button.
+        if app.buttons["Save"].firstMatch.exists && app.buttons["Save"].firstMatch.isHittable {
+            app.buttons["Save"].firstMatch.tap()
+        } else {
+            app.buttons["More"].firstMatch.tap(); pause(1.2)
+            app.buttons["Save"].firstMatch.tap()
+        }
+        pause(2.5)
+        let ok = app.alerts.firstMatch
+        if ok.waitForExistence(timeout: 3) { pause(1.0); ok.buttons.firstMatch.tap() }
+        pause(1.0)
+        app.buttons["Close"].firstMatch.tap(); pause(2.0)
+        let recent = app.buttons.matching(NSPredicate(format: "label CONTAINS 'MegaPDF-Test-Form'")).firstMatch
+        XCTAssertTrue(recent.waitForExistence(timeout: 5), "the file is not in Recents")
+        recent.tap()
+        _ = page(); pause(3.0)
+
+        // 8. The Photos picker appears (no permission prompt) and is dismissed.
+        app.buttons["Sign"].firstMatch.tap(); pause(1.5)
+        app.buttons["Photos"].firstMatch.tap(); pause(3.0)
+        let cancel = lastButton(app, "Cancel")
+        if cancel.waitForExistence(timeout: 5) { cancel.tap() }
+        pause(1.5)
+        app.buttons["Close"].firstMatch.tap(); pause(2.5)
+    }
+
+    /// The topmost of several same-named buttons (a sheet's Save above the
+    /// viewer's Save): XCUITest lists them in hierarchy order, sheets last.
+    private func lastButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
+        let all = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
+        return all.last ?? app.buttons[label].firstMatch
+    }
+
+    /// Finds MegaPDF-Test-Form in the document picker: in Recents if it is
+    /// there, otherwise under Browse → On My iPhone.
+    private func openTestFormInPicker(_ app: XCUIApplication) {
+        let file = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS 'MegaPDF-Test-Form'")).firstMatch
+        if file.waitForExistence(timeout: 5) { file.tap(); return }
+        for name in ["Browse", "On My iPhone", "On My iPad"] {
+            let item = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", name)).firstMatch
+            if item.waitForExistence(timeout: 3) { item.tap(); pause(1.5) }
+            if file.waitForExistence(timeout: 3) { file.tap(); return }
+        }
+        XCTFail("MegaPDF-Test-Form.pdf is not visible in the Files picker")
+    }
+
+    /// Two strokes across the drawing canvas, the second one a loop, so it
+    /// reads as a signature rather than a line.
+    private func drawSignature(_ app: XCUIApplication) {
+        let canvas = app.otherElements.matching(NSPredicate(format: "label == 'Signature canvas'")).firstMatch
+        let area: XCUIElement = canvas.exists ? canvas : app.windows.firstMatch
+        func pt(_ x: Double, _ y: Double) -> XCUICoordinate {
+            area.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y))
+        }
+        // Slow drags: at the default velocity the gesture samples so few points
+        // that the canvas records dots, not a line.
+        let strokes: [[(Double, Double)]] = [
+            [(0.12, 0.62), (0.30, 0.30), (0.42, 0.66)],
+            [(0.44, 0.66), (0.62, 0.30), (0.88, 0.60)],
+        ]
+        for stroke in strokes {
+            for (a, b) in zip(stroke, stroke.dropFirst()) {
+                pt(a.0, a.1).press(forDuration: 0.05, thenDragTo: pt(b.0, b.1),
+                                   withVelocity: .slow, thenHoldForDuration: 0.05)
+            }
+            pause(0.4)
+        }
+    }
 }

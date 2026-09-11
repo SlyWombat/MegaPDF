@@ -32,19 +32,17 @@ Nothing in the app is gated: every feature below is reachable immediately on
 first launch with no credentials.
 
 **3. What the app does, and for whom**
-MegaPDF fills in, checks and signs PDF forms entirely on the device. It is for
-people who are sent a PDF form — a rental agreement, a school permission slip, an
-insurance or claim form — and need to complete and return it. It replaces the
-print → sign → scan → email loop, without the subscription or cloud upload that
-comparable apps require. Everything happens locally; the document never leaves the
-device.
+MegaPDF fills in, checks and signs PDF forms entirely on the device, for people
+who are sent a form — a rental agreement, a permission slip, a claim form — and
+need to complete and return it. No subscription, no cloud upload; the document
+never leaves the device.
 
-**4. Setting up and reaching the main features** (no login or credentials exist)
+**4. Setting up and reaching the main features**
 Any PDF works as a sample; the app ships no content of its own and needs none.
-A purpose-built blank form is attached to the submission and kept at
-`docs/review/MegaPDF-Test-Form.pdf` (regenerate: `python3 tools/gen_review_form.py`):
-it has three printed squares, two real AcroForm checkboxes, a signature rule,
-and the word "insurance" four times for the search demonstration.
+The blank form used in the attached recording is in the public repository at
+https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
+(three printed squares, two real AcroForm checkboxes, a signature rule, and the
+word "insurance" four times for the search demonstration).
 1. Launch the app → Home screen → tap **Open PDF** → the iOS Files picker opens →
    choose any PDF from Files or iCloud Drive.
 2. **Check a box:** tap a checkbox or an empty printed square on the page — it is
@@ -54,17 +52,28 @@ and the word "insurance" four times for the search demonstration.
    **Photos** to use a photograph of a signature on paper (the white background is
    removed automatically). Then tap the saved signature and tap the page to place
    it; drag to move it, use the handles to resize.
-5. **Search:** tap the magnifier, type a word — every match is highlighted and the
+5. **Add text:** tap **Text**, tap a blank line, type, choose a size and font,
+   tap **Add**. Tap the text again to move it or fix a typo.
+6. **Search:** tap the magnifier, type a word — every match is highlighted and the
    up/down arrows step through them.
-6. **Save:** tap **Save** — the edited PDF is written back to the original file
+7. **Save:** tap **Save** — the edited PDF is written back to the original file
    in place (a "Saved" confirmation appears); **Save a copy**, in the overflow
    menu, writes a new file through the Files picker instead.
 
-> **Scope note (checked against `ios/MegaPDF/Engine/` on 2026-08-15):** the iOS
-> engine does checkboxes (AcroForm widgets and drawn squares), signature stamps,
-> search, render and save — there is **no text editing on iOS**. Text editing is a
-> Windows-only feature; `TESTING.md` describes the Windows app. Do not tell App
-> Review about a feature the build does not have.
+> **Scope note (updated 2026-09-11 for 1.7.0):** the iOS build does checkboxes
+> (AcroForm widgets and drawn squares), signature stamps, added text with size
+> and face (#43), search, render and save. Do not describe editing of a
+> document's *existing* text — that remains Windows-only.
+
+**1. Screen recording**
+Attached: the full flow above on an iPhone 17 Pro Max simulator running
+iOS 26.5 — cold launch, open the test form from Files, tick and clear boxes,
+draw and place a signature, search, save, reopen from Recents, and the Photos
+picker appearing and closing.
+
+**2. Devices and OS versions tested**
+iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5, and the
+TestFlight build on the developer's own devices.
 
 **5. External services, tools or platforms**
 None. The app makes no network requests at all — no analytics, no crash
@@ -76,10 +85,9 @@ anywhere in the app is a single "view the source" link on the About screen, whic
 opens the public GitHub repository in Safari.
 
 **6. Regional differences**
-None. The app behaves identically in every region. There is no geo-gating, no
-region-specific content, pricing or feature set, and no server that could vary by
-region. It is localised in English (en-CA) and French (fr-CA); the language
-follows the device setting and nothing else differs between the two.
+None: no geo-gating, no region-specific content, pricing or features, and no
+server. Localised in English (en-CA) and French (fr-CA, fr); the language
+follows the device setting and nothing else differs.
 
 **7. Regulated industry / protected third-party material**
 Not applicable. MegaPDF is a general-purpose document utility. It operates only on
@@ -87,13 +95,11 @@ files the user already has and already opened, contains no third-party protected
 material, and provides no service in a regulated industry.
 
 **Permissions and privacy**
-The app requests no permissions at all, and shows no permission dialogs. Adding a
-signature from a photo uses SwiftUI's `PhotosPicker`, which runs out of process
-and hands back only the single chosen image, so no photo-library authorisation is
-requested and the app never gets library-wide access — the build ships no
-`NSPhotoLibraryUsageDescription` because none is needed. There are no location,
-contacts, camera or App Tracking Transparency prompts either. No data is collected; privacy policy:
-https://electricrv.ca/megapdf/privacy/
+The app requests no permissions and shows no permission dialogs. Adding a
+signature from a photo uses SwiftUI's PhotosPicker, which runs out of process and
+hands back only the chosen image, so no photo-library authorisation is requested.
+No location, contacts, camera or tracking prompts. No data is collected; privacy
+policy: https://electricrv.ca/megapdf/privacy/
 
 ---
 

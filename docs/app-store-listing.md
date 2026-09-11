@@ -3,6 +3,14 @@
 Everything App Store Connect asks for at submission, in order. Fields with
 character limits show the count in brackets.
 
+**Most of this pushes itself.** `tools/asc_publish.py` reads this file (the
+copy blocks under "Copy by language"), `docs/app-review-notes.md` (the Notes
+field) and a capture folder (screenshots and previews), and writes them to the
+editable version through the App Store Connect API — `version`, `copy`,
+`screenshots`, `previews`, `review`, `build`, `submit`, in that order. What is
+left by hand: creating the app record (once), the App Privacy answers, and
+pricing. Done that way for 1.7.0 on 2026-09-11.
+
 ---
 
 ## App Information
