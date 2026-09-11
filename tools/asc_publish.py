@@ -352,8 +352,8 @@ def cmd_review(attachments):
               f"{c.get('contactEmail')} {c.get('contactPhone')}")
     else:
         attrs.update({"contactFirstName": "David", "contactLastName": "Seaman",
-                      "contactEmail": "dave@drscapital.com",
-                      "contactPhone": os.environ.get("ASC_CONTACT_PHONE", "")})
+                      "contactEmail": "info@electricrv.ca",
+                      "contactPhone": "18885551212"})
         did = api("POST", "/v1/appStoreReviewDetails", {"data": {
             "type": "appStoreReviewDetails", "attributes": attrs,
             "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})["data"]["id"]

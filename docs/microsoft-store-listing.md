@@ -296,7 +296,7 @@ https://electricrv.ca/megapdf/privacy/
 https://electricrv.ca/megapdf/
 ```
 ```
-dave@drscapital.com
+info@electricrv.ca
 ```
 ```
 © 2026 Electric RV. Licensed under Apache-2.0.

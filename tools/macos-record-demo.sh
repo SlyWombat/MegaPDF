@@ -62,46 +62,18 @@ sleep 1
 # Fit page: the whole page in the frame, so the signature line is on screen.
 click 1457 118; sleep 1.5
 
-# Where the page is. A fresh file opens at whatever zoom fits, so nothing about
-# the page's placement is assumed: a shot of the content area is scanned for
-# the white page on a grey viewport, and every page click below is a PDF point
-# mapped through that measurement, as the iOS choreography does.
-screencapture -x -R "$WX,$((WY + 28)),1920,1080" /tmp/megapdf-layout.png
-read -r PL PT PS <<<"$(python3 - /tmp/megapdf-layout.png <<'PY'
-import struct, subprocess, sys
-subprocess.run(["sips", "-s", "format", "bmp", sys.argv[1], "--out", "/tmp/megapdf-layout.bmp"], capture_output=True)
-d = open("/tmp/megapdf-layout.bmp", "rb").read()
-off = struct.unpack_from("<I", d, 10)[0]; w = struct.unpack_from("<i", d, 18)[0]
-hraw = struct.unpack_from("<i", d, 22)[0]; h = abs(hraw); bpp = struct.unpack_from("<H", d, 28)[0] // 8
-row = ((w * bpp) + 3) // 4 * 4
-topdown = hraw < 0                        # sips writes top-down; a bottom-up file has h > 0
-def px(x, y):
-    p = off + (y if topdown else h - 1 - y) * row + x * bpp
-    return d[p], d[p + 1], d[p + 2]
-def white(x, y): return min(px(x, y)) >= 250
-# The widest white run on any of several rows is the page (text breaks the
-# runs on some rows; the page may be short at a small zoom). Its top edge is
-# found up the left margin, which no text crosses — starting below the
-# toolbar, whose light buttons would otherwise read as page.
-best = None
-for y in range(150, 1000, 50):
-    runs, x = [], 0
-    while x < w:
-        if white(x, y):
-            x0 = x
-            while x < w and white(x, y): x += 1
-            runs.append((x0, x))
-        x += 1
-    if runs:
-        r = max(runs, key=lambda r: r[1] - r[0])
-        if best is None or r[1] - r[0] > best[1] - best[0]: best = r
-left, right = best
-assert right - left > 400, f"no page found: widest white run {left}-{right}"
-top = next(yy for yy in range(70, h) if white(left + 8, yy))
-print(left, top, (right - left) / 612.0)
-PY
-)"
-echo "page: left=$PL top=$PT scale=$PS px/pt"
+# Where the page is. A fresh file opens at whatever zoom fits, and a mode
+# banner (Add text, placing a signature) pushes the page down while it
+# shows, so nothing about the page's placement is assumed: a shot of the
+# content area is measured (tools/macos-measure-page.py) and every page
+# click below is a PDF point mapped through the latest measurement, as the
+# iOS choreography does. Re-measured after each mode change.
+measure_page() {
+    screencapture -x -R "$WX,$((WY + 28)),1920,1080" /tmp/megapdf-layout.png
+    read -r PL PT PS <<<"$(python3 "$ROOT/tools/macos-measure-page.py" /tmp/megapdf-layout.png)"
+    echo "page: left=$PL top=$PT scale=$PS px/pt"
+}
+measure_page
 pagex() { python3 -c "print(int($WX + $PL + $1 * $PS))"; }
 pagey() { python3 -c "print(int($WY + 28 + $PT + (792 - $1) * $PS))"; }   # PDF y, bottom-left origin
 
@@ -120,9 +92,11 @@ click "$(pagex 78.5)" "$(pagey 590.5)"; sleep 1.6      # tick "Include delivery 
 click "$(pagex 78.5)" "$(pagey 564.5)"; sleep 2.0      # tick "Damage insurance accepted"
 click 644 118; sleep 2.0                               # Sign → library flyout
 click 716 210; sleep 1.5                               # the saved signature
+measure_page                                           # the placement banner moved the page
 click "$(pagex 196)" "$(pagey 426)"; sleep 1.2         # place it on the line
 key esc; sleep 2.0                                     # drop the selection
 click 702 118; sleep 1.2                               # Add text
+measure_page                                           # the mode banner moved the page
 click "$(pagex 72)" "$(pagey 350)"; sleep 1.2          # printed name, clear of the "Sign above the line" label
 type_ "Jane Whitfield"; sleep 1.2
 key return; sleep 2.2

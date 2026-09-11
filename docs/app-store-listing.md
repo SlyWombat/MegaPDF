@@ -311,7 +311,7 @@ use the French agreement and search for "location".
 | Field | Value |
 |---|---|
 | Sign-in required | **No** — there are no accounts |
-| Contact | dave@drscapital.com |
+| Contact | David Seaman, info@electricrv.ca, +1 888 555-1212 (company contact, as everywhere public) |
 | Notes | see below |
 
 > MegaPDF is a local-only PDF form filler: no account, no server, no network
