@@ -131,6 +131,8 @@ cat > "$APP/Contents/Info.plist" << PLIST
         <string>fr-CA</string>
     </array>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
+    <!-- The Mac App Store refuses a package without a category (ITMS 90242). -->
+    <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSHumanReadableCopyright</key><string>Electric RV</string>
     <!-- Opening a PDF from Finder is the whole point of the app; without this the
@@ -268,7 +270,26 @@ SIGN_ARGS+=(--sign "$IDENTITY")
 if [ -n "${MACOS_ENTITLEMENTS:-}" ]; then
     [ -f "$MACOS_ENTITLEMENTS" ] || { echo "::error::entitlements file not found: $MACOS_ENTITLEMENTS" >&2; exit 1; }
     echo "entitlements: $MACOS_ENTITLEMENTS"
-    SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
+    # A Store build's signature must name the application identifier and team
+    # the embedded profile names, or App Store Connect warns the build off
+    # TestFlight (ITMS 90886). Both come from the profile itself, so the
+    # checked-in entitlements stay free of team-specific values.
+    if [ -n "${MACOS_PROVISION_PROFILE:-}" ]; then
+        SIGNED_ENTITLEMENTS="$RUNNER_TEMP_DIR/megapdf-entitlements.plist"
+        security cms -D -i "$MACOS_PROVISION_PROFILE" > "$RUNNER_TEMP_DIR/megapdf-profile.plist"
+        python3 - "$MACOS_ENTITLEMENTS" "$RUNNER_TEMP_DIR/megapdf-profile.plist" "$SIGNED_ENTITLEMENTS" <<'PY'
+import plistlib, sys
+ents = plistlib.load(open(sys.argv[1], "rb"))
+prof = plistlib.load(open(sys.argv[2], "rb"))["Entitlements"]
+for key in ("com.apple.application-identifier", "com.apple.developer.team-identifier"):
+    ents[key] = prof[key]
+plistlib.dump(ents, open(sys.argv[3], "wb"))
+print("signing as", prof["com.apple.application-identifier"])
+PY
+        SIGN_ARGS+=(--entitlements "$SIGNED_ENTITLEMENTS")
+    else
+        SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
+    fi
 fi
 
 # Nested Mach-O libraries must carry their own signatures before the bundle can
