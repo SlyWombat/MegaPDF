@@ -133,6 +133,9 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>LSMinimumSystemVersion</key><string>12.0</string>
     <!-- The Mac App Store refuses a package without a category (ITMS 90242). -->
     <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+    <!-- Standard OS crypto only, as the iOS build declares: without this the
+         build sits in App Store Connect waiting for an export-compliance answer. -->
+    <key>ITSAppUsesNonExemptEncryption</key><false/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSHumanReadableCopyright</key><string>Electric RV</string>
     <!-- Opening a PDF from Finder is the whole point of the app; without this the

@@ -369,13 +369,18 @@ def cmd_review(attachments):
 
 def cmd_build(number=None):
     v = editable_version()
-    builds = api("GET", f"/v1/builds?filter[app]={APP_ID}&sort=-uploadedDate&limit=10")["data"]
+    builds = api("GET", f"/v1/builds?filter[app]={APP_ID}&filter[preReleaseVersion.platform]={PLATFORM}&sort=-uploadedDate&limit=10&fields[builds]=version,uploadedDate,processingState,expired,usesNonExemptEncryption")["data"]
     if number:
         builds = [b for b in builds if b["attributes"]["version"] == str(number)]
     builds = [b for b in builds if b["attributes"]["processingState"] == "VALID" and not b["attributes"]["expired"]]
     if not builds:
         sys.exit("no processed build to attach yet")
     b = builds[0]
+    # Export compliance, in case the build's Info.plist did not declare it; a
+    # build without an answer cannot be submitted.
+    if b["attributes"].get("usesNonExemptEncryption") is None:
+        api("PATCH", f"/v1/builds/{b['id']}", {"data": {
+            "type": "builds", "id": b["id"], "attributes": {"usesNonExemptEncryption": False}}})
     api("PATCH", f"/v1/appStoreVersions/{v['id']}/relationships/build",
         {"data": {"type": "builds", "id": b["id"]}})
     print(f"  attached build {b['attributes']['version']} ({b['attributes']['uploadedDate'][:16]}) to {v['attributes']['versionString']}")
@@ -385,7 +390,8 @@ def cmd_submit():
     v = editable_version()
     # An unsubmitted submission may already exist from an earlier attempt
     # (previews still transcoding, say); adding a second is refused.
-    pending = api("GET", f"/v1/reviewSubmissions?filter[app]={APP_ID}&filter[state]=READY_FOR_REVIEW&limit=1")["data"]
+    pending = [r for r in api("GET", f"/v1/reviewSubmissions?filter[app]={APP_ID}&filter[state]=READY_FOR_REVIEW&limit=10")["data"]
+               if r["attributes"]["platform"] == PLATFORM]
     sub = pending[0] if pending else api("POST", "/v1/reviewSubmissions", {"data": {
         "type": "reviewSubmissions", "attributes": {"platform": PLATFORM},
         "relationships": {"app": {"data": {"type": "apps", "id": APP_ID}}}}})["data"]
