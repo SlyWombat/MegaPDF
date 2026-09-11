@@ -16,6 +16,11 @@ things a runner cannot see.
 - Non-interactive SSH has a bare PATH. Start scripts with
   `export PATH="/opt/homebrew/bin:$HOME/.dotnet:$PATH"`.
 - macOS bash is 3.2: `set -u` with an empty array (`"${T[@]}"`) is an error.
+- **The only display is the KVM's HDMI capture, and it sleeps after ten idle
+  minutes.** With it asleep the Avalonia app dies on launch with "not able to
+  start the RenderTimer … -6661" (no active display for CVDisplayLink), and
+  `system_profiler SPDisplaysDataType` lists no display. `caffeinate -u -t 3`
+  wakes it; the capture scripts do this themselves. Simulators are unaffected.
 
 ## What is installed (2026-09-11)
 
@@ -52,6 +57,11 @@ output files are for. Takes about three minutes per device.
 
 **iOS listing screenshots**: `tools/ios-screenshots.sh <lang> [out]` — the CI
 recipe, locally.
+
+**macOS preview video**: `tools/macos-demo-video.sh ~/app-macos/MegaPDF.app ~/captures/macos/video 1440x900 [light|dark]`
+— the app's `--story` mode renders a frame after each step (tick, tick,
+sign, print the name, find ×3, done) and ffmpeg holds each for a couple of
+seconds. Real window states, no pointer.
 
 **macOS screenshots**: the app renders its own window, so no Screen Recording
 permission is involved. `--window WxH` sets the size (1440x900 is a Mac App

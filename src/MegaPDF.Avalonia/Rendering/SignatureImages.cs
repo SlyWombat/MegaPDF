@@ -35,6 +35,17 @@ internal static class SignatureImages
                 System.Runtime.InteropServices.Marshal.Copy(
                     locked.Address + (y * locked.RowBytes), bytes, y * rowBytes, rowBytes);
             }
+
+            // Decode picks the platform's native order, and on macOS (Skia) that
+            // is RGBA, not the BGRA the engine stamps and EncodePng writes. Taken
+            // as BGRA anyway, red and blue trade places: a navy signature came
+            // out maroon in the first Mac preview frames. Swap to what the name
+            // promises.
+            if (locked.Format == PixelFormat.Rgba8888)
+            {
+                for (var i = 0; i < bytes.Length; i += 4)
+                    (bytes[i], bytes[i + 2]) = (bytes[i + 2], bytes[i]);
+            }
         }
 
         return new SignatureBitmap(bytes, size.Width, size.Height);

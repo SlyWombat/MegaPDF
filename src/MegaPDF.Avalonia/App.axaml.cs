@@ -7,6 +7,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.Markup.Xaml;
 using MegaPDF.Avalonia.ViewModels;
+using MegaPDF.Core.Engine;
 using MegaPDF.Avalonia.Views;
 
 namespace MegaPDF.Avalonia;
@@ -90,26 +91,96 @@ public partial class App : Application
     {
         DispatcherTimer.RunOnce(() =>
         {
-            try
-            {
-                if (desktop.MainWindow is { } window)
-                {
-                    var size = new PixelSize(
-                        Math.Max(1, (int)window.Bounds.Width),
-                        Math.Max(1, (int)window.Bounds.Height));
-                    using var target = new RenderTargetBitmap(size, new Vector(96, 96));
-                    target.Render(window);
-                    Directory.CreateDirectory(Path.GetDirectoryName(outPath) ?? ".");
-                    target.Save(outPath);
-                    Console.WriteLine($"screenshot: {outPath} ({size.Width}x{size.Height})");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"::error::screenshot failed: {ex.Message}");
-            }
+            if (desktop.MainWindow is { } window)
+                RenderWindow(window, outPath);
             desktop.Shutdown();
         }, TimeSpan.FromSeconds(4));
+    }
+
+    /// <summary>Renders the window as it stands to a PNG; never throws.</summary>
+    private static void RenderWindow(Window window, string outPath)
+    {
+        try
+        {
+            var size = new PixelSize(
+                Math.Max(1, (int)window.Bounds.Width),
+                Math.Max(1, (int)window.Bounds.Height));
+            using var target = new RenderTargetBitmap(size, new Vector(96, 96));
+            target.Render(window);
+            Directory.CreateDirectory(Path.GetDirectoryName(outPath) ?? ".");
+            target.Save(outPath);
+            Console.WriteLine($"screenshot: {outPath} ({size.Width}x{size.Height})");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::screenshot failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// --story &lt;dir&gt; --signature &lt;png&gt;: the frames of the Mac preview
+    /// video. The app opens the unfilled demo agreement (a .pdf argument) and
+    /// then does, on a timer, what the iOS choreography does with taps: ticks
+    /// two boxes, places the signature, prints the name under the line, finds
+    /// every "rental" and steps through the matches, rendering the window after
+    /// each step as NN-name.png. tools/macos-demo-video.sh turns the frames into
+    /// a clip.
+    ///
+    /// Frames rather than a screen recording because screencapture and synthetic
+    /// input both need privacy permissions an SSH session on the capture Mac
+    /// cannot be granted; the window renders itself exactly as --screenshot does.
+    /// The points are the demo agreement's layout (tools/gen_test_fixtures.py,
+    /// 612x792, here from the top-left as the view model counts).
+    /// </summary>
+    private static void RunStory(IClassicDesktopStyleApplicationLifetime desktop,
+                                 MainViewModel viewModel, string outDir, string? signaturePng)
+    {
+        var signature = signaturePng is not null && File.Exists(signaturePng)
+            ? Rendering.SignatureImages.LoadBgra(signaturePng)
+            : null;
+        if (signature is null)
+            Console.Error.WriteLine("::warning::--story without a readable --signature png; the signature step is skipped");
+
+        var steps = new (string Name, Action Act)[]
+        {
+            ("opened", () => { }),
+            ("box-1", () => viewModel.HandlePageClick(0, new PdfPoint(78.5, 201.5))),
+            ("box-2", () => viewModel.HandlePageClick(0, new PdfPoint(78.5, 227.5))),
+            ("signed", () =>
+            {
+                if (signature is not null)
+                    viewModel.PlaceSignature(0, new PdfPoint(196, 355), signature, "Mega W.");
+            }),
+            ("printed-name", () => viewModel.AddTextBox(0, new PdfPoint(72, 405), "Jane Whitfield")),
+            ("find", () => { viewModel.IsFindOpen = true; viewModel.Search("rental"); }),
+            ("find-next", () => viewModel.FindNextCommand.Execute(null)),
+            ("find-next-2", () => viewModel.FindNextCommand.Execute(null)),
+            ("done", () => viewModel.CloseFind()),
+        };
+
+        var step = 0;
+        void Next()
+        {
+            if (step >= steps.Length)
+            {
+                desktop.Shutdown();
+                return;
+            }
+            var (name, act) = steps[step];
+            try { act(); }
+            catch (Exception ex) { Console.Error.WriteLine($"::error::story step {name}: {ex.Message}"); }
+            var index = step++;
+            // Page raster and layout are asynchronous; give them a moment, then
+            // render and move on.
+            DispatcherTimer.RunOnce(() =>
+            {
+                if (desktop.MainWindow is { } window)
+                    RenderWindow(window, Path.Combine(outDir, $"{index:00}-{name}.png"));
+                DispatcherTimer.RunOnce(Next, TimeSpan.FromMilliseconds(300));
+            }, TimeSpan.FromSeconds(1.5));
+        }
+
+        DispatcherTimer.RunOnce(Next, TimeSpan.FromSeconds(4));
     }
 
     /// <summary>
@@ -283,6 +354,13 @@ public partial class App : Application
             // photographed — which is exactly what happened to the first set. This
             // also yields the window alone, with no desktop or dock around it,
             // which is what a design review wants.
+            if (ArgumentAfter(desktop.Args, "--story") is { } storyDir)
+            {
+                if (ArgumentAfter(desktop.Args, "--theme") is "dark")
+                    RequestedThemeVariant = ThemeVariant.Dark;
+                RunStory(desktop, viewModel, storyDir, ArgumentAfter(desktop.Args, "--signature"));
+            }
+
             var shot = ArgumentAfter(desktop.Args, "--screenshot");
             if (shot is not null)
             {
