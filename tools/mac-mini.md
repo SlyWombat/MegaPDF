@@ -80,10 +80,15 @@ C="$HOME/Library/Containers/com.megapdf.mac/Data"; mkdir -p "$C/tmp/fixtures"; c
 **Long jobs**: an SSH command from a Claude session is cut off after ten
 minutes. Run anything longer with `nohup … &` on the Mac and tail its log.
 
-## Not possible over SSH
+## Screen recording and synthetic input over SSH
 
-`screencapture` and any synthetic input into the real GUI fail with
-"could not create image from display": macOS privacy (TCC) grants apply
-per app and an SSH session has none. True screen recordings of the Mac app
-need Screen Recording and Accessibility granted in System Settings on the
-Mac itself; until then Mac video is assembled from app-rendered frames.
+macOS privacy (TCC) grants apply per app, and an SSH session's app is
+`sshd-keygen-wrapper`. Until 2026-09-11 it had none, so `screencapture` failed
+with "could not create image from display" and the Mac clip was assembled from
+app-rendered frames instead. Since then the owner has granted the SSH context
+**Screen & System Audio Recording** and **Accessibility** in System Settings
+(GUI-only on macOS 26; done through the KVM), and `screencapture -x` over a
+fresh SSH session returns a real 2560x1440 PNG. An SSH session that was open
+before a grant does not see it — reconnect. `tools/macos-demo-video.sh` still
+uses the frame method; a true recording of the Mac app (pointer and all) is
+possible now and not yet built.

@@ -27,6 +27,10 @@ if [ ! -d "$APP" ]; then
         -configuration Debug -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO -quiet 2>&1 | grep -v "ld: warning" || true
 fi
 
+# Empty for English — and an empty array under set -u is an error on macOS
+# bash 3.2, hence the ${arr[@]+...} form where it is expanded.
+# Empty for English — and an empty array under set -u is an error on macOS
+# bash 3.2, hence the ${arr[@]+...} form where it is expanded.
 LANG_ARGS=()
 case "$LANG_TAG" in
     fr-CA) LANG_ARGS=(-AppleLanguages "(fr-CA)" -AppleLocale fr_CA) ;;
@@ -62,7 +66,7 @@ capture() {
     xcrun simctl install "$udid" "$APP"
     xcrun simctl ui "$udid" appearance light || true
     for state in home viewer search sign draw text; do
-        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" "${LANG_ARGS[@]}" >/dev/null
+        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
         sleep 8
         xcrun simctl io "$udid" screenshot "$OUT/$label-$state.png" >/dev/null
         xcrun simctl terminate "$udid" com.megapdf.ios || true
@@ -70,7 +74,7 @@ capture() {
     done
     xcrun simctl ui "$udid" appearance dark || true
     for state in search sign; do
-        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" "${LANG_ARGS[@]}" >/dev/null
+        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
         sleep 8
         xcrun simctl io "$udid" screenshot "$OUT/$label-$state-dark.png" >/dev/null
         xcrun simctl terminate "$udid" com.megapdf.ios || true
