@@ -120,7 +120,7 @@ click "$(pagex 78.5)" "$(pagey 590.5)"; sleep 1.6      # tick "Include delivery 
 click "$(pagex 78.5)" "$(pagey 564.5)"; sleep 2.0      # tick "Damage insurance accepted"
 click 644 118; sleep 2.0                               # Sign → library flyout
 click 716 210; sleep 1.5                               # the saved signature
-click "$(pagex 196)" "$(pagey 437)"; sleep 1.2         # place it on the line
+click "$(pagex 196)" "$(pagey 426)"; sleep 1.2         # place it on the line
 key esc; sleep 2.0                                     # drop the selection
 click 702 118; sleep 1.2                               # Add text
 click "$(pagex 72)" "$(pagey 376)"; sleep 1.2          # under the line

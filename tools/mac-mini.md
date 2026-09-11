@@ -89,6 +89,15 @@ app-rendered frames instead. Since then the owner has granted the SSH context
 **Screen & System Audio Recording** and **Accessibility** in System Settings
 (GUI-only on macOS 26; done through the KVM), and `screencapture -x` over a
 fresh SSH session returns a real 2560x1440 PNG. An SSH session that was open
-before a grant does not see it — reconnect. `tools/macos-demo-video.sh` still
-uses the frame method; a true recording of the Mac app (pointer and all) is
-possible now and not yet built.
+before a grant does not see it — reconnect. Automation for System Events is
+granted too (window placement); use `tell application "System Events" to tell
+process …` for other apps rather than `tell application X`, which would raise
+a new consent prompt that only the KVM can answer. Never `tccutil reset`.
+
+**macOS preview video, recorded for real**: `tools/macos-record-demo.sh
+[app] [out] [light|dark]` — cliclick drives the window while screencapture
+records 1920x1080. It measures where the page is off a screenshot and maps
+every click from PDF points, and seeds the signature library if empty. For
+dark, switch Appearance first (`tell appearance preferences to set dark mode
+to true`) and back after. Finding that clicks missed at every zoom but
+fit-width was how the page-click bug in the Mac app was found and fixed.
