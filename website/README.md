@@ -21,14 +21,15 @@ The main-page teaser block (`.megapdf-teaser` CSS + section) lives in
 
 ## Launch swap (when a store approves)
 
-`megapdf/index.html` carries the store links already written, commented out
-directly under the "in testing now" paragraph. On approval: delete that
-paragraph, uncomment the `.storelinks` block (drop the link for whichever store
-is still pending), redeploy.
+Microsoft Store (2026-09-10) and Google Play (2026-09-09) are public and linked
+from the `.storelinks` block. The App Store link is still written and commented
+out directly under the "in testing now" paragraph. On approval: delete that
+paragraph, move the link into `.storelinks`, redeploy.
 
-Both listings 404 until they are actually public, and the Play API cannot report
+Listings 404 until they are actually public, and the Play API cannot report
 Google's verdict — the store URL returning 200 is the signal, not a track status
 of `completed`, which only describes the rollout:
 
-- `https://play.google.com/store/apps/details?id=ca.electricrv.megapdf`
-- `https://apps.apple.com/app/id6799522972`
+- `https://apps.microsoft.com/detail/9PF4TRRH4M76` (live)
+- `https://play.google.com/store/apps/details?id=ca.electricrv.megapdf` (live)
+- `https://apps.apple.com/app/id6799522972` (pending)

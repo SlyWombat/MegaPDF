@@ -6,8 +6,11 @@ cert problems (error `0x800B010A`, "Publisher: Unknown", the `.cer`/Setup.exe tr
 step) all disappear, and the Store handles updates.
 
 ## Status
-- **1.7.0.0 SUBMITTED 2026-09-10** — x64 + ARM64, en-US + en-CA, WACK PASS,
-  awaiting certification. Update this line as it moves (certified -> live).
+- **1.7.0.0 LIVE 2026-09-10** — x64 + ARM64, en-US + en-CA. Submitted, certified,
+  and published the same day; the listing at
+  https://apps.microsoft.com/detail/9PF4TRRH4M76 went public at 18:55 UTC and
+  electricrv.ca/megapdf links to it. Next release: bump the version, rebuild
+  both architectures, new submission.
 - Partner Center developer account: **active as of 2026-07-22.**
 - When creating the new app, product type = **"MSIX or PWA app"** (not EXE/MSI —
   Store re-signing, Store-managed updates, and package flights are MSIX-only).

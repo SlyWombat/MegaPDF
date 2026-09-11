@@ -58,6 +58,8 @@
         .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
         .stores { color: var(--muted); font-size: 13px; margin-top: 14px; }
         .stores strong { color: var(--text); }
+        .stores a { color: var(--text); }
+        .stores a:hover { color: var(--accent); }
         /* Store links, used once the apps are public (see the block in the hero). */
         .storelinks { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
         .storelinks a {
@@ -134,16 +136,20 @@
                     leaving your device.
                 </p>
                 <div class="ctas">
-                    <a class="cta" href="https://github.com/SlyWombat/MegaPDF/releases">Download for Windows</a>
+                    <a class="cta" href="https://apps.microsoft.com/detail/9PF4TRRH4M76">Get it for Windows</a>
                     <a class="cta ghost" href="https://github.com/SlyWombat/MegaPDF">View the source</a>
                 </div>
                 <div class="storelinks">
+                    <a href="https://apps.microsoft.com/detail/9PF4TRRH4M76">
+                        <span><span class="where">Get it from</span>Microsoft Store</span>
+                    </a>
                     <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
                         <span><span class="where">Get it on</span>Google Play</span>
                     </a>
                 </div>
                 <p class="stores">The <strong>iPhone&nbsp;/&nbsp;iPad</strong> app is in testing now —
-                   the App&nbsp;Store release is on the way.</p>
+                   the App&nbsp;Store release is on the way. Prefer a plain install on Windows?
+                   Every release is also on <a href="https://github.com/SlyWombat/MegaPDF/releases">GitHub</a>.</p>
 
                 <!-- LAUNCH SWAP (App Store): when Apple approves, delete the
                      <p class="stores"> line above and move this link into the
