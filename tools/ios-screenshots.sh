@@ -49,6 +49,10 @@ capture() {
     picked=$(pick_device "$pattern") || { echo "no simulator matches $pattern" >&2; return 1; }
     udid="${picked%%|*}"; name="${picked##*|}"
     echo "capturing $label on $name"
+    # A device the previous script is still shutting down refuses to boot, and
+    # under set -e that ended the English run with nothing captured. Settle it.
+    xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true
+    sleep 5
     xcrun simctl boot "$udid" 2>/dev/null || true
     xcrun simctl bootstatus "$udid" -b >/dev/null
     # First-boot banners come and go for a while after bootstatus returns.

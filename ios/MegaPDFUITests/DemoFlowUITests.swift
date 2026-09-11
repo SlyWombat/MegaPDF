@@ -71,9 +71,14 @@ final class DemoFlowUITests: XCTestCase {
     }
 
     func testFillCheckSignStory() {
-        let labels = Labels.forLanguage(ProcessInfo.processInfo.environment["DEMO_LANG"])
+        let lang = ProcessInfo.processInfo.environment["DEMO_LANG"]
+        let labels = Labels.forLanguage(lang)
         app.launch()
         _ = page()
+        // The toolbar must be in the requested language, or the recording is
+        // an English video under a French file name.
+        XCTAssertTrue(app.buttons[labels.sign].firstMatch.waitForExistence(timeout: 5),
+                      "toolbar is not in the requested language (\(lang ?? "en"))")
         pause(2.5)
 
         // 1. Tick two of the three boxes.
@@ -102,6 +107,13 @@ final class DemoFlowUITests: XCTestCase {
 
         // 3. Type the printed name under the signature line.
         app.buttons[labels.addText].firstMatch.tap()
+        // Same one-line hint as for the signature ("Tap the page where the text
+        // should go"); let it read, dismiss it, then tap.
+        let textHint = app.alerts.firstMatch
+        if textHint.waitForExistence(timeout: 2) {
+            pause(1.5)
+            textHint.buttons.firstMatch.tap()
+        }
         pause(0.8)
         tapPage(x: 72, yFromBottom: 372)
         let field = app.textFields[labels.textField].firstMatch

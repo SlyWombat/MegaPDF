@@ -16,11 +16,14 @@ things a runner cannot see.
 - Non-interactive SSH has a bare PATH. Start scripts with
   `export PATH="/opt/homebrew/bin:$HOME/.dotnet:$PATH"`.
 - macOS bash is 3.2: `set -u` with an empty array (`"${T[@]}"`) is an error.
-- **The only display is the KVM's HDMI capture, and it sleeps after ten idle
-  minutes.** With it asleep the Avalonia app dies on launch with "not able to
-  start the RenderTimer … -6661" (no active display for CVDisplayLink), and
-  `system_profiler SPDisplaysDataType` lists no display. `caffeinate -u -t 3`
-  wakes it; the capture scripts do this themselves. Simulators are unaffected.
+- **The only display is the KVM's HDMI capture.** If it is asleep the Avalonia
+  app dies on launch with "not able to start the RenderTimer … -6661" (no
+  active display for CVDisplayLink) and `system_profiler SPDisplaysDataType`
+  lists no display. Display sleep is now set to never (`pmset displaysleep 0`,
+  house-network change 2026-09-11); `caffeinate -u -t 3` wakes it if that ever
+  regresses, and the capture scripts still do it. The same timer also fails
+  intermittently while simulators boot; the scripts retry. Simulators are
+  unaffected either way.
 
 ## What is installed (2026-09-11)
 
