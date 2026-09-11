@@ -56,13 +56,6 @@ public sealed class AppSettings
         set { _model = _model with { FlattenOnSave = value }; Save(); }
     }
 
-    /// <summary>Startup update check against GitHub releases — on by default.</summary>
-    public bool CheckForUpdates
-    {
-        get => _model.CheckForUpdates;
-        set { _model = _model with { CheckForUpdates = value }; Save(); }
-    }
-
     /// <summary>
     /// UI language as a BCP-47 tag ("fr-CA"), or "" to follow the operating
     /// system (#91). Storage only: the apps apply it at startup, Core never reads it.
@@ -103,7 +96,6 @@ public sealed class AppSettings
         public bool ReopenLastFile { get; init; }
         public bool DefaultAppCardShown { get; init; }
         public bool FlattenOnSave { get; init; }
-        public bool CheckForUpdates { get; init; } = true;
         public string Language { get; init; } = "";
     }
 }

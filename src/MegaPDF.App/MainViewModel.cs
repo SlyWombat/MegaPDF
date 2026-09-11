@@ -127,35 +127,6 @@ public partial class MainViewModel(Window window) : ObservableObject
     [ObservableProperty]
     private bool _isDefaultAppCardOpen;
 
-    // --- Update bar states: available → downloading → staged (restart) ---
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UpdateMessage), nameof(UpdateActionLabel))]
-    private string? _updateAvailableVersion;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UpdateMessage), nameof(UpdateActionLabel))]
-    private bool _updateDownloading;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(UpdateMessage), nameof(UpdateActionLabel))]
-    private bool _updateStaged;
-
-    public bool IsUpdateBarOpen => UpdateAvailableVersion is not null;
-
-    public string UpdateMessage =>
-        UpdateStaged ? Strings.UpdateReady(UpdateAvailableVersion)
-        : UpdateDownloading ? Strings.UpdateDownloading(UpdateAvailableVersion)
-        : Strings.UpdateAvailable(UpdateAvailableVersion);
-
-    public string UpdateActionLabel => UpdateStaged ? Strings.RestartNow : Strings.Update;
-
-    public bool CheckForUpdates
-    {
-        get => _settings.CheckForUpdates;
-        set => _settings.CheckForUpdates = value;
-    }
-
     public void MaybeShowDefaultAppCard()
     {
         if (_settings.DefaultAppCardShown)

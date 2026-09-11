@@ -43,8 +43,7 @@ $global:CT = [System.Windows.Automation.ControlType]
 # Derived, not hardcoded: "spcj169vsxppp" was the old self-signed sideload
 # identity, and the package has carried the Store identity
 # (ElectricRV.MegaPDF_fba94j4nmgb9y) since 2026-07-22. The stale literal made
-# Start-App launch nothing at all. tools/Setup.cs still names the old AUMID on
-# purpose -- that one is for the sideload Setup.exe path.
+# Start-App launch nothing at all.
 $global:AUMID = $(
     $pkg = Get-AppxPackage ElectricRV.MegaPDF -ErrorAction SilentlyContinue |
            Select-Object -First 1

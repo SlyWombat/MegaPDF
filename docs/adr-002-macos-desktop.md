@@ -335,7 +335,8 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
      Windows never sets and never reads, populated on macOS from Avalonia's
      `IStorageProvider.SaveBookmarkAsync`.
   5. **`UpdateChecker` must self-disable on Store builds**, exactly as it does
-     for MSIX — the Store forbids self-updating.
+     for MSIX — the Store forbids self-updating. *(Moot since 2026-09-11: the
+     updater was deleted with the Windows sideload flow; there is nothing to port.)*
   6. **Certificates were automatable this time — DONE 2026-08-28.** Unlike
      Developer ID, `MAC_INSTALLER_DISTRIBUTION` and `MAC_APP_STORE` are ordinary
      ASC API types, so no portal step and no Account Holder role was needed:

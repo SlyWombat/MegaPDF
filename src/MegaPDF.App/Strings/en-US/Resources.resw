@@ -238,9 +238,6 @@
   <data name="FlattenToggle.Header" xml:space="preserve">
     <value>Make marks &amp; signatures permanent when saving</value>
   </data>
-  <data name="UpdateCheckToggle.Header" xml:space="preserve">
-    <value>Check for updates at startup</value>
-  </data>
   <data name="AboutPanel.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>About Mega PDF</value>
   </data>
@@ -347,21 +344,6 @@
     <value>Save ●</value>
     <comment>Toolbar label while there are unsaved changes</comment>
   </data>
-  <data name="UpdateReady" xml:space="preserve">
-    <value>MegaPDF {0} is ready — it will be used the next time you open MegaPDF.</value>
-  </data>
-  <data name="UpdateDownloading" xml:space="preserve">
-    <value>Getting MegaPDF {0}…</value>
-  </data>
-  <data name="UpdateAvailable" xml:space="preserve">
-    <value>A new version of MegaPDF is available ({0}).</value>
-  </data>
-  <data name="RestartNow" xml:space="preserve">
-    <value>Restart now</value>
-  </data>
-  <data name="Update" xml:space="preserve">
-    <value>Update</value>
-  </data>
   <data name="NoResults" xml:space="preserve">
     <value>No results</value>
   </data>
@@ -464,12 +446,6 @@ Saved as {2} — ready to email.</value>
     <value>Edit text</value>
     <comment>UIA name of the inline editor</comment>
   </data>
-  <data name="CouldNotUpdateTitle" xml:space="preserve">
-    <value>Couldn't update</value>
-  </data>
-  <data name="UpdateFailedHint" xml:space="preserve">
-    <value>You can download the new version from the MegaPDF releases page instead.</value>
-  </data>
   <data name="RestoreTitle" xml:space="preserve">
     <value>Restore unsaved changes?</value>
   </data>
@@ -535,9 +511,6 @@ Saved as {2} — ready to email.</value>
   <!-- ===== Error bodies (UserFacing.cs). The engine's own messages are technical
        English; these are what the person sees first, with the technical detail
        underneath when nothing better is known. ===== -->
-  <data name="NoUpdateAvailable" xml:space="preserve">
-    <value>No update available.</value>
-  </data>
   <data name="ErrorFileUnreadable" xml:space="preserve">
     <value>The file could not be read.</value>
   </data>

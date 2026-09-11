@@ -116,7 +116,8 @@ only, no print options UI) before building.
 
 Per SDD §5.2: build only when an SCCM/GPO shop asks. Self-contained payload
 harvest, shortcuts, .pdf ProgId registration, upgrade code, auto-update
-disabled. Until then the Setup.exe bootstrapper covers friction.
+disabled. Until then the Store install covers it (the Setup.exe sideload
+bootstrapper was retired 2026-09-11).
 
 ---
 

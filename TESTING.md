@@ -1,4 +1,4 @@
-# Testing MegaPDF 1.0
+# Testing MegaPDF
 
 Thanks for testing! MegaPDF is a deliberately simple PDF editor: it does four things
 — edit text, check boxes, place signatures, save — and tries to do them with zero
@@ -6,22 +6,19 @@ learning curve. If you ever feel lost or surprised, that itself is a bug worth r
 
 ## Requirements
 
-- Windows 11 (or Windows 10 1809+), **x64** PC (not ARM).
+- Windows 11 (or Windows 10 1809+), x64 or ARM64 PC.
 - Nothing else — the package is self-contained.
 
 ## Install (one time, ~1 minute)
 
-1. Unzip the `MegaPDF-1.0` folder anywhere.
-2. Double-click **`Setup.exe`** and follow the prompts.
-3. If Windows shows a blue "Windows protected your PC" screen, click
-   **More info → Run anyway** (this test build isn't Store-signed yet).
-4. Choose **Yes** on the one Windows security prompt.
-5. MegaPDF appears in the **Start menu**.
+Get **Mega PDF** from the Microsoft Store:
+https://apps.microsoft.com/detail/9PF4TRRH4M76 — the Store installs it, signs it,
+and keeps it up to date. It appears in the **Start menu**.
 
-(If Setup.exe is blocked by company policy, the same install is available by
-right-clicking `Install-MegaPDF.ps1` → Run with PowerShell.)
+If you installed an earlier test build from a zip (`Setup.exe`), **uninstall that
+first** — it is a different package and cannot update itself into the Store version.
 
-To uninstall completely: **Settings → Apps → MegaPDF → Uninstall**.
+To uninstall completely: **Settings → Apps → Mega PDF → Uninstall**.
 Note: uninstalling removes your signature library — signatures are stored locally,
 per Windows user, and never leave your computer.
 
@@ -67,11 +64,6 @@ pieces MegaPDF is built on. Check the notices dialog opens and scrolls.
 
 **Print** — the Print button (or Ctrl+P) opens the normal Windows print dialog with a
 preview; pick a printer and print. What you see, including your edits, is what prints.
-
-**Updates** — if a newer version is out, a green bar appears at startup offering Update;
-click it and MegaPDF downloads and installs the new version in the background, then uses
-it next time you open the app (or click Restart now). Turn this off in Settings if you
-prefer. (Only works in the installed app, not a dev build.)
 
 **Shrink for email** — the Shrink button saves a *smaller copy* of the current file
 (pictures reduced to email quality; the original is never touched). Try it on a

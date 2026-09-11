@@ -231,9 +231,6 @@
   <data name="FlattenToggle.Header" xml:space="preserve">
     <value>Rendre les marques et signatures permanentes à l'enregistrement</value>
   </data>
-  <data name="UpdateCheckToggle.Header" xml:space="preserve">
-    <value>Vérifier les mises à jour au démarrage</value>
-  </data>
   <data name="AboutPanel.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>À propos de Mega PDF</value>
   </data>
@@ -337,21 +334,6 @@
   <data name="SaveWithDot" xml:space="preserve">
     <value>Enregistrer ●</value>
   </data>
-  <data name="UpdateReady" xml:space="preserve">
-    <value>MegaPDF {0} est prêt : il sera utilisé à la prochaine ouverture de MegaPDF.</value>
-  </data>
-  <data name="UpdateDownloading" xml:space="preserve">
-    <value>Téléchargement de MegaPDF {0}…</value>
-  </data>
-  <data name="UpdateAvailable" xml:space="preserve">
-    <value>Une nouvelle version de MegaPDF est disponible ({0}).</value>
-  </data>
-  <data name="RestartNow" xml:space="preserve">
-    <value>Redémarrer maintenant</value>
-  </data>
-  <data name="Update" xml:space="preserve">
-    <value>Mettre à jour</value>
-  </data>
   <data name="NoResults" xml:space="preserve">
     <value>Aucun résultat</value>
   </data>
@@ -449,12 +431,6 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   <data name="EditTextName" xml:space="preserve">
     <value>Modifier le texte</value>
   </data>
-  <data name="CouldNotUpdateTitle" xml:space="preserve">
-    <value>Impossible de mettre à jour</value>
-  </data>
-  <data name="UpdateFailedHint" xml:space="preserve">
-    <value>Vous pouvez plutôt télécharger la nouvelle version depuis la page des versions de MegaPDF.</value>
-  </data>
   <data name="RestoreTitle" xml:space="preserve">
     <value>Restaurer les modifications non enregistrées?</value>
   </data>
@@ -517,9 +493,6 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   </data>
 
   <!-- ===== Messages d'erreur ===== -->
-  <data name="NoUpdateAvailable" xml:space="preserve">
-    <value>Aucune mise à jour disponible.</value>
-  </data>
   <data name="ErrorFileUnreadable" xml:space="preserve">
     <value>Le fichier n'a pas pu être lu.</value>
   </data>

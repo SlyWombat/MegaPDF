@@ -393,6 +393,8 @@ Being open source is also a mitigation here, not just a distribution choice: the
 2. **Direct download (`.msix` + App Installer)** — from the product website for users/orgs avoiding the Store. `<AppInstaller>` manifest configured with `OnLaunch` update checks (`HoursBetweenUpdateChecks="24"`), so the direct channel also gets automated updates. Requires our own code-signing certificate (EV or Azure Trusted Signing) — budgeted as a release-infrastructure line item.
 3. **winget** (`winget install MegaPDF`) — published to the community repo, pointing at the signed MSIX; serves IT departments scripting deployments.
 
+*(Amendment — 2026-09-11: the Store listing went live on 2026-09-10 and is now the only Windows channel. The self-signed sideload flow that carried testers until then — `Build-Installer.ps1`, `Install-MegaPDF.ps1`, `Setup.exe`, the tag-triggered GitHub release workflow — was retired the next day, together with the in-app GitHub self-updater it required. Channels 2 and 3 remain plans, not builds; either would need our own signing certificate first.)*
+
 ### 5.2 Enterprise fallback: MSI via WiX (deferred, v1.x)
 
 Some corporate environments still block Store/MSIX sideloading and mandate MSI for SCCM/Intune deployment. Plan: ship MSIX-only in v1.0; produce a WiX v4-built MSI wrapper in v1.x **if and when** enterprise demand materializes. The MSI variant would disable in-app auto-update (updates then flow through the org's deployment tooling, as those orgs require). Building both installers from day one is premature complexity for a product aimed first at individuals and small offices.
@@ -402,6 +404,7 @@ Some corporate environments still block Store/MSIX sideloading and mandate MSI f
 - Updates are **silent and automatic** by default (Store or App Installer mechanisms). The persona should never see a "new version available!" interstitial, never click through an update wizard, and never be interrupted mid-document — updates apply on next launch.
 - In-app "About" flyout shows current version and a "Check for updates" button (links to Store/App Installer check) for support scenarios. It also carries the licence and attribution block: *"Free & open source · Apache-2.0"*, the copyright line, the credit line, a link to the GitHub repository, and a **Third-party notices** entry that opens the bundled `THIRD-PARTY-NOTICES.txt` in full (§4.3). *(Amendment — 2026-08-12: the same About surface exists on mobile — a sheet on iOS, a dialog on Android, both reached from the home screen — carrying the same version / copyright / credit / GitHub / notices content. Windows reaches it from the `⚙` settings flyout.)*
 - **Versioning:** semantic `MAJOR.MINOR.PATCH.0` (MSIX requires 4-part). Release cadence: patch releases as needed; feature releases quarterly at most — churn is a cost to this persona, not a benefit.
+- *(Amendment — 2026-09-11: with the Store the only channel, updates are entirely the OS's. The app no longer polls GitHub, has no update bar, and no "check for updates" setting; the About block below is unchanged.)*
 - **Rollback:** Store and App Installer both support publishing a rolled-back package version; the recovery journal format (§3.4) is versioned and backward-compatible so a rollback never strands unsaved-work journals.
 
 ### 5.4 Install-time integrations

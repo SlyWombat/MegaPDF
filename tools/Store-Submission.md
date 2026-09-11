@@ -26,7 +26,6 @@ step) all disappear, and the Store handles updates.
     (listing link: https://apps.microsoft.com/detail/9PF4TRRH4M76).
   - Package SID `S-1-15-2-889272221-470063173-54854299-340821108-960714459-1437483129-3433287587`
     (not needed for submission; kept for future use, e.g. loopback exemption).
-  - `tools/Setup.cs` AppUserModelId updated to the new family name.
 - Builds now also work on the Sly machine: per-user Windows .NET SDK in
   `%LOCALAPPDATA%\Microsoft\dotnet` (no full VS needed; symbols package skipped —
   `mspdbcmf.exe` ships with VS only). Store-mode `dotnet build` produces an
@@ -37,10 +36,10 @@ step) all disappear, and the Store handles updates.
   "needs account" or "needs reserved identity" are blocked until login.
 
 ## Already done in the repo (code)
-- **Self-updater stands down on Store builds.** `MainWindow.CheckForUpdatesAsync`
-  returns early when `Package.Current.SignatureKind == PackageSignatureKind.Store`.
-  Same binary self-updates from GitHub when sideloaded and defers to the Store when
-  Store-signed — no separate build config.
+- **No self-updater.** The GitHub-polling updater and the sideload installer
+  (`Build-Installer.ps1`, `Install-MegaPDF.ps1`, `Setup.cs`, `release.yml`) were
+  retired 2026-09-11, the day after the Store listing went live. Updates are the
+  Store's job; nothing in the app checks for them.
 - **Store packaging mode validated to build.** A Release build with
   `-p:WindowsPackageType=MSIX -p:AppxPackageSigningEnabled=false
   -p:UapAppxPackageBuildMode=StoreUpload -p:SelfContained=true
@@ -62,9 +61,7 @@ step) all disappear, and the Store handles updates.
    - ⚠️ This changes the **package identity** (family name + publisher hash). It is a
      *different app* from the current self-signed test build: existing testers must
      **uninstall the old MegaPDF once** and install the Store version. Auto-update does
-     not cross the identity boundary. The hardcoded `AppUserModelId` in `tools/Setup.cs`
-     (`MegaPDF_spcj169vsxppp!App`) is only used by the sideload Setup.exe path — it does
-     not affect Store installs, but update it if you keep shipping sideload builds.
+     not cross the identity boundary.
 
 ## Build the upload package (needs reserved identity)
 
@@ -217,7 +214,9 @@ per-platform steps.
 - Keep the 4-part version with **revision = 0** (`x.y.z.0`) — already the convention.
 - Each submission's version must be higher than the last.
 
-## After launch — decide
-- Keep `tools/Build-Installer.ps1` + `Install-MegaPDF.ps1` for internal dev sideloading,
-  or retire them once all testers are on the Store. The `UpdateChecker` can stay; it
-  self-disables on Store builds.
+## After launch — done
+- Sideload flow retired 2026-09-11 (installer scripts, Setup.exe, release workflow,
+  in-app updater, its settings toggle and strings). Testers still on the old
+  self-signed identity uninstall once and install from the Store. For a local
+  test install of a Store-mode build, `Add-AppxPackage` the unsigned `.msix`
+  with Developer Mode on, or use a package flight.

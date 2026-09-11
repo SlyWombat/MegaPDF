@@ -49,8 +49,8 @@ public partial class App : Application
     {
         // --screenshot <out.png>: render the window and quit (#84). Taken before
         // the splash, because two and a half seconds of artwork is not what is
-        // being photographed, and before the update check and crash-recovery
-        // prompt, which would appear on top of it.
+        // being photographed, and before the crash-recovery prompt, which would
+        // appear on top of it.
         if (Screenshot.ArgumentAfter("--screenshot") is { } shotPath)
         {
             await RunScreenshotAsync(shotPath);
@@ -91,9 +91,6 @@ public partial class App : Application
 
         // First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — once, dismissible forever.
         mainWindow.ViewModel.MaybeShowDefaultAppCard();
-
-        // Quiet startup update check (packaged builds; setting-gated; never blocks).
-        _ = mainWindow.CheckForUpdatesAsync();
     }
 
     private async Task RunScreenshotAsync(string path)

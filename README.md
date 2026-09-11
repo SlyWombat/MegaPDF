@@ -46,17 +46,14 @@ dotnet build MegaPDF.sln
 dotnet test MegaPDF.sln
 ```
 
-## Test installer (MSIX)
+## Installing
 
-```
-powershell -File tools\Build-Installer.ps1
-```
-
-This produces a signed, self-contained package under `artifacts\MegaPDF.App_<version>_x64_Test\`
-along with the generated `Install.ps1`. To install: right-click `Install.ps1` → *Run with
-PowerShell* (it trusts the dev certificate — one elevation prompt — then installs). The
-installer registers MegaPDF as an available `.pdf` handler; uninstall cleanly via
-Settings → Apps. Store releases will be signed with a real certificate instead (SDD §5).
+Windows builds ship through the **Microsoft Store** only:
+https://apps.microsoft.com/detail/9PF4TRRH4M76 (x64 and ARM64; the Store signs the
+package and handles updates). The Store package is built headlessly by the recipe in
+`tools/Store-Submission.md`. There is no sideload installer and no in-app updater any
+more — both were retired in September 2026 once the Store listing went live; the older
+`.msix` assets on the GitHub releases page are historical and will not update.
 
 ## License
 

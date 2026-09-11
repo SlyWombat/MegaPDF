@@ -908,61 +908,6 @@ public sealed partial class MainWindow : Window
         ViewModel.ClearSearch();
     }
 
-    // --- Startup update check (packaged builds only) ---
-
-    private readonly UpdateChecker _updateChecker = new();
-
-    public async Task CheckForUpdatesAsync()
-    {
-        // Store-distributed builds update through the Microsoft Store; our GitHub
-        // self-updater is only for sideloaded test builds (SDD §5). Same binary:
-        // it self-updates when sideloaded and defers to the Store when Store-signed.
-        if (Windows.ApplicationModel.Package.Current.SignatureKind
-                == Windows.ApplicationModel.PackageSignatureKind.Store)
-            return;
-        if (!ViewModel.CheckForUpdates)
-            return;
-        var version = await _updateChecker.CheckAsync();
-        if (version is null)
-            return;
-        ViewModel.UpdateAvailableVersion = version;
-        UpdateBar.IsOpen = true;
-    }
-
-    private async void OnUpdateActionClicked(object sender, RoutedEventArgs e)
-    {
-        if (ViewModel.UpdateStaged)
-        {
-            UpdateChecker.RestartNow();
-            return;
-        }
-
-        ViewModel.UpdateDownloading = true;
-        UpdateActionButton.IsEnabled = false;
-        try
-        {
-            await _updateChecker.DownloadAndStageAsync();
-            ViewModel.UpdateStaged = true;
-        }
-        catch (Exception ex)
-        {
-            UpdateBar.IsOpen = false;
-            var dialog = new ContentDialog
-            {
-                Title = Strings.CouldNotUpdateTitle,
-                Content = $"{UserFacing.Describe(ex)}\n\n{Strings.UpdateFailedHint}",
-                CloseButtonText = Strings.OK,
-                XamlRoot = Content.XamlRoot,
-            };
-            await dialog.ShowAsync();
-        }
-        finally
-        {
-            ViewModel.UpdateDownloading = false;
-            UpdateActionButton.IsEnabled = true;
-        }
-    }
-
     // Toolbar breakpoints, in effective pixels (the states themselves live in
     // MainWindow.xaml). Above Full the toolbar shows icon + label; below it the labels
     // go and every button stays; below Icons the zoom cluster folds into the single
@@ -1169,7 +1114,6 @@ public sealed partial class MainWindow : Window
         LanguageChoice.SelectedIndex = AppLanguage.ChoiceIndex(ViewModel.LanguageSetting);
         ReopenToggle.IsOn = ViewModel.ReopenLastFile;
         FlattenToggle.IsOn = ViewModel.FlattenOnSave;
-        UpdateCheckToggle.IsOn = ViewModel.CheckForUpdates;
         var version = typeof(MainWindow).Assembly.GetName().Version;
         AboutVersion.Text = Strings.AboutVersion(version?.ToString(3) ?? "dev");
         _settingsLoading = false;
@@ -1208,12 +1152,6 @@ public sealed partial class MainWindow : Window
     {
         if (!_settingsLoading)
             ViewModel.FlattenOnSave = FlattenToggle.IsOn;
-    }
-
-    private void OnUpdateCheckToggled(object sender, RoutedEventArgs e)
-    {
-        if (!_settingsLoading)
-            ViewModel.CheckForUpdates = UpdateCheckToggle.IsOn;
     }
 
     /// <summary>Opens the bundled THIRD-PARTY-NOTICES.txt in a scrollable in-app viewer.</summary>

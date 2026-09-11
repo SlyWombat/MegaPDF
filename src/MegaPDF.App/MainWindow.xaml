@@ -286,10 +286,6 @@
                                     x:Name="FlattenToggle"
                                     x:Uid="FlattenToggle"
                                     Toggled="OnFlattenToggled" />
-                                <ToggleSwitch
-                                    x:Name="UpdateCheckToggle"
-                                    x:Uid="UpdateCheckToggle"
-                                    Toggled="OnUpdateCheckToggled" />
                                 <StackPanel x:Uid="AboutPanel" Spacing="{ThemeResource SpaceXs}" Margin="0,4,0,0" MaxWidth="260">
                                     <TextBlock x:Uid="AboutHeading" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,4" />
                                     <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
@@ -463,19 +459,6 @@
                     CloseButtonClick="OnDefaultAppCardClosed">
                     <InfoBar.ActionButton>
                         <Button x:Uid="ChooseDefaultAppsButton" Click="OnChooseDefaultAppsClicked" />
-                    </InfoBar.ActionButton>
-                </InfoBar>
-                <InfoBar
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    x:Name="UpdateBar"
-                    Severity="Success"
-                    Message="{x:Bind ViewModel.UpdateMessage, Mode=OneWay}"
-                    IsClosable="True">
-                    <InfoBar.ActionButton>
-                        <Button
-                            x:Name="UpdateActionButton"
-                            Content="{x:Bind ViewModel.UpdateActionLabel, Mode=OneWay}"
-                            Click="OnUpdateActionClicked" />
                     </InfoBar.ActionButton>
                 </InfoBar>
             </StackPanel>

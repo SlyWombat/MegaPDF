@@ -34,21 +34,6 @@ public static partial class Strings
     /// <summary>Save ●</summary>
     public static string SaveWithDot => Get("SaveWithDot");
 
-    /// <summary>MegaPDF {0} is ready — it will be used the next time you open MegaPDF.</summary>
-    public static string UpdateReady(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UpdateReady"), arg0);
-
-    /// <summary>Getting MegaPDF {0}…</summary>
-    public static string UpdateDownloading(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UpdateDownloading"), arg0);
-
-    /// <summary>A new version of MegaPDF is available ({0}).</summary>
-    public static string UpdateAvailable(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UpdateAvailable"), arg0);
-
-    /// <summary>Restart now</summary>
-    public static string RestartNow => Get("RestartNow");
-
-    /// <summary>Update</summary>
-    public static string Update => Get("Update");
-
     /// <summary>No results</summary>
     public static string NoResults => Get("NoResults");
 
@@ -142,12 +127,6 @@ public static partial class Strings
     /// <summary>Edit text</summary>
     public static string EditTextName => Get("EditTextName");
 
-    /// <summary>Couldn't update</summary>
-    public static string CouldNotUpdateTitle => Get("CouldNotUpdateTitle");
-
-    /// <summary>You can download the new version from the MegaPDF releases page instead.</summary>
-    public static string UpdateFailedHint => Get("UpdateFailedHint");
-
     /// <summary>Restore unsaved changes?</summary>
     public static string RestoreTitle => Get("RestoreTitle");
 
@@ -207,9 +186,6 @@ public static partial class Strings
 
     /// <summary>Draw your signature</summary>
     public static string DrawSignatureTitle => Get("DrawSignatureTitle");
-
-    /// <summary>No update available.</summary>
-    public static string NoUpdateAvailable => Get("NoUpdateAvailable");
 
     /// <summary>The file could not be read.</summary>
     public static string ErrorFileUnreadable => Get("ErrorFileUnreadable");
