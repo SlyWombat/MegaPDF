@@ -123,7 +123,7 @@ click 716 210; sleep 1.5                               # the saved signature
 click "$(pagex 196)" "$(pagey 426)"; sleep 1.2         # place it on the line
 key esc; sleep 2.0                                     # drop the selection
 click 702 118; sleep 1.2                               # Add text
-click "$(pagex 72)" "$(pagey 376)"; sleep 1.2          # under the line
+click "$(pagex 72)" "$(pagey 350)"; sleep 1.2          # printed name, clear of the "Sign above the line" label
 type_ "Jane Whitfield"; sleep 1.2
 key return; sleep 2.2
 cliclick kd:cmd t:f ku:cmd; sleep 1.2                  # Find
