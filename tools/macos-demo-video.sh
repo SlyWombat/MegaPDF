@@ -24,7 +24,7 @@ BIN="$APP/Contents/MacOS/MegaPDF"
 [ -x "$BIN" ] || { echo "no app at $APP — run tools/build-macos-app.sh first" >&2; exit 1; }
 
 # The app is sandboxed: the document it opens must live in its container.
-CONTAINER="$HOME/Library/Containers/com.megapdf.mac/Data"
+CONTAINER="$HOME/Library/Containers/com.megapdf.ios/Data"
 STAGE="$CONTAINER/tmp/story"
 mkdir -p "$STAGE" "$OUT/frames/$THEME"
 python3 "$ROOT/tools/gen_test_fixtures.py" "$STAGE" >/dev/null

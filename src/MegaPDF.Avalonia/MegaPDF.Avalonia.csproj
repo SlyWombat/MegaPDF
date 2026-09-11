@@ -18,7 +18,7 @@
     <!-- Its own version line, not the Windows app's 1.6.2: this is a new app with
          a viewer's worth of features so far, and claiming 1.6.2 would promise
          parity it does not have yet. -->
-    <Version>0.1.0</Version>
+    <Version>1.7.0</Version>
     <RuntimeIdentifiers>osx-arm64;osx-x64;win-x64</RuntimeIdentifiers>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

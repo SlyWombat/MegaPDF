@@ -73,7 +73,7 @@ forces dark; `--screenshot-state find|focus|mode` poses it. Fixtures must sit
 inside the sandbox container:
 
 ```
-C="$HOME/Library/Containers/com.megapdf.mac/Data"; mkdir -p "$C/tmp/fixtures"; cp ~/fixtures/*.pdf "$C/tmp/fixtures/"
+C="$HOME/Library/Containers/com.megapdf.ios/Data"; mkdir -p "$C/tmp/fixtures"; cp ~/fixtures/*.pdf "$C/tmp/fixtures/"
 ~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF "$C/tmp/fixtures/demo.pdf" --window 1440x900 --screenshot out.png
 ```
 

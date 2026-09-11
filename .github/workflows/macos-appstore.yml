@@ -78,7 +78,7 @@ jobs:
         run: |
           APP="$RUNNER_TEMP/app/MegaPDF.app"
           BIN="$APP/Contents/MacOS/MegaPDF"
-          CONTAINER="$HOME/Library/Containers/com.megapdf.mac/Data"
+          CONTAINER="$HOME/Library/Containers/com.megapdf.ios/Data"
 
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
 

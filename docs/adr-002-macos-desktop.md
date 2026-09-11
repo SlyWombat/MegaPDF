@@ -343,7 +343,7 @@ problem" from "macOS-specific problem" in minutes. Triage tool only — Linux is
 
      | | |
      |---|---|
-     | `com.megapdf.mac` | bundle id (ASC `RHC532R4ZY`) — `ca.electricrv.megapdf` was taken by the iOS diagnostic build |
+     | `com.megapdf.mac` | bundle id (ASC `RHC532R4ZY`) — `ca.electricrv.megapdf` was taken by the iOS diagnostic build. *Superseded 2026-09-11: the Mac ships as `com.megapdf.ios`, a platform of the iOS record (universal purchase), with its own Mac App Store profile `HTK392LHVP` in the workflow's provisioning-profile repository variable.* |
      | 3rd Party Mac Developer Installer | minted (`9DXF43885M`), expires **2027-08-28** |
      | MegaPDF Mac App Store | `MAC_APP_STORE` profile, ACTIVE, expires 2027-08-08 |
 

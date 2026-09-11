@@ -32,9 +32,11 @@ fi
 VERSION="$(grep -oE '<Version>[^<]+</Version>' "$PROJECT" | head -1 | sed 's/<[^>]*>//g')"
 VERSION="${VERSION:-0.1.0}"
 
-# ca.electricrv.megapdf is already taken by the iOS diagnostic bundle id, so the
-# Mac app is com.megapdf.mac — symmetric with the phone app's com.megapdf.ios.
-BUNDLE_ID="${MACOS_BUNDLE_ID:-com.megapdf.mac}"
+# The same bundle id as the iPhone app: the Mac is a platform of the one
+# App Store record (universal purchase), and Apple requires every platform in
+# such a record to share the id. com.megapdf.mac was the Mac's own id until
+# 2026-09-11 and is still registered; nothing ships under it.
+BUNDLE_ID="${MACOS_BUNDLE_ID:-com.megapdf.ios}"
 echo "building MegaPDF $VERSION for $RID"
 
 # PDFium must be present before publish: MegaPDF.Core.csproj copies it from

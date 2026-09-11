@@ -35,7 +35,7 @@ type_() { cliclick "t:$1"; }
 
 # Fixtures inside the app's container (it is sandboxed when Store-signed; the
 # ad-hoc build reads anywhere, but keep one convention).
-C="$HOME/Library/Containers/com.megapdf.mac/Data"; mkdir -p "$C/tmp/story"
+C="$HOME/Library/Containers/com.megapdf.ios/Data"; mkdir -p "$C/tmp/story"
 python3 "$ROOT/tools/gen_test_fixtures.py" "$C/tmp/story" >/dev/null
 cp "$C/tmp/story/demo-blank.pdf" "$C/tmp/story/agreement.pdf"
 

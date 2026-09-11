@@ -103,6 +103,60 @@ policy: https://electricrv.ca/megapdf/privacy/
 
 ---
 
+## Notes field text (macOS)
+
+MegaPDF for Mac is the same app as the iPhone version, on the same record: no
+accounts, no sign-in, no purchases, no subscriptions, no user-generated content
+shared with anyone, and no network connections. Every feature is reachable on
+first launch with nothing to enter.
+
+**What it does, and for whom**
+Fills in, checks and signs PDF forms entirely on the Mac, for people who are
+sent a form and need to complete and return it. The document never leaves the
+machine. It is sandboxed and opens only the files the user chooses.
+
+**Reaching the main features**
+Any PDF works; the blank form used in the attached recording is at
+https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
+1. Launch → **Open** (or ⌘O) → choose a PDF.
+2. **Check a box:** click a checkbox or an empty printed square — it is marked
+   at once; click again to clear it.
+3. **Sign:** **Sign** → draw a new signature, or use a photo of one (the white
+   background is removed) → click the saved signature → click the page to place
+   it; drag to move, handles to resize.
+4. **Add text:** **Add text** → click a blank line → type → Return; the font
+   and size pickers in the toolbar apply to it.
+5. **Cover:** paints white over anything, by dragging.
+6. **Find:** ⌘F → type → Return steps through the matches.
+7. **Save:** ⌘S writes back to the file that was opened; **Save As** writes a
+   copy. **Print** (⌘P) uses the standard macOS print panel.
+
+**Screen recording**
+Attached: the flow above on a Mac mini (M4) running macOS 26.6 — ticks, the
+signature placed, text added, find.
+
+**Devices tested**
+Mac mini (M4), macOS 26.6.2; the sandboxed Store build is exercised end to end
+inside its container on every CI run (open, tick, fill, sign, type, cover,
+find, save, reopen, undo).
+
+**External services** None. No network requests, analytics, crash reporting,
+advertising, authentication, payment or server component. One embedded
+open-source library, PDFium (BSD-3-Clause), compiled in. The only outbound link
+is "view the source" on the About panel, which opens GitHub in the browser.
+
+**Regional differences** None. English (en-CA) and French (fr-CA, fr); the
+language follows the system setting.
+
+**Regulated industry / third-party material** Not applicable: a general-purpose
+document utility working on the user's own files.
+
+**Permissions and privacy** Sandboxed; no entitlements beyond user-selected
+file access and printing. No data is collected; privacy policy:
+https://electricrv.ca/megapdf/privacy/
+
+---
+
 ## Item 2 — devices and OS tested (needs filling in)
 
 Apple wants **physical** devices. Fill in what was actually used, e.g.:

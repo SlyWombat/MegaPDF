@@ -40,10 +40,17 @@ PLATFORM = os.environ.get("ASC_PLATFORM", "IOS")
 LOCALES = ["en-CA", "fr-CA", "fr-FR"]
 REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr"}
 
-# Listing slots, in order (docs/app-store-listing.md § Screenshots).
-SHOT_ORDER = ["viewer", "text", "search", "sign", "draw", "home"]
-SHOT_SETS = {"iphone-6_9": "APP_IPHONE_67", "ipad-13": "APP_IPAD_PRO_3GEN_129"}
-PREVIEW_SETS = {"iphone-6_9": "IPHONE_67", "ipad-13": "IPAD_PRO_3GEN_129"}
+# Listing slots, in order (docs/app-store-listing.md § Screenshots). The Mac
+# is a platform of the same record: ASC_PLATFORM=MAC_OS switches the version,
+# the slot types, and where the captures come from (tools/mac-mini.md).
+if PLATFORM == "MAC_OS":
+    SHOT_ORDER = ["02-signed", "03-find", "04-add-text", "05-form-focus", "01-empty"]
+    SHOT_SETS = {"light": "APP_DESKTOP"}
+    PREVIEW_SETS = {"macos-light-recorded": "DESKTOP"}
+else:
+    SHOT_ORDER = ["viewer", "text", "search", "sign", "draw", "home"]
+    SHOT_SETS = {"iphone-6_9": "APP_IPHONE_67", "ipad-13": "APP_IPAD_PRO_3GEN_129"}
+    PREVIEW_SETS = {"iphone-6_9": "IPHONE_67", "ipad-13": "IPAD_PRO_3GEN_129"}
 
 
 # --- client -----------------------------------------------------------------
@@ -154,7 +161,8 @@ def review_notes():
     """The Notes field text from docs/app-review-notes.md: between the
     '## Notes field text' heading and the next '---'."""
     text = open(os.path.join(ROOT, "docs/app-review-notes.md"), encoding="utf-8").read()
-    start = text.index("## Notes field text") + len("## Notes field text")
+    heading = "## Notes field text (macOS)" if PLATFORM == "MAC_OS" else "## Notes field text"
+    start = text.index(heading) + len(heading)
     end = text.index("\n---", start)
     notes = text[start:end].strip()
     # Blockquotes are notes to ourselves, not to the reviewer.
@@ -271,7 +279,8 @@ def cmd_screenshots(captures):
     v = editable_version()
     locs = version_localizations(v["id"])
     for locale in LOCALES:
-        folder = os.path.join(captures, "ios-screenshots", REPO_LOCALE.get(locale, locale))
+        folder = (os.path.join(captures, "macos", "listing") if PLATFORM == "MAC_OS"
+                  else os.path.join(captures, "ios-screenshots", REPO_LOCALE.get(locale, locale)))
         if locale not in locs or not os.path.isdir(folder):
             print(f"  {locale}: no localization or no folder {folder}; skipped")
             continue
@@ -301,7 +310,8 @@ def cmd_previews(captures):
     v = editable_version()
     locs = version_localizations(v["id"])
     for locale in LOCALES:
-        folder = os.path.join(captures, "ios", REPO_LOCALE.get(locale, locale))
+        folder = (os.path.join(captures, "macos", "video") if PLATFORM == "MAC_OS"
+                  else os.path.join(captures, "ios", REPO_LOCALE.get(locale, locale)))
         if locale not in locs or not os.path.isdir(folder):
             print(f"  {locale}: no localization or no folder {folder}; skipped")
             continue
