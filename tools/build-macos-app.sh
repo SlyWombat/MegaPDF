@@ -270,26 +270,14 @@ SIGN_ARGS+=(--sign "$IDENTITY")
 if [ -n "${MACOS_ENTITLEMENTS:-}" ]; then
     [ -f "$MACOS_ENTITLEMENTS" ] || { echo "::error::entitlements file not found: $MACOS_ENTITLEMENTS" >&2; exit 1; }
     echo "entitlements: $MACOS_ENTITLEMENTS"
-    # A Store build's signature must name the application identifier and team
-    # the embedded profile names, or App Store Connect warns the build off
-    # TestFlight (ITMS 90886). Both come from the profile itself, so the
-    # checked-in entitlements stay free of team-specific values.
-    if [ -n "${MACOS_PROVISION_PROFILE:-}" ]; then
-        SIGNED_ENTITLEMENTS="$RUNNER_TEMP_DIR/megapdf-entitlements.plist"
-        security cms -D -i "$MACOS_PROVISION_PROFILE" > "$RUNNER_TEMP_DIR/megapdf-profile.plist"
-        python3 - "$MACOS_ENTITLEMENTS" "$RUNNER_TEMP_DIR/megapdf-profile.plist" "$SIGNED_ENTITLEMENTS" <<'PY'
-import plistlib, sys
-ents = plistlib.load(open(sys.argv[1], "rb"))
-prof = plistlib.load(open(sys.argv[2], "rb"))["Entitlements"]
-for key in ("com.apple.application-identifier", "com.apple.developer.team-identifier"):
-    ents[key] = prof[key]
-plistlib.dump(ents, open(sys.argv[3], "wb"))
-print("signing as", prof["com.apple.application-identifier"])
-PY
-        SIGN_ARGS+=(--entitlements "$SIGNED_ENTITLEMENTS")
-    else
-        SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
-    fi
+    # Deliberately NOT adding com.apple.application-identifier and the team
+    # identifier from the profile, although App Store Connect warns (ITMS 90886)
+    # that without them the build is not eligible for Mac TestFlight: with them
+    # in the signature macOS enforces the App Store profile at launch, and a
+    # Store-signed app is killed on any machine but a customer's, which ends
+    # the sandbox self-check below with "Killed: 9". The Store re-signs the
+    # app on ingestion; only TestFlight for Mac is lost, and nothing uses it.
+    SIGN_ARGS+=(--entitlements "$MACOS_ENTITLEMENTS")
 fi
 
 # Nested Mach-O libraries must carry their own signatures before the bundle can
