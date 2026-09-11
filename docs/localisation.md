@@ -151,4 +151,6 @@ platform: Windows sets live in `artifacts/store/screenshots/{fr-CA,fr-FR}/`
 a language matrix and open a French demo agreement (`demo-fr.pdf`, from
 `tools/gen_test_fixtures.py`) whose names and search term come from the string
 catalogues (`screenshot_*` keys on Android, the demo keys in the String Catalog
-on iOS).
+on iOS). The iOS sets, and the App Store preview videos, also come off the
+in-house Mac: `tools/ios-screenshots.sh` and `tools/ios-demo-video.sh` take the
+language as their first argument.

@@ -232,10 +232,12 @@ def _winansi(text):
     return raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
 
 
-def gen_demo(lang="en"):
+def gen_demo(lang="en", filled=True):
     """One-page 'filled agreement' used for App Store screenshots: real
     MegaPDF-style artifacts (mark:/sig: annots tagged MegaPDF_Id).
-    `lang` picks the page's language (DEMO_TEXT); the layout is identical."""
+    `lang` picks the page's language (DEMO_TEXT); the layout is identical.
+    `filled=False` writes the same page with nothing on it — no ticks, no
+    signature — for the preview video, which fills it in on camera."""
     objs = []
     add = lambda b: (objs.append(b), len(objs))[1]
     t = DEMO_TEXT[lang]
@@ -260,6 +262,16 @@ def gen_demo(lang="en"):
         b"BT /F1 9 Tf 72 388 Td (%s) Tj ET" % _winansi(t["line"]),
     ]
     content = add(stream(b"", b"\n".join(body) + b"\n"))
+
+    if not filled:
+        pages_num = len(objs) + 2
+        page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+                   b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >> /Contents %d 0 R >>"
+                   % (pages_num, helv, bold, content))
+        pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+        assert pages == pages_num
+        add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+        return build(objs)
 
     def mark_ap(size):
         inset = size * 0.10
@@ -397,6 +409,8 @@ def main():
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
                        ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
                        ("demo-fr.pdf", gen_demo("fr")),
+                       ("demo-blank.pdf", gen_demo(filled=False)),
+                       ("demo-fr-blank.pdf", gen_demo("fr", filled=False)),
                        ("formtext.pdf", gen_formtext()),
                               ("cropped.pdf", gen_cropped()),
                        ("textbox.pdf", gen_textbox())):

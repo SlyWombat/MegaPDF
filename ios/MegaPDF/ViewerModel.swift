@@ -130,8 +130,9 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
-        case "viewer", "sign", "draw", "search", "text":
-            if let url = Bundle.main.url(forResource: DemoContent.demoResource, withExtension: "pdf"),
+        case "viewer", "sign", "draw", "search", "text", "story":
+            let resource = mode == "story" ? DemoContent.blankDemoResource : DemoContent.demoResource
+            if let url = Bundle.main.url(forResource: resource, withExtension: "pdf"),
                let bytes = try? Data(contentsOf: url) {
                 if mode == "sign" { screenshotSheet = .signatures }
                 if mode == "draw" { screenshotSheet = .draw }

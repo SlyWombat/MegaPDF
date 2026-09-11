@@ -252,6 +252,18 @@ public partial class App : Application
             var viewModel = new MainViewModel();
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
 
+            // --window 1440x900: the size the window opens at, for captures. The
+            // default 1000x800 is right for a design-review shot and wrong for a
+            // Mac App Store one, where the listing sizes start at 1280x800 and
+            // the toolbar's last button is clipped at anything under ~1100.
+            if (ArgumentAfter(desktop.Args, "--window") is { } windowSize
+                && windowSize.Split('x') is [var w, var h]
+                && double.TryParse(w, out var width) && double.TryParse(h, out var height))
+            {
+                desktop.MainWindow.Width = width;
+                desktop.MainWindow.Height = height;
+            }
+
             // The engine holds a native document handle and a pinned byte[]; let
             // it go on the way out rather than at finalisation.
             desktop.ShutdownRequested += (_, _) => viewModel.Dispose();

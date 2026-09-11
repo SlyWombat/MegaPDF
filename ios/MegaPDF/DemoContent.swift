@@ -21,6 +21,11 @@ enum DemoContent {
     /// The bundled demo agreement's resource name, without extension.
     static var demoResource: String { String(localized: "demo", comment: "screenshot demo PDF resource name") }
 
+    /// The same agreement with nothing filled in (`demo-blank.pdf`,
+    /// `demo-fr-blank.pdf`): what `-screenshot story` opens, so the preview
+    /// video can tick, sign and type on camera instead of over a finished page.
+    static var blankDemoResource: String { demoResource + "-blank" }
+
     /// The demo agreement's display name in the title bar and the recents list.
     static var documentName: String { String(localized: "Rental Agreement.pdf") }
 

@@ -58,6 +58,19 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+  # App Store preview video choreography (MegaPDFUITests/DemoFlowUITests.swift):
+  # drives the real app while `simctl io recordVideo` records. Its own scheme,
+  # so `xcodebuild test -scheme MegaPDF` in CI never waits on its pauses.
+  MegaPDFUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [MegaPDFUITests]
+    dependencies:
+      - target: MegaPDF
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MegaPDF
 schemes:
   MegaPDF:
     build:
@@ -65,3 +78,10 @@ schemes:
         MegaPDF: all
     test:
       targets: [MegaPDFTests]
+  MegaPDFDemo:
+    build:
+      targets:
+        MegaPDF: all
+        MegaPDFUITests: [test]
+    test:
+      targets: [MegaPDFUITests]

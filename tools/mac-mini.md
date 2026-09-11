@@ -1,0 +1,76 @@
+# The in-house Mac — build, test and capture runbook
+
+A Mac mini (M4, macOS 26) on the house network is the build and capture box
+for the iOS and macOS apps. It replaces GitHub's macOS runners for anything
+that wants a real screen: App Store preview videos, listing screenshots, and
+driving the real apps. CI still proves the builds; this machine is for the
+things a runner cannot see.
+
+## Reaching it
+
+- `ssh mac-mini` from the WSL user on GPD-DAVE, key-only, as the automation
+  account `claude` (admin, no passwordless sudo — builds never need it).
+  Screen Sharing is on for the rare case a dialog must be clicked.
+- Keep every bit of state under `/Users/claude`. Never touch the owner's
+  account, add SSH keys, or change auto-login.
+- Non-interactive SSH has a bare PATH. Start scripts with
+  `export PATH="/opt/homebrew/bin:$HOME/.dotnet:$PATH"`.
+- macOS bash is 3.2: `set -u` with an empty array (`"${T[@]}"`) is an error.
+
+## What is installed (2026-09-11)
+
+| Piece | Where | Note |
+|---|---|---|
+| Xcode 26.6 | `/Applications/Xcode.app` | licence accepted; iOS 26.5 simulators, iPhone 17 line and the current iPads |
+| Homebrew | `/opt/homebrew` | `xcodegen`, `ffmpeg` |
+| .NET 8 SDK | `~/.dotnet` | per-user, from `dotnet-install.sh`; builds the Avalonia app |
+| Repo | `~/Projects/MegaPDF` | clone over the read-write deploy key; `git pull` before a session |
+| iOS PDFium | `~/Projects/MegaPDF/ios/Vendor` | `ios/scripts/fetch-pdfium.sh`, gitignored |
+| Simulator build | `~/dd-ios` | derived data shared by the capture scripts |
+| Mac app | `~/app-macos/MegaPDF.app` | `tools/build-macos-app.sh osx-arm64 ~/app-macos` |
+| Captures | `~/captures/` | never committed; copy what is wanted into `artifacts/` locally |
+
+## Recipes
+
+All from `~/Projects/MegaPDF` on the Mac.
+
+**Prove the builds** (what CI does, on real Apple silicon):
+
+```
+cd ios && xcodegen generate && xcodebuild test -project MegaPDF.xcodeproj -scheme MegaPDF \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath ~/dd-ios CODE_SIGNING_ALLOWED=NO
+tools/build-macos-app.sh osx-arm64 ~/app-macos
+python3 tools/gen_test_fixtures.py ~/fixtures
+~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF --render-check ~/fixtures/stamped.pdf
+~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF --self-test ~/fixtures
+dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
+```
+
+**iOS preview videos**: `tools/ios-demo-video.sh <en|fr-CA|fr> [device] [label] [out]`
+— see `docs/app-store-listing.md` § App preview videos for what the three
+output files are for. Takes about three minutes per device.
+
+**iOS listing screenshots**: `tools/ios-screenshots.sh <lang> [out]` — the CI
+recipe, locally.
+
+**macOS screenshots**: the app renders its own window, so no Screen Recording
+permission is involved. `--window WxH` sets the size (1440x900 is a Mac App
+Store size and the smallest at which the whole toolbar fits); `--theme dark`
+forces dark; `--screenshot-state find|focus|mode` poses it. Fixtures must sit
+inside the sandbox container:
+
+```
+C="$HOME/Library/Containers/com.megapdf.mac/Data"; mkdir -p "$C/tmp/fixtures"; cp ~/fixtures/*.pdf "$C/tmp/fixtures/"
+~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF "$C/tmp/fixtures/demo.pdf" --window 1440x900 --screenshot out.png
+```
+
+**Long jobs**: an SSH command from a Claude session is cut off after ten
+minutes. Run anything longer with `nohup … &` on the Mac and tail its log.
+
+## Not possible over SSH
+
+`screencapture` and any synthetic input into the real GUI fail with
+"could not create image from display": macOS privacy (TCC) grants apply
+per app and an SSH session has none. True screen recordings of the Mac app
+need Screen Recording and Accessibility granted in System Settings on the
+Mac itself; until then Mac video is assembled from app-rendered frames.

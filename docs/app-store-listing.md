@@ -268,6 +268,30 @@ Each shot only exists once its screenshot state ships. `search` is not in the
 actually carries the feature, or the listing promises something the binary does
 not do.
 
+The same set comes off the in-house Mac without a runner:
+`tools/ios-screenshots.sh <lang>` (see `tools/mac-mini.md`). Same files, same
+slots.
+
+## App preview videos
+
+`tools/ios-demo-video.sh <lang> [device] [label]` records the real app filling
+in the agreement — two boxes ticked, the library signature placed, a printed
+name typed under the line, every "rental" found — on a simulator, driven by
+`ios/MegaPDFUITests/DemoFlowUITests.swift` (scheme `MegaPDFDemo`, launch mode
+`-screenshot story`, which opens the *unfilled* agreement `demo-blank.pdf` /
+`demo-fr-blank.pdf`). It writes, per language and device:
+
+| File | Use |
+|---|---|
+| `<label>-preview.mp4` | **Upload this one.** Time-compressed to under 30 s, the App Store Connect limit (15–30 s), 30 fps, H.264, no audio. |
+| `<label>-demo.mp4` | Real pace (~50 s) for the website or a README. |
+| `<label>-raw.mp4` | As recorded, springboard lead-in and all. |
+
+Sizes match the screenshot slots: `iphone-6_9` (iPhone 17 Pro Max, 1320×2868)
+and `ipad-13` (iPad Pro 13", 2064×2752). App Store Connect takes one preview
+per device size per localisation, ahead of the screenshots; the French runs
+use the French agreement and search for "location".
+
 ## App Review Information
 
 > **A brief Notes field got 1.0 rejected** under Guideline 2.1 on 2026-08-14 — the

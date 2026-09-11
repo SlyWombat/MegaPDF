@@ -48,8 +48,8 @@ printed or PDF-exported page match what is on screen?
 
 ## Known and deliberate
 
-- **The toolbar is words, not icons.** The Windows app uses a Windows-only icon
-  font. Real icons are still to come; empty boxes would have been worse.
+- **The toolbar is icons with labels under them**, drawn as vector paths, so
+  it is the same set as Windows without that app's icon font.
 - **Placed signatures cannot yet be dragged or resized.** Clicking one removes
   it. Undo brings it back.
 - **Added text cannot be dragged.** Clicking it removes it.
