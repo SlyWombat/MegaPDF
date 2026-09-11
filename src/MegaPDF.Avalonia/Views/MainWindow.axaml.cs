@@ -349,6 +349,19 @@ public partial class MainWindow : Window
         presenter.GetVisualDescendants().OfType<Panel>().FirstOrDefault(p => p is not StackPanel);
 
     /// <summary>
+    /// The page surface, as the thing to measure a pointer position against. A row's
+    /// container is the full viewport width with the white page centred inside it,
+    /// so a position relative to the container carries the centring margin — and at
+    /// every zoom except fit-width, where that margin is a few pixels, clicks landed
+    /// off the page: no checkbox ticked, the cursor never changed, whiteout bands
+    /// drawn beside where the drag was. The overlay Panel sits inside the page
+    /// Border and shares its origin, which is the space every editor, highlight and
+    /// band is already placed in.
+    /// </summary>
+    private static Visual SurfaceOf(Control container) =>
+        container is ContentPresenter presenter && OverlayOf(presenter) is { } overlay ? overlay : container;
+
+    /// <summary>
     /// Keeps the view model told how big the viewport is and which page is in it —
     /// what fit-to-width, fit-to-page and the "Page 3 of 12" readout all need.
     /// </summary>
@@ -428,7 +441,7 @@ public partial class MainWindow : Window
         // inside it converts straight back to page points. Same conversion the WinUI
         // app uses (72/96 divided by zoom), which is what keeps a click landing on the
         // same checkbox on both desktops.
-        var position = e.GetPosition(container);
+        var position = e.GetPosition(SurfaceOf(container));
         var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
         var pagePoint = new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint);
 
@@ -484,7 +497,7 @@ public partial class MainWindow : Window
         StandardCursorType CursorForContent()
         {
             var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
-            var at = e.GetPosition(container);
+            var at = e.GetPosition(SurfaceOf(container));
             return page.KindAt(new PdfPoint(at.X * dipToPoint, at.Y * dipToPoint)) switch
             {
                 PageHitKind.TextRun or PageHitKind.FormTextField => StandardCursorType.Ibeam,
@@ -529,7 +542,7 @@ public partial class MainWindow : Window
         if (_band is null || _bandHost is null)
             return;
 
-        var p = e.GetPosition(_bandHost);
+        var p = e.GetPosition(SurfaceOf(_bandHost));
         var x = Math.Min(p.X, _bandOrigin.X);
         var y = Math.Min(p.Y, _bandOrigin.Y);
         _band.Margin = new Thickness(x, y, 0, 0);

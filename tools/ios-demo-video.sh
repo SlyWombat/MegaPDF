@@ -88,7 +88,8 @@ ffmpeg -v error -y -ss "$START" -to "$END" -i "$RAW" -r 30 -fps_mode cfr -c:v li
 DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$DEMO")
 FACTOR=$(python3 -c "print(min(1.0, 29.5 / float('$DUR')))")
 PREVIEW="$OUT/$LABEL-preview.mp4"
-ffmpeg -v error -y -i "$DEMO" -vf "setpts=$FACTOR*PTS" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$PREVIEW"
+# App Store Connect refuses a preview without an audio track (MOV_RESAVE_STEREO), so a silent stereo one goes in.
+ffmpeg -v error -y -i "$DEMO" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -vf "setpts=$FACTOR*PTS" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a aac -b:a 96k -shortest -movflags +faststart "$PREVIEW"
 
 for f in "$RAW" "$DEMO" "$PREVIEW"; do
     printf '%s  %s\n' "$(ffprobe -v error -show_entries stream=width,height:format=duration -of csv=p=0 "$f" | tr '\n' ' ')" "$f"

@@ -69,7 +69,8 @@ with open(out, "w") as f:
     f.write(f"file '{os.path.join(d, frames[-1])}'\n")  # concat needs the last file twice
 PY
 CLIP="$OUT/macos-$THEME-preview.mp4"
-ffmpeg -v error -y -f concat -safe 0 -i "$LIST" -vf "format=yuv420p" -r 30 -fps_mode cfr \
-    -c:v libx264 -preset slow -crf 18 -movflags +faststart -an "$CLIP"
+# App Store Connect refuses a preview without an audio track (MOV_RESAVE_STEREO), so a silent stereo one goes in.
+ffmpeg -v error -y -f concat -safe 0 -i "$LIST" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -vf "format=yuv420p" -r 30 -fps_mode cfr \
+    -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 96k -shortest -movflags +faststart "$CLIP"
 ffprobe -v error -show_entries stream=width,height:format=duration -of csv=p=0 "$CLIP" | tr '\n' ' '
 echo " $CLIP"

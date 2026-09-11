@@ -59,6 +59,8 @@ sleep 5
 osascript -e "tell application \"System Events\" to tell process \"MegaPDF\" to set position of window 1 to {$WX, $WY}"
 osascript -e 'tell application "System Events" to set frontmost of process "MegaPDF" to true'
 sleep 1
+# Fit page: the whole page in the frame, so the signature line is on screen.
+click 1457 118; sleep 1.5
 
 # Where the page is. A fresh file opens at whatever zoom fits, so nothing about
 # the page's placement is assumed: a shot of the content area is scanned for
@@ -70,23 +72,32 @@ import struct, subprocess, sys
 subprocess.run(["sips", "-s", "format", "bmp", sys.argv[1], "--out", "/tmp/megapdf-layout.bmp"], capture_output=True)
 d = open("/tmp/megapdf-layout.bmp", "rb").read()
 off = struct.unpack_from("<I", d, 10)[0]; w = struct.unpack_from("<i", d, 18)[0]
-h = abs(struct.unpack_from("<i", d, 22)[0]); bpp = struct.unpack_from("<H", d, 28)[0] // 8
+hraw = struct.unpack_from("<i", d, 22)[0]; h = abs(hraw); bpp = struct.unpack_from("<H", d, 28)[0] // 8
 row = ((w * bpp) + 3) // 4 * 4
+topdown = hraw < 0                        # sips writes top-down; a bottom-up file has h > 0
 def px(x, y):
-    p = off + (h - 1 - y) * row + x * bpp
+    p = off + (y if topdown else h - 1 - y) * row + x * bpp
     return d[p], d[p + 1], d[p + 2]
 def white(x, y): return min(px(x, y)) >= 250
-y = 700                                   # a row well inside the page, below the text
-runs, x = [], 0
-while x < w:
-    if white(x, y):
-        x0 = x
-        while x < w and white(x, y): x += 1
-        runs.append((x0, x))
-    x += 1
-left, right = max(runs, key=lambda r: r[1] - r[0])
-mid = (left + right) // 2
-top = next(yy for yy in range(0, h) if white(mid, yy))
+# The widest white run on any of several rows is the page (text breaks the
+# runs on some rows; the page may be short at a small zoom). Its top edge is
+# found up the left margin, which no text crosses — starting below the
+# toolbar, whose light buttons would otherwise read as page.
+best = None
+for y in range(150, 1000, 50):
+    runs, x = [], 0
+    while x < w:
+        if white(x, y):
+            x0 = x
+            while x < w and white(x, y): x += 1
+            runs.append((x0, x))
+        x += 1
+    if runs:
+        r = max(runs, key=lambda r: r[1] - r[0])
+        if best is None or r[1] - r[0] > best[1] - best[0]: best = r
+left, right = best
+assert right - left > 400, f"no page found: widest white run {left}-{right}"
+top = next(yy for yy in range(70, h) if white(left + 8, yy))
 print(left, top, (right - left) / 612.0)
 PY
 )"
@@ -130,7 +141,8 @@ ffmpeg -v error -y -ss 1.5 -i "$RAW" -r 30 -fps_mode cfr -c:v libx264 -preset sl
 DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$DEMO")
 FACTOR=$(python3 -c "print(min(1.0, 29.5 / float('$DUR')))")
 PREVIEW="$OUT/macos-$THEME-recorded-preview.mp4"
-ffmpeg -v error -y -i "$DEMO" -vf "setpts=$FACTOR*PTS" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$PREVIEW"
+# App Store Connect refuses a preview without an audio track (MOV_RESAVE_STEREO), so a silent stereo one goes in.
+ffmpeg -v error -y -i "$DEMO" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -vf "setpts=$FACTOR*PTS" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -c:a aac -b:a 96k -shortest -movflags +faststart "$PREVIEW"
 for f in "$RAW" "$DEMO" "$PREVIEW"; do
     printf '%s  %s\n' "$(ffprobe -v error -show_entries stream=width,height:format=duration -of csv=p=0 "$f" | tr '\n' ' ')" "$f"
 done

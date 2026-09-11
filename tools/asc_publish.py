@@ -373,13 +373,20 @@ def cmd_build(number=None):
 
 def cmd_submit():
     v = editable_version()
-    sub = api("POST", "/v1/reviewSubmissions", {"data": {
+    # An unsubmitted submission may already exist from an earlier attempt
+    # (previews still transcoding, say); adding a second is refused.
+    pending = api("GET", f"/v1/reviewSubmissions?filter[app]={APP_ID}&filter[state]=READY_FOR_REVIEW&limit=1")["data"]
+    sub = pending[0] if pending else api("POST", "/v1/reviewSubmissions", {"data": {
         "type": "reviewSubmissions", "attributes": {"platform": PLATFORM},
         "relationships": {"app": {"data": {"type": "apps", "id": APP_ID}}}}})["data"]
-    api("POST", "/v1/reviewSubmissionItems", {"data": {
-        "type": "reviewSubmissionItems",
-        "relationships": {"reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
-                          "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+    items = api("GET", f"/v1/reviewSubmissions/{sub['id']}/items")["data"]
+    if items:
+        print(f"  submission {sub['id']} already holds {len(items)} item(s)")
+    else:
+        api("POST", "/v1/reviewSubmissionItems", {"data": {
+            "type": "reviewSubmissionItems",
+            "relationships": {"reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
+                              "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
     api("PATCH", f"/v1/reviewSubmissions/{sub['id']}", {"data": {
         "type": "reviewSubmissions", "id": sub["id"], "attributes": {"submitted": True}}})
     print(f"  submitted {v['attributes']['versionString']} for review ({sub['id']})")
