@@ -204,7 +204,7 @@ struct SignaturesSheet: View {
                     .frame(maxWidth: .infinity)
             }
             PhotosPicker(selection: $photoItem, matching: .images) {
-                Label("From photo", systemImage: "photo")
+                Label("Photo", systemImage: "photo")
                     .frame(maxWidth: .infinity)
             }
         }

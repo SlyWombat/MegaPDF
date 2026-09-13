@@ -37,6 +37,8 @@ public class StringCatalogueTests
         ["SignatureCardName"] = "\"{0}, signature\" reads the same in both (#100)",
         ["SignaturesTitle"] = "same word (macOS flyout heading, #100)",
         ["%@, signature"] = "iOS card label, same in both (#100)",
+        ["Photo"] = "iOS add button: the word is the same (#100)",
+        ["add_from_photos"] = "Android add button reads \"Photo\" in both (#100)",
         ["SignaturesButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "same",
         ["LanguageEnglish.Text"] = "language names are written in their own language",
         ["LanguageFrench.Text"] = "same",

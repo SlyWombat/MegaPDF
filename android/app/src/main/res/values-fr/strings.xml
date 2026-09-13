@@ -86,7 +86,7 @@
     <string name="signatures">Signatures</string>
     <string name="draw">Dessiner</string>
     <string name="draw_your_signature">Dessinez votre signature</string>
-    <string name="add_from_photos">À partir d\'une photo</string>
+    <string name="add_from_photos">Photo</string>
     <string name="no_signatures_yet">Aucune signature pour l\'instant. Dessinez-en une avec votre doigt, ou ajoutez une photo de votre signature sur du papier blanc — l\'arrière-plan est retiré automatiquement.</string>
     <string name="tap_to_place_signature">Touchez la page à l\'endroit où placer la signature</string>
     <string name="signature_place">Placer sur la page</string>

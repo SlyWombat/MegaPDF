@@ -93,7 +93,7 @@
     <string name="signatures">Signatures</string>
     <string name="draw">Draw</string>
     <string name="draw_your_signature">Draw your signature</string>
-    <string name="add_from_photos">From photo</string>
+    <string name="add_from_photos">Photo</string>
     <string name="no_signatures_yet">No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.</string>
     <string name="tap_to_place_signature">Tap the page where the signature should go</string>
     <!-- Library sheet (#99): card actions and the two small dialogs behind its menu. -->

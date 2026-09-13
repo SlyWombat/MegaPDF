@@ -48,8 +48,12 @@ $global:AUMID = $(
     $pkg = Get-AppxPackage ElectricRV.MegaPDF -ErrorAction SilentlyContinue |
            Select-Object -First 1
     if ($pkg) { "$($pkg.PackageFamilyName)!App" }
-    else { throw "MegaPDF is not installed -- install the package before driving it." }
+    elseif ($env:MEGAPDF_EXE) { $null }   # driving an unpackaged build instead (below)
+    else { throw "MegaPDF is not installed -- install the package, or set MEGAPDF_EXE to an unpackaged MegaPDF.exe." }
 )
+# MEGAPDF_EXE points the rig at an unpackaged build (src\MegaPDF.App\bin\...\MegaPDF.exe)
+# on a machine without the Store package; MEGAPDF_ARGS adds launch arguments such as
+# "--language fr-CA" for the French sets. Same window, same UIA ids, same shots.
 # Shots land in the repo's (gitignored) artifacts dir, never beside these scripts.
 $global:REPO = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $global:SHOTDIR = if ($env:MEGAPDF_SHOTDIR) { $env:MEGAPDF_SHOTDIR } else { Join-Path $global:REPO "artifacts\store\screenshots" }
@@ -58,7 +62,12 @@ New-Item -ItemType Directory -Force $global:SHOTDIR | Out-Null
 function Start-App {
     $p = Get-Process -Name MegaPDF -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
     if (-not $p) {
-        Start-Process "shell:AppsFolder\$global:AUMID"
+        if ($env:MEGAPDF_EXE) {
+            if ($env:MEGAPDF_ARGS) { Start-Process -FilePath $env:MEGAPDF_EXE -ArgumentList $env:MEGAPDF_ARGS }
+            else { Start-Process -FilePath $env:MEGAPDF_EXE }
+        } else {
+            Start-Process "shell:AppsFolder\$global:AUMID"
+        }
         for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep -Milliseconds 500
             $p = Get-Process -Name MegaPDF -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
