@@ -80,6 +80,9 @@ class Run:
         except OSError:
             pass
         self.by_index = {r["i"]: r for r in self.results}
+        # Windows and macOS enumerate the same tree in different orders (path
+        # separators sort differently), so cross-run matching goes by path.
+        self.by_key = {r["path"].replace("\\", "/").lower(): r for r in self.results}
 
     def ok(self):
         return [r for r in self.results if r.get("pages") is not None and r.get("outcome") in ("ok", "partial")]
@@ -406,20 +409,26 @@ def section_compare(runs, out):
         a, b = runs
         out.append(f"Documents whose outcome differs between `{a.name}` and `{b.name}`:\n")
         diffs = []
-        for i, ra in a.by_index.items():
-            rb = b.by_index.get(i)
-            if rb and ra.get("outcome") != rb.get("outcome"):
+        for key, ra in a.by_key.items():
+            rb = b.by_key.get(key)
+            if rb is None:
+                continue
+            i = f"#{ra['i']}/#{rb['i']}"
+            if ra.get("outcome") != rb.get("outcome"):
                 diffs.append((i, ra.get("outcome"), rb.get("outcome")))
-            elif rb and ra.get("pages") is not None and rb.get("pages") is not None and ra["pages"] != rb["pages"]:
+            elif ra.get("pages") is not None and rb.get("pages") is not None and ra["pages"] != rb["pages"]:
                 diffs.append((i, f"{ra['pages']} pages", f"{rb['pages']} pages"))
-            elif rb and ra.get("search") and rb.get("search"):
+            elif ra.get("search") and rb.get("search"):
                 for t in ra["search"]:
                     if t in rb["search"] and ra["search"][t]["hits"] != rb["search"][t]["hits"]:
                         diffs.append((i, f"{t}: {ra['search'][t]['hits']} hits", f"{t}: {rb['search'][t]['hits']} hits"))
+            if ra.get("scroll") and rb.get("scroll") and ra["scroll"].get("blank_with_text") != rb["scroll"].get("blank_with_text"):
+                diffs.append((i, f"blank-with-text pages {ra['scroll'].get('blank_with_text')}", f"{rb['scroll'].get('blank_with_text')}"))
+        out.append(f"(Document ids are shown as `{a.name}` index / `{b.name}` index; the two runs number files differently.)\n")
         if diffs:
             out.append("| doc | " + a.name + " | " + b.name + " |\n|---|---|---|")
             for i, x, y in diffs[:50]:
-                out.append(f"| #{i} | {x} | {y} |")
+                out.append(f"| {i} | {x} | {y} |")
             if len(diffs) > 50:
                 out.append(f"\n… and {len(diffs) - 50} more.")
         else:

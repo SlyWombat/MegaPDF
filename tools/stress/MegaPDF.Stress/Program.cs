@@ -33,6 +33,9 @@ internal static class Program
         {
             "run" => Orchestrator.Run(opts),
             "worker" => Worker.Run(opts),
+            "find" => Tools.Find(opts),
+            "open-bench" => Tools.OpenBench(opts),
+            "inspect" => Tools.Inspect(opts),
             _ => Usage(),
         };
     }
@@ -566,6 +569,151 @@ internal static class Worker
             res.DecodeMaxMs = Math.Max(res.DecodeMaxMs, ms);
         }
         return res;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tools — one-file diagnostics used to triage what the run flags.
+// ---------------------------------------------------------------------------
+
+internal static class Tools
+{
+    private const double PointsToPixels = 96.0 / 72.0;
+
+    /// <summary>Per-page hit counts for a term — to localise a cross-platform hit-count difference.</summary>
+    public static int Find(Options opts)
+    {
+        var file = opts.Require("file");
+        var term = opts.Require("term");
+        var engine = new PdfiumEngine();
+        using var doc = engine.Open(file);
+        var total = 0;
+        for (var p = 0; p < doc.PageCount; p++)
+        {
+            using var page = doc.GetPage(p);
+            var matches = page.FindText(term);
+            if (matches.Count == 0)
+                continue;
+            total += matches.Count;
+            var rects = string.Join(" ", matches.Select(m => $"[{string.Join("|", m.Rects.Select(r => $"{r.X:F0},{r.Y:F0},{r.Width:F0}x{r.Height:F0}"))}]"));
+            Console.WriteLine($"page {p + 1}: {matches.Count} {rects}");
+        }
+        Console.WriteLine($"total {total}");
+        return 0;
+    }
+
+    /// <summary>Opens the same file repeatedly, from where it is and from a fresh local temp copy.</summary>
+    public static int OpenBench(Options opts)
+    {
+        var file = opts.Require("file");
+        var n = opts.Int("n", 10);
+        var engine = new PdfiumEngine();
+
+        static double Median(List<double> xs) { xs.Sort(); return xs[xs.Count / 2]; }
+
+        var inPlace = new List<double>();
+        for (var i = 0; i < n; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            using var doc = engine.Open(file);
+            _ = doc.PageCount;
+            inPlace.Add(sw.Elapsed.TotalMilliseconds);
+        }
+        Console.WriteLine($"open in place      : first {inPlace[0]:F2} ms, median {Median(inPlace.ToList()):F2} ms");
+
+        var fresh = new List<double>();
+        var bytes = File.ReadAllBytes(file);
+        var tmpDir = Directory.CreateTempSubdirectory("megapdf-openbench-").FullName;
+        try
+        {
+            for (var i = 0; i < n; i++)
+            {
+                var local = Path.Combine(tmpDir, $"doc{i}.pdf");
+                File.WriteAllBytes(local, bytes);
+                var sw = Stopwatch.StartNew();
+                using var doc = engine.Open(local);
+                _ = doc.PageCount;
+                fresh.Add(sw.Elapsed.TotalMilliseconds);
+            }
+            Console.WriteLine($"open fresh temp copy: first {fresh[0]:F2} ms, median {Median(fresh.ToList()):F2} ms");
+
+            var reread = new List<double>();
+            var local2 = Path.Combine(tmpDir, "same.pdf");
+            File.WriteAllBytes(local2, bytes);
+            for (var i = 0; i < n; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                using var doc = engine.Open(local2);
+                _ = doc.PageCount;
+                reread.Add(sw.Elapsed.TotalMilliseconds);
+            }
+            Console.WriteLine($"open same temp copy : first {reread[0]:F2} ms, median {Median(reread.ToList()):F2} ms");
+
+            var readOnly = new List<double>();
+            for (var i = 0; i < n; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                _ = File.ReadAllBytes(local2);
+                readOnly.Add(sw.Elapsed.TotalMilliseconds);
+            }
+            Console.WriteLine($"File.ReadAllBytes   : first {readOnly[0]:F2} ms, median {Median(readOnly.ToList()):F2} ms ({bytes.Length:N0} bytes)");
+        }
+        finally
+        {
+            Directory.Delete(tmpDir, recursive: true);
+        }
+        return 0;
+    }
+
+    /// <summary>How one page's render time scales with pixel count, plus what is on it.</summary>
+    public static int Inspect(Options opts)
+    {
+        var file = opts.Require("file");
+        var pageIndex = opts.Int("page", 1) - 1;
+        var engine = new PdfiumEngine();
+        using var doc = engine.Open(file);
+        using var page = doc.GetPage(pageIndex);
+        Console.WriteLine($"pages {doc.PageCount}; page {pageIndex + 1}: {page.Width:F1} x {page.Height:F1} pt");
+        var sw = Stopwatch.StartNew();
+        var runs = page.GetTextRuns();
+        Console.WriteLine($"text runs {runs.Count} ({runs.Sum(r => r.Text.Length)} chars) in {sw.Elapsed.TotalMilliseconds:F0} ms");
+        sw.Restart();
+        var lines = page.GetTextLines();
+        Console.WriteLine($"text lines {lines.Count} in {sw.Elapsed.TotalMilliseconds:F0} ms");
+        sw.Restart();
+        var fields = page.GetFormFields();
+        Console.WriteLine($"form fields {fields.Count} in {sw.Elapsed.TotalMilliseconds:F0} ms");
+        sw.Restart();
+        var squares = page.DetectCheckboxSquares();
+        Console.WriteLine($"checkbox squares {squares.Count} in {sw.Elapsed.TotalMilliseconds:F0} ms");
+        sw.Restart();
+        var images = doc.GetImages().Where(i => i.PageIndex == pageIndex).ToList();
+        Console.WriteLine($"images {images.Count} (largest {images.Select(i => (long)i.PixelWidth * i.PixelHeight).DefaultIfEmpty(0).Max() / 1e6:F1} MP, " +
+                          $"{images.Sum(i => i.StoredByteLength) / 1e6:F1} MB stored) in {sw.Elapsed.TotalMilliseconds:F0} ms");
+        foreach (var scale in new[] { 0.25, 0.5, 1.0, 1.5, 2.0, 3.0 })
+        {
+            var pw = Math.Max(1, (int)(page.Width * PointsToPixels * scale));
+            var ph = Math.Max(1, (int)(page.Height * PointsToPixels * scale));
+            sw.Restart();
+            try
+            {
+                _ = page.Render(pw, ph);
+                Console.WriteLine($"render x{scale:F2}: {pw}x{ph} ({pw * (long)ph / 1e6:F1} MP) in {sw.Elapsed.TotalMilliseconds:F0} ms");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"render x{scale:F2}: {pw}x{ph} FAILED {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+        // Second render at the same size, same page handle: what a cached page would cost.
+        {
+            var pw = Math.Max(1, (int)(page.Width * PointsToPixels * 1.5));
+            var ph = Math.Max(1, (int)(page.Height * PointsToPixels * 1.5));
+            sw.Restart();
+            _ = page.Render(pw, ph);
+            Console.WriteLine($"render x1.50 again on the same page handle: {sw.Elapsed.TotalMilliseconds:F0} ms");
+        }
+        return 0;
     }
 }
 
