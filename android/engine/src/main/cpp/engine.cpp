@@ -231,7 +231,6 @@ Java_com_megapdf_engine_PdfiumNative_nativeSave(JNIEnv* env, jobject, jlong hand
 
 namespace {
 
-constexpr char kMegaPdfIdKey[] = "MegaPDF_Id";
 
 // Reads MegaPDF_Id from an annot; empty string when absent.
 // ---- Added text (#34) -------------------------------------------------------
@@ -353,14 +352,6 @@ std::vector<jchar> ReadTextObjectText(FPDF_PAGEOBJECT obj, FPDF_TEXTPAGE textPag
     return std::vector<jchar>(buf.begin(), buf.end() - 1);
 }
 
-std::vector<jchar> ReadMegaPdfId(FPDF_ANNOTATION annot) {
-    unsigned long bytes = FPDFAnnot_GetStringValue(annot, kMegaPdfIdKey, nullptr, 0);
-    if (bytes <= 2) return {};
-    std::vector<FPDF_WCHAR> buf(bytes / 2);
-    FPDFAnnot_GetStringValue(annot, kMegaPdfIdKey, buf.data(), bytes);
-    return std::vector<jchar>(buf.begin(), buf.end() - 1);  // drop the terminator
-}
-
 }  // namespace
 
 extern "C" {
@@ -432,52 +423,16 @@ Java_com_megapdf_engine_PdfiumNative_nativeDetectSquaresPacked(JNIEnv* env, jobj
     return out;
 }
 
-// Adds an X check-mark stamp annot over a drawn square, inset 10%, stroke
-// 0x202020 at width max(1.2, w*0.11), tagged MegaPDF_Id = id ("mark:...").
+// Adds the ✗ check-mark stamp over a drawn square, tagged MegaPDF_Id = id
+// ("mark:..."): geometry and ink are the core's (#108).
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jlong handle,
                                                         jdouble l, jdouble b, jdouble r,
                                                         jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
-    l += crop.x; r += crop.x; b += crop.y; t += crop.y;
-    const double w = r - l, h = t - b;
-    const float il = static_cast<float>(l + 0.10 * w);
-    const float ib = static_cast<float>(b + 0.10 * h);
-    const float ir = static_cast<float>(r - 0.10 * w);
-    const float it = static_cast<float>(t - 0.10 * h);
-
-    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(p->page, FPDF_ANNOT_STAMP);
-    if (annot == nullptr) return JNI_FALSE;
-
-    bool ok = true;
-    FS_RECTF rect{il, it, ir, ib};  // FS_RECTF is left, top, right, bottom
-    ok = ok && FPDFAnnot_SetRect(annot, &rect);
-
-    FPDF_PAGEOBJECT path = FPDFPageObj_CreateNewPath(il, ib);
-    ok = ok && path != nullptr;
-    if (path != nullptr) {
-        ok = ok && FPDFPath_LineTo(path, ir, it);
-        ok = ok && FPDFPath_MoveTo(path, il, it);
-        ok = ok && FPDFPath_LineTo(path, ir, ib);
-        FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
-        const double strokeWidth = w * 0.11 > 1.2 ? w * 0.11 : 1.2;
-        FPDFPageObj_SetStrokeWidth(path, static_cast<float>(strokeWidth));
-        FPDFPath_SetDrawMode(path, FPDF_FILLMODE_NONE, 1);
-        ok = ok && FPDFAnnot_AppendObject(annot, path);
-    }
-
-    if (ok) {
-        const jchar* chars = env->GetStringChars(id, nullptr);
-        const jsize len = env->GetStringLength(id);
-        std::vector<FPDF_WCHAR> wide(chars, chars + len);
-        wide.push_back(0);
-        env->ReleaseStringChars(id, chars);
-        ok = FPDFAnnot_SetStringValue(annot, kMegaPdfIdKey, wide.data());
-    }
-
-    FPDFPage_CloseAnnot(annot);
-    return ok ? JNI_TRUE : JNI_FALSE;
+    const megapdf_rect square{l, b, r, t};
+    const std::vector<jchar> wide = JavaChars(env, id);
+    return megapdf_add_check_mark(p->core, &square, MEGAPDF_MARK_CROSS, wide.data()) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
 // ---- Added text (#34) -------------------------------------------------------
@@ -668,46 +623,52 @@ Java_com_megapdf_engine_PdfiumNative_nativeRemoveTextBox(JNIEnv* env, jobject, j
     return FPDFPage_GenerateContent(p->page) ? JNI_TRUE : JNI_FALSE;
 }
 
-// MegaPDF_Id per annot index ("" for annots that aren't ours).
+// MegaPDF_Id per annot index ("" for annots that aren't ours), from the core's
+// stamp list; the array is indexed by annotation so Kotlin's Stamp.annotIndex holds.
 JNIEXPORT jobjectArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAnnotIds(JNIEnv* env, jobject, jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
     const int count = FPDFPage_GetAnnotCount(p->page);
     jclass stringClass = env->FindClass("java/lang/String");
     jobjectArray out = env->NewObjectArray(count, stringClass, nullptr);
-    for (int i = 0; i < count; i++) {
-        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
-        std::vector<jchar> id;
-        if (annot != nullptr) {
-            id = ReadMegaPdfId(annot);
-            FPDFPage_CloseAnnot(annot);
+    std::vector<std::vector<jchar>> ids(static_cast<size_t>(count));
+    if (megapdf_stamps* stamps = megapdf_stamps_load(p->core)) {
+        for (size_t i = 0; i < megapdf_stamp_count(stamps); i++) {
+            megapdf_stamp st{};
+            if (megapdf_stamp_get(stamps, i, &st) != MEGAPDF_OK || st.annot_index < 0 || st.annot_index >= count) continue;
+            const size_t n = megapdf_stamp_id(stamps, i, nullptr, 0);
+            std::vector<jchar> id(n);
+            if (n > 0) megapdf_stamp_id(stamps, i, id.data(), n);
+            ids[static_cast<size_t>(st.annot_index)] = std::move(id);
         }
-        jstring s = env->NewString(id.data(), static_cast<jsize>(id.size()));
+        megapdf_stamps_free(stamps);
+    }
+    for (int i = 0; i < count; i++) {
+        jstring s = env->NewString(ids[i].data(), static_cast<jsize>(ids[i].size()));
         env->SetObjectArrayElement(out, i, s);
         env->DeleteLocalRef(s);
     }
     return out;
 }
 
-// Annot rects packed [l, b, r, t] per annot index, aligned with nativeAnnotIds.
+// Annot rects packed [l, b, r, t] per annot index, aligned with nativeAnnotIds
+// (zeros for annots that aren't ours), crop space.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAnnotRectsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
     const int count = FPDFPage_GetAnnotCount(p->page);
     std::vector<double> packed(static_cast<size_t>(count) * 4, 0.0);
-    for (int i = 0; i < count; i++) {
-        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
-        if (annot == nullptr) continue;
-        FS_RECTF r;
-        if (FPDFAnnot_GetRect(annot, &r)) {
-            packed[i * 4 + 0] = r.left - crop.x;
-            packed[i * 4 + 1] = r.bottom - crop.y;
-            packed[i * 4 + 2] = r.right - crop.x;
-            packed[i * 4 + 3] = r.top - crop.y;
+    if (megapdf_stamps* stamps = megapdf_stamps_load(p->core)) {
+        for (size_t i = 0; i < megapdf_stamp_count(stamps); i++) {
+            megapdf_stamp st{};
+            if (megapdf_stamp_get(stamps, i, &st) != MEGAPDF_OK || st.annot_index < 0 || st.annot_index >= count) continue;
+            packed[st.annot_index * 4 + 0] = st.bounds.left;
+            packed[st.annot_index * 4 + 1] = st.bounds.bottom;
+            packed[st.annot_index * 4 + 2] = st.bounds.right;
+            packed[st.annot_index * 4 + 3] = st.bounds.top;
         }
-        FPDFPage_CloseAnnot(annot);
+        megapdf_stamps_free(stamps);
     }
     jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
     if (out && !packed.empty()) {
@@ -720,80 +681,41 @@ JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeRemoveAnnot(JNIEnv*, jobject, jlong handle,
                                                        jint index) {
     auto* p = reinterpret_cast<Page*>(handle);
-    return FPDFPage_RemoveAnnot(p->page, index) ? JNI_TRUE : JNI_FALSE;
+    return megapdf_remove_annotation(p->core, index) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
-// --- Signature stamps (#17). Behavioral reference: PdfiumEngine.AddImageStamp.
+// --- Signature stamps (#17), placed by the core (#108).
 
-// Places an image stamp: STAMP annot at rect, image object positioned via the
-// unit-square matrix (A=width, D=height, E=left, F=bottom, PDF points), tagged
-// MegaPDF_Id = id ("sig:..."). Pixels are ARGB ints (Android Bitmap layout).
+// Places an image stamp over [l, b, r, t] (crop space), tagged MegaPDF_Id = id
+// ("sig:..."). Pixels are ARGB ints (Android Bitmap layout); the core takes BGRA bytes.
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAddImageStamp(JNIEnv* env, jobject, jlong handle,
                                                          jintArray pixels, jint pw, jint ph,
                                                          jdouble l, jdouble b, jdouble r,
                                                          jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
-
-    l += crop.x; r += crop.x; b += crop.y; t += crop.y;
-
-    FPDF_BITMAP bmp = FPDFBitmap_Create(pw, ph, /*alpha=*/1);
-    if (bmp == nullptr) return JNI_FALSE;
+    if (pw <= 0 || ph <= 0) return JNI_FALSE;
+    std::vector<uint8_t> bgra(static_cast<size_t>(pw) * ph * 4);
     {
         jint* src = env->GetIntArrayElements(pixels, nullptr);
-        auto* dst = static_cast<uint8_t*>(FPDFBitmap_GetBuffer(bmp));
-        const int stride = FPDFBitmap_GetStride(bmp);
         for (int y = 0; y < ph; y++) {
-            uint8_t* row = dst + y * stride;
             for (int x = 0; x < pw; x++) {
                 const uint32_t argb = static_cast<uint32_t>(src[y * pw + x]);
-                row[x * 4 + 0] = argb & 0xFF;          // B
-                row[x * 4 + 1] = (argb >> 8) & 0xFF;   // G
-                row[x * 4 + 2] = (argb >> 16) & 0xFF;  // R
-                row[x * 4 + 3] = (argb >> 24) & 0xFF;  // A
+                uint8_t* px = &bgra[(static_cast<size_t>(y) * pw + x) * 4];
+                px[0] = argb & 0xFF;          // B
+                px[1] = (argb >> 8) & 0xFF;   // G
+                px[2] = (argb >> 16) & 0xFF;  // R
+                px[3] = (argb >> 24) & 0xFF;  // A
             }
         }
         env->ReleaseIntArrayElements(pixels, src, JNI_ABORT);
     }
-
-    bool ok = true;
-    FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(p->page, FPDF_ANNOT_STAMP);
-    if (annot == nullptr) {
-        FPDFBitmap_Destroy(bmp);
-        return JNI_FALSE;
-    }
-    FS_RECTF rect{static_cast<float>(l), static_cast<float>(t),
-                  static_cast<float>(r), static_cast<float>(b)};
-    ok = ok && FPDFAnnot_SetRect(annot, &rect);
-
-    FPDF_PAGEOBJECT img = FPDFPageObj_NewImageObj(p->owner->doc);
-    ok = ok && img != nullptr;
-    if (img != nullptr) {
-        ok = ok && FPDFImageObj_SetBitmap(nullptr, 0, img, bmp);
-        FS_MATRIX m{static_cast<float>(r - l), 0, 0,
-                    static_cast<float>(t - b), static_cast<float>(l),
-                    static_cast<float>(b)};
-        ok = ok && FPDFPageObj_SetMatrix(img, &m);
-        ok = ok && FPDFAnnot_AppendObject(annot, img);
-    }
-
-    if (ok) {
-        const jchar* chars = env->GetStringChars(id, nullptr);
-        const jsize len = env->GetStringLength(id);
-        std::vector<FPDF_WCHAR> wide(chars, chars + len);
-        wide.push_back(0);
-        env->ReleaseStringChars(id, chars);
-        ok = FPDFAnnot_SetStringValue(annot, kMegaPdfIdKey, wide.data());
-    }
-
-    FPDFPage_CloseAnnot(annot);
-    FPDFBitmap_Destroy(bmp);
-    return ok ? JNI_TRUE : JNI_FALSE;
+    const megapdf_rect bounds{l, b, r, t};
+    const std::vector<jchar> wide = JavaChars(env, id);
+    return megapdf_add_image_stamp(p->core, bgra.data(), pw, ph, &bounds, wide.data()) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
-// Reads the stamp's image back at native pixel resolution: temporarily set a
-// 1pt-per-pixel matrix, render, restore (the desktop move/resize pattern, so
+// Reads the stamp's image back at native pixel resolution (the core's rule, so
 // repeated moves never lose resolution). Returns [width, height, argb...] or
 // null when the annot has no image object.
 JNIEXPORT jintArray JNICALL
@@ -801,54 +723,27 @@ Java_com_megapdf_engine_PdfiumNative_nativeGetStampImagePacked(JNIEnv* env, jobj
                                                                jlong handle,
                                                                jint annotIndex) {
     auto* p = reinterpret_cast<Page*>(handle);
-    FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, annotIndex);
-    if (annot == nullptr) return nullptr;
+    megapdf_image* img = megapdf_stamp_image_load(p->core, annotIndex);
+    if (img == nullptr) return nullptr;
+    const int w = megapdf_image_width(img);
+    const int h = megapdf_image_height(img);
+    std::vector<uint8_t> bgra(megapdf_image_pixels(img, nullptr, 0));
+    megapdf_image_pixels(img, bgra.data(), bgra.size());
+    megapdf_image_free(img);
 
-    jintArray result = nullptr;
-    const int objCount = FPDFAnnot_GetObjectCount(annot);
-    for (int i = 0; i < objCount && result == nullptr; i++) {
-        FPDF_PAGEOBJECT obj = FPDFAnnot_GetObject(annot, i);
-        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
-
-        unsigned int pw = 0, ph = 0;
-        if (!FPDFImageObj_GetImagePixelSize(obj, &pw, &ph) || pw == 0 || ph == 0) continue;
-
-        FS_MATRIX original;
-        if (!FPDFPageObj_GetMatrix(obj, &original)) continue;
-        FS_MATRIX native{static_cast<float>(pw), 0, 0, static_cast<float>(ph), 0, 0};
-        FPDFPageObj_SetMatrix(obj, &native);
-        FPDF_BITMAP bmp = FPDFImageObj_GetRenderedBitmap(p->owner->doc, p->page, obj);
-        FPDFPageObj_SetMatrix(obj, &original);
-        if (bmp == nullptr) continue;
-
-        const int w = FPDFBitmap_GetWidth(bmp);
-        const int h = FPDFBitmap_GetHeight(bmp);
-        const int stride = FPDFBitmap_GetStride(bmp);
-        const auto* buf = static_cast<const uint8_t*>(FPDFBitmap_GetBuffer(bmp));
-        std::vector<jint> packed(static_cast<size_t>(w) * h + 2);
-        packed[0] = w;
-        packed[1] = h;
-        for (int y = 0; y < h; y++) {
-            const uint8_t* row = buf + y * stride;
-            for (int x = 0; x < w; x++) {
-                const uint32_t bgra = row[x * 4 + 0] | (row[x * 4 + 1] << 8) |
-                                      (row[x * 4 + 2] << 16) |
-                                      (static_cast<uint32_t>(row[x * 4 + 3]) << 24);
-                // BGRA bytes -> ARGB int: A stays, swap R/B positions.
-                packed[2 + y * w + x] = static_cast<jint>(
-                    (bgra & 0xFF000000u) | ((bgra & 0x00FF0000u) >> 16) |
-                    (bgra & 0x0000FF00u) | ((bgra & 0x000000FFu) << 16));
-            }
-        }
-        FPDFBitmap_Destroy(bmp);
-
-        result = env->NewIntArray(static_cast<jsize>(packed.size()));
-        if (result != nullptr) {
-            env->SetIntArrayRegion(result, 0, static_cast<jsize>(packed.size()),
-                                   packed.data());
-        }
+    std::vector<jint> packed(static_cast<size_t>(w) * h + 2);
+    packed[0] = w;
+    packed[1] = h;
+    for (size_t i = 0; i < static_cast<size_t>(w) * h; i++) {
+        const uint8_t* px = &bgra[i * 4];
+        // BGRA bytes -> ARGB int.
+        packed[2 + i] = static_cast<jint>((static_cast<uint32_t>(px[3]) << 24) | (static_cast<uint32_t>(px[2]) << 16) |
+                                          (static_cast<uint32_t>(px[1]) << 8) | px[0]);
     }
-    FPDFPage_CloseAnnot(annot);
+    jintArray result = env->NewIntArray(static_cast<jsize>(packed.size()));
+    if (result != nullptr) {
+        env->SetIntArrayRegion(result, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
     return result;
 }
 

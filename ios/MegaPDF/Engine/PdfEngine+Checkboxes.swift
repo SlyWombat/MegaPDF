@@ -78,55 +78,27 @@ extension PdfEngine {
         }
     }
 
-    /// Places the ✗ check-mark stamp over a drawn square: STAMP annot, 10%
-    /// inset, 0x202020 stroke at width max(1.2, w·0.11), `MegaPDF_Id` = id.
+    /// Places the ✗ check-mark stamp over a drawn square (crop space): geometry
+    /// and ink are the core's (#108), tagged `MegaPDF_Id` = id.
     func addCheckMark(_ document: PdfDocument, pageIndex: Int,
                       square: PdfRect, id: String) throws {
-        try withPage(document, index: pageIndex) { page in
-            // The square arrives in crop space from the UI; pdfium wants user space.
-            let square = square.toUser(cropOrigin(page))
-            let w = square.right - square.left
-            let h = square.top - square.bottom
-            let il = Float(square.left + 0.10 * w)
-            let ib = Float(square.bottom + 0.10 * h)
-            let ir = Float(square.right - 0.10 * w)
-            let it = Float(square.top - 0.10 * h)
-
-            guard let annot = FPDFPage_CreateAnnot(page, FPDF_ANNOT_STAMP) else {
-                throw PdfError.editFailed
+        try withCorePage(document, index: pageIndex) { page in
+            var rect = megapdf_rect(left: square.left, bottom: square.bottom, right: square.right, top: square.top)
+            let wide = Array(id.utf16) + [0]
+            let status = wide.withUnsafeBufferPointer {
+                megapdf_add_check_mark(page, &rect, MEGAPDF_MARK_CROSS, $0.baseAddress)
             }
-            defer { FPDFPage_CloseAnnot(annot) }
-
-            var rect = FS_RECTF(left: il, top: it, right: ir, bottom: ib)
-            guard FPDFAnnot_SetRect(annot, &rect) != 0,
-                  let path = FPDFPageObj_CreateNewPath(il, ib),
-                  FPDFPath_LineTo(path, ir, it) != 0,
-                  FPDFPath_MoveTo(path, il, it) != 0,
-                  FPDFPath_LineTo(path, ir, ib) != 0
-            else { throw PdfError.editFailed }
-
-            FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF)
-            FPDFPageObj_SetStrokeWidth(path, Float(max(1.2, w * 0.11)))
-            FPDFPath_SetDrawMode(path, FPDF_FILLMODE_NONE, 1)
-            guard FPDFAnnot_AppendObject(annot, path) != 0,
-                  Self.setMegaPdfId(annot, id: id)
-            else { throw PdfError.editFailed }
+            guard status == MEGAPDF_OK else { throw PdfError.editFailed }
         }
     }
 
     /// Removes the annotation at `annotIndex` (from `stamps`).
     func removeAnnot(_ document: PdfDocument, pageIndex: Int, annotIndex: Int) throws {
-        try withPage(document, index: pageIndex) { page in
-            guard FPDFPage_RemoveAnnot(page, Int32(annotIndex)) != 0 else {
+        try withCorePage(document, index: pageIndex) { page in
+            guard megapdf_remove_annotation(page, Int32(annotIndex)) == MEGAPDF_OK else {
                 throw PdfError.editFailed
             }
         }
     }
 
-    static func setMegaPdfId(_ annot: FPDF_ANNOTATION, id: String) -> Bool {
-        let wide = Array(id.utf16) + [0]
-        return wide.withUnsafeBufferPointer {
-            FPDFAnnot_SetStringValue(annot, "MegaPDF_Id", $0.baseAddress) != 0
-        }
-    }
 }

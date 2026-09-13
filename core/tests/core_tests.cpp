@@ -620,6 +620,150 @@ void test_form_fields(const std::string& fixtures) {
     megapdf_form_fields_free(nullptr);
 }
 
+// --------------------------------------------------------------------------
+// Contract 4 (#108): stamps and MegaPDF_Id marks. stamped.pdf carries a
+// signature stamp (sig:interop-1, [100 500 190 560]) and a mark
+// (mark:interop-2, [72 600 84 612]) written by the fixture generator; the
+// interop contract is that every platform reads them back the same way.
+
+struct StampList {
+    std::vector<megapdf_stamp> stamps;
+    std::vector<std::string> ids;
+};
+
+StampList stamps_of(const megapdf_page* page) {
+    StampList out;
+    megapdf_stamps* s = megapdf_stamps_load(page);
+    for (size_t i = 0; i < megapdf_stamp_count(s); i++) {
+        megapdf_stamp st{};
+        megapdf_stamp_get(s, i, &st);
+        out.stamps.push_back(st);
+        const size_t n = megapdf_stamp_id(s, i, nullptr, 0);
+        U16 id(n);
+        if (n > 0) megapdf_stamp_id(s, i, id.data(), n);
+        out.ids.push_back(show(id));
+    }
+    megapdf_stamps_free(s);
+    return out;
+}
+
+void test_stamps(const std::string& fixtures) {
+    // Reading stamps another platform wrote.
+    {
+        Doc d(fixtures + "/stamped.pdf");
+        if (!d.doc) { check(false, "stamped.pdf opens"); return; }
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "stamped.pdf page loads"); return; }
+        auto list = stamps_of(p.page);
+        check(list.ids.size() == 2, "stamped.pdf has two MegaPDF stamps", std::to_string(list.ids.size()));
+        if (list.ids.size() == 2) {
+            check(list.ids[0] == "sig:interop-1" && list.ids[1] == "mark:interop-2", "stamp ids read back", list.ids[0] + ", " + list.ids[1]);
+            check(close_to(list.stamps[0].bounds.left, 100) && close_to(list.stamps[0].bounds.top, 560), "signature bounds read back", rect_str(list.stamps[0].bounds));
+            check(list.stamps[0].annot_index == 0 && list.stamps[1].annot_index == 1, "annotation indices are reported");
+        }
+    }
+    // Check marks in every style over the fixture's square, then removal by id.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "fixture.pdf page loads for stamps"); return; }
+        const megapdf_rect square{72, 600, 84, 612};
+        auto cross = utf16("mark:cross"), tick = utf16("mark:check"), box = utf16("mark:square");
+        check(megapdf_add_check_mark(p.page, &square, MEGAPDF_MARK_CROSS, cross.data()) == MEGAPDF_OK, "cross mark added");
+        check(megapdf_add_check_mark(p.page, &square, MEGAPDF_MARK_CHECK, tick.data()) == MEGAPDF_OK, "check mark added");
+        check(megapdf_add_check_mark(p.page, &square, MEGAPDF_MARK_FILLED_SQUARE, box.data()) == MEGAPDF_OK, "filled-square mark added");
+        auto list = stamps_of(p.page);
+        check(list.ids.size() == 3, "three marks listed", std::to_string(list.ids.size()));
+        if (list.ids.size() == 3) {
+            check(list.ids[0] == "mark:cross" && list.ids[2] == "mark:square", "mark ids in order", list.ids[0] + "," + list.ids[1] + "," + list.ids[2]);
+            // Inset 10% of the 12 pt square: (73.2, 601.2)-(82.8, 610.8).
+            check(close_to(list.stamps[0].bounds.left, 73.2, 0.05) && close_to(list.stamps[0].bounds.bottom, 601.2, 0.05) &&
+                      close_to(list.stamps[0].bounds.right, 82.8, 0.05) && close_to(list.stamps[0].bounds.top, 610.8, 0.05),
+                  "mark sits 10% inside the square", rect_str(list.stamps[0].bounds));
+        }
+        check(megapdf_remove_stamp(p.page, tick.data()) == MEGAPDF_OK, "remove by id");
+        list = stamps_of(p.page);
+        check(list.ids.size() == 2 && list.ids[1] == "mark:square", "the right mark was removed", std::to_string(list.ids.size()));
+        check(megapdf_remove_stamp(p.page, tick.data()) == MEGAPDF_ERR_ARGUMENT, "removing a missing id is an argument error");
+        check(megapdf_stamp_image_load(p.page, 0) == nullptr, "a mark has no image");
+        check(megapdf_remove_annotation(p.page, 0) == MEGAPDF_OK, "remove by index");
+        check(stamps_of(p.page).ids.size() == 1, "one mark left");
+        check(megapdf_add_check_mark(p.page, &square, MEGAPDF_MARK_CROSS, nullptr) == MEGAPDF_ERR_ARGUMENT, "a mark needs an id");
+    }
+    // An image stamp: place, read back at native size with alpha, move under the same id.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        Page p(d.doc, 1);
+        if (!p.page) { check(false, "fixture.pdf page 2 loads for stamps"); return; }
+        const int w = 8, h = 4;
+        std::vector<unsigned char> bgra(static_cast<size_t>(w) * h * 4, 0);
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+            unsigned char* px = &bgra[(static_cast<size_t>(y) * w + x) * 4];
+            const bool ink = x >= w / 2;          // right half opaque blue, left half transparent
+            px[0] = ink ? 0xFF : 0; px[1] = 0; px[2] = 0; px[3] = ink ? 0xFF : 0;
+        }
+        const megapdf_rect bounds{100, 400, 280, 460};
+        auto id = utf16("sig:test-1");
+        check(megapdf_add_image_stamp(p.page, bgra.data(), w, h, &bounds, id.data()) == MEGAPDF_OK, "image stamp added");
+        auto list = stamps_of(p.page);
+        check(list.ids.size() == 1 && list.ids[0] == "sig:test-1", "signature listed");
+        if (list.ids.size() == 1) {
+            check(close_to(list.stamps[0].bounds.left, 100) && close_to(list.stamps[0].bounds.bottom, 400) &&
+                      close_to(list.stamps[0].bounds.right, 280) && close_to(list.stamps[0].bounds.top, 460),
+                  "signature placed at its bounds", rect_str(list.stamps[0].bounds));
+            megapdf_image* img = megapdf_stamp_image_load(p.page, list.stamps[0].annot_index);
+            check(img != nullptr, "signature image reads back");
+            if (img) {
+                check(megapdf_image_width(img) == w && megapdf_image_height(img) == h, "image comes back at native pixel size",
+                      std::to_string(megapdf_image_width(img)) + "x" + std::to_string(megapdf_image_height(img)));
+                const size_t bytes = megapdf_image_pixels(img, nullptr, 0);
+                std::vector<unsigned char> back(bytes);
+                megapdf_image_pixels(img, back.data(), bytes);
+                check(bytes == bgra.size(), "pixel buffer size matches", std::to_string(bytes));
+                if (bytes == bgra.size()) {
+                    check(back[3] == 0, "transparent pixel stays transparent", std::to_string(back[3]));
+                    const size_t br = (static_cast<size_t>(h - 1) * w + (w - 1)) * 4;
+                    check(back[br] > 0xA0 && back[br + 3] == 0xFF, "opaque blue pixel stays opaque blue",
+                          std::to_string(back[br]) + "/" + std::to_string(back[br + 3]));
+                }
+                megapdf_image_free(img);
+            }
+        }
+        const megapdf_rect moved{300, 100, 420, 140};
+        check(megapdf_move_image_stamp(p.page, id.data(), &moved) == MEGAPDF_OK, "move returns OK");
+        list = stamps_of(p.page);
+        check(list.ids.size() == 1 && list.ids[0] == "sig:test-1", "moved stamp keeps its id", std::to_string(list.ids.size()));
+        if (list.ids.size() == 1) {
+            check(close_to(list.stamps[0].bounds.left, 300) && close_to(list.stamps[0].bounds.top, 140), "moved stamp is at the new bounds", rect_str(list.stamps[0].bounds));
+            megapdf_image* img = megapdf_stamp_image_load(p.page, list.stamps[0].annot_index);
+            check(img && megapdf_image_width(img) == w && megapdf_image_height(img) == h, "a move keeps native resolution");
+            megapdf_image_free(img);
+        }
+        auto missing = utf16("sig:nope");
+        check(megapdf_move_image_stamp(p.page, missing.data(), &moved) == MEGAPDF_ERR_ARGUMENT, "moving a missing id is an argument error");
+        check(megapdf_add_image_stamp(p.page, bgra.data(), 0, h, &bounds, id.data()) == MEGAPDF_ERR_ARGUMENT, "a zero-width image is rejected");
+    }
+    // Crop space: a stamp on cropped.pdf lands where the UI asked, in crop coordinates.
+    {
+        Doc d(fixtures + "/cropped.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "cropped.pdf page loads for stamps"); return; }
+        const megapdf_rect square{50, 50, 62, 62};
+        auto id = utf16("mark:crop");
+        megapdf_add_check_mark(p.page, &square, MEGAPDF_MARK_CROSS, id.data());
+        auto list = stamps_of(p.page);
+        check(list.ids.size() == 1 && close_to(list.stamps[0].bounds.bottom, 51.2, 0.05), "mark on a cropped page reads back in crop space",
+              list.ids.empty() ? "none" : rect_str(list.stamps[0].bounds));
+    }
+    check(megapdf_stamps_load(nullptr) == nullptr, "stamps of a null page is NULL");
+    check(megapdf_stamp_count(nullptr) == 0, "null stamps count 0");
+    check(megapdf_stamp_image_load(nullptr, 0) == nullptr, "image of a null page is NULL");
+    check(megapdf_image_pixels(nullptr, nullptr, 0) == 0, "null image has no pixels");
+    check(megapdf_remove_annotation(nullptr, 0) == MEGAPDF_ERR_ARGUMENT, "remove rejects a null page");
+    megapdf_stamps_free(nullptr);
+    megapdf_image_free(nullptr);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -636,6 +780,7 @@ int main(int argc, char** argv) {
     test_schematic(argv[2]);
     test_text_runs(argv[1], argv[2], argv[3]);
     test_form_fields(argv[1]);
+    test_stamps(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

@@ -186,27 +186,25 @@ actor PdfEngine {
         return result
     }
 
-    /// All MegaPDF-placed stamps on the page (`MegaPDF_Id`-tagged, any platform).
+    /// All MegaPDF-placed stamps on the page (`MegaPDF_Id`-tagged, any platform),
+    /// from the core's stamp list (#108).
     func stamps(_ document: PdfDocument, pageIndex: Int) throws -> [PdfStamp] {
-        try withPage(document, index: pageIndex) { page in
-            let crop = cropOrigin(page)
+        try withCorePage(document, index: pageIndex) { page in
+            guard let stamps = megapdf_stamps_load(page) else { return [] }
+            defer { megapdf_stamps_free(stamps) }
             var result: [PdfStamp] = []
-            for i in 0..<FPDFPage_GetAnnotCount(page) {
-                guard let annot = FPDFPage_GetAnnot(page, i) else { continue }
-                defer { FPDFPage_CloseAnnot(annot) }
-                let bytes = FPDFAnnot_GetStringValue(annot, "MegaPDF_Id", nil, 0)
-                guard bytes > 2 else { continue }
-                var buf = [UInt16](repeating: 0, count: Int(bytes) / 2)
-                FPDFAnnot_GetStringValue(annot, "MegaPDF_Id", &buf, bytes)
-                let id = String(utf16CodeUnits: buf, count: buf.count - 1)
-                var r = FS_RECTF()
-                FPDFAnnot_GetRect(annot, &r)
+            for i in 0..<megapdf_stamp_count(stamps) {
+                var s = megapdf_stamp()
+                guard megapdf_stamp_get(stamps, i, &s) == MEGAPDF_OK else { continue }
+                let n = megapdf_stamp_id(stamps, i, nil, 0)
+                var units = [UInt16](repeating: 0, count: n)
+                if n > 0 { _ = units.withUnsafeMutableBufferPointer { megapdf_stamp_id(stamps, i, $0.baseAddress, n) } }
                 result.append(PdfStamp(
-                    annotIndex: Int(i), id: id,
-                    rect: PdfRect(left: Double(r.left), bottom: Double(r.bottom),
-                                  right: Double(r.right), top: Double(r.top)).toCrop(crop)))
-        }
-        return result
+                    annotIndex: Int(s.annot_index), id: String(utf16CodeUnits: units, count: n),
+                    rect: PdfRect(left: s.bounds.left, bottom: s.bounds.bottom,
+                                  right: s.bounds.right, top: s.bounds.top)))
+            }
+            return result
         }
     }
 

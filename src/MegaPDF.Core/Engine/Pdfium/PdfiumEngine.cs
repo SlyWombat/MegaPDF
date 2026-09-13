@@ -268,6 +268,10 @@ internal sealed class PdfiumPage : IPdfPage
     private PdfRect CropToView(double left, double bottom, double right, double top) =>
         new(left, Height - top, right - left, top - bottom);
 
+    /// <summary>View space (top-left) to the core's crop space (bottom-left).</summary>
+    private CoreNative.Rect ViewToCrop(PdfRect r) =>
+        new() { Left = r.X, Bottom = Height - r.Bottom, Right = r.Right, Top = Height - r.Y };
+
     /// <summary>View space back to PDF user space.</summary>
     private double UserX(double viewX) => viewX + _cropLeft;
     private double UserY(double viewY) => _cropTop - viewY;
@@ -309,7 +313,7 @@ internal sealed class PdfiumPage : IPdfPage
     public PageHit HitTest(PdfPoint point)
     {
         // Our own stamps sit on top of everything (clicking one removes/selects it).
-        foreach (var (id, bounds) in GetMegaPdfStamps())
+        foreach (var (_, id, bounds) in GetMegaPdfStamps())
         {
             if (bounds.Contains(point))
                 return new PageHit(PageHitKind.StampAnnotation, AnnotationId: id, Bounds: bounds);
@@ -449,79 +453,21 @@ internal sealed class PdfiumPage : IPdfPage
         return squares;
     }
 
-    private const string StampIdKey = "MegaPDF_Id";
-
     public string AddCheckMarkStamp(PdfRect squareBounds, string? stampId = null, CheckMarkStyle style = CheckMarkStyle.Cross)
     {
         ThrowIfDisposed();
         var id = stampId ?? "mark:" + Guid.NewGuid().ToString("N");
-
-        // Mark at ~80% of the square, centered (SDD §3.2), in PDF page coordinates.
-        var inset = Math.Max(squareBounds.Width, squareBounds.Height) * 0.10;
-        var left = (float)UserX(squareBounds.X + inset);
-        var right = (float)UserX(squareBounds.Right - inset);
-        var top = (float)(UserY(squareBounds.Y + inset));
-        var bottom = (float)(UserY(squareBounds.Bottom - inset));
-
-        lock (PdfiumLibrary.Lock)
+        // Geometry (10% inset, 0x202020 ink, stroke max(1.2, w × 0.11)) and the three
+        // styles (SDD §3.2 / Appendix B #3) are drawn by the core (#108).
+        var square = ViewToCrop(squareBounds);
+        var coreStyle = style switch
         {
-            var annot = PdfiumNative.FPDFPage_CreateAnnot(_handle, PdfiumNative.FPDF_ANNOT_SUBTYPE_STAMP);
-            if (annot == IntPtr.Zero)
-                throw new InvalidOperationException("Could not create the mark annotation.");
-            try
-            {
-                var rect = new PdfiumNative.FS_RECTF { Left = left, Top = top, Right = right, Bottom = bottom };
-                PdfiumNative.FPDFAnnot_SetRect(annot, ref rect);
-
-                // Mark styles per SDD §3.2 / Appendix B #3: ✗ (default), ✓, filled ■.
-                IntPtr path;
-                var fill = 0;
-                var stroke = 1;
-                switch (style)
-                {
-                    case CheckMarkStyle.Check:
-                    {
-                        var width = right - left;
-                        var height = top - bottom;
-                        path = PdfiumNative.FPDFPageObj_CreateNewPath(left, (float)(bottom + height * 0.45));
-                        PdfiumNative.FPDFPath_LineTo(path, (float)(left + width * 0.38), bottom);
-                        PdfiumNative.FPDFPath_LineTo(path, right, top);
-                        break;
-                    }
-                    case CheckMarkStyle.FilledSquare:
-                        path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
-                        PdfiumNative.FPDFPath_LineTo(path, right, bottom);
-                        PdfiumNative.FPDFPath_LineTo(path, right, top);
-                        PdfiumNative.FPDFPath_LineTo(path, left, top);
-                        PdfiumNative.FPDFPath_LineTo(path, left, bottom);
-                        PdfiumNative.FPDFPageObj_SetFillColor(path, 0x20, 0x20, 0x20, 0xFF);
-                        fill = 1; // alternate fill mode
-                        stroke = 0;
-                        break;
-                    default: // Cross
-                        path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
-                        PdfiumNative.FPDFPath_LineTo(path, right, top);
-                        PdfiumNative.FPDFPath_MoveTo(path, left, top);
-                        PdfiumNative.FPDFPath_LineTo(path, right, bottom);
-                        break;
-                }
-                PdfiumNative.FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
-                PdfiumNative.FPDFPageObj_SetStrokeWidth(path, (float)Math.Max(1.2, squareBounds.Width * 0.11));
-                PdfiumNative.FPDFPath_SetDrawMode(path, fill, stroke);
-
-                if (PdfiumNative.FPDFAnnot_AppendObject(annot, path) == 0)
-                {
-                    PdfiumNative.FPDFPageObj_Destroy(path);
-                    throw new InvalidOperationException("Could not draw the mark.");
-                }
-
-                PdfiumNative.FPDFAnnot_SetStringValue(annot, StampIdKey, id);
-            }
-            finally
-            {
-                PdfiumNative.FPDFPage_CloseAnnot(annot);
-            }
-        }
+            CheckMarkStyle.Check => CoreNative.MarkCheck,
+            CheckMarkStyle.FilledSquare => CoreNative.MarkFilledSquare,
+            _ => CoreNative.MarkCross,
+        };
+        if (CoreNative.megapdf_add_check_mark(_core, ref square, coreStyle, id) != 0)
+            throw new InvalidOperationException("Could not draw the mark.");
         return id;
     }
 
@@ -531,36 +477,29 @@ internal sealed class PdfiumPage : IPdfPage
         return GetMegaPdfStamps().Select(s => new StampInfo(s.Id, s.Bounds)).ToList();
     }
 
-    /// <summary>All MegaPDF-placed stamps on the page: (id, bounds in top-left space).</summary>
-    private List<(string Id, PdfRect Bounds)> GetMegaPdfStamps()
+    /// <summary>All MegaPDF-placed stamps on the page: (annotation index, id, bounds in top-left space).</summary>
+    private List<(int AnnotIndex, string Id, PdfRect Bounds)> GetMegaPdfStamps()
     {
-        lock (PdfiumLibrary.Lock)
+        var stamps = CoreNative.megapdf_stamps_load(_core);
+        if (stamps == IntPtr.Zero)
+            return [];
+        try
         {
-            var stamps = new List<(string, PdfRect)>();
-            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
+            var count = (int)CoreNative.megapdf_stamp_count(stamps);
+            var result = new List<(int, string, PdfRect)>(count);
             for (var i = 0; i < count; i++)
             {
-                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
-                if (annot == IntPtr.Zero)
-                    continue;
-                try
-                {
-                    var id = ReadStampId(annot);
-                    if (id.Length == 0 || PdfiumNative.FPDFAnnot_GetRect(annot, out var rect) == 0)
-                        continue;
-                    stamps.Add((id, new PdfRect(ViewX(rect.Left), ViewY(rect.Top), rect.Right - rect.Left, rect.Top - rect.Bottom)));
-                }
-                finally
-                {
-                    PdfiumNative.FPDFPage_CloseAnnot(annot);
-                }
+                CoreNative.megapdf_stamp_get(stamps, (nuint)i, out var s);
+                result.Add((s.AnnotIndex, CoreNative.StampId(stamps, (nuint)i),
+                    CropToView(s.Bounds.Left, s.Bounds.Bottom, s.Bounds.Right, s.Bounds.Top)));
             }
-            return stamps;
+            return result;
+        }
+        finally
+        {
+            CoreNative.megapdf_stamps_free(stamps);
         }
     }
-
-    private static string ReadStampId(IntPtr annot) =>
-        ReadUtf16ByteLengthString((buffer, length) => PdfiumNative.FPDFAnnot_GetStringValue(annot, StampIdKey, buffer, length));
 
     public IReadOnlyList<PdfTextRun> GetTextRuns()
     {
@@ -641,16 +580,6 @@ internal sealed class PdfiumPage : IPdfPage
         {
             CoreNative.megapdf_form_fields_free(fields);
         }
-    }
-
-    private static string ReadUtf16ByteLengthString(Func<byte[]?, uint, uint> read)
-    {
-        var lengthInBytes = read(null, 0);
-        if (lengthInBytes <= 2)
-            return "";
-        var buffer = new byte[lengthInBytes];
-        read(buffer, lengthInBytes);
-        return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
     }
 
     public TextEditOutcome SetTextRunText(PdfTextRun run, string newText)
@@ -1332,159 +1261,61 @@ internal sealed class PdfiumPage : IPdfPage
             throw new ArgumentException("BGRA buffer size must be width*height*4.", nameof(bgra));
 
         var id = stampId ?? "sig:" + Guid.NewGuid().ToString("N");
-        var left = (float)UserX(bounds.X);
-        var right = (float)UserX(bounds.Right);
-        var top = (float)UserY(bounds.Y);
-        var bottom = (float)UserY(bounds.Bottom);
-
-        lock (PdfiumLibrary.Lock)
+        var rect = ViewToCrop(bounds);
+        int status;
+        unsafe
         {
-            using var pixels = bgra.Pin();
-            IntPtr bitmap;
-            unsafe
-            {
-                bitmap = PdfiumNative.FPDFBitmap_CreateEx(
-                    pixelWidth, pixelHeight, PdfiumNative.FPDFBitmap_BGRA, (IntPtr)pixels.Pointer, pixelWidth * 4);
-            }
-            if (bitmap == IntPtr.Zero)
-                throw new InvalidOperationException("Could not wrap the signature image.");
-
-            var annot = IntPtr.Zero;
-            var imageObj = IntPtr.Zero;
-            try
-            {
-                annot = PdfiumNative.FPDFPage_CreateAnnot(_handle, PdfiumNative.FPDF_ANNOT_SUBTYPE_STAMP);
-                if (annot == IntPtr.Zero)
-                    throw new InvalidOperationException("Could not create the signature annotation.");
-
-                var rect = new PdfiumNative.FS_RECTF { Left = left, Top = top, Right = right, Bottom = bottom };
-                PdfiumNative.FPDFAnnot_SetRect(annot, ref rect);
-
-                imageObj = PdfiumNative.FPDFPageObj_NewImageObj(_document);
-                if (imageObj == IntPtr.Zero
-                    || PdfiumNative.FPDFImageObj_SetBitmap([_handle], 1, imageObj, bitmap) == 0)
-                    throw new InvalidOperationException("Could not attach the signature image.");
-
-                // An image object is a unit square; the matrix scales/places it (PDF coords).
-                var matrix = new PdfiumNative.FS_MATRIX
-                {
-                    A = right - left, B = 0, C = 0, D = top - bottom, E = left, F = bottom,
-                };
-                PdfiumNative.FPDFPageObj_SetMatrix(imageObj, ref matrix);
-
-                if (PdfiumNative.FPDFAnnot_AppendObject(annot, imageObj) == 0)
-                    throw new InvalidOperationException("Could not place the signature.");
-                imageObj = IntPtr.Zero; // ownership transferred to the annotation
-
-                PdfiumNative.FPDFAnnot_SetStringValue(annot, StampIdKey, id);
-            }
-            finally
-            {
-                if (imageObj != IntPtr.Zero)
-                    PdfiumNative.FPDFPageObj_Destroy(imageObj);
-                if (annot != IntPtr.Zero)
-                    PdfiumNative.FPDFPage_CloseAnnot(annot);
-                PdfiumNative.FPDFBitmap_Destroy(bitmap);
-            }
+            fixed (byte* pixels = bgra.Span)
+                status = CoreNative.megapdf_add_image_stamp(_core, pixels, pixelWidth, pixelHeight, ref rect, id);
         }
+        if (status != 0)
+            throw new InvalidOperationException("Could not place the signature.");
         return id;
     }
 
     public StampImage? GetStampImage(string annotationId)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
-            for (var i = 0; i < count; i++)
-            {
-                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
-                if (annot == IntPtr.Zero)
-                    continue;
-                try
-                {
-                    if (ReadStampId(annot) != annotationId)
-                        continue;
-                    var obj = PdfiumNative.FPDFAnnot_GetObject(annot, 0);
-                    if (obj == IntPtr.Zero)
-                        return null;
-
-                    // Render at the image's NATIVE pixel size (not its placement size) so
-                    // repeated remove/re-add cycles never lose resolution: temporarily set a
-                    // 1pt-per-pixel matrix, render, then restore the placement matrix.
-                    PdfiumNative.FPDFPageObj_GetMatrix(obj, out var placement);
-                    var nativeMatrix = placement;
-                    if (PdfiumNative.FPDFImageObj_GetImagePixelSize(obj, out var pxWidth, out var pxHeight) != 0
-                        && pxWidth > 0 && pxHeight > 0)
-                    {
-                        nativeMatrix = new PdfiumNative.FS_MATRIX { A = pxWidth, B = 0, C = 0, D = pxHeight, E = 0, F = 0 };
-                    }
-                    PdfiumNative.FPDFPageObj_SetMatrix(obj, ref nativeMatrix);
-                    var bitmap = PdfiumNative.FPDFImageObj_GetRenderedBitmap(_document, _handle, obj);
-                    PdfiumNative.FPDFPageObj_SetMatrix(obj, ref placement);
-                    if (bitmap == IntPtr.Zero)
-                        return null;
-                    try
-                    {
-                        var width = PdfiumNative.FPDFBitmap_GetWidth(bitmap);
-                        var height = PdfiumNative.FPDFBitmap_GetHeight(bitmap);
-                        var stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
-                        var buffer = PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
-                        var pixels = new byte[width * height * 4];
-                        for (var row = 0; row < height; row++)
-                            Marshal.Copy(buffer + row * stride, pixels, row * width * 4, width * 4);
-                        return new StampImage(pixels, width, height);
-                    }
-                    finally
-                    {
-                        PdfiumNative.FPDFBitmap_Destroy(bitmap);
-                    }
-                }
-                finally
-                {
-                    PdfiumNative.FPDFPage_CloseAnnot(annot);
-                }
-            }
+        var stamp = GetMegaPdfStamps().FirstOrDefault(s => s.Id == annotationId);
+        if (stamp.Id is null)
             return null;
+        // Native pixel size, not placement size, so repeated move cycles never lose
+        // resolution — the core's rule.
+        var image = CoreNative.megapdf_stamp_image_load(_core, stamp.AnnotIndex);
+        if (image == IntPtr.Zero)
+            return null;
+        try
+        {
+            var width = CoreNative.megapdf_image_width(image);
+            var height = CoreNative.megapdf_image_height(image);
+            var pixels = new byte[(int)CoreNative.megapdf_image_pixels(image, null, 0)];
+            CoreNative.megapdf_image_pixels(image, pixels, (nuint)pixels.Length);
+            return new StampImage(pixels, width, height);
+        }
+        finally
+        {
+            CoreNative.megapdf_image_free(image);
         }
     }
 
     public void MoveStampAnnotation(string annotationId, PdfRect newBounds)
     {
         ThrowIfDisposed();
-        // In-place FPDFAnnot_UpdateObject after SetRect wipes the appearance stream
-        // (verified empirically), so a move is: extract native-resolution pixels,
-        // remove, re-add at the new bounds under the same stable id.
-        lock (PdfiumLibrary.Lock)
-        {
-            var image = GetStampImage(annotationId)
-                ?? throw new InvalidOperationException("Only image stamps (signatures) can be moved.");
-            RemoveStampAnnotation(annotationId);
-            AddImageStamp(image.Bgra, image.PixelWidth, image.PixelHeight, newBounds, annotationId);
-        }
+        // Extract at native resolution, remove, re-add under the same id — in the core,
+        // because updating the annotation in place wipes its appearance stream.
+        var rect = ViewToCrop(newBounds);
+        if (CoreNative.megapdf_move_image_stamp(_core, annotationId, ref rect) != 0)
+            throw new InvalidOperationException("Only image stamps (signatures) can be moved.");
     }
 
     public void RemoveStampAnnotation(string annotationId)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
-            for (var i = 0; i < count; i++)
-            {
-                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
-                if (annot == IntPtr.Zero)
-                    continue;
-                var matches = ReadStampId(annot) == annotationId;
-                PdfiumNative.FPDFPage_CloseAnnot(annot);
-                if (!matches)
-                    continue;
-                if (PdfiumNative.FPDFPage_RemoveAnnot(_handle, i) == 0)
-                    throw new InvalidOperationException("Could not remove the mark.");
-                return;
-            }
+        var status = CoreNative.megapdf_remove_stamp(_core, annotationId);
+        if (status == -1)
             throw new KeyNotFoundException($"No MegaPDF stamp with id {annotationId} on page {Index}.");
-        }
+        if (status != 0)
+            throw new InvalidOperationException("Could not remove the mark.");
     }
 
     public void Dispose()

@@ -12,7 +12,10 @@ lines built on first use, a `MEGAPDF_TEXT_BOXES_ONLY` load for text-box listings
 captured before the port — as the regression gate. #107 (AcroForm fields) followed:
 `megapdf_form_fields_load`, `megapdf_form_click`, `megapdf_form_set_text` and
 `megapdf_form_commit` (the kill-focus-before-save rule), which left the phones with
-a filter and a struct copy where they had form code.
+a filter and a struct copy where they had form code. #108 (stamps and MegaPDF_Id
+marks) moved check marks in all three styles, image stamps with alpha, the stamp list,
+native-resolution image read-back, removal by index or id, and the extract-remove-re-add
+move under a stable id into the core.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 

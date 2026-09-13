@@ -22,7 +22,7 @@
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
 //
-// Migration note: until every contract has moved (#108–#112), bindings still
+// Migration note: until every contract has moved (#109–#112), bindings still
 // call PDFium directly for the rest, through the *_raw accessors. Those go away
 // with the last migrated contract.
 #ifndef MEGAPDF_CORE_H
@@ -259,6 +259,79 @@ MEGAPDF_API int megapdf_form_set_text(const megapdf_page* page, double x, double
  * serialising; the rule every platform had to remember on its own until now.
  */
 MEGAPDF_API void megapdf_form_commit(const megapdf_document* document);
+
+/* --------------------------------------------------------------------------
+ * Contract 4: stamps and MegaPDF_Id marks (#108, SDD §6.2). A MegaPDF stamp is
+ * a STAMP annotation carrying a `MegaPDF_Id` string ("mark:…" for check marks,
+ * "sig:…" for signatures). Ids are caller-supplied so they stay stable across
+ * undo/redo and across platforms. Coordinates are crop space throughout.
+ * ----------------------------------------------------------------------- */
+
+typedef enum megapdf_mark_style {
+    MEGAPDF_MARK_CROSS = 0,          /* ✗ — the default (Appendix B #3) */
+    MEGAPDF_MARK_CHECK = 1,          /* ✓ */
+    MEGAPDF_MARK_FILLED_SQUARE = 2   /* ■ */
+} megapdf_mark_style;
+
+/**
+ * Draws a check mark over a drawn square: STAMP annot inset 10% of the larger
+ * side, 0x202020 ink, stroke width max(1.2, width × 0.11), tagged with `id_utf16`
+ * (NUL-terminated). MEGAPDF_OK, MEGAPDF_ERR_ARGUMENT, or MEGAPDF_ERR_PDFIUM.
+ */
+MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* page, const megapdf_rect* square,
+                                       megapdf_mark_style style, const unsigned short* id_utf16);
+
+/**
+ * Places an image stamp (a signature): STAMP annot at `bounds`, the image object
+ * positioned by the unit-square matrix, alpha respected. `bgra` is width × height
+ * × 4 bytes, top row first; the core copies it.
+ */
+MEGAPDF_API int megapdf_add_image_stamp(const megapdf_page* page, const unsigned char* bgra, int width, int height,
+                                        const megapdf_rect* bounds, const unsigned short* id_utf16);
+
+typedef struct megapdf_stamp {
+    int annot_index;         /* the annotation's index on the page, valid until the page's annotations change */
+    megapdf_rect bounds;     /* crop space */
+} megapdf_stamp;
+
+typedef struct megapdf_stamps megapdf_stamps;
+
+/** Every annotation on the page carrying a MegaPDF_Id, in annotation order; a snapshot. */
+MEGAPDF_API megapdf_stamps* megapdf_stamps_load(const megapdf_page* page);
+MEGAPDF_API void megapdf_stamps_free(megapdf_stamps* stamps);
+MEGAPDF_API size_t megapdf_stamp_count(const megapdf_stamps* stamps);
+MEGAPDF_API int megapdf_stamp_get(const megapdf_stamps* stamps, size_t index, megapdf_stamp* out);
+/** The stamp's MegaPDF_Id: UTF-16 code units, no terminator, count-then-fill. */
+MEGAPDF_API size_t megapdf_stamp_id(const megapdf_stamps* stamps, size_t index, unsigned short* out, size_t capacity);
+
+typedef struct megapdf_image megapdf_image;
+
+/**
+ * The image of the stamp at `annot_index`, rendered at the image's NATIVE pixel
+ * size rather than its placement size (a temporary 1 pt-per-pixel matrix), so
+ * repeated move cycles never lose resolution. NULL when the annotation has no
+ * image object.
+ */
+MEGAPDF_API megapdf_image* megapdf_stamp_image_load(const megapdf_page* page, int annot_index);
+MEGAPDF_API void megapdf_image_free(megapdf_image* image);
+MEGAPDF_API int megapdf_image_width(const megapdf_image* image);
+MEGAPDF_API int megapdf_image_height(const megapdf_image* image);
+/** BGRA bytes, top row first, width × 4 per row; count-then-fill in bytes. */
+MEGAPDF_API size_t megapdf_image_pixels(const megapdf_image* image, unsigned char* out, size_t capacity);
+
+/** Removes the annotation at `annot_index`. MEGAPDF_OK or MEGAPDF_ERR_PDFIUM. */
+MEGAPDF_API int megapdf_remove_annotation(const megapdf_page* page, int annot_index);
+
+/** Removes the stamp carrying `id_utf16`. MEGAPDF_ERR_ARGUMENT when no such stamp. */
+MEGAPDF_API int megapdf_remove_stamp(const megapdf_page* page, const unsigned short* id_utf16);
+
+/**
+ * Moves an image stamp to `bounds` under the same id: extract at native
+ * resolution, remove, re-add. (Updating the annotation in place after SetRect
+ * wipes its appearance stream.) MEGAPDF_ERR_ARGUMENT when the id names no image stamp.
+ */
+MEGAPDF_API int megapdf_move_image_stamp(const megapdf_page* page, const unsigned short* id_utf16,
+                                         const megapdf_rect* bounds);
 
 /* --------------------------------------------------------------------------
  * Raw handles — for the contracts that have not migrated yet. Bindings use these

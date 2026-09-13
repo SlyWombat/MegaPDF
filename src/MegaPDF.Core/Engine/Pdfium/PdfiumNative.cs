@@ -109,11 +109,6 @@ internal static class PdfiumNative
         public float Left, Top, Right, Bottom;
     }
 
-    [DllImport(Dll)] public static extern int FPDFPage_GetAnnotCount(IntPtr page);
-    [DllImport(Dll)] public static extern IntPtr FPDFPage_GetAnnot(IntPtr page, int index);
-    [DllImport(Dll)] public static extern void FPDFPage_CloseAnnot(IntPtr annot);
-    [DllImport(Dll)] public static extern int FPDFAnnot_GetSubtype(IntPtr annot);
-    [DllImport(Dll)] public static extern int FPDFAnnot_GetRect(IntPtr annot, out FS_RECTF rect);
     /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
     /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
 
@@ -121,29 +116,17 @@ internal static class PdfiumNative
 
     public const int FPDF_PAGEOBJ_PATH = 2;
 
-    [DllImport(Dll)] public static extern int FPDFPath_GetDrawMode(IntPtr path, out int fillMode, out int stroke);
 
-    [DllImport(Dll)] public static extern IntPtr FPDFPage_CreateAnnot(IntPtr page, int subtype);
-    [DllImport(Dll)] public static extern int FPDFPage_RemoveAnnot(IntPtr page, int index);
-    [DllImport(Dll)] public static extern int FPDFAnnot_SetRect(IntPtr annot, ref FS_RECTF rect);
-    [DllImport(Dll)] public static extern int FPDFAnnot_AppendObject(IntPtr annot, IntPtr pageObject);
-    [DllImport(Dll)] public static extern int FPDFAnnot_SetStringValue(IntPtr annot, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [MarshalAs(UnmanagedType.LPWStr)] string value);
     /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
-    [DllImport(Dll)] public static extern uint FPDFAnnot_GetStringValue(IntPtr annot, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen);
 
     // --- Image stamps (signatures, SDD §3.3) ---
 
     public const int FPDFBitmap_BGRA = 4;
 
-    [DllImport(Dll)] public static extern IntPtr FPDFBitmap_CreateEx(int width, int height, int format, IntPtr firstScan, int stride);
     [DllImport(Dll)] public static extern int FPDFBitmap_GetWidth(IntPtr bitmap);
     [DllImport(Dll)] public static extern int FPDFBitmap_GetHeight(IntPtr bitmap);
-    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_NewImageObj(IntPtr document);
-    [DllImport(Dll)] public static extern int FPDFImageObj_SetBitmap(IntPtr[] pages, int count, IntPtr imageObject, IntPtr bitmap);
     /// <summary>Renders the image object (masks applied) to a new BGRA bitmap the caller destroys.</summary>
     [DllImport(Dll)] public static extern IntPtr FPDFImageObj_GetRenderedBitmap(IntPtr document, IntPtr page, IntPtr imageObject);
-    [DllImport(Dll)] public static extern IntPtr FPDFAnnot_GetObject(IntPtr annot, int index);
-    [DllImport(Dll)] public static extern int FPDFAnnot_UpdateObject(IntPtr annot, IntPtr pageObject);
     [DllImport(Dll)] public static extern int FPDFImageObj_GetImagePixelSize(IntPtr imageObject, out uint width, out uint height);
 
     /// <summary>Bakes annotations and form fields into page content. 0=fail, 1=success, 2=nothing to do.</summary>
@@ -183,11 +166,8 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFPageObjMark_GetParamStringValue(IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
 
     [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
-    [DllImport(Dll)] public static extern int FPDFPath_MoveTo(IntPtr path, float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_LineTo(IntPtr path, float x, float y);
     [DllImport(Dll)] public static extern int FPDFPath_SetDrawMode(IntPtr path, int fillMode, int stroke);
-    [DllImport(Dll)] public static extern int FPDFPageObj_SetStrokeColor(IntPtr pageObject, uint r, uint g, uint b, uint a);
-    [DllImport(Dll)] public static extern int FPDFPageObj_SetStrokeWidth(IntPtr pageObject, float width);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int WriteBlockDelegate(IntPtr self, IntPtr data, uint size);

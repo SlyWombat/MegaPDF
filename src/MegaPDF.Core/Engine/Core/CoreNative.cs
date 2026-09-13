@@ -205,7 +205,76 @@ internal static class CoreNative
         return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
     }
 
-    // Raw handles, for the contracts still bound directly (#108–#112) --------
+    // Contract 4: stamps and MegaPDF_Id marks (#108) -------------------------
+
+    public const int MarkCross = 0;
+    public const int MarkCheck = 1;
+    public const int MarkFilledSquare = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Stamp
+    {
+        public int AnnotIndex;
+        public Rect Bounds;
+    }
+
+    [DllImport(Dll)]
+    public static extern int megapdf_add_check_mark(IntPtr page, ref Rect square, int style, [MarshalAs(UnmanagedType.LPWStr)] string id);
+
+    [DllImport(Dll)]
+    public static extern unsafe int megapdf_add_image_stamp(IntPtr page, byte* bgra, int width, int height, ref Rect bounds,
+        [MarshalAs(UnmanagedType.LPWStr)] string id);
+
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_stamps_load(IntPtr page);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_stamps_free(IntPtr stamps);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_stamp_count(IntPtr stamps);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_stamp_get(IntPtr stamps, nuint index, out Stamp stamp);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_stamp_id(IntPtr stamps, nuint index, [Out] ushort[]? outUnits, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_stamp_image_load(IntPtr page, int annotIndex);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_image_free(IntPtr image);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_image_width(IntPtr image);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_image_height(IntPtr image);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_image_pixels(IntPtr image, [Out] byte[]? outBgra, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_remove_annotation(IntPtr page, int annotIndex);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_remove_stamp(IntPtr page, [MarshalAs(UnmanagedType.LPWStr)] string id);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_move_image_stamp(IntPtr page, [MarshalAs(UnmanagedType.LPWStr)] string id, ref Rect bounds);
+
+    public static string StampId(IntPtr stamps, nuint index)
+    {
+        var n = (int)megapdf_stamp_id(stamps, index, null, 0);
+        if (n == 0)
+            return "";
+        var units = new ushort[n];
+        megapdf_stamp_id(stamps, index, units, (nuint)n);
+        return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
+    }
+
+    // Raw handles, for the contracts still bound directly (#109–#112) --------
 
     [DllImport(Dll)]
     public static extern IntPtr megapdf_document_raw(IntPtr document);
