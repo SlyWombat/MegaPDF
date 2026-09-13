@@ -1,3 +1,4 @@
+using MegaPDF.Core.Viewing;
 using System.Globalization;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -488,8 +489,10 @@ internal static class Worker
         try
         {
             using var page = doc.GetPage(p);
-            var pw = Math.Max(1, (int)(page.Width * PointsToPixels * scale * zoom));
-            var ph = Math.Max(1, (int)(page.Height * PointsToPixels * scale * zoom));
+            // The apps never ask for the ideal raster past the render clamp (#93/#111):
+            // they fit it first and scale the bitmap up, and since #111 the engine
+            // refuses an unclamped request outright rather than trying PDFium's luck.
+            var (pw, ph) = RenderLimits.Fit(page.Width * PointsToPixels * scale * zoom, page.Height * PointsToPixels * scale * zoom);
             z.Pixels = [pw, ph];
             var sw = Stopwatch.StartNew();
             _ = page.Render(pw, ph);

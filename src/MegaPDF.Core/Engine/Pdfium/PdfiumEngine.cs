@@ -269,35 +269,21 @@ internal sealed class PdfiumPage : IPdfPage
     public RenderedPage Render(int pixelWidth, int pixelHeight)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        // The shared recipe — white ground, page content with annotations and LCD
+        // text, then live form-field values — and the refusal policy live in the core
+        // (#111); this allocates the pixels and hands them over.
+        var pixels = new byte[checked(pixelWidth * pixelHeight * 4)];
+        int status;
+        unsafe
         {
-            var bitmap = PdfiumNative.FPDFBitmap_Create(pixelWidth, pixelHeight, alpha: 1);
-            if (bitmap == IntPtr.Zero)
-                throw new OutOfMemoryException($"Could not allocate a {pixelWidth}x{pixelHeight} render bitmap.");
-            try
-            {
-                PdfiumNative.FPDFBitmap_FillRect(bitmap, 0, 0, pixelWidth, pixelHeight, 0xFFFFFFFF);
-                PdfiumNative.FPDF_RenderPageBitmap(
-                    bitmap, _handle, 0, 0, pixelWidth, pixelHeight, rotate: 0,
-                    PdfiumNative.FPDF_ANNOT | PdfiumNative.FPDF_LCD_TEXT);
-                // Draw live form-field content (values typed via the form-fill env).
-                PdfiumNative.FPDF_FFLDraw(
-                    _forms, bitmap, _handle, 0, 0, pixelWidth, pixelHeight, 0,
-                    PdfiumNative.FPDF_ANNOT | PdfiumNative.FPDF_LCD_TEXT);
-
-                var stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
-                var buffer = PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
-                var pixels = new byte[pixelWidth * pixelHeight * 4];
-                for (var row = 0; row < pixelHeight; row++)
-                    Marshal.Copy(buffer + row * stride, pixels, row * pixelWidth * 4, pixelWidth * 4);
-
-                return new RenderedPage(pixelWidth, pixelHeight, pixels);
-            }
-            finally
-            {
-                PdfiumNative.FPDFBitmap_Destroy(bitmap);
-            }
+            fixed (byte* buffer = pixels)
+                status = CoreNative.megapdf_render(_core, buffer, pixelWidth, pixelHeight, pixelWidth * 4, CoreNative.RenderBgra);
         }
+        if (status == -2)
+            throw new OutOfMemoryException($"Could not allocate a {pixelWidth}x{pixelHeight} render bitmap.");
+        if (status != 0)
+            throw new InvalidOperationException($"A {pixelWidth}x{pixelHeight} render is outside the limits; fit it with RenderLimits first.");
+        return new RenderedPage(pixelWidth, pixelHeight, pixels);
     }
 
     public PageHit HitTest(PdfPoint point)

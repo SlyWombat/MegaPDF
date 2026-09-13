@@ -23,6 +23,7 @@ internal object PdfiumNative {
     external fun nativePageWidth(handle: Long): Double
     external fun nativePageHeight(handle: Long): Double
     external fun nativeRenderPage(handle: Long, bitmap: Bitmap): Boolean
+    external fun nativeRenderSize(idealWidth: Double, idealHeight: Double): IntArray
     external fun nativeSave(handle: Long, out: OutputStream): Boolean
 
     // Checkbox surface (#15). Packed arrays keep the JNI boundary simple:

@@ -26,12 +26,6 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern void FPDF_InitLibrary();
 
 
-    [DllImport(Dll)] public static extern IntPtr FPDFBitmap_Create(int width, int height, int alpha);
-    [DllImport(Dll)] public static extern int FPDFBitmap_FillRect(IntPtr bitmap, int left, int top, int width, int height, uint color);
-    [DllImport(Dll)] public static extern void FPDF_RenderPageBitmap(IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
-    [DllImport(Dll)] public static extern IntPtr FPDFBitmap_GetBuffer(IntPtr bitmap);
-    [DllImport(Dll)] public static extern int FPDFBitmap_GetStride(IntPtr bitmap);
-    [DllImport(Dll)] public static extern void FPDFBitmap_Destroy(IntPtr bitmap);
 
 
     // --- Text extraction & editing (fpdf_edit.h, fpdf_text.h) ---
@@ -95,7 +89,6 @@ internal static class PdfiumNative
     // The FPDF_FORMFILLINFO environment, page load/close hooks, document open and
     // text search moved into the shared core with #105 (ADR-003); the form handle
     // used below comes from CoreNative.megapdf_document_form_raw.
-    [DllImport(Dll)] public static extern void FPDF_FFLDraw(IntPtr formHandle, IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
     // --- Annotations (fpdf_annot.h) ---
 

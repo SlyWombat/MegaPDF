@@ -252,8 +252,13 @@ final class ViewerModel: ObservableObject {
             for index in window {
                 if Task.isCancelled { return }
                 let size = pageSizes[index]
-                let width = min(max(widthPx, 1), Self.maxPixelDim)
-                let height = min(Int(Double(width) * size.height / size.width), Self.maxPixelDim)
+                // The app's memory bound, aspect preserved (a per-axis clamp squashed
+                // tall pages); the engine applies its own render clamp on top (#93/#111).
+                let idealWidth = Double(max(widthPx, 1))
+                let idealHeight = idealWidth * size.height / size.width
+                let memoryScale = min(1.0, Double(Self.maxPixelDim) / max(idealWidth, idealHeight))
+                let width = max(1, Int(idealWidth * memoryScale))
+                let height = max(1, Int(idealHeight * memoryScale))
                 if renderedWidths[index] == width { continue }
                 if let image = try? await PdfEngine.shared.render(
                     doc, index: index, pixelWidth: width, pixelHeight: height) {

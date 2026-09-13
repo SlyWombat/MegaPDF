@@ -1122,6 +1122,91 @@ void test_save_flatten_images(const std::string& fixtures) {
     check(megapdf_shrink_images(nullptr, fake_encode, nullptr, nullptr, nullptr) == MEGAPDF_ERR_ARGUMENT, "shrink rejects null");
 }
 
+// --------------------------------------------------------------------------
+// Contract 7 (#111): render policy. The size assertions are RenderLimitsTests
+// (#93/#94) moved here; the corpus banner (33,408 × 22,408 at 300% on a 2× display)
+// and the 66,944 × 9,528 strip are the documents that produced them.
+
+void test_render() {
+    int w = 0, h = 0;
+    megapdf_render_size(4896, 6336, &w, &h);
+    check(w == 4896 && h == 6336 && !megapdf_render_is_capped(4896, 6336), "ordinary pages are not touched", std::to_string(w) + "x" + std::to_string(h));
+    megapdf_render_size(0, 0, &w, &h);
+    check(w == 1 && h == 1, "a zero request becomes 1x1");
+
+    megapdf_render_size(33408, 22408, &w, &h);
+    check(megapdf_render_is_capped(33408, 22408) == 1, "the corpus banner is capped");
+    check(static_cast<long long>(w) * h <= MEGAPDF_RENDER_MAX_PIXELS && w <= MEGAPDF_RENDER_MAX_SIDE && h <= MEGAPDF_RENDER_MAX_SIDE,
+          "the banner comes down to the megapixel budget", std::to_string(w) + "x" + std::to_string(h));
+    check(close_to(static_cast<double>(w) / h, 33408.0 / 22408.0, 0.005), "the banner keeps its aspect ratio");
+
+    megapdf_render_size(66944, 9528, &w, &h);
+    check(megapdf_render_is_capped(66944, 9528) == 1 && w <= MEGAPDF_RENDER_MAX_SIDE && h <= MEGAPDF_RENDER_MAX_SIDE &&
+              static_cast<long long>(w) * h <= MEGAPDF_RENDER_MAX_PIXELS && w >= 14000,
+          "a very wide strip is bound by the side limit", std::to_string(w) + "x" + std::to_string(h));
+    check(close_to(static_cast<double>(w) / h, 66944.0 / 9528.0, 0.005), "the strip keeps its aspect ratio");
+
+    int w2 = 0, h2 = 0, w3 = 0, h3 = 0;
+    megapdf_render_size(33408 * 2.0 / 3.0, 22408 * 2.0 / 3.0, &w2, &h2);
+    megapdf_render_size(33408, 22408, &w3, &h3);
+    check(std::abs(w2 - w3) <= 1 && std::abs(h2 - h3) <= 1, "the capped size is the same for every zoom past the cap");
+}
+
+void test_render_page(const std::string& fixtures) {
+    Doc d(fixtures + "/forms.pdf");
+    Page p(d.doc, 0);
+    if (!p.page) { check(false, "forms.pdf page loads for render"); return; }
+    const int w = 153, h = 198;   // a quarter of Letter
+    std::vector<unsigned char> bgra(static_cast<size_t>(w) * h * 4, 0);
+    check(megapdf_render(p.page, bgra.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK, "render returns OK");
+    size_t white = 0, ink = 0;
+    for (size_t i = 0; i < bgra.size(); i += 4) {
+        if (bgra[i] == 0xFF && bgra[i + 1] == 0xFF && bgra[i + 2] == 0xFF) white++; else ink++;
+        if (bgra[i + 3] != 0xFF) { check(false, "rendered pixels are opaque"); break; }
+    }
+    check(white > ink && ink > 50, "the page renders as mostly white with some ink", std::to_string(ink) + " ink pixels");
+
+    // The checkbox widget draws through the form environment: click it, and the
+    // region around its centre gains ink.
+    megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+    megapdf_form_field field{};
+    megapdf_form_field_get(f, 0, &field);
+    megapdf_form_fields_free(f);
+    auto ink_in_box = [&](const std::vector<unsigned char>& px) {
+        size_t n = 0;
+        const int x0 = static_cast<int>(field.bounds.left / 612.0 * w), x1 = static_cast<int>(field.bounds.right / 612.0 * w);
+        const int y0 = static_cast<int>((792.0 - field.bounds.top) / 792.0 * h), y1 = static_cast<int>((792.0 - field.bounds.bottom) / 792.0 * h);
+        for (int y = y0; y <= y1 && y < h; y++) for (int x = x0; x <= x1 && x < w; x++) {
+            const unsigned char* q = &px[(static_cast<size_t>(y) * w + x) * 4];
+            if (q[0] < 0x80 && q[1] < 0x80 && q[2] < 0x80) n++;
+        }
+        return n;
+    };
+    const size_t before = ink_in_box(bgra);
+    megapdf_form_click(p.page, (field.bounds.left + field.bounds.right) / 2, (field.bounds.bottom + field.bounds.top) / 2);
+    std::vector<unsigned char> after(bgra.size(), 0);
+    megapdf_render(p.page, after.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
+    check(ink_in_box(after) > before, "a checked box draws its check through the form environment",
+          std::to_string(before) + " -> " + std::to_string(ink_in_box(after)));
+
+    // RGBA swaps the channel order; the white ground is white either way, and a
+    // blue-ish pixel moves channels.
+    std::vector<unsigned char> rgba(bgra.size(), 0);
+    check(megapdf_render(p.page, rgba.data(), w, h, w * 4, MEGAPDF_RENDER_RGBA) == MEGAPDF_OK, "RGBA render returns OK");
+    bool swapped_ok = true;
+    for (size_t i = 0; i < bgra.size(); i += 4) {
+        if (after[i] != rgba[i + 2] || after[i + 2] != rgba[i] || after[i + 1] != rgba[i + 1]) { swapped_ok = false; break; }
+    }
+    check(swapped_ok, "RGBA is BGRA with red and blue exchanged");
+
+    // Refusals are status codes.
+    check(megapdf_render(p.page, bgra.data(), 0, 10, 40, 0) == MEGAPDF_ERR_ARGUMENT, "a zero-width render is an argument error");
+    check(megapdf_render(p.page, bgra.data(), 20000, 20000, 80000, 0) == MEGAPDF_ERR_ARGUMENT, "a raster past the clamp is refused, not attempted");
+    check(megapdf_render(p.page, bgra.data(), w, h, w * 2, 0) == MEGAPDF_ERR_ARGUMENT, "a stride too small is an argument error");
+    check(megapdf_render(nullptr, bgra.data(), w, h, w * 4, 0) == MEGAPDF_ERR_ARGUMENT && megapdf_render(p.page, nullptr, w, h, w * 4, 0) == MEGAPDF_ERR_ARGUMENT,
+          "render rejects nulls");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1141,6 +1226,8 @@ int main(int argc, char** argv) {
     test_stamps(argv[1]);
     test_whiteouts_and_text_boxes(argv[1]);
     test_save_flatten_images(argv[1]);
+    test_render();
+    test_render_page(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

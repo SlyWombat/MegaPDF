@@ -22,7 +22,7 @@
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
 //
-// Migration note: until every contract has moved (#111–#112), bindings still
+// Migration note: until every contract has moved (#112), bindings still
 // call PDFium directly for the rest, through the *_raw accessors. Those go away
 // with the last migrated contract.
 #ifndef MEGAPDF_CORE_H
@@ -463,6 +463,44 @@ typedef void (*megapdf_jpeg_release_fn)(void* context, unsigned char* jpeg);
  */
 MEGAPDF_API int megapdf_shrink_images(const megapdf_document* document, megapdf_jpeg_encode_fn encode,
                                       megapdf_jpeg_release_fn release, void* context, int* out_replaced);
+
+/* --------------------------------------------------------------------------
+ * Contract 7: render policy (#111, #93). Bitmap allocation and presentation stay
+ * native; the size clamp, the flags, form-field drawing and "PDFium refused"
+ * live here.
+ * ----------------------------------------------------------------------- */
+
+/** Longest side any page raster may have (the common GPU texture limit). */
+#define MEGAPDF_RENDER_MAX_SIDE 16384
+/** Most pixels any page raster may have: 32 MP is 128 MB of BGRA. */
+#define MEGAPDF_RENDER_MAX_PIXELS 32000000LL
+
+/**
+ * The pixel size to render at for a page that would ideally be ideal_width ×
+ * ideal_height pixels: aspect ratio preserved, never below 1 × 1, never past the
+ * side or megapixel limits. A poster-sized scan at 300% on a 2× display asks for
+ * hundreds of megapixels that nothing on screen needs; the view scales the
+ * raster up over the remaining distance.
+ */
+MEGAPDF_API void megapdf_render_size(double ideal_width, double ideal_height, int* out_width, int* out_height);
+
+/** 1 when megapdf_render_size() would shrink this request. */
+MEGAPDF_API int megapdf_render_is_capped(double ideal_width, double ideal_height);
+
+enum {
+    MEGAPDF_RENDER_BGRA = 0,   /* PDFium's native byte order (Windows, macOS, iOS) */
+    MEGAPDF_RENDER_RGBA = 1    /* byte-reversed, for Android's ARGB_8888 buffers */
+};
+
+/**
+ * Renders the page into the caller's width × height buffer of `stride` bytes per
+ * row (at least width × 4): white ground, page content with annotations and LCD
+ * text, then live form-field values. MEGAPDF_ERR_ARGUMENT for a null page or
+ * buffer, a non-positive size or a size past the clamp; MEGAPDF_ERR_PDFIUM when
+ * PDFium refuses the bitmap. Never crashes on a refusal.
+ */
+MEGAPDF_API int megapdf_render(const megapdf_page* page, void* buffer, int width, int height, int stride,
+                               unsigned int flags);
 
 /* --------------------------------------------------------------------------
  * Raw handles — for the contracts that have not migrated yet. Bindings use these

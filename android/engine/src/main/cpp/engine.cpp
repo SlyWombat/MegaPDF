@@ -45,8 +45,6 @@ struct Page {
 };
 
 
-constexpr int kRenderFlags = FPDF_ANNOT | FPDF_LCD_TEXT | FPDF_REVERSE_BYTE_ORDER;
-
 // Bridges the core's save callback to a java.io.OutputStream.
 struct StreamWriter {
     JNIEnv* env;
@@ -148,6 +146,21 @@ Java_com_megapdf_engine_PdfiumNative_nativePageHeight(JNIEnv*, jobject, jlong ha
     return megapdf_page_height(reinterpret_cast<Page*>(handle)->core);
 }
 
+// The aspect-preserving render clamp (#93/#111): [width, height] for an ideal size.
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRenderSize(JNIEnv* env, jobject, jdouble idealWidth,
+                                                      jdouble idealHeight) {
+    int w = 0, h = 0;
+    megapdf_render_size(idealWidth, idealHeight, &w, &h);
+    const jint pair[2] = {w, h};
+    jintArray out = env->NewIntArray(2);
+    if (out != nullptr) env->SetIntArrayRegion(out, 0, 2, pair);
+    return out;
+}
+
+// Renders into the ARGB_8888 bitmap: the core draws the white ground, the page
+// content and the live form-field values in RGBA byte order to match the
+// buffer, and refuses (false, never a crash) anything past the render clamp.
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeRenderPage(JNIEnv* env, jobject, jlong handle,
                                                       jobject bitmap) {
@@ -162,25 +175,10 @@ Java_com_megapdf_engine_PdfiumNative_nativeRenderPage(JNIEnv* env, jobject, jlon
     if (AndroidBitmap_lockPixels(env, bitmap, &pixels) != ANDROID_BITMAP_RESULT_SUCCESS) {
         return JNI_FALSE;
     }
-
-    const int w = static_cast<int>(info.width);
-    const int h = static_cast<int>(info.height);
-    FPDF_BITMAP bmp = FPDFBitmap_CreateEx(w, h, FPDFBitmap_BGRA, pixels,
-                                          static_cast<int>(info.stride));
-    if (bmp == nullptr) {
-        AndroidBitmap_unlockPixels(env, bitmap);
-        return JNI_FALSE;
-    }
-    // White ground, then page content, then live form-field values — the desktop
-    // render path. FPDF_REVERSE_BYTE_ORDER makes PDFium emit RGBA to match the
-    // ARGB_8888 buffer's native byte order.
-    FPDFBitmap_FillRect(bmp, 0, 0, w, h, 0xFFFFFFFF);
-    FPDF_RenderPageBitmap(bmp, p->page, 0, 0, w, h, 0, kRenderFlags);
-    if (p->owner->form) FPDF_FFLDraw(p->owner->form, bmp, p->page, 0, 0, w, h, 0, kRenderFlags);
-    FPDFBitmap_Destroy(bmp);
-
+    const int status = megapdf_render(p->core, pixels, static_cast<int>(info.width), static_cast<int>(info.height),
+                                      static_cast<int>(info.stride), MEGAPDF_RENDER_RGBA);
     AndroidBitmap_unlockPixels(env, bitmap);
-    return JNI_TRUE;
+    return status == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jboolean JNICALL

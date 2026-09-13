@@ -368,7 +368,23 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern unsafe int megapdf_replace_image_jpeg(IntPtr document, int pageIndex, int objectIndex, byte* jpeg, nuint length);
 
-    // Raw handles, for the contracts still bound directly (#111–#112) --------
+    // Contract 7: render policy (#111) -----------------------------------------
+
+    public const uint RenderBgra = 0;
+    public const uint RenderRgba = 1;
+
+    /// <summary>The aspect-preserving clamp of an ideal raster size (16,384 px a side, 32 MP).</summary>
+    [DllImport(Dll)]
+    public static extern void megapdf_render_size(double idealWidth, double idealHeight, out int width, out int height);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_render_is_capped(double idealWidth, double idealHeight);
+
+    /// <summary>White ground, page content with annotations and LCD text, then live form values, into the caller's buffer.</summary>
+    [DllImport(Dll)]
+    public static extern unsafe int megapdf_render(IntPtr page, byte* buffer, int width, int height, int stride, uint flags);
+
+    // Raw handles, for the contracts still bound directly (#112) --------------
 
     [DllImport(Dll)]
     public static extern IntPtr megapdf_document_raw(IntPtr document);

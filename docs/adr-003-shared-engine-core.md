@@ -26,7 +26,12 @@ images) moved `megapdf_save` (full rewrite through a caller write callback, form
 committed first), `megapdf_flatten_all`, the image list, `megapdf_render_image`,
 `megapdf_replace_image_jpeg` and `megapdf_shrink_images` — the shrink-for-email
 decision rules with the JPEG encoder injected — into the core; file I/O and the atomic
-replace stay per platform.
+replace stay per platform. #111 (render policy) added `megapdf_render_size` /
+`megapdf_render_is_capped` (the #93 clamp, 16,384 px a side and 32 MP, aspect
+preserved) and `megapdf_render` (white ground, content, live form values, BGRA or RGBA,
+a status code when PDFium refuses); the desktop `RenderLimits` became a binding of it,
+and iOS and Android render through it, which closed #115 — the phones now clamp the
+same way the desktops do.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 

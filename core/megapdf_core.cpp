@@ -1641,6 +1641,64 @@ MEGAPDF_API int megapdf_shrink_images(const megapdf_document* d, megapdf_jpeg_en
 }  // extern "C"
 
 // --------------------------------------------------------------------------
+// Contract 7: render policy (#111)
+// --------------------------------------------------------------------------
+
+extern "C" {
+
+MEGAPDF_API void megapdf_render_size(double ideal_width, double ideal_height, int* out_width, int* out_height) {
+    const double w = ideal_width > 1.0 ? ideal_width : 1.0;
+    const double h = ideal_height > 1.0 ? ideal_height : 1.0;
+    const double side = MEGAPDF_RENDER_MAX_SIDE;
+    const double budget = static_cast<double>(MEGAPDF_RENDER_MAX_PIXELS);
+    // Not std::min: <windef.h>, which pdfium's headers pull in on Windows, defines a min macro.
+    auto smaller = [](double a, double b) { return a < b ? a : b; };
+    double scale = 1.0;
+    if (w > side) scale = smaller(scale, side / w);
+    if (h > side) scale = smaller(scale, side / h);
+    if (w * h * scale * scale > budget) scale = smaller(scale, std::sqrt(budget / (w * h)));
+    const int width = static_cast<int>(std::floor(w * scale));
+    const int height = static_cast<int>(std::floor(h * scale));
+    if (out_width != nullptr) *out_width = width < 1 ? 1 : width;
+    if (out_height != nullptr) *out_height = height < 1 ? 1 : height;
+}
+
+MEGAPDF_API int megapdf_render_is_capped(double ideal_width, double ideal_height) {
+    int w = 0, h = 0;
+    megapdf_render_size(ideal_width, ideal_height, &w, &h);
+    const int ideal_w = static_cast<int>(std::floor(ideal_width > 1.0 ? ideal_width : 1.0));
+    const int ideal_h = static_cast<int>(std::floor(ideal_height > 1.0 ? ideal_height : 1.0));
+    return (w < ideal_w || h < ideal_h) ? 1 : 0;
+}
+
+MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, int height, int stride, unsigned int flags) {
+    if (p == nullptr || buffer == nullptr || width <= 0 || height <= 0 || stride < width * 4) return MEGAPDF_ERR_ARGUMENT;
+    if (width > MEGAPDF_RENDER_MAX_SIDE || height > MEGAPDF_RENDER_MAX_SIDE ||
+        static_cast<long long>(width) * height > MEGAPDF_RENDER_MAX_PIXELS) {
+        SetError(0, "the requested raster is past the render clamp; ask megapdf_render_size first");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    FPDF_BITMAP bmp = FPDFBitmap_CreateEx(width, height, FPDFBitmap_BGRA, buffer, stride);
+    if (bmp == nullptr) {
+        SetError(FPDF_ERR_UNKNOWN, "PDFium refused the render bitmap");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    // The shared recipe: white ground, page content, then live form-field values.
+    int render_flags = FPDF_ANNOT | FPDF_LCD_TEXT;
+    if (flags & MEGAPDF_RENDER_RGBA) render_flags |= FPDF_REVERSE_BYTE_ORDER;
+    FPDFBitmap_FillRect(bmp, 0, 0, width, height, 0xFFFFFFFF);
+    FPDF_RenderPageBitmap(bmp, p->page, 0, 0, width, height, 0, render_flags);
+    if (p->owner != nullptr && p->owner->form != nullptr) {
+        FPDF_FFLDraw(p->owner->form, bmp, p->page, 0, 0, width, height, 0, render_flags);
+    }
+    FPDFBitmap_Destroy(bmp);
+    return MEGAPDF_OK;
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
 // Raw handles (transitional)
 // --------------------------------------------------------------------------
 

@@ -44,6 +44,17 @@ class PdfEngine {
         }
 
     companion object {
+        /**
+         * The pixel size to render a page at when it would ideally be [idealWidth] ×
+         * [idealHeight]: the shared core's aspect-preserving clamp (16,384 px a side,
+         * 32 MP, #93/#111), never smaller than 1 × 1. The view scales the bitmap up
+         * over the remaining distance.
+         */
+        fun renderSize(idealWidth: Double, idealHeight: Double): Pair<Int, Int> {
+            val wh = PdfiumNative.nativeRenderSize(idealWidth, idealHeight)
+            return wh[0] to wh[1]
+        }
+
         private var initialized = false
 
         /**
@@ -143,7 +154,8 @@ class PdfPage internal constructor(
 
     /**
      * Renders the full page into [bitmap] (must be ARGB_8888), scaled to the bitmap's
-     * pixel size: white ground, page content, then live form-field values (FPDF_FFLDraw).
+     * pixel size: white ground, page content, then live form-field values. Size the
+     * bitmap with [PdfEngine.renderSize] first — a raster past the clamp is refused.
      */
     suspend fun render(bitmap: Bitmap): Unit = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }

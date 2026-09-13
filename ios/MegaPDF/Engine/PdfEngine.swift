@@ -130,41 +130,35 @@ actor PdfEngine {
         }
     }
 
-    /// Renders page `index` at `pixelWidth` x `pixelHeight`: white ground, page
-    /// content, then live form-field values — the shared render recipe.
+    /// Renders page `index` at up to `pixelWidth` x `pixelHeight`: white ground, page
+    /// content, then live form-field values — the shared render recipe, drawn by the
+    /// core, which also applies the render clamp (#93/#111): a request past 16,384 px
+    /// a side or 32 MP comes back smaller, aspect preserved, and the view scales it up.
     func render(_ document: PdfDocument, index: Int,
                 pixelWidth: Int, pixelHeight: Int) throws -> CGImage {
-        try withPage(document, index: index) { page in
-            let stride = pixelWidth * 4
-            var pixels = Data(count: stride * pixelHeight)
-            let rendered = pixels.withUnsafeMutableBytes { raw -> Bool in
-                guard let base = raw.baseAddress,
-                      let bmp = FPDFBitmap_CreateEx(
-                          Int32(pixelWidth), Int32(pixelHeight),
-                          Int32(FPDFBitmap_BGRA), base, Int32(stride)) else { return false }
-                FPDFBitmap_FillRect(bmp, 0, 0, Int32(pixelWidth), Int32(pixelHeight), 0xFFFFFFFF)
-                let flags = Int32(FPDF_ANNOT | FPDF_LCD_TEXT)
-                FPDF_RenderPageBitmap(bmp, page, 0, 0, Int32(pixelWidth), Int32(pixelHeight), 0, flags)
-                if let form = document.form {
-                    FPDF_FFLDraw(form, bmp, page, 0, 0, Int32(pixelWidth), Int32(pixelHeight), 0, flags)
-                }
-                FPDFBitmap_Destroy(bmp)
-                return true
-        }
-
-        guard rendered,
-              let provider = CGDataProvider(data: pixels as CFData),
-              let cgImage = CGImage(
-                  width: pixelWidth, height: pixelHeight,
-                  bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: stride,
-                  space: CGColorSpaceCreateDeviceRGB(),
-                  bitmapInfo: CGBitmapInfo(
-                      rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue |
-                          CGBitmapInfo.byteOrder32Little.rawValue),
-                  provider: provider, decode: nil,
-                  shouldInterpolate: true, intent: .defaultIntent)
-        else { throw PdfError.renderFailed }
-        return cgImage
+        var width: Int32 = 0, height: Int32 = 0
+        megapdf_render_size(Double(pixelWidth), Double(pixelHeight), &width, &height)
+        let w = Int(width), h = Int(height)
+        return try withCorePage(document, index: index) { page in
+            let stride = w * 4
+            var pixels = Data(count: stride * h)
+            let status = pixels.withUnsafeMutableBytes { raw -> Int32 in
+                guard let base = raw.baseAddress else { return Int32(MEGAPDF_ERR_PDFIUM) }
+                return megapdf_render(page, base, width, height, Int32(stride), UInt32(MEGAPDF_RENDER_BGRA))
+            }
+            guard status == MEGAPDF_OK,
+                  let provider = CGDataProvider(data: pixels as CFData),
+                  let cgImage = CGImage(
+                      width: w, height: h,
+                      bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: stride,
+                      space: CGColorSpaceCreateDeviceRGB(),
+                      bitmapInfo: CGBitmapInfo(
+                          rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue |
+                              CGBitmapInfo.byteOrder32Little.rawValue),
+                      provider: provider, decode: nil,
+                      shouldInterpolate: true, intent: .defaultIntent)
+            else { throw PdfError.renderFailed }
+            return cgImage
         }
     }
 

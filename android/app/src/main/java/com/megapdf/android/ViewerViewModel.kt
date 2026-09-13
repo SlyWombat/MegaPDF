@@ -383,9 +383,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         renderJob = viewModelScope.launch {
             for (index in window) {
                 val size = state.pageSizes[index]
-                val width = targetWidthPx.coerceIn(1, MAX_BITMAP_DIM)
-                val height = (width * size.heightPoints / size.widthPoints).toInt()
-                    .coerceIn(1, MAX_BITMAP_DIM)
+                // The app's memory bound first (aspect preserved, unlike a per-axis
+                // clamp), then the engine's render clamp (#93/#111), which is what
+                // stops a poster-sized scan from asking for a raster nothing can hold.
+                val idealWidth = targetWidthPx.coerceAtLeast(1).toDouble()
+                val idealHeight = idealWidth * size.heightPoints / size.widthPoints
+                val memoryScale = minOf(1.0, MAX_BITMAP_DIM / maxOf(idealWidth, idealHeight))
+                val (width, height) = PdfEngine.renderSize(idealWidth * memoryScale, idealHeight * memoryScale)
                 if (renderedWidths[index] == width) continue
 
                 val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
