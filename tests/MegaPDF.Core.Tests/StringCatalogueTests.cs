@@ -33,6 +33,10 @@ public class StringCatalogueTests
         // Windows
         ["AboutVersion"] = "\"MegaPDF {0}\" is a brand name and a number",
         ["LabelSignatures.Text"] = "\"Signatures\" is the same word",
+        ["SignaturesHeading.Text"] = "same",
+        ["SignatureCardName"] = "\"{0}, signature\" reads the same in both (#100)",
+        ["SignaturesTitle"] = "same word (macOS flyout heading, #100)",
+        ["%@, signature"] = "iOS card label, same in both (#100)",
         ["SignaturesButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name"] = "same",
         ["LanguageEnglish.Text"] = "language names are written in their own language",
         ["LanguageFrench.Text"] = "same",
