@@ -97,19 +97,40 @@
     <value>Signatures</value>
   </data>
   <data name="SignaturesHeading.Text" xml:space="preserve">
-    <value>Your signatures</value>
+    <value>Signatures</value>
   </data>
-  <data name="RemoveSignatureItem.Text" xml:space="preserve">
-    <value>Remove from library</value>
+  <data name="NoSignaturesYet.Text" xml:space="preserve">
+    <value>No signatures yet. Draw one, type your name, or add a photo of your signature on white paper — the background is removed automatically.</value>
+  </data>
+  <data name="RenameSignatureItem.Text" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="DeleteSignatureItem.Text" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="SignatureOptionsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rename or delete</value>
+  </data>
+  <data name="SignatureOptionsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Signature options</value>
   </data>
   <data name="AddFromImageLabel.Text" xml:space="preserve">
-    <value>Add from image…</value>
+    <value>From photo</value>
   </data>
   <data name="TypeSignatureLabel.Text" xml:space="preserve">
-    <value>Type signature…</value>
+    <value>Type</value>
   </data>
   <data name="DrawSignatureLabel.Text" xml:space="preserve">
-    <value>Draw signature…</value>
+    <value>Draw</value>
+  </data>
+  <data name="DrawSignatureButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Draw a signature with your mouse, finger, or pen</value>
+  </data>
+  <data name="TypeSignatureButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Type your name in a handwriting face</value>
+  </data>
+  <data name="AddSignatureFromImageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Use a photo or scan of your signature</value>
   </data>
   <data name="WhiteoutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Cover an area with whiteout</value>
@@ -538,5 +559,30 @@ Saved as {2} — ready to email.</value>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Something went wrong.</value>
+  </data>
+
+  <!-- ===== Signature library cards (#100) ===== -->
+  <data name="SignatureCardName" xml:space="preserve">
+    <value>{0}, signature</value>
+    <comment>Narrator name of a library card; {0} is the signature's name</comment>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="RenameSignatureTitle" xml:space="preserve">
+    <value>Rename signature</value>
+  </data>
+  <data name="DeleteSignatureTitle" xml:space="preserve">
+    <value>Delete {0}?</value>
+    <comment>{0} is the signature's name</comment>
+  </data>
+  <data name="DeleteSignatureBody" xml:space="preserve">
+    <value>This cannot be undone.</value>
+  </data>
+  <data name="CouldNotRenameSignatureTitle" xml:space="preserve">
+    <value>Couldn't rename that signature</value>
   </data>
 </root>

@@ -113,61 +113,23 @@
 
                 <AppBarSeparator />
 
-                <Button x:Uid="SignaturesButton" AutomationProperties.AutomationId="SignaturesButton">
+                <Button x:Name="SignaturesToolbarButton" x:Uid="SignaturesButton" AutomationProperties.AutomationId="SignaturesButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelSignatures" x:Uid="LabelSignatures" />
                     </StackPanel>
                     <Button.Flyout>
                         <Flyout x:Name="SignaturesFlyout" Placement="BottomEdgeAlignedLeft">
-                            <StackPanel Spacing="{ThemeResource SpaceS}" MinWidth="260">
-                                <TextBlock x:Uid="SignaturesHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Signatures}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="local:SignatureItem">
-                                            <Button
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Left"
-                                                Margin="0,2"
-                                                Click="OnSignatureClicked">
-                                                <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceM}">
-                                                    <Border Background="White" CornerRadius="4" Padding="4">
-                                                        <Image Source="{x:Bind Thumbnail}" Height="28" MaxWidth="110" Stretch="Uniform" />
-                                                    </Border>
-                                                    <TextBlock Text="{x:Bind Name}" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                                <Button.ContextFlyout>
-                                                    <MenuFlyout>
-                                                        <MenuFlyoutItem x:Uid="RemoveSignatureItem" Click="OnRemoveSignatureClicked">
-                                                            <MenuFlyoutItem.Icon>
-                                                                <FontIcon Glyph="&#xE74D;" />
-                                                            </MenuFlyoutItem.Icon>
-                                                        </MenuFlyoutItem>
-                                                    </MenuFlyout>
-                                                </Button.ContextFlyout>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Button Click="OnAddSignatureFromImageClicked" AutomationProperties.AutomationId="AddSignatureFromImageButton" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                                        <FontIcon Glyph="&#xEB9F;" FontSize="{ThemeResource TypeBody}" />
-                                        <TextBlock x:Uid="AddFromImageLabel" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Click="OnTypeSignatureClicked" AutomationProperties.AutomationId="TypeSignatureButton" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                                        <FontIcon Glyph="&#xE70F;" FontSize="{ThemeResource TypeBody}" />
-                                        <TextBlock x:Uid="TypeSignatureLabel" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Click="OnDrawSignatureClicked" AutomationProperties.AutomationId="DrawSignatureButton" HorizontalAlignment="Stretch">
-                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                                        <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeBody}" />
-                                        <TextBlock x:Uid="DrawSignatureLabel" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
+                            <!-- The library itself lives in SignatureLibraryPanel (#100), shared
+                                 with the `sign` screenshot state's in-tree copy below. -->
+                            <local:SignatureLibraryPanel
+                                ViewModel="{x:Bind ViewModel}"
+                                Picked="OnSignaturePicked"
+                                RenameRequested="OnRenameSignatureRequested"
+                                DeleteRequested="OnDeleteSignatureRequested"
+                                DrawRequested="OnDrawSignatureClicked"
+                                TypeRequested="OnTypeSignatureClicked"
+                                PhotoRequested="OnAddSignatureFromImageClicked" />
                         </Flyout>
                     </Button.Flyout>
                 </Button>
@@ -516,5 +478,21 @@
                            Foreground="#FF202020" Padding="16,8" />
             </Border>
         </Grid>
+        <!-- The signature library drawn inside the window tree, for the `sign`
+             screenshot state only (#100): RenderTargetBitmap cannot see the popup
+             layer a real Flyout lives in, so the capture shows this copy, styled
+             as the flyout presenter and placed under the Signatures button. -->
+        <Border x:Name="SignatureLibraryShot"
+                Grid.RowSpan="2"
+                Visibility="Collapsed"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Background="{ThemeResource FlyoutPresenterBackground}"
+                BorderBrush="{ThemeResource FlyoutBorderThemeBrush}"
+                BorderThickness="1"
+                CornerRadius="{ThemeResource OverlayCornerRadius}"
+                Padding="12">
+            <local:SignatureLibraryPanel ViewModel="{x:Bind ViewModel}" />
+        </Border>
     </Grid>
 </Window>

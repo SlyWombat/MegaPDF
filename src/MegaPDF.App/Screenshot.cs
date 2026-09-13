@@ -70,10 +70,68 @@ internal static class Screenshot
             case "find-zoomed":
                 return await FindOnAZoomedPageAsync(window);
 
+            case "sign":
+                return await OpenSignatureLibraryAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    /// <summary>
+    /// The signature library with one card in it (#100). An empty library is seeded
+    /// from tools/assets/megawoman-sig.jpg through the same cleanup the Add-from-photo
+    /// button uses, so the shot shows what a user with a signature sees. The seed lands
+    /// in the real per-user library, exactly as the store rig's
+    /// Add-SignatureToLibrary.ps1 did by hand.
+    /// </summary>
+    private static async Task<bool> OpenSignatureLibraryAsync(MainWindow window)
+    {
+        var vm = window.ViewModel;
+        if (vm.Signatures.Count == 0)
+        {
+            var seed = FindUpwards(Path.Combine("tools", "assets", "megawoman-sig.jpg"));
+            if (seed is null)
+            {
+                Console.Error.WriteLine(
+                    "--screenshot-state sign: the library is empty and tools/assets/megawoman-sig.jpg "
+                    + "was not found above the executable, so there is no card to photograph.");
+                return false;
+            }
+            var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(seed);
+            var image = await SignatureImageProcessor.LoadAndCleanAsync(file);
+            await vm.AddSignatureFromImageAsync(image, "Mega W.");
+            if (vm.Signatures.Count == 0)
+            {
+                Console.Error.WriteLine("--screenshot-state sign: seeding the library failed.");
+                return false;
+            }
+        }
+
+        // Not the real flyout: RenderTargetBitmap renders the popup layer as nothing
+        // (0×0 for the presenter, verified), PrintWindow returns white for a
+        // composition window, and a screen BitBlt needs the window in front, which a
+        // process started from a terminal cannot arrange. The window keeps an in-tree
+        // copy of the same panel for exactly this shot.
+        window.ShowSignatureLibraryForScreenshot();
+        await Task.Delay(900);
+        Console.WriteLine($"signature library shown with {vm.Signatures.Count} signature(s)");
+        return true;
+    }
+
+    /// <summary>A repo-relative file, found by walking up from the executable (a dev build runs from bin/).</summary>
+    private static string? FindUpwards(string relative)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, relative);
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     /// <summary>

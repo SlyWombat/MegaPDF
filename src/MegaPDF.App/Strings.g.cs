@@ -213,4 +213,25 @@ public static partial class Strings
 
     /// <summary>Something went wrong.</summary>
     public static string ErrorGeneric => Get("ErrorGeneric");
+
+    /// <summary>{0}, signature</summary>
+    public static string SignatureCardName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignatureCardName"), arg0);
+
+    /// <summary>Rename</summary>
+    public static string Rename => Get("Rename");
+
+    /// <summary>Delete</summary>
+    public static string Delete => Get("Delete");
+
+    /// <summary>Rename signature</summary>
+    public static string RenameSignatureTitle => Get("RenameSignatureTitle");
+
+    /// <summary>Delete {0}?</summary>
+    public static string DeleteSignatureTitle(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("DeleteSignatureTitle"), arg0);
+
+    /// <summary>This cannot be undone.</summary>
+    public static string DeleteSignatureBody => Get("DeleteSignatureBody");
+
+    /// <summary>Couldn't rename that signature</summary>
+    public static string CouldNotRenameSignatureTitle => Get("CouldNotRenameSignatureTitle");
 }

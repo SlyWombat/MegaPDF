@@ -70,7 +70,11 @@ public sealed record SearchHighlight(double X, double Y, double Width, double He
 }
 
 /// <summary>A library signature shown in the flyout.</summary>
-public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail);
+public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail)
+{
+    /// <summary>Narrator name for the card: the signature's name, then what it is.</summary>
+    public string AccessibleName => Strings.SignatureCardName(Name);
+}
 
 /// <summary>A recent document shown on the empty state.</summary>
 public sealed record RecentDocument(string Name, string Path);
@@ -855,6 +859,40 @@ public partial class MainViewModel(Window window) : ObservableObject
         Signatures.Clear();
         foreach (var entry in _signatureLibrary.All)
             Signatures.Add(ToItem(entry));
+        Signatures.CollectionChanged -= OnSignaturesChanged;
+        Signatures.CollectionChanged += OnSignaturesChanged;
+        OnSignaturesChanged(this, null);
+    }
+
+    /// <summary>The flyout shows either the library or the empty-state copy, never both (#100).</summary>
+    public Visibility HasSignaturesVisibility => Signatures.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility NoSignaturesVisibility => Signatures.Count > 0 ? Visibility.Collapsed : Visibility.Visible;
+
+    private void OnSignaturesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs? e)
+    {
+        OnPropertyChanged(nameof(HasSignaturesVisibility));
+        OnPropertyChanged(nameof(NoSignaturesVisibility));
+    }
+
+    /// <summary>Renames a library signature in place; the card keeps its position.</summary>
+    public async Task RenameSignatureAsync(SignatureItem item, string newName)
+    {
+        newName = newName.Trim();
+        if (newName.Length == 0 || newName == item.Name)
+            return;
+        try
+        {
+            _signatureLibrary.Rename(item.Id, newName);
+            var index = Signatures.IndexOf(item);
+            if (index >= 0)
+                Signatures[index] = item with { Name = newName };
+            if (PendingSignature == item)
+                PendingSignature = Signatures.FirstOrDefault(s => s.Id == item.Id);
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync(Strings.CouldNotRenameSignatureTitle, UserFacing.Describe(ex));
+        }
     }
 
     private static SignatureItem ToItem(SignatureEntry entry) =>

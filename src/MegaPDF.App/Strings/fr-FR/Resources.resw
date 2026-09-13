@@ -88,19 +88,40 @@
     <value>Signatures</value>
   </data>
   <data name="SignaturesHeading.Text" xml:space="preserve">
-    <value>Vos signatures</value>
+    <value>Signatures</value>
   </data>
-  <data name="RemoveSignatureItem.Text" xml:space="preserve">
-    <value>Retirer de la bibliothèque</value>
+  <data name="NoSignaturesYet.Text" xml:space="preserve">
+    <value>Aucune signature pour l'instant. Dessinez-en une, tapez votre nom ou ajoutez une photo de votre signature sur papier blanc — l'arrière-plan est retiré automatiquement.</value>
+  </data>
+  <data name="RenameSignatureItem.Text" xml:space="preserve">
+    <value>Renommer</value>
+  </data>
+  <data name="DeleteSignatureItem.Text" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="SignatureOptionsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Renommer ou supprimer</value>
+  </data>
+  <data name="SignatureOptionsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Options de la signature</value>
   </data>
   <data name="AddFromImageLabel.Text" xml:space="preserve">
-    <value>Ajouter à partir d'une image…</value>
+    <value>D'une photo</value>
   </data>
   <data name="TypeSignatureLabel.Text" xml:space="preserve">
-    <value>Taper une signature…</value>
+    <value>Taper</value>
   </data>
   <data name="DrawSignatureLabel.Text" xml:space="preserve">
-    <value>Dessiner une signature…</value>
+    <value>Dessiner</value>
+  </data>
+  <data name="DrawSignatureButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Dessinez une signature avec la souris, le doigt ou un stylet</value>
+  </data>
+  <data name="TypeSignatureButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Tapez votre nom dans une police manuscrite</value>
+  </data>
+  <data name="AddSignatureFromImageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Utilisez une photo ou une numérisation de votre signature</value>
   </data>
   <data name="WhiteoutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Masquer une zone avec du correcteur</value>
@@ -518,5 +539,30 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Une erreur s'est produite.</value>
+  </data>
+
+  <!-- ===== Signature library cards (#100) ===== -->
+  <data name="SignatureCardName" xml:space="preserve">
+    <value>{0}, signature</value>
+    <comment>Narrator name of a library card; {0} is the signature's name</comment>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Renommer</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="RenameSignatureTitle" xml:space="preserve">
+    <value>Renommer la signature</value>
+  </data>
+  <data name="DeleteSignatureTitle" xml:space="preserve">
+    <value>Supprimer {0} ?</value>
+    <comment>{0} is the signature's name</comment>
+  </data>
+  <data name="DeleteSignatureBody" xml:space="preserve">
+    <value>Cette action est irréversible.</value>
+  </data>
+  <data name="CouldNotRenameSignatureTitle" xml:space="preserve">
+    <value>Impossible de renommer cette signature</value>
   </data>
 </root>
