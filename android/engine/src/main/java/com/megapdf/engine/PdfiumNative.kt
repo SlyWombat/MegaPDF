@@ -66,6 +66,15 @@ internal object PdfiumNative {
     // [rectCount, l, b, r, t...] per match, PDF points, bottom-left origin.
     external fun nativeSearchPagePacked(handle: Long, query: String): DoubleArray
 
+    // ---- The document's own text (#114) ----------------------------------
+    external fun nativeTextRunsPacked(handle: Long): DoubleArray
+    external fun nativeTextRunStrings(handle: Long): Array<String>
+    external fun nativeSetText(handle: Long, objectIndex: Int, text: String): LongArray
+    external fun nativeDetachObject(handle: Long, objectIndex: Int): Long
+    external fun nativeRestoreObject(handle: Long, detached: Long, objectIndex: Int): Boolean
+    external fun nativeRestoreOriginal(handle: Long, original: Long, objectIndex: Int): Boolean
+    external fun nativeDiscardDetached(detached: Long)
+
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4
 }

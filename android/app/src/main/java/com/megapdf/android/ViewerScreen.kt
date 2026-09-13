@@ -1,5 +1,6 @@
 package com.megapdf.android
 
+import androidx.compose.foundation.layout.widthIn
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -119,6 +120,8 @@ fun ViewerScreen(
     canUndo: Boolean,
     canRedo: Boolean,
     pendingTextTap: PendingTextTap?,
+    pendingBodyEdit: PendingBodyEdit? = null,
+    notice: String? = null,
     searchQuery: String,
     searchHits: List<SearchHit>,
     currentHitIndex: Int,
@@ -141,6 +144,8 @@ fun ViewerScreen(
     onStartTextPlacement: () -> Unit,
     onCommitText: (text: String, fontSize: Double, fontName: String) -> Unit,
     onCancelTextPlacement: () -> Unit,
+    onCommitBodyEdit: (String) -> Unit = {},
+    onCancelBodyEdit: () -> Unit = {},
     onCommitStampRect: (com.megapdf.engine.PdfRect) -> Unit,
     onRemoveStamp: () -> Unit,
     onCommitTextBoxRect: (com.megapdf.engine.PdfRect) -> Unit,
@@ -237,6 +242,56 @@ fun ViewerScreen(
                 TextButton(onClick = onCancelTextPlacement) { Text(stringResource(R.string.cancel)) }
             },
         )
+    }
+
+    if (pendingBodyEdit != null) {
+        // The document's own text (#114): one field, and the line keeps its size and
+        // font (SDD §3.1 — no formatting controls). Clearing the field removes the line.
+        var typed by remember(pendingBodyEdit) { mutableStateOf(pendingBodyEdit.initialText) }
+        AlertDialog(
+            onDismissRequest = onCancelBodyEdit,
+            title = { Text(stringResource(R.string.edit_text)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.body_text_hint))
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onCommitBodyEdit(typed) }) { Text(stringResource(R.string.save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelBodyEdit) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (notice != null) {
+        // A one-line notice over the page that goes away on its own — for things the
+        // user should know but need not act on, like a substituted font (#114).
+        androidx.compose.ui.window.Popup(
+            alignment = androidx.compose.ui.Alignment.BottomCenter,
+            offset = androidx.compose.ui.unit.IntOffset(0, -160),
+        ) {
+            androidx.compose.material3.Surface(
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                color = androidx.compose.material3.MaterialTheme.colorScheme.inverseSurface,
+                shadowElevation = 6.dp,
+            ) {
+                Text(
+                    notice,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.inverseOnSurface,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .widthIn(max = 360.dp),
+                )
+            }
+        }
     }
 
     if (drawDialogOpen) {

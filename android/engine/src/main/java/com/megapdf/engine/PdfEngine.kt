@@ -318,6 +318,91 @@ class PdfPage internal constructor(
         removeAnnot(found.annotIndex)
     }
 
+    // ---- The document's own text (#114) ------------------------------------
+
+    /**
+     * The page's visual lines of body text, top to bottom, as the shared core merges
+     * them (#106). MegaPDF text boxes are left out — they have their own editing path.
+     */
+    suspend fun textLines(): List<TextLine> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val packed = PdfiumNative.nativeTextRunsPacked(handle)
+        val strings = PdfiumNative.nativeTextRunStrings(handle)
+        if (packed.isEmpty()) return@withContext emptyList()
+        var i = 0
+        val runCount = packed[i++].toInt()
+        val runs = ArrayList<TextRun>(runCount)
+        for (r in 0 until runCount) {
+            runs += TextRun(
+                objectIndex = packed[i].toInt(),
+                text = strings.getOrElse(r * 2) { "" }.trim(),
+                rect = PdfRect(packed[i + 1], packed[i + 2], packed[i + 3], packed[i + 4]),
+                fontSize = packed[i + 5],
+                fontName = strings.getOrElse(r * 2 + 1) { "" },
+                isTextBox = packed[i + 6] != 0.0,
+                endsWithSeparator = packed[i + 7] != 0.0,
+            )
+            i += 8
+        }
+        val lineCount = packed[i++].toInt()
+        val lines = ArrayList<TextLine>(lineCount)
+        repeat(lineCount) {
+            val rect = PdfRect(packed[i], packed[i + 1], packed[i + 2], packed[i + 3])
+            val n = packed[i + 4].toInt()
+            val members = (0 until n).map { runs[packed[i + 5 + it].toInt()] }.filter { !it.isTextBox }
+            i += 5 + n
+            if (members.isNotEmpty()) lines += TextLine(members, rect)
+        }
+        lines
+    }
+
+    /**
+     * Replaces the text of the run at [objectIndex] — in the run's own font when it can
+     * carry the text, otherwise the closest standard face (#116). The edited run is a new
+     * object at the same index; the untouched original comes back in the result so an
+     * undo can put it back byte-identical with [restoreOriginal] (#117).
+     */
+    suspend fun setText(objectIndex: Int, text: String): TextEdit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        require(text.isNotEmpty()) { "text must not be empty" }
+        val result = PdfiumNative.nativeSetText(handle, objectIndex, text)
+        check(result.size == 3 && result[0] == 0L && result[2] != 0L) { "failed to change text" }
+        TextEdit(
+            if (result[1] == 1L) TextEditOutcome.SUBSTITUTED else TextEditOutcome.IN_PLACE,
+            DetachedObject(result[2]),
+        )
+    }
+
+    /** Undoes [setText]: takes the edited run at [objectIndex] off and puts [original] back. */
+    suspend fun restoreOriginal(original: DetachedObject, objectIndex: Int): Unit =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            check(original.handle != 0L) { "the original was already restored" }
+            check(PdfiumNative.nativeRestoreOriginal(handle, original.handle, objectIndex)) {
+                "failed to restore the original text"
+            }
+            original.handle = 0L
+        }
+
+    /** Removes the page object at [objectIndex] and keeps it alive for undo. */
+    suspend fun detachObject(objectIndex: Int): DetachedObject = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val detached = PdfiumNative.nativeDetachObject(handle, objectIndex)
+        check(detached != 0L) { "failed to remove the text" }
+        DetachedObject(detached)
+    }
+
+    /** Puts a detached object back at [objectIndex], byte-identical. */
+    suspend fun restoreObject(detached: DetachedObject, objectIndex: Int): Unit =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            check(detached.handle != 0L) { "the object was already restored" }
+            check(PdfiumNative.nativeRestoreObject(handle, detached.handle, objectIndex)) {
+                "failed to restore the text"
+            }
+            detached.handle = 0L
+        }
+
     /**
      * Case-insensitive literal substring search on this page (#26), matches in
      * reading order. A match that wraps across lines carries one rect per line.
@@ -370,6 +455,45 @@ data class Stamp(val annotIndex: Int, val id: String, val rect: PdfRect)
 
 /** One search hit on a page; several rects when the hit wraps across lines. */
 data class SearchMatch(val rects: List<PdfRect>)
+
+/** One run of body text: a single text object on the page, crop space (#114). */
+data class TextRun(
+    val objectIndex: Int,
+    /** What the run says, with PDFium's generated separator trimmed off. */
+    val text: String,
+    val rect: PdfRect,
+    val fontSize: Double,
+    val fontName: String,
+    val isTextBox: Boolean,
+    /** Whether the page reads a separator after this run (a word boundary). */
+    val endsWithSeparator: Boolean,
+)
+
+/** A visual line: same-baseline runs, left to right. */
+data class TextLine(val runs: List<TextRun>, val rect: PdfRect) {
+    /** The line as one string: runs joined with a space only where the page separates them. */
+    val text: String
+        get() = buildString {
+            runs.forEachIndexed { i, run ->
+                append(run.text)
+                if (run.endsWithSeparator && i < runs.size - 1) append(' ')
+            }
+        }
+}
+
+/** How a text edit landed. */
+enum class TextEditOutcome {
+    /** The run's own font drew the new text. */
+    IN_PLACE,
+    /** That font could not carry it, so a similar standard face was used. */
+    SUBSTITUTED,
+}
+
+/** A page object kept alive by the core for undo; restoring consumes it. */
+class DetachedObject internal constructor(internal var handle: Long)
+
+/** The result of [PdfPage.setText]: how it landed, and the original for undo. */
+data class TextEdit(val outcome: TextEditOutcome, val original: DetachedObject)
 
 /** A MegaPDF text box (#34): added text, addressed by its stable [id]. */
 data class TextBox(

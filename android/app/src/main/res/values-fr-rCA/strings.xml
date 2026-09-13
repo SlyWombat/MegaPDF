@@ -78,6 +78,11 @@
     <string name="text_untagged">Ce texte a été ajouté par une version antérieure et ne peut pas être modifié ici</string>
     <string name="text_add_failed">Impossible d\'ajouter ce texte</string>
     <string name="text_change_failed">Impossible de modifier ce texte</string>
+
+    <!-- The document's own text (#114) -->
+    <string name="body_text_hint">Modifiez cette ligne. La taille et la police restent les mêmes.</string>
+    <string name="body_text_substituted">La police d\'origine ne pouvait pas afficher ce texte; une police standard semblable a été utilisée.</string>
+    <string name="body_text_scanned">Cette page est une image numérisée; son texte ne peut pas être modifié.</string>
     <string name="text_move_failed">Impossible de déplacer ce texte</string>
     <string name="text_remove_failed">Impossible de retirer ce texte</string>
     <string name="undo_failed">Impossible d\'annuler</string>
@@ -117,5 +122,6 @@
     <string name="screenshot_recent_3">Formulaire de réclamation d\'assurance.pdf</string>
     <string name="screenshot_search_term">location</string>
     <string name="screenshot_text">Jane Whitfield</string>
+    <string name="screenshot_edited_heading">Contrat de location d\'équipement (2026)</string>
     <string name="screenshot_signature_name">Mega W.</string>
 </resources>

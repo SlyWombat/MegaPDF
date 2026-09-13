@@ -47,7 +47,7 @@ demo_status_bar
 
 OUT="/tmp/shots/$LANG_TAG"
 mkdir -p "$OUT"
-for state in home viewer search sign draw text; do
+for state in home viewer search sign draw text text-edit; do
     adb shell am force-stop ca.electricrv.megapdf || true
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10

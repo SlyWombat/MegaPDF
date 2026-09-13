@@ -3,6 +3,10 @@ package com.megapdf.android
 import com.megapdf.engine.PdfDocument
 import com.megapdf.engine.DEFAULT_FONT
 import com.megapdf.engine.PdfRect
+import com.megapdf.engine.DetachedObject
+import com.megapdf.engine.TextEditOutcome
+import com.megapdf.engine.TextLine
+import com.megapdf.engine.TextRun
 
 // Undo/redo (#34) — the mobile port of the desktop `IEditOperation` + `UndoStack`
 // (SDD §4.2, command pattern), and the twin of iOS's EditHistory.swift. Two rules
@@ -281,4 +285,75 @@ class MoveTextBoxOperation(
 
     override suspend fun revert(doc: PdfDocument) =
         doc.onPage(pageIndex) { it.moveTextBox(id, fromX, fromY) }
+}
+
+// ---- The document's own text (#114) ----------------------------------------
+
+/**
+ * Retyping a visual line: the Android twin of iOS's BodyTextEditOperation and the
+ * desktop LineEditOperation. The new text goes into the line's first run; the other
+ * runs are detached but kept, and the core hands back the first run's untouched
+ * original, so undo restores the line byte-identical (#117).
+ */
+class BodyTextEditOperation(
+    override val pageIndex: Int,
+    private val line: TextLine,
+    private val newText: String,
+) : PdfEditOperation {
+    private var firstOriginal: DetachedObject? = null
+    private val held = ArrayList<Pair<TextRun, DetachedObject>>()
+
+    /** How the last apply landed; SUBSTITUTED means the UI owes the user a notice. */
+    var lastOutcome: TextEditOutcome? = null
+        private set
+
+    override val name: String get() = "edit text"
+
+    override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+        // The edited first run is a new object at the same index, so the indices of
+        // the runs taken off below do not move because of it.
+        val edit = page.setText(line.runs.first().objectIndex, newText)
+        firstOriginal = edit.original
+        lastOutcome = edit.outcome
+        held.clear()
+        // Highest object index first, so the earlier indices stay valid.
+        for (run in line.runs.drop(1).sortedByDescending { it.objectIndex }) {
+            held.add(Pair(run, page.detachObject(run.objectIndex)))
+        }
+    }
+
+    override suspend fun revert(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+        // Lowest index first, so every run lands exactly where it came from.
+        for (entry in held.sortedBy { it.first.objectIndex }) {
+            page.restoreObject(entry.second, entry.first.objectIndex)
+        }
+        held.clear()
+        val original = checkNotNull(firstOriginal) { "nothing to undo" }
+        page.restoreOriginal(original, line.runs.first().objectIndex)
+        firstOriginal = null
+    }
+}
+
+/** Clearing a line in the editor removes it; undo brings every run back exactly. */
+class BodyTextDeleteOperation(
+    override val pageIndex: Int,
+    private val line: TextLine,
+) : PdfEditOperation {
+    private val held = ArrayList<Pair<TextRun, DetachedObject>>()
+
+    override val name: String get() = "delete text"
+
+    override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+        held.clear()
+        for (run in line.runs.sortedByDescending { it.objectIndex }) {
+            held.add(Pair(run, page.detachObject(run.objectIndex)))
+        }
+    }
+
+    override suspend fun revert(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+        for (entry in held.sortedBy { it.first.objectIndex }) {
+            page.restoreObject(entry.second, entry.first.objectIndex)
+        }
+        held.clear()
+    }
 }

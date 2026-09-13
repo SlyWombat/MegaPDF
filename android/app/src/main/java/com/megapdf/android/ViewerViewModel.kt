@@ -1,5 +1,6 @@
 package com.megapdf.android
 
+import com.megapdf.engine.TextEditOutcome
 import android.app.Application
 import android.graphics.Bitmap
 import android.net.Uri
@@ -129,6 +130,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var pendingTextTap: PendingTextTap? by mutableStateOf(null)
         private set
 
+    /** The line of the document's own text the editor is open on (#114). */
+    var pendingBodyEdit: PendingBodyEdit? by mutableStateOf(null)
+        private set
+
+    /** A one-line notice over the page that clears itself — not a dialog (#114). */
+    var notice: String? by mutableStateOf(null)
+        private set
+    private var noticeJob: Job? = null
+
+    /** The scanned-page hint is shown once per document, not on every stray tap. */
+    private var scannedHintShown = false
+
     /** Screenshot-mode sheet request ("sign" | "draw" | "search" | "text"); set via launch intent. */
     var screenshotSheet: String? by mutableStateOf(null)
         private set
@@ -162,7 +175,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     RecentEntry("demo://3", app.getString(R.string.screenshot_recent_3), now - 6 * day),
                 ), null)
             }
-            "viewer", "sign", "draw", "search", "text" -> {
+            "viewer", "sign", "draw", "search", "text", "text-edit" -> {
                 screenshotSheet = if (state == "viewer") null else state
                 viewModelScope.launch {
                     val bytes = withContext(Dispatchers.IO) {
@@ -196,6 +209,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         pendingTextTap = PendingTextTap(
                             0, SCREENSHOT_TEXT_X, SCREENSHOT_TEXT_Y,
                             initialText = app.getString(R.string.screenshot_text))
+                    }
+                    if (state == "text-edit") {
+                        // The body-text editor open on the agreement's heading, mid-correction (#114).
+                        val page = doc.openPage(0)
+                        try {
+                            page.textLines().firstOrNull()?.let {
+                                pendingBodyEdit = PendingBodyEdit(
+                                    0, it, initialText = app.getString(R.string.screenshot_edited_heading))
+                            }
+                        } finally {
+                            page.close()
+                        }
                     }
                 }
             }
@@ -506,10 +531,66 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                             }
                     }
                 }
+                if (operation == null) {
+                    // Nothing the user placed and nothing to tick: the document's own
+                    // text (#114). A tap on a line opens the editor on it.
+                    val lines = page.textLines()
+                    val line = lines.firstOrNull { it.rect.grownBy(TAP_SLOP_POINTS).contains(x, y) }
+                    if (line != null) {
+                        pendingBodyEdit = PendingBodyEdit(pageIndex, line)
+                    } else if (lines.isEmpty() && !scannedHintShown) {
+                        // A page with no text at all is a picture of a page.
+                        scannedHintShown = true
+                        showNotice(str(R.string.body_text_scanned))
+                    }
+                }
             } finally {
                 page.close()
             }
             operation?.let { perform(it, doc) }
+        }
+    }
+
+    // --- The document's own text (#114) ---
+
+    /**
+     * Commits the body-text editor. The same text is a no-op; an empty field removes
+     * the line. Either way it is one undoable edit.
+     */
+    fun commitBodyEdit(text: String) {
+        val pending = pendingBodyEdit ?: return
+        val doc = document ?: return
+        pendingBodyEdit = null
+        val trimmed = text.trim()
+        if (trimmed == pending.line.text) return
+        viewModelScope.launch {
+            try {
+                if (trimmed.isEmpty()) {
+                    perform(BodyTextDeleteOperation(pending.pageIndex, pending.line), doc)
+                } else {
+                    val operation = BodyTextEditOperation(pending.pageIndex, pending.line, trimmed)
+                    perform(operation, doc)
+                    if (operation.lastOutcome == TextEditOutcome.SUBSTITUTED) {
+                        showNotice(str(R.string.body_text_substituted))
+                    }
+                }
+            } catch (e: Exception) {
+                statusMessage = str(R.string.text_change_failed)
+            }
+        }
+    }
+
+    fun cancelBodyEdit() {
+        pendingBodyEdit = null
+    }
+
+    /** Shows a notice over the page for a few seconds. */
+    private fun showNotice(text: String) {
+        noticeJob?.cancel()
+        notice = text
+        noticeJob = viewModelScope.launch {
+            delay(4_000)
+            notice = null
         }
     }
 
@@ -1008,6 +1089,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         canRedo = false
         isPlacingText = false
         pendingTextTap = null
+        pendingBodyEdit = null
+        scannedHintShown = false
         val doc = document ?: return
         document = null
         viewModelScope.launch { doc.close() }
@@ -1083,3 +1166,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         const val SCREENSHOT_TEXT_Y = 372.0
     }
 }
+
+/** A line of the document's own text being retyped (#114). */
+data class PendingBodyEdit(
+    val pageIndex: Int,
+    val line: com.megapdf.engine.TextLine,
+    /** What the field opens with — the line itself, except in screenshot mode. */
+    val initialText: String = line.text,
+)

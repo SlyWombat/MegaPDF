@@ -602,3 +602,113 @@ Java_com_megapdf_engine_PdfiumNative_nativeSearchPagePacked(JNIEnv* env, jobject
 }
 
 }  // extern "C"
+
+// --- The document's own text (#114): lines, the tiered edit and the byte-identical
+// --- undo, all in the core (#106, #112, #116, #117). Marshalling only.
+
+extern "C" {
+
+// Per run: [objectIndex, l, b, r, t, fontSize, isTextBox, endsWithSeparator],
+// preceded by the run count; then the line count and per line
+// [l, b, r, t, runCount, runIndex...]. Crop space. Pairs with nativeTextRunStrings,
+// which lists each run's text and font in the same order.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeTextRunsPacked(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<double> packed;
+    if (megapdf_text* t = megapdf_text_load(p->core, MEGAPDF_TEXT_ALL)) {
+        const size_t runs = megapdf_text_run_count(t);
+        packed.push_back(static_cast<double>(runs));
+        for (size_t i = 0; i < runs; i++) {
+            megapdf_text_run r{};
+            megapdf_text_run_get(t, i, &r);
+            const std::vector<jchar> raw = CoreString(t, i, MEGAPDF_TEXT_RUN_TEXT);
+            const bool separator = !raw.empty() && (raw.back() == ' ' || raw.back() == '\r' || raw.back() == '\n');
+            packed.insert(packed.end(), {static_cast<double>(r.object_index), r.bounds.left, r.bounds.bottom,
+                                         r.bounds.right, r.bounds.top, r.font_size, r.is_text_box ? 1.0 : 0.0,
+                                         separator ? 1.0 : 0.0});
+        }
+        const size_t lines = megapdf_text_line_count(t);
+        packed.push_back(static_cast<double>(lines));
+        for (size_t j = 0; j < lines; j++) {
+            megapdf_rect b{};
+            megapdf_text_line_get(t, j, &b);
+            const size_t n = megapdf_text_line_runs(t, j, nullptr, 0);
+            std::vector<size_t> indices(n);
+            if (n > 0) megapdf_text_line_runs(t, j, indices.data(), n);
+            packed.insert(packed.end(), {b.left, b.bottom, b.right, b.top, static_cast<double>(n)});
+            for (size_t k : indices) packed.push_back(static_cast<double>(k));
+        }
+        megapdf_text_free(t);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
+// Each run's text then font, two entries per run, in nativeTextRunsPacked's order.
+JNIEXPORT jobjectArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeTextRunStrings(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<std::vector<jchar>> items;
+    if (megapdf_text* t = megapdf_text_load(p->core, MEGAPDF_TEXT_ALL)) {
+        for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+            items.push_back(CoreString(t, i, MEGAPDF_TEXT_RUN_TEXT));
+            items.push_back(CoreString(t, i, MEGAPDF_TEXT_RUN_FONT));
+        }
+        megapdf_text_free(t);
+    }
+    return StringArray(env, items);
+}
+
+// [status, outcome, originalHandle]: status 0 is success; outcome 0 means the run's own
+// font drew the text, 1 a standard face; the handle is the untouched original (#117).
+JNIEXPORT jlongArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSetText(JNIEnv* env, jobject, jlong handle, jint objectIndex,
+                                                  jstring text) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    std::vector<jchar> wide = JavaChars(env, text);
+    wide.push_back(0);
+    int outcome = -1;
+    megapdf_detached* original = nullptr;
+    const int status = megapdf_set_text(p->core, objectIndex, wide.data(), 0, &outcome, &original);
+    const jlong values[3] = {status, outcome, reinterpret_cast<jlong>(original)};
+    jlongArray out = env->NewLongArray(3);
+    if (out != nullptr) env->SetLongArrayRegion(out, 0, 3, values);
+    return out;
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeDetachObject(JNIEnv*, jobject, jlong handle, jint objectIndex) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    return reinterpret_cast<jlong>(megapdf_detach_object(p->core, objectIndex));
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRestoreObject(JNIEnv*, jobject, jlong handle, jlong detached,
+                                                        jint objectIndex) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    return megapdf_restore_object(p->core, reinterpret_cast<megapdf_detached*>(detached), objectIndex) == MEGAPDF_OK
+               ? JNI_TRUE : JNI_FALSE;
+}
+
+// Undoes nativeSetText: takes the edited run off and puts the original back where it was.
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRestoreOriginal(JNIEnv*, jobject, jlong handle, jlong original,
+                                                          jint objectIndex) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_detached* edited = megapdf_detach_object(p->core, objectIndex);
+    if (edited == nullptr) return JNI_FALSE;
+    megapdf_discard_detached(edited);
+    return megapdf_restore_object(p->core, reinterpret_cast<megapdf_detached*>(original), objectIndex) == MEGAPDF_OK
+               ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeDiscardDetached(JNIEnv*, jobject, jlong detached) {
+    megapdf_discard_detached(reinterpret_cast<megapdf_detached*>(detached));
+}
+
+}  // extern "C"
