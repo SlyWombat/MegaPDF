@@ -758,6 +758,21 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         signatures.removeAll { it.id == id }
     }
 
+    /** Renames a library entry in place; the id and image are untouched (#99). */
+    fun renameSignature(id: String, displayName: String) {
+        val name = displayName.trim()
+        if (name.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) { signatureStore.rename(id, name) }
+        val index = signatures.indexOfFirst { it.id == id }
+        if (index >= 0) signatures[index] = signatures[index].copy(displayName = name)
+    }
+
+    /** The stored ink for a library card's thumbnail, decoded off the main thread (#99). */
+    suspend fun loadSignatureBitmap(entry: SignatureEntry): Bitmap? =
+        withContext(Dispatchers.IO) {
+            try { signatureStore.loadBitmap(entry) } catch (_: Exception) { null }
+        }
+
     fun startPlacement(entry: SignatureEntry) {
         selectedTextBox = null
         pendingSignature = entry
