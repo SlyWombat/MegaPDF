@@ -210,6 +210,10 @@ struct SignaturesSheet: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        // Icon above the label: three of these share a phone's width in French too
+        // ("Dessiner" / "Taper" / "Photo"), where the default row layout hyphenated
+        // the first word.
+        .labelStyle(StackedLabelStyle())
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
@@ -344,6 +348,20 @@ struct DrawSignatureView: View {
             ctx.strokePath()
         }
         return ctx.makeImage()
+    }
+}
+
+/// Icon over title, for buttons that must share a narrow row (#100).
+struct StackedLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(spacing: 4) {
+            configuration.icon
+            configuration.title
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .padding(.vertical, 2)
     }
 }
 
