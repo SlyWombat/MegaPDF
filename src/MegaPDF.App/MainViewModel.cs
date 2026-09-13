@@ -7,6 +7,7 @@ using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
 using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Services;
+using MegaPDF.Core.Viewing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -36,6 +37,15 @@ public sealed record PageView(
 
     /// <summary>Find-match highlights at this slot's zoom; empty when no search is active.</summary>
     public IReadOnlyList<SearchHighlight> Highlights { get; init; } = [];
+
+    /// <summary>
+    /// The engine could not rasterise this page (#93). The slot says so instead of
+    /// staying a blank sheet, and the viewport loop stops asking for it.
+    /// </summary>
+    public bool RenderFailed { get; init; }
+
+    public Visibility FailedVisibility => RenderFailed ? Visibility.Visible : Visibility.Collapsed;
+    public string FailedMessage => Strings.PageRenderFailed;
 }
 
 /// <summary>One find-match rectangle on a page, in DIPs (zoom baked in at creation).</summary>
@@ -248,6 +258,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
         var rememberedView = _recentFiles.FindEntry(path);
         _document?.Dispose();
+        _cappedRenders.Clear();
         _document = doc;
         DocumentPath = path;
         HasUnsavedChanges = false;
@@ -359,7 +370,7 @@ public partial class MainViewModel(Window window) : ObservableObject
                 {
                     if (generation != _openGeneration)
                         return;
-                    if (Pages[i].Source is null)
+                    if (Pages[i].Source is null && !Pages[i].RenderFailed)
                         Pages[i] = await RenderPageAsync(doc, i);
                     if (_viewportDirty)
                         break; // the window moved — restart with the new one
@@ -378,12 +389,26 @@ public partial class MainViewModel(Window window) : ObservableObject
         var scale = (window.Content?.XamlRoot?.RasterizationScale ?? 1.0) * ZoomFactor;
         var zoom = ZoomFactor;
 
-        var (rendered, pointsW, pointsH, regions) = await Task.Run(() =>
+        RenderedPage rendered;
+        double pointsW, pointsH;
+        List<InteractiveRegion> regions;
+        try
         {
-            using var page = doc.GetPage(pageIndex);
-            var pixels = page.Render((int)(page.Width * 96 / 72 * scale), (int)(page.Height * 96 / 72 * scale));
-            return (pixels, page.Width, page.Height, BuildRegions(page));
-        });
+            (rendered, pointsW, pointsH, regions) = await Task.Run(() => RenderPage(doc, pageIndex, scale));
+        }
+        catch (Exception ex)
+        {
+            // A page the engine cannot rasterise (a broken content stream, or PDFium
+            // refusing the bitmap) used to escape this fire-and-forget loop as an
+            // unhandled exception and leave a blank sheet behind (#93). The slot now
+            // says what happened and is not asked for again until it re-enters the
+            // render window.
+            System.Diagnostics.Debug.WriteLine($"page {pageIndex + 1} could not be rendered: {ex}");
+            var slot = Pages[pageIndex];
+            return new PageView(pageIndex, null, slot.PointsWidth, slot.PointsHeight,
+                slot.PointsWidth * 96 / 72 * zoom, slot.PointsHeight * 96 / 72 * zoom, [])
+            { Highlights = HighlightsFor(pageIndex, zoom), RenderFailed = true };
+        }
 
         var bitmap = new WriteableBitmap(rendered.PixelWidth, rendered.PixelHeight);
         using (var pixelStream = bitmap.PixelBuffer.AsStream())
@@ -393,6 +418,41 @@ public partial class MainViewModel(Window window) : ObservableObject
         return new PageView(pageIndex, bitmap, pointsW, pointsH,
             pointsW * 96 / 72 * zoom, pointsH * 96 / 72 * zoom, regions)
         { Highlights = HighlightsFor(pageIndex, zoom) };
+    }
+
+    /// <summary>
+    /// Rasters of pages too large to render at their ideal size (see
+    /// <see cref="RenderLimits"/>), kept so a zoom step does not decode the page
+    /// again. Cleared on open, and per page when an edit touches it.
+    /// </summary>
+    private readonly CappedRenderCache _cappedRenders = new(capacity: 2);
+
+    /// <summary>
+    /// Off the UI thread: the page raster and its interaction map.
+    ///
+    /// The raster is clamped to <see cref="RenderLimits"/> and the view scales it up
+    /// the rest of the way (#93). Past the clamp every zoom level asks for the same
+    /// pixels, and below it the view can scale the same raster down, so a page that
+    /// ever needed clamping is rendered once and served from
+    /// <see cref="_cappedRenders"/> at every zoom until an edit invalidates it. That
+    /// is the difference between 20 s and 0 s per zoom click on an 88 MB scan (#94).
+    /// </summary>
+    private (RenderedPage Rendered, double PointsW, double PointsH, List<InteractiveRegion> Regions)
+        RenderPage(IPdfDocument doc, int pageIndex, double scale)
+    {
+        using var page = doc.GetPage(pageIndex);
+        var regions = BuildRegions(page);
+
+        if (_cappedRenders.TryGet(pageIndex, out var kept))
+            return (kept, page.Width, page.Height, regions);
+
+        var idealW = page.Width * 96 / 72 * scale;
+        var idealH = page.Height * 96 / 72 * scale;
+        var (w, h) = RenderLimits.Fit(idealW, idealH);
+        var rendered = page.Render(w, h);
+        if (RenderLimits.IsCapped(idealW, idealH))
+            _cappedRenders.Put(pageIndex, rendered);
+        return (rendered, page.Width, page.Height, regions);
     }
 
     /// <summary>Interaction map in HitTest priority order: stamps, form fields, squares, text.</summary>
@@ -462,6 +522,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     {
         if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
             return;
+        _cappedRenders.Remove(pageIndex); // the edit changed what the page looks like
         Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
     }
 

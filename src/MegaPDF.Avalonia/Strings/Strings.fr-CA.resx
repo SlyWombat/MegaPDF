@@ -408,6 +408,10 @@
     <value>Impossible de lire cette signature.</value>
     <comment>Technical detail follows</comment>
   </data>
+  <data name="PageRenderFailed" xml:space="preserve">
+    <value>Cette page n'a pas pu être affichée.</value>
+    <comment>Shown in a page's slot when the engine could not rasterise it (#93)</comment>
+  </data>
   <data name="CouldNotReadImage" xml:space="preserve">
     <value>Impossible de lire cette image.</value>
     <comment>Technical detail follows</comment>

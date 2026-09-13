@@ -36,6 +36,7 @@ internal static class Program
             "find" => Tools.Find(opts),
             "open-bench" => Tools.OpenBench(opts),
             "inspect" => Tools.Inspect(opts),
+            "flags-bench" => FlagsBench.Run(opts),
             _ => Usage(),
         };
     }
@@ -713,6 +714,74 @@ internal static class Tools
             _ = page.Render(pw, ph);
             Console.WriteLine($"render x1.50 again on the same page handle: {sw.Elapsed.TotalMilliseconds:F0} ms");
         }
+        return 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// FlagsBench — how PDFium's render flags change one page's render time (#96).
+// Talks to pdfium directly (the same binary MegaPDF.Core loads) because the
+// engine's P/Invoke layer is internal and always renders with ANNOT | LCD_TEXT.
+// ---------------------------------------------------------------------------
+
+internal static class FlagsBench
+{
+    private const string Dll = "pdfium";
+    [DllImport(Dll)] private static extern void FPDF_InitLibrary();
+    [DllImport(Dll, CharSet = CharSet.Ansi)] private static extern IntPtr FPDF_LoadDocument(string path, string? password);
+    [DllImport(Dll)] private static extern IntPtr FPDF_LoadPage(IntPtr document, int index);
+    [DllImport(Dll)] private static extern float FPDF_GetPageWidthF(IntPtr page);
+    [DllImport(Dll)] private static extern float FPDF_GetPageHeightF(IntPtr page);
+    [DllImport(Dll)] private static extern IntPtr FPDFBitmap_Create(int width, int height, int alpha);
+    [DllImport(Dll)] private static extern void FPDFBitmap_FillRect(IntPtr bitmap, int left, int top, int width, int height, uint color);
+    [DllImport(Dll)] private static extern void FPDF_RenderPageBitmap(IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
+    [DllImport(Dll)] private static extern void FPDFBitmap_Destroy(IntPtr bitmap);
+    [DllImport(Dll)] private static extern void FPDF_ClosePage(IntPtr page);
+    [DllImport(Dll)] private static extern void FPDF_CloseDocument(IntPtr document);
+
+    public static int Run(Options opts)
+    {
+        var file = opts.Require("file");
+        var pageIndex = opts.Int("page", 1) - 1;
+        var scale = opts.Double("scale", 1.5);
+        FPDF_InitLibrary();
+        var doc = FPDF_LoadDocument(file, null);
+        if (doc == IntPtr.Zero) { Console.Error.WriteLine("could not open"); return 1; }
+        var page = FPDF_LoadPage(doc, pageIndex);
+        if (page == IntPtr.Zero) { Console.Error.WriteLine("could not load the page"); return 1; }
+        var w = (int)(FPDF_GetPageWidthF(page) * 96 / 72 * scale);
+        var h = (int)(FPDF_GetPageHeightF(page) * 96 / 72 * scale);
+        Console.WriteLine($"{w}x{h} px");
+        var variants = new (string Name, int Flags)[]
+        {
+            ("none", 0),
+            ("ANNOT|LCD_TEXT (what the app uses)", 0x01 | 0x02),
+            ("ANNOT only", 0x01),
+            ("LCD_TEXT only", 0x02),
+            ("ANNOT|NO_SMOOTHTEXT", 0x01 | 0x1000),
+            ("ANNOT|NO_SMOOTHIMAGE", 0x01 | 0x2000),
+            ("ANNOT|NO_SMOOTHPATH", 0x01 | 0x4000),
+            ("ANNOT|RENDER_LIMITEDIMAGECACHE", 0x01 | 0x200),
+            ("ANNOT|RENDER_FORCEHALFTONE", 0x01 | 0x400),
+            ("ANNOT|NO_NATIVETEXT", 0x01 | 0x04),
+        };
+        foreach (var (name, flags) in variants)
+        {
+            var times = new List<double>();
+            for (var i = 0; i < 3; i++)
+            {
+                var bmp = FPDFBitmap_Create(w, h, 1);
+                FPDFBitmap_FillRect(bmp, 0, 0, w, h, 0xFFFFFFFF);
+                var sw = Stopwatch.StartNew();
+                FPDF_RenderPageBitmap(bmp, page, 0, 0, w, h, 0, flags);
+                times.Add(sw.Elapsed.TotalMilliseconds);
+                FPDFBitmap_Destroy(bmp);
+            }
+            times.Sort();
+            Console.WriteLine($"{name,-40} median {times[1],8:F0} ms  (min {times[0]:F0})");
+        }
+        FPDF_ClosePage(page);
+        FPDF_CloseDocument(doc);
         return 0;
     }
 }

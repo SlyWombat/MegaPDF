@@ -392,6 +392,17 @@
                                 PointerMoved="OnPagePointerMoved"
                                 PointerExited="OnPagePointerExited">
                                 <Image Source="{x:Bind Source}" Stretch="Uniform" />
+                                <!-- A page the engine refused to rasterise says so (#93) rather than
+                                     staying a blank sheet the user cannot tell from "still loading". -->
+                                <TextBlock
+                                    Text="{x:Bind FailedMessage}"
+                                    Visibility="{x:Bind FailedVisibility}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap"
+                                    Margin="24"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <!-- Find-match highlights (issue #26); Grid panel so Margin positions each rect. -->
                                 <ItemsControl ItemsSource="{x:Bind Highlights}" IsHitTestVisible="False">
                                     <ItemsControl.ItemsPanel>

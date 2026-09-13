@@ -294,6 +294,15 @@
               <Panel>
                 <Image Source="{Binding Image}" Stretch="Fill" IsHitTestVisible="False" />
 
+                <!-- A page the engine refused to rasterise says so (#93) rather than
+                     staying a blank sheet the user cannot tell from "still loading". -->
+                <TextBlock Text="{x:Static loc:Strings.PageRenderFailed}"
+                           IsVisible="{Binding RenderFailed}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           TextAlignment="Center" TextWrapping="Wrap" Margin="24"
+                           Foreground="{DynamicResource BrandInk}" Opacity="0.7"
+                           IsHitTestVisible="False" />
+
                 <!-- Search hits drawn over the page rather than into it: the raster
                      never changes, so highlighting and clearing cost no re-render. -->
                 <ItemsControl ItemsSource="{Binding Highlights}" IsHitTestVisible="False">

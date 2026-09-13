@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Viewing;
 
 namespace MegaPDF.Avalonia.ViewModels;
 
@@ -16,12 +18,30 @@ namespace MegaPDF.Avalonia.ViewModels;
 /// opens its own page handle and mutates the document underneath, so a cached
 /// handle goes stale the moment a checkbox is ticked. Opening one per render is the
 /// cost of being able to edit at all.
+///
+/// Rasterising happens off the UI thread (#95): a poster-sized scan takes seconds
+/// to decode, and doing that inside <c>ContainerPrepared</c> froze the window for
+/// the whole of it. A render request carries a generation number; whichever
+/// request is newest when a raster arrives is the one that gets shown, and a
+/// raster for a zoom that has since changed triggers the next render itself.
 /// </summary>
 public sealed partial class PageViewModel : ObservableObject, IDisposable
 {
     private readonly IPdfDocument _document;
     private double _renderedZoom;
     private double _renderedDpiScale;
+    private double _pendingZoom = -1;
+    private double _pendingDpiScale = -1;
+    private int _renderGeneration;
+    private bool _disposed;
+
+    /// <summary>
+    /// The raster of a page too large to render at its ideal size (see
+    /// <see cref="RenderLimits"/>), kept across zoom steps and scroll-outs: past the
+    /// clamp every zoom asks for the same pixels, and below it the view scales the
+    /// same raster down, so decoding the page once is enough until an edit (#94).
+    /// </summary>
+    private WriteableBitmap? _cappedImage;
 
     internal PageViewModel(IPdfDocument document, int index, double pointWidth, double pointHeight)
     {
@@ -83,19 +103,31 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private WriteableBitmap? _image;
 
+    /// <summary>
+    /// The engine could not rasterise this page (#93). The slot says so instead of
+    /// staying a blank sheet, and stops asking until something changes.
+    /// </summary>
+    [ObservableProperty]
+    private bool _renderFailed;
+
     /// <summary>Whether the view has realised this page and it currently holds a raster.</summary>
     internal bool IsRealised => Image is not null;
 
+    /// <summary>Whether a raster is on its way for the current zoom (tests and diagnostics).</summary>
+    internal bool IsRenderPending => _pendingZoom >= 0;
+
     /// <summary>
-    /// Rasterises at the current zoom if what we have isn't already that. Cheap to call
-    /// on every scroll or zoom tick — the equality guard is what makes it so.
+    /// Rasterises at the current zoom if what we have isn't already that, or already
+    /// on its way. Cheap to call on every scroll or zoom tick — the equality guards
+    /// are what make it so.
     /// </summary>
     internal void EnsureRendered(double dpiScale)
     {
         if (Image is not null && _renderedZoom == Zoom && _renderedDpiScale == dpiScale)
             return;
-
-        Rerender(dpiScale);
+        if (_pendingZoom == Zoom && _pendingDpiScale == dpiScale)
+            return;
+        StartRender(dpiScale, invalidate: false);
     }
 
     /// <summary>
@@ -183,35 +215,156 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         return PageHitKind.None;
     }
 
-    /// <summary>Unconditional re-raster — what an edit needs, since the zoom hasn't changed.</summary>
-    internal void Rerender(double dpiScale)
+    /// <summary>
+    /// Unconditional re-raster — what an edit needs, since the zoom hasn't changed.
+    /// The current raster stays on screen until the new one arrives.
+    /// </summary>
+    internal void Rerender(double dpiScale) => StartRender(dpiScale, invalidate: true);
+
+    private void StartRender(double dpiScale, bool invalidate)
     {
-        using var page = _document.GetPage(Index);
-        var next = PageBitmap.Render(page, Zoom, dpiScale);
-        // Refreshed alongside the raster, because an edit changes both.
-        Regions = BuildRegions(page);
+        if (_disposed)
+            return;
+
+        var zoom = Zoom;
+        var generation = ++_renderGeneration;
+        _pendingZoom = zoom;
+        _pendingDpiScale = dpiScale;
+
+        if (invalidate)
+        {
+            // The page changed, so a retained raster is wrong now. It may still be
+            // the one on screen; it is disposed when the replacement lands.
+            _cappedImage = null;
+        }
+        else if (_cappedImage is { } kept)
+        {
+            // Served from the retained raster at any zoom (#94); the view scales it.
+            Apply(kept, Regions, zoom, dpiScale, generation, wasCapped: true);
+            return;
+        }
+
+        var idealWidth = PointWidth * PageBitmap.PointsToPixels * zoom * dpiScale;
+        var idealHeight = PointHeight * PageBitmap.PointsToPixels * zoom * dpiScale;
+        var capped = RenderLimits.IsCapped(idealWidth, idealHeight);
+        var (pixelWidth, pixelHeight) = RenderLimits.Fit(idealWidth, idealHeight);
+        var document = _document;
+        var index = Index;
+
+        Task.Run(() =>
+        {
+            using var page = document.GetPage(index);
+            var rendered = page.Render(pixelWidth, pixelHeight);
+            // Refreshed alongside the raster, because an edit changes both.
+            var regions = BuildRegions(page);
+            return (rendered, regions);
+        }).ContinueWith(task => Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed || generation != _renderGeneration)
+                return; // superseded by a newer request, or the document is gone
+            if (task.IsFaulted)
+            {
+                Console.Error.WriteLine($"page {index + 1}: render failed: {task.Exception?.GetBaseException().Message}");
+                _pendingZoom = -1;
+                _pendingDpiScale = -1;
+                RenderFailed = true;
+                return;
+            }
+            var (rendered, regions) = task.Result;
+            Apply(PageBitmap.FromRenderedPage(rendered, dpiScale), regions, zoom, dpiScale, generation, capped);
+        }), TaskScheduler.Default);
+    }
+
+    /// <summary>UI thread: shows a raster, then chases the zoom if it moved while rendering.</summary>
+    private void Apply(WriteableBitmap next, IReadOnlyList<(PdfRect, PageHitKind)> regions,
+                       double zoom, double dpiScale, int generation, bool wasCapped)
+    {
+        if (_disposed || generation != _renderGeneration)
+            return;
 
         var previous = Image;
         Image = next;
-        _renderedZoom = Zoom;
+        Regions = regions;
+        RenderFailed = false;
+        _renderedZoom = zoom;
         _renderedDpiScale = dpiScale;
-        previous?.Dispose();
+        _pendingZoom = -1;
+        _pendingDpiScale = -1;
+        if (wasCapped)
+        {
+            var displaced = _cappedImage;
+            _cappedImage = next;
+            if (!ReferenceEquals(displaced, next) && !ReferenceEquals(displaced, previous))
+                displaced?.Dispose();
+            RetainedRasters.Touch(this);
+        }
+        if (!ReferenceEquals(previous, next) && !ReferenceEquals(previous, _cappedImage))
+            previous?.Dispose();
+
+        // The zoom moved while this was rendering; the page is on screen, so it
+        // follows up itself rather than waiting for a scroll to notice.
+        if (Zoom != zoom)
+            EnsureRendered(dpiScale);
     }
 
     /// <summary>Drops the raster but keeps the page, for when it scrolls out of view.</summary>
     internal void Unrender()
     {
+        _renderGeneration++; // an in-flight raster for a page nobody is looking at is dropped
+        _pendingZoom = -1;
+        _pendingDpiScale = -1;
         var previous = Image;
         Image = null;
         _renderedZoom = 0;
-        previous?.Dispose();
+        if (!ReferenceEquals(previous, _cappedImage))
+            previous?.Dispose();
+    }
+
+    /// <summary>Lets go of the retained raster; what is on screen stays until it is replaced.</summary>
+    private void ReleaseRetained()
+    {
+        var capped = _cappedImage;
+        _cappedImage = null;
+        if (capped is not null && !ReferenceEquals(capped, Image))
+            capped.Dispose();
     }
 
     public void Dispose()
     {
+        _disposed = true;
+        _renderGeneration++;
+        RetainedRasters.Forget(this);
         var image = Image;
         Image = null;
+        var capped = _cappedImage;
+        _cappedImage = null;
         image?.Dispose();
+        if (!ReferenceEquals(capped, image))
+            capped?.Dispose();
+    }
+
+    /// <summary>
+    /// Bounds how many clamped rasters stay alive across the whole app: each is up
+    /// to 128 MB, and a scanned book could otherwise retain one per page. UI thread only.
+    /// </summary>
+    private static class RetainedRasters
+    {
+        private const int Capacity = 2;
+        private static readonly LinkedList<PageViewModel> Recent = new();
+
+        public static void Touch(PageViewModel page)
+        {
+            Recent.Remove(page);
+            Recent.AddFirst(page);
+            while (Recent.Count > Capacity)
+            {
+                var oldest = Recent.Last!.Value;
+                Recent.RemoveLast();
+                oldest.ReleaseRetained();
+            }
+        }
+
+        public static void Forget(PageViewModel page) => Recent.Remove(page);
     }
 }
 

@@ -323,6 +323,9 @@ public static partial class Strings
     /// <summary>Could not read that signature.</summary>
     public static string CouldNotReadSignature => Get("CouldNotReadSignature");
 
+    /// <summary>This page couldn't be displayed.</summary>
+    public static string PageRenderFailed => Get("PageRenderFailed");
+
     /// <summary>Could not read that image.</summary>
     public static string CouldNotReadImage => Get("CouldNotReadImage");
 

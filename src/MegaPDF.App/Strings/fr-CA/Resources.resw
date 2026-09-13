@@ -352,6 +352,10 @@
   <data name="CouldNotOpenTitle" xml:space="preserve">
     <value>Impossible d'ouvrir ce fichier</value>
   </data>
+  <data name="PageRenderFailed" xml:space="preserve">
+    <value>Cette page n'a pas pu être affichée.</value>
+    <comment>Shown in a page's slot when the engine could not rasterise it (#93)</comment>
+  </data>
   <data name="CouldNotAddSignatureTitle" xml:space="preserve">
     <value>Impossible d'ajouter cette signature</value>
   </data>

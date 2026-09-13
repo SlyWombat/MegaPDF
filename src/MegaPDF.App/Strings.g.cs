@@ -52,6 +52,9 @@ public static partial class Strings
     /// <summary>Couldn't open that file</summary>
     public static string CouldNotOpenTitle => Get("CouldNotOpenTitle");
 
+    /// <summary>This page couldn't be displayed.</summary>
+    public static string PageRenderFailed => Get("PageRenderFailed");
+
     /// <summary>Couldn't add that signature</summary>
     public static string CouldNotAddSignatureTitle => Get("CouldNotAddSignatureTitle");
 
