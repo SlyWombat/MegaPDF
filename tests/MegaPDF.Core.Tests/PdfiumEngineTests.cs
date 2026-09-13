@@ -1,4 +1,5 @@
 using System.Text;
+using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
 using Xunit;
 
@@ -66,6 +67,83 @@ public class PdfiumEngineTests : IDisposable
         Assert.Equal(1, reopened.PageCount);
         using var page = reopened.GetPage(0);
         Assert.Equal(612, page.Width, 1);
+    }
+
+    // --- Save (#97): a full rewrite, and one that must not balloon the file ---
+
+    [Fact]
+    public void Save_Unmodified_DoesNotAppendACopyOfTheDocument()
+    {
+        // Guards against switching to FPDF_INCREMENTAL by reflex: PDFium's incremental
+        // mode appends every loaded object, so an unmodified save came back as the
+        // original plus a whole rewrite (1.97x at the median over the corpus, #97).
+        // A rewrite of this sample is smaller than the sample itself plus the sample.
+        var path = WriteSamplePdf();
+        var original = File.ReadAllBytes(path);
+
+        using var saved = new MemoryStream();
+        using (var doc = _engine.Open(path))
+        {
+            using (var page = doc.GetPage(0))
+                _ = page.Width; // the apps' open-time size pass loads every page
+            doc.Save(saved);
+        }
+
+        var bytes = saved.ToArray();
+        Assert.True(bytes.Length < original.Length * 2, $"save grew the {original.Length}-byte sample to {bytes.Length} bytes");
+        Assert.False(bytes.Length > original.Length && bytes.AsSpan(0, original.Length).SequenceEqual(original),
+            "the output is the original with a copy of the document appended — the incremental trap");
+
+        var reopenedPath = Path.Combine(_dir, "resaved.pdf");
+        File.WriteAllBytes(reopenedPath, bytes);
+        using var reopened = _engine.Open(reopenedPath);
+        Assert.Equal(1, reopened.PageCount);
+    }
+
+    [Fact]
+    public void Save_AfterAnEdit_ReopensWithTheEdit()
+    {
+        var path = WriteSamplePdf();
+        var savedPath = Path.Combine(_dir, "edited.pdf");
+
+        using (var doc = _engine.Open(path))
+        {
+            using (var page = doc.GetPage(0))
+                page.AppendTextBox("added later", 12, new PdfPoint(72, 100));
+            using var stream = File.Create(savedPath);
+            doc.Save(stream);
+        }
+
+        using var reopened = _engine.Open(savedPath);
+        using var reopenedPage = reopened.GetPage(0);
+        var box = Assert.Single(reopenedPage.GetTextBoxes());
+        Assert.Equal("added later", box.Text);
+    }
+
+    [Fact]
+    public void Save_ToANonSeekableStream_StillWrites()
+    {
+        var path = WriteSamplePdf();
+        using var sink = new MemoryStream();
+        using var forwardOnly = new ForwardOnlyStream(sink);
+        using (var doc = _engine.Open(path))
+            doc.Save(forwardOnly);
+        Assert.True(sink.Length > 0);
+    }
+
+    /// <summary>A write-only, non-seekable wrapper — what a sandboxed host stream can look like.</summary>
+    private sealed class ForwardOnlyStream(Stream inner) : Stream
+    {
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => true;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() => inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
     }
 
     [Fact]

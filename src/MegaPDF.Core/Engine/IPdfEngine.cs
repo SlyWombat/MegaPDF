@@ -18,8 +18,12 @@ public interface IPdfDocument : IDisposable
     IPdfPage GetPage(int pageIndex);
 
     /// <summary>
-    /// Writes the document to <paramref name="target"/>, using an incremental
-    /// (append-only) update when possible, falling back to a full rewrite (SDD §3.4).
+    /// Writes the document to <paramref name="target"/> as a full rewrite. SDD §3.4
+    /// asks for an incremental (append-only) update where the engine supports it;
+    /// PDFium's incremental mode appends every object the document has loaded rather
+    /// than the ones that changed, which after the open-time size pass is the whole
+    /// document, so it roughly doubles the file (#97, measured on the corpus). Until
+    /// there is a writer with change tracking, the rewrite is the smaller output.
     /// Callers own atomicity — see <see cref="Services.AtomicFileWriter"/>.
     /// </summary>
     void Save(Stream target);
