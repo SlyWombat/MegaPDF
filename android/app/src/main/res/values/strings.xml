@@ -106,6 +106,10 @@
     <string name="signature_delete_title">Delete %1$s?</string>
     <string name="signature_delete_body">This cannot be undone.</string>
     <!-- Default library name; persisted at creation time, so it keeps the language it was created in. -->
+    <string name="type_signature">Type</string>
+    <string name="type_signature_title">Type your name</string>
+    <string name="type_signature_preview_hint">Your name, as a signature</string>
+    <string name="type_signature_add">Add</string>
     <string name="signature_default_name">Signature %1$d</string>
     <string name="signature_added">Signature added</string>
     <string name="signature_import_failed">Couldn\'t import the signature.</string>

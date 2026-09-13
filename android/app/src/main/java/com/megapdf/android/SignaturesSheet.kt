@@ -84,6 +84,7 @@ fun SignaturesSheet(
     loadBitmap: suspend (SignatureEntry) -> Bitmap?,
     onPick: (SignatureEntry) -> Unit,
     onDraw: () -> Unit,
+    onType: () -> Unit,
     onAddFromPhoto: () -> Unit,
     onRename: (id: String, name: String) -> Unit,
     onDelete: (id: String) -> Unit,
@@ -168,7 +169,15 @@ fun SignaturesSheet(
                 ) {
                     Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.draw))
+                    Text(stringResource(R.string.draw), maxLines = 1)
+                }
+                FilledTonalButton(
+                    onClick = { dismissThen(onType) },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(KeyboardIcon, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.type_signature), maxLines = 1)
                 }
                 FilledTonalButton(
                     onClick = { dismissThen(onAddFromPhoto) },
@@ -176,7 +185,7 @@ fun SignaturesSheet(
                 ) {
                     Icon(PhotoIcon, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.add_from_photos))
+                    Text(stringResource(R.string.add_from_photos), maxLines = 1)
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -315,6 +324,77 @@ private fun SignatureCard(
  * glyph is not worth `material-icons-extended` (same reasoning as the undo
  * arrow in ViewerScreen.kt), so it is drawn from the standard 24dp path.
  */
+/** The Material "keyboard" glyph for Type, drawn from its standard 24dp path for the same reason. */
+private val KeyboardIcon: ImageVector = materialIcon(name = "Filled.Keyboard") {
+    materialPath {
+        moveTo(20.0f, 5.0f)
+        horizontalLineTo(4.0f)
+        curveToRelative(-1.1f, 0.0f, -1.99f, 0.9f, -1.99f, 2.0f)
+        lineTo(2.0f, 17.0f)
+        curveToRelative(0.0f, 1.1f, 0.9f, 2.0f, 2.0f, 2.0f)
+        horizontalLineToRelative(16.0f)
+        curveToRelative(1.1f, 0.0f, 2.0f, -0.9f, 2.0f, -2.0f)
+        verticalLineTo(7.0f)
+        curveToRelative(0.0f, -1.1f, -0.9f, -2.0f, -2.0f, -2.0f)
+        close()
+        moveTo(11.0f, 8.0f)
+        horizontalLineToRelative(2.0f)
+        verticalLineToRelative(2.0f)
+        horizontalLineToRelative(-2.0f)
+        close()
+        moveTo(11.0f, 11.0f)
+        horizontalLineToRelative(2.0f)
+        verticalLineToRelative(2.0f)
+        horizontalLineToRelative(-2.0f)
+        close()
+        moveTo(8.0f, 8.0f)
+        horizontalLineToRelative(2.0f)
+        verticalLineToRelative(2.0f)
+        horizontalLineTo(8.0f)
+        close()
+        moveTo(8.0f, 11.0f)
+        horizontalLineToRelative(2.0f)
+        verticalLineToRelative(2.0f)
+        horizontalLineTo(8.0f)
+        close()
+        moveTo(7.0f, 13.0f)
+        horizontalLineTo(5.0f)
+        verticalLineToRelative(-2.0f)
+        horizontalLineToRelative(2.0f)
+        close()
+        moveTo(7.0f, 10.0f)
+        horizontalLineTo(5.0f)
+        verticalLineTo(8.0f)
+        horizontalLineToRelative(2.0f)
+        close()
+        moveTo(16.0f, 17.0f)
+        horizontalLineTo(8.0f)
+        verticalLineToRelative(-2.0f)
+        horizontalLineToRelative(8.0f)
+        close()
+        moveTo(16.0f, 13.0f)
+        horizontalLineToRelative(-2.0f)
+        verticalLineToRelative(-2.0f)
+        horizontalLineToRelative(2.0f)
+        close()
+        moveTo(16.0f, 10.0f)
+        horizontalLineToRelative(-2.0f)
+        verticalLineTo(8.0f)
+        horizontalLineToRelative(2.0f)
+        close()
+        moveTo(19.0f, 13.0f)
+        horizontalLineToRelative(-2.0f)
+        verticalLineToRelative(-2.0f)
+        horizontalLineToRelative(2.0f)
+        close()
+        moveTo(19.0f, 10.0f)
+        horizontalLineToRelative(-2.0f)
+        verticalLineTo(8.0f)
+        horizontalLineToRelative(2.0f)
+        close()
+    }
+}
+
 private val PhotoIcon: ImageVector = materialIcon(name = "Filled.Image") {
     materialPath {
         moveTo(21.0f, 19.0f)

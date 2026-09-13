@@ -163,6 +163,7 @@ fun ViewerScreen(
     androidx.activity.compose.BackHandler { if (searchOpen) closeSearch() else requestClose() }
 
     var drawDialogOpen by remember { mutableStateOf(false) }
+    var typeDialogOpen by remember { mutableStateOf(false) }
     LaunchedEffect(screenshotSheet) {
         if (screenshotSheet == "sign") signDialogOpen = true
         if (screenshotSheet == "draw") drawDialogOpen = true
@@ -178,6 +179,7 @@ fun ViewerScreen(
             loadBitmap = loadSignatureBitmap,
             onPick = onStartPlacement,
             onDraw = { drawDialogOpen = true },
+            onType = { typeDialogOpen = true },
             onAddFromPhoto = onAddSignature,
             onRename = onRenameSignature,
             onDelete = onDeleteSignature,
@@ -242,6 +244,15 @@ fun ViewerScreen(
             onSave = onSaveDrawnSignature,
             onDismiss = { drawDialogOpen = false; signDialogOpen = true },
             screenshotMode = screenshotSheet == "draw",
+        )
+    }
+
+    if (typeDialogOpen) {
+        // Typed names take the drawn-signature path (#101): a transparent bitmap
+        // that gets trimmed to its ink and stored like any other.
+        TypeSignatureDialog(
+            onSave = { typeDialogOpen = false; signDialogOpen = true; onSaveDrawnSignature(it) },
+            onDismiss = { typeDialogOpen = false; signDialogOpen = true },
         )
     }
 
