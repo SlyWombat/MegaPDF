@@ -20,6 +20,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(REPO ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
+option(MEGAPDF_CORE_TESTS "Build and register the core test target (#104)" OFF)
+option(MEGAPDF_ASAN "AddressSanitizer for the core and its tests (GCC/Clang only)" OFF)
+
 add_library(megapdf_core SHARED megapdf_core.cpp megapdf_core.h)
 # One header set for every platform: the prebuilts are all the same pdfium-binaries
 # release (libs/pdfium/*/VERSION), and only the Android tree vendors the headers.
@@ -66,14 +69,16 @@ if(WIN32)
     endif()
 
     target_compile_definitions(megapdf_core PRIVATE MEGAPDF_CORE_BUILD)
-    target_link_libraries(megapdf_core PRIVATE ${PDFIUM_LIB})
+    set(PDFIUM_LINK ${PDFIUM_LIB})
+    set(PDFIUM_RUNTIME ${PDFIUM_DLL})
 elseif(APPLE)
     # tools/fetch-pdfium-mac.sh puts the universal prebuilt here (gitignored).
     set(PDFIUM_MAC ${REPO}/libs/pdfium/mac-univ)
     if(NOT EXISTS ${PDFIUM_MAC}/lib/libpdfium.dylib)
         message(FATAL_ERROR "libs/pdfium/mac-univ is missing; run tools/fetch-pdfium-mac.sh first")
     endif()
-    target_link_libraries(megapdf_core PRIVATE ${PDFIUM_MAC}/lib/libpdfium.dylib)
+    set(PDFIUM_LINK ${PDFIUM_MAC}/lib/libpdfium.dylib)
+    set(PDFIUM_RUNTIME ${PDFIUM_LINK})
     # Both dylibs ship side by side in Contents/MacOS. The prebuilt's install name
     # is "./libpdfium.dylib", which dyld would resolve against the working
     # directory; rewrite our reference to load it from beside us instead.
@@ -90,5 +95,52 @@ else()
     if(NOT EXISTS ${PDFIUM_LINUX}/lib/libpdfium.so)
         message(FATAL_ERROR "libs/pdfium/linux-x64 is missing (fetch the pinned pdfium-binaries linux-x64 build)")
     endif()
-    target_link_libraries(megapdf_core PRIVATE ${PDFIUM_LINUX}/lib/libpdfium.so)
+    set(PDFIUM_LINK ${PDFIUM_LINUX}/lib/libpdfium.so)
+    set(PDFIUM_RUNTIME ${PDFIUM_LINK})
+    set_target_properties(megapdf_core PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+endif()
+
+target_link_libraries(megapdf_core PRIVATE ${PDFIUM_LINK})
+
+if(MEGAPDF_ASAN AND NOT MSVC)
+    target_compile_options(megapdf_core PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+    target_link_options(megapdf_core PRIVATE -fsanitize=address)
+endif()
+
+# ---------------------------------------------------------------------------
+# Test target (#104): the assertions the platform suites make, run against the
+# implementation itself on every CI OS. Needs the generated fixtures and the
+# #98 schematic; see .github/workflows/core-tests.yml for the invocation.
+# ---------------------------------------------------------------------------
+if(MEGAPDF_CORE_TESTS)
+    enable_testing()
+    set(MEGAPDF_FIXTURES_DIR "" CACHE PATH "Output directory of tools/gen_test_fixtures.py")
+    set(MEGAPDF_SCHEMATIC "${REPO}/tests/MegaPDF.Core.Tests/Fixtures/microbit-v2-schematic.pdf"
+        CACHE FILEPATH "The #98 search canary")
+    if(MEGAPDF_FIXTURES_DIR STREQUAL "")
+        message(FATAL_ERROR "MEGAPDF_CORE_TESTS needs -DMEGAPDF_FIXTURES_DIR=<dir written by tools/gen_test_fixtures.py>")
+    endif()
+
+    add_executable(megapdf_core_tests tests/core_tests.cpp)
+    target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/libs/pdfium/android/include)
+    target_link_libraries(megapdf_core_tests PRIVATE megapdf_core ${PDFIUM_LINK})
+    if(MEGAPDF_ASAN AND NOT MSVC)
+        target_compile_options(megapdf_core_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+        target_link_options(megapdf_core_tests PRIVATE -fsanitize=address)
+    endif()
+
+    # pdfium beside the test binary, and the binary looking beside itself.
+    add_custom_command(TARGET megapdf_core_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_core_tests>)
+    if(APPLE)
+        set_target_properties(megapdf_core_tests PROPERTIES BUILD_RPATH "@loader_path")
+        add_custom_command(TARGET megapdf_core_tests POST_BUILD
+            COMMAND install_name_tool -change ./libpdfium.dylib @loader_path/libpdfium.dylib $<TARGET_FILE:megapdf_core_tests>)
+    elseif(UNIX)
+        set_target_properties(megapdf_core_tests PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+
+    add_test(NAME core
+        COMMAND megapdf_core_tests ${MEGAPDF_FIXTURES_DIR} ${MEGAPDF_SCHEMATIC}
+        WORKING_DIRECTORY $<TARGET_FILE_DIR:megapdf_core_tests>)
 endif()

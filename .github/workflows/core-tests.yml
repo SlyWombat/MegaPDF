@@ -1,0 +1,79 @@
+# The shared engine core, built and tested where the code lives (#104, ADR-003):
+# the same assertions the platform suites make, run against core/ itself on all
+# three operating systems, with AddressSanitizer on Linux. A divergence in the
+# core fails here, on the same commit, instead of three platform jobs later.
+name: Core tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'core/**'
+      - 'tools/fetch-pdfium-linux.sh'
+      - 'tools/fetch-pdfium-mac.sh'
+      - 'tools/gen_test_fixtures.py'
+      - 'tests/MegaPDF.Core.Tests/Fixtures/**'
+      - '.github/workflows/core-tests.yml'
+  pull_request:
+    paths:
+      - 'core/**'
+      - 'tools/fetch-pdfium-linux.sh'
+      - 'tools/fetch-pdfium-mac.sh'
+      - 'tools/gen_test_fixtures.py'
+      - 'tests/MegaPDF.Core.Tests/Fixtures/**'
+      - '.github/workflows/core-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  core:
+    name: core on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            fetch: tools/fetch-pdfium-linux.sh
+            asan: 'ON'
+            generator: -G Ninja
+          - os: macos-latest
+            fetch: tools/fetch-pdfium-mac.sh
+            asan: 'OFF'
+            generator: -G Ninja
+          - os: windows-latest
+            fetch: ''
+            asan: 'OFF'
+            generator: -A x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ninja
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build; else brew install ninja; fi
+
+      - name: Fetch the pinned PDFium prebuilt
+        if: matrix.fetch != ''
+        shell: bash
+        run: ${{ matrix.fetch }}
+
+      - name: Generate fixtures
+        shell: bash
+        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S core -B "$RUNNER_TEMP/core-build" ${{ matrix.generator }} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DMEGAPDF_CORE_TESTS=ON -DMEGAPDF_ASAN=${{ matrix.asan }} \
+            -DMEGAPDF_FIXTURES_DIR="$RUNNER_TEMP/fixtures"
+
+      - name: Build
+        shell: bash
+        run: cmake --build "$RUNNER_TEMP/core-build" --config Debug
+
+      - name: Test
+        shell: bash
+        run: cd "$RUNNER_TEMP/core-build" && ctest -C Debug --output-on-failure

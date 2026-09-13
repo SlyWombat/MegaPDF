@@ -72,3 +72,6 @@ src/MegaPDF.Avalonia/Strings/Strings.qps-ploc.resx
 
 # Native build output of the shared engine core (tools/build-core.*)
 core/build/
+
+# Linux pdfium prebuilt for the core test target (tools/fetch-pdfium-linux.sh)
+libs/pdfium/linux-x64/
