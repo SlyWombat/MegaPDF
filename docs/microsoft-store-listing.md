@@ -340,9 +340,14 @@ caption each:
 | `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
 | `05-add-text.png` | Type on a blank line, in the size and face that matches the form. |
 
-All five shots were re-taken 2026-09-09 from the packaged **1.7.0** build on
-GPD-DAVE, so they match the binary being submitted and show the size and font
-pickers (#43). `05-add-text.png` now exists.
+The English five were re-taken 2026-09-13 on GPD-DAVE from the unpackaged
+Release build of main (the rig's `MEGAPDF_EXE` mode, see its README) after the
+signature picker redesign (#100); shot 4 came from the installed Store 1.7.0
+package because the unpackaged build's file pickers do not open. The French sets
+are still the 2026-09-09/10 captures: none of the five scenes changed, and the
+unpackaged build cannot switch its XAML chrome to French (no package identity,
+so `PrimaryLanguageOverride` is a no-op) while the live Store 1.7.0 package
+ignores the Language setting altogether.
 
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the

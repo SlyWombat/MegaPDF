@@ -9,6 +9,18 @@ this one needs a real Windows desktop, so it runs locally.
 Output goes to `artifacts/store/screenshots/` (gitignored — these are upload
 assets, not repo content). Override with `$env:MEGAPDF_SHOTDIR`.
 
+## Driving a build that is not installed
+
+Set `MEGAPDF_EXE` to an unpackaged `MegaPDF.exe` (the Release build under
+`src\MegaPDF.App\bin\...\win-x64`) and `Start-App` launches that instead of the
+Store package; `MEGAPDF_ARGS` adds launch arguments, and the first argument may
+be a PDF path, which is how to open a document without the file picker: the
+unpackaged build's `FileOpenPicker` never appears (no package identity), so
+`Send-Path` finds nothing and `Shot-Shrink.ps1` cannot run against it. For the
+Shrink shot use the installed package, driven by coordinates and keyboard:
+UI Automation cannot see the packaged app's buttons from a WSL-launched
+PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
+
 ## Run order
 
 Each script drives one step against the already-running app, so you can inspect
