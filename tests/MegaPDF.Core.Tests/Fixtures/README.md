@@ -1,0 +1,11 @@
+# Real-document fixtures
+
+Binary PDFs that the synthetic generator (`tools/gen_test_fixtures.py`) cannot
+stand in for. Each one is public and redistributable; say where it came from
+when adding another.
+
+| file | source | why it is here |
+|---|---|---|
+| `microbit-v2-schematic.pdf` | micro:bit V2.2.1 (nRF52820) schematic as published by the Micro:bit Educational Foundation with the open-hardware design files for the board | #98: the corpus stress run once returned 13 matches for "the" on this file on macOS, and 12 on every other run on both platforms. `SearchParityTests` asserts 4 / 6 / 2 per page so every CI run is another sample. The same bytes sit in `ios/MegaPDFTests/` and `android/engine/src/androidTest/assets/` for the mobile engine tests. |
+
+These are copied to the test output by the project file (`Fixtures\**`).
