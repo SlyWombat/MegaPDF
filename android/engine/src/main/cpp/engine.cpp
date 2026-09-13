@@ -431,7 +431,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jl
                                                         jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
     const megapdf_rect square{l, b, r, t};
-    const std::vector<jchar> wide = JavaChars(env, id);
+    std::vector<jchar> wide = JavaChars(env, id);
+    wide.push_back(0);   // the core wants a NUL-terminated id
     return megapdf_add_check_mark(p->core, &square, MEGAPDF_MARK_CROSS, wide.data()) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -711,7 +712,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddImageStamp(JNIEnv* env, jobject, j
         env->ReleaseIntArrayElements(pixels, src, JNI_ABORT);
     }
     const megapdf_rect bounds{l, b, r, t};
-    const std::vector<jchar> wide = JavaChars(env, id);
+    std::vector<jchar> wide = JavaChars(env, id);
+    wide.push_back(0);   // the core wants a NUL-terminated id
     return megapdf_add_image_stamp(p->core, bgra.data(), pw, ph, &bounds, wide.data()) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
