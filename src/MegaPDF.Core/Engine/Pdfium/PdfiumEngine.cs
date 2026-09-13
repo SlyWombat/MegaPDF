@@ -622,93 +622,52 @@ internal sealed class PdfiumPage : IPdfPage
     public DetachedTextRun DetachTextRun(PdfTextRun run)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, run.ObjectIndex);
-            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-                throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
-            return DetachObject(obj);
-        }
+        if (CoreNative.megapdf_object_type(_core, run.ObjectIndex) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
+            throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
+        return DetachObject(run.ObjectIndex);
     }
 
     public DetachedTextRun DetachObjectAt(int objectIndex)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
-            if (obj == IntPtr.Zero)
-                throw new InvalidOperationException($"No page object at index {objectIndex}.");
-            return DetachObject(obj);
-        }
+        if (CoreNative.megapdf_object_type(_core, objectIndex) < 0)
+            throw new InvalidOperationException($"No page object at index {objectIndex}.");
+        return DetachObject(objectIndex);
     }
 
-    private DetachedTextRun DetachObject(IntPtr obj)
+    private DetachedTextRun DetachObject(int objectIndex)
     {
-        if (PdfiumNative.FPDFPage_RemoveObject(_handle, obj) == 0)
+        // The core removes the object and keeps it alive for a possible undo (#109);
+        // a handle never restored is freed when the document closes.
+        var handle = CoreNative.megapdf_detach_object(_core, objectIndex);
+        if (handle == IntPtr.Zero)
             throw new InvalidOperationException("Could not remove the object.");
-        GenerateContent();
-        // Ownership transferred to us; kept alive for a possible undo.
-        return new DetachedTextRun(obj);
+        return new DetachedTextRun(handle);
     }
-
-    private const string WhiteoutMarkName = "MegaPDFWhiteout";
 
     public int AppendWhiteout(PdfRect bounds)
     {
         ThrowIfDisposed();
-        var left = (float)UserX(bounds.X);
-        var right = (float)UserX(bounds.Right);
-        var top = (float)UserY(bounds.Y);
-        var bottom = (float)UserY(bounds.Bottom);
-
-        lock (PdfiumLibrary.Lock)
-        {
-            var path = PdfiumNative.FPDFPageObj_CreateNewPath(left, bottom);
-            PdfiumNative.FPDFPath_LineTo(path, right, bottom);
-            PdfiumNative.FPDFPath_LineTo(path, right, top);
-            PdfiumNative.FPDFPath_LineTo(path, left, top);
-            PdfiumNative.FPDFPath_LineTo(path, left, bottom);
-            PdfiumNative.FPDFPageObj_SetFillColor(path, 0xFF, 0xFF, 0xFF, 0xFF);
-            PdfiumNative.FPDFPath_SetDrawMode(path, fillMode: 1, stroke: 0);
-            PdfiumNative.FPDFPageObj_AddMark(path, WhiteoutMarkName);
-
-            var index = PdfiumNative.FPDFPage_CountObjects(_handle);
-            if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, path, (nuint)index) == 0)
-            {
-                PdfiumNative.FPDFPageObj_Destroy(path);
-                throw new InvalidOperationException("Could not place the whiteout.");
-            }
-            GenerateContent();
-            return index;
-        }
+        var rect = ViewToCrop(bounds);
+        if (CoreNative.megapdf_add_whiteout(_core, ref rect, out var index) != 0)
+            throw new InvalidOperationException("Could not place the whiteout.");
+        return index;
     }
 
     public IReadOnlyList<(int ObjectIndex, PdfRect Bounds)> GetWhiteouts()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var whiteouts = new List<(int, PdfRect)>();
-            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
-            for (var i = 0; i < count; i++)
-            {
-                var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
-                if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_PATH)
-                    continue;
-                if (!HasWhiteoutMark(obj))
-                    continue;
-                if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
-                    continue;
-                whiteouts.Add((i, new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom)));
-            }
-            return whiteouts;
-        }
+        var count = (int)CoreNative.megapdf_whiteouts(_core, null, 0);
+        if (count == 0)
+            return [];
+        var buffer = new CoreNative.ObjectRect[count];
+        var filled = (int)CoreNative.megapdf_whiteouts(_core, buffer, (nuint)count);
+        var whiteouts = new List<(int, PdfRect)>(filled);
+        for (var i = 0; i < filled; i++)
+            whiteouts.Add((buffer[i].ObjectIndex, CropToView(buffer[i].Bounds.Left, buffer[i].Bounds.Bottom, buffer[i].Bounds.Right, buffer[i].Bounds.Top)));
+        return whiteouts;
     }
 
-    private static bool HasWhiteoutMark(IntPtr obj) => HasMark(obj, WhiteoutMarkName);
-
-    /// <summary>True when the object carries a MegaPDF page-object mark with the given name.</summary>
     /// <summary>
     /// The `id` carried by the object's MegaPDFTextBox mark (SDD §6.2 contract 4),
     /// or null when it has none — boxes written before the param existed.
@@ -771,34 +730,13 @@ internal sealed class PdfiumPage : IPdfPage
         if (!StandardTextBoxFonts.IsSupported(fontName))
             throw new ArgumentOutOfRangeException(nameof(fontName), fontName,
                 "Text boxes are limited to the three standard faces (#43).");
-        lock (PdfiumLibrary.Lock)
-        {
-            var index = PdfiumNative.FPDFPage_CountObjects(_handle);
-            InsertTextRun(index, text, fontName, fontSize,
-                new PdfRect(topLeft.X, topLeft.Y, 0, fontSize));
-            // Tag it so it reads as a movable MegaPDF text box, not ordinary body text.
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, index);
-            if (obj != IntPtr.Zero)
-            {
-                var mark = PdfiumNative.FPDFPageObj_AddMark(obj, TextBoxMarkName);
-                // SDD §6.2 contract 4: the id is how the mobile apps address a box,
-                // since page-object indices shift. Windows still works by index
-                // internally; this is written so a box created here is addressable
-                // on a phone.
-                if (mark != IntPtr.Zero)
-                {
-                    PdfiumNative.FPDFPageObjMark_SetStringParam(
-                        _document, obj, mark, TextBoxIdKey, $"text:{Guid.NewGuid()}");
-                    // The face the user picked, recorded rather than inferred: pdfium
-                    // is free to normalise a standard font's reported name, and the
-                    // cross-platform contract has to be exactly what was chosen (#43).
-                    PdfiumNative.FPDFPageObjMark_SetStringParam(
-                        _document, obj, mark, TextBoxFontKey, fontName);
-                }
-                GenerateContent();
-            }
-            return index;
-        }
+        // The baseline sits one font size below the top-left the caller gave; the
+        // core writes the MegaPDFTextBox mark with the id and the face (#109).
+        var id = $"text:{Guid.NewGuid()}";
+        if (CoreNative.megapdf_add_text_box(_core, -1, text, fontName, fontSize,
+                topLeft.X, Height - (topLeft.Y + fontSize), id, out var index) != 0)
+            throw new InvalidOperationException("Could not place the text box.");
+        return index;
     }
 
     /// <summary>MegaPDF-added text boxes on this page, as their underlying text runs.</summary>
@@ -823,36 +761,17 @@ internal sealed class PdfiumPage : IPdfPage
     public void MoveTextBox(int objectIndex, PdfRect newBounds)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
-            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-                throw new InvalidOperationException($"Object {objectIndex} is no longer a text object.");
-            if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var _, out var _, out var top) == 0)
-                throw new InvalidOperationException("Could not read the text box bounds.");
-
-            // Translate in place: page space is top-left, PDF space bottom-left, so a
-            // downward move (larger Y) is a smaller F. Keeps scale/rotation untouched.
-            var currentX = left;
-            var currentY = ViewY(top);
-            if (PdfiumNative.FPDFPageObj_GetMatrix(obj, out var matrix) == 0)
-                throw new InvalidOperationException("Could not read the text box matrix.");
-            matrix.E += (float)(newBounds.X - currentX);
-            matrix.F -= (float)(newBounds.Y - currentY);
-            PdfiumNative.FPDFPageObj_SetMatrix(obj, ref matrix);
-            GenerateContent();
-        }
+        // Translate in place so the bounds' bottom-left lands on the target (the core
+        // keeps scale and rotation); callers pass bounds of the box's own size.
+        if (CoreNative.megapdf_move_text_box(_core, objectIndex, newBounds.X, Height - newBounds.Bottom) != 0)
+            throw new InvalidOperationException($"Object {objectIndex} is no longer a text object.");
     }
 
     public void RestoreTextRun(DetachedTextRun detached, int objectIndex)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, detached.Handle, (nuint)objectIndex) == 0)
-                throw new InvalidOperationException("Could not restore the text.");
-            GenerateContent();
-        }
+        if (CoreNative.megapdf_restore_object(_core, detached.Handle, objectIndex) != 0)
+            throw new InvalidOperationException("Could not restore the text.");
     }
 
     public void InsertStyledTextBox(int objectIndex, string text, string fontName,
@@ -862,39 +781,11 @@ internal sealed class PdfiumPage : IPdfPage
         if (!StandardTextBoxFonts.IsSupported(fontName))
             throw new ArgumentOutOfRangeException(nameof(fontName), fontName,
                 "Text boxes are limited to the three standard faces (#43).");
-
-        // Monitor is reentrant, so the nested engine calls below are safe.
-        lock (PdfiumLibrary.Lock)
-        {
-            // InsertTextRun reads bounds.Bottom as the baseline, the way AppendTextBox
-            // uses it; the true bounds are normalised below.
-            InsertTextRun(objectIndex, text, fontName, fontSize,
-                new PdfRect(anchor.X, anchor.Y - fontSize, 0, fontSize));
-
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
-            if (obj == IntPtr.Zero)
-                throw new InvalidOperationException("The restyled text box went missing.");
-
-            var mark = PdfiumNative.FPDFPageObj_AddMark(obj, TextBoxMarkName);
-            if (mark != IntPtr.Zero)
-            {
-                PdfiumNative.FPDFPageObjMark_SetStringParam(_document, obj, mark, TextBoxIdKey, id);
-                PdfiumNative.FPDFPageObjMark_SetStringParam(
-                    _document, obj, mark, TextBoxFontKey, fontName);
-            }
-            GenerateContent();
-
-            // Normalise onto the bounds anchor: InsertTextRun placed the baseline, and
-            // GetTextBoxes/MoveTextBox both speak bounds. Without this a 12pt → 18pt
-            // restyle drops by the extra descender depth.
-            if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom,
-                                                   out var right, out var top) != 0)
-            {
-                var height = top - bottom;
-                MoveTextBox(objectIndex,
-                    new PdfRect(anchor.X, anchor.Y - height, right - left, height));
-            }
-        }
+        // The id-preserving restyle (#45), in the core: insert at the index, then
+        // normalise onto the bounds anchor so a 12pt → 18pt change grows upward.
+        if (CoreNative.megapdf_restyle_text_box(_core, objectIndex, text, fontName, fontSize,
+                anchor.X, Height - anchor.Y, id) != 0)
+            throw new InvalidOperationException("The restyled text box could not be placed.");
     }
 
     public void InsertTextRun(int objectIndex, string text, string fontName, double fontSize, PdfRect bounds)

@@ -274,7 +274,58 @@ internal static class CoreNative
         return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
     }
 
-    // Raw handles, for the contracts still bound directly (#109–#112) --------
+    // Contract 5: whiteouts, text boxes and detached objects (#109) -----------
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ObjectRect
+    {
+        public int ObjectIndex;
+        public Rect Bounds;
+    }
+
+    [DllImport(Dll)]
+    public static extern int megapdf_add_whiteout(IntPtr page, ref Rect bounds, out int objectIndex);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_whiteouts(IntPtr page, [Out] ObjectRect[]? outRects, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_add_text_box(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string fontName, double fontSize, double baselineX, double baselineY,
+        [MarshalAs(UnmanagedType.LPWStr)] string id, out int outObjectIndex);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_restyle_text_box(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string fontName, double fontSize, double left, double bottom,
+        [MarshalAs(UnmanagedType.LPWStr)] string id);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_find_text_box(IntPtr page, [MarshalAs(UnmanagedType.LPWStr)] string id);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_object_type(IntPtr page, int objectIndex);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_object_bounds(IntPtr page, int objectIndex, out Rect bounds);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_move_text_box(IntPtr page, int objectIndex, double left, double bottom);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_remove_text_box(IntPtr page, [MarshalAs(UnmanagedType.LPWStr)] string id);
+
+    /// <summary>Removes a page object and keeps it alive for undo; the core owns it until restored, discarded or the document closes.</summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_detach_object(IntPtr page, int objectIndex);
+
+    /// <summary>Puts a detached object back at the index; consumes the handle on success.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_restore_object(IntPtr page, IntPtr detached, int objectIndex);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_discard_detached(IntPtr detached);
+
+    // Raw handles, for the contracts still bound directly (#110–#112) --------
 
     [DllImport(Dll)]
     public static extern IntPtr megapdf_document_raw(IntPtr document);

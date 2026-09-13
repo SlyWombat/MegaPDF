@@ -165,9 +165,6 @@ internal static class PdfiumNative
     /// <summary>UTF-16 buffer; out length in bytes incl. NUL.</summary>
     [DllImport(Dll)] public static extern int FPDFPageObjMark_GetParamStringValue(IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
 
-    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateNewPath(float x, float y);
-    [DllImport(Dll)] public static extern int FPDFPath_LineTo(IntPtr path, float x, float y);
-    [DllImport(Dll)] public static extern int FPDFPath_SetDrawMode(IntPtr path, int fillMode, int stroke);
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int WriteBlockDelegate(IntPtr self, IntPtr data, uint size);

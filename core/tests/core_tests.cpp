@@ -764,6 +764,161 @@ void test_stamps(const std::string& fixtures) {
     megapdf_image_free(nullptr);
 }
 
+// --------------------------------------------------------------------------
+// Contract 5 (#109): whiteouts, text boxes and detached objects.
+
+int FPDFPage_CountObjects_via_bounds_probe(const megapdf_page* page) {
+    int n = 0;
+    megapdf_rect r{};
+    while (megapdf_object_bounds(page, n, &r) == MEGAPDF_OK) n++;
+    return n;
+}
+
+std::vector<megapdf_object_rect> whiteouts_of(const megapdf_page* page) {
+    const size_t n = megapdf_whiteouts(page, nullptr, 0);
+    std::vector<megapdf_object_rect> out(n);
+    if (n > 0) megapdf_whiteouts(page, out.data(), n);
+    return out;
+}
+
+struct Box { int object_index; std::string id; std::string font; double size; megapdf_rect bounds; std::string text; };
+
+std::vector<Box> boxes_of(const megapdf_page* page) {
+    std::vector<Box> out;
+    megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_BOXES_ONLY);
+    for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+        megapdf_text_run r{};
+        megapdf_text_run_get(t, i, &r);
+        out.push_back(Box{r.object_index, show(run_string(t, i, MEGAPDF_TEXT_RUN_BOX_ID)), show(run_string(t, i, MEGAPDF_TEXT_RUN_BOX_FONT)),
+                          r.font_size, r.bounds, show(run_string(t, i, MEGAPDF_TEXT_RUN_TEXT))});
+    }
+    megapdf_text_free(t);
+    return out;
+}
+
+void test_whiteouts_and_text_boxes(const std::string& fixtures) {
+    // Whiteouts, and detach/restore/discard around them.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "fixture.pdf page loads for whiteouts"); return; }
+        check(whiteouts_of(p.page).empty(), "no whiteouts to start");
+        const int before = FPDFPage_CountObjects_via_bounds_probe(p.page);
+        const megapdf_rect area{100, 500, 200, 540};
+        int index = -1;
+        check(megapdf_add_whiteout(p.page, &area, &index) == MEGAPDF_OK, "whiteout added");
+        check(index == before, "whiteout is appended at the end", std::to_string(index) + " vs " + std::to_string(before));
+        auto w = whiteouts_of(p.page);
+        check(w.size() == 1 && w[0].object_index == index && rect_close(w[0].bounds, area, 0.01), "whiteout listed with its bounds",
+              w.empty() ? "none" : rect_str(w[0].bounds));
+
+        megapdf_detached* held = megapdf_detach_object(p.page, index);
+        check(held != nullptr, "whiteout detaches");
+        check(whiteouts_of(p.page).empty(), "detached whiteout is off the page");
+        check(megapdf_restore_object(p.page, held, index) == MEGAPDF_OK, "whiteout restores");
+        w = whiteouts_of(p.page);
+        check(w.size() == 1 && rect_close(w[0].bounds, area, 0.01), "restored whiteout is back where it was");
+
+        held = megapdf_detach_object(p.page, index);
+        megapdf_discard_detached(held);
+        check(whiteouts_of(p.page).empty(), "discarded whiteout stays gone");
+        check(megapdf_detach_object(p.page, 9999) == nullptr, "detaching a missing index fails cleanly");
+        check(megapdf_detach_object(nullptr, 0) == nullptr && megapdf_restore_object(p.page, nullptr, 0) == MEGAPDF_ERR_ARGUMENT, "null detached handles are rejected");
+        megapdf_discard_detached(nullptr);
+
+        // A detached object still held when the document closes is freed by the core (ASan/LSan watch this).
+        megapdf_add_whiteout(p.page, &area, &index);
+        megapdf_detached* leaked = megapdf_detach_object(p.page, index);
+        check(leaked != nullptr, "second whiteout detaches for the close test");
+    }
+    // Text boxes: add, list, find, move, restyle, remove.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        Page p(d.doc, 1);
+        if (!p.page) { check(false, "fixture.pdf page 2 loads for text boxes"); return; }
+        auto hello = utf16("Hello box"), id = utf16("text:core-1");
+        int index = -1;
+        check(megapdf_add_text_box(p.page, -1, hello.data(), "Helvetica", 12, 100, 300, id.data(), &index) == MEGAPDF_OK, "text box added");
+        auto boxes = boxes_of(p.page);
+        check(boxes.size() == 1, "one text box listed", std::to_string(boxes.size()));
+        if (boxes.size() == 1) {
+            check(boxes[0].object_index == index && boxes[0].id == "text:core-1" && boxes[0].font == "Helvetica" && close_to(boxes[0].size, 12) &&
+                      boxes[0].text == "Hello box",
+                  "box carries id, face, size and text", boxes[0].id + "/" + boxes[0].font + "/" + boxes[0].text);
+            check(close_to(boxes[0].bounds.left, 100, 1.0) && boxes[0].bounds.bottom < 300 && boxes[0].bounds.bottom > 295 && boxes[0].bounds.top > 300,
+                  "baseline sits on the requested point", rect_str(boxes[0].bounds));
+        }
+        check(megapdf_find_text_box(p.page, id.data()) == index, "find by id");
+        check(megapdf_object_type(p.page, index) == 1 && megapdf_object_type(p.page, 9999) == -1 && megapdf_object_type(nullptr, 0) == -1,
+              "object type answers text for the box and -1 for a bad index");
+        auto nope = utf16("text:nope");
+        check(megapdf_find_text_box(p.page, nope.data()) == -1, "find of a missing id is -1");
+
+        check(megapdf_move_text_box(p.page, index, 150, 400) == MEGAPDF_OK, "move returns OK");
+        megapdf_rect b{};
+        check(megapdf_object_bounds(p.page, index, &b) == MEGAPDF_OK && close_to(b.left, 150, 0.01) && close_to(b.bottom, 400, 0.01),
+              "moved box has its bottom-left on the target", rect_str(b));
+
+        // Restyle (#45): detach the old object, insert the new one at the same index
+        // anchored on the old bottom-left, same id — grows upward, keeps the corner.
+        megapdf_detached* old = megapdf_detach_object(p.page, index);
+        check(old != nullptr, "old box detaches for restyle");
+        check(megapdf_restyle_text_box(p.page, index, hello.data(), "Times-Roman", 18, b.left, b.bottom, id.data()) == MEGAPDF_OK, "restyle returns OK");
+        boxes = boxes_of(p.page);
+        check(boxes.size() == 1 && boxes[0].id == "text:core-1" && boxes[0].font == "Times-Roman" && close_to(boxes[0].size, 18), "restyled box keeps its id and records the new face");
+        if (boxes.size() == 1) {
+            check(close_to(boxes[0].bounds.left, b.left, 0.05) && close_to(boxes[0].bounds.bottom, b.bottom, 0.05) && boxes[0].bounds.top > b.top,
+                  "restyled box keeps its corner and grows upward", rect_str(boxes[0].bounds) + " vs " + rect_str(b));
+        }
+        // Undo: detach the restyled one, restore the original.
+        megapdf_detached* restyled = megapdf_detach_object(p.page, index);
+        check(megapdf_restore_object(p.page, old, index) == MEGAPDF_OK, "original restores after restyle");
+        boxes = boxes_of(p.page);
+        check(boxes.size() == 1 && boxes[0].font == "Helvetica" && close_to(boxes[0].size, 12) && close_to(boxes[0].bounds.bottom, b.bottom, 0.05),
+              "restored original is byte-identical in what it reports");
+        megapdf_discard_detached(restyled);
+
+        check(megapdf_remove_text_box(p.page, id.data()) == MEGAPDF_OK, "remove by id");
+        check(boxes_of(p.page).empty(), "box is gone");
+        check(megapdf_remove_text_box(p.page, id.data()) == MEGAPDF_OK, "removing an already-gone box is fine");
+        check(megapdf_add_text_box(p.page, -1, hello.data(), "Comic Sans", 12, 100, 300, id.data(), &index) == MEGAPDF_ERR_ARGUMENT, "a face outside the three is rejected");
+        auto empty = utf16("");
+        check(megapdf_add_text_box(p.page, -1, empty.data(), "Helvetica", 12, 100, 300, id.data(), &index) == MEGAPDF_ERR_ARGUMENT, "empty text is rejected");
+    }
+    // Legacy boxes with no id answer to the derived handle, uniquely.
+    {
+        Doc d(fixtures + "/textbox.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "textbox.pdf page loads"); return; }
+        auto boxes = boxes_of(p.page);
+        int untagged = -1, untagged2 = -1;
+        for (const auto& bx : boxes) if (bx.id.empty()) { if (untagged < 0) untagged = bx.object_index; else untagged2 = bx.object_index; }
+        check(untagged >= 0 && untagged2 >= 0, "textbox.pdf has two legacy boxes");
+        auto handle = utf16(("text:untagged#" + std::to_string(untagged)).c_str());
+        check(megapdf_find_text_box(p.page, handle.data()) == untagged, "the derived handle finds the legacy box");
+        check(megapdf_remove_text_box(p.page, handle.data()) == MEGAPDF_OK, "legacy box removed by its handle");
+        auto after = boxes_of(p.page);
+        check(after.size() == boxes.size() - 1, "exactly one box was removed", std::to_string(after.size()));
+        auto tagged = utf16("text:fixture-1");
+        check(megapdf_find_text_box(p.page, tagged.data()) >= 0, "the tagged box is still there");
+    }
+    // Crop space: text lands where asked on the cropped page.
+    {
+        Doc d(fixtures + "/cropped.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "cropped.pdf page loads for text boxes"); return; }
+        auto text = utf16("Cropped"), id = utf16("text:crop");
+        int index = -1;
+        megapdf_add_text_box(p.page, -1, text.data(), "Courier", 10, 40, 60, id.data(), &index);
+        auto boxes = boxes_of(p.page);
+        check(boxes.size() == 1 && close_to(boxes[0].bounds.left, 40, 1.0) && boxes[0].bounds.bottom < 60 && boxes[0].bounds.top > 60,
+              "text box on a cropped page reads back in crop space", boxes.empty() ? "none" : rect_str(boxes[0].bounds));
+    }
+    check(megapdf_add_whiteout(nullptr, nullptr, nullptr) == MEGAPDF_ERR_ARGUMENT, "whiteout rejects null");
+    check(megapdf_whiteouts(nullptr, nullptr, 0) == 0, "whiteouts of null is 0");
+    check(megapdf_find_text_box(nullptr, nullptr) == -1, "find on null is -1");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -781,6 +936,7 @@ int main(int argc, char** argv) {
     test_text_runs(argv[1], argv[2], argv[3]);
     test_form_fields(argv[1]);
     test_stamps(argv[1]);
+    test_whiteouts_and_text_boxes(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

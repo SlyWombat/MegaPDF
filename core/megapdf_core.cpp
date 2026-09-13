@@ -24,12 +24,20 @@
 // Internals
 // --------------------------------------------------------------------------
 
+struct megapdf_detached;
+
 struct megapdf_document {
     std::vector<unsigned char> bytes;   // FPDF_LoadMemDocument64 needs the buffer alive for the document's life.
     FPDF_DOCUMENT doc = nullptr;
     FPDF_FORMHANDLE form = nullptr;
     FPDF_FORMFILLINFO ffi{};
     std::vector<megapdf_page*> open_pages;  // closed for the caller if still open at megapdf_close()
+    std::vector<megapdf_detached*> detached;  // freed at megapdf_close() if never restored or discarded
+};
+
+struct megapdf_detached {
+    megapdf_document* owner = nullptr;
+    FPDF_PAGEOBJECT object = nullptr;
 };
 
 struct megapdf_page {
@@ -184,6 +192,11 @@ MEGAPDF_API void megapdf_close(megapdf_document* d) {
         delete p;
     }
     d->open_pages.clear();
+    for (megapdf_detached* x : d->detached) {
+        FPDFPageObj_Destroy(x->object);
+        delete x;
+    }
+    d->detached.clear();
     if (d->form != nullptr) FPDFDOC_ExitFormFillEnvironment(d->form);
     if (d->doc != nullptr) FPDF_CloseDocument(d->doc);
     delete d;
@@ -1116,6 +1129,287 @@ MEGAPDF_API int megapdf_move_image_stamp(const megapdf_page* p, const unsigned s
     }
     delete img;
     return status;
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
+// Contract 5: whiteouts, text boxes and detached objects (#109)
+// --------------------------------------------------------------------------
+
+namespace {
+
+constexpr const char* kWhiteoutMark = "MegaPDFWhiteout";
+constexpr const char* kTextBoxMarkName = "MegaPDFTextBox";
+const U16 kWhiteoutMarkU16 = {'M', 'e', 'g', 'a', 'P', 'D', 'F', 'W', 'h', 'i', 't', 'e', 'o', 'u', 't'};
+const char* const kUntaggedPrefix = "text:untagged#";
+
+bool IsStandardTextBoxFont(const char* name) {
+    return name != nullptr && (std::strcmp(name, "Helvetica") == 0 || std::strcmp(name, "Times-Roman") == 0 ||
+                               std::strcmp(name, "Courier") == 0);
+}
+
+bool GenerateContent(const megapdf_page* p) {
+    if (!FPDFPage_GenerateContent(p->page)) {
+        SetError(FPDF_ERR_UNKNOWN, "PDFium failed to regenerate the page content stream");
+        return false;
+    }
+    return true;
+}
+
+// Ascii-only helper for the untagged handle: "text:untagged#<index>".
+bool IsUntaggedHandle(const unsigned short* id, int* out_index) {
+    size_t i = 0;
+    for (; kUntaggedPrefix[i] != '\0'; i++) {
+        if (id[i] != static_cast<unsigned short>(kUntaggedPrefix[i])) return false;
+    }
+    if (id[i] == 0) return false;
+    int value = 0;
+    for (; id[i] != 0; i++) {
+        if (id[i] < '0' || id[i] > '9') return false;
+        value = value * 10 + (id[i] - '0');
+    }
+    *out_index = value;
+    return true;
+}
+
+// The object index of the box carrying `id`, or -1.
+int FindTextBoxUnlocked(FPDF_PAGE page, const unsigned short* id) {
+    int untagged = -1;
+    const bool wants_untagged = IsUntaggedHandle(id, &untagged);
+    const int count = FPDFPage_CountObjects(page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT || !HasMark(obj, kTextBoxMark)) continue;
+        const U16 box_id = ReadMarkParam(obj, "id");
+        if (box_id.empty()) {
+            if (wants_untagged && i == untagged) return i;
+        } else if (SameId(box_id, id)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int MoveTextBoxUnlocked(const megapdf_page* p, int object_index, double left, double bottom) {
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) {
+        SetError(0, "the object is no longer a text object");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    float l = 0, b = 0, r = 0, t = 0;
+    FS_MATRIX m{};
+    if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) || !FPDFPageObj_GetMatrix(obj, &m)) {
+        SetError(FPDF_ERR_UNKNOWN, "could not read the text box geometry");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    // Translate in place so the bounds' bottom-left lands on the target; scale and
+    // rotation stay as they are.
+    m.e += static_cast<float>(left + p->crop_x) - l;
+    m.f += static_cast<float>(bottom + p->crop_y) - b;
+    if (!FPDFPageObj_SetMatrix(obj, &m)) {
+        SetError(FPDF_ERR_UNKNOWN, "could not move the text box");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+}
+
+int AddTextBoxUnlocked(const megapdf_page* p, int object_index, const unsigned short* text, const char* font_name,
+                       double font_size, double baseline_x, double baseline_y, const unsigned short* id,
+                       int* out_object_index) {
+    FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
+    const int count = FPDFPage_CountObjects(p->page);
+    if (object_index < 0 || object_index > count) object_index = count;
+
+    FPDF_FONT font = FPDFText_LoadStandardFont(doc, font_name);
+    if (font == nullptr) { SetError(FPDF_ERR_UNKNOWN, "the standard font could not be loaded"); return MEGAPDF_ERR_PDFIUM; }
+    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size));
+    bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
+    if (ok) {
+        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(baseline_x + p->crop_x), static_cast<float>(baseline_y + p->crop_y)};
+        ok = FPDFPageObj_SetMatrix(obj, &m);
+    }
+    if (ok) {
+        // The id is how the phones address a box, since object indices shift; the
+        // face is recorded rather than inferred, because PDFium may normalise a
+        // standard font's reported name (#43).
+        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_AddMark(obj, kTextBoxMarkName);
+        ok = mark != nullptr;
+        if (ok) {
+            // FPDFPageObjMark_SetStringParam takes UTF-8; the id and face are ASCII by contract.
+            std::string id_utf8;
+            for (size_t i = 0; id[i] != 0; i++) id_utf8 += static_cast<char>(id[i] < 0x80 ? id[i] : '?');
+            ok = FPDFPageObjMark_SetStringParam(doc, obj, mark, "id", id_utf8.c_str()) &&
+                 FPDFPageObjMark_SetStringParam(doc, obj, mark, "font", font_name);
+        }
+    }
+    if (ok) {
+        // Takes ownership (and frees the object itself on failure).
+        ok = FPDFPage_InsertObjectAtIndex(p->page, obj, static_cast<size_t>(object_index));
+        obj = nullptr;
+    }
+    if (obj != nullptr) FPDFPageObj_Destroy(obj);
+    FPDFFont_Close(font);
+    if (!ok) { SetError(FPDF_ERR_UNKNOWN, "could not place the text box"); return MEGAPDF_ERR_PDFIUM; }
+    if (!GenerateContent(p)) return MEGAPDF_ERR_PDFIUM;
+    if (out_object_index != nullptr) *out_object_index = object_index;
+    return MEGAPDF_OK;
+}
+
+}  // namespace
+
+extern "C" {
+
+MEGAPDF_API int megapdf_add_whiteout(const megapdf_page* p, const megapdf_rect* bounds, int* out_object_index) {
+    if (p == nullptr || bounds == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    const float left = static_cast<float>(bounds->left + p->crop_x), right = static_cast<float>(bounds->right + p->crop_x);
+    const float bottom = static_cast<float>(bounds->bottom + p->crop_y), top = static_cast<float>(bounds->top + p->crop_y);
+    FPDF_PAGEOBJECT path = FPDFPageObj_CreateNewPath(left, bottom);
+    if (path == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the whiteout"); return MEGAPDF_ERR_PDFIUM; }
+    FPDFPath_LineTo(path, right, bottom);
+    FPDFPath_LineTo(path, right, top);
+    FPDFPath_LineTo(path, left, top);
+    FPDFPath_LineTo(path, left, bottom);
+    FPDFPageObj_SetFillColor(path, 0xFF, 0xFF, 0xFF, 0xFF);
+    FPDFPath_SetDrawMode(path, FPDF_FILLMODE_ALTERNATE, 0);
+    FPDFPageObj_AddMark(path, kWhiteoutMark);
+    const int index = FPDFPage_CountObjects(p->page);
+    if (!FPDFPage_InsertObjectAtIndex(p->page, path, static_cast<size_t>(index))) {
+        SetError(FPDF_ERR_UNKNOWN, "could not place the whiteout");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    if (!GenerateContent(p)) return MEGAPDF_ERR_PDFIUM;
+    if (out_object_index != nullptr) *out_object_index = index;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_whiteouts(const megapdf_page* p, megapdf_object_rect* out, size_t capacity) {
+    if (p == nullptr) return 0;
+    Guard guard(CoreLock());
+    size_t found = 0;
+    const int count = FPDFPage_CountObjects(p->page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_PATH || !HasMark(obj, kWhiteoutMarkU16)) continue;
+        float l = 0, b = 0, r = 0, t = 0;
+        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
+        if (found < capacity && out != nullptr) {
+            out[found].object_index = i;
+            out[found].bounds = megapdf_rect{l - p->crop_x, b - p->crop_y, r - p->crop_x, t - p->crop_y};
+        }
+        found++;
+    }
+    return found;
+}
+
+MEGAPDF_API int megapdf_add_text_box(const megapdf_page* p, int object_index, const unsigned short* text, const char* font_name,
+                                     double font_size, double baseline_x, double baseline_y, const unsigned short* id,
+                                     int* out_object_index) {
+    if (p == nullptr || text == nullptr || text[0] == 0 || id == nullptr || id[0] == 0 || !IsStandardTextBoxFont(font_name)) {
+        SetError(0, "a text box needs text, an id and one of the three standard faces");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    return AddTextBoxUnlocked(p, object_index, text, font_name, font_size, baseline_x, baseline_y, id, out_object_index);
+}
+
+MEGAPDF_API int megapdf_restyle_text_box(const megapdf_page* p, int object_index, const unsigned short* text, const char* font_name,
+                                         double font_size, double left, double bottom, const unsigned short* id) {
+    if (p == nullptr || text == nullptr || text[0] == 0 || id == nullptr || id[0] == 0 || !IsStandardTextBoxFont(font_name)) {
+        SetError(0, "a text box needs text, an id and one of the three standard faces");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    // Place the baseline at the corner, then normalise onto the bounds anchor:
+    // GetTextBoxes and MoveTextBox both speak bounds, and without this a 12 pt →
+    // 18 pt restyle drops by the extra descender depth.
+    int index = -1;
+    const int status = AddTextBoxUnlocked(p, object_index, text, font_name, font_size, left, bottom, id, &index);
+    if (status != MEGAPDF_OK) return status;
+    return MoveTextBoxUnlocked(p, index, left, bottom);
+}
+
+MEGAPDF_API int megapdf_find_text_box(const megapdf_page* p, const unsigned short* id) {
+    if (p == nullptr || id == nullptr) return -1;
+    Guard guard(CoreLock());
+    return FindTextBoxUnlocked(p->page, id);
+}
+
+MEGAPDF_API int megapdf_object_type(const megapdf_page* p, int object_index) {
+    if (p == nullptr || object_index < 0) return -1;
+    Guard guard(CoreLock());
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    return obj == nullptr ? -1 : FPDFPageObj_GetType(obj);
+}
+
+MEGAPDF_API int megapdf_object_bounds(const megapdf_page* p, int object_index, megapdf_rect* out) {
+    if (p == nullptr || out == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    float l = 0, b = 0, r = 0, t = 0;
+    if (obj == nullptr || !FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) return MEGAPDF_ERR_ARGUMENT;
+    *out = megapdf_rect{l - p->crop_x, b - p->crop_y, r - p->crop_x, t - p->crop_y};
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_move_text_box(const megapdf_page* p, int object_index, double left, double bottom) {
+    if (p == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    return MoveTextBoxUnlocked(p, object_index, left, bottom);
+}
+
+MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* p, const unsigned short* id) {
+    if (p == nullptr || id == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    const int index = FindTextBoxUnlocked(p->page, id);
+    if (index < 0) return MEGAPDF_OK;   // already gone: an undo racing a re-render must not fail
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, index);
+    if (!FPDFPage_RemoveObject(p->page, obj)) { SetError(FPDF_ERR_UNKNOWN, "could not remove the text box"); return MEGAPDF_ERR_PDFIUM; }
+    FPDFPageObj_Destroy(obj);
+    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+}
+
+MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* p, int object_index) {
+    if (p == nullptr || p->owner == nullptr || object_index < 0) return nullptr;
+    Guard guard(CoreLock());
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    if (obj == nullptr) { SetError(0, "no page object at that index"); return nullptr; }
+    if (!FPDFPage_RemoveObject(p->page, obj)) { SetError(FPDF_ERR_UNKNOWN, "could not remove the object"); return nullptr; }
+    GenerateContent(p);
+    auto* x = new (std::nothrow) megapdf_detached();
+    if (x == nullptr) { FPDFPageObj_Destroy(obj); SetError(FPDF_ERR_UNKNOWN, "out of memory"); return nullptr; }
+    x->owner = p->owner;
+    x->object = obj;
+    p->owner->detached.push_back(x);
+    return x;
+}
+
+MEGAPDF_API int megapdf_restore_object(const megapdf_page* p, megapdf_detached* x, int object_index) {
+    if (p == nullptr || x == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (!FPDFPage_InsertObjectAtIndex(p->page, x->object, static_cast<size_t>(object_index))) {
+        SetError(FPDF_ERR_UNKNOWN, "could not restore the object");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    // The page owns it again; the handle is spent.
+    if (x->owner != nullptr) {
+        auto& list = x->owner->detached;
+        for (size_t i = 0; i < list.size(); i++) if (list[i] == x) { list[i] = list.back(); list.pop_back(); break; }
+    }
+    delete x;
+    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+}
+
+MEGAPDF_API void megapdf_discard_detached(megapdf_detached* x) {
+    if (x == nullptr) return;
+    Guard guard(CoreLock());
+    if (x->owner != nullptr) {
+        auto& list = x->owner->detached;
+        for (size_t i = 0; i < list.size(); i++) if (list[i] == x) { list[i] = list.back(); list.pop_back(); break; }
+    }
+    FPDFPageObj_Destroy(x->object);
+    delete x;
 }
 
 }  // extern "C"

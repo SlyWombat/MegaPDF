@@ -15,7 +15,13 @@ captured before the port — as the regression gate. #107 (AcroForm fields) foll
 a filter and a struct copy where they had form code. #108 (stamps and MegaPDF_Id
 marks) moved check marks in all three styles, image stamps with alpha, the stamp list,
 native-resolution image read-back, removal by index or id, and the extract-remove-re-add
-move under a stable id into the core.
+move under a stable id into the core. #109 (whiteouts, text boxes, detached objects)
+followed: `megapdf_add_whiteout` / `megapdf_whiteouts`, `megapdf_add_text_box` with the
+three-face rule and the mark params, `megapdf_restyle_text_box` (the #45 id-preserving
+restyle anchored on the bottom-left corner), find/move/remove by id including the
+`text:untagged#N` handle for pre-id boxes, and `megapdf_detach_object` /
+`megapdf_restore_object` / `megapdf_discard_detached`, with the document freeing any
+detached object still held at close (decision 1 made concrete).
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 

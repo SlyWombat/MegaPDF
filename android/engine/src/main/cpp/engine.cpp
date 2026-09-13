@@ -44,24 +44,6 @@ struct Page {
     Document* owner = nullptr;
 };
 
-// pdfium reports page content in user space, whose origin is the MediaBox, but it
-// renders and measures the CropBox. Where the two differ -- imposed pages, trimmed
-// scans -- every coordinate handed to the UI is out by that difference, so search
-// highlights and tap targets land on the wrong part of the page (#28). Everything
-// crossing the JNI boundary is shifted into crop-relative space, which is a no-op on
-// the usual page whose crop origin is already (0,0). The core owns the origin; the
-// contracts it has absorbed return crop space already, and the ones still bound
-// directly here shift through this.
-struct CropOrigin {
-    double x = 0;
-    double y = 0;
-};
-
-CropOrigin cropOrigin(const Page* p) {
-    CropOrigin c;
-    megapdf_page_crop_origin(p->core, &c.x, &c.y);
-    return c;
-}
 
 constexpr int kRenderFlags = FPDF_ANNOT | FPDF_LCD_TEXT | FPDF_REVERSE_BYTE_ORDER;
 
@@ -233,106 +215,8 @@ namespace {
 
 
 // Reads MegaPDF_Id from an annot; empty string when absent.
-// ---- Added text (#34) -------------------------------------------------------
-// A MegaPDF text box is a page text object carrying the "MegaPDFTextBox"
-// page-object mark -- the desktop's representation exactly (PdfiumEngine
-// .AppendTextBox), so a box added here is a movable text box on Windows. The
-// mark also carries an "id" string param: page-object indices shift as objects
-// come and go, so every reversible edit addresses its target by id instead.
-constexpr const char* kTextBoxMark = "MegaPDFTextBox";
-constexpr const char* kTextBoxIdKey = "id";
-// The face the user picked (#43), carried as a mark param beside the id rather
-// than read back off the font resource: pdfium is free to normalise a standard
-// font's reported name, and the cross-platform contract has to be exactly what
-// was chosen. A box with no `font` param is Helvetica -- which is what every box
-// written before #43 is.
-constexpr const char* kTextBoxFontKey = "font";
-constexpr const char* kDefaultTextBoxFont = "Helvetica";
-// Handle given to a marked box that carries no id; the object index follows.
-constexpr const char* kUntaggedPrefix = "text:untagged#";
-
-bool MarkNameIs(FPDF_PAGEOBJECTMARK mark, const char* name) {
-    unsigned long bytes = 0;
-    if (!FPDFPageObjMark_GetName(mark, nullptr, 0, &bytes) || bytes <= 2) return false;
-    std::vector<FPDF_WCHAR> buf(bytes / 2);
-    if (!FPDFPageObjMark_GetName(mark, buf.data(), bytes, &bytes)) return false;
-    const size_t n = buf.size() - 1;  // drop the UTF-16 terminator
-    for (size_t i = 0; i < n; i++) {
-        if (name[i] == '\0' || static_cast<FPDF_WCHAR>(name[i]) != buf[i]) return false;
-    }
-    return name[n] == '\0';
-}
-
-// True when `obj` is one of our text boxes; fills `out` with its id.
-//
-// A box written before the id param existed (shipping Windows 1.6.x) still reads
-// as a text box, but its handle can only be its position -- and it must be
-// *unique*, or a document carrying two of them would let removeTextBox delete an
-// arbitrary one. Position-derived handles are not stable across edits, which is
-// fine: nothing here creates untagged boxes, it only has to read them coherently.
-bool TextBoxId(FPDF_PAGEOBJECT obj, int objectIndex, std::vector<jchar>* out) {
-    if (FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return false;
-    const int marks = FPDFPageObj_CountMarks(obj);
-    for (int m = 0; m < marks; m++) {
-        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_GetMark(obj, static_cast<unsigned long>(m));
-        if (mark == nullptr || !MarkNameIs(mark, kTextBoxMark)) continue;
-        unsigned long bytes = 0;
-        if (FPDFPageObjMark_GetParamStringValue(mark, kTextBoxIdKey, nullptr, 0, &bytes) &&
-            bytes > 2) {
-            std::vector<FPDF_WCHAR> buf(bytes / 2);
-            if (FPDFPageObjMark_GetParamStringValue(mark, kTextBoxIdKey, buf.data(), bytes,
-                                                    &bytes)) {
-                *out = std::vector<jchar>(buf.begin(), buf.end() - 1);
-                return true;
-            }
-        }
-        const std::string fallback = std::string(kUntaggedPrefix) + std::to_string(objectIndex);
-        *out = std::vector<jchar>(fallback.begin(), fallback.end());
-        return true;
-    }
-    return false;
-}
-
-// Reads a string param off the object's MegaPDFTextBox mark. False when the
-// object is not one of ours, or the mark does not carry that key.
-bool TextBoxMarkParam(FPDF_PAGEOBJECT obj, const char* key, std::vector<jchar>* out) {
-    if (FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return false;
-    const int marks = FPDFPageObj_CountMarks(obj);
-    for (int m = 0; m < marks; m++) {
-        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_GetMark(obj, static_cast<unsigned long>(m));
-        if (mark == nullptr || !MarkNameIs(mark, kTextBoxMark)) continue;
-        unsigned long bytes = 0;
-        if (!FPDFPageObjMark_GetParamStringValue(mark, key, nullptr, 0, &bytes) || bytes <= 2) {
-            return false;
-        }
-        std::vector<FPDF_WCHAR> buf(bytes / 2);
-        if (!FPDFPageObjMark_GetParamStringValue(mark, key, buf.data(), bytes, &bytes)) {
-            return false;
-        }
-        *out = std::vector<jchar>(buf.begin(), buf.end() - 1);
-        return true;
-    }
-    return false;
-}
-
-// The face a box was written in, defaulting to Helvetica for boxes that predate
-// the `font` param.
-std::vector<jchar> TextBoxFont(FPDF_PAGEOBJECT obj) {
-    std::vector<jchar> face;
-    if (TextBoxMarkParam(obj, kTextBoxFontKey, &face)) return face;
-    const std::string fallback = kDefaultTextBoxFont;
-    return std::vector<jchar>(fallback.begin(), fallback.end());
-}
-
-FPDF_PAGEOBJECT FindTextBox(FPDF_PAGE page, const std::vector<jchar>& id) {
-    const int count = FPDFPage_CountObjects(page);
-    for (int i = 0; i < count; i++) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
-        std::vector<jchar> found;
-        if (obj != nullptr && TextBoxId(obj, i, &found) && found == id) return obj;
-    }
-    return nullptr;
-}
+// ---- Added text (#34): the MegaPDFTextBox representation is written and read by
+// the core (#109); this shim only marshals.
 
 std::vector<jchar> JavaChars(JNIEnv* env, jstring s) {
     const jchar* chars = env->GetStringChars(s, nullptr);
@@ -340,16 +224,6 @@ std::vector<jchar> JavaChars(JNIEnv* env, jstring s) {
     std::vector<jchar> out(chars, chars + len);
     env->ReleaseStringChars(s, chars);
     return out;
-}
-
-std::vector<jchar> ReadTextObjectText(FPDF_PAGEOBJECT obj, FPDF_TEXTPAGE textPage) {
-    // Despite the header saying FPDF_WCHARs, the length is in BYTES (including
-    // the UTF-16 NUL) -- the pdfium 152 quirk the desktop engine documents too.
-    const unsigned long bytes = FPDFTextObj_GetText(obj, textPage, nullptr, 0);
-    if (bytes <= 2) return {};
-    std::vector<FPDF_WCHAR> buf(bytes / 2);
-    FPDFTextObj_GetText(obj, textPage, buf.data(), bytes);
-    return std::vector<jchar>(buf.begin(), buf.end() - 1);
 }
 
 }  // namespace
@@ -439,150 +313,126 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jl
 // ---- Added text (#34) -------------------------------------------------------
 
 // Places `text` with its baseline starting at crop-space (x, y) in the named
-// base-14 face, tagged with the MegaPDFTextBox mark and the given id.
-//
-// `fontName` must be a name FPDFText_LoadStandardFont accepts -- deliberately
-// strict: the app passes one of three constants, so anything else is a bug and
-// should fail loudly rather than silently render in the wrong face.
+// base-14 face, tagged with the MegaPDFTextBox mark and the given id — all in
+// the core (#109), which also rejects any face outside the three (#43).
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAddTextBox(JNIEnv* env, jobject, jlong handle,
                                                       jstring text, jstring fontName,
                                                       jdouble fontSize,
                                                       jdouble x, jdouble y, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
-    FPDF_DOCUMENT doc = p->owner->doc;
-
+    std::vector<jchar> wideText = JavaChars(env, text);
+    wideText.push_back(0);
+    std::vector<jchar> wideId = JavaChars(env, id);
+    wideId.push_back(0);
     const char* faceUtf8 = env->GetStringUTFChars(fontName, nullptr);
-    FPDF_FONT font = FPDFText_LoadStandardFont(doc, faceUtf8);
-    if (font == nullptr) {
-        env->ReleaseStringUTFChars(fontName, faceUtf8);
-        return JNI_FALSE;
-    }
-
-    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(fontSize));
-    bool ok = obj != nullptr;
-
-    if (ok) {
-        std::vector<jchar> wide = JavaChars(env, text);
-        wide.push_back(0);
-        ok = FPDFText_SetText(obj, wide.data());
-    }
-    if (ok) {
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(x + crop.x), static_cast<float>(y + crop.y)};
-        ok = FPDFPageObj_SetMatrix(obj, &m);
-    }
-    if (ok) {
-        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_AddMark(obj, kTextBoxMark);
-        const char* idUtf8 = env->GetStringUTFChars(id, nullptr);
-        ok = mark != nullptr &&
-             FPDFPageObjMark_SetStringParam(doc, obj, mark, kTextBoxIdKey, idUtf8) &&
-             FPDFPageObjMark_SetStringParam(doc, obj, mark, kTextBoxFontKey, faceUtf8);
-        env->ReleaseStringUTFChars(id, idUtf8);
-    }
-    if (ok) {
-        // Takes ownership, and frees the object itself on failure -- so from here
-        // on it must not be destroyed by us.
-        ok = FPDFPage_InsertObject(p->page, obj);
-        ok = ok && FPDFPage_GenerateContent(p->page);
-    } else if (obj != nullptr) {
-        FPDFPageObj_Destroy(obj);
-    }
-
-    FPDFFont_Close(font);
+    int index = -1;
+    const int status = megapdf_add_text_box(p->core, -1, wideText.data(), faceUtf8, fontSize, x, y, wideId.data(), &index);
     env->ReleaseStringUTFChars(fontName, faceUtf8);
-    return ok ? JNI_TRUE : JNI_FALSE;
+    return status == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
-// The face of each box, aligned with nativeTextBoxIds.
-JNIEXPORT jobjectArray JNICALL
-Java_com_megapdf_engine_PdfiumNative_nativeTextBoxFonts(JNIEnv* env, jobject, jlong handle) {
-    auto* p = reinterpret_cast<Page*>(handle);
-    std::vector<std::vector<jchar>> faces;
-    const int count = FPDFPage_CountObjects(p->page);
-    for (int i = 0; i < count; i++) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
-        std::vector<jchar> id;
-        if (obj == nullptr || !TextBoxId(obj, i, &id)) continue;
-        faces.push_back(TextBoxFont(obj));
+}  // extern "C"
+
+namespace {
+
+// The core's text-box listing, decoded once for the four aligned arrays below.
+struct BoxRow {
+    int objectIndex;
+    std::vector<jchar> id;
+    std::vector<jchar> font;
+    std::vector<jchar> text;
+    megapdf_rect bounds;
+    double fontSize;
+};
+
+std::vector<jchar> CoreString(const megapdf_text* t, size_t i, megapdf_text_field field) {
+    const size_t n = megapdf_text_run_string(t, i, field, nullptr, 0);
+    std::vector<jchar> out(n);
+    if (n > 0) megapdf_text_run_string(t, i, field, out.data(), n);
+    return out;
+}
+
+std::vector<BoxRow> LoadBoxes(const Page* p) {
+    std::vector<BoxRow> rows;
+    megapdf_text* t = megapdf_text_load(p->core, MEGAPDF_TEXT_BOXES_ONLY);
+    if (t == nullptr) return rows;
+    for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+        megapdf_text_run r{};
+        if (megapdf_text_run_get(t, i, &r) != MEGAPDF_OK) continue;
+        BoxRow row;
+        row.objectIndex = r.object_index;
+        row.id = CoreString(t, i, MEGAPDF_TEXT_RUN_BOX_ID);
+        if (row.id.empty()) {
+            // A box written before the id param existed (shipping Windows 1.6.x): its
+            // handle is its position, which the core's find understands too.
+            const std::string fallback = "text:untagged#" + std::to_string(r.object_index);
+            row.id.assign(fallback.begin(), fallback.end());
+        }
+        row.font = CoreString(t, i, MEGAPDF_TEXT_RUN_BOX_FONT);
+        if (row.font.empty()) {
+            const std::string fallback = "Helvetica";   // every box written before #43
+            row.font.assign(fallback.begin(), fallback.end());
+        }
+        row.text = CoreString(t, i, MEGAPDF_TEXT_RUN_TEXT);
+        row.bounds = r.bounds;
+        row.fontSize = r.font_size;
+        rows.push_back(std::move(row));
     }
+    megapdf_text_free(t);
+    return rows;
+}
+
+jobjectArray StringArray(JNIEnv* env, const std::vector<std::vector<jchar>>& items) {
     jclass stringClass = env->FindClass("java/lang/String");
-    jobjectArray out = env->NewObjectArray(static_cast<jsize>(faces.size()), stringClass, nullptr);
-    for (size_t i = 0; i < faces.size(); i++) {
-        jstring s = env->NewString(faces[i].data(), static_cast<jsize>(faces[i].size()));
+    jobjectArray out = env->NewObjectArray(static_cast<jsize>(items.size()), stringClass, nullptr);
+    for (size_t i = 0; i < items.size(); i++) {
+        jstring s = env->NewString(items[i].data(), static_cast<jsize>(items[i].size()));
         env->SetObjectArrayElement(out, static_cast<jsize>(i), s);
         env->DeleteLocalRef(s);
     }
     return out;
+}
+
+}  // namespace
+
+extern "C" {
+
+// The face of each box, aligned with nativeTextBoxIds.
+JNIEXPORT jobjectArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeTextBoxFonts(JNIEnv* env, jobject, jlong handle) {
+    std::vector<std::vector<jchar>> items;
+    for (auto& row : LoadBoxes(reinterpret_cast<Page*>(handle))) items.push_back(std::move(row.font));
+    return StringArray(env, items);
 }
 
 // Ids of the MegaPDF text boxes on the page, in page-object order.
 JNIEXPORT jobjectArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeTextBoxIds(JNIEnv* env, jobject, jlong handle) {
-    auto* p = reinterpret_cast<Page*>(handle);
-    std::vector<std::vector<jchar>> ids;
-    const int count = FPDFPage_CountObjects(p->page);
-    for (int i = 0; i < count; i++) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
-        std::vector<jchar> id;
-        if (obj != nullptr && TextBoxId(obj, i, &id)) ids.push_back(id);
-    }
-    jclass stringClass = env->FindClass("java/lang/String");
-    jobjectArray out = env->NewObjectArray(static_cast<jsize>(ids.size()), stringClass, nullptr);
-    for (size_t i = 0; i < ids.size(); i++) {
-        jstring s = env->NewString(ids[i].data(), static_cast<jsize>(ids[i].size()));
-        env->SetObjectArrayElement(out, static_cast<jsize>(i), s);
-        env->DeleteLocalRef(s);
-    }
-    return out;
+    std::vector<std::vector<jchar>> items;
+    for (auto& row : LoadBoxes(reinterpret_cast<Page*>(handle))) items.push_back(std::move(row.id));
+    return StringArray(env, items);
 }
 
 // The text of each box, aligned with nativeTextBoxIds.
 JNIEXPORT jobjectArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeTextBoxTexts(JNIEnv* env, jobject, jlong handle) {
-    auto* p = reinterpret_cast<Page*>(handle);
-    FPDF_TEXTPAGE textPage = FPDFText_LoadPage(p->page);
-    std::vector<std::vector<jchar>> texts;
-    const int count = FPDFPage_CountObjects(p->page);
-    for (int i = 0; i < count; i++) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
-        std::vector<jchar> id;
-        if (obj == nullptr || !TextBoxId(obj, i, &id)) continue;
-        texts.push_back(textPage != nullptr ? ReadTextObjectText(obj, textPage)
-                                            : std::vector<jchar>());
-    }
-    if (textPage != nullptr) FPDFText_ClosePage(textPage);
-
-    jclass stringClass = env->FindClass("java/lang/String");
-    jobjectArray out = env->NewObjectArray(static_cast<jsize>(texts.size()), stringClass, nullptr);
-    for (size_t i = 0; i < texts.size(); i++) {
-        jstring s = env->NewString(texts[i].data(), static_cast<jsize>(texts[i].size()));
-        env->SetObjectArrayElement(out, static_cast<jsize>(i), s);
-        env->DeleteLocalRef(s);
-    }
-    return out;
+    std::vector<std::vector<jchar>> items;
+    for (auto& row : LoadBoxes(reinterpret_cast<Page*>(handle))) items.push_back(std::move(row.text));
+    return StringArray(env, items);
 }
 
 // [l, b, r, t, fontSize] per text box, aligned with nativeTextBoxIds.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeTextBoxRectsPacked(JNIEnv* env, jobject,
                                                               jlong handle) {
-    auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
     std::vector<double> packed;
-    const int count = FPDFPage_CountObjects(p->page);
-    for (int i = 0; i < count; i++) {
-        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
-        std::vector<jchar> id;
-        if (obj == nullptr || !TextBoxId(obj, i, &id)) continue;
-        float l = 0, b = 0, r = 0, t = 0, size = 0;
-        FPDFPageObj_GetBounds(obj, &l, &b, &r, &t);
-        FPDFTextObj_GetFontSize(obj, &size);
-        packed.push_back(l - crop.x);
-        packed.push_back(b - crop.y);
-        packed.push_back(r - crop.x);
-        packed.push_back(t - crop.y);
-        packed.push_back(size);
+    for (const auto& row : LoadBoxes(reinterpret_cast<Page*>(handle))) {
+        packed.push_back(row.bounds.left);
+        packed.push_back(row.bounds.bottom);
+        packed.push_back(row.bounds.right);
+        packed.push_back(row.bounds.top);
+        packed.push_back(row.fontSize);
     }
     jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
     if (out && !packed.empty()) {
@@ -596,19 +446,11 @@ JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeMoveTextBox(JNIEnv* env, jobject, jlong handle,
                                                        jstring id, jdouble x, jdouble y) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
-    FPDF_PAGEOBJECT obj = FindTextBox(p->page, JavaChars(env, id));
-    if (obj == nullptr) return JNI_FALSE;
-
-    float l = 0, b = 0, r = 0, t = 0;
-    FS_MATRIX m;
-    if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) || !FPDFPageObj_GetMatrix(obj, &m)) {
-        return JNI_FALSE;
-    }
-    m.e += static_cast<float>(x + crop.x) - l;
-    m.f += static_cast<float>(y + crop.y) - b;
-    const bool ok = FPDFPageObj_SetMatrix(obj, &m) && FPDFPage_GenerateContent(p->page);
-    return ok ? JNI_TRUE : JNI_FALSE;
+    std::vector<jchar> wide = JavaChars(env, id);
+    wide.push_back(0);
+    const int index = megapdf_find_text_box(p->core, wide.data());
+    if (index < 0) return JNI_FALSE;
+    return megapdf_move_text_box(p->core, index, x, y) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
 // Removes the box with the given id. Already gone counts as success, so an undo
@@ -617,11 +459,9 @@ JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeRemoveTextBox(JNIEnv* env, jobject, jlong handle,
                                                          jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    FPDF_PAGEOBJECT obj = FindTextBox(p->page, JavaChars(env, id));
-    if (obj == nullptr) return JNI_TRUE;
-    if (!FPDFPage_RemoveObject(p->page, obj)) return JNI_FALSE;
-    FPDFPageObj_Destroy(obj);
-    return FPDFPage_GenerateContent(p->page) ? JNI_TRUE : JNI_FALSE;
+    std::vector<jchar> wide = JavaChars(env, id);
+    wide.push_back(0);
+    return megapdf_remove_text_box(p->core, wide.data()) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
 }
 
 // MegaPDF_Id per annot index ("" for annots that aren't ours), from the core's

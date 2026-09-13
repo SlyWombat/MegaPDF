@@ -22,7 +22,7 @@
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
 //
-// Migration note: until every contract has moved (#109–#112), bindings still
+// Migration note: until every contract has moved (#110–#112), bindings still
 // call PDFium directly for the rest, through the *_raw accessors. Those go away
 // with the last migrated contract.
 #ifndef MEGAPDF_CORE_H
@@ -332,6 +332,72 @@ MEGAPDF_API int megapdf_remove_stamp(const megapdf_page* page, const unsigned sh
  */
 MEGAPDF_API int megapdf_move_image_stamp(const megapdf_page* page, const unsigned short* id_utf16,
                                          const megapdf_rect* bounds);
+
+/* --------------------------------------------------------------------------
+ * Contract 5: whiteouts, text boxes and detached objects (#109). Whiteouts are
+ * white filled paths carrying the MegaPDFWhiteout mark; text boxes are text
+ * objects in one of three base-14 faces carrying the MegaPDFTextBox mark with
+ * `id` and `font` params (SDD §6.2 contract 4, #43). Coordinates are crop space.
+ * ----------------------------------------------------------------------- */
+
+typedef struct megapdf_object_rect {
+    int object_index;
+    megapdf_rect bounds;
+} megapdf_object_rect;
+
+/** Appends a whiteout covering `bounds`; its object index comes back in `out_object_index`. */
+MEGAPDF_API int megapdf_add_whiteout(const megapdf_page* page, const megapdf_rect* bounds, int* out_object_index);
+/** Every whiteout on the page, in object order; count-then-fill. */
+MEGAPDF_API size_t megapdf_whiteouts(const megapdf_page* page, megapdf_object_rect* out, size_t capacity);
+
+/**
+ * Inserts a text box at `object_index` (-1 appends) with its baseline starting at
+ * (baseline_x, baseline_y). `font_name` must be "Helvetica", "Times-Roman" or
+ * "Courier" (MEGAPDF_ERR_ARGUMENT otherwise); `text` and `id` are NUL-terminated
+ * UTF-16. The mark records the id and the face exactly as chosen.
+ */
+MEGAPDF_API int megapdf_add_text_box(const megapdf_page* page, int object_index, const unsigned short* text,
+                                     const char* font_name, double font_size, double baseline_x, double baseline_y,
+                                     const unsigned short* id, int* out_object_index);
+
+/**
+ * The id-preserving restyle (#45): inserts a box at `object_index` and then moves
+ * it so its bounds' bottom-left corner lands on (left, bottom) — a 12 pt → 18 pt
+ * change grows upward from the anchored corner instead of dropping by the extra
+ * descender depth. The caller detaches the old object first (megapdf_detach_object).
+ */
+MEGAPDF_API int megapdf_restyle_text_box(const megapdf_page* page, int object_index, const unsigned short* text,
+                                         const char* font_name, double font_size, double left, double bottom,
+                                         const unsigned short* id);
+
+/**
+ * The object index of the text box carrying `id`, or -1. A marked box with no id
+ * (written before the param existed) answers to "text:untagged#<object index>",
+ * the derived handle the phones give it.
+ */
+MEGAPDF_API int megapdf_find_text_box(const megapdf_page* page, const unsigned short* id);
+
+/** PDFium's object type (FPDF_PAGEOBJ_TEXT = 1, PATH = 2, IMAGE = 3, ...), or -1 for a bad index. */
+MEGAPDF_API int megapdf_object_type(const megapdf_page* page, int object_index);
+
+/** Bounds of any page object, crop space. MEGAPDF_ERR_ARGUMENT for a bad index. */
+MEGAPDF_API int megapdf_object_bounds(const megapdf_page* page, int object_index, megapdf_rect* out);
+
+/** Translates a text object so its bounds' bottom-left corner lands on (left, bottom); scale and rotation untouched. */
+MEGAPDF_API int megapdf_move_text_box(const megapdf_page* page, int object_index, double left, double bottom);
+
+/** Removes and frees the box carrying `id`. Already gone counts as success, so an undo cannot fail. */
+MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* page, const unsigned short* id);
+
+/**
+ * Detached objects: a page object removed from its page but kept alive so an
+ * undo can put it back byte-identical. The core owns it; restoring consumes the
+ * handle, discarding frees it, and closing the document frees any still held.
+ */
+typedef struct megapdf_detached megapdf_detached;
+MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* page, int object_index);
+MEGAPDF_API int megapdf_restore_object(const megapdf_page* page, megapdf_detached* detached, int object_index);
+MEGAPDF_API void megapdf_discard_detached(megapdf_detached* detached);
 
 /* --------------------------------------------------------------------------
  * Raw handles — for the contracts that have not migrated yet. Bindings use these
