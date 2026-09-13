@@ -67,9 +67,23 @@ internal static class Program
     internal static string? ScreenshotPath;
 
     public static AppBuilder BuildAvaloniaApp()
-        => AppBuilder.Configure<App>()
+    {
+        var builder = AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .LogToTrace();
+
+        // A flyout is normally its own OS window, which RenderTargetBitmap cannot
+        // see, so the `sign` screenshot state (#100) would capture a closed library.
+        // Drawing popups inside the main window for capture runs only keeps the
+        // shipped behaviour untouched.
+        if (Environment.GetCommandLineArgs().Contains("--screenshot"))
+        {
+            builder = builder
+                .With(new Win32PlatformOptions { OverlayPopups = true })
+                .With(new AvaloniaNativePlatformOptions { OverlayPopups = true });
+        }
+        return builder;
+    }
     // No .WithInterFont(): bundling Inter would make the app look the same
     // everywhere, which is the opposite of what we want. The system default is
     // San Francisco on macOS and Segoe UI on Windows — each native to its host.

@@ -145,7 +145,62 @@
     <value>Vos signatures</value>
   </data>
   <data name="NoSignaturesYet" xml:space="preserve">
-    <value>Aucune signature pour l'instant — dessinez-en une ci-dessous.</value>
+    <value>Aucune signature pour l'instant. Dessinez-en une avec le pavé tactile, ou utilisez une photo de votre signature sur papier blanc — l'arrière-plan est retiré automatiquement.</value>
+    <comment>Empty state of the signature library (#100)</comment>
+  </data>
+  <data name="SignaturesTitle" xml:space="preserve">
+    <value>Signatures</value>
+    <comment>Heading of the signature library flyout (#100)</comment>
+  </data>
+  <data name="SignatureDraw" xml:space="preserve">
+    <value>Dessiner</value>
+    <comment>Button: draw a new signature (#100)</comment>
+  </data>
+  <data name="SignatureFromPhoto" xml:space="preserve">
+    <value>À partir d'une photo</value>
+    <comment>Button: import a signature from an image (#100)</comment>
+  </data>
+  <data name="SignatureOptions" xml:space="preserve">
+    <value>Options de la signature</value>
+    <comment>Tooltip and accessible name of the per-card overflow button (#100)</comment>
+  </data>
+  <data name="SignatureCardA11y" xml:space="preserve">
+    <value>{0}, signature. Cliquez pour la placer sur la page.</value>
+    <comment>Accessible name of a signature card; {0} is its name (#100)</comment>
+  </data>
+  <data name="RenameSignature" xml:space="preserve">
+    <value>Renommer…</value>
+    <comment>Menu item (#100)</comment>
+  </data>
+  <data name="DeleteSignature" xml:space="preserve">
+    <value>Supprimer…</value>
+    <comment>Menu item (#100)</comment>
+  </data>
+  <data name="RenameSignatureTitle" xml:space="preserve">
+    <value>Renommer la signature</value>
+    <comment>Dialog title (#100)</comment>
+  </data>
+  <data name="SignatureName" xml:space="preserve">
+    <value>Nom</value>
+    <comment>Watermark of the rename box (#100)</comment>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Renommer</value>
+  </data>
+  <data name="Delete" xml:space="preserve">
+    <value>Supprimer</value>
+  </data>
+  <data name="DeleteSignatureTitle" xml:space="preserve">
+    <value>Supprimer la signature</value>
+    <comment>Dialog title (#100)</comment>
+  </data>
+  <data name="DeleteSignaturePrompt" xml:space="preserve">
+    <value>Supprimer « {0} » ? Cette action est irréversible.</value>
+    <comment>{0} is the signature's name (#100)</comment>
+  </data>
+  <data name="SignatureRenamed" xml:space="preserve">
+    <value>Renommée « {0} ».</value>
+    <comment>Status line after a rename (#100)</comment>
   </data>
   <data name="DrawNewSignature" xml:space="preserve">
     <value>Dessiner une nouvelle signature…</value>

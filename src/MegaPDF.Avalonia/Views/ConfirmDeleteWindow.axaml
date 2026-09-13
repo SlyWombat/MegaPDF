@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.ConfirmDeleteWindow"
+        Title="{x:Static loc:Strings.DeleteSignatureTitle}"
+        Width="400" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Name="PromptText" TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+      <Button Name="CancelButton" Content="{x:Static loc:Strings.Cancel}" IsCancel="True" IsDefault="True" />
+      <!-- Destructive, so it is not the default; Enter cancels. -->
+      <Button Name="DeleteButton" Content="{x:Static loc:Strings.Delete}"
+              Foreground="{DynamicResource BrandDanger}" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -17,6 +17,16 @@ namespace MegaPDF.Avalonia.ViewModels;
 public sealed record SignatureItem(SignatureEntry Entry, global::Avalonia.Media.Imaging.Bitmap? Thumbnail)
 {
     public string Name => Entry.Name;
+
+    /// <summary>
+    /// The view model the card's menu items command. A menu is a popup outside the
+    /// window's visual tree, where an ancestor binding cannot find the main view
+    /// model; the item carries it instead (#100).
+    /// </summary>
+    public MainViewModel? Owner { get; init; }
+
+    /// <summary>Narrator/VoiceOver name for the card: what it is, and what a click does.</summary>
+    public string AccessibleName => Strings.SignatureCardA11y(Entry.Name);
 }
 
 /// <summary>
@@ -1192,9 +1202,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Signatures.Clear();
 
         foreach (var entry in _signatures.All.OrderByDescending(e => e.CreatedUtc))
-            Signatures.Add(new SignatureItem(entry, Rendering.SignatureImages.LoadThumbnail(entry.PngPath)));
+            Signatures.Add(new SignatureItem(entry, Rendering.SignatureImages.LoadThumbnail(entry.PngPath)) { Owner = this });
 
         HasSignatures = Signatures.Count > 0;
+    }
+
+    // The card and its menu (#100). Place is the card's own click; Rename and Delete
+    // need a dialog, which is the view's business, so they are raised as requests
+    // the way a password prompt is.
+
+    [RelayCommand]
+    private void PlaceSignature(SignatureItem item) => BeginPlacing(item);
+
+    /// <summary>Raised when the user asks to rename a signature; the view shows the prompt.</summary>
+    public event Action<SignatureItem>? RenameSignatureRequested;
+
+    /// <summary>Raised when the user asks to delete a signature; the view asks once, then calls <see cref="RemoveSignature"/>.</summary>
+    public event Action<SignatureItem>? DeleteSignatureRequested;
+
+    [RelayCommand]
+    private void RequestRenameSignature(SignatureItem item) => RenameSignatureRequested?.Invoke(item);
+
+    [RelayCommand]
+    private void RequestDeleteSignature(SignatureItem item) => DeleteSignatureRequested?.Invoke(item);
+
+    public void RenameSignature(Guid id, string newName)
+    {
+        var trimmed = newName.Trim();
+        if (trimmed.Length == 0)
+            return;
+        _signatures.Rename(id, trimmed);
+        LoadSignatures();
+        Status = Strings.SignatureRenamed(trimmed);
     }
 
     [ObservableProperty]

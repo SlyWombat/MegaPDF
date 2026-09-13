@@ -32,10 +32,46 @@ public partial class App : Application
     /// these since their store screenshots were first captured; macOS is catching
     /// up with them.
     /// </summary>
-    private static bool ApplyScreenshotState(MainViewModel viewModel, string state)
+    private static bool ApplyScreenshotState(MainViewModel viewModel, MainWindow? window, string state, string? signaturePng)
     {
         switch (state)
         {
+            // The signature library (#100): white cards with the ink, an overflow per
+            // card, and the two ways in. Needs at least one signature to show a card,
+            // so an empty library is seeded from --signature (or the repo's demo
+            // signature) through the same import path a person uses.
+            case "sign":
+                if (window is null)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state sign has no window to open the flyout on.");
+                    return false;
+                }
+                if (viewModel.Signatures.Count == 0)
+                {
+                    var seed = signaturePng ?? FindDemoSignature();
+                    if (seed is null || !File.Exists(seed))
+                    {
+                        Console.Error.WriteLine(
+                            "::error::--screenshot-state sign: the library is empty and no signature image "
+                            + "was found to seed it (pass --signature <png|jpg>, or run from the repo so "
+                            + "tools/assets/megawoman-sig.jpg is reachable).");
+                        return false;
+                    }
+                    try
+                    {
+                        viewModel.AddSignatureFromImage("Mega W.", Rendering.SignatureImages.LoadBgra(seed),
+                                                        Rendering.SignatureImages.EncodePng);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"::error::--screenshot-state sign: seeding the library failed: {ex.Message}");
+                        return false;
+                    }
+                }
+                Console.WriteLine($"screenshot-state sign: {viewModel.Signatures.Count} signature(s) in the library");
+                window.ShowSignaturesFlyout();
+                return true;
+
             // Search hits: cyan for every match, brand blue for the one you are on.
             case "find":
                 viewModel.IsFindOpen = true;
@@ -80,6 +116,20 @@ public partial class App : Application
                 Console.Error.WriteLine($"::error::unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    /// <summary>The repo's demo signature (tools/assets/megawoman-sig.jpg), found by walking up from the binary; null outside a checkout.</summary>
+    private static string? FindDemoSignature()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "tools", "assets", "megawoman-sig.jpg");
+            if (File.Exists(candidate))
+                return candidate;
+            dir = dir.Parent;
+        }
+        return null;
     }
 
     /// <summary>
@@ -320,7 +370,11 @@ public partial class App : Application
                 return;
             }
 
-            var viewModel = new MainViewModel();
+            // The sign screenshot seeds a signature into the library; that must land in
+            // a throwaway directory, never in the person's real one (#100).
+            var viewModel = ArgumentAfter(desktop.Args, "--screenshot-state") == "sign"
+                ? new MainViewModel(Directory.CreateTempSubdirectory("megapdf-shot-sign-").FullName)
+                : new MainViewModel();
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
 
             // --window 1440x900: the size the window opens at, for captures. The
@@ -388,7 +442,8 @@ public partial class App : Application
                 {
                     DispatcherTimer.RunOnce(() =>
                     {
-                        if (!ApplyScreenshotState(viewModel, state))
+                        if (!ApplyScreenshotState(viewModel, desktop.MainWindow as MainWindow, state,
+                                                  ArgumentAfter(desktop.Args, "--signature")))
                             desktop.Shutdown(1);
                     }, TimeSpan.FromSeconds(2));
                 }

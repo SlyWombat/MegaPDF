@@ -1,0 +1,16 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.RenameSignatureWindow"
+        Title="{x:Static loc:Strings.RenameSignatureTitle}"
+        Width="380" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBox Name="NameBox" Watermark="{x:Static loc:Strings.SignatureName}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+      <Button Name="CancelButton" Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="RenameButton" Content="{x:Static loc:Strings.Rename}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>
