@@ -9,12 +9,11 @@ namespace MegaPDF.Core.Engine.Core;
 /// macOS, built by tools/build-core.* and copied next to pdfium by the Core
 /// project.
 ///
-/// Since #105 the core owns documents: <see cref="megapdf_open"/> copies the bytes
-/// and initialises the form-fill environment, pages come from
+/// The core owns documents: <see cref="megapdf_open"/> copies the bytes and
+/// initialises the form-fill environment, pages come from
 /// <see cref="megapdf_load_page"/>, and the core serialises every call on its own
-/// mutex. The engine still takes <see cref="Pdfium.PdfiumLibrary.Lock"/> around
-/// the contracts that have not migrated yet, which reach PDFium through the raw
-/// handle accessors.
+/// mutex. Since #112 every contract lives there; the desktop engine makes no
+/// PDFium call of its own.
 ///
 /// Buffers are caller-owned, count-then-fill, so the marshalling here is
 /// deliberately boring.
@@ -384,14 +383,24 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern unsafe int megapdf_render(IntPtr page, byte* buffer, int width, int height, int stride, uint flags);
 
-    // Raw handles, for the contracts still bound directly (#112) --------------
+    // Phase 3: body-text editing (#112) ---------------------------------------
+
+    public const int ErrNoFont = -4;
+    public const int EditInPlace = 0;
+    public const int EditSubstituted = 1;
 
     [DllImport(Dll)]
-    public static extern IntPtr megapdf_document_raw(IntPtr document);
+    public static extern int megapdf_set_text(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
+        int forceSubstitute, out int outcome);
 
     [DllImport(Dll)]
-    public static extern IntPtr megapdf_document_form_raw(IntPtr document);
+    public static extern int megapdf_insert_text_run(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string fontName, double fontSize, double left, double baseline);
 
     [DllImport(Dll)]
-    public static extern IntPtr megapdf_page_raw(IntPtr page);
+    public static extern int megapdf_is_subset_font_name([MarshalAs(UnmanagedType.LPUTF8Str)] string baseName);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_map_to_standard_font([MarshalAs(UnmanagedType.LPUTF8Str)] string originalName,
+        [Out] byte[]? outName, nuint capacity);
 }

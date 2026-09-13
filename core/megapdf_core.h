@@ -22,9 +22,8 @@
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
 //
-// Migration note: until every contract has moved (#112), bindings still
-// call PDFium directly for the rest, through the *_raw accessors. Those go away
-// with the last migrated contract.
+// Every contract lives here (#105–#112): no binding calls PDFium directly, so
+// there are no raw-handle accessors — the opaque handles are the whole surface.
 #ifndef MEGAPDF_CORE_H
 #define MEGAPDF_CORE_H
 
@@ -61,7 +60,8 @@ enum {
     MEGAPDF_OK = 0,
     MEGAPDF_ERR_ARGUMENT = -1,    /* a null handle or an out-of-range index */
     MEGAPDF_ERR_PDFIUM = -2,      /* PDFium refused; see megapdf_last_error_message() */
-    MEGAPDF_ERR_MEMORY = -3       /* the core could not allocate */
+    MEGAPDF_ERR_MEMORY = -3,      /* the core could not allocate */
+    MEGAPDF_ERR_NO_FONT = -4      /* no font could render the text, not even a standard substitute (tier 2 failed) */
 };
 
 /* --------------------------------------------------------------------------
@@ -503,14 +503,49 @@ MEGAPDF_API int megapdf_render(const megapdf_page* page, void* buffer, int width
                                unsigned int flags);
 
 /* --------------------------------------------------------------------------
- * Raw handles — for the contracts that have not migrated yet. Bindings use these
- * to keep calling PDFium directly for stamps, text, forms, save; each disappears
- * as its contract moves into the core.
+ * Phase 3: body-text editing, written once (#112, SDD §3.1). The tiers:
+ *   1. the run's own font covers the new text → edit in place;
+ *   2. it does not (a subset-embedded font only carries the glyphs the document
+ *      already uses, and PDFium would silently draw notdef boxes) → replace the
+ *      run with the closest standard face, same index, matrix, colour and marks;
+ *   3. rasterised text has no run to edit — the caller reports that; nothing here
+ *      pretends otherwise.
+ * Undo is detach-and-restore (contract 5); megapdf_insert_text_run replays a
+ * journalled restore after a crash.
  * ----------------------------------------------------------------------- */
 
-MEGAPDF_API void* megapdf_document_raw(const megapdf_document* document);      /* FPDF_DOCUMENT */
-MEGAPDF_API void* megapdf_document_form_raw(const megapdf_document* document); /* FPDF_FORMHANDLE */
-MEGAPDF_API void* megapdf_page_raw(const megapdf_page* page);                  /* FPDF_PAGE */
+enum {
+    MEGAPDF_EDIT_IN_PLACE = 0,     /* tier 1: the document's own font rendered the new text */
+    MEGAPDF_EDIT_SUBSTITUTED = 1   /* tier 2: a similar standard face was used; the UI shows a notice */
+};
+
+/**
+ * Sets a text object's text. `force_substitute` skips tier 1 (the test hook the
+ * desktop suite uses). MEGAPDF_ERR_ARGUMENT for a non-text object or empty text,
+ * MEGAPDF_ERR_NO_FONT when even the substitute cannot render it; `out_outcome`
+ * receives MEGAPDF_EDIT_IN_PLACE or MEGAPDF_EDIT_SUBSTITUTED.
+ */
+MEGAPDF_API int megapdf_set_text(const megapdf_page* page, int object_index, const unsigned short* text,
+                                 int force_substitute, int* out_outcome);
+
+/**
+ * Inserts a text object at `object_index` with its baseline starting at
+ * (left, baseline) in crop space, in the standard face closest to `font_name`
+ * (any name; see megapdf_map_to_standard_font). Untagged — this recreates body
+ * text from the recovery journal, not a text box.
+ */
+MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* page, int object_index, const unsigned short* text,
+                                        const char* font_name, double font_size, double left, double baseline);
+
+/** 1 when `base_name` is a subset-embedded font's name: six capitals, a plus sign, the name. */
+MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name);
+
+/**
+ * The standard-14 face closest to `original_name` (bold/italic from the name;
+ * Courier for monospace, Times for serif, Helvetica otherwise). Writes a
+ * NUL-terminated name into `out` when it fits; returns its length without the NUL.
+ */
+MEGAPDF_API size_t megapdf_map_to_standard_font(const char* original_name, char* out, size_t capacity);
 
 #ifdef __cplusplus
 }  /* extern "C" */

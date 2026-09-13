@@ -1,160 +1,26 @@
-using System.Runtime.InteropServices;
-
 namespace MegaPDF.Core.Engine.Pdfium;
 
 /// <summary>
-/// Thin P/Invoke surface over pdfium.dll (SDD §4.3: a wrapper we own, no generated bindings).
-/// PDFium is not thread-safe — every call must hold <see cref="PdfiumLibrary.Lock"/>.
-/// Targets win-x64, where stdcall/cdecl are the same ABI.
+/// The PDFium constants the desktop engine still names. Every PDFium call now goes
+/// through the shared engine core (ADR-003, #105–#112), so there are no P/Invokes
+/// into pdfium.dll left here — only the error codes <see cref="PdfLoadException"/>
+/// reports and the object types the core's <c>megapdf_object_type</c> returns.
 /// </summary>
 internal static class PdfiumNative
 {
-    private const string Dll = "pdfium";
-
-    // FPDF_RenderPageBitmap flags
-    public const int FPDF_ANNOT = 0x01;
-    public const int FPDF_LCD_TEXT = 0x02;
-
-    // FPDF_SaveAsCopy flags
-    public const uint FPDF_INCREMENTAL = 1;
-
-    // FPDF_GetLastError codes
     public const uint FPDF_ERR_FILE = 2;
     public const uint FPDF_ERR_FORMAT = 3;
     public const uint FPDF_ERR_PASSWORD = 4;
-
-    [DllImport(Dll)] public static extern void FPDF_InitLibrary();
-
-
-
-
-    // --- Text extraction & editing (fpdf_edit.h, fpdf_text.h) ---
-
     public const int FPDF_PAGEOBJ_TEXT = 1;
-
-    [DllImport(Dll)] public static extern IntPtr FPDFText_LoadPage(IntPtr page);
-    [DllImport(Dll)] public static extern void FPDFText_ClosePage(IntPtr textPage);
-
-    [DllImport(Dll)] public static extern int FPDFPage_CountObjects(IntPtr page);
-    [DllImport(Dll)] public static extern IntPtr FPDFPage_GetObject(IntPtr page, int index);
-    [DllImport(Dll)] public static extern int FPDFPageObj_GetType(IntPtr pageObject);
-
-    /// <summary>Buffer is UTF-16LE; length in FPDF_WCHARs; returns chars incl. NUL.</summary>
-    [DllImport(Dll)] public static extern uint FPDFTextObj_GetText(IntPtr textObject, IntPtr textPage, [Out] byte[]? buffer, uint length);
-    [DllImport(Dll)] public static extern int FPDFTextObj_GetFontSize(IntPtr textObject, out float size);
-    [DllImport(Dll)] public static extern IntPtr FPDFTextObj_GetFont(IntPtr textObject);
-
-    /// <summary>Buffer is UTF-8; returns bytes incl. NUL.</summary>
-    [DllImport(Dll)] public static extern nuint FPDFFont_GetFamilyName(IntPtr font, [Out] byte[]? buffer, nuint length);
-
-    [DllImport(Dll)] public static extern int FPDFText_SetText(IntPtr textObject, [MarshalAs(UnmanagedType.LPWStr)] string text);
-    [DllImport(Dll)] public static extern int FPDFPage_GenerateContent(IntPtr page);
-
-    // --- Text search (fpdf_text.h; simple find, issue #26) ---
-
-    /// <summary>findWhat is an FPDF_WIDESTRING (UTF-16LE, NUL-terminated); flags 0 = case-insensitive substring.</summary>
-
-    /// <summary>Computes the rects covering a char range; FPDFText_GetRect then reads them by index.</summary>
-
-    // --- Font substitution (tier 2, SDD §3.1) ---
-
-    /// <summary>Buffer is UTF-8; returns bytes incl. NUL. Subset fonts carry an ABCDEF+ prefix.</summary>
-    [DllImport(Dll)] public static extern nuint FPDFFont_GetBaseFontName(IntPtr font, [Out] byte[]? buffer, nuint length);
-
-    [DllImport(Dll)] public static extern IntPtr FPDFText_LoadStandardFont(IntPtr document, [MarshalAs(UnmanagedType.LPUTF8Str)] string font);
-    [DllImport(Dll)] public static extern void FPDFFont_Close(IntPtr font);
-    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_CreateTextObj(IntPtr document, IntPtr font, float fontSize);
-    [DllImport(Dll)] public static extern int FPDFPage_InsertObjectAtIndex(IntPtr page, IntPtr pageObject, nuint index);
-    [DllImport(Dll)] public static extern int FPDFPage_RemoveObject(IntPtr page, IntPtr pageObject);
-    [DllImport(Dll)] public static extern void FPDFPageObj_Destroy(IntPtr pageObject);
-    [DllImport(Dll)] public static extern int FPDFPageObj_GetMatrix(IntPtr pageObject, out FS_MATRIX matrix);
-    [DllImport(Dll)] public static extern int FPDFPageObj_SetMatrix(IntPtr pageObject, ref FS_MATRIX matrix);
-    [DllImport(Dll)] public static extern int FPDFPageObj_GetFillColor(IntPtr pageObject, out uint r, out uint g, out uint b, out uint a);
-    [DllImport(Dll)] public static extern int FPDFPageObj_SetFillColor(IntPtr pageObject, uint r, uint g, uint b, uint a);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FS_MATRIX
-    {
-        public float A, B, C, D, E, F;
-    }
-
-    // --- AcroForm form-fill environment (fpdf_formfill.h) ---
-
-    public const int FPDF_FORMFIELD_CHECKBOX = 2;
-    public const int FPDF_FORMFIELD_RADIOBUTTON = 3;
-    public const int FPDF_FORMFIELD_TEXTFIELD = 6;
-    public const int FPDF_ANNOT_SUBTYPE_WIDGET = 20;
-    public const int FPDF_ANNOT_SUBTYPE_STAMP = 13;
-
-    // The FPDF_FORMFILLINFO environment, page load/close hooks, document open and
-    // text search moved into the shared core with #105 (ADR-003); the form handle
-    // used below comes from CoreNative.megapdf_document_form_raw.
-
-    // --- Annotations (fpdf_annot.h) ---
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FS_RECTF
-    {
-        public float Left, Top, Right, Bottom;
-    }
-
-    /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
-    /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
-
-    // --- Drawn-square detection & mark stamps (SDD §3.2) ---
-
-    public const int FPDF_PAGEOBJ_PATH = 2;
-
-
-    /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
-
-    // --- Image stamps (signatures, SDD §3.3) ---
-
-    public const int FPDFBitmap_BGRA = 4;
-
-    /// <summary>Renders the image object (masks applied) to a new BGRA bitmap the caller destroys.</summary>
-
-    /// <summary>Bakes annotations and form fields into page content. 0=fail, 1=success, 2=nothing to do.</summary>
-
-    // --- Image compression (shrink-for-email) ---
-
-    /// <summary>Returns the image's stored (compressed) stream length in bytes.</summary>
-
-    /// <summary>Replaces the image's stream with a JPEG read synchronously (inline) from the file access.</summary>
-
-    public const int FPDF_PAGEOBJ_IMAGE = 3;
-
-    // --- Content marks (identify MegaPDF whiteout objects) ---
-
-    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_AddMark(IntPtr pageObject, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
-    [DllImport(Dll)] public static extern int FPDFPageObj_CountMarks(IntPtr pageObject);
-    [DllImport(Dll)] public static extern IntPtr FPDFPageObj_GetMark(IntPtr pageObject, int index);
-    /// <summary>UTF-16 buffer; out length in bytes incl. NUL.</summary>
-    [DllImport(Dll)] public static extern int FPDFPageObjMark_GetName(IntPtr mark, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
-    [DllImport(Dll)] public static extern int FPDFPageObjMark_SetStringParam(IntPtr document, IntPtr pageObject, IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
-    /// <summary>UTF-16 buffer; out length in bytes incl. NUL.</summary>
-    [DllImport(Dll)] public static extern int FPDFPageObjMark_GetParamStringValue(IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
-
-
 }
 
 /// <summary>
-/// Global PDFium state: one-time init and the process-wide lock that serializes all
-/// PDFium calls. The library is never torn down — it lives for the process lifetime.
+/// The process-wide lock the desktop adapter takes around multi-call sequences
+/// (open, page load, dispose). The core serialises every individual call on its
+/// own mutex; this keeps a count-then-fill pair from interleaving with another
+/// thread's edit.
 /// </summary>
 internal static class PdfiumLibrary
 {
     public static readonly object Lock = new();
-    private static bool _initialized;
-
-    public static void EnsureInitialized()
-    {
-        lock (Lock)
-        {
-            if (_initialized)
-                return;
-            PdfiumNative.FPDF_InitLibrary();
-            _initialized = true;
-        }
-    }
 }

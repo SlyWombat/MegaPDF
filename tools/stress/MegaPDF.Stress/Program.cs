@@ -48,7 +48,7 @@ internal static class Program
     {
         Console.Error.WriteLine(
             "usage: MegaPDF.Stress run --root <dir> --out <dir> [--workers N] [--scale S]\n" +
-            "         [--phases scroll,search,zoom,save,images] [--terms Seaman,the]\n" +
+            "         [--phases scroll,search,zoom,save,images[,edit]] [--terms Seaman,the]\n" +
             "         [--limit N] [--filter substring] [--hang-seconds 180] [--cap-base 300] [--cap-per-page 2]\n" +
             "       MegaPDF.Stress worker --list <files.txt> --root <dir> [--scale S] [--phases ...] [--terms ...]");
         return 2;
@@ -116,6 +116,7 @@ internal sealed class FileResult
     [JsonPropertyName("zoom")] public List<ZoomResult>? Zoom { get; set; }
     [JsonPropertyName("save")] public SaveResult? Save { get; set; }
     [JsonPropertyName("images")] public ImagesResult? Images { get; set; }
+    [JsonPropertyName("edit")] public EditResult? Edit { get; set; }
     [JsonPropertyName("mem")] public MemResult? Mem { get; set; }
     [JsonPropertyName("wall_ms")] public double? WallMs { get; set; }
     [JsonPropertyName("worker")] public int? WorkerPid { get; set; }
@@ -164,6 +165,22 @@ internal sealed class SaveResult
     [JsonPropertyName("bytes")] public long Bytes { get; set; }
     [JsonPropertyName("reopen_ms")] public double? ReopenMs { get; set; }
     [JsonPropertyName("reopen_pages")] public int? ReopenPages { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+}
+
+/// <summary>The optional edit phase (#112): retype the first line of page 1, save, reopen, read it back.</summary>
+internal sealed class EditResult
+{
+    [JsonPropertyName("ms")] public double Ms { get; set; }
+    [JsonPropertyName("outcome")] public string? Outcome { get; set; }
+    [JsonPropertyName("skipped")] public string? Skipped { get; set; }
+    [JsonPropertyName("verified")] public bool Verified { get; set; }
+    // Where the retyped text was found — booleans only, never document text.
+    [JsonPropertyName("in_memory")] public bool InMemory { get; set; }
+    [JsonPropertyName("reopened_same_index")] public bool ReopenedSameIndex { get; set; }
+    [JsonPropertyName("reopened_anywhere")] public bool ReopenedAnywhere { get; set; }
+    [JsonPropertyName("runs_before")] public int RunsBefore { get; set; }
+    [JsonPropertyName("runs_after")] public int RunsAfter { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
 }
 
@@ -374,6 +391,15 @@ internal static class Worker
                 catch (Exception ex) { errors["images"] = Describe(ex); }
             }
 
+            // 9. Optional (#112): retype the first line of page 1 through the tiered
+            //    body-text edit, save, reopen and read the new text back. Last, because
+            //    it changes the document.
+            if (phases.Contains("edit") && count > 0)
+            {
+                Heartbeat(hb, i, "edit", 0);
+                r.Edit = RetypeFirstLine(engine, doc, Path.Combine(tmpDir, "edited.pdf"));
+            }
+
             if (errors.Count > 0)
             {
                 r.PhaseErrors = errors;
@@ -503,6 +529,63 @@ internal static class Worker
             z.Error = Describe(ex);
         }
         return z;
+    }
+
+    private const string RetypedText = "MegaPDF corpus edit 2026";
+
+    private static EditResult RetypeFirstLine(PdfiumEngine engine, IPdfDocument doc, string savedPath)
+    {
+        var e = new EditResult();
+        try
+        {
+            int objectIndex;
+            var sw = Stopwatch.StartNew();
+            using (var page = doc.GetPage(0))
+            {
+                var line = page.GetTextLines().FirstOrDefault(l => !string.IsNullOrWhiteSpace(l.Text));
+                if (line is null)
+                {
+                    // Scans and pictures: tier 3, nothing to retype.
+                    e.Skipped = "no text";
+                    return e;
+                }
+                var run = line.Runs[0];
+                objectIndex = run.ObjectIndex;
+                e.Outcome = page.SetTextRunText(run, RetypedText) == TextEditOutcome.EditedInPlace ? "in_place" : "substituted";
+                var inMemory = page.GetTextRuns();
+                e.RunsBefore = inMemory.Count;
+                e.InMemory = inMemory.Any(r => r.Text == RetypedText);
+            }
+            using (var stream = File.Create(savedPath))
+                doc.Save(stream);
+            e.Ms = sw.Elapsed.TotalMilliseconds;
+            using var reopened = engine.Open(savedPath);
+            using var reopenedPage = reopened.GetPage(0);
+            var after = reopenedPage.GetTextRuns();
+            e.RunsAfter = after.Count;
+            e.ReopenedSameIndex = after.Any(r => r.ObjectIndex == objectIndex && r.Text == RetypedText);
+            e.ReopenedAnywhere = after.Any(r => r.Text == RetypedText);
+            // The object index is not stable across a save: PDFium re-parses the
+            // rewritten content stream on reopen. What has to survive is the text.
+            e.Verified = e.ReopenedAnywhere;
+            if (!e.InMemory)
+                e.Error = "the retyped text did not read back in memory";
+            else if (!e.Verified)
+                e.Error = "the retyped text did not read back after save and reopen";
+        }
+        catch (TextEditException ex)
+        {
+            e.Error = "text edit refused: " + ex.Reason;
+        }
+        catch (Exception ex)
+        {
+            e.Error = Describe(ex);
+        }
+        finally
+        {
+            try { File.Delete(savedPath); } catch { /* best effort */ }
+        }
+        return e;
     }
 
     private static SaveResult SaveAndReopen(PdfiumEngine engine, IPdfDocument doc, string savedPath)

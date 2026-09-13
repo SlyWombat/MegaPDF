@@ -1699,13 +1699,187 @@ MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, i
 }  // extern "C"
 
 // --------------------------------------------------------------------------
-// Raw handles (transitional)
+// Phase 3: body-text editing (#112)
 // --------------------------------------------------------------------------
+
+namespace {
+
+// FPDFFont_GetBaseFontName / GetFamilyName: UTF-8, length in bytes including the terminator.
+std::string ReadFontNameUtf8(FPDF_FONT font, bool base_name) {
+    const size_t bytes = base_name ? FPDFFont_GetBaseFontName(font, nullptr, 0) : FPDFFont_GetFamilyName(font, nullptr, 0);
+    if (bytes <= 1) return "";
+    std::string buf(bytes, '\0');
+    if (base_name) FPDFFont_GetBaseFontName(font, &buf[0], static_cast<unsigned long>(bytes));
+    else FPDFFont_GetFamilyName(font, &buf[0], static_cast<unsigned long>(bytes));
+    buf.resize(bytes - 1);
+    return buf;
+}
+
+bool IsSubsetName(const std::string& name) {
+    if (name.size() <= 7 || name[6] != '+') return false;
+    for (size_t i = 0; i < 6; i++) if (name[i] < 'A' || name[i] > 'Z') return false;
+    return true;
+}
+
+std::string MapToStandard(const std::string& original) {
+    std::string name;
+    for (char c : original) name += static_cast<char>((c >= 'A' && c <= 'Z') ? c + 32 : c);
+    auto has = [&](const char* needle) { return name.find(needle) != std::string::npos; };
+    const bool bold = has("bold");
+    const bool italic = has("italic") || has("oblique");
+    if (has("courier") || has("mono")) {
+        return bold && italic ? "Courier-BoldOblique" : bold ? "Courier-Bold" : italic ? "Courier-Oblique" : "Courier";
+    }
+    if (has("times") || (has("serif") && !has("sans"))) {
+        return bold && italic ? "Times-BoldItalic" : bold ? "Times-Bold" : italic ? "Times-Italic" : "Times-Roman";
+    }
+    return bold && italic ? "Helvetica-BoldOblique" : bold ? "Helvetica-Bold" : italic ? "Helvetica-Oblique" : "Helvetica";
+}
+
+// Tier 2 test (SDD §3.1): the object's font is a subset and the new text needs a
+// glyph the document never used. Coverage is approximated by every character the
+// page draws with the same base font.
+bool NeedsSubstitution(const megapdf_page* p, FPDF_PAGEOBJECT obj, const unsigned short* text) {
+    FPDF_FONT font = FPDFTextObj_GetFont(obj);
+    if (font == nullptr) return false;
+    const std::string base = ReadFontNameUtf8(font, true);
+    if (!IsSubsetName(base)) return false;
+
+    std::vector<bool> covered(65536, false);
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+    const int count = FPDFPage_CountObjects(p->page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT other = FPDFPage_GetObject(p->page, i);
+        if (other == nullptr || FPDFPageObj_GetType(other) != FPDF_PAGEOBJ_TEXT) continue;
+        FPDF_FONT other_font = FPDFTextObj_GetFont(other);
+        if (other_font == nullptr || ReadFontNameUtf8(other_font, true) != base) continue;
+        for (unsigned short c : ReadObjectText(other, text_page)) covered[c] = true;
+    }
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
+    for (size_t i = 0; text[i] != 0; i++) if (!covered[text[i]]) return true;
+    return false;
+}
+
+// Replaces the text object with one in a standard face, preserving index,
+// matrix, fill colour and the text-box identity (#45).
+int SubstituteUnlocked(const megapdf_page* p, FPDF_PAGEOBJECT old_obj, int object_index, const unsigned short* text) {
+    FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
+    float font_size = 0;
+    FPDFTextObj_GetFontSize(old_obj, &font_size);
+    FPDF_FONT old_font = FPDFTextObj_GetFont(old_obj);
+    const std::string original = old_font ? ReadFontNameUtf8(old_font, false) : "";
+
+    FPDF_FONT standard = FPDFText_LoadStandardFont(doc, MapToStandard(original).c_str());
+    if (standard == nullptr) { SetError(0, "no substitute font could be loaded"); return MEGAPDF_ERR_NO_FONT; }
+    FPDF_PAGEOBJECT new_obj = FPDFPageObj_CreateTextObj(doc, standard, font_size);
+    if (new_obj == nullptr) { FPDFFont_Close(standard); SetError(0, "could not create replacement text"); return MEGAPDF_ERR_NO_FONT; }
+    if (!FPDFText_SetText(new_obj, reinterpret_cast<FPDF_WIDESTRING>(text))) {
+        FPDFPageObj_Destroy(new_obj);
+        FPDFFont_Close(standard);
+        SetError(0, "the substitute font could not render the new text");
+        return MEGAPDF_ERR_NO_FONT;
+    }
+    FS_MATRIX matrix{};
+    if (FPDFPageObj_GetMatrix(old_obj, &matrix)) FPDFPageObj_SetMatrix(new_obj, &matrix);
+    unsigned int r = 0, g = 0, b = 0, a = 0;
+    if (FPDFPageObj_GetFillColor(old_obj, &r, &g, &b, &a)) FPDFPageObj_SetFillColor(new_obj, r, g, b, a);
+
+    // Read the box's identity off the OLD object while it still exists — it is
+    // destroyed below, and the mark is rebuilt on the replacement from these values.
+    const bool was_box = HasMark(old_obj, kTextBoxMark);
+    const U16 box_id = was_box ? ReadMarkParam(old_obj, "id") : U16{};
+    const U16 box_font = was_box ? ReadMarkParam(old_obj, "font") : U16{};
+
+    int status = MEGAPDF_OK;
+    if (!FPDFPage_RemoveObject(p->page, old_obj)) {
+        FPDFPageObj_Destroy(new_obj);
+        SetError(FPDF_ERR_UNKNOWN, "could not remove the original text object");
+        status = MEGAPDF_ERR_PDFIUM;
+    } else {
+        FPDFPageObj_Destroy(old_obj);
+        if (!FPDFPage_InsertObjectAtIndex(p->page, new_obj, static_cast<size_t>(object_index))) {
+            SetError(FPDF_ERR_UNKNOWN, "could not insert the replacement text object");
+            status = MEGAPDF_ERR_PDFIUM;
+        } else if (was_box) {
+            // Re-tag AFTER insertion, off the object the page now owns — the order the
+            // params actually stick in. Re-adding the mark alone was #45: the box read
+            // as a text box but carried no id, so both phones refused to select it. A
+            // box written before the id param existed stays untagged rather than
+            // gaining a fabricated identity no phone recorded.
+            FPDF_PAGEOBJECT inserted = FPDFPage_GetObject(p->page, object_index);
+            FPDF_PAGEOBJECTMARK mark = inserted ? FPDFPageObj_AddMark(inserted, kTextBoxMarkName) : nullptr;
+            if (mark != nullptr) {
+                auto ascii = [](const U16& v) { std::string out; for (unsigned short c : v) out += static_cast<char>(c < 0x80 ? c : '?'); return out; };
+                if (!box_id.empty()) FPDFPageObjMark_SetStringParam(doc, inserted, mark, "id", ascii(box_id).c_str());
+                if (!box_font.empty()) FPDFPageObjMark_SetStringParam(doc, inserted, mark, "font", ascii(box_font).c_str());
+            }
+        }
+    }
+    FPDFFont_Close(standard);
+    if (status == MEGAPDF_OK && !GenerateContent(p)) status = MEGAPDF_ERR_PDFIUM;
+    return status;
+}
+
+}  // namespace
 
 extern "C" {
 
-MEGAPDF_API void* megapdf_document_raw(const megapdf_document* d) { return d ? d->doc : nullptr; }
-MEGAPDF_API void* megapdf_document_form_raw(const megapdf_document* d) { return d ? d->form : nullptr; }
-MEGAPDF_API void* megapdf_page_raw(const megapdf_page* p) { return p ? p->page : nullptr; }
+MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const unsigned short* text, int force_substitute,
+                                 int* out_outcome) {
+    if (p == nullptr || object_index < 0 || text == nullptr || text[0] == 0) {
+        SetError(0, "PDFium cannot set empty text on a text object");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) {
+        SetError(0, "the object is no longer a text object");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    if (!force_substitute && !NeedsSubstitution(p, obj, text)) {
+        if (FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text))) {
+            if (!GenerateContent(p)) return MEGAPDF_ERR_PDFIUM;
+            if (out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_IN_PLACE;
+            return MEGAPDF_OK;
+        }
+        // In-place set failed outright — fall through to substitution.
+    }
+    const int status = SubstituteUnlocked(p, obj, object_index, text);
+    if (status == MEGAPDF_OK && out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_SUBSTITUTED;
+    return status;
+}
+
+MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* p, int object_index, const unsigned short* text, const char* font_name,
+                                        double font_size, double left, double baseline) {
+    if (p == nullptr || object_index < 0 || text == nullptr || text[0] == 0 || font_name == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
+    FPDF_FONT font = FPDFText_LoadStandardFont(doc, MapToStandard(font_name).c_str());
+    if (font == nullptr) { SetError(0, "no substitute font could be loaded"); return MEGAPDF_ERR_NO_FONT; }
+    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size));
+    bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
+    if (ok) {
+        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(left + p->crop_x), static_cast<float>(baseline + p->crop_y)};
+        FPDFPageObj_SetMatrix(obj, &m);
+        const int count = FPDFPage_CountObjects(p->page);
+        ok = FPDFPage_InsertObjectAtIndex(p->page, obj, static_cast<size_t>(object_index > count ? count : object_index));
+        obj = nullptr;
+    }
+    if (obj != nullptr) FPDFPageObj_Destroy(obj);
+    FPDFFont_Close(font);
+    if (!ok) { SetError(FPDF_ERR_UNKNOWN, "could not recreate the text"); return MEGAPDF_ERR_PDFIUM; }
+    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+}
+
+MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name) {
+    return base_name != nullptr && IsSubsetName(base_name) ? 1 : 0;
+}
+
+MEGAPDF_API size_t megapdf_map_to_standard_font(const char* original_name, char* out, size_t capacity) {
+    const std::string face = MapToStandard(original_name ? original_name : "");
+    if (out != nullptr && capacity > face.size()) std::memcpy(out, face.c_str(), face.size() + 1);
+    return face.size();
+}
 
 }  // extern "C"
+

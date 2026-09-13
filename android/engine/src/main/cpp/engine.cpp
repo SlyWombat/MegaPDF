@@ -1,16 +1,13 @@
-// JNI shim over the shared engine core and, for the contracts that have not
-// migrated yet, the PDFium C API. Thin by design: marshalling only, no policy.
-// Behavior mirrors the desktop reference (src/MegaPDF.Core/Engine/Pdfium/) —
-// see SDD §6.2 for the cross-platform contracts.
+// JNI shim over the shared engine core. Thin by design: marshalling only, no
+// policy. Behaviour mirrors the desktop reference (src/MegaPDF.Core) — see SDD §6.2
+// for the cross-platform contracts.
 //
-// Since #105 the core owns the document: bytes go in, opaque handles come out,
-// and the form-fill environment, page lifecycle and crop-origin bookkeeping live
-// in core/. The Document and Page structs here wrap the core's handles and keep
-// the raw FPDF_* handles beside them for the JNI functions still bound directly.
+// Every contract lives in core/ (#105–#112): bytes go in, opaque handles come
+// out, coordinates come back in crop space, and nothing here calls PDFium. The
+// Document and Page structs wrap the core's handles for the Kotlin side.
 //
-// Threading: PDFium is not thread-safe. The core serialises its own calls; the
-// direct PDFium calls here must still come from the single engine thread owned by
-// the Kotlin PdfEngine dispatcher.
+// Threading: the core serialises its own calls; the Kotlin PdfEngine dispatcher
+// keeps multi-call sequences (count, then fill) on one thread.
 
 #include <jni.h>
 #include <android/bitmap.h>
@@ -20,13 +17,6 @@
 #include <string>
 #include <vector>
 
-#include "fpdfview.h"
-#include "fpdf_annot.h"
-#include "fpdf_edit.h"
-#include "fpdf_formfill.h"
-#include "fpdf_save.h"
-#include "fpdf_text.h"
-#include "fpdf_transformpage.h"  // FPDFPage_GetCropBox
 
 #include "megapdf_core.h"  // the shared policy core (#33)
 
@@ -34,13 +24,10 @@ namespace {
 
 struct Document {
     megapdf_document* core = nullptr;
-    FPDF_DOCUMENT doc = nullptr;      // megapdf_document_raw(core), for unmigrated contracts
-    FPDF_FORMHANDLE form = nullptr;   // megapdf_document_form_raw(core), likewise
 };
 
 struct Page {
     megapdf_page* core = nullptr;
-    FPDF_PAGE page = nullptr;         // megapdf_page_raw(core), for unmigrated contracts
     Document* owner = nullptr;
 };
 
@@ -78,7 +65,7 @@ extern "C" {
 
 JNIEXPORT void JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeInit(JNIEnv*, jobject) {
-    FPDF_InitLibrary();
+    // Nothing to do: the core initialises PDFium on its first open (#105).
 }
 
 JNIEXPORT jlong JNICALL
@@ -95,8 +82,6 @@ Java_com_megapdf_engine_PdfiumNative_nativeOpen(JNIEnv* env, jobject, jbyteArray
 
     auto* d = new Document();
     d->core = core;
-    d->doc = static_cast<FPDF_DOCUMENT>(megapdf_document_raw(core));
-    d->form = static_cast<FPDF_FORMHANDLE>(megapdf_document_form_raw(core));
     return reinterpret_cast<jlong>(d);
 }
 
@@ -124,7 +109,6 @@ Java_com_megapdf_engine_PdfiumNative_nativeOpenPage(JNIEnv*, jobject, jlong hand
     if (core == nullptr) return 0;
     auto* p = new Page();
     p->core = core;
-    p->page = static_cast<FPDF_PAGE>(megapdf_page_raw(core));
     p->owner = d;
     return reinterpret_cast<jlong>(p);
 }
@@ -233,7 +217,8 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject
             megapdf_form_field f{};
             if (megapdf_form_field_get(fields, i, &f) != MEGAPDF_OK) continue;
             if (f.kind != MEGAPDF_FIELD_CHECKBOX && f.kind != MEGAPDF_FIELD_RADIO) continue;
-            packed.push_back(f.kind == MEGAPDF_FIELD_RADIO ? FPDF_FORMFIELD_RADIOBUTTON : FPDF_FORMFIELD_CHECKBOX);
+            // PDFium's FPDF_FORMFIELD_RADIOBUTTON (3) and _CHECKBOX (2), which Kotlin decodes.
+            packed.push_back(f.kind == MEGAPDF_FIELD_RADIO ? 3.0 : 2.0);
             packed.push_back(f.is_checked ? 1 : 0);
             packed.push_back(f.bounds.left);
             packed.push_back(f.bounds.bottom);
@@ -458,14 +443,14 @@ Java_com_megapdf_engine_PdfiumNative_nativeRemoveTextBox(JNIEnv* env, jobject, j
 JNIEXPORT jobjectArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAnnotIds(JNIEnv* env, jobject, jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const int count = FPDFPage_GetAnnotCount(p->page);
-    jclass stringClass = env->FindClass("java/lang/String");
-    jobjectArray out = env->NewObjectArray(count, stringClass, nullptr);
-    std::vector<std::vector<jchar>> ids(static_cast<size_t>(count));
+    // Indexed by annotation, up to the last MegaPDF stamp: Kotlin's Stamp.annotIndex
+    // is a position in this array, and annotations after the last stamp are not ours.
+    std::vector<std::vector<jchar>> ids;
     if (megapdf_stamps* stamps = megapdf_stamps_load(p->core)) {
         for (size_t i = 0; i < megapdf_stamp_count(stamps); i++) {
             megapdf_stamp st{};
-            if (megapdf_stamp_get(stamps, i, &st) != MEGAPDF_OK || st.annot_index < 0 || st.annot_index >= count) continue;
+            if (megapdf_stamp_get(stamps, i, &st) != MEGAPDF_OK || st.annot_index < 0) continue;
+            if (static_cast<size_t>(st.annot_index) >= ids.size()) ids.resize(static_cast<size_t>(st.annot_index) + 1);
             const size_t n = megapdf_stamp_id(stamps, i, nullptr, 0);
             std::vector<jchar> id(n);
             if (n > 0) megapdf_stamp_id(stamps, i, id.data(), n);
@@ -473,6 +458,9 @@ Java_com_megapdf_engine_PdfiumNative_nativeAnnotIds(JNIEnv* env, jobject, jlong 
         }
         megapdf_stamps_free(stamps);
     }
+    const int count = static_cast<int>(ids.size());
+    jclass stringClass = env->FindClass("java/lang/String");
+    jobjectArray out = env->NewObjectArray(count, stringClass, nullptr);
     for (int i = 0; i < count; i++) {
         jstring s = env->NewString(ids[i].data(), static_cast<jsize>(ids[i].size()));
         env->SetObjectArrayElement(out, i, s);
@@ -487,12 +475,12 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAnnotRectsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const int count = FPDFPage_GetAnnotCount(p->page);
-    std::vector<double> packed(static_cast<size_t>(count) * 4, 0.0);
+    std::vector<double> packed;
     if (megapdf_stamps* stamps = megapdf_stamps_load(p->core)) {
         for (size_t i = 0; i < megapdf_stamp_count(stamps); i++) {
             megapdf_stamp st{};
-            if (megapdf_stamp_get(stamps, i, &st) != MEGAPDF_OK || st.annot_index < 0 || st.annot_index >= count) continue;
+            if (megapdf_stamp_get(stamps, i, &st) != MEGAPDF_OK || st.annot_index < 0) continue;
+            if (packed.size() < (static_cast<size_t>(st.annot_index) + 1) * 4) packed.resize((static_cast<size_t>(st.annot_index) + 1) * 4, 0.0);
             packed[st.annot_index * 4 + 0] = st.bounds.left;
             packed[st.annot_index * 4 + 1] = st.bounds.bottom;
             packed[st.annot_index * 4 + 2] = st.bounds.right;

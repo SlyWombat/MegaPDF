@@ -38,7 +38,7 @@ public sealed class PdfiumEngine : IPdfEngine
 {
     public IPdfDocument Open(string filePath, string? password = null)
     {
-        PdfiumLibrary.EnsureInitialized();
+        // The core initialises PDFium on its first open.
         var bytes = File.ReadAllBytes(filePath);
         lock (PdfiumLibrary.Lock)
         {
@@ -64,18 +64,9 @@ internal sealed class PdfiumDocument : IPdfDocument
 {
     /// <summary>The core's document handle (owns the bytes, the FPDF_DOCUMENT and the form environment).</summary>
     private readonly IntPtr _core;
-    /// <summary>Raw FPDF_DOCUMENT, for the contracts still bound to PDFium directly.</summary>
-    private readonly IntPtr _handle;
-    /// <summary>Raw FPDF_FORMHANDLE, likewise.</summary>
-    private readonly IntPtr _forms;
     private bool _disposed;
 
-    internal PdfiumDocument(IntPtr core)
-    {
-        _core = core;
-        _handle = CoreNative.megapdf_document_raw(core);
-        _forms = CoreNative.megapdf_document_form_raw(core);
-    }
+    internal PdfiumDocument(IntPtr core) => _core = core;
 
     public int PageCount
     {
@@ -94,7 +85,7 @@ internal sealed class PdfiumDocument : IPdfDocument
             var page = CoreNative.megapdf_load_page(_core, pageIndex);
             if (page == IntPtr.Zero)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page {pageIndex} could not be loaded.");
-            return new PdfiumPage(_handle, _forms, page, pageIndex);
+            return new PdfiumPage(page, pageIndex);
         }
     }
 
@@ -214,45 +205,27 @@ internal sealed class PdfiumDocument : IPdfDocument
 
 internal sealed class PdfiumPage : IPdfPage
 {
-    private readonly IntPtr _document;
-    private readonly IntPtr _forms;
     /// <summary>The core's page handle; the form-fill hooks were applied on load.</summary>
     private readonly IntPtr _core;
-    /// <summary>Raw FPDF_PAGE, for the contracts still bound to PDFium directly.</summary>
-    private readonly IntPtr _handle;
     private bool _disposed;
 
-    internal PdfiumPage(IntPtr document, IntPtr forms, IntPtr core, int index)
+    internal PdfiumPage(IntPtr core, int index)
     {
-        _document = document;
-        _forms = forms;
         _core = core;
-        _handle = CoreNative.megapdf_page_raw(core);
         Index = index;
         Width = CoreNative.megapdf_page_width(core);
         Height = CoreNative.megapdf_page_height(core);
         // pdfium reports page *content* in user space, whose origin is the
         // MediaBox — but it renders, and sizes, the CropBox. When the two differ
-        // (imposed pages, trimmed scans) every coordinate we hand the UI is out by
-        // the difference: highlights, checkbox squares and click targets all land
-        // on the wrong part of the page (#28). The core owns that origin; the
-        // contracts it has absorbed already return crop space, and the ones still
-        // bound directly convert through it below.
-        CoreNative.megapdf_page_crop_origin(core, out var cropX, out var cropY);
-        _cropLeft = cropX;
-        _cropTop = cropY + Height;
+        // (imposed pages, trimmed scans) every coordinate handed to the UI is out
+        // by the difference (#28). The core owns that origin and every contract
+        // returns crop space; this class only flips bottom-left to top-left.
     }
 
     public int Index { get; }
     public double Width { get; }
     public double Height { get; }
 
-    private readonly double _cropLeft;
-    private readonly double _cropTop;
-
-    /// <summary>PDF user space (bottom-left, MediaBox origin) to view space (top-left, crop origin).</summary>
-    private double ViewX(double userX) => userX - _cropLeft;
-    private double ViewY(double userTop) => _cropTop - userTop;
 
     /// <summary>The core's crop space (bottom-left, crop origin) to view space (top-left).</summary>
     private PdfRect CropToView(double left, double bottom, double right, double top) =>
@@ -261,10 +234,6 @@ internal sealed class PdfiumPage : IPdfPage
     /// <summary>View space (top-left) to the core's crop space (bottom-left).</summary>
     private CoreNative.Rect ViewToCrop(PdfRect r) =>
         new() { Left = r.X, Bottom = Height - r.Bottom, Right = r.Right, Top = Height - r.Y };
-
-    /// <summary>View space back to PDF user space.</summary>
-    private double UserX(double viewX) => viewX + _cropLeft;
-    private double UserY(double viewY) => _cropTop - viewY;
 
     public RenderedPage Render(int pixelWidth, int pixelHeight)
     {
@@ -563,36 +532,19 @@ internal sealed class PdfiumPage : IPdfPage
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(newText))
             throw new ArgumentException("PDFium cannot set empty text on a text object.", nameof(newText));
-
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, run.ObjectIndex);
-            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-                throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
-
-            // Tier 2 (SDD §3.1): a subset-embedded font only contains the glyphs the
-            // document already uses. Setting text with uncovered characters would
-            // silently render notdef boxes, so substitute a standard font instead.
-            if (!NeedsFontSubstitution(obj, newText))
-            {
-                if (PdfiumNative.FPDFText_SetText(obj, newText) != 0)
-                {
-                    GenerateContent();
-                    return TextEditOutcome.EditedInPlace;
-                }
-                // In-place set failed outright — fall through to substitution.
-            }
-
-            SubstituteTextObject(obj, run.ObjectIndex, newText);
-            GenerateContent();
-            return TextEditOutcome.EditedWithSubstitutedFont;
-        }
+        // The tiers (SDD §3.1) are the core's (#112): in place when the run's font
+        // covers the new text, otherwise the closest standard face at the same index.
+        return ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: false);
     }
 
-    private void GenerateContent()
+    private TextEditOutcome ApplyTextEdit(int objectIndex, string newText, bool forceSubstitute)
     {
-        if (PdfiumNative.FPDFPage_GenerateContent(_handle) == 0)
-            throw new InvalidOperationException("PDFium failed to regenerate the page content stream.");
+        var status = CoreNative.megapdf_set_text(_core, objectIndex, newText, forceSubstitute ? 1 : 0, out var outcome);
+        if (status == CoreNative.ErrNoFont)
+            throw new TextEditException(TextEditFailure.NoUsableFont, CoreNative.LastErrorMessage());
+        if (status != 0)
+            throw new InvalidOperationException($"Object {objectIndex} is no longer a text object.");
+        return outcome == CoreNative.EditSubstituted ? TextEditOutcome.EditedWithSubstitutedFont : TextEditOutcome.EditedInPlace;
     }
 
     public DetachedTextRun DetachTextRun(PdfTextRun run)
@@ -644,60 +596,6 @@ internal sealed class PdfiumPage : IPdfPage
         return whiteouts;
     }
 
-    /// <summary>
-    /// The `id` carried by the object's MegaPDFTextBox mark (SDD §6.2 contract 4),
-    /// or null when it has none — boxes written before the param existed.
-    /// </summary>
-    internal static string? ReadTextBoxId(IntPtr obj) => ReadMarkParam(obj, TextBoxIdKey);
-
-    private static bool HasMark(IntPtr obj, string markName)
-    {
-        var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
-        for (var m = 0; m < marks; m++)
-        {
-            var mark = PdfiumNative.FPDFPageObj_GetMark(obj, m);
-            if (mark == IntPtr.Zero)
-                continue;
-            PdfiumNative.FPDFPageObjMark_GetName(mark, null, 0, out var lengthInBytes);
-            if (lengthInBytes <= 2)
-                continue;
-            var buffer = new byte[lengthInBytes];
-            PdfiumNative.FPDFPageObjMark_GetName(mark, buffer, lengthInBytes, out _);
-            if (System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2) == markName)
-                return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// The face named by the box's `font` mark param (#43), or the default when it
-    /// carries none — which is every box written before #43, and what they all are.
-    /// </summary>
-    internal static string ReadTextBoxFont(IntPtr obj)
-        => ReadMarkParam(obj, TextBoxFontKey) ?? StandardTextBoxFonts.Default;
-
-    private static string? ReadMarkParam(IntPtr obj, string key)
-    {
-        var marks = PdfiumNative.FPDFPageObj_CountMarks(obj);
-        for (var m = 0; m < marks; m++)
-        {
-            var mark = PdfiumNative.FPDFPageObj_GetMark(obj, m);
-            if (mark == IntPtr.Zero)
-                continue;
-            PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, key, null, 0, out var lengthInBytes);
-            if (lengthInBytes <= 2)
-                continue;
-            var buffer = new byte[lengthInBytes];
-            if (PdfiumNative.FPDFPageObjMark_GetParamStringValue(mark, key, buffer, lengthInBytes, out _) == 0)
-                continue;
-            return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
-        }
-        return null;
-    }
-
-    private const string TextBoxMarkName = "MegaPDFTextBox";
-    private const string TextBoxIdKey = "id";
-    private const string TextBoxFontKey = "font";
 
     public int AppendTextBox(string text, double fontSize, PdfPoint topLeft,
                              string fontName = StandardTextBoxFonts.Default)
@@ -767,228 +665,29 @@ internal sealed class PdfiumPage : IPdfPage
     public void InsertTextRun(int objectIndex, string text, string fontName, double fontSize, PdfRect bounds)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            var font = PdfiumNative.FPDFText_LoadStandardFont(_document, MapToStandardFont(fontName));
-            if (font == IntPtr.Zero)
-                throw new InvalidOperationException("No substitute font could be loaded.");
-            var obj = PdfiumNative.FPDFPageObj_CreateTextObj(_document, font, (float)fontSize);
-            try
-            {
-                if (obj == IntPtr.Zero || PdfiumNative.FPDFText_SetText(obj, text) == 0)
-                    throw new InvalidOperationException("Could not recreate the text.");
-                var matrix = new PdfiumNative.FS_MATRIX
-                {
-                    A = 1, B = 0, C = 0, D = 1,
-                    E = (float)UserX(bounds.X),
-                    F = (float)UserY(bounds.Bottom),
-                };
-                PdfiumNative.FPDFPageObj_SetMatrix(obj, ref matrix);
-                if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, obj, (nuint)objectIndex) == 0)
-                    throw new InvalidOperationException("Could not insert the recreated text.");
-                obj = IntPtr.Zero;
-                GenerateContent();
-            }
-            finally
-            {
-                if (obj != IntPtr.Zero)
-                    PdfiumNative.FPDFPageObj_Destroy(obj);
-                PdfiumNative.FPDFFont_Close(font);
-            }
-        }
+        // Crash-recovery replay: bounds.Bottom is the baseline, the face the closest
+        // standard one to the journalled name (#112).
+        var status = CoreNative.megapdf_insert_text_run(_core, objectIndex, text, fontName, fontSize, bounds.X, Height - bounds.Bottom);
+        if (status == CoreNative.ErrNoFont)
+            throw new InvalidOperationException("No substitute font could be loaded.");
+        if (status != 0)
+            throw new InvalidOperationException("Could not insert the recreated text.");
     }
 
-    /// <summary>True when the object's font is a subset and the new text needs glyphs the document never used.</summary>
-    private bool NeedsFontSubstitution(IntPtr obj, string newText)
-    {
-        var font = PdfiumNative.FPDFTextObj_GetFont(obj);
-        if (font == IntPtr.Zero)
-            return false;
+    internal static bool IsSubsetFontName(string baseName) => CoreNative.megapdf_is_subset_font_name(baseName) != 0;
 
-        var baseName = ReadFontName(font, useBaseName: true);
-        if (!IsSubsetFontName(baseName))
-            return false;
-
-        // Approximate the subset's glyph coverage by every character the page draws
-        // with this same font.
-        var coverage = new HashSet<char>();
-        var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
-        try
-        {
-            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
-            for (var i = 0; i < count; i++)
-            {
-                var other = PdfiumNative.FPDFPage_GetObject(_handle, i);
-                if (other == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(other) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-                    continue;
-                var otherFont = PdfiumNative.FPDFTextObj_GetFont(other);
-                if (otherFont == IntPtr.Zero || ReadFontName(otherFont, useBaseName: true) != baseName)
-                    continue;
-                foreach (var c in ReadTextObjectText(other, textPage))
-                    coverage.Add(c);
-            }
-        }
-        finally
-        {
-            if (textPage != IntPtr.Zero)
-                PdfiumNative.FPDFText_ClosePage(textPage);
-        }
-
-        return newText.Any(c => !coverage.Contains(c));
-    }
-
-    internal static bool IsSubsetFontName(string baseName) =>
-        baseName.Length > 7 && baseName[6] == '+' && baseName.Take(6).All(char.IsUpper);
-
-    /// <summary>Maps an original font name to the closest standard-14 face (SDD §3.1 tier 2).</summary>
+    /// <summary>Maps an original font name to the closest standard-14 face (SDD §3.1 tier 2), as the core does.</summary>
     internal static string MapToStandardFont(string originalName)
     {
-        var name = originalName.ToLowerInvariant();
-        var bold = name.Contains("bold");
-        var italic = name.Contains("italic") || name.Contains("oblique");
-
-        if (name.Contains("courier") || name.Contains("mono"))
-            return (bold, italic) switch
-            {
-                (true, true) => "Courier-BoldOblique",
-                (true, false) => "Courier-Bold",
-                (false, true) => "Courier-Oblique",
-                _ => "Courier",
-            };
-
-        if (name.Contains("times") || (name.Contains("serif") && !name.Contains("sans")))
-            return (bold, italic) switch
-            {
-                (true, true) => "Times-BoldItalic",
-                (true, false) => "Times-Bold",
-                (false, true) => "Times-Italic",
-                _ => "Times-Roman",
-            };
-
-        return (bold, italic) switch
-        {
-            (true, true) => "Helvetica-BoldOblique",
-            (true, false) => "Helvetica-Bold",
-            (false, true) => "Helvetica-Oblique",
-            _ => "Helvetica",
-        };
+        var buffer = new byte[64];
+        var length = (int)CoreNative.megapdf_map_to_standard_font(originalName, buffer, (nuint)buffer.Length);
+        return System.Text.Encoding.UTF8.GetString(buffer, 0, length);
     }
 
     /// <summary>Test hook: runs the tier-2 substitution path unconditionally.</summary>
-    internal void ForceSubstituteForTest(PdfTextRun run, string newText)
-    {
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, run.ObjectIndex);
-            SubstituteTextObject(obj, run.ObjectIndex, newText);
-            GenerateContent();
-        }
-    }
+    internal void ForceSubstituteForTest(PdfTextRun run, string newText) =>
+        ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: true);
 
-    /// <summary>Replaces the text object with one using a standard font, preserving index, position, size, and color.</summary>
-    internal void SubstituteTextObject(IntPtr oldObj, int objectIndex, string newText)
-    {
-        PdfiumNative.FPDFTextObj_GetFontSize(oldObj, out var fontSize);
-        var oldFont = PdfiumNative.FPDFTextObj_GetFont(oldObj);
-        var originalName = oldFont != IntPtr.Zero ? ReadFontName(oldFont, useBaseName: false) : "";
-
-        var standardFont = PdfiumNative.FPDFText_LoadStandardFont(_document, MapToStandardFont(originalName));
-        if (standardFont == IntPtr.Zero)
-            throw new TextEditException(TextEditFailure.NoUsableFont, "No substitute font could be loaded.");
-
-        var newObj = PdfiumNative.FPDFPageObj_CreateTextObj(_document, standardFont, fontSize);
-        try
-        {
-            if (newObj == IntPtr.Zero)
-                throw new TextEditException(TextEditFailure.NoUsableFont, "Could not create replacement text.");
-            if (PdfiumNative.FPDFText_SetText(newObj, newText) == 0)
-                throw new TextEditException(TextEditFailure.NoUsableFont,
-                    "The substitute font could not render the new text.");
-
-            if (PdfiumNative.FPDFPageObj_GetMatrix(oldObj, out var matrix) != 0)
-                PdfiumNative.FPDFPageObj_SetMatrix(newObj, ref matrix);
-            if (PdfiumNative.FPDFPageObj_GetFillColor(oldObj, out var r, out var g, out var b, out var a) != 0)
-                PdfiumNative.FPDFPageObj_SetFillColor(newObj, r, g, b, a);
-
-            // Read the box's identity off the OLD object while it still exists —
-            // it is destroyed a few lines below, and the mark has to be rebuilt on
-            // the replacement from these values (#45).
-            var wasTextBox = HasMark(oldObj, TextBoxMarkName);
-            var boxId = wasTextBox ? ReadTextBoxId(oldObj) : null;
-            var boxFont = wasTextBox ? ReadTextBoxFont(oldObj) : null;
-
-            if (PdfiumNative.FPDFPage_RemoveObject(_handle, oldObj) == 0)
-                throw new InvalidOperationException("Could not remove the original text object.");
-            PdfiumNative.FPDFPageObj_Destroy(oldObj);
-
-            if (PdfiumNative.FPDFPage_InsertObjectAtIndex(_handle, newObj, (nuint)objectIndex) == 0)
-                throw new InvalidOperationException("Could not insert the replacement text object.");
-            newObj = IntPtr.Zero; // ownership transferred to the page
-
-            // Re-tag AFTER insertion, off the object the page now owns — the same
-            // order AppendTextBox uses, and the order the params actually stick in.
-            //
-            // Re-adding the mark alone is not enough, which is what #45 was: the
-            // replacement read as a text box but carried no id, so SDD §6.2
-            // contract 4's handle was gone and both phones refused to select it,
-            // reporting it as written by an older version. It had been silently
-            // downgraded by a desktop edit. The face went the same way, so the box
-            // also reverted to reading as Helvetica.
-            if (wasTextBox)
-            {
-                var inserted = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
-                if (inserted != IntPtr.Zero)
-                {
-                    var mark = PdfiumNative.FPDFPageObj_AddMark(inserted, TextBoxMarkName);
-                    if (mark != IntPtr.Zero)
-                    {
-                        // A box written before the id param existed has none to carry;
-                        // it stays untagged rather than gaining a fabricated identity,
-                        // because a new id would not match what any phone recorded.
-                        if (boxId is not null)
-                            PdfiumNative.FPDFPageObjMark_SetStringParam(
-                                _document, inserted, mark, TextBoxIdKey, boxId);
-                        if (boxFont is not null)
-                            PdfiumNative.FPDFPageObjMark_SetStringParam(
-                                _document, inserted, mark, TextBoxFontKey, boxFont);
-                    }
-                }
-            }
-        }
-        finally
-        {
-            if (newObj != IntPtr.Zero)
-                PdfiumNative.FPDFPageObj_Destroy(newObj);
-            PdfiumNative.FPDFFont_Close(standardFont);
-        }
-    }
-
-    private static string ReadTextObjectText(IntPtr obj, IntPtr textPage)
-    {
-        // Despite the header saying FPDF_WCHARs, the returned length is in BYTES
-        // (including the UTF-16 NUL terminator) — verified against pdfium 152.
-        var lengthInBytes = PdfiumNative.FPDFTextObj_GetText(obj, textPage, null, 0);
-        if (lengthInBytes <= 2)
-            return "";
-        var buffer = new byte[lengthInBytes];
-        PdfiumNative.FPDFTextObj_GetText(obj, textPage, buffer, lengthInBytes);
-        return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
-    }
-
-    private static string ReadFontName(IntPtr font, bool useBaseName)
-    {
-        var lengthInBytes = useBaseName
-            ? PdfiumNative.FPDFFont_GetBaseFontName(font, null, 0)
-            : PdfiumNative.FPDFFont_GetFamilyName(font, null, 0);
-        if (lengthInBytes <= 1)
-            return "";
-        var buffer = new byte[lengthInBytes];
-        if (useBaseName)
-            PdfiumNative.FPDFFont_GetBaseFontName(font, buffer, lengthInBytes);
-        else
-            PdfiumNative.FPDFFont_GetFamilyName(font, buffer, lengthInBytes);
-        return System.Text.Encoding.UTF8.GetString(buffer, 0, (int)lengthInBytes - 1);
-    }
     public void SetFormFieldValue(PdfFormField field, string value)
     {
         ThrowIfDisposed();

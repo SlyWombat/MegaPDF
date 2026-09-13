@@ -119,7 +119,6 @@ void test_null_handles() {
     check(megapdf_search_page(nullptr, t.data(), nullptr, 0) == 0, "null page yields no matches");
     megapdf_close(nullptr);
     megapdf_close_page(nullptr);
-    check(megapdf_document_raw(nullptr) == nullptr && megapdf_page_raw(nullptr) == nullptr, "raw accessors tolerate NULL");
 }
 
 void test_open_failures(const std::string& fixtures) {
@@ -143,13 +142,11 @@ void test_document_and_geometry(const std::string& fixtures) {
     check(d.doc != nullptr, "fixture.pdf opens from bytes");
     if (!d.doc) return;
     check(megapdf_page_count(d.doc) == 2, "fixture.pdf has 2 pages", std::to_string(megapdf_page_count(d.doc)));
-    check(megapdf_document_raw(d.doc) != nullptr, "raw FPDF_DOCUMENT is available");
-    check(megapdf_document_form_raw(d.doc) != nullptr, "form-fill environment was initialised");
+
 
     Page p(d.doc, 0);
     check(p.page != nullptr, "page 1 loads");
     if (!p.page) return;
-    check(megapdf_page_raw(p.page) != nullptr, "raw FPDF_PAGE is available");
     check(close_to(megapdf_page_width(p.page), 612) && close_to(megapdf_page_height(p.page), 792),
           "fixture.pdf page is Letter", std::to_string(megapdf_page_width(p.page)) + "x" + std::to_string(megapdf_page_height(p.page)));
 
@@ -1207,6 +1204,108 @@ void test_render_page(const std::string& fixtures) {
           "render rejects nulls");
 }
 
+// --------------------------------------------------------------------------
+// Phase 3 (#112): body-text editing. FontSubstitutionTests and TextEditSpikeTests
+// make the same assertions through the desktop binding.
+
+std::string mapped(const char* name) {
+    char buf[64];
+    const size_t n = megapdf_map_to_standard_font(name, buf, sizeof buf);
+    return std::string(buf, n);
+}
+
+void test_text_editing(const std::string& fixtures) {
+    check(megapdf_is_subset_font_name("ABCDEF+SegoeUI") == 1 && megapdf_is_subset_font_name("BCDFGH+Times-Roman") == 1, "subset prefixes are detected");
+    check(megapdf_is_subset_font_name("Helvetica") == 0 && megapdf_is_subset_font_name("Arial-BoldMT") == 0 && megapdf_is_subset_font_name("abcdef+lower") == 0 &&
+              megapdf_is_subset_font_name(nullptr) == 0,
+          "non-subset names are not");
+    const char* cases[][2] = {{"SegoeUI", "Helvetica"}, {"Arial-BoldMT", "Helvetica-Bold"}, {"Calibri-Italic", "Helvetica-Oblique"},
+                              {"TimesNewRomanPSMT", "Times-Roman"}, {"Times-BoldItalic", "Times-BoldItalic"}, {"Georgia", "Helvetica"},
+                              {"LiberationSerif-Bold", "Times-Bold"}, {"CourierNewPSMT", "Courier"}, {"Consolas-Bold", "Helvetica-Bold"},
+                              {"RobotoMono-Italic", "Courier-Oblique"}};
+    for (const auto& c : cases) check(mapped(c[0]) == c[1], "closest standard face", std::string(c[0]) + " -> " + mapped(c[0]));
+    check(megapdf_map_to_standard_font("Whatever", nullptr, 0) == 9, "map reports the length without a buffer");
+
+    // Tier 1: a standard font covers anything.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "fixture.pdf page loads for editing"); return; }
+        auto text = utf16("Symbols beyond original: XYZQ!?");
+        int outcome = -1;
+        check(megapdf_set_text(p.page, 0, text.data(), 0, &outcome) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_IN_PLACE, "a standard-font edit stays tier 1",
+              std::to_string(outcome));
+        megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+        check(show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) == "Symbols beyond original: XYZQ!?", "the new text reads back", show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)));
+        megapdf_text_free(t);
+
+        // Forced substitution keeps the index, the position and the colour.
+        megapdf_text_run before{};
+        t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+        megapdf_text_run_get(t, 0, &before);
+        const size_t runs_before = megapdf_text_run_count(t);
+        megapdf_text_free(t);
+        auto swapped = utf16("Swapped to a standard face");
+        check(megapdf_set_text(p.page, before.object_index, swapped.data(), 1, &outcome) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED,
+              "forced substitution reports tier 2", std::to_string(outcome));
+        t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+        megapdf_text_run after{};
+        megapdf_text_run_get(t, 0, &after);
+        check(megapdf_text_run_count(t) == runs_before && after.object_index == before.object_index, "substitution preserves the object index");
+        check(show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) == "Swapped to a standard face", "substituted text reads back");
+        check(close_to(after.bounds.left, before.bounds.left, 5) && close_to(after.bounds.bottom, before.bounds.bottom, 10), "the replacement keeps the original's position",
+              rect_str(after.bounds) + " vs " + rect_str(before.bounds));
+        megapdf_text_free(t);
+
+        // Errors are status codes.
+        auto empty = utf16("");
+        check(megapdf_set_text(p.page, 0, empty.data(), 0, &outcome) == MEGAPDF_ERR_ARGUMENT, "empty text is an argument error");
+        int path_index = -1;
+        for (int i = 0; megapdf_object_type(p.page, i) >= 0; i++) if (megapdf_object_type(p.page, i) == 2) { path_index = i; break; }
+        check(path_index >= 0 && megapdf_set_text(p.page, path_index, text.data(), 0, &outcome) == MEGAPDF_ERR_ARGUMENT, "editing a path is an argument error");
+        check(megapdf_set_text(nullptr, 0, text.data(), 0, &outcome) == MEGAPDF_ERR_ARGUMENT, "set_text rejects a null page");
+
+        // Crash-recovery replay: a run inserted at an index in the face closest to the journalled name.
+        auto inserted = utf16("Replayed");
+        check(megapdf_insert_text_run(p.page, 0, inserted.data(), "Arial-BoldMT", 14, 100, 500) == MEGAPDF_OK, "insert_text_run returns OK");
+        t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+        megapdf_text_run r0{};
+        megapdf_text_run_get(t, 0, &r0);
+        check(r0.object_index == 0 && show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) == "Replayed" && close_to(r0.font_size, 14) &&
+                  close_to(r0.bounds.left, 100, 2) && r0.bounds.bottom < 500 && r0.bounds.top > 500,
+              "the replayed run sits at index 0 on its baseline", rect_str(r0.bounds));
+        check(!run_string(t, 0, MEGAPDF_TEXT_RUN_FONT).empty() && r0.is_text_box == 0, "the replayed run is body text in a real face");
+        megapdf_text_free(t);
+    }
+    // A substituted text box keeps its identity (#45); a legacy untagged box stays untagged.
+    {
+        Doc d(fixtures + "/textbox.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "textbox.pdf page loads for editing"); return; }
+        auto tagged = utf16("text:fixture-1");
+        const int tagged_index = megapdf_find_text_box(p.page, tagged.data());
+        check(tagged_index >= 0, "the tagged fixture box is found");
+        auto retyped = utf16("Retyped box");
+        int outcome = -1;
+        std::string face_before;
+        for (const auto& b : boxes_of(p.page)) if (b.object_index == tagged_index) face_before = b.font;
+        check(megapdf_set_text(p.page, tagged_index, retyped.data(), 1, &outcome) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED, "the tagged box substitutes");
+        check(megapdf_find_text_box(p.page, tagged.data()) == tagged_index, "the substituted box keeps its id at its index");
+        auto boxes = boxes_of(p.page);
+        bool found = false;
+        for (const auto& b : boxes) if (b.object_index == tagged_index) { found = true; check(b.text == "Retyped box" && b.font == face_before, "the substituted box keeps its face param", b.font + " vs " + face_before); }
+        check(found, "the substituted box is still a text box");
+
+        int legacy = -1;
+        for (const auto& b : boxes) if (b.id.empty()) { legacy = b.object_index; break; }
+        check(legacy >= 0, "a legacy box exists");
+        check(megapdf_set_text(p.page, legacy, retyped.data(), 1, &outcome) == MEGAPDF_OK, "the legacy box substitutes");
+        bool still_untagged = false;
+        for (const auto& b : boxes_of(p.page)) if (b.object_index == legacy) still_untagged = b.id.empty();
+        check(still_untagged, "a legacy box gains no fabricated id");
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1228,6 +1327,7 @@ int main(int argc, char** argv) {
     test_save_flatten_images(argv[1]);
     test_render();
     test_render_page(argv[1]);
+    test_text_editing(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

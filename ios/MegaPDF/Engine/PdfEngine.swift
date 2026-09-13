@@ -2,20 +2,16 @@ import CoreGraphics
 import CPdfium
 import Foundation
 
-// Engine facade over the shared engine core (ADR-003) and, for the contracts
-// that have not migrated yet, PDFium via Swift C interop — the iOS counterpart
-// of Android's engine module and the desktop `PdfiumEngine.cs` (contracts:
-// SDD §6.2, engine choice: ADR-001).
+// Engine facade over the shared engine core (ADR-003) — the iOS counterpart of
+// Android's engine module and the desktop `PdfiumEngine.cs` (contracts: SDD §6.2,
+// engine choice: ADR-001).
 //
-// Since #105 the core owns the document: bytes go in, opaque handles come out,
-// and the form-fill environment, page lifecycle and crop-origin bookkeeping live
-// in core/. `PdfDocument` wraps the core's handle and exposes the raw PDFium
-// handles beside it for the extensions still bound directly.
+// Every contract lives in core/ (#105–#112): bytes go in, opaque handles come
+// out, and coordinates come back in crop space. Nothing here calls PDFium.
 //
-// PDFium is not thread-safe. The core serialises its own calls; `PdfEngine` is
-// an actor and the app uses the single `PdfEngine.shared` instance, so the
-// direct PDFium calls are serialized too — the Swift analog of Android's
-// single-threaded dispatcher.
+// The core serialises its own calls; `PdfEngine` is an actor and the app uses the
+// single `PdfEngine.shared` instance, which keeps multi-call sequences (count,
+// then fill) from interleaving.
 
 enum PdfError: Error, Equatable {
     case passwordRequired
@@ -55,35 +51,6 @@ struct PdfRect: Equatable {
     var top: Double
 }
 
-/// The CropBox origin in user space (#28/#30).
-///
-/// pdfium reports page content in user space, whose origin is the **MediaBox**,
-/// but it renders and measures the **CropBox**. Where the two differ — imposed
-/// pages, trimmed scans — every coordinate handed to the UI is out by that
-/// difference. Every coordinate crossing this engine's boundary is therefore
-/// shifted into crop-relative space, which is a no-op on the usual page whose
-/// crop origin is already (0,0). The core owns the origin; the contracts it has
-/// absorbed return crop space already, and the extensions still bound directly
-/// convert through this.
-struct CropOrigin: Equatable {
-    var x: Double = 0
-    var y: Double = 0
-}
-
-extension PdfRect {
-    /// User space (pdfium) → crop space (what the UI draws in).
-    func toCrop(_ crop: CropOrigin) -> PdfRect {
-        PdfRect(left: left - crop.x, bottom: bottom - crop.y,
-                right: right - crop.x, top: top - crop.y)
-    }
-
-    /// Crop space (what the UI hands us) → user space (pdfium).
-    func toUser(_ crop: CropOrigin) -> PdfRect {
-        PdfRect(left: left + crop.x, bottom: bottom + crop.y,
-                right: right + crop.x, top: top + crop.y)
-    }
-}
-
 struct PdfStamp: Equatable {
     let annotIndex: Int
     let id: String
@@ -93,10 +60,7 @@ struct PdfStamp: Equatable {
 actor PdfEngine {
     static let shared = PdfEngine()
 
-    private init() {
-        // The core initialises PDFium on first open; the direct calls below need it too.
-        FPDF_InitLibrary()
-    }
+    private init() {}   // the core initialises PDFium on its first open
 
     func open(_ bytes: Data, password: String? = nil) throws -> PdfDocument {
         // The core copies the bytes, so `bytes` is only borrowed for the call.
@@ -204,34 +168,6 @@ actor PdfEngine {
 
     // MARK: - internals
 
-    /// The core's page handles for the raw pages currently inside a `withPage`
-    /// body, so the extensions still written against `FPDF_PAGE` can ask the core
-    /// for the crop origin without changing shape. Actor-isolated, and gone once
-    /// the last contract migrates (#106–#110).
-    private var corePages: [FPDF_PAGE: OpaquePointer] = [:]
-
-    /// The page's CropBox origin, or (0,0) when it has none (#30), as recorded by
-    /// the core when it loaded the page. Every coordinate-returning entry point
-    /// still bound directly converts through it.
-    func cropOrigin(_ page: FPDF_PAGE) -> CropOrigin {
-        var crop = CropOrigin()
-        megapdf_page_crop_origin(corePages[page], &crop.x, &crop.y)
-        return crop
-    }
-
-    /// Loads a page through the core, runs `body` with the raw `FPDF_PAGE`, and
-    /// closes it — the access pattern for the operations still bound to PDFium
-    /// directly (form-fill hooks applied by the core on load and close).
-    func withPage<T>(_ document: PdfDocument, index: Int,
-                     _ body: (FPDF_PAGE) throws -> T) throws -> T {
-        try withCorePage(document, index: index) { core in
-            let raw = OpaquePointer(megapdf_page_raw(core))!
-            corePages[raw] = core
-            defer { corePages[raw] = nil }
-            return try body(raw)
-        }
-    }
-
     /// Loads a page through the core, runs `body` with the core's handle, and
     /// closes it — the access pattern for the migrated contracts.
     func withCorePage<T>(_ document: PdfDocument, index: Int,
@@ -250,17 +186,10 @@ actor PdfEngine {
 final class PdfDocument {
     /// The core's handle.
     let core: OpaquePointer
-    /// Raw PDFium handles, for the extensions still bound directly (stamps, text, forms, save).
-    let docHandle: FPDF_DOCUMENT
-    let formHandle: FPDF_FORMHANDLE?
-    fileprivate var doc: FPDF_DOCUMENT { docHandle }
-    fileprivate var form: FPDF_FORMHANDLE? { formHandle }
     private var destroyed = false
 
     fileprivate init(core: OpaquePointer) {
         self.core = core
-        docHandle = OpaquePointer(megapdf_document_raw(core))!
-        formHandle = megapdf_document_form_raw(core).map { OpaquePointer($0) }
     }
 
     fileprivate func destroy() {

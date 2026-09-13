@@ -32,6 +32,14 @@ preserved) and `megapdf_render` (white ground, content, live form values, BGRA o
 a status code when PDFium refuses); the desktop `RenderLimits` became a binding of it,
 and iOS and Android render through it, which closed #115 — the phones now clamp the
 same way the desktops do.
+
+Phase 3 (#112) finished the migration: body-text editing is written once —
+`megapdf_set_text` with the tiers (in place when the run's font covers the new text;
+otherwise the closest standard face at the same index, matrix, colour and text-box
+identity), `megapdf_insert_text_run` for journal replay, and the subset-name and
+standard-face rules. With it the `*_raw` accessors were removed: no binding calls
+PDFium directly. The desktop engine is an adapter over `CoreNative`, Android's
+`engine.cpp` includes no PDFium header, and iOS's engine makes no PDFium call.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 
