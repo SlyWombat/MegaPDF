@@ -1214,7 +1214,101 @@ std::string mapped(const char* name) {
     return std::string(buf, n);
 }
 
+// A one-page PDF whose only text is drawn in the non-embedded Symbol font. Symbol's
+// built-in encoding has no Latin letters, so no in-place edit can write Latin
+// text in it: FPDFText_SetText still "succeeds", and what reads back is Greek.
+std::vector<unsigned char> symbol_font_pdf() {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>");
+    const std::string content = "BT /F1 24 Tf 72 700 Td (abgd) Tj ET";
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// Two text objects on one baseline in non-embedded Helvetica. PDFium reads the
+// first back with a generated trailing space (the separator before "World"), so a
+// read-back check that ignores generation would reject a perfectly good edit.
+std::vector<unsigned char> two_run_line_pdf() {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    const std::string content = "BT /F1 12 Tf 72 700 Td (Hello) Tj ET BT /F1 12 Tf 120 700 Td (World) Tj ET";
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
 void test_text_editing(const std::string& fixtures) {
+    // #116 part 2: a generated separator space after the run is not the edit failing.
+    {
+        auto bytes = two_run_line_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "two-run pdf opens");
+        if (d) {
+            Page p(d, 0);
+            megapdf_text* t = p.page ? megapdf_text_load(p.page, MEGAPDF_TEXT_ALL) : nullptr;
+            check(t && megapdf_text_run_count(t) == 2, "two-run page has two runs");
+            megapdf_text_run first{};
+            megapdf_text_run_get(t, 0, &first);
+            const std::string before = show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT));
+            megapdf_text_free(t);
+            auto howdy = utf16("Howdy");
+            int outcome = -1;
+            check(megapdf_set_text(p.page, first.object_index, howdy.data(), 0, &outcome) == MEGAPDF_OK, "two-run edit returns OK");
+            check(outcome == MEGAPDF_EDIT_IN_PLACE, "a standard-font run followed by another run is edited in place",
+                  "outcome " + std::to_string(outcome) + ", original read back as '" + before + "'");
+            t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            std::string after = show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT));
+            megapdf_text_free(t);
+            while (!after.empty() && after.back() == ' ') after.pop_back();
+            check(after == "Howdy", "the edited run reads back as the new text, separator aside", after);
+        }
+        megapdf_close(d);
+    }
+
+    // The corpus defect: a font that cannot carry the new text must not be edited
+    // in place and reported as a success. Tier 1 has to prove the text took, or
+    // fall back to tier 2 — never garbled, dropped or letter-spaced text.
+    {
+        auto bytes = symbol_font_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "symbol-font pdf opens");
+        if (d) {
+            Page p(d, 0);
+            megapdf_text* t = p.page ? megapdf_text_load(p.page, MEGAPDF_TEXT_ALL) : nullptr;
+            check(t && megapdf_text_run_count(t) == 1, "symbol-font page has one run");
+            megapdf_text_run r{};
+            megapdf_text_run_get(t, 0, &r);
+            megapdf_text_free(t);
+            auto latin = utf16("Hello");
+            int outcome = -1;
+            check(megapdf_set_text(p.page, r.object_index, latin.data(), 0, &outcome) == MEGAPDF_OK, "the edit returns OK");
+            check(outcome == MEGAPDF_EDIT_SUBSTITUTED, "a font that cannot encode the text is substituted, not edited in place",
+                  std::to_string(outcome));
+            t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            check(megapdf_text_run_count(t) == 1 && show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) == "Hello",
+                  "the new text reads back exactly", t ? show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) : "no text");
+            megapdf_text_free(t);
+        }
+        megapdf_close(d);
+    }
+
     check(megapdf_is_subset_font_name("ABCDEF+SegoeUI") == 1 && megapdf_is_subset_font_name("BCDFGH+Times-Roman") == 1, "subset prefixes are detected");
     check(megapdf_is_subset_font_name("Helvetica") == 0 && megapdf_is_subset_font_name("Arial-BoldMT") == 0 && megapdf_is_subset_font_name("abcdef+lower") == 0 &&
               megapdf_is_subset_font_name(nullptr) == 0,

@@ -533,6 +533,12 @@ internal static class Worker
 
     private const string RetypedText = "MegaPDF corpus edit 2026";
 
+    // A run's text carries the separator PDFium generates before the next object on
+    // the line (the text-run contract, #106), so the retyped run reads back as the
+    // text plus at most trailing whitespace. Anything else — dropped, wrong or
+    // spread-apart characters — is a failed edit (#116).
+    private static bool IsRetyped(string text) => text.TrimEnd() == RetypedText;
+
     private static EditResult RetypeFirstLine(PdfiumEngine engine, IPdfDocument doc, string savedPath)
     {
         var e = new EditResult();
@@ -554,7 +560,7 @@ internal static class Worker
                 e.Outcome = page.SetTextRunText(run, RetypedText) == TextEditOutcome.EditedInPlace ? "in_place" : "substituted";
                 var inMemory = page.GetTextRuns();
                 e.RunsBefore = inMemory.Count;
-                e.InMemory = inMemory.Any(r => r.Text == RetypedText);
+                e.InMemory = inMemory.Any(r => IsRetyped(r.Text));
             }
             using (var stream = File.Create(savedPath))
                 doc.Save(stream);
@@ -563,8 +569,8 @@ internal static class Worker
             using var reopenedPage = reopened.GetPage(0);
             var after = reopenedPage.GetTextRuns();
             e.RunsAfter = after.Count;
-            e.ReopenedSameIndex = after.Any(r => r.ObjectIndex == objectIndex && r.Text == RetypedText);
-            e.ReopenedAnywhere = after.Any(r => r.Text == RetypedText);
+            e.ReopenedSameIndex = after.Any(r => r.ObjectIndex == objectIndex && IsRetyped(r.Text));
+            e.ReopenedAnywhere = after.Any(r => IsRetyped(r.Text));
             // The object index is not stable across a save: PDFium re-parses the
             // rewritten content stream on reopen. What has to survive is the text.
             e.Verified = e.ReopenedAnywhere;

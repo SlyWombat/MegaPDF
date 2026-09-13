@@ -1736,6 +1736,33 @@ std::string MapToStandard(const std::string& original) {
     return bold && italic ? "Helvetica-BoldOblique" : bold ? "Helvetica-Bold" : italic ? "Helvetica-Oblique" : "Helvetica";
 }
 
+// True when the characters the text page attributes to `obj` are exactly `want`.
+// PDFium generates characters of its own while extracting: a separator space before
+// the next object on the line, a line break, or spaces where glyphs sit farther
+// apart than the font says they should. Generated characters at the ends are
+// separators and do not count; one inside the run means the glyphs drew spread
+// apart (the font had no width for them), which is a failed edit (#116).
+bool AuthoredTextIs(FPDF_TEXTPAGE text_page, FPDF_PAGEOBJECT obj, const unsigned short* want) {
+    if (text_page == nullptr) return false;
+    struct Char { unsigned short code; bool generated; };
+    std::vector<Char> chars;
+    const int count = FPDFText_CountChars(text_page);
+    for (int i = 0; i < count; i++) {
+        if (FPDFText_GetTextObject(text_page, i) != obj) continue;
+        const unsigned int u = FPDFText_GetUnicode(text_page, i);
+        chars.push_back(Char{static_cast<unsigned short>(u > 0xFFFF ? 0xFFFD : u), FPDFText_IsGenerated(text_page, i) == 1});
+    }
+    size_t begin = 0, end = chars.size();
+    while (begin < end && chars[begin].generated) begin++;
+    while (end > begin && chars[end - 1].generated) end--;
+    const size_t n = U16Length(want);
+    if (end - begin != n) return false;
+    for (size_t i = 0; i < n; i++) {
+        if (chars[begin + i].generated || chars[begin + i].code != want[i]) return false;
+    }
+    return true;
+}
+
 // Tier 2 test (SDD §3.1): the object's font is a subset and the new text needs a
 // glyph the document never used. Coverage is approximated by every character the
 // page draws with the same base font.
@@ -1839,10 +1866,22 @@ MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const 
     if (!force_substitute && !NeedsSubstitution(p, obj, text)) {
         if (FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text))) {
             if (!GenerateContent(p)) return MEGAPDF_ERR_PDFIUM;
-            if (out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_IN_PLACE;
-            return MEGAPDF_OK;
+            // Prove the text took (#116). FPDFText_SetText succeeds whatever the font
+            // can actually carry: a font with no slot in its encoding drops the
+            // character, one with no mapping draws the wrong glyph, one with no width
+            // spreads the letters apart — and the subset-name check above only knows
+            // about ABCDEF+ fonts. Over the corpus half of all tier-1 edits failed
+            // like that. What reads back is what the page now says; anything but the
+            // exact requested text falls through to the standard-face substitute.
+            FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+            const bool took = AuthoredTextIs(text_page, obj, text);
+            if (text_page != nullptr) FPDFText_ClosePage(text_page);
+            if (took) {
+                if (out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_IN_PLACE;
+                return MEGAPDF_OK;
+            }
         }
-        // In-place set failed outright — fall through to substitution.
+        // In-place set failed outright or did not read back — substitute.
     }
     const int status = SubstituteUnlocked(p, obj, object_index, text);
     if (status == MEGAPDF_OK && out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_SUBSTITUTED;
