@@ -1,0 +1,31 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.TypeSignatureWindow"
+        Title="{x:Static loc:Strings.TypeSignatureTitle}"
+        Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBox Name="NameBox" Watermark="{x:Static loc:Strings.SignatureName}" />
+
+    <!-- The preview is what the placed stamp will look like: the same script face,
+         ink on a white sheet, white in both themes on purpose. -->
+    <Border Name="PreviewSheet" Background="White" CornerRadius="8" Height="112"
+            BorderBrush="{DynamicResource BrandRule}" BorderThickness="1" Padding="16,0">
+      <TextBlock Name="Preview"
+                 Text="{x:Static loc:Strings.TypeSignaturePreviewHint}"
+                 FontFamily="Snell Roundhand, Segoe Script, Brush Script MT, Apple Chancery"
+                 FontSize="34"
+                 Foreground="#FF202020"
+                 Opacity="0.45"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" />
+    </Border>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+      <Button Name="CancelButton" Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="AddButton" Content="{x:Static loc:Strings.Add}" IsDefault="True" IsEnabled="False" />
+    </StackPanel>
+  </StackPanel>
+</Window>

@@ -160,6 +160,22 @@
     <value>À partir d'une photo</value>
     <comment>Button: import a signature from an image (#100)</comment>
   </data>
+  <data name="SignatureType" xml:space="preserve">
+    <value>Taper</value>
+    <comment>Button: make a signature by typing a name (#101)</comment>
+  </data>
+  <data name="TypeSignatureTitle" xml:space="preserve">
+    <value>Tapez votre nom</value>
+    <comment>Dialog title (#101)</comment>
+  </data>
+  <data name="TypeSignaturePreviewHint" xml:space="preserve">
+    <value>Votre nom, en guise de signature</value>
+    <comment>Placeholder shown in the preview sheet before anything is typed (#101)</comment>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Ajouter</value>
+    <comment>Confirm button of the type-a-name dialog (#101)</comment>
+  </data>
   <data name="SignatureOptions" xml:space="preserve">
     <value>Options de la signature</value>
     <comment>Tooltip and accessible name of the per-card overflow button (#100)</comment>

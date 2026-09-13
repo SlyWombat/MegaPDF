@@ -597,6 +597,38 @@ public partial class MainWindow : Window
             SignButton.Flyout?.Hide();
             await ImportSignatureAsync();
         };
+
+        TypeSignatureButton.Click += async (_, _) =>
+        {
+            SignButton.Flyout?.Hide();
+            await TypeSignatureAsync();
+        };
+    }
+
+    /// <summary>
+    /// Type a name, get a signature (#101): the typed name is rendered to ink on a
+    /// transparent raster and stored through the same path as a drawn one, then
+    /// armed for placement like any new signature.
+    /// </summary>
+    private async Task TypeSignatureAsync()
+    {
+        if (ViewModel is not { } vm)
+            return;
+
+        var dialog = new TypeSignatureWindow();
+        await dialog.ShowDialog(this);
+        if (dialog.TypedName is not { } name)
+            return;
+
+        try
+        {
+            var entry = vm.AddSignatureFromImage(name, TypeSignatureWindow.Render(name), Rendering.SignatureImages.EncodePng);
+            vm.BeginPlacing(entry);
+        }
+        catch (Exception ex)
+        {
+            vm.Status = Strings.WithDetail(Strings.CouldNotSaveSignature, ex.Message);
+        }
     }
 
     /// <summary>

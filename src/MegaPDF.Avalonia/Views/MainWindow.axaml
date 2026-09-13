@@ -160,8 +160,8 @@
                   </ItemsControl>
                 </ScrollViewer>
 
-                <!-- Two equal ways in, side by side. -->
-                <Grid ColumnDefinitions="*,*">
+                <!-- Three equal ways in, side by side (#100, #101). -->
+                <Grid ColumnDefinitions="*,*,*">
                   <Button Name="DrawSignatureButton" Grid.Column="0"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                           Margin="0,0,4,0">
@@ -172,7 +172,17 @@
                       <TextBlock Text="{x:Static loc:Strings.SignatureDraw}" />
                     </StackPanel>
                   </Button>
-                  <Button Name="ImportSignatureButton" Grid.Column="1"
+                  <Button Name="TypeSignatureButton" Grid.Column="1"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          Margin="4,0,4,0">
+                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+                      <Path Data="{StaticResource IconText}" Width="16" Height="16"
+                            Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                            StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+                      <TextBlock Text="{x:Static loc:Strings.SignatureType}" />
+                    </StackPanel>
+                  </Button>
+                  <Button Name="ImportSignatureButton" Grid.Column="2"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                           Margin="4,0,0,0">
                     <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">

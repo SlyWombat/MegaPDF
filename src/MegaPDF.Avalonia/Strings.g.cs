@@ -104,6 +104,18 @@ public static partial class Strings
     /// <summary>From photo</summary>
     public static string SignatureFromPhoto => Get("SignatureFromPhoto");
 
+    /// <summary>Type</summary>
+    public static string SignatureType => Get("SignatureType");
+
+    /// <summary>Type your name</summary>
+    public static string TypeSignatureTitle => Get("TypeSignatureTitle");
+
+    /// <summary>Your name, as a signature</summary>
+    public static string TypeSignaturePreviewHint => Get("TypeSignaturePreviewHint");
+
+    /// <summary>Add</summary>
+    public static string Add => Get("Add");
+
     /// <summary>Signature options</summary>
     public static string SignatureOptions => Get("SignatureOptions");
 
