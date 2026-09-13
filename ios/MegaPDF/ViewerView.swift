@@ -166,6 +166,22 @@ struct ViewerView: View {
         // The field and the pickers bind to the model, not to @State, so a
         // correction's prefill lands in the same update as `pendingText` rather
         // than racing the sheet's presentation.
+        // The document's own text (#113): one field, the line keeps its size and font.
+        .sheet(item: $model.pendingBodyEdit) { _ in
+            BodyTextSheet(
+                text: $model.bodyDraft,
+                onSave: { model.commitBodyEdit(model.bodyDraft) },
+                onCancel: model.cancelBodyEdit
+            )
+        }
+        .overlay(alignment: .bottom) {
+            if let notice = model.notice {
+                NoticeBanner(text: notice)
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: model.notice)
         .sheet(item: $model.pendingText) { pending in
             TextBoxSheet(
                 isEditing: pending.editingId != nil,

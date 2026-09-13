@@ -113,6 +113,22 @@
         }
       }
     },
+    "Change this line. The size and font stay as they are." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifiez cette ligne. La taille et la police restent les mêmes."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifiez cette ligne. La taille et la police restent les mêmes."
+          }
+        }
+      }
+    },
     "Clear" : {
       "localizations" : {
         "fr" : {
@@ -621,6 +637,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modifier le texte"
+          }
+        }
+      }
+    },
+    "Equipment Rental Agreement (2026)" : {
+      "comment" : "screenshot: the demo heading being corrected in the text editor",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrat de location d'équipement (2026)"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contrat de location d'équipement (2026)"
           }
         }
       }
@@ -1396,6 +1429,22 @@
         }
       }
     },
+    "The original font couldn't show this text, so a similar standard font was used." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La police d'origine ne pouvait pas afficher ce texte ; une police standard semblable a été utilisée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La police d'origine ne pouvait pas afficher ce texte; une police standard semblable a été utilisée."
+          }
+        }
+      }
+    },
     "Third-party notices" : {
       "localizations" : {
         "fr" : {
@@ -1456,6 +1505,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document est protégé."
+          }
+        }
+      }
+    },
+    "This page is a scanned image, so its text can't be edited." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette page est une image numérisée ; son texte ne peut pas être modifié."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette page est une image numérisée; son texte ne peut pas être modifié."
           }
         }
       }

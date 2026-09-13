@@ -39,6 +39,13 @@ let defaultTextSize: Double = 12
 /// A tap that is waiting for the text the user is about to type (#34). When
 /// `editingId` is set the tap re-opened an existing box to correct it (#36), and
 /// (`x`, `y`) is that box's bounds lower-left rather than the raw tap point.
+/// A line of the document's own text being retyped (#113).
+struct PendingBodyEdit: Identifiable {
+    let id = UUID()
+    let pageIndex: Int
+    let line: PdfTextLine
+}
+
 struct PendingText: Identifiable {
     let id = UUID()
     let pageIndex: Int
@@ -82,6 +89,15 @@ final class ViewerModel: ObservableObject {
     /// correction's prefill (#36/#43) lands in the same update as `pendingText`
     /// instead of racing the sheet's presentation.
     @Published var draftText = ""
+
+    /// The line the body-text editor is open on, and what its field holds (#113).
+    @Published var pendingBodyEdit: PendingBodyEdit?
+    @Published var bodyDraft = ""
+    /// A one-line notice over the page that clears itself — not an alert.
+    @Published private(set) var notice: String?
+    private var noticeTask: Task<Void, Never>?
+    /// The scanned-page hint is shown once per document, not on every stray tap.
+    private var scannedHintShown = false
     @Published var draftSize = defaultTextSize
     @Published var draftFont = PdfEngine.defaultFont
 
@@ -119,6 +135,17 @@ final class ViewerModel: ObservableObject {
         state = .home(recents: recents.load(), error: nil)
         signatures = signatureStore.load()
         applyScreenshotModeIfNeeded()
+        applyUITestDocumentIfNeeded()
+    }
+
+    /// Debug builds only: a UI test hands over a small PDF as base64 in the launch
+    /// environment, so the editing tiers can be driven on documents built for them.
+    private func applyUITestDocumentIfNeeded() {
+        #if DEBUG
+        guard let base64 = ProcessInfo.processInfo.environment["MEGAPDF_UITEST_PDF_BASE64"],
+              let bytes = Data(base64Encoded: base64) else { return }
+        Task { await open(bytes: bytes, password: nil, displayName: "UITest.pdf", sourceURL: nil) }
+        #endif
     }
 
     private func applyScreenshotModeIfNeeded() {
@@ -130,7 +157,7 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
-        case "viewer", "sign", "draw", "search", "text", "story":
+        case "viewer", "sign", "draw", "search", "text", "text-edit", "story":
             let resource = mode == "story" ? DemoContent.blankDemoResource : DemoContent.demoResource
             if let url = Bundle.main.url(forResource: resource, withExtension: "pdf"),
                let bytes = try? Data(contentsOf: url) {
@@ -140,6 +167,13 @@ final class ViewerModel: ObservableObject {
                 Task {
                     await open(bytes: bytes, password: nil,
                                displayName: DemoContent.documentName, sourceURL: nil)
+                    if mode == "text-edit", let doc = document,
+                       let line = try? await PdfEngine.shared.textLines(doc, pageIndex: 0).first {
+                        // The body-text editor open on the agreement's heading, mid-correction (#113).
+                        bodyDraft = String(localized: "Equipment Rental Agreement (2026)",
+                                           comment: "screenshot: the demo heading being corrected in the text editor")
+                        pendingBodyEdit = PendingBodyEdit(pageIndex: 0, line: line)
+                    }
                     if mode == "text" {
                         // The Add text sheet, open on a typed name with the size
                         // and face pickers showing (#43). Armed after the open so
@@ -373,10 +407,66 @@ final class ViewerModel: ObservableObject {
                 }
                 if let operation {
                     try await perform(operation, doc: doc)
+                    return
+                }
+
+                // Nothing the user placed and nothing to tick: the document's own text
+                // (#113). A tap on a line opens the editor on it.
+                let lines = try await engine.textLines(doc, pageIndex: index)
+                if let line = lines.first(where: {
+                    $0.rect.grown(by: Self.tapSlopPoints).contains(x: x, y: y)
+                }) {
+                    bodyDraft = line.text
+                    pendingBodyEdit = PendingBodyEdit(pageIndex: index, line: line)
+                } else if lines.isEmpty, !scannedHintShown {
+                    // Tier 3: a page with no text at all is a picture of a page.
+                    scannedHintShown = true
+                    showNotice(String(localized: "This page is a scanned image, so its text can't be edited."))
                 }
             } catch {
                 // Edits are tap-driven; a failure just leaves the page unchanged.
             }
+        }
+    }
+
+    // MARK: - the document's own text (#113)
+
+    /// Commits the body-text editor. The same text is a no-op; an empty field removes
+    /// the line. Either way it is one undoable edit.
+    func commitBodyEdit(_ text: String) {
+        guard let pending = pendingBodyEdit, let doc = document else { return }
+        pendingBodyEdit = nil
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != pending.line.text else { return }
+        Task {
+            do {
+                if trimmed.isEmpty {
+                    try await perform(BodyTextDeleteOperation(pageIndex: pending.pageIndex, line: pending.line), doc: doc)
+                } else {
+                    let operation = BodyTextEditOperation(pageIndex: pending.pageIndex, line: pending.line, newText: trimmed)
+                    try await perform(operation, doc: doc)
+                    if operation.lastOutcome == .substituted {
+                        showNotice(String(localized: "The original font couldn't show this text, so a similar standard font was used."))
+                    }
+                }
+            } catch {
+                statusMessage = String(localized: "Couldn't change that text.")
+            }
+        }
+    }
+
+    func cancelBodyEdit() {
+        pendingBodyEdit = nil
+        bodyDraft = ""
+    }
+
+    /// Shows a notice over the page for a few seconds.
+    func showNotice(_ text: String) {
+        noticeTask?.cancel()
+        notice = text
+        noticeTask = Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if !Task.isCancelled { notice = nil }
         }
     }
 
@@ -879,6 +969,8 @@ final class ViewerModel: ObservableObject {
 
     private func closeCurrent() {
         renderTask?.cancel()
+        pendingBodyEdit = nil
+        scannedHintShown = false
         clearSearch()
         pageImages = [:]
         renderedWidths = [:]

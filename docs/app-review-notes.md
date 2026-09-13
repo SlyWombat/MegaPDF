@@ -54,16 +54,23 @@ word "insurance" four times for the search demonstration).
    it; drag to move it, use the handles to resize.
 5. **Add text:** tap **Text**, tap a blank line, type, choose a size and font,
    tap **Add**. Tap the text again to move it or fix a typo.
+   **Change the document's own text:** tap any line of printed text (a heading,
+   a date), retype it in the editor that opens, tap **Save**. It keeps its size
+   and font; if that font cannot show what was typed, a similar standard font is
+   used and a one-line notice says so. Clearing the field removes the line. Undo
+   (the arrow in the toolbar) restores the original exactly.
 6. **Search:** tap the magnifier, type a word — every match is highlighted and the
    up/down arrows step through them.
 7. **Save:** tap **Save** — the edited PDF is written back to the original file
    in place (a "Saved" confirmation appears); **Save a copy**, in the overflow
    menu, writes a new file through the Files picker instead.
 
-> **Scope note (updated 2026-09-11 for 1.7.0):** the iOS build does checkboxes
-> (AcroForm widgets and drawn squares), signature stamps, added text with size
-> and face (#43), search, render and save. Do not describe editing of a
-> document's *existing* text — that remains Windows-only.
+> **Scope note (updated 2026-09-13 for the release after 1.7.0):** the iOS build
+> does checkboxes (AcroForm widgets and drawn squares), signature stamps, added
+> text with size and face (#43), editing a document's existing text line by line
+> (#113, through the shared engine core), search, render and save. Scanned pages
+> are pictures: tapping one explains that its text cannot be edited. Until that
+> release ships, keep describing 1.7.0 without existing-text editing.
 
 **1. Screen recording**
 Attached: the full flow above on an iPhone 17 Pro Max simulator running

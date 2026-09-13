@@ -1,7 +1,7 @@
 name: iOS Screenshots
 
 # Manual: captures App Store screenshots from real simulators using the app's
-# `-screenshot <state>` launch mode (home / viewer / search / sign / draw / text), at the two
+# `-screenshot <state>` launch mode (home / viewer / search / sign / draw / text / text-edit), at the two
 # required sizes: 6.9" iPhone and 13" iPad, once per listing language (#91):
 # en, fr-CA and fr (France) each get their own artifact. Download the artifact
 # and upload the PNGs to App Store Connect (docs/app-store-listing.md maps them).
@@ -94,7 +94,7 @@ jobs:
             xcrun simctl uninstall "$udid" com.megapdf.ios 2>/dev/null || true
             xcrun simctl install "$udid" "$APP"
             xcrun simctl ui "$udid" appearance light || true
-            for state in home viewer search sign draw text; do
+            for state in home viewer search sign draw text text-edit; do
               xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" "${LANG_ARGS[@]}"
               sleep 8
               xcrun simctl io "$udid" screenshot "$OUT/${label}-${state}.png"

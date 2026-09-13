@@ -69,7 +69,7 @@ capture() {
     xcrun simctl uninstall "$udid" com.megapdf.ios 2>/dev/null || true
     xcrun simctl install "$udid" "$APP"
     xcrun simctl ui "$udid" appearance light || true
-    for state in home viewer search sign draw text; do
+    for state in home viewer search sign draw text text-edit; do
         xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
         sleep 8
         xcrun simctl io "$udid" screenshot "$OUT/$label-$state.png" >/dev/null
