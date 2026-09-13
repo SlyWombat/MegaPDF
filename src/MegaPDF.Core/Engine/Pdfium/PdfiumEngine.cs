@@ -29,7 +29,10 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
 /// <summary>
 /// PDFium-backed engine (SDD §4.3). Documents are loaded fully into memory so the
 /// original file is never held open — Save can atomically replace it (SDD §3.4),
-/// and cloud-synced files are never locked.
+/// and cloud-synced files are never locked. The bytes, the PDFium document and its
+/// form-fill environment are owned by the shared core (ADR-003, #105); this class
+/// adapts the core's handles to <see cref="IPdfEngine"/> and still binds the
+/// not-yet-migrated contracts to PDFium directly through the core's raw handles.
 /// </summary>
 public sealed class PdfiumEngine : IPdfEngine
 {
@@ -37,17 +40,17 @@ public sealed class PdfiumEngine : IPdfEngine
     {
         PdfiumLibrary.EnsureInitialized();
         var bytes = File.ReadAllBytes(filePath);
-        var pin = GCHandle.Alloc(bytes, GCHandleType.Pinned);
         lock (PdfiumLibrary.Lock)
         {
-            var handle = PdfiumNative.FPDF_LoadMemDocument(pin.AddrOfPinnedObject(), bytes.Length, password);
-            if (handle == IntPtr.Zero)
+            IntPtr core;
+            unsafe
             {
-                var error = PdfiumNative.FPDF_GetLastError();
-                pin.Free();
-                throw new PdfLoadException(filePath, error);
+                fixed (byte* p = bytes)
+                    core = CoreNative.megapdf_open(p, (nuint)bytes.Length, password);
             }
-            return new PdfiumDocument(handle, pin);
+            if (core == IntPtr.Zero)
+                throw new PdfLoadException(filePath, CoreNative.megapdf_last_error());
+            return new PdfiumDocument(core);
         }
     }
 
@@ -59,16 +62,19 @@ public sealed class PdfiumEngine : IPdfEngine
 
 internal sealed class PdfiumDocument : IPdfDocument
 {
+    /// <summary>The core's document handle (owns the bytes, the FPDF_DOCUMENT and the form environment).</summary>
+    private readonly IntPtr _core;
+    /// <summary>Raw FPDF_DOCUMENT, for the contracts still bound to PDFium directly.</summary>
     private readonly IntPtr _handle;
-    private readonly PdfiumFormEnvironment _forms;
-    private GCHandle _pin;
+    /// <summary>Raw FPDF_FORMHANDLE, likewise.</summary>
+    private readonly IntPtr _forms;
     private bool _disposed;
 
-    internal PdfiumDocument(IntPtr handle, GCHandle pin)
+    internal PdfiumDocument(IntPtr core)
     {
-        _handle = handle;
-        _pin = pin;
-        _forms = new PdfiumFormEnvironment(handle);
+        _core = core;
+        _handle = CoreNative.megapdf_document_raw(core);
+        _forms = CoreNative.megapdf_document_form_raw(core);
     }
 
     public int PageCount
@@ -76,8 +82,7 @@ internal sealed class PdfiumDocument : IPdfDocument
         get
         {
             ThrowIfDisposed();
-            lock (PdfiumLibrary.Lock)
-                return PdfiumNative.FPDF_GetPageCount(_handle);
+            return CoreNative.megapdf_page_count(_core);
         }
     }
 
@@ -86,10 +91,10 @@ internal sealed class PdfiumDocument : IPdfDocument
         ThrowIfDisposed();
         lock (PdfiumLibrary.Lock)
         {
-            var page = PdfiumNative.FPDF_LoadPage(_handle, pageIndex);
+            var page = CoreNative.megapdf_load_page(_core, pageIndex);
             if (page == IntPtr.Zero)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page {pageIndex} could not be loaded.");
-            return new PdfiumPage(_handle, _forms.Handle, page, pageIndex);
+            return new PdfiumPage(_handle, _forms, page, pageIndex);
         }
     }
 
@@ -99,7 +104,7 @@ internal sealed class PdfiumDocument : IPdfDocument
         lock (PdfiumLibrary.Lock)
         {
             // Commit any in-progress form-field editing before serializing.
-            PdfiumNative.FORM_ForceToKillFocus(_forms.Handle);
+            PdfiumNative.FORM_ForceToKillFocus(_forms);
 
             // Always a full rewrite, on purpose (#97). PDFium's FPDF_INCREMENTAL does
             // not track which objects changed: it copies the original file and then
@@ -156,7 +161,7 @@ internal sealed class PdfiumDocument : IPdfDocument
         lock (PdfiumLibrary.Lock)
         {
             // Commit any in-progress form editing, then bake every page.
-            PdfiumNative.FORM_ForceToKillFocus(_forms.Handle);
+            PdfiumNative.FORM_ForceToKillFocus(_forms);
             var pageCount = PdfiumNative.FPDF_GetPageCount(_handle);
             for (var i = 0; i < pageCount; i++)
             {
@@ -209,10 +214,9 @@ internal sealed class PdfiumDocument : IPdfDocument
         _disposed = true;
         lock (PdfiumLibrary.Lock)
         {
-            _forms.Dispose();
-            PdfiumNative.FPDF_CloseDocument(_handle);
+            // Tears down the form environment and any page still open, then the document.
+            CoreNative.megapdf_close(_core);
         }
-        _pin.Free();
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
@@ -222,39 +226,31 @@ internal sealed class PdfiumPage : IPdfPage
 {
     private readonly IntPtr _document;
     private readonly IntPtr _forms;
+    /// <summary>The core's page handle; the form-fill hooks were applied on load.</summary>
+    private readonly IntPtr _core;
+    /// <summary>Raw FPDF_PAGE, for the contracts still bound to PDFium directly.</summary>
     private readonly IntPtr _handle;
     private bool _disposed;
 
-    internal PdfiumPage(IntPtr document, IntPtr forms, IntPtr handle, int index)
+    internal PdfiumPage(IntPtr document, IntPtr forms, IntPtr core, int index)
     {
         _document = document;
         _forms = forms;
-        _handle = handle;
+        _core = core;
+        _handle = CoreNative.megapdf_page_raw(core);
         Index = index;
-        // Caller (PdfiumDocument.GetPage) holds the lock; Monitor is reentrant.
-        lock (PdfiumLibrary.Lock)
-        {
-            PdfiumNative.FORM_OnAfterLoadPage(handle, forms);
-            Width = PdfiumNative.FPDF_GetPageWidthF(handle);
-            Height = PdfiumNative.FPDF_GetPageHeightF(handle);
-            // pdfium reports page *content* in user space, whose origin is the
-            // MediaBox — but it renders, and sizes, the CropBox. When the two differ
-            // (imposed pages, trimmed scans) every coordinate we hand the UI is out by
-            // the difference: highlights, checkbox squares and click targets all land
-            // on the wrong part of the page (#28). Everything below converts through
-            // the crop origin instead of assuming it is (0,0).
-            if (PdfiumNative.FPDFPage_GetCropBox(handle, out var cl, out var cb, out var cr, out var ct)
-                && cr > cl && ct > cb)
-            {
-                _cropLeft = cl;
-                _cropTop = ct;
-            }
-            else
-            {
-                _cropLeft = 0;
-                _cropTop = Height;
-            }
-        }
+        Width = CoreNative.megapdf_page_width(core);
+        Height = CoreNative.megapdf_page_height(core);
+        // pdfium reports page *content* in user space, whose origin is the
+        // MediaBox — but it renders, and sizes, the CropBox. When the two differ
+        // (imposed pages, trimmed scans) every coordinate we hand the UI is out by
+        // the difference: highlights, checkbox squares and click targets all land
+        // on the wrong part of the page (#28). The core owns that origin; the
+        // contracts it has absorbed already return crop space, and the ones still
+        // bound directly convert through it below.
+        CoreNative.megapdf_page_crop_origin(core, out var cropX, out var cropY);
+        _cropLeft = cropX;
+        _cropTop = cropY + Height;
     }
 
     public int Index { get; }
@@ -267,6 +263,10 @@ internal sealed class PdfiumPage : IPdfPage
     /// <summary>PDF user space (bottom-left, MediaBox origin) to view space (top-left, crop origin).</summary>
     private double ViewX(double userX) => userX - _cropLeft;
     private double ViewY(double userTop) => _cropTop - userTop;
+
+    /// <summary>The core's crop space (bottom-left, crop origin) to view space (top-left).</summary>
+    private PdfRect CropToView(double left, double bottom, double right, double top) =>
+        new(left, Height - top, right - left, top - bottom);
 
     /// <summary>View space back to PDF user space.</summary>
     private double UserX(double viewX) => viewX + _cropLeft;
@@ -425,30 +425,24 @@ internal sealed class PdfiumPage : IPdfPage
     public IReadOnlyList<PdfRect> DetectCheckboxSquares()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            // The heuristic (SDD §3.2: stroked-not-filled paths, 6–24 pt, square
-            // within 25%) lives in the shared engine core and is no longer written
-            // here — one implementation serves all platforms (ADR-003, #38). The
-            // core hands back crop-relative rects with PDF's bottom-left origin; page
-            // space here is top-left, so each one goes back through the crop origin
-            // and the same ViewX/ViewY every other coordinate in this class uses.
-            var count = (int)CoreNative.megapdf_detect_checkbox_squares(_handle, null, 0);
-            if (count == 0)
-                return [];
-            var buffer = new CoreNative.Rect[count];
-            var filled = (int)CoreNative.megapdf_detect_checkbox_squares(_handle, buffer, (nuint)count);
-            CoreNative.megapdf_crop_origin(_handle, out var cropX, out var cropY);
+        // The heuristic (SDD §3.2: stroked-not-filled paths, 6–24 pt, square
+        // within 25%) lives in the shared engine core and is no longer written
+        // here — one implementation serves all platforms (ADR-003, #38). The
+        // core hands back crop-space rects with PDF's bottom-left origin; page
+        // space here is top-left, so each one flips through CropToView.
+        var count = (int)CoreNative.megapdf_detect_checkbox_squares(_core, null, 0);
+        if (count == 0)
+            return [];
+        var buffer = new CoreNative.Rect[count];
+        var filled = (int)CoreNative.megapdf_detect_checkbox_squares(_core, buffer, (nuint)count);
 
-            var squares = new List<PdfRect>(filled);
-            for (var i = 0; i < filled; i++)
-            {
-                var r = buffer[i];
-                squares.Add(new PdfRect(
-                    ViewX(r.Left + cropX), ViewY(r.Top + cropY), r.Right - r.Left, r.Top - r.Bottom));
-            }
-            return squares;
+        var squares = new List<PdfRect>(filled);
+        for (var i = 0; i < filled; i++)
+        {
+            var r = buffer[i];
+            squares.Add(CropToView(r.Left, r.Bottom, r.Right, r.Top));
         }
+        return squares;
     }
 
     private const string StampIdKey = "MegaPDF_Id";
@@ -608,50 +602,28 @@ internal sealed class PdfiumPage : IPdfPage
         if (string.IsNullOrEmpty(term))
             return [];
 
-        lock (PdfiumLibrary.Lock)
+        // Contract 1 (#26): case-insensitive substring, one rect per line spanned,
+        // matches with no rects dropped. The core does the search and returns a
+        // packed stream — per match: rect count, then (left, bottom, right, top)
+        // per rect, in crop space — which decodes here into page space.
+        var total = (int)CoreNative.megapdf_search_page(_core, term, null, 0);
+        if (total == 0)
+            return [];
+        var packed = new double[total];
+        var filled = (int)CoreNative.megapdf_search_page(_core, term, packed, (nuint)total);
+        var matches = new List<PdfSearchMatch>();
+        var pos = 0;
+        while (pos < filled)
         {
-            var matches = new List<PdfSearchMatch>();
-            var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
-            if (textPage == IntPtr.Zero)
-                return matches;
-            try
-            {
-                // Flags 0 = case-insensitive substring — the only mode we offer (issue #26).
-                var find = PdfiumNative.FPDFText_FindStart(textPage, term, flags: 0, startIndex: 0);
-                if (find == IntPtr.Zero)
-                    return matches;
-                try
-                {
-                    while (PdfiumNative.FPDFText_FindNext(find) != 0)
-                    {
-                        var charIndex = PdfiumNative.FPDFText_GetSchResultIndex(find);
-                        var charCount = PdfiumNative.FPDFText_GetSchCount(find);
-                        var rectCount = PdfiumNative.FPDFText_CountRects(textPage, charIndex, charCount);
-                        var rects = new List<PdfRect>(rectCount);
-                        for (var r = 0; r < rectCount; r++)
-                        {
-                            if (PdfiumNative.FPDFText_GetRect(textPage, r, out var left, out var top, out var right, out var bottom) == 0)
-                                continue;
-                            // PDF coords are bottom-left origin; our page space is top-left (Geometry.cs).
-                            rects.Add(new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom));
-                        }
-                        if (rects.Count > 0)
-                            matches.Add(new PdfSearchMatch(rects));
-                    }
-                }
-                finally
-                {
-                    PdfiumNative.FPDFText_FindClose(find);
-                }
-                return matches;
-            }
-            finally
-            {
-                PdfiumNative.FPDFText_ClosePage(textPage);
-            }
+            var rectCount = (int)packed[pos++];
+            var rects = new List<PdfRect>(rectCount);
+            for (var r = 0; r < rectCount && pos + 4 <= filled; r++, pos += 4)
+                rects.Add(CropToView(packed[pos], packed[pos + 1], packed[pos + 2], packed[pos + 3]));
+            if (rects.Count > 0)
+                matches.Add(new PdfSearchMatch(rects));
         }
+        return matches;
     }
-
     public IReadOnlyList<PdfFormField> GetFormFields()
     {
         ThrowIfDisposed();
@@ -1588,8 +1560,8 @@ internal sealed class PdfiumPage : IPdfPage
         _disposed = true;
         lock (PdfiumLibrary.Lock)
         {
-            PdfiumNative.FORM_OnBeforeClosePage(_handle, _forms);
-            PdfiumNative.FPDF_ClosePage(_handle);
+            // FORM_OnBeforeClosePage + FPDF_ClosePage, in the core.
+            CoreNative.megapdf_close_page(_core);
         }
     }
 

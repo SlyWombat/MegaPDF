@@ -26,18 +26,7 @@ internal static class PdfiumNative
 
     [DllImport(Dll)] public static extern void FPDF_InitLibrary();
 
-    [DllImport(Dll)] public static extern IntPtr FPDF_LoadMemDocument(IntPtr dataBuf, int size, [MarshalAs(UnmanagedType.LPUTF8Str)] string? password);
-    [DllImport(Dll)] public static extern uint FPDF_GetLastError();
-    [DllImport(Dll)] public static extern void FPDF_CloseDocument(IntPtr document);
     [DllImport(Dll)] public static extern int FPDF_GetPageCount(IntPtr document);
-
-    [DllImport(Dll)] public static extern IntPtr FPDF_LoadPage(IntPtr document, int pageIndex);
-    [DllImport(Dll)] public static extern void FPDF_ClosePage(IntPtr page);
-    [DllImport(Dll)] public static extern float FPDF_GetPageWidthF(IntPtr page);
-    /// <summary>The box the viewer actually shows; its origin is not always (0,0).</summary>
-    [DllImport(Dll)] public static extern bool FPDFPage_GetCropBox(
-        IntPtr page, out float left, out float bottom, out float right, out float top);
-    [DllImport(Dll)] public static extern float FPDF_GetPageHeightF(IntPtr page);
 
     [DllImport(Dll)] public static extern IntPtr FPDFBitmap_Create(int width, int height, int alpha);
     [DllImport(Dll)] public static extern int FPDFBitmap_FillRect(IntPtr bitmap, int left, int top, int width, int height, uint color);
@@ -74,15 +63,8 @@ internal static class PdfiumNative
     // --- Text search (fpdf_text.h; simple find, issue #26) ---
 
     /// <summary>findWhat is an FPDF_WIDESTRING (UTF-16LE, NUL-terminated); flags 0 = case-insensitive substring.</summary>
-    [DllImport(Dll)] public static extern IntPtr FPDFText_FindStart(IntPtr textPage, [MarshalAs(UnmanagedType.LPWStr)] string findWhat, uint flags, int startIndex);
-    [DllImport(Dll)] public static extern int FPDFText_FindNext(IntPtr handle);
-    [DllImport(Dll)] public static extern int FPDFText_GetSchResultIndex(IntPtr handle);
-    [DllImport(Dll)] public static extern int FPDFText_GetSchCount(IntPtr handle);
-    [DllImport(Dll)] public static extern void FPDFText_FindClose(IntPtr handle);
 
     /// <summary>Computes the rects covering a char range; FPDFText_GetRect then reads them by index.</summary>
-    [DllImport(Dll)] public static extern int FPDFText_CountRects(IntPtr textPage, int startIndex, int count);
-    [DllImport(Dll)] public static extern int FPDFText_GetRect(IntPtr textPage, int rectIndex, out double left, out double top, out double right, out double bottom);
 
     // --- Font substitution (tier 2, SDD §3.1) ---
 
@@ -114,57 +96,9 @@ internal static class PdfiumNative
     public const int FPDF_ANNOT_SUBTYPE_WIDGET = 20;
     public const int FPDF_ANNOT_SUBTYPE_STAMP = 13;
 
-    /// <summary>
-    /// FPDF_FORMFILLINFO version 1. PDFium keeps the POINTER we pass — the struct
-    /// must live in unmanaged memory for the document's lifetime.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FPDF_FORMFILLINFO
-    {
-        public int Version;
-        public IntPtr Release;
-        public IntPtr FFI_Invalidate;
-        public IntPtr FFI_OutputSelectedRect;
-        public IntPtr FFI_SetCursor;
-        public IntPtr FFI_SetTimer;
-        public IntPtr FFI_KillTimer;
-        public IntPtr FFI_GetLocalTime;
-        public IntPtr FFI_OnChange;
-        public IntPtr FFI_GetPage;
-        public IntPtr FFI_GetCurrentPage;
-        public IntPtr FFI_GetRotation;
-        public IntPtr FFI_ExecuteNamedAction;
-        public IntPtr FFI_SetTextFieldFocus;
-        public IntPtr FFI_DoURIAction;
-        public IntPtr FFI_DoGoToAction;
-        public IntPtr JsPlatform;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FPDF_SYSTEMTIME
-    {
-        public ushort Year, Month, DayOfWeek, Day, Hour, Minute, Second, Milliseconds;
-    }
-
-    // Callback delegate shapes for the FFI members PDFium may invoke.
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiVoidDelegate(IntPtr self);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiInvalidateDelegate(IntPtr self, IntPtr page, double left, double top, double right, double bottom);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiSetCursorDelegate(IntPtr self, int cursorType);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int FfiSetTimerDelegate(IntPtr self, int elapseMs, IntPtr timerFunc);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiKillTimerDelegate(IntPtr self, int timerId);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate FPDF_SYSTEMTIME FfiGetLocalTimeDelegate(IntPtr self);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate IntPtr FfiGetPageDelegate(IntPtr self, IntPtr document, int pageIndex);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate IntPtr FfiGetCurrentPageDelegate(IntPtr self, IntPtr document);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate int FfiGetRotationDelegate(IntPtr self, IntPtr page);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiExecuteNamedActionDelegate(IntPtr self, IntPtr namedAction);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiSetTextFieldFocusDelegate(IntPtr self, IntPtr value, uint valueLen, int isFocus);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiDoUriActionDelegate(IntPtr self, IntPtr uri);
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FfiDoGoToActionDelegate(IntPtr self, int pageIndex, int zoomMode, IntPtr posArray, int arraySize);
-
-    [DllImport(Dll)] public static extern IntPtr FPDFDOC_InitFormFillEnvironment(IntPtr document, IntPtr formInfo);
-    [DllImport(Dll)] public static extern void FPDFDOC_ExitFormFillEnvironment(IntPtr formHandle);
-    [DllImport(Dll)] public static extern void FORM_OnAfterLoadPage(IntPtr page, IntPtr formHandle);
-    [DllImport(Dll)] public static extern void FORM_OnBeforeClosePage(IntPtr page, IntPtr formHandle);
+    // The FPDF_FORMFILLINFO environment, page load/close hooks, document open and
+    // text search moved into the shared core with #105 (ADR-003); the form handle
+    // used below comes from CoreNative.megapdf_document_form_raw.
     [DllImport(Dll)] public static extern int FORM_OnLButtonDown(IntPtr formHandle, IntPtr page, int modifier, double pageX, double pageY);
     [DllImport(Dll)] public static extern int FORM_OnLButtonUp(IntPtr formHandle, IntPtr page, int modifier, double pageX, double pageY);
     [DllImport(Dll)] public static extern int FORM_SelectAllText(IntPtr formHandle, IntPtr page);

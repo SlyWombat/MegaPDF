@@ -1,9 +1,10 @@
 import CPdfium
 import Foundation
 
-// Text search (#26) — literal case-insensitive substring search via PDFium's
-// FPDFText API, matching the desktop and Android implementations (same flags,
-// same per-page rect semantics).
+// Text search (#26) — literal case-insensitive substring search, implemented
+// once in the shared engine core (#105) and decoded here from its packed stream:
+// per match, a rect count and then (left, bottom, right, top) per rect, in
+// crop space. Desktop and Android decode the same stream.
 
 /// One search hit on a page: the bounding rects (PDF points, bottom-left
 /// origin) covering the matched glyphs — usually one, more when the match
@@ -19,29 +20,29 @@ extension PdfEngine {
     func search(_ document: PdfDocument, pageIndex: Int, term: String)
         throws -> [PdfSearchMatch] {
         guard !term.isEmpty else { return [] }
-        return try withPage(document, index: pageIndex) { page in
-            let crop = cropOrigin(page)
-            guard let text = FPDFText_LoadPage(page) else { return [] }
-            defer { FPDFText_ClosePage(text) }
-
-            // FPDF_WIDESTRING is null-terminated UTF-16.
+        return try withCorePage(document, index: pageIndex) { page in
+            // The core wants NUL-terminated UTF-16.
             let wide = Array(term.utf16) + [0]
-            let handle = wide.withUnsafeBufferPointer {
-                FPDFText_FindStart(text, $0.baseAddress, 0, 0)
+            let packed: [Double] = wide.withUnsafeBufferPointer { t in
+                let total = megapdf_search_page(page, t.baseAddress, nil, 0)
+                guard total > 0 else { return [] }
+                var out = [Double](repeating: 0, count: total)
+                let filled = out.withUnsafeMutableBufferPointer {
+                    megapdf_search_page(page, t.baseAddress, $0.baseAddress, total)
+                }
+                return Array(out.prefix(min(filled, total)))
             }
-            guard let handle else { return [] }
-            defer { FPDFText_FindClose(handle) }
 
             var result: [PdfSearchMatch] = []
-            while FPDFText_FindNext(handle) != 0 {
-                let start = FPDFText_GetSchResultIndex(handle)
-                let count = FPDFText_GetSchCount(handle)
+            var i = 0
+            while i < packed.count {
+                let rectCount = Int(packed[i]); i += 1
                 var rects: [PdfRect] = []
-                // CountRects returns -1 on failure; clamp so the range is valid.
-                for i in 0..<max(FPDFText_CountRects(text, start, count), 0) {
-                    var l = 0.0, t = 0.0, r = 0.0, b = 0.0
-                    guard FPDFText_GetRect(text, i, &l, &t, &r, &b) != 0 else { continue }
-                    rects.append(PdfRect(left: l, bottom: b, right: r, top: t).toCrop(crop))
+                var n = 0
+                while n < rectCount, i + 4 <= packed.count {
+                    rects.append(PdfRect(left: packed[i], bottom: packed[i + 1],
+                                         right: packed[i + 2], top: packed[i + 3]))
+                    i += 4; n += 1
                 }
                 if !rects.isEmpty { result.append(PdfSearchMatch(rects: rects)) }
             }

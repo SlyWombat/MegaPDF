@@ -1,9 +1,16 @@
-// JNI shim over the PDFium C API. Thin by design: marshalling only, no policy.
+// JNI shim over the shared engine core and, for the contracts that have not
+// migrated yet, the PDFium C API. Thin by design: marshalling only, no policy.
 // Behavior mirrors the desktop reference (src/MegaPDF.Core/Engine/Pdfium/) —
 // see SDD §6.2 for the cross-platform contracts.
 //
-// Threading: PDFium is not thread-safe. Every entry point here must be called
-// from the single engine thread owned by the Kotlin PdfEngine dispatcher.
+// Since #105 the core owns the document: bytes go in, opaque handles come out,
+// and the form-fill environment, page lifecycle and crop-origin bookkeeping live
+// in core/. The Document and Page structs here wrap the core's handles and keep
+// the raw FPDF_* handles beside them for the JNI functions still bound directly.
+//
+// Threading: PDFium is not thread-safe. The core serialises its own calls; the
+// direct PDFium calls here must still come from the single engine thread owned by
+// the Kotlin PdfEngine dispatcher.
 
 #include <jni.h>
 #include <android/bitmap.h>
@@ -26,14 +33,14 @@
 namespace {
 
 struct Document {
-    std::vector<uint8_t> data;  // FPDF_LoadMemDocument64 requires the buffer to outlive the doc.
-    FPDF_DOCUMENT doc = nullptr;
-    FPDF_FORMHANDLE form = nullptr;
-    FPDF_FORMFILLINFO ffi = {};
+    megapdf_document* core = nullptr;
+    FPDF_DOCUMENT doc = nullptr;      // megapdf_document_raw(core), for unmigrated contracts
+    FPDF_FORMHANDLE form = nullptr;   // megapdf_document_form_raw(core), likewise
 };
 
 struct Page {
-    FPDF_PAGE page = nullptr;
+    megapdf_page* core = nullptr;
+    FPDF_PAGE page = nullptr;         // megapdf_page_raw(core), for unmigrated contracts
     Document* owner = nullptr;
 };
 
@@ -42,53 +49,18 @@ struct Page {
 // scans -- every coordinate handed to the UI is out by that difference, so search
 // highlights and tap targets land on the wrong part of the page (#28). Everything
 // crossing the JNI boundary is shifted into crop-relative space, which is a no-op on
-// the usual page whose crop origin is already (0,0).
+// the usual page whose crop origin is already (0,0). The core owns the origin; the
+// contracts it has absorbed return crop space already, and the ones still bound
+// directly here shift through this.
 struct CropOrigin {
     double x = 0;
     double y = 0;
 };
 
-CropOrigin cropOrigin(FPDF_PAGE page) {
-    float l = 0, b = 0, r = 0, t = 0;
-    if (FPDFPage_GetCropBox(page, &l, &b, &r, &t) && r > l && t > b) {
-        return CropOrigin{static_cast<double>(l), static_cast<double>(b)};
-    }
-    return CropOrigin{};
-}
-
-// --- FPDF_FORMFILLINFO no-op callbacks (no JS, no XFA), as on desktop. ---
-void FfiInvalidate(FPDF_FORMFILLINFO*, FPDF_PAGE, double, double, double, double) {}
-void FfiOutputSelectedRect(FPDF_FORMFILLINFO*, FPDF_PAGE, double, double, double, double) {}
-void FfiSetCursor(FPDF_FORMFILLINFO*, int) {}
-int FfiSetTimer(FPDF_FORMFILLINFO*, int, TimerCallback) { return 0; }
-void FfiKillTimer(FPDF_FORMFILLINFO*, int) {}
-FPDF_SYSTEMTIME FfiGetLocalTime(FPDF_FORMFILLINFO*) { return FPDF_SYSTEMTIME{}; }
-void FfiOnChange(FPDF_FORMFILLINFO*) {}
-FPDF_PAGE FfiGetPage(FPDF_FORMFILLINFO*, FPDF_DOCUMENT, int) { return nullptr; }
-FPDF_PAGE FfiGetCurrentPage(FPDF_FORMFILLINFO*, FPDF_DOCUMENT) { return nullptr; }
-int FfiGetRotation(FPDF_FORMFILLINFO*, FPDF_PAGE) { return 0; }
-void FfiExecuteNamedAction(FPDF_FORMFILLINFO*, FPDF_BYTESTRING) {}
-void FfiSetTextFieldFocus(FPDF_FORMFILLINFO*, FPDF_WIDESTRING, FPDF_DWORD, FPDF_BOOL) {}
-void FfiDoURIAction(FPDF_FORMFILLINFO*, FPDF_BYTESTRING) {}
-void FfiDoGoToAction(FPDF_FORMFILLINFO*, int, int, float*, int) {}
-
-void InitFormFillInfo(FPDF_FORMFILLINFO* ffi) {
-    std::memset(ffi, 0, sizeof(*ffi));
-    ffi->version = 1;
-    ffi->FFI_Invalidate = FfiInvalidate;
-    ffi->FFI_OutputSelectedRect = FfiOutputSelectedRect;
-    ffi->FFI_SetCursor = FfiSetCursor;
-    ffi->FFI_SetTimer = FfiSetTimer;
-    ffi->FFI_KillTimer = FfiKillTimer;
-    ffi->FFI_GetLocalTime = FfiGetLocalTime;
-    ffi->FFI_OnChange = FfiOnChange;
-    ffi->FFI_GetPage = FfiGetPage;
-    ffi->FFI_GetCurrentPage = FfiGetCurrentPage;
-    ffi->FFI_GetRotation = FfiGetRotation;
-    ffi->FFI_ExecuteNamedAction = FfiExecuteNamedAction;
-    ffi->FFI_SetTextFieldFocus = FfiSetTextFieldFocus;
-    ffi->FFI_DoURIAction = FfiDoURIAction;
-    ffi->FFI_DoGoToAction = FfiDoGoToAction;
+CropOrigin cropOrigin(const Page* p) {
+    CropOrigin c;
+    megapdf_page_crop_origin(p->core, &c.x, &c.y);
+    return c;
 }
 
 constexpr int kRenderFlags = FPDF_ANNOT | FPDF_LCD_TEXT | FPDF_REVERSE_BYTE_ORDER;
@@ -133,68 +105,66 @@ Java_com_megapdf_engine_PdfiumNative_nativeInit(JNIEnv*, jobject) {
 JNIEXPORT jlong JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeOpen(JNIEnv* env, jobject, jbyteArray bytes,
                                                 jstring password) {
-    auto* d = new Document();
+    // The core copies the bytes, so the JNI array is only borrowed for the call.
     const jsize len = env->GetArrayLength(bytes);
-    d->data.resize(static_cast<size_t>(len));
-    env->GetByteArrayRegion(bytes, 0, len, reinterpret_cast<jbyte*>(d->data.data()));
-
+    jbyte* data = env->GetByteArrayElements(bytes, nullptr);
     const char* pw = password ? env->GetStringUTFChars(password, nullptr) : nullptr;
-    d->doc = FPDF_LoadMemDocument64(d->data.data(), d->data.size(), pw);
+    megapdf_document* core = megapdf_open(data, static_cast<size_t>(len), pw);
     if (pw) env->ReleaseStringUTFChars(password, pw);
+    env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
+    if (core == nullptr) return 0;
 
-    if (d->doc == nullptr) {
-        delete d;
-        return 0;
-    }
-    InitFormFillInfo(&d->ffi);
-    d->form = FPDFDOC_InitFormFillEnvironment(d->doc, &d->ffi);
+    auto* d = new Document();
+    d->core = core;
+    d->doc = static_cast<FPDF_DOCUMENT>(megapdf_document_raw(core));
+    d->form = static_cast<FPDF_FORMHANDLE>(megapdf_document_form_raw(core));
     return reinterpret_cast<jlong>(d);
 }
 
 JNIEXPORT jint JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeLastError(JNIEnv*, jobject) {
-    return static_cast<jint>(FPDF_GetLastError());
+    return static_cast<jint>(megapdf_last_error());
 }
 
 JNIEXPORT void JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeCloseDocument(JNIEnv*, jobject, jlong handle) {
     auto* d = reinterpret_cast<Document*>(handle);
-    if (d->form) FPDFDOC_ExitFormFillEnvironment(d->form);
-    if (d->doc) FPDF_CloseDocument(d->doc);
+    megapdf_close(d->core);   // form environment, any page still open, then the document
     delete d;
 }
 
 JNIEXPORT jint JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativePageCount(JNIEnv*, jobject, jlong handle) {
-    return FPDF_GetPageCount(reinterpret_cast<Document*>(handle)->doc);
+    return megapdf_page_count(reinterpret_cast<Document*>(handle)->core);
 }
 
 JNIEXPORT jlong JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeOpenPage(JNIEnv*, jobject, jlong handle, jint index) {
     auto* d = reinterpret_cast<Document*>(handle);
-    FPDF_PAGE page = FPDF_LoadPage(d->doc, index);
-    if (page == nullptr) return 0;
-    if (d->form) FORM_OnAfterLoadPage(page, d->form);
-    auto* p = new Page{page, d};
+    megapdf_page* core = megapdf_load_page(d->core, index);   // FORM_OnAfterLoadPage inside
+    if (core == nullptr) return 0;
+    auto* p = new Page();
+    p->core = core;
+    p->page = static_cast<FPDF_PAGE>(megapdf_page_raw(core));
+    p->owner = d;
     return reinterpret_cast<jlong>(p);
 }
 
 JNIEXPORT void JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeClosePage(JNIEnv*, jobject, jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    if (p->owner->form) FORM_OnBeforeClosePage(p->page, p->owner->form);
-    FPDF_ClosePage(p->page);
+    megapdf_close_page(p->core);   // FORM_OnBeforeClosePage + FPDF_ClosePage inside
     delete p;
 }
 
 JNIEXPORT jdouble JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativePageWidth(JNIEnv*, jobject, jlong handle) {
-    return FPDF_GetPageWidth(reinterpret_cast<Page*>(handle)->page);
+    return megapdf_page_width(reinterpret_cast<Page*>(handle)->core);
 }
 
 JNIEXPORT jdouble JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativePageHeight(JNIEnv*, jobject, jlong handle) {
-    return FPDF_GetPageHeight(reinterpret_cast<Page*>(handle)->page);
+    return megapdf_page_height(reinterpret_cast<Page*>(handle)->core);
 }
 
 JNIEXPORT jboolean JNICALL
@@ -400,7 +370,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     FPDF_FORMHANDLE form = p->owner->form;
     std::vector<double> packed;
     if (form != nullptr) {
@@ -439,7 +409,7 @@ JNIEXPORT void JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeClickAt(JNIEnv*, jobject, jlong handle,
                                                    jdouble x, jdouble y) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     FPDF_FORMHANDLE form = p->owner->form;
     if (form == nullptr) return;
     FORM_OnLButtonDown(form, p->page, 0, x + crop.x, y + crop.y);
@@ -455,9 +425,9 @@ Java_com_megapdf_engine_PdfiumNative_nativeDetectSquaresPacked(JNIEnv* env, jobj
     // The heuristic itself lives in the shared core (#33) — this is marshalling
     // only, which is what this shim was always supposed to be.
     auto* p = reinterpret_cast<Page*>(handle);
-    const size_t count = megapdf_detect_checkbox_squares(p->page, nullptr, 0);
+    const size_t count = megapdf_detect_checkbox_squares(p->core, nullptr, 0);
     std::vector<megapdf_rect> rects(count);
-    if (count > 0) megapdf_detect_checkbox_squares(p->page, rects.data(), count);
+    if (count > 0) megapdf_detect_checkbox_squares(p->core, rects.data(), count);
 
     std::vector<double> packed;
     packed.reserve(count * 4);
@@ -481,7 +451,7 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddCheckMark(JNIEnv* env, jobject, jl
                                                         jdouble l, jdouble b, jdouble r,
                                                         jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     l += crop.x; r += crop.x; b += crop.y; t += crop.y;
     const double w = r - l, h = t - b;
     const float il = static_cast<float>(l + 0.10 * w);
@@ -536,7 +506,7 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddTextBox(JNIEnv* env, jobject, jlon
                                                       jdouble fontSize,
                                                       jdouble x, jdouble y, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     FPDF_DOCUMENT doc = p->owner->doc;
 
     const char* faceUtf8 = env->GetStringUTFChars(fontName, nullptr);
@@ -654,7 +624,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeTextBoxRectsPacked(JNIEnv* env, jobject,
                                                               jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     std::vector<double> packed;
     const int count = FPDFPage_CountObjects(p->page);
     for (int i = 0; i < count; i++) {
@@ -682,7 +652,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeMoveTextBox(JNIEnv* env, jobject, jlong handle,
                                                        jstring id, jdouble x, jdouble y) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     FPDF_PAGEOBJECT obj = FindTextBox(p->page, JavaChars(env, id));
     if (obj == nullptr) return JNI_FALSE;
 
@@ -736,7 +706,7 @@ JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeAnnotRectsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
     const int count = FPDFPage_GetAnnotCount(p->page);
     std::vector<double> packed(static_cast<size_t>(count) * 4, 0.0);
     for (int i = 0; i < count; i++) {
@@ -776,7 +746,7 @@ Java_com_megapdf_engine_PdfiumNative_nativeAddImageStamp(JNIEnv* env, jobject, j
                                                          jdouble l, jdouble b, jdouble r,
                                                          jdouble t, jstring id) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
+    const CropOrigin crop = cropOrigin(p);
 
     l += crop.x; r += crop.x; b += crop.y; t += crop.y;
 
@@ -897,47 +867,30 @@ Java_com_megapdf_engine_PdfiumNative_nativeGetStampImagePacked(JNIEnv* env, jobj
 }  // extern "C"
 
 // --- Text search (#26). Case-insensitive literal substring search — flags 0,
-// --- no whole-word, no regex; the contract is shared across all platforms.
+// --- no whole-word, no regex; the contract is shared across all platforms and,
+// --- since #105, implemented once in the core.
 
 extern "C" {
 
 // Matches on the page, packed [rectCount, l, b, r, t...] per match (a match
-// wrapping across lines has several rects), PDF points, bottom-left origin.
+// wrapping across lines has several rects), PDF points, bottom-left origin,
+// crop-relative — the core's stream, handed through unchanged.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeSearchPagePacked(JNIEnv* env, jobject,
                                                             jlong handle, jstring query) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p->page);
     std::vector<double> packed;
     const jsize len = env->GetStringLength(query);
-    FPDF_TEXTPAGE text = len > 0 ? FPDFText_LoadPage(p->page) : nullptr;
-    if (text != nullptr) {
-        // jchar is already UTF-16; FPDF_WIDESTRING wants a null terminator.
+    if (len > 0) {
+        // jchar is already UTF-16; the core wants a NUL terminator.
         const jchar* chars = env->GetStringChars(query, nullptr);
-        std::vector<FPDF_WCHAR> wide(chars, chars + len);
+        std::vector<unsigned short> wide(chars, chars + len);
         wide.push_back(0);
         env->ReleaseStringChars(query, chars);
 
-        FPDF_SCHHANDLE find = FPDFText_FindStart(text, wide.data(), 0, 0);
-        if (find != nullptr) {
-            while (FPDFText_FindNext(find)) {
-                const int start = FPDFText_GetSchResultIndex(find);
-                const int count = FPDFText_GetSchCount(find);
-                const int rects = FPDFText_CountRects(text, start, count);
-                if (rects <= 0) continue;
-                packed.push_back(rects);
-                for (int i = 0; i < rects; i++) {
-                    double l = 0, t = 0, r = 0, b = 0;
-                    FPDFText_GetRect(text, i, &l, &t, &r, &b);
-                    packed.push_back(l - crop.x);
-                    packed.push_back(b - crop.y);
-                    packed.push_back(r - crop.x);
-                    packed.push_back(t - crop.y);
-                }
-            }
-            FPDFText_FindClose(find);
-        }
-        FPDFText_ClosePage(text);
+        const size_t total = megapdf_search_page(p->core, wide.data(), nullptr, 0);
+        packed.resize(total);
+        if (total > 0) megapdf_search_page(p->core, wide.data(), packed.data(), total);
     }
     jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
     if (out && !packed.empty()) {

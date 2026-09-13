@@ -3,6 +3,9 @@
 **Status: ACCEPTED — Option B, a C++17 core behind a C ABI, on all three platforms,
 2026-09-13.** Tracking issue: #33. Phase 1 (PR #37, #38) is complete; the decisions
 below govern phase 2 (#105–#111), phase 3 (#112) and phase 4 (#113, #114).
+Phase 2 progress: #105 (core-owned documents, CropBox geometry, text search) landed
+2026-09-13 — the ABI is `megapdf_open` / `megapdf_load_page` / `megapdf_search_page`
+as decided below, and the corpus search totals were identical before and after.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 
@@ -72,7 +75,7 @@ phones got neither (#115).
    detach-and-restore undo keeps native objects alive between calls, substitution
    needs the document's font state, and every mutation must run under one lock.
    From #105 the ABI is `megapdf_open(bytes, length, password) → doc`,
-   `megapdf_page(doc, index) → page`, `megapdf_close(doc)`; the form-fill
+   `megapdf_load_page(doc, index) → page`, `megapdf_close(doc)`; the form-fill
    environment and page cache live inside the core; detached objects are opaque
    integer ids owned by the document and freed with it. Bindings pass bytes and
    receive handles and never see an `FPDF_*` type again. The phase-1 `void* page`

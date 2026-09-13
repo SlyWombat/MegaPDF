@@ -71,14 +71,12 @@ extension PdfEngine {
     /// implementation now serves all three platforms, which is what stops the
     /// next #30 from happening.
     func detectCheckboxSquares(_ document: PdfDocument, pageIndex: Int) throws -> [PdfRect] {
-        try withPage(document, index: pageIndex) { page in
-            // FPDF_PAGE is an OpaquePointer here; the ABI takes a bare void*.
-            let handle = UnsafeMutableRawPointer(page)
-            let count = megapdf_detect_checkbox_squares(handle, nil, 0)
+        try withCorePage(document, index: pageIndex) { page in
+            let count = megapdf_detect_checkbox_squares(page, nil, 0)
             guard count > 0 else { return [] }
             var buffer = [megapdf_rect](repeating: megapdf_rect(), count: count)
             _ = buffer.withUnsafeMutableBufferPointer {
-                megapdf_detect_checkbox_squares(handle, $0.baseAddress, count)
+                megapdf_detect_checkbox_squares(page, $0.baseAddress, count)
             }
             // The core already returns crop-space rects.
             return buffer.map {
