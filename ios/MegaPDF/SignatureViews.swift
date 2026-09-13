@@ -22,6 +22,7 @@ struct SignaturesSheet: View {
     let onDismiss: () -> Void
 
     @State private var drawing = false
+    @State private var typing = false
     @State private var photoItem: PhotosPickerItem?
     @State private var thumbnails: [String: UIImage] = [:]
     @State private var pendingDelete: SignatureEntry?
@@ -93,6 +94,11 @@ struct SignaturesSheet: View {
             }
             .sheet(isPresented: $drawing) {
                 DrawSignatureView { image in onDrawn(image) }
+            }
+            .sheet(isPresented: $typing) {
+                // A typed name takes the drawn path (#101): ink on a transparent
+                // raster that the store trims and keeps like any other.
+                TypeSignatureView { image in onDrawn(image) }
             }
             .onAppear {
                 if startDrawing { drawing = true }
@@ -191,6 +197,10 @@ struct SignaturesSheet: View {
         HStack(spacing: 12) {
             Button { drawing = true } label: {
                 Label("Draw", systemImage: "pencil.tip")
+                    .frame(maxWidth: .infinity)
+            }
+            Button { typing = true } label: {
+                Label("Type", systemImage: "keyboard")
                     .frame(maxWidth: .infinity)
             }
             PhotosPicker(selection: $photoItem, matching: .images) {
@@ -334,6 +344,96 @@ struct DrawSignatureView: View {
             ctx.strokePath()
         }
         return ctx.makeImage()
+    }
+}
+
+/// Type-a-name signature (#101): the third way to sign, for a phone without a
+/// stylus. The name is shown live in a script face on a white card — what the
+/// placed stamp will look like — and rendered to a transparent CGImage that goes
+/// through the same trim-and-store path as a drawn one.
+struct TypeSignatureView: View {
+    let onSave: (CGImage) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    /// Snell Roundhand ships with iOS; the italic serif is the fallback if a
+    /// future release drops it, so the feature degrades rather than breaks.
+    private static let faceName = "SnellRoundhand-Bold"
+    private static let previewSize: CGFloat = 34
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 16) {
+                TextField("Name", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .textInputAutocapitalization(.words)
+                    .focused($focused)
+                    .submitLabel(.done)
+                    .onSubmit(commit)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1))
+                    Text(name.isEmpty ? String(localized: "Your name, as a signature") : name)
+                        .font(Self.previewFont)
+                        .foregroundStyle(name.isEmpty ? Color.gray : Color(white: Double(Brand.inkLevel)))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.4)
+                        .padding(.horizontal, 16)
+                }
+                .frame(height: 120)
+                .accessibilityHidden(true)
+                Spacer()
+            }
+            .padding(16)
+            .navigationTitle("Type your name")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add", action: commit)
+                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .onAppear { focused = true }
+        }
+    }
+
+    private static var previewFont: Font {
+        UIFont(name: faceName, size: previewSize) != nil
+            ? .custom(faceName, size: previewSize)
+            : .system(size: previewSize, design: .serif).italic()
+    }
+
+    private func commit() {
+        let text = name.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        if let image = Self.render(text) { onSave(image) }
+        dismiss()
+    }
+
+    /// The name as ink on a transparent raster, large enough to stay sharp when
+    /// placed: 160 pt glyphs with a 32 pt margin; the store trims to the ink.
+    static func render(_ text: String) -> CGImage? {
+        let font = UIFont(name: faceName, size: 160) ?? UIFont.italicSystemFont(ofSize: 160)
+        let ink = UIColor(white: CGFloat(Brand.inkLevel), alpha: 1)
+        let attributed = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: ink])
+        let margin: CGFloat = 32
+        let unbounded = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        let bounds = attributed.boundingRect(with: unbounded, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
+        let size = CGSize(width: ceil(bounds.width + margin * 2), height: ceil(bounds.height + margin * 2))
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            attributed.draw(at: CGPoint(x: margin, y: margin))
+        }
+        return image.cgImage
     }
 }
 

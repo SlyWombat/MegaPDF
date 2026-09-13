@@ -1492,6 +1492,38 @@
         }
       }
     },
+    "Type" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taper"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Taper"
+          }
+        }
+      }
+    },
+    "Type your name" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tapez votre nom"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tapez votre nom"
+          }
+        }
+      }
+    },
     "Undo" : {
       "localizations" : {
         "fr" : {
@@ -1552,6 +1584,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Version %1$@ (%2$@)"
+          }
+        }
+      }
+    },
+    "Your name, as a signature" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre nom, en guise de signature"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre nom, en guise de signature"
           }
         }
       }
