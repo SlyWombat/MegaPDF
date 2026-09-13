@@ -1,7 +1,6 @@
-# ADR-002: Shared engine core vs. hand-written policy per platform
+# ADR-003: Shared engine core vs. hand-written policy per platform
 
-**Status: PROPOSED — Android and iOS legs measured and green (PR #37); the Windows
-leg is unbuilt and its cost is not code but packaging (#38).** Tracking issue: #33.
+**Status: PROPOSED — Android and iOS legs measured and green (PR #37, re-measured 2026-09-13 after rebasing onto main); the Windows leg is #38, and the ownership, threading and error-handling decisions for phase 2 are written up in #103, which also takes this to ACCEPTED.** Tracking issue: #33. (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its branch.)
 
 ## Decision & spike results
 
@@ -15,9 +14,9 @@ Measured on PR #37 against `8703621`:
 
 | | Result |
 |---|---|
-| Android instrumented tests | **21 passed**, unchanged count, same fixtures now exercising the shared implementation |
-| iOS tests | **37 passed**, including `CheckboxTests.testDrawnSquareDetectedMarkAddedAndRoundTrips` |
-| Android APK size | 15,781,313 → 15,783,453 bytes — **+2,140 bytes (+0.014%)** |
+| Android instrumented tests | **21 passed** on 2026-08-16; **28 passed** on the 2026-09-13 rebase (the suite grew), same fixtures now exercising the shared implementation |
+| iOS tests | **37 passed** on 2026-08-16; **48 passed** on the 2026-09-13 rebase, including `CheckboxTests.testDrawnSquareDetectedMarkAddedAndRoundTrips` and the #98 search canary |
+| Android APK size | 15,781,313 → 15,783,453 bytes — **+2,140 bytes (+0.014%)** on 2026-08-16; debug-APK artifact 15,926,383 → 15,928,966 bytes (**+2,583**) on the 2026-09-13 rebase |
 | Build wiring, Android | **one CMake line** (source + include dir); compiles into the existing `.so`, so no second binary ships and there is no runtime ABI boundary |
 | Build wiring, iOS | source entry in `project.yml`, a one-line bridging header, `HEADER_SEARCH_PATHS` |
 | Net code | 154 lines of core (with its documentation) replacing two hand-written copies; both deleted |
@@ -65,11 +64,12 @@ native build step at all**. Two concrete obstacles surfaced while attempting it:
    `pdfium.dll`, so linking a core DLL against it requires generating one:
    `dumpbin /exports` → `.def` → `lib /def /machine:x64`. That works (461 symbols,
    verified locally) but it is a build step someone must own.
-2. **The developer machine cannot build it.** The installed VS 2017 Build Tools
-   carry the MSVC compiler but **no Windows SDK** — `INCLUDE` contains only the
-   MSVC directory, and the compile fails on `stddef.h`. So a native build step
-   added to the Windows pipeline would break local builds of the shipping product
-   until the SDK is installed.
+2. **The developer machine could not build it** when this was written: VS 2017
+   Build Tools with no Windows SDK, so the compile failed on `stddef.h`. *No longer
+   true as of 2026-09-13*: GPD-DAVE has VS 2022 Build Tools with MSVC 14.44,
+   Windows SDK 10.0.26100 (UCRT headers present), CMake and Ninja under the Build
+   Tools tree, and `dumpbin`/`lib` for the import library. The `windows-latest`
+   runner has the same. #38 therefore builds from source.
 
 That turns the Windows leg into a **distribution decision, not a coding one**:
 
