@@ -389,9 +389,15 @@ internal static class CoreNative
     public const int EditInPlace = 0;
     public const int EditSubstituted = 1;
 
+    public const uint SetTextForceSubstitute = 1;
+
+    /// <summary>
+    /// Sets a run's text as a new object at the same index; the untouched original is
+    /// handed back through <paramref name="replaced"/> for a byte-identical undo (#117).
+    /// </summary>
     [DllImport(Dll)]
     public static extern int megapdf_set_text(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
-        int forceSubstitute, out int outcome);
+        uint flags, out int outcome, out IntPtr replaced);
 
     [DllImport(Dll)]
     public static extern int megapdf_insert_text_run(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,

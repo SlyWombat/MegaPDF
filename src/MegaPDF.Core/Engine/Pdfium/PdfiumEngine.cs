@@ -532,14 +532,40 @@ internal sealed class PdfiumPage : IPdfPage
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(newText))
             throw new ArgumentException("PDFium cannot set empty text on a text object.", nameof(newText));
-        // The tiers (SDD §3.1) are the core's (#112): in place when the run's font
-        // covers the new text, otherwise the closest standard face at the same index.
-        return ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: false);
+        // The tiers (SDD §3.1) are the core's (#112): the run's own font when it can
+        // carry the new text, otherwise the closest standard face at the same index.
+        var outcome = ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: false, out var replaced);
+        CoreNative.megapdf_discard_detached(replaced);   // nobody will undo this one
+        return outcome;
     }
 
-    private TextEditOutcome ApplyTextEdit(int objectIndex, string newText, bool forceSubstitute)
+    public TextEditOutcome SetTextRunText(PdfTextRun run, string newText, out DetachedTextRun original)
     {
-        var status = CoreNative.megapdf_set_text(_core, objectIndex, newText, forceSubstitute ? 1 : 0, out var outcome);
+        ThrowIfDisposed();
+        if (string.IsNullOrEmpty(newText))
+            throw new ArgumentException("PDFium cannot set empty text on a text object.", nameof(newText));
+        var outcome = ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: false, out var replaced);
+        original = new DetachedTextRun(replaced);
+        return outcome;
+    }
+
+    public void RestoreOriginalTextRun(DetachedTextRun original, int objectIndex)
+    {
+        ThrowIfDisposed();
+        // The edited run is a separate object at the same index (#117): take it off,
+        // then the untouched original goes back exactly where it was.
+        var edited = CoreNative.megapdf_detach_object(_core, objectIndex);
+        if (edited == IntPtr.Zero)
+            throw new InvalidOperationException($"No edited text at object {objectIndex} to take back.");
+        CoreNative.megapdf_discard_detached(edited);
+        if (CoreNative.megapdf_restore_object(_core, original.Handle, objectIndex) != 0)
+            throw new InvalidOperationException("Could not restore the original text.");
+    }
+
+    private TextEditOutcome ApplyTextEdit(int objectIndex, string newText, bool forceSubstitute, out IntPtr replaced)
+    {
+        var status = CoreNative.megapdf_set_text(_core, objectIndex, newText,
+            forceSubstitute ? CoreNative.SetTextForceSubstitute : 0, out var outcome, out replaced);
         if (status == CoreNative.ErrNoFont)
             throw new TextEditException(TextEditFailure.NoUsableFont, CoreNative.LastErrorMessage());
         if (status != 0)
@@ -685,8 +711,11 @@ internal sealed class PdfiumPage : IPdfPage
     }
 
     /// <summary>Test hook: runs the tier-2 substitution path unconditionally.</summary>
-    internal void ForceSubstituteForTest(PdfTextRun run, string newText) =>
-        ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: true);
+    internal void ForceSubstituteForTest(PdfTextRun run, string newText)
+    {
+        ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: true, out var replaced);
+        CoreNative.megapdf_discard_detached(replaced);
+    }
 
     public void SetFormFieldValue(PdfFormField field, string value)
     {

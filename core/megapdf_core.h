@@ -519,14 +519,30 @@ enum {
     MEGAPDF_EDIT_SUBSTITUTED = 1   /* tier 2: a similar standard face was used; the UI shows a notice */
 };
 
+/** Flags for megapdf_set_text(). */
+enum {
+    /** Skip tier 1 and substitute — the test hook the desktop suite uses. */
+    MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE = 1
+};
+
 /**
- * Sets a text object's text. `force_substitute` skips tier 1 (the test hook the
- * desktop suite uses). MEGAPDF_ERR_ARGUMENT for a non-text object or empty text,
- * MEGAPDF_ERR_NO_FONT when even the substitute cannot render it; `out_outcome`
- * receives MEGAPDF_EDIT_IN_PLACE or MEGAPDF_EDIT_SUBSTITUTED.
+ * Sets a text run's text. `out_outcome` receives MEGAPDF_EDIT_IN_PLACE (the run's
+ * own font drew it) or MEGAPDF_EDIT_SUBSTITUTED (a standard face did).
+ *
+ * The original object is never modified. Either way the edited run is a new
+ * text object at `object_index` — same font size, matrix, colours, render mode
+ * and text-box identity — and the original leaves the page detached. It is handed
+ * back through `out_replaced` when non-NULL, so an undo restores it byte-identical:
+ * detach the edited run at `object_index`, then megapdf_restore_object() the
+ * original there. With `out_replaced` NULL it is freed. (PDFium cannot read a text
+ * object's character codes back, so an edit made on the original itself could
+ * never be undone exactly, #117.)
+ *
+ * MEGAPDF_ERR_ARGUMENT for a non-text object, empty text or an unknown flag;
+ * MEGAPDF_ERR_NO_FONT when not even the substitute can draw the text.
  */
 MEGAPDF_API int megapdf_set_text(const megapdf_page* page, int object_index, const unsigned short* text,
-                                 int force_substitute, int* out_outcome);
+                                 unsigned int flags, int* out_outcome, megapdf_detached** out_replaced);
 
 /**
  * Inserts a text object at `object_index` with its baseline starting at

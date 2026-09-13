@@ -5,12 +5,14 @@ namespace MegaPDF.Core.Editing;
 
 /// <summary>
 /// Edits a visual line (1.1 paragraph-grade editing): the merged text goes into the
-/// line's first run; the remaining runs are detached but kept alive, so undo restores
-/// the original fragmentation, fonts, and layout byte-identical.
+/// line's first run; the remaining runs are detached but kept alive, and the first run's
+/// untouched original is handed back by the engine, so undo restores the original
+/// fragmentation, fonts, and layout byte-identical (#117).
 /// </summary>
 public sealed class LineEditOperation(IPdfDocument document, int pageIndex, PdfTextLine line, string newText) : IPageEditOperation
 {
     private readonly List<(PdfTextRun Run, DetachedTextRun Handle)> _detached = [];
+    private DetachedTextRun? _firstOriginal;
 
     public int PageIndex { get; } = pageIndex;
 
@@ -21,7 +23,10 @@ public sealed class LineEditOperation(IPdfDocument document, int pageIndex, PdfT
     public void Apply()
     {
         using var page = document.GetPage(PageIndex);
-        LastOutcome = page.SetTextRunText(line.Runs[0], newText);
+        // The edited first run is a new object at the same index, so the indexes of the
+        // runs detached below are unchanged by it.
+        LastOutcome = page.SetTextRunText(line.Runs[0], newText, out var firstOriginal);
+        _firstOriginal = firstOriginal;
         // Detach the rest, highest object index first so earlier indexes stay valid.
         _detached.Clear();
         foreach (var run in line.Runs.Skip(1).OrderByDescending(r => r.ObjectIndex))
@@ -35,7 +40,8 @@ public sealed class LineEditOperation(IPdfDocument document, int pageIndex, PdfT
         foreach (var (run, handle) in _detached.OrderBy(d => d.Run.ObjectIndex))
             page.RestoreTextRun(handle, run.ObjectIndex);
         _detached.Clear();
-        page.SetTextRunText(line.Runs[0], line.Runs[0].Text);
+        page.RestoreOriginalTextRun(_firstOriginal!, line.Runs[0].ObjectIndex);
+        _firstOriginal = null;
     }
 
     public JournalEntry ToJournalEntry(bool inverse) => inverse

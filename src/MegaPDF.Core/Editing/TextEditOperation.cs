@@ -4,11 +4,15 @@ using MegaPDF.Core.Recovery;
 namespace MegaPDF.Core.Editing;
 
 /// <summary>
-/// Reversible body-text edit (SDD §3.1 tier 1): replaces a text run's content in place.
-/// The captured run carries the object index and the original text for revert.
+/// Reversible body-text edit (SDD §3.1): replaces a text run's content, in its own font
+/// when that can carry the new text and a standard face otherwise. The engine hands back
+/// the untouched original run, and revert puts it back byte-identical — whichever tier the
+/// edit took (#117).
 /// </summary>
 public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfTextRun run, string newText) : IPageEditOperation
 {
+    private DetachedTextRun? _original;
+
     public int PageIndex { get; } = pageIndex;
 
     public string Description => "text edit";
@@ -19,13 +23,15 @@ public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfT
     public void Apply()
     {
         using var page = document.GetPage(PageIndex);
-        LastOutcome = page.SetTextRunText(run, newText);
+        LastOutcome = page.SetTextRunText(run, newText, out var original);
+        _original = original;
     }
 
     public void Revert()
     {
         using var page = document.GetPage(PageIndex);
-        page.SetTextRunText(run, run.Text);
+        page.RestoreOriginalTextRun(_original!, run.ObjectIndex);
+        _original = null;
     }
 
     public JournalEntry ToJournalEntry(bool inverse) =>

@@ -1255,6 +1255,80 @@ std::vector<unsigned char> two_run_line_pdf() {
 }
 
 void test_text_editing(const std::string& fixtures) {
+    // Undo of a substituted edit restores the original run byte-identical: the core
+    // hands back the replaced object instead of destroying it. Undo of an in-place
+    // edit sets the old text on the same object with no substitution.
+    {
+        auto bytes = symbol_font_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        if (d) {
+            Page p(d, 0);
+            megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            megapdf_text_run r{};
+            megapdf_text_run_get(t, 0, &r);
+            const U16 text_before = run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT);
+            const U16 font_before = run_string(t, 0, MEGAPDF_TEXT_RUN_FONT);
+            megapdf_text_free(t);
+
+            auto latin = utf16("Hello");
+            int outcome = -1;
+            megapdf_detached* replaced = nullptr;
+            check(megapdf_set_text(p.page, r.object_index, latin.data(), 0, &outcome, &replaced) == MEGAPDF_OK &&
+                      outcome == MEGAPDF_EDIT_SUBSTITUTED && replaced != nullptr,
+                  "a substituted edit hands back the replaced original");
+
+            // Revert: take the substitute off, put the original back at its index.
+            megapdf_detached* substitute = megapdf_detach_object(p.page, r.object_index);
+            check(substitute != nullptr, "the substitute detaches");
+            megapdf_discard_detached(substitute);
+            check(megapdf_restore_object(p.page, replaced, r.object_index) == MEGAPDF_OK, "the original restores");
+            t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            megapdf_text_run after{};
+            megapdf_text_run_get(t, 0, &after);
+            check(megapdf_text_run_count(t) == 1 && run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT) == text_before &&
+                      run_string(t, 0, MEGAPDF_TEXT_RUN_FONT) == font_before && after.object_index == r.object_index,
+                  "undo restores the original run's text, font and index",
+                  show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) + " / " + show(run_string(t, 0, MEGAPDF_TEXT_RUN_FONT)));
+            megapdf_text_free(t);
+
+            // Without a place to hand it, the replaced original is freed (ASan watches).
+            megapdf_set_text(p.page, r.object_index, latin.data(), 0, &outcome, nullptr);
+            check(outcome == MEGAPDF_EDIT_SUBSTITUTED, "a second substitution without out_replaced still works");
+        }
+        megapdf_close(d);
+    }
+    {
+        auto bytes = two_run_line_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        if (d) {
+            Page p(d, 0);
+            megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            megapdf_text_run r{};
+            megapdf_text_run_get(t, 0, &r);
+            megapdf_text_free(t);
+            auto howdy = utf16("Howdy"), hello = utf16("Hello");
+            int outcome = -1;
+            megapdf_detached* replaced = nullptr;
+            megapdf_set_text(p.page, r.object_index, howdy.data(), 0, &outcome, &replaced);
+            check(outcome == MEGAPDF_EDIT_IN_PLACE && replaced != nullptr, "an in-place edit also hands back the untouched original");
+            megapdf_detached* edited = megapdf_detach_object(p.page, r.object_index);
+            check(edited != nullptr, "the edited run detaches for undo");
+            megapdf_discard_detached(edited);
+            check(megapdf_restore_object(p.page, replaced, r.object_index) == MEGAPDF_OK, "the original restores after an in-place edit");
+            t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            std::string back = show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT));
+            megapdf_text_run restored{};
+            megapdf_text_run_get(t, 0, &restored);
+            megapdf_text_free(t);
+            while (!back.empty() && back.back() == ' ') back.pop_back();
+            check(back == "Hello" && restored.object_index == r.object_index, "undoing an in-place edit reads back the original text at its index", back);
+            (void)hello;
+            check(megapdf_set_text(p.page, r.object_index, howdy.data(), 4, &outcome, nullptr) == MEGAPDF_ERR_ARGUMENT,
+                  "an unknown flag is an argument error");
+        }
+        megapdf_close(d);
+    }
+
     // #116 part 2: a generated separator space after the run is not the edit failing.
     {
         auto bytes = two_run_line_pdf();
@@ -1270,7 +1344,7 @@ void test_text_editing(const std::string& fixtures) {
             megapdf_text_free(t);
             auto howdy = utf16("Howdy");
             int outcome = -1;
-            check(megapdf_set_text(p.page, first.object_index, howdy.data(), 0, &outcome) == MEGAPDF_OK, "two-run edit returns OK");
+            check(megapdf_set_text(p.page, first.object_index, howdy.data(), 0, &outcome, nullptr) == MEGAPDF_OK, "two-run edit returns OK");
             check(outcome == MEGAPDF_EDIT_IN_PLACE, "a standard-font run followed by another run is edited in place",
                   "outcome " + std::to_string(outcome) + ", original read back as '" + before + "'");
             t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
@@ -1298,7 +1372,7 @@ void test_text_editing(const std::string& fixtures) {
             megapdf_text_free(t);
             auto latin = utf16("Hello");
             int outcome = -1;
-            check(megapdf_set_text(p.page, r.object_index, latin.data(), 0, &outcome) == MEGAPDF_OK, "the edit returns OK");
+            check(megapdf_set_text(p.page, r.object_index, latin.data(), 0, &outcome, nullptr) == MEGAPDF_OK, "the edit returns OK");
             check(outcome == MEGAPDF_EDIT_SUBSTITUTED, "a font that cannot encode the text is substituted, not edited in place",
                   std::to_string(outcome));
             t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
@@ -1327,7 +1401,7 @@ void test_text_editing(const std::string& fixtures) {
         if (!p.page) { check(false, "fixture.pdf page loads for editing"); return; }
         auto text = utf16("Symbols beyond original: XYZQ!?");
         int outcome = -1;
-        check(megapdf_set_text(p.page, 0, text.data(), 0, &outcome) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_IN_PLACE, "a standard-font edit stays tier 1",
+        check(megapdf_set_text(p.page, 0, text.data(), 0, &outcome, nullptr) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_IN_PLACE, "a standard-font edit stays tier 1",
               std::to_string(outcome));
         megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
         check(show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)) == "Symbols beyond original: XYZQ!?", "the new text reads back", show(run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT)));
@@ -1340,7 +1414,7 @@ void test_text_editing(const std::string& fixtures) {
         const size_t runs_before = megapdf_text_run_count(t);
         megapdf_text_free(t);
         auto swapped = utf16("Swapped to a standard face");
-        check(megapdf_set_text(p.page, before.object_index, swapped.data(), 1, &outcome) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED,
+        check(megapdf_set_text(p.page, before.object_index, swapped.data(), 1, &outcome, nullptr) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED,
               "forced substitution reports tier 2", std::to_string(outcome));
         t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
         megapdf_text_run after{};
@@ -1353,11 +1427,11 @@ void test_text_editing(const std::string& fixtures) {
 
         // Errors are status codes.
         auto empty = utf16("");
-        check(megapdf_set_text(p.page, 0, empty.data(), 0, &outcome) == MEGAPDF_ERR_ARGUMENT, "empty text is an argument error");
+        check(megapdf_set_text(p.page, 0, empty.data(), 0, &outcome, nullptr) == MEGAPDF_ERR_ARGUMENT, "empty text is an argument error");
         int path_index = -1;
         for (int i = 0; megapdf_object_type(p.page, i) >= 0; i++) if (megapdf_object_type(p.page, i) == 2) { path_index = i; break; }
-        check(path_index >= 0 && megapdf_set_text(p.page, path_index, text.data(), 0, &outcome) == MEGAPDF_ERR_ARGUMENT, "editing a path is an argument error");
-        check(megapdf_set_text(nullptr, 0, text.data(), 0, &outcome) == MEGAPDF_ERR_ARGUMENT, "set_text rejects a null page");
+        check(path_index >= 0 && megapdf_set_text(p.page, path_index, text.data(), 0, &outcome, nullptr) == MEGAPDF_ERR_ARGUMENT, "editing a path is an argument error");
+        check(megapdf_set_text(nullptr, 0, text.data(), 0, &outcome, nullptr) == MEGAPDF_ERR_ARGUMENT, "set_text rejects a null page");
 
         // Crash-recovery replay: a run inserted at an index in the face closest to the journalled name.
         auto inserted = utf16("Replayed");
@@ -1383,7 +1457,7 @@ void test_text_editing(const std::string& fixtures) {
         int outcome = -1;
         std::string face_before;
         for (const auto& b : boxes_of(p.page)) if (b.object_index == tagged_index) face_before = b.font;
-        check(megapdf_set_text(p.page, tagged_index, retyped.data(), 1, &outcome) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED, "the tagged box substitutes");
+        check(megapdf_set_text(p.page, tagged_index, retyped.data(), 1, &outcome, nullptr) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED, "the tagged box substitutes");
         check(megapdf_find_text_box(p.page, tagged.data()) == tagged_index, "the substituted box keeps its id at its index");
         auto boxes = boxes_of(p.page);
         bool found = false;
@@ -1393,7 +1467,7 @@ void test_text_editing(const std::string& fixtures) {
         int legacy = -1;
         for (const auto& b : boxes) if (b.id.empty()) { legacy = b.object_index; break; }
         check(legacy >= 0, "a legacy box exists");
-        check(megapdf_set_text(p.page, legacy, retyped.data(), 1, &outcome) == MEGAPDF_OK, "the legacy box substitutes");
+        check(megapdf_set_text(p.page, legacy, retyped.data(), 1, &outcome, nullptr) == MEGAPDF_OK, "the legacy box substitutes");
         bool still_untagged = false;
         for (const auto& b : boxes_of(p.page)) if (b.object_index == legacy) still_untagged = b.id.empty();
         check(still_untagged, "a legacy box gains no fabricated id");

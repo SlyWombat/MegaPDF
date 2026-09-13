@@ -90,6 +90,19 @@ public interface IPdfPage : IDisposable
     TextEditOutcome SetTextRunText(PdfTextRun run, string newText);
 
     /// <summary>
+    /// As <see cref="SetTextRunText(PdfTextRun, string)"/>, handing back the untouched
+    /// original run so an undo can put it back byte-identical with
+    /// <see cref="RestoreOriginalTextRun"/> — whichever tier the edit took (#117).
+    /// </summary>
+    TextEditOutcome SetTextRunText(PdfTextRun run, string newText, out DetachedTextRun original);
+
+    /// <summary>
+    /// Undoes <see cref="SetTextRunText(PdfTextRun, string, out DetachedTextRun)"/>: takes
+    /// the edited run at <paramref name="objectIndex"/> off the page and puts the original back.
+    /// </summary>
+    void RestoreOriginalTextRun(DetachedTextRun original, int objectIndex);
+
+    /// <summary>
     /// Removes a text run from the page, keeping the native object alive so
     /// <see cref="RestoreTextRun"/> can put it back byte-identical (undo).
     /// </summary>

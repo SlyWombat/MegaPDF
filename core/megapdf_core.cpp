@@ -1787,73 +1787,111 @@ bool NeedsSubstitution(const megapdf_page* p, FPDF_PAGEOBJECT obj, const unsigne
     return false;
 }
 
-// Replaces the text object with one in a standard face, preserving index,
-// matrix, fill colour and the text-box identity (#45).
-int SubstituteUnlocked(const megapdf_page* p, FPDF_PAGEOBJECT old_obj, int object_index, const unsigned short* text) {
+// Detaches `original` into the document's keeping and hands it back through
+// `out_replaced`, or frees it when the caller does not want it.
+void HandBackOriginal(const megapdf_page* p, FPDF_PAGEOBJECT original, megapdf_detached** out_replaced) {
+    megapdf_detached* held = (out_replaced != nullptr && p->owner != nullptr) ? new (std::nothrow) megapdf_detached() : nullptr;
+    if (held == nullptr) {
+        FPDFPageObj_Destroy(original);
+        return;
+    }
+    held->owner = p->owner;
+    held->object = original;
+    p->owner->detached.push_back(held);
+    *out_replaced = held;
+}
+
+// Replaces the text object at `object_index` with a new one drawing `text` in
+// `font`, carrying over the original's font size, matrix, fill and stroke colour,
+// render mode and text-box identity (#45). The original is never modified —
+// PDFium can set a text object's character codes but not read them, so an edit
+// tried on the original could not be rolled back or undone exactly (#117). It
+// leaves the page and goes to HandBackOriginal().
+//
+// With `verify` the new object must read back as exactly `text` (#116). If it
+// does not, the page is put back as it was and MEGAPDF_ERR_NO_FONT is returned so
+// the caller can fall back to a substitute face.
+int ReplaceTextObjectUnlocked(const megapdf_page* p, FPDF_PAGEOBJECT original, int object_index, FPDF_FONT font,
+                              const unsigned short* text, bool verify, megapdf_detached** out_replaced) {
     FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
     float font_size = 0;
-    FPDFTextObj_GetFontSize(old_obj, &font_size);
-    FPDF_FONT old_font = FPDFTextObj_GetFont(old_obj);
-    const std::string original = old_font ? ReadFontNameUtf8(old_font, false) : "";
-
-    FPDF_FONT standard = FPDFText_LoadStandardFont(doc, MapToStandard(original).c_str());
-    if (standard == nullptr) { SetError(0, "no substitute font could be loaded"); return MEGAPDF_ERR_NO_FONT; }
-    FPDF_PAGEOBJECT new_obj = FPDFPageObj_CreateTextObj(doc, standard, font_size);
-    if (new_obj == nullptr) { FPDFFont_Close(standard); SetError(0, "could not create replacement text"); return MEGAPDF_ERR_NO_FONT; }
-    if (!FPDFText_SetText(new_obj, reinterpret_cast<FPDF_WIDESTRING>(text))) {
-        FPDFPageObj_Destroy(new_obj);
-        FPDFFont_Close(standard);
-        SetError(0, "the substitute font could not render the new text");
+    FPDFTextObj_GetFontSize(original, &font_size);
+    FPDF_PAGEOBJECT fresh = FPDFPageObj_CreateTextObj(doc, font, font_size);
+    if (fresh == nullptr) {
+        SetError(0, "could not create the replacement text");
+        return MEGAPDF_ERR_NO_FONT;
+    }
+    if (!FPDFText_SetText(fresh, reinterpret_cast<FPDF_WIDESTRING>(text))) {
+        FPDFPageObj_Destroy(fresh);
+        SetError(0, "the font could not take the new text");
         return MEGAPDF_ERR_NO_FONT;
     }
     FS_MATRIX matrix{};
-    if (FPDFPageObj_GetMatrix(old_obj, &matrix)) FPDFPageObj_SetMatrix(new_obj, &matrix);
+    if (FPDFPageObj_GetMatrix(original, &matrix)) FPDFPageObj_SetMatrix(fresh, &matrix);
     unsigned int r = 0, g = 0, b = 0, a = 0;
-    if (FPDFPageObj_GetFillColor(old_obj, &r, &g, &b, &a)) FPDFPageObj_SetFillColor(new_obj, r, g, b, a);
+    if (FPDFPageObj_GetFillColor(original, &r, &g, &b, &a)) FPDFPageObj_SetFillColor(fresh, r, g, b, a);
+    if (FPDFPageObj_GetStrokeColor(original, &r, &g, &b, &a)) FPDFPageObj_SetStrokeColor(fresh, r, g, b, a);
+    const FPDF_TEXT_RENDERMODE mode = FPDFTextObj_GetTextRenderMode(original);
+    if (mode != FPDF_TEXTRENDERMODE_UNKNOWN) FPDFTextObj_SetTextRenderMode(fresh, mode);
 
-    // Read the box's identity off the OLD object while it still exists — it is
-    // destroyed below, and the mark is rebuilt on the replacement from these values.
-    const bool was_box = HasMark(old_obj, kTextBoxMark);
-    const U16 box_id = was_box ? ReadMarkParam(old_obj, "id") : U16{};
-    const U16 box_font = was_box ? ReadMarkParam(old_obj, "font") : U16{};
+    // Read the box's identity off the original while it is still on the page.
+    const bool was_box = HasMark(original, kTextBoxMark);
+    const U16 box_id = was_box ? ReadMarkParam(original, "id") : U16{};
+    const U16 box_font = was_box ? ReadMarkParam(original, "font") : U16{};
 
-    int status = MEGAPDF_OK;
-    if (!FPDFPage_RemoveObject(p->page, old_obj)) {
-        FPDFPageObj_Destroy(new_obj);
+    if (!FPDFPage_RemoveObject(p->page, original)) {
+        FPDFPageObj_Destroy(fresh);
         SetError(FPDF_ERR_UNKNOWN, "could not remove the original text object");
-        status = MEGAPDF_ERR_PDFIUM;
-    } else {
-        FPDFPageObj_Destroy(old_obj);
-        if (!FPDFPage_InsertObjectAtIndex(p->page, new_obj, static_cast<size_t>(object_index))) {
-            SetError(FPDF_ERR_UNKNOWN, "could not insert the replacement text object");
-            status = MEGAPDF_ERR_PDFIUM;
-        } else if (was_box) {
-            // Re-tag AFTER insertion, off the object the page now owns — the order the
-            // params actually stick in. Re-adding the mark alone was #45: the box read
-            // as a text box but carried no id, so both phones refused to select it. A
-            // box written before the id param existed stays untagged rather than
-            // gaining a fabricated identity no phone recorded.
-            FPDF_PAGEOBJECT inserted = FPDFPage_GetObject(p->page, object_index);
-            FPDF_PAGEOBJECTMARK mark = inserted ? FPDFPageObj_AddMark(inserted, kTextBoxMarkName) : nullptr;
-            if (mark != nullptr) {
-                auto ascii = [](const U16& v) { std::string out; for (unsigned short c : v) out += static_cast<char>(c < 0x80 ? c : '?'); return out; };
-                if (!box_id.empty()) FPDFPageObjMark_SetStringParam(doc, inserted, mark, "id", ascii(box_id).c_str());
-                if (!box_font.empty()) FPDFPageObjMark_SetStringParam(doc, inserted, mark, "font", ascii(box_font).c_str());
-            }
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    if (!FPDFPage_InsertObjectAtIndex(p->page, fresh, static_cast<size_t>(object_index))) {
+        // PDFium frees `fresh` on failure. Put the original back so the page is as it was.
+        FPDFPage_InsertObjectAtIndex(p->page, original, static_cast<size_t>(object_index));
+        SetError(FPDF_ERR_UNKNOWN, "could not insert the replacement text object");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    FPDF_PAGEOBJECT inserted = FPDFPage_GetObject(p->page, object_index);
+    if (was_box && inserted != nullptr) {
+        // Re-tag AFTER insertion, off the object the page now owns — the order the
+        // params actually stick in. Re-adding the mark alone was #45: the box read
+        // as a text box but carried no id, so both phones refused to select it. A
+        // box written before the id param existed stays untagged rather than
+        // gaining a fabricated identity no phone recorded.
+        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_AddMark(inserted, kTextBoxMarkName);
+        if (mark != nullptr) {
+            auto ascii = [](const U16& v) { std::string out; for (unsigned short c : v) out += static_cast<char>(c < 0x80 ? c : '?'); return out; };
+            if (!box_id.empty()) FPDFPageObjMark_SetStringParam(doc, inserted, mark, "id", ascii(box_id).c_str());
+            if (!box_font.empty()) FPDFPageObjMark_SetStringParam(doc, inserted, mark, "font", ascii(box_font).c_str());
         }
     }
-    FPDFFont_Close(standard);
-    if (status == MEGAPDF_OK && !GenerateContent(p)) status = MEGAPDF_ERR_PDFIUM;
-    return status;
+    if (verify) {
+        // Prove the text took (#116). FPDFText_SetText succeeds whatever the font can
+        // carry: a font with no slot in its encoding drops the character, one with no
+        // mapping draws the wrong glyph, one with no width spreads the letters apart.
+        FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+        const bool took = AuthoredTextIs(text_page, inserted, text);
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+        if (!took) {
+            FPDFPage_RemoveObject(p->page, inserted);
+            FPDFPageObj_Destroy(inserted);
+            FPDFPage_InsertObjectAtIndex(p->page, original, static_cast<size_t>(object_index));
+            SetError(0, "the run's own font could not carry the new text");
+            return MEGAPDF_ERR_NO_FONT;
+        }
+    }
+    HandBackOriginal(p, original, out_replaced);
+    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
 }
 
 }  // namespace
 
 extern "C" {
 
-MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const unsigned short* text, int force_substitute,
-                                 int* out_outcome) {
-    if (p == nullptr || object_index < 0 || text == nullptr || text[0] == 0) {
+MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const unsigned short* text, unsigned int flags,
+                                 int* out_outcome, megapdf_detached** out_replaced) {
+    if (out_replaced != nullptr) *out_replaced = nullptr;
+    const bool force_substitute = (flags & MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE) != 0;
+    if (p == nullptr || object_index < 0 || text == nullptr || text[0] == 0 || (flags & ~static_cast<unsigned int>(MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE)) != 0) {
         SetError(0, "PDFium cannot set empty text on a text object");
         return MEGAPDF_ERR_ARGUMENT;
     }
@@ -1863,27 +1901,31 @@ MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const 
         SetError(0, "the object is no longer a text object");
         return MEGAPDF_ERR_ARGUMENT;
     }
+
+    // Tier 1: the run's own font, if it can carry the text.
     if (!force_substitute && !NeedsSubstitution(p, obj, text)) {
-        if (FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text))) {
-            if (!GenerateContent(p)) return MEGAPDF_ERR_PDFIUM;
-            // Prove the text took (#116). FPDFText_SetText succeeds whatever the font
-            // can actually carry: a font with no slot in its encoding drops the
-            // character, one with no mapping draws the wrong glyph, one with no width
-            // spreads the letters apart — and the subset-name check above only knows
-            // about ABCDEF+ fonts. Over the corpus half of all tier-1 edits failed
-            // like that. What reads back is what the page now says; anything but the
-            // exact requested text falls through to the standard-face substitute.
-            FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
-            const bool took = AuthoredTextIs(text_page, obj, text);
-            if (text_page != nullptr) FPDFText_ClosePage(text_page);
-            if (took) {
+        if (FPDF_FONT own = FPDFTextObj_GetFont(obj)) {
+            const int status = ReplaceTextObjectUnlocked(p, obj, object_index, own, text, /*verify=*/true, out_replaced);
+            if (status == MEGAPDF_OK) {
                 if (out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_IN_PLACE;
                 return MEGAPDF_OK;
             }
+            if (status != MEGAPDF_ERR_NO_FONT) return status;
+            // The page is as it was; fall through to the substitute.
         }
-        // In-place set failed outright or did not read back — substitute.
     }
-    const int status = SubstituteUnlocked(p, obj, object_index, text);
+
+    // Tier 2: the closest standard face.
+    FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
+    FPDF_FONT old_font = FPDFTextObj_GetFont(obj);
+    const std::string original = old_font ? ReadFontNameUtf8(old_font, false) : "";
+    FPDF_FONT standard = FPDFText_LoadStandardFont(doc, MapToStandard(original).c_str());
+    if (standard == nullptr) {
+        SetError(0, "no substitute font could be loaded");
+        return MEGAPDF_ERR_NO_FONT;
+    }
+    const int status = ReplaceTextObjectUnlocked(p, obj, object_index, standard, text, /*verify=*/false, out_replaced);
+    FPDFFont_Close(standard);   // the text object keeps its own reference
     if (status == MEGAPDF_OK && out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_SUBSTITUTED;
     return status;
 }
