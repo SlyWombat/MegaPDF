@@ -648,6 +648,13 @@ final class ViewerModel: ObservableObject {
         signatures = signatureStore.load()
     }
 
+    func renameSignature(id: String, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        signatureStore.rename(id: id, displayName: trimmed)
+        signatures = signatureStore.load()
+    }
+
     func startPlacement(_ entry: SignatureEntry) {
         selectedTextBox = nil
         pendingSignature = entry

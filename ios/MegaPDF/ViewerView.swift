@@ -133,12 +133,14 @@ struct ViewerView: View {
             SignaturesSheet(
                 signatures: model.signatures,
                 startDrawing: model.screenshotSheet == .draw,
+                loadImage: { SignatureStore().loadImage($0) },
                 onPick: { entry in
                     signaturesOpen = false
                     model.startPlacement(entry)
                 },
                 onDrawn: model.addDrawnSignature,
                 onPhoto: model.importSignature,
+                onRename: model.renameSignature,
                 onDelete: model.deleteSignature,
                 onDismiss: { signaturesOpen = false }
             )

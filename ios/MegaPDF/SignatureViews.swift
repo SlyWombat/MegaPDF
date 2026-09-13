@@ -1,47 +1,86 @@
 import PhotosUI
 import SwiftUI
 
-/// Library sheet: pick to place, draw a new one, import from Photos, delete.
+/// The signature library (#100): the ink itself on white cards, tap to place,
+/// long-press or the card's menu for Rename and Delete, and two equal buttons to
+/// add another.
+///
+/// A card grid rather than a list of names, because the user is choosing a
+/// squiggle, not a label; and a half-height sheet so the page they are about to
+/// sign stays in view above it. The same design as the Android sheet (#99) and
+/// the desktop flyouts, in this platform's idiom.
 struct SignaturesSheet: View {
     let signatures: [SignatureEntry]
     var startDrawing = false
+    /// Reads a signature's stored image. Called off the main actor; file I/O only.
+    let loadImage: @Sendable (SignatureEntry) -> CGImage?
     let onPick: (SignatureEntry) -> Void
     let onDrawn: (CGImage) -> Void
     let onPhoto: (Data) -> Void
+    let onRename: (String, String) -> Void
     let onDelete: (String) -> Void
     let onDismiss: () -> Void
 
     @State private var drawing = false
     @State private var photoItem: PhotosPickerItem?
+    @State private var thumbnails: [String: UIImage] = [:]
+    @State private var pendingDelete: SignatureEntry?
+    @State private var renaming: SignatureEntry?
+    @State private var renameText = ""
+
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 12)]
 
     var body: some View {
         NavigationStack {
-            List {
+            ScrollView {
                 if signatures.isEmpty {
-                    Text("No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.")
-                        .foregroundStyle(.secondary)
+                    emptyState
                 } else {
-                    Section("Tap a signature, then tap the page") {
+                    LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(signatures) { entry in
-                            Button(entry.displayName) { onPick(entry) }
-                                .foregroundStyle(.primary)
-                        }
-                        .onDelete { offsets in
-                            offsets.map { signatures[$0].id }.forEach(onDelete)
+                            card(for: entry)
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                 }
             }
+            .background(Self.surface)
+            .safeAreaInset(edge: .bottom) { addRow }
             .navigationTitle("Signatures")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Close", action: onDismiss)
                 }
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    Button("Draw") { drawing = true }
-                    PhotosPicker("Photos", selection: $photoItem, matching: .images)
+            }
+            .confirmationDialog(
+                Text("Delete \(pendingDelete?.displayName ?? "")?"),
+                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let entry = pendingDelete { onDelete(entry.id) }
+                    pendingDelete = nil
                 }
+                Button("Cancel", role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text("This cannot be undone.")
+            }
+            .alert(
+                "Rename signature",
+                isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+            ) {
+                TextField("Name", text: $renameText)
+                    .autocorrectionDisabled()
+                Button("Save") {
+                    let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let entry = renaming, !name.isEmpty, name != entry.displayName {
+                        onRename(entry.id, name)
+                    }
+                    renaming = nil
+                }
+                Button("Cancel", role: .cancel) { renaming = nil }
             }
             .onChange(of: photoItem) { item in
                 guard let item else { return }
@@ -58,6 +97,144 @@ struct SignaturesSheet: View {
             .onAppear {
                 if startDrawing { drawing = true }
             }
+            .task(id: signatures.map(\.id)) { await loadThumbnails() }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .modifier(SolidSheetBackground(color: Self.surface))
+    }
+
+    /// One flat surface for the sheet, its bar and its add row, so nothing behind
+    /// the sheet (the page's own signature, say) shows through the glass.
+    private static let surface = Color(.systemGroupedBackground)
+
+    // MARK: - pieces
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "signature")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(.secondary)
+            Text("No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(Color(.secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    private func card(for entry: SignatureEntry) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                onPick(entry)
+            } label: {
+                ZStack {
+                    // White on purpose in both appearances: it is ink on paper, and
+                    // the placed signature lands on a white page.
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white)
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    if let image = thumbnails[entry.id] {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(12)
+                    } else {
+                        ProgressView().tint(.gray)
+                    }
+                }
+                .frame(height: 88)
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .contextMenu { cardActions(entry) }
+            .accessibilityLabel(Text("\(entry.displayName), signature"))
+            .accessibilityHint(Text("Places it on the page"))
+            .accessibilityAction(named: Text("Rename")) { beginRename(entry) }
+            .accessibilityAction(named: Text("Delete")) { pendingDelete = entry }
+
+            HStack(spacing: 4) {
+                Text(entry.displayName)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Menu {
+                    cardActions(entry)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .tint(.secondary)
+                .accessibilityLabel(Text("More options for \(entry.displayName)"))
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+
+    @ViewBuilder
+    private func cardActions(_ entry: SignatureEntry) -> some View {
+        Button { beginRename(entry) } label: { Label("Rename", systemImage: "pencil") }
+        Button(role: .destructive) { pendingDelete = entry } label: { Label("Delete", systemImage: "trash") }
+    }
+
+    private var addRow: some View {
+        HStack(spacing: 12) {
+            Button { drawing = true } label: {
+                Label("Draw", systemImage: "pencil.tip")
+                    .frame(maxWidth: .infinity)
+            }
+            PhotosPicker(selection: $photoItem, matching: .images) {
+                Label("From photo", systemImage: "photo")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+        .background(Self.surface)
+    }
+
+    private func beginRename(_ entry: SignatureEntry) {
+        renameText = entry.displayName
+        renaming = entry
+    }
+
+    /// Decodes the PNGs off the main actor; only the ids not yet cached.
+    private func loadThumbnails() async {
+        let missing = signatures.filter { thumbnails[$0.id] == nil }
+        guard !missing.isEmpty else { return }
+        let load = loadImage
+        let decoded: [(String, UIImage)] = await Task.detached(priority: .userInitiated) {
+            missing.compactMap { entry in
+                load(entry).map { (entry.id, UIImage(cgImage: $0)) }
+            }
+        }.value
+        for (id, image) in decoded { thumbnails[id] = image }
+    }
+}
+
+/// `presentationBackground` arrived in 16.4; on 16.0–16.3 the sheet keeps the
+/// system material, which is only a cosmetic bleed-through, not a functional loss.
+private struct SolidSheetBackground: ViewModifier {
+    let color: Color
+
+    func body(content: Content) -> some View {
+        if #available(iOS 16.4, *) {
+            content.presentationBackground(color)
+        } else {
+            content
         }
     }
 }
