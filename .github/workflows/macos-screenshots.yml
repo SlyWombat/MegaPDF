@@ -73,6 +73,13 @@ jobs:
               --screenshot-state find --screenshot "$OUT/08-dark-find.png"
           "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark \
               --screenshot-state mode --screenshot "$OUT/09-dark-mode-banner.png"
+          # The signature library (#100): seeded from the repo's sample ink, since
+          # the built app sits outside the checkout and cannot find it by walking up.
+          SIG="$GITHUB_WORKSPACE/tools/assets/megawoman-sig.jpg"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --screenshot-state sign \
+              --signature "$SIG" --screenshot "$OUT/10-sign.png"
+          "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark --screenshot-state sign \
+              --signature "$SIG" --screenshot "$OUT/11-dark-sign.png"
 
           ls -la "$OUT"
 
