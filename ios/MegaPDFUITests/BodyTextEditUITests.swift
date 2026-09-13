@@ -49,6 +49,12 @@ final class BodyTextEditUITests: XCTestCase {
             font: "<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>")
     }
 
+    /// Text under 4 pt of character spacing, which PDFium's content writer cannot write back (#118).
+    private var spacedHeading: String {
+        pdf(content: "BT /F1 24 Tf 4 Tc 72 700 Td (Spaced report) Tj ET BT /F1 24 Tf 72 660 Td (Second line) Tj ET",
+            font: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    }
+
     private var pictureOnly: String {
         pdf(content: "0.8 g 72 400 468 300 re f", font: nil)
     }
@@ -102,6 +108,16 @@ final class BodyTextEditUITests: XCTestCase {
         let banner = app.staticTexts["noticeBanner"]
         XCTAssertTrue(banner.waitForExistence(timeout: 5), "a substituted font must be announced")
         XCTAssertTrue(banner.label.contains("standard font"), banner.label)
+    }
+
+    func testAPageThatCannotBeRewrittenFaithfullySaysSoInsteadOfOpeningTheEditor() {
+        let page = launch(with: spacedHeading)
+        tap(page, x: 160, yFromBottom: 708)
+        let banner = app.staticTexts["noticeBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 8), "a page the engine will not rewrite must say so")
+        XCTAssertTrue(banner.label.contains("layout"), banner.label)
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch.exists,
+                       "the editor must not open on text that cannot be changed faithfully")
     }
 
     func testTier3_aPageWithNoTextSaysItIsAScannedImage() {

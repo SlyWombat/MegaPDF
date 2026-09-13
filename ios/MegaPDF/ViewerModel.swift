@@ -416,8 +416,21 @@ final class ViewerModel: ObservableObject {
                 if let line = lines.first(where: {
                     $0.rect.grown(by: Self.tapSlopPoints).contains(x: x, y: y)
                 }) {
-                    bodyDraft = line.text
-                    pendingBodyEdit = PendingBodyEdit(pageIndex: index, line: line)
+                    // #118: on pages PDFium cannot rewrite faithfully, say so now rather
+                    // than after the user has typed.
+                    var editable = true
+                    for run in line.runs {
+                        if try await engine.textEditable(doc, pageIndex: index, objectIndex: run.objectIndex) == false {
+                            editable = false
+                            break
+                        }
+                    }
+                    if editable {
+                        bodyDraft = line.text
+                        pendingBodyEdit = PendingBodyEdit(pageIndex: index, line: line)
+                    } else {
+                        showNotice(String(localized: "This page's text can't be changed without disturbing its layout."))
+                    }
                 } else if lines.isEmpty, !scannedHintShown {
                     // Tier 3: a page with no text at all is a picture of a page.
                     scannedHintShown = true
@@ -449,6 +462,8 @@ final class ViewerModel: ObservableObject {
                         showNotice(String(localized: "The original font couldn't show this text, so a similar standard font was used."))
                     }
                 }
+            } catch PdfError.layoutWouldChange {
+                showNotice(String(localized: "This page's text can't be changed without disturbing its layout."))
             } catch {
                 statusMessage = String(localized: "Couldn't change that text.")
             }

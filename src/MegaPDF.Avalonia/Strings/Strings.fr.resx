@@ -370,6 +370,10 @@
     <value>Ce texte fait partie d'une image numérisée et ne peut donc pas être modifié. Vous pouvez plutôt le masquer et écrire par-dessus.</value>
     <comment>TextEditFailure.NotExtractable</comment>
   </data>
+  <data name="TextLayoutWouldChange" xml:space="preserve">
+    <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page. Vous pouvez plutôt le masquer et écrire par-dessus.</value>
+    <comment>TextEditFailure.LayoutWouldChange (#118)</comment>
+  </data>
   <data name="TextFontCannotWrite" xml:space="preserve">
     <value>Ce texte utilise une police qui ne peut pas écrire ces caractères, et aucun substitut proche n'était disponible.</value>
     <comment>TextEditFailure.NoUsableFont</comment>

@@ -278,6 +278,9 @@ public static partial class Strings
     /// <summary>That text is part of a scanned image, so it cannot be edited. You can cover it and type over the top instead.</summary>
     public static string TextIsScanned => Get("TextIsScanned");
 
+    /// <summary>This page's text can't be changed without disturbing its layout. You can cover it and type over the top instead.</summary>
+    public static string TextLayoutWouldChange => Get("TextLayoutWouldChange");
+
     /// <summary>That text uses a font that cannot write those characters, and no close substitute was available.</summary>
     public static string TextFontCannotWrite => Get("TextFontCannotWrite");
 

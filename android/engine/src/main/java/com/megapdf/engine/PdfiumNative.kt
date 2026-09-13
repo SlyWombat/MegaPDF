@@ -74,6 +74,7 @@ internal object PdfiumNative {
     external fun nativeRestoreObject(handle: Long, detached: Long, objectIndex: Int): Boolean
     external fun nativeRestoreOriginal(handle: Long, original: Long, objectIndex: Int): Boolean
     external fun nativeDiscardDetached(detached: Long)
+    external fun nativeTextEditable(handle: Long, objectIndex: Int): Int
 
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4

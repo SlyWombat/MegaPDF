@@ -29,7 +29,7 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 ```
 Mega PDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
 
-EDIT TEXT — Click any text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. Done.
+EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
 ADD TEXT — Click a blank line and type on it. Pick the size and the face — sans, serif or monospace — so what you add matches the rest of the form. Drag it into place, or double-click it later to change it.
 
@@ -48,7 +48,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 
 **App features** — one line per box, nine boxes
 ```
-Edit text in any PDF by clicking and typing — like a Word document
+Edit the document's own text by clicking and typing — like a Word document
 Add text on any blank line, in the size and face that matches the form
 Click empty squares to check boxes on any form
 Place a signature from your personal library with a click, then nudge and resize it
@@ -77,7 +77,7 @@ lightweight PDF
 
 **Screenshot captions** — same five files, same order
 ```
-01-edit-text.png: Click any text and type — editing a PDF like a Word file.
+01-edit-text.png: Click the text and type — editing a PDF like a Word file.
 02-checkbox.png: Click an empty square to check it. Drawn checkboxes too, not just real form fields.
 03-signature.png: Drop a saved signature on the line, then nudge it into place.
 04-shrink.png: Shrink oversized scans to email-friendly sizes in one click.
@@ -97,7 +97,7 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 ```
 Mega PDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
 
-EDIT TEXT — Click any text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. Done.
+EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
 ADD TEXT — Click a blank line and type on it. Pick the size and the face — sans, serif or monospace — so what you add matches the rest of the form. Drag it into place, or double-click it later to change it.
 
@@ -116,7 +116,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 
 **App features** — one line per box, nine boxes
 ```
-Edit text in any PDF by clicking and typing — like a Word document
+Edit the document's own text by clicking and typing — like a Word document
 Add text on any blank line, in the size and face that matches the form
 Click empty squares to check boxes on any form
 Place a signature from your personal library with a click, then nudge and resize it
@@ -145,7 +145,7 @@ lightweight PDF
 
 **Screenshot captions** — same five files, same order
 ```
-01-edit-text.png: Click any text and type — editing a PDF like a Word file.
+01-edit-text.png: Click the text and type — editing a PDF like a Word file.
 02-checkbox.png: Click an empty square to check it. Drawn checkboxes too, not just real form fields.
 03-signature.png: Drop a saved signature on the line, then nudge it into place.
 04-shrink.png: Shrink oversized scans to email-friendly sizes in one click.
@@ -163,7 +163,7 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 ```
 Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
 
-MODIFIER LE TEXTE — Cliquez sur n'importe quel texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. Terminé.
+MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou double-cliquez dessus plus tard pour le modifier.
 
@@ -182,7 +182,7 @@ Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 
 **App features** — one line per box, nine boxes
 ```
-Modifiez le texte de n'importe quel PDF en cliquant et en tapant, comme dans un document Word
+Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
 Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
@@ -211,7 +211,7 @@ PDF léger
 
 **Screenshot captions** — same five files, same order
 ```
-01-edit-text.png: Cliquez sur n'importe quel texte et tapez : modifier un PDF comme un document Word.
+01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
 04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic.
@@ -229,7 +229,7 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 ```
 Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
 
-MODIFIER LE TEXTE — Cliquez sur n'importe quel texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. Terminé.
+MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou double-cliquez dessus plus tard pour le modifier.
 
@@ -248,7 +248,7 @@ Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 
 **App features** — one line per box, nine boxes
 ```
-Modifiez le texte de n'importe quel PDF en cliquant et en tapant, comme dans un document Word
+Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
 Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
@@ -277,7 +277,7 @@ PDF léger
 
 **Screenshot captions** — same five files, same order
 ```
-01-edit-text.png: Cliquez sur n'importe quel texte et tapez : modifier un PDF comme un document Word.
+01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
 04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée au e-mail en un clic.

@@ -10,13 +10,16 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
+#include "fpdf_ppo.h"   // FPDF_ImportPagesByIndex: the #118 dry run works on a copy of the page
 #include "fpdf_flatten.h"
 #include "fpdf_save.h"
 #include "fpdf_text.h"
@@ -36,6 +39,7 @@ struct megapdf_document {
     FPDF_FORMFILLINFO ffi{};
     std::vector<megapdf_page*> open_pages;  // closed for the caller if still open at megapdf_close()
     std::vector<megapdf_detached*> detached;  // freed at megapdf_close() if never restored or discarded
+    std::map<std::pair<int, int>, bool> rewrite_keeps_page;  // #118 verdicts by (page index, object index)
 };
 
 struct megapdf_detached {
@@ -46,6 +50,7 @@ struct megapdf_detached {
 struct megapdf_page {
     megapdf_document* owner = nullptr;
     FPDF_PAGE page = nullptr;
+    int index = -1;
     double crop_x = 0.0;
     double crop_y = 0.0;
 };
@@ -235,6 +240,7 @@ MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* d, int index) {
     }
     p->owner = d;
     p->page = page;
+    p->index = index;
     ReadCropOrigin(page, &p->crop_x, &p->crop_y);
     d->open_pages.push_back(p);
     return p;
@@ -1145,6 +1151,145 @@ MEGAPDF_API int megapdf_move_image_stamp(const megapdf_page* p, const unsigned s
 }  // extern "C"
 
 // --------------------------------------------------------------------------
+// #118: can PDFium rewrite this text without changing the page?
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct ScratchShot {
+    int w = 0;
+    int h = 0;
+    std::vector<unsigned char> px;
+};
+
+ScratchShot RenderScratchPage(FPDF_PAGE page) {
+    const double pw = FPDF_GetPageWidthF(page), ph = FPDF_GetPageHeightF(page);
+    double scale = 1.0;
+    while (pw * ph * scale * scale > 1.0e6 && scale > 1e-3) scale /= 2;
+    ScratchShot shot;
+    shot.w = static_cast<int>(pw * scale) > 0 ? static_cast<int>(pw * scale) : 1;
+    shot.h = static_cast<int>(ph * scale) > 0 ? static_cast<int>(ph * scale) : 1;
+    shot.px.assign(static_cast<size_t>(shot.w) * shot.h * 4, 0);
+    FPDF_BITMAP bmp = FPDFBitmap_CreateEx(shot.w, shot.h, FPDFBitmap_BGRA, shot.px.data(), shot.w * 4);
+    if (bmp == nullptr) return ScratchShot{};
+    FPDFBitmap_FillRect(bmp, 0, 0, shot.w, shot.h, 0xFFFFFFFF);
+    FPDF_RenderPageBitmap(bmp, page, 0, 0, shot.w, shot.h, 0, FPDF_ANNOT);
+    FPDFBitmap_Destroy(bmp);
+    return shot;
+}
+
+struct ScratchRun {
+    float left, bottom, right, top;
+    U16 text;
+};
+
+std::vector<ScratchRun> ScratchRuns(FPDF_PAGE page) {
+    std::vector<ScratchRun> out;
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+    const int count = FPDFPage_CountObjects(page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) continue;
+        ScratchRun run{};
+        FPDFPageObj_GetBounds(obj, &run.left, &run.bottom, &run.right, &run.top);
+        run.text = ReadObjectText(obj, text_page);
+        out.push_back(std::move(run));
+    }
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
+    return out;
+}
+
+struct ScratchWriter {
+    FPDF_FILEWRITE fw;   // first, so PDFium's pointer downcasts
+    std::vector<unsigned char> out;
+};
+
+int ScratchWriteBlock(FPDF_FILEWRITE* self, const void* data, unsigned long size) {
+    auto* w = reinterpret_cast<ScratchWriter*>(self);
+    w->out.insert(w->out.end(), static_cast<const unsigned char*>(data), static_cast<const unsigned char*>(data) + size);
+    return 1;
+}
+
+bool SameShot(const ScratchShot& a, const ScratchShot& b) {
+    if (a.w == 0 || a.w != b.w || a.h != b.h) return false;
+    size_t differing = 0;
+    for (size_t i = 0; i < a.px.size(); i += 4) {
+        const int d = std::abs(a.px[i] - b.px[i]) + std::abs(a.px[i + 1] - b.px[i + 1]) + std::abs(a.px[i + 2] - b.px[i + 2]);
+        if (d > 60) differing++;
+    }
+    return differing * 2000 <= static_cast<size_t>(a.w) * a.h;   // at most 0.05% of pixels
+}
+
+bool SameRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].text != b[i].text) return false;
+        if (std::fabs(a[i].left - b[i].left) > 0.5f || std::fabs(a[i].bottom - b[i].bottom) > 0.5f ||
+            std::fabs(a[i].right - b[i].right) > 0.5f || std::fabs(a[i].top - b[i].top) > 0.5f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The dry run behind megapdf_text_editable(). Rewrites the stream holding the object
+// on a copy of the page — take the object off and put it straight back, which is what
+// any edit forces — then saves, reopens and compares with the copy before the rewrite.
+bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, int object_index) {
+    const auto key = std::make_pair(page_index, object_index);
+    const auto cached = d->rewrite_keeps_page.find(key);
+    if (cached != d->rewrite_keeps_page.end()) return cached->second;
+
+    bool keeps = false;
+    FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
+    if (scratch != nullptr) {
+        const int indices[1] = {page_index};
+        FPDF_PAGE page = FPDF_ImportPagesByIndex(scratch, d->doc, indices, 1, 0) ? FPDF_LoadPage(scratch, 0) : nullptr;
+        if (page != nullptr) {
+            const ScratchShot before = RenderScratchPage(page);
+            const std::vector<ScratchRun> runs_before = ScratchRuns(page);
+            FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, object_index);
+            bool rewritten = false;
+            if (obj != nullptr && FPDFPage_RemoveObject(page, obj)) {
+                // PDFium frees the object if re-insertion fails, and the copy is thrown away either way.
+                rewritten = FPDFPage_InsertObjectAtIndex(page, obj, static_cast<size_t>(object_index)) &&
+                            FPDFPage_GenerateContent(page);
+            }
+            FPDF_ClosePage(page);
+            ScratchWriter writer{};
+            writer.fw.version = 1;
+            writer.fw.WriteBlock = ScratchWriteBlock;
+            if (rewritten && FPDF_SaveAsCopy(scratch, &writer.fw, 0)) {
+                FPDF_DOCUMENT again = FPDF_LoadMemDocument64(writer.out.data(), writer.out.size(), nullptr);
+                FPDF_PAGE reopened = again ? FPDF_LoadPage(again, 0) : nullptr;
+                if (reopened != nullptr) {
+                    keeps = SameShot(before, RenderScratchPage(reopened)) && SameRuns(runs_before, ScratchRuns(reopened));
+                    FPDF_ClosePage(reopened);
+                }
+                if (again != nullptr) FPDF_CloseDocument(again);
+            }
+        }
+        FPDF_CloseDocument(scratch);
+    }
+    d->rewrite_keeps_page[key] = keeps;
+    return keeps;
+}
+
+}  // namespace
+
+extern "C" {
+
+MEGAPDF_API int megapdf_text_editable(const megapdf_page* p, int object_index) {
+    if (p == nullptr || p->owner == nullptr || p->index < 0 || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return MEGAPDF_ERR_ARGUMENT;
+    return RewriteKeepsPageUnlocked(p->owner, p->index, object_index) ? 1 : 0;
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
 // Contract 5: whiteouts, text boxes and detached objects (#109)
 // --------------------------------------------------------------------------
 
@@ -1386,6 +1531,11 @@ MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* p, int o
     Guard guard(CoreLock());
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr) { SetError(0, "no page object at that index"); return nullptr; }
+    if (FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT && !HasMark(obj, kTextBoxMark) && p->index >= 0 &&
+        !RewriteKeepsPageUnlocked(p->owner, p->index, object_index)) {
+        SetError(0, "PDFium would change how this page looks if its text were rewritten");
+        return nullptr;
+    }
     if (!FPDFPage_RemoveObject(p->page, obj)) { SetError(FPDF_ERR_UNKNOWN, "could not remove the object"); return nullptr; }
     GenerateContent(p);
     auto* x = new (std::nothrow) megapdf_detached();
@@ -1900,6 +2050,13 @@ MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const 
     if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) {
         SetError(0, "the object is no longer a text object");
         return MEGAPDF_ERR_ARGUMENT;
+    }
+    // #118: if PDFium cannot write this stream back without changing the page, the
+    // edit would silently alter text the user never touched. Refuse before either
+    // tier modifies anything.
+    if (p->owner != nullptr && p->index >= 0 && !RewriteKeepsPageUnlocked(p->owner, p->index, object_index)) {
+        SetError(0, "PDFium would change how this page looks if its text were rewritten");
+        return MEGAPDF_ERR_LAYOUT;
     }
 
     // Tier 1: the run's own font, if it can carry the text.

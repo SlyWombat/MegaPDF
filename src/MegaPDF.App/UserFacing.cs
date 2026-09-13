@@ -24,6 +24,7 @@ internal static class UserFacing
         PdfLoadException load => Strings.ErrorCouldNotOpen(load.ErrorCode),
         TextEditException { Reason: TextEditFailure.NoUsableFont } => Strings.ErrorNoUsableFont,
         TextEditException { Reason: TextEditFailure.NotExtractable } => Strings.ErrorNotExtractable,
+        TextEditException { Reason: TextEditFailure.LayoutWouldChange } => Strings.ErrorLayoutWouldChange,
         VerifiedSave.UnreadableOutputException => Strings.ErrorSavedCopyUnreadable,
         // Windows' own messages (file in use, access denied) are already in the
         // user's language and say what happened; keep them as the lead.

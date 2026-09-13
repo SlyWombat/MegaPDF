@@ -57,7 +57,7 @@ Fill, check & sign PDFs
 Someone emailed you a PDF to sign? Open it, tap the boxes, drop in your signature, save. Done in under a minute — no account, no subscription.
 ```
 
-**Description** [4000] (2076)
+**Description** [4000] (2391)
 ```
 Open. Fix. Save. Done.
 
@@ -68,6 +68,9 @@ Tap a checkbox and it's checked — real interactive form fields and plain print
 
 Type on any line
 Tap where the answer goes and type it. Choose the size and the face — sans, serif or monospace — so what you add matches the form you are filling in. Drag it into place, or tap it again to fix a typo. Everything you add is real, searchable text, not a sticker on top of the page.
+
+Fix the document's own text
+Wrong date? Misspelled name? Tap the line and retype it. MegaPDF keeps the document's own font where it can and tells you when it had to use a similar one. If a change would disturb the rest of the page, it says so instead of quietly moving things. Undo puts the original back exactly.
 
 Sign like you mean it
 Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
@@ -101,6 +104,7 @@ MegaPDF now speaks French. The app follows your device language; you can also pi
 ```
 viewer: Checked and signed in under a minute
 text: Type on the blank line — your size, your font
+text-edit: Fix a typo in the document itself
 search: Find any word, on every page
 sign: Your signatures, saved on your device
 draw: Draw it once, use it everywhere
@@ -124,7 +128,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (2654)
+**Description** [4000] (3020)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -135,6 +139,9 @@ Touchez une case et elle est cochée : les vrais champs de formulaire interactif
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
+
+Corrigez le texte du document
+Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
@@ -168,6 +175,7 @@ MegaPDF parle maintenant français. L'application suit la langue de votre appare
 ```
 viewer: Coché et signé en moins d'une minute
 text: Écrivez sur la ligne vide : votre taille, votre police
+text-edit: Corrigez une coquille dans le document même
 search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
@@ -191,7 +199,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer ? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (2650)
+**Description** [4000] (3018)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -202,6 +210,9 @@ Touchez une case et elle est cochée : les vrais champs de formulaire interactif
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
+
+Corrigez le texte du document
+Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
@@ -235,6 +246,7 @@ MegaPDF parle maintenant français. L'application suit la langue de votre appare
 ```
 viewer: Coché et signé en moins d'une minute
 text: Écrivez sur la ligne vide : votre taille, votre police
+text-edit: Corrigez une coquille dans le document même
 search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout

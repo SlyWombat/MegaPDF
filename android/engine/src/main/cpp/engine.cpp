@@ -712,3 +712,15 @@ Java_com_megapdf_engine_PdfiumNative_nativeDiscardDetached(JNIEnv*, jobject, jlo
 }
 
 }  // extern "C"
+
+extern "C" {
+
+// 1 when the run at objectIndex can be changed without PDFium disturbing the rest of
+// the page when it rewrites the content stream, 0 when not (#118).
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeTextEditable(JNIEnv*, jobject, jlong handle, jint objectIndex) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    return megapdf_text_editable(p->core, objectIndex);
+}
+
+}  // extern "C"

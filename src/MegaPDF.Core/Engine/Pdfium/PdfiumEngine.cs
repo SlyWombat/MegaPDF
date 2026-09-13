@@ -562,10 +562,18 @@ internal sealed class PdfiumPage : IPdfPage
             throw new InvalidOperationException("Could not restore the original text.");
     }
 
+    public bool IsTextEditable(int objectIndex)
+    {
+        ThrowIfDisposed();
+        return CoreNative.megapdf_text_editable(_core, objectIndex) == 1;
+    }
+
     private TextEditOutcome ApplyTextEdit(int objectIndex, string newText, bool forceSubstitute, out IntPtr replaced)
     {
         var status = CoreNative.megapdf_set_text(_core, objectIndex, newText,
             forceSubstitute ? CoreNative.SetTextForceSubstitute : 0, out var outcome, out replaced);
+        if (status == CoreNative.ErrLayout)
+            throw new TextEditException(TextEditFailure.LayoutWouldChange, CoreNative.LastErrorMessage());
         if (status == CoreNative.ErrNoFont)
             throw new TextEditException(TextEditFailure.NoUsableFont, CoreNative.LastErrorMessage());
         if (status != 0)
@@ -578,6 +586,10 @@ internal sealed class PdfiumPage : IPdfPage
         ThrowIfDisposed();
         if (CoreNative.megapdf_object_type(_core, run.ObjectIndex) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
             throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
+        // Deleting body text rewrites its stream just as editing does (#118).
+        if (run.TextBoxId is null && CoreNative.megapdf_text_editable(_core, run.ObjectIndex) == 0)
+            throw new TextEditException(TextEditFailure.LayoutWouldChange,
+                "Removing this text would change how the rest of the page looks.");
         return DetachObject(run.ObjectIndex);
     }
 

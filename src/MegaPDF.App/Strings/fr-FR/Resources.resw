@@ -537,6 +537,9 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="ErrorNotExtractable" xml:space="preserve">
     <value>Ce texte fait partie d'une image numérisée et ne peut pas être modifié. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
   </data>
+  <data name="ErrorLayoutWouldChange" xml:space="preserve">
+    <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page : le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
+  </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Une erreur s'est produite.</value>
   </data>

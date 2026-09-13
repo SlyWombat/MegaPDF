@@ -579,6 +579,12 @@ internal static class Worker
             else if (!e.Verified)
                 e.Error = "the retyped text did not read back after save and reopen";
         }
+        catch (TextEditException ex) when (ex.Reason == TextEditFailure.LayoutWouldChange)
+        {
+            // #118: the engine declined because PDFium would disturb the page. That is
+            // the engine protecting the document, not a failed edit.
+            e.Skipped = "layout";
+        }
         catch (TextEditException ex)
         {
             e.Error = "text edit refused: " + ex.Reason;

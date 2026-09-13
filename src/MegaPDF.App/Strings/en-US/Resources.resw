@@ -557,6 +557,9 @@ Saved as {2} — ready to email.</value>
   <data name="ErrorNotExtractable" xml:space="preserve">
     <value>That text is part of a scanned image, so it cannot be edited. Cover it with whiteout and add new text instead.</value>
   </data>
+  <data name="ErrorLayoutWouldChange" xml:space="preserve">
+    <value>This page's text can't be changed without disturbing its layout: rewriting it would shift the spacing of other text. Cover it with whiteout and add new text instead.</value>
+  </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Something went wrong.</value>
   </data>

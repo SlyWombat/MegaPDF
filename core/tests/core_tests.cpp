@@ -1254,7 +1254,71 @@ std::vector<unsigned char> two_run_line_pdf() {
     return std::vector<unsigned char>(pdf.begin(), pdf.end());
 }
 
+// Two lines in Helvetica under a character spacing of 2 pt. PDFium's content writer has
+// no syntax for Tc, so rewriting this stream would pull every letter together (#118).
+std::vector<unsigned char> spaced_text_pdf() {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    const std::string content = "BT /F1 18 Tf 4 Tc 72 700 Td (Spaced heading) Tj ET BT /F1 18 Tf 72 660 Td (Second spaced line) Tj ET";
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
 void test_text_editing(const std::string& fixtures) {
+    // #118: a page PDFium cannot rewrite faithfully refuses edits and deletions, and is left untouched.
+    {
+        auto bytes = spaced_text_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "spaced-text pdf opens");
+        if (d) {
+            Page p(d, 0);
+            megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            check(megapdf_text_run_count(t) == 2, "spaced page has two runs", std::to_string(megapdf_text_run_count(t)));
+            megapdf_text_run first{};
+            megapdf_text_run_get(t, 0, &first);
+            const U16 text_before = run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT);
+            megapdf_text_free(t);
+            check(megapdf_text_editable(p.page, first.object_index) == 0, "a page whose character spacing a rewrite would lose is not editable");
+            auto howdy = utf16("Howdy");
+            int outcome = -1;
+            megapdf_detached* original = reinterpret_cast<megapdf_detached*>(1);
+            check(megapdf_set_text(p.page, first.object_index, howdy.data(), 0, &outcome, &original) == MEGAPDF_ERR_LAYOUT && original == nullptr,
+                  "the edit is refused with MEGAPDF_ERR_LAYOUT");
+            check(megapdf_detach_object(p.page, first.object_index) == nullptr, "deleting that body text is refused too");
+            t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            megapdf_text_run after{};
+            megapdf_text_run_get(t, 0, &after);
+            check(megapdf_text_run_count(t) == 2 && run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT) == text_before && rect_close(after.bounds, first.bounds, 0.01),
+                  "the refused page is untouched");
+            megapdf_text_free(t);
+            check(megapdf_text_editable(nullptr, 0) == MEGAPDF_ERR_ARGUMENT && megapdf_text_editable(p.page, 9999) == MEGAPDF_ERR_ARGUMENT,
+                  "editable rejects a bad page or index");
+        }
+        megapdf_close(d);
+    }
+    {
+        auto bytes = two_run_line_pdf();
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        if (d) {
+            Page p(d, 0);
+            megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            megapdf_text_run r{};
+            megapdf_text_run_get(t, 0, &r);
+            megapdf_text_free(t);
+            check(megapdf_text_editable(p.page, r.object_index) == 1, "a page PDFium rewrites faithfully is editable");
+        }
+        megapdf_close(d);
+    }
+
     // Undo of a substituted edit restores the original run byte-identical: the core
     // hands back the replaced object instead of destroying it. Undo of an in-place
     // edit sets the old text on the same object with no substitution.

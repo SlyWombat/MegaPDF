@@ -537,7 +537,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     val lines = page.textLines()
                     val line = lines.firstOrNull { it.rect.grownBy(TAP_SLOP_POINTS).contains(x, y) }
                     if (line != null) {
-                        pendingBodyEdit = PendingBodyEdit(pageIndex, line)
+                        // #118: on pages PDFium cannot rewrite faithfully, say so now
+                        // rather than after the user has typed.
+                        if (line.runs.all { page.textEditable(it.objectIndex) }) {
+                            pendingBodyEdit = PendingBodyEdit(pageIndex, line)
+                        } else {
+                            showNotice(str(R.string.body_text_layout))
+                        }
                     } else if (lines.isEmpty() && !scannedHintShown) {
                         // A page with no text at all is a picture of a page.
                         scannedHintShown = true
@@ -574,6 +580,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         showNotice(str(R.string.body_text_substituted))
                     }
                 }
+            } catch (e: com.megapdf.engine.TextLayoutException) {
+                showNotice(str(R.string.body_text_layout))
             } catch (e: Exception) {
                 statusMessage = str(R.string.text_change_failed)
             }

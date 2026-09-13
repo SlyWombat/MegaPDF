@@ -61,7 +61,8 @@ enum {
     MEGAPDF_ERR_ARGUMENT = -1,    /* a null handle or an out-of-range index */
     MEGAPDF_ERR_PDFIUM = -2,      /* PDFium refused; see megapdf_last_error_message() */
     MEGAPDF_ERR_MEMORY = -3,      /* the core could not allocate */
-    MEGAPDF_ERR_NO_FONT = -4      /* no font could render the text, not even a standard substitute (tier 2 failed) */
+    MEGAPDF_ERR_NO_FONT = -4,     /* no font could render the text, not even a standard substitute (tier 2 failed) */
+    MEGAPDF_ERR_LAYOUT = -5       /* PDFium would change how the page looks if it rewrote this text (#118) */
 };
 
 /* --------------------------------------------------------------------------
@@ -539,7 +540,8 @@ enum {
  * never be undone exactly, #117.)
  *
  * MEGAPDF_ERR_ARGUMENT for a non-text object, empty text or an unknown flag;
- * MEGAPDF_ERR_NO_FONT when not even the substitute can draw the text.
+ * MEGAPDF_ERR_NO_FONT when not even the substitute can draw the text;
+ * MEGAPDF_ERR_LAYOUT when megapdf_text_editable() says no — the document is untouched.
  */
 MEGAPDF_API int megapdf_set_text(const megapdf_page* page, int object_index, const unsigned short* text,
                                  unsigned int flags, int* out_outcome, megapdf_detached** out_replaced);
@@ -552,6 +554,22 @@ MEGAPDF_API int megapdf_set_text(const megapdf_page* page, int object_index, con
  */
 MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* page, int object_index, const unsigned short* text,
                                         const char* font_name, double font_size, double left, double baseline);
+
+/**
+ * Whether the text object at `object_index` can be edited or removed without PDFium
+ * changing anything else about the page (#118): 1 yes, 0 no, MEGAPDF_ERR_ARGUMENT for
+ * a bad page or index.
+ *
+ * Changing a text object makes PDFium rewrite the content stream that holds it, and
+ * its writer drops text state it has no syntax for — character and word spacing,
+ * horizontal scaling, rise — and turns colour spaces into device colour. On many
+ * real documents that moves or restyles text the user never touched. The answer
+ * comes from a dry run on a copy of the page: rewrite the stream there, save, reopen,
+ * and compare the render and every text object's position and text. Cached per page
+ * and object. megapdf_set_text() and megapdf_detach_object() (for body text) refuse
+ * what this refuses, so the apps can ask first and say so when a line is tapped.
+ */
+MEGAPDF_API int megapdf_text_editable(const megapdf_page* page, int object_index);
 
 /** 1 when `base_name` is a subset-embedded font's name: six capitals, a plus sign, the name. */
 MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name);

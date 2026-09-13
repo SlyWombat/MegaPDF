@@ -374,6 +374,10 @@
     <value>That text is part of a scanned image, so it cannot be edited. You can cover it and type over the top instead.</value>
     <comment>TextEditFailure.NotExtractable</comment>
   </data>
+  <data name="TextLayoutWouldChange" xml:space="preserve">
+    <value>This page's text can't be changed without disturbing its layout. You can cover it and type over the top instead.</value>
+    <comment>TextEditFailure.LayoutWouldChange (#118)</comment>
+  </data>
   <data name="TextFontCannotWrite" xml:space="preserve">
     <value>That text uses a font that cannot write those characters, and no close substitute was available.</value>
     <comment>TextEditFailure.NoUsableFont</comment>

@@ -43,6 +43,39 @@ class BodyTextTest {
         return pdf.toString().toByteArray(Charsets.US_ASCII)
     }
 
+    /** One Helvetica line under 4 pt of character spacing, which PDFium cannot write back (#118). */
+    private fun spacedTextPdf(): ByteArray {
+        val pdf = StringBuilder("%PDF-1.4\n")
+        val offsets = ArrayList<Int>()
+        fun add(body: String) {
+            offsets += pdf.length
+            pdf.append("${offsets.size} 0 obj\n$body\nendobj\n")
+        }
+        val content = "BT /F1 24 Tf 4 Tc 72 700 Td (Spaced report) Tj ET"
+        add("<< /Type /Catalog /Pages 2 0 R >>")
+        add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>")
+        add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+        add("<< /Length ${content.length} >>\nstream\n$content\nendstream")
+        val xref = pdf.length
+        pdf.append("xref\n0 ${offsets.size + 1}\n0000000000 65535 f \n")
+        for (offset in offsets) pdf.append(String.format("%010d 00000 n \n", offset))
+        pdf.append("trailer\n<< /Size ${offsets.size + 1} /Root 1 0 R >>\nstartxref\n$xref\n%%EOF\n")
+        return pdf.toString().toByteArray(Charsets.US_ASCII)
+    }
+
+    @Test
+    fun textPdfiumCannotRewriteFaithfullyIsRefusedAndLeftAlone() = onFirstPage(spacedTextPdf()) { page ->
+        val run = page.textLines().single().runs.single()
+        assertEquals("the tap-time check says no", false, page.textEditable(run.objectIndex))
+        try {
+            page.setText(run.objectIndex, "Annual report")
+            throw AssertionError("an edit that would disturb the page must be refused")
+        } catch (expected: TextLayoutException) {
+        }
+        assertEquals("the page is exactly as it was", run, page.textLines().single().runs.single())
+    }
+
     private fun <T> onFirstPage(bytes: ByteArray, body: suspend (PdfPage) -> T): T = runBlocking {
         val doc = engine.open(bytes)
         try {

@@ -180,6 +180,17 @@ third time.
 - For the length of phase 2 the phones run the core for some contracts while the
   desktops still run `PdfiumEngine.cs` for others. The per-platform fixture
   assertions are what make that interval safe; they are not to be thinned.
+- **Body-text edits are bounded by PDFium's content writer (#118).** When it
+  regenerates a modified text object it writes only `Tm`, `Tf`, `Tr` and `Tj`:
+  character and word spacing, horizontal scaling and rise are lost, upstream too,
+  and the public API has no accessors to restore them. So before a body-text edit
+  or deletion touches the document, the core rewrites that page in a scratch copy
+  and compares the render and every text object's geometry; if anything else on
+  the page would move, `megapdf_set_text` returns `MEGAPDF_ERR_LAYOUT` and
+  `megapdf_detach_object` declines, leaving the page untouched.
+  `megapdf_text_editable` gives the same verdict (cached per object) so every app
+  says so when the line is tapped rather than after the person has typed. Lifting
+  the bound needs a PDFium that writes those operators, not a binding change.
 - **SDD §6.1's "native per platform" now means native UI.** The layer below the UI
   and above PDFium is shared by design; MAUI and Uno stay rejected; the product
   principles are untouched.

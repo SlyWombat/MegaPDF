@@ -366,11 +366,21 @@ class PdfPage internal constructor(
         check(!closed) { "page is closed" }
         require(text.isNotEmpty()) { "text must not be empty" }
         val result = PdfiumNative.nativeSetText(handle, objectIndex, text)
+        if (result.size == 3 && result[0] == -5L) throw TextLayoutException()
         check(result.size == 3 && result[0] == 0L && result[2] != 0L) { "failed to change text" }
         TextEdit(
             if (result[1] == 1L) TextEditOutcome.SUBSTITUTED else TextEditOutcome.IN_PLACE,
             DetachedObject(result[2]),
         )
+    }
+
+    /**
+     * Whether the run at [objectIndex] can be changed without PDFium disturbing the rest
+     * of the page when it rewrites it (#118). Asked before the editor opens.
+     */
+    suspend fun textEditable(objectIndex: Int): Boolean = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeTextEditable(handle, objectIndex) == 1
     }
 
     /** Undoes [setText]: takes the edited run at [objectIndex] off and puts [original] back. */
@@ -524,3 +534,6 @@ class PdfLoadException(val errorCode: Int) :
     Exception("Failed to load document (FPDF error $errorCode)")
 
 class PdfSaveException : Exception("Failed to serialize document")
+
+/** PDFium would change the rest of the page if it rewrote this text (#118). */
+class TextLayoutException : Exception("rewriting this text would change the page's layout")

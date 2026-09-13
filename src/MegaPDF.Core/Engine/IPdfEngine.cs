@@ -103,6 +103,13 @@ public interface IPdfPage : IDisposable
     void RestoreOriginalTextRun(DetachedTextRun original, int objectIndex);
 
     /// <summary>
+    /// Whether the text object at <paramref name="objectIndex"/> can be edited or removed
+    /// without PDFium changing anything else about the page when it rewrites the content
+    /// stream (#118). Ask before opening an editor; the edit itself refuses the same way.
+    /// </summary>
+    bool IsTextEditable(int objectIndex);
+
+    /// <summary>
     /// Removes a text run from the page, keeping the native object alive so
     /// <see cref="RestoreTextRun"/> can put it back byte-identical (undo).
     /// </summary>
@@ -315,4 +322,10 @@ public enum TextEditFailure
 
     /// <summary>The text is rasterized (scanned) and cannot be edited (tier 3).</summary>
     NotExtractable,
+
+    /// <summary>
+    /// PDFium would change how the rest of the page looks if it rewrote this text: its
+    /// content writer drops character and word spacing, scaling and rise (#118).
+    /// </summary>
+    LayoutWouldChange,
 }

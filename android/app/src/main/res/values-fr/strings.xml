@@ -82,6 +82,7 @@
     <string name="body_text_hint">Modifiez cette ligne. La taille et la police restent les mêmes.</string>
     <string name="body_text_substituted">La police d\'origine ne pouvait pas afficher ce texte ; une police standard semblable a été utilisée.</string>
     <string name="body_text_scanned">Cette page est une image numérisée ; son texte ne peut pas être modifié.</string>
+    <string name="body_text_layout">Le texte de cette page ne peut pas être modifié sans déranger sa mise en page.</string>
     <string name="text_move_failed">Impossible de déplacer ce texte</string>
     <string name="text_remove_failed">Impossible de retirer ce texte</string>
     <string name="undo_failed">Impossible d\'annuler</string>

@@ -344,8 +344,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
             case PageHitKind.TextRun when hit.TextLine is { } line:
                 // The view opens an editor over the line; the commit comes back
-                // through EditLine.
-                EditLineRequested?.Invoke(pageIndex, line);
+                // through EditLine. Pages PDFium cannot rewrite faithfully say so
+                // instead (#118).
+                if (TryBeginLineEdit(pageIndex, line))
+                    EditLineRequested?.Invoke(pageIndex, line);
                 break;
 
             case PageHitKind.TextBox when hit.TextRun is { } run:
@@ -950,6 +952,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Status = ex.Reason switch
             {
                 TextEditFailure.NotExtractable => Strings.TextIsScanned,
+                TextEditFailure.LayoutWouldChange => Strings.TextLayoutWouldChange,
                 _ => Strings.TextFontCannotWrite,
             };
             return;
@@ -988,7 +991,30 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
-        Apply(new DeleteLineOperation(_document, pageIndex, line), Strings.TextDeleted);
+        try
+        {
+            Apply(new DeleteLineOperation(_document, pageIndex, line), Strings.TextDeleted);
+        }
+        catch (TextEditException ex) when (ex.Reason == TextEditFailure.LayoutWouldChange)
+        {
+            Status = Strings.TextLayoutWouldChange;
+        }
+    }
+
+    /// <summary>
+    /// Whether every run of <paramref name="line"/> can be changed without PDFium
+    /// disturbing the rest of the page (#118). Asked before the editor opens; when it
+    /// cannot, the status says why and no editor appears.
+    /// </summary>
+    public bool TryBeginLineEdit(int pageIndex, PdfTextLine line)
+    {
+        if (_document is null)
+            return false;
+        using var page = _document.GetPage(pageIndex);
+        if (line.Runs.All(run => run.TextBoxId is not null || page.IsTextEditable(run.ObjectIndex)))
+            return true;
+        Status = Strings.TextLayoutWouldChange;
+        return false;
     }
 
     /// <summary>

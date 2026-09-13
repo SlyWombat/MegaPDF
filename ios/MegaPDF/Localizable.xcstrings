@@ -1525,6 +1525,22 @@
         }
       }
     },
+    "This page's text can't be changed without disturbing its layout." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le texte de cette page ne peut pas être modifié sans déranger sa mise en page."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le texte de cette page ne peut pas être modifié sans déranger sa mise en page."
+          }
+        }
+      }
+    },
     "This replaces the text you tapped." : {
       "localizations" : {
         "fr" : {

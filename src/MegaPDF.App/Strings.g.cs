@@ -211,6 +211,9 @@ public static partial class Strings
     /// <summary>That text is part of a scanned image, so it cannot be edited. Cover it with whiteout and add new text instead.</summary>
     public static string ErrorNotExtractable => Get("ErrorNotExtractable");
 
+    /// <summary>This page's text can't be changed without disturbing its layout: rewriting it would shift the spacing of other text. Cover it with whiteout and add new text instead.</summary>
+    public static string ErrorLayoutWouldChange => Get("ErrorLayoutWouldChange");
+
     /// <summary>Something went wrong.</summary>
     public static string ErrorGeneric => Get("ErrorGeneric");
 

@@ -112,9 +112,18 @@ extension PdfEngine {
             let status = wide.withUnsafeBufferPointer {
                 megapdf_set_text(page, Int32(objectIndex), $0.baseAddress, 0, &outcome, &replaced)
             }
+            if status == MEGAPDF_ERR_LAYOUT { throw PdfError.layoutWouldChange }
             guard status == MEGAPDF_OK, let replaced else { throw PdfError.editFailed }
             return (outcome == MEGAPDF_EDIT_SUBSTITUTED ? .substituted : .inPlace,
                     PdfDetachedObject(handle: replaced))
+        }
+    }
+
+    /// Whether the run at `objectIndex` can be changed without PDFium disturbing the rest of
+    /// the page when it rewrites it (#118). Asked before the editor opens.
+    func textEditable(_ document: PdfDocument, pageIndex: Int, objectIndex: Int) throws -> Bool {
+        try withCorePage(document, index: pageIndex) { page in
+            megapdf_text_editable(page, Int32(objectIndex)) == 1
         }
     }
 

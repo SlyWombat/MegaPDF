@@ -221,6 +221,12 @@ public sealed partial class MainWindow : Window
             {
                 // Lines, not fragments: the editor covers the whole visual line (1.1).
                 var line = hit.TextLine!;
+                // #118: on pages PDFium cannot rewrite faithfully, say so before typing.
+                if (!await Task.Run(() => ViewModel.IsLineEditable(pageView.Index, line)))
+                {
+                    await ViewModel.ShowLayoutRefusalAsync();
+                    break;
+                }
                 // Clearing all text means "remove this text" (undoable).
                 // style: null — §3.1 is explicit that no formatting UI appears when
                 // editing the document's own text. Its formatting is inherited from

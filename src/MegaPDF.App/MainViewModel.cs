@@ -1028,8 +1028,31 @@ public partial class MainViewModel(Window window) : ObservableObject
     {
         if (_document is null)
             return;
-        await DoEditAsync(new DeleteLineOperation(_document, pageIndex, line));
+        try
+        {
+            await DoEditAsync(new DeleteLineOperation(_document, pageIndex, line));
+        }
+        catch (TextEditException ex)
+        {
+            await ShowErrorAsync(Strings.CannotEditTextTitle, UserFacing.Describe(ex));
+        }
     }
+
+    /// <summary>
+    /// Whether every run of <paramref name="line"/> can be changed without PDFium
+    /// disturbing the rest of the page (#118). Asked before the editor opens, so the
+    /// person is told before they type rather than after.
+    /// </summary>
+    public bool IsLineEditable(int pageIndex, PdfTextLine line)
+    {
+        if (_document is null)
+            return false;
+        using var page = _document.GetPage(pageIndex);
+        return line.Runs.All(run => run.TextBoxId is not null || page.IsTextEditable(run.ObjectIndex));
+    }
+
+    public Task ShowLayoutRefusalAsync() =>
+        ShowErrorAsync(Strings.CannotEditTextTitle, Strings.ErrorLayoutWouldChange);
 
     [ObservableProperty]
     private bool _isFontNoticeOpen;

@@ -20,6 +20,8 @@ enum PdfError: Error, Equatable {
     case renderFailed
     case saveFailed
     case editFailed
+    /// PDFium would change the rest of the page if it rewrote this text (#118).
+    case layoutWouldChange
 }
 
 /// What `error.localizedDescription` says for an engine failure — short and
@@ -39,6 +41,8 @@ extension PdfError: LocalizedError {
             return String(localized: "Couldn't save the document.")
         case .editFailed:
             return String(localized: "Couldn't change the document.")
+        case .layoutWouldChange:
+            return String(localized: "This page's text can't be changed without disturbing its layout.")
         }
     }
 }

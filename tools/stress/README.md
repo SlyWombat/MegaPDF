@@ -14,7 +14,9 @@ run's numbers and the issues it produced are recorded there.
 `--phases` also accepts `edit` (not in the default set, because it changes the
 document): it retypes the first text line of page 1 through the tiered body-text
 edit, saves, reopens and checks the new text reads back (#112). The report counts
-edits tried, edits that needed a substituted font, and failures.
+edits tried, edits that needed a substituted font, edits the engine declined
+because PDFium would have disturbed the page's layout (#118; counted as skipped,
+not failed), and failures.
 
 One-file diagnostics: `find`, `open-bench`, `inspect`, `flags-bench`.
 

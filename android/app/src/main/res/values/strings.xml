@@ -89,6 +89,7 @@
     <string name="body_text_hint">Change this line. The size and font stay as they are.</string>
     <string name="body_text_substituted">The original font couldn\'t show this text, so a similar standard font was used.</string>
     <string name="body_text_scanned">This page is a scanned image, so its text can\'t be edited.</string>
+    <string name="body_text_layout">This page\'s text can\'t be changed without disturbing its layout.</string>
     <string name="text_move_failed">Couldn\'t move that text</string>
     <string name="text_remove_failed">Couldn\'t remove that text</string>
     <string name="undo_failed">Couldn\'t undo that</string>

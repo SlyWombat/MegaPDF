@@ -32,7 +32,7 @@ MS_EN = {
     "short": "The lightweight PDF editor for Windows. Open. Fix. Save. Done.",
     "description": """Mega PDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
 
-EDIT TEXT — Click any text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. Done.
+EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
 ADD TEXT — Click a blank line and type on it. Pick the size and the face — sans, serif or monospace — so what you add matches the rest of the form. Drag it into place, or double-click it later to change it.
 
@@ -48,7 +48,7 @@ PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
 
 Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
     "features": [
-        "Edit text in any PDF by clicking and typing — like a Word document",
+        "Edit the document's own text by clicking and typing — like a Word document",
         "Add text on any blank line, in the size and face that matches the form",
         "Click empty squares to check boxes on any form",
         "Place a signature from your personal library with a click, then nudge and resize it",
@@ -61,7 +61,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
     "terms": ["PDF editor", "edit PDF", "sign PDF", "fill PDF form", "PDF signature", "compress PDF", "lightweight PDF"],
     "copyright": "© 2026 Electric RV. Licensed under Apache-2.0.",
     "captions": [
-        ("01-edit-text.png", "Click any text and type — editing a PDF like a Word file."),
+        ("01-edit-text.png", "Click the text and type — editing a PDF like a Word file."),
         ("02-checkbox.png", "Click an empty square to check it. Drawn checkboxes too, not just real form fields."),
         ("03-signature.png", "Drop a saved signature on the line, then nudge it into place."),
         ("04-shrink.png", "Shrink oversized scans to email-friendly sizes in one click."),
@@ -73,7 +73,7 @@ MS_FR_CA = {
     "short": "L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.",
     "description": """Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
 
-MODIFIER LE TEXTE — Cliquez sur n'importe quel texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. Terminé.
+MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou double-cliquez dessus plus tard pour le modifier.
 
@@ -89,7 +89,7 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnem
 
 Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     "features": [
-        "Modifiez le texte de n'importe quel PDF en cliquant et en tapant, comme dans un document Word",
+        "Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word",
         "Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire",
         "Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire",
         "Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la",
@@ -102,7 +102,7 @@ Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     "terms": ["éditeur PDF", "modifier PDF", "signer PDF", "remplir formulaire PDF", "signature PDF", "compresser PDF", "PDF léger"],
     "copyright": "© 2026 Electric RV. Sous licence Apache-2.0.",
     "captions": [
-        ("01-edit-text.png", "Cliquez sur n'importe quel texte et tapez : modifier un PDF comme un document Word."),
+        ("01-edit-text.png", "Cliquez sur le texte et tapez : modifier un PDF comme un document Word."),
         ("02-checkbox.png", "Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire."),
         ("03-signature.png", "Déposez une signature enregistrée sur la ligne, puis ajustez-la en place."),
         ("04-shrink.png", "Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic."),
@@ -128,6 +128,9 @@ Tap a checkbox and it's checked — real interactive form fields and plain print
 Type on any line
 Tap where the answer goes and type it. Choose the size and the face — sans, serif or monospace — so what you add matches the form you are filling in. Drag it into place, or tap it again to fix a typo. Everything you add is real, searchable text, not a sticker on top of the page.
 
+Fix the document's own text
+Wrong date? Misspelled name? Tap the line and retype it. MegaPDF keeps the document's own font where it can and tells you when it had to use a similar one. If a change would disturb the rest of the page, it says so instead of quietly moving things. Undo puts the original back exactly.
+
 Sign like you mean it
 Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
 
@@ -149,6 +152,7 @@ MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you
     "captions": [
         ("viewer", "Checked and signed in under a minute"),
         ("text", "Type on the blank line — your size, your font"),
+        ("text-edit", "Fix a typo in the document itself"),
         ("search", "Find any word, on every page"),
         ("sign", "Your signatures, saved on your device"),
         ("draw", "Draw it once, use it everywhere"),
@@ -169,6 +173,9 @@ Touchez une case et elle est cochée : les vrais champs de formulaire interactif
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
+
+Corrigez le texte du document
+Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
@@ -191,6 +198,7 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
     "captions": [
         ("viewer", "Coché et signé en moins d'une minute"),
         ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
+        ("text-edit", "Corrigez une coquille dans le document même"),
         ("search", "Trouvez n'importe quel mot, sur chaque page"),
         ("sign", "Vos signatures, enregistrées sur votre appareil"),
         ("draw", "Dessinez-la une fois, utilisez-la partout"),

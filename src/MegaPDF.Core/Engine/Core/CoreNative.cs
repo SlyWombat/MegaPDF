@@ -386,6 +386,7 @@ internal static class CoreNative
     // Phase 3: body-text editing (#112) ---------------------------------------
 
     public const int ErrNoFont = -4;
+    public const int ErrLayout = -5;
     public const int EditInPlace = 0;
     public const int EditSubstituted = 1;
 
@@ -402,6 +403,10 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_insert_text_run(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string fontName, double fontSize, double left, double baseline);
+
+    /// <summary>1 when rewriting the object's content stream keeps the page as it is, 0 when not (#118).</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_text_editable(IntPtr page, int objectIndex);
 
     [DllImport(Dll)]
     public static extern int megapdf_is_subset_font_name([MarshalAs(UnmanagedType.LPUTF8Str)] string baseName);
