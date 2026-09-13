@@ -19,6 +19,10 @@ on:
       # build has to surface here rather than at release time. This is the one
       # path that makes the job fire on unrelated PRs; it is deliberate.
       - 'src/MegaPDF.Core/**'
+      # The shared engine core is compiled into the Mac bundle as
+      # libmegapdf_core.dylib (#38, ADR-003); a change there is a Mac change.
+      - 'core/**'
+      - 'tools/build-core.sh'
 
 jobs:
   # Fast feedback on the same code, on the cheaper runner. This is ADR-002
@@ -382,18 +386,15 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # Into its default home, libs/pdfium/mac-univ: that is where the Core project
+      # copies libpdfium.dylib from, and where core/CMakeLists.txt links the shared
+      # engine core against it (#38). Both then land beside the test assembly on
+      # their own, so no copy step is needed.
       - name: Fetch pinned PDFium
-        run: tools/fetch-pdfium-mac.sh "$RUNNER_TEMP/pdfium-mac"
+        run: tools/fetch-pdfium-mac.sh
 
-      - name: Build the test project
+      - name: Build the test project (builds libmegapdf_core.dylib on the way)
         run: dotnet build tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
-
-      # Build, then place the dylib, then run with --no-build: .NET resolves the
-      # bare name "pdfium" relative to the assembly directory.
-      - name: Place libpdfium.dylib beside the test assembly
-        run: |
-          cp "$RUNNER_TEMP/pdfium-mac/lib/libpdfium.dylib" \
-             tests/MegaPDF.Core.Tests/bin/Release/net8.0/
 
       - name: Run the whole Core suite
         run: |
