@@ -100,39 +100,53 @@ internal sealed class PdfiumDocument : IPdfDocument
             // Commit any in-progress form-field editing before serializing.
             PdfiumNative.FORM_ForceToKillFocus(_forms.Handle);
 
-            Exception? writeError = null;
-
-            int WriteBlock(IntPtr self, IntPtr data, uint size)
-            {
-                try
-                {
-                    var buffer = new byte[size];
-                    Marshal.Copy(data, buffer, 0, (int)size);
-                    target.Write(buffer, 0, buffer.Length);
-                    return 1;
-                }
-                catch (Exception ex)
-                {
-                    writeError = ex;
-                    return 0;
-                }
-            }
-
-            var callback = new PdfiumNative.WriteBlockDelegate(WriteBlock);
-            var fileWrite = new PdfiumNative.FPDF_FILEWRITE
-            {
-                Version = 1,
-                WriteBlock = Marshal.GetFunctionPointerForDelegate(callback),
-            };
-
-            var ok = PdfiumNative.FPDF_SaveAsCopy(_handle, ref fileWrite, PdfiumNative.SAVE_DEFAULT);
-            GC.KeepAlive(callback);
-
-            if (writeError is not null)
-                throw new IOException("Writing the PDF failed.", writeError);
-            if (ok == 0)
-                throw new IOException("PDFium could not serialize the document.");
+            // Always a full rewrite, on purpose (#97). PDFium's FPDF_INCREMENTAL does
+            // not track which objects changed: it copies the original file and then
+            // appends every indirect object the document has loaded. The apps load
+            // every page at open for the size pass, so that appendix is the whole
+            // document again — measured over 4,263 corpus files it made the saved file
+            // 1.97x the original at the median (3.36x worst) against 1.00x (2.51x worst)
+            // for this rewrite. A real append-only update needs a writer with change
+            // tracking, which PDFium does not offer.
+            WriteWith(target, PdfiumNative.SAVE_DEFAULT);
         }
+    }
+
+    /// <summary>One FPDF_SaveAsCopy pass into <paramref name="target"/>.</summary>
+    private void WriteWith(Stream target, uint flags)
+    {
+        Exception? writeError = null;
+
+        int WriteBlock(IntPtr self, IntPtr data, uint size)
+        {
+            try
+            {
+                var buffer = new byte[size];
+                Marshal.Copy(data, buffer, 0, (int)size);
+                target.Write(buffer, 0, buffer.Length);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                writeError = ex;
+                return 0;
+            }
+        }
+
+        var callback = new PdfiumNative.WriteBlockDelegate(WriteBlock);
+        var fileWrite = new PdfiumNative.FPDF_FILEWRITE
+        {
+            Version = 1,
+            WriteBlock = Marshal.GetFunctionPointerForDelegate(callback),
+        };
+
+        var ok = PdfiumNative.FPDF_SaveAsCopy(_handle, ref fileWrite, flags);
+        GC.KeepAlive(callback);
+
+        if (writeError is not null)
+            throw new IOException("Writing the PDF failed.", writeError);
+        if (ok == 0)
+            throw new IOException("PDFium could not serialize the document.");
     }
 
     public void FlattenAllPages()

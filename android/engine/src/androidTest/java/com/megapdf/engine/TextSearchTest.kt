@@ -156,4 +156,47 @@ class TextSearchTest {
             }
         }
     }
+
+    /**
+     * Exact counts on a real document (#98). The corpus stress run (#92) once
+     * returned 13 matches for "the" on this schematic on macOS and 12 on every
+     * other attempt on both desktops; 84 re-runs never reproduced it. The same
+     * assertion runs in the Core and iOS suites so every CI run is another
+     * sample. A failure here means the engine's search is not deterministic for
+     * this file: record the per-page counts and rects before changing anything.
+     */
+    @Test
+    fun microbitSchematicHasExactlyTwelveMatchesForThe() {
+        runBlocking {
+            val doc = engine.open(asset("microbit-v2-schematic.pdf"))
+            try {
+                assertEquals(3, doc.pageCount())
+                val perPage = mutableListOf<Int>()
+                for (index in 0 until doc.pageCount()) {
+                    val page = doc.openPage(index)
+                    try {
+                        val matches = page.search("the")
+                        perPage.add(matches.size)
+                        for (match in matches) {
+                            assertTrue("page ${index + 1}: match without rects", match.rects.isNotEmpty())
+                            for (rect in match.rects) {
+                                assertTrue("page ${index + 1}: degenerate rect $rect",
+                                    rect.right > rect.left && rect.top > rect.bottom)
+                                assertTrue("page ${index + 1}: rect $rect lies outside the page",
+                                    rect.left >= -1.0 && rect.bottom >= -1.0 &&
+                                        rect.right <= page.widthPoints + 1.0 &&
+                                        rect.top <= page.heightPoints + 1.0)
+                            }
+                        }
+                        assertTrue(page.search("Seaman").isEmpty())
+                    } finally {
+                        page.close()
+                    }
+                }
+                assertEquals(listOf(4, 6, 2), perPage)
+            } finally {
+                doc.close()
+            }
+        }
+    }
 }

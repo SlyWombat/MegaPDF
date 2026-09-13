@@ -25,4 +25,10 @@
     <ProjectReference Include="..\..\src\MegaPDF.Core\MegaPDF.Core.csproj" />
   </ItemGroup>
 
+  <!-- Real-document fixtures (see Fixtures/README.md); the synthetic ones come
+       from SamplePdf.cs. -->
+  <ItemGroup>
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

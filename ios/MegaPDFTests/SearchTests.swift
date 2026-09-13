@@ -50,4 +50,40 @@ final class SearchTests: XCTestCase {
         let empty = try await engine.search(doc, pageIndex: 0, term: "")
         XCTAssertTrue(empty.isEmpty)
     }
+
+    /// Exact counts on a real document (#98). The corpus stress run (#92) once
+    /// returned 13 matches for "the" on this schematic on macOS and 12 on every
+    /// other attempt on both desktops; 84 re-runs never reproduced it. The same
+    /// assertion runs in the Core and Android suites so every CI run is another
+    /// sample. A failure here means the engine's search is not deterministic for
+    /// this file: record the per-page counts and rects before changing anything.
+    func testMicrobitSchematicHasExactlyTwelveMatchesForThe() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("microbit-v2-schematic"))
+        defer { Task { await engine.close(doc) } }
+
+        let pageCount = await engine.pageCount(doc)
+        XCTAssertEqual(pageCount, 3)
+
+        var perPage: [Int] = []
+        for index in 0..<pageCount {
+            let size = try await engine.pageSize(doc, index: index)
+            let matches = try await engine.search(doc, pageIndex: index, term: "the")
+            perPage.append(matches.count)
+            for match in matches {
+                XCTAssertFalse(match.rects.isEmpty)
+                for rect in match.rects {
+                    XCTAssertTrue(rect.right > rect.left && rect.top > rect.bottom,
+                                  "page \(index + 1): degenerate rect \(rect)")
+                    XCTAssertTrue(rect.left >= -1 && rect.bottom >= -1
+                                  && rect.right <= Double(size.width) + 1
+                                  && rect.top <= Double(size.height) + 1,
+                                  "page \(index + 1): rect \(rect) lies outside the page")
+                }
+            }
+            let none = try await engine.search(doc, pageIndex: index, term: "Seaman")
+            XCTAssertTrue(none.isEmpty)
+        }
+        XCTAssertEqual(perPage, [4, 6, 2])
+    }
 }
