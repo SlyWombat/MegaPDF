@@ -166,26 +166,44 @@ fun SignaturesSheet(
                 FilledTonalButton(
                     onClick = { dismissThen(onDraw) },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                 ) {
-                    Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.draw), maxLines = 1)
+                    // Icon above the label: three of these share a phone's width in
+                    // French too ("Dessiner" / "Taper" / "Photo"), where a row layout
+                    // truncated the first word.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.draw), maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
                 FilledTonalButton(
                     onClick = { dismissThen(onType) },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                 ) {
-                    Icon(KeyboardIcon, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.type_signature), maxLines = 1)
+                    // Icon above the label: three of these share a phone's width in
+                    // French too ("Dessiner" / "Taper" / "Photo"), where a row layout
+                    // truncated the first word.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(KeyboardIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.type_signature), maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
                 FilledTonalButton(
                     onClick = { dismissThen(onAddFromPhoto) },
                     modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
                 ) {
-                    Icon(PhotoIcon, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.add_from_photos), maxLines = 1)
+                    // Icon above the label: three of these share a phone's width in
+                    // French too ("Dessiner" / "Taper" / "Photo"), where a row layout
+                    // truncated the first word.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(PhotoIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.add_from_photos), maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
