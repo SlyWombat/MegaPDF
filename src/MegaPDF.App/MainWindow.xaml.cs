@@ -1208,19 +1208,72 @@ public sealed partial class MainWindow : Window
 
     // --- Signature library & placement (SDD §3.3) ---
 
-    private void OnSignatureClicked(object sender, RoutedEventArgs e)
+    private void OnSignaturePicked(object sender, SignatureItem item)
     {
-        if (sender is Button { DataContext: SignatureItem item })
-        {
-            ViewModel.SelectSignatureForPlacement(item);
-            SignaturesFlyout.Hide();
-        }
+        ViewModel.SelectSignatureForPlacement(item);
+        SignaturesFlyout.Hide();
     }
 
-    private void OnRemoveSignatureClicked(object sender, RoutedEventArgs e)
+    /// <summary>Opens the library flyout on its toolbar button.</summary>
+    public void ShowSignaturesFlyout() => SignaturesFlyout.ShowAt(SignaturesToolbarButton);
+
+    /// <summary>
+    /// Shows the in-tree copy of the library where the flyout would open (the `sign`
+    /// screenshot state): the popup layer is invisible to RenderTargetBitmap.
+    /// </summary>
+    public void ShowSignatureLibraryForScreenshot()
     {
-        if (sender is MenuFlyoutItem { DataContext: SignatureItem item })
+        var below = SignaturesToolbarButton.TransformToVisual(RootGrid)
+            .TransformPoint(new Windows.Foundation.Point(0, SignaturesToolbarButton.ActualHeight + 4));
+        SignatureLibraryShot.Visibility = Visibility.Visible;
+        SignatureLibraryShot.UpdateLayout();
+        // A real flyout slides left to stay inside the window; so does this.
+        var x = Math.Max(8, Math.Min(below.X, RootGrid.ActualWidth - SignatureLibraryShot.ActualWidth - 8));
+        SignatureLibraryShot.Margin = new Thickness(x, below.Y, 0, 0);
+    }
+
+    /// <summary>
+    /// Rename from a card's overflow or right-click (#100). The flyout light-dismisses
+    /// under the dialog, so it is reopened afterwards: the user was in the library
+    /// and still is.
+    /// </summary>
+    private async void OnRenameSignatureRequested(object sender, SignatureItem item)
+    {
+        SignaturesFlyout.Hide();
+
+        var input = new TextBox { Text = item.Name, PlaceholderText = Strings.SignatureNamePlaceholder };
+        input.SelectAll();
+        var dialog = new ContentDialog
+        {
+            Title = Strings.RenameSignatureTitle,
+            Content = input,
+            PrimaryButtonText = Strings.Rename,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+            await ViewModel.RenameSignatureAsync(item, input.Text);
+        ShowSignaturesFlyout();
+    }
+
+    /// <summary>Delete asks once; a signature is not recoverable once its file is gone.</summary>
+    private async void OnDeleteSignatureRequested(object sender, SignatureItem item)
+    {
+        SignaturesFlyout.Hide();
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.DeleteSignatureTitle(item.Name),
+            Content = Strings.DeleteSignatureBody,
+            PrimaryButtonText = Strings.Delete,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = Content.XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
             ViewModel.RemoveSignatureFromLibrary(item);
+        ShowSignaturesFlyout();
     }
 
     private void OnCancelPlacementClicked(InfoBar sender, object args) =>
@@ -1241,7 +1294,7 @@ public sealed partial class MainWindow : Window
         await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:defaultapps"));
     }
 
-    private async void OnAddSignatureFromImageClicked(object sender, RoutedEventArgs e)
+    private async void OnAddSignatureFromImageClicked(object sender, EventArgs e)
     {
         SignaturesFlyout.Hide();
         var picker = new Windows.Storage.Pickers.FileOpenPicker();
@@ -1258,7 +1311,7 @@ public sealed partial class MainWindow : Window
         await ViewModel.AddSignatureFromImageAsync(image, Path.GetFileNameWithoutExtension(file.Name));
     }
 
-    private async void OnTypeSignatureClicked(object sender, RoutedEventArgs e)
+    private async void OnTypeSignatureClicked(object sender, EventArgs e)
     {
         SignaturesFlyout.Hide();
         var input = new TextBox { PlaceholderText = Strings.YourNamePlaceholder, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Script"), FontSize = 24 };
@@ -1283,7 +1336,7 @@ public sealed partial class MainWindow : Window
     /// pointer-event stroke canvas: each press starts a rounded polyline, moves extend
     /// it, release ends it. Works with mouse, touch, and pen.
     /// </summary>
-    private async void OnDrawSignatureClicked(object sender, RoutedEventArgs e)
+    private async void OnDrawSignatureClicked(object sender, EventArgs e)
     {
         SignaturesFlyout.Hide();
 
