@@ -88,6 +88,10 @@ jobs:
             sleep 45
             xcrun simctl status_bar "$udid" override --time "9:41" \
               --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+            # A fresh container every time: the seeded demo library only appears when the
+            # store is empty, and an in-house simulator keeps whatever a previous run or
+            # UI test left behind (#100).
+            xcrun simctl uninstall "$udid" com.megapdf.ios 2>/dev/null || true
             xcrun simctl install "$udid" "$APP"
             xcrun simctl ui "$udid" appearance light || true
             for state in home viewer search sign draw text; do
