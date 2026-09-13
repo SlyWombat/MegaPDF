@@ -338,7 +338,7 @@ Key decisions:
 
 | Option | License | Verdict |
 |---|---|---|
-| **PDFium** | BSD-3 (permissive) | **Primary engine.** Production-grade rendering (it powers Chrome's PDF viewer), AcroForm form-fill, annotation API, page-object editing (`FPDFText_SetText`, object insert/remove), and incremental save. Consumed via prebuilt binaries and a thin P/Invoke wrapper we own and maintain in-repo. |
+| **PDFium** | BSD-3 (permissive) | **Primary engine.** Production-grade rendering (it powers Chrome's PDF viewer), AcroForm form-fill, annotation API, page-object editing (`FPDFText_SetText`, object insert/remove), and incremental save. Consumed via prebuilt binaries; the policy above the C API lives in the shared engine core (`core/`, ADR-003) and each platform's binding to it is thin marshalling we own in-repo. |
 | iText / MuPDF | AGPL | License-compatible only if MegaPDF itself went AGPL, which would constrain downstream users and contributors; rejected. Neither offers interactive in-place editing anyway. |
 | PdfPig / PDFsharp | Apache / MIT | Useful read/create utilities; no in-place editing or reliable incremental save. Retained as candidates for test tooling and structural verification, not the engine. |
 
@@ -435,11 +435,15 @@ tracked as GitHub issues #11–#20 (milestones *Android M1–M3*, *iOS M0*).
 
 ### 6.1 Decisions
 
-- **Native per platform, no shared code.** Android is **Kotlin + Jetpack Compose**; iOS
-  (later) is **Swift + SwiftUI**. Each platform reimplements the needed engine surface
-  over PDFium's C API. `MegaPDF.Core` stays the **behavioral reference** — the spec the
-  ports are written against — not a dependency. `src/` remains .NET/Windows; Android
-  lives in `android/` with its own path-filtered CI.
+- **Native UI per platform; one shared engine core beneath it** *(amended 2026-09-13,
+  ADR-003)*. Android is **Kotlin + Jetpack Compose**; iOS is **Swift + SwiftUI**; the
+  desktops are WinUI 3 and Avalonia over `MegaPDF.Core`. Everything between the UI
+  and PDFium's C API — the policy that used to be reimplemented per platform — is
+  written once in C++17 in `core/` behind a C ABI, and each platform binds to it
+  (P/Invoke, JNI, Swift C interop). Until a contract has migrated, `MegaPDF.Core`
+  remains the behavioural reference the other ports are tested against. No shared
+  UI framework; MAUI and Uno stay rejected. `src/` remains .NET; Android lives in
+  `android/`, iOS in `ios/`, each with its own path-filtered CI.
 - **Reduced mobile v1 scope: fill-check-sign.** View/zoom, tap-to-check checkboxes
   (both AcroForm widgets and drawn squares), signature library + placement, save.
   Signature capture on mobile offers both **on-screen drawing** (finger/stylus,

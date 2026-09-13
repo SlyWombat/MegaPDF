@@ -1,41 +1,41 @@
 # ADR-003: Shared engine core vs. hand-written policy per platform
 
-**Status: PROPOSED — Android and iOS legs measured and green (PR #37, re-measured 2026-09-13 after rebasing onto main); the Windows leg is #38, and the ownership, threading and error-handling decisions for phase 2 are written up in #103, which also takes this to ACCEPTED.** Tracking issue: #33. (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its branch.)
+**Status: ACCEPTED — Option B, a C++17 core behind a C ABI, on all three platforms,
+2026-09-13.** Tracking issue: #33. Phase 1 (PR #37, #38) is complete; the decisions
+below govern phase 2 (#105–#111), phase 3 (#112) and phase 4 (#113, #114).
+(Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
+branch as a draft.)
 
 ## Decision & spike results
 
-Phase 1 moved the drawn-checkbox heuristic (SDD §6.2 contract 2) out of the Swift
-and C++ shims into `core/megapdf_core.{h,cpp}`, one implementation behind a C ABI,
-and bound Android and iOS to it. It was chosen because it already had exact-rect
-assertions on all three platforms, so the fixtures decide the result rather than
-opinion.
+Engine *policy* — everything between the platform UI and PDFium's C API — is
+written once, in C++17, in `core/`, and each platform binds to it: P/Invoke from
+`MegaPDF.Core` (Windows and macOS), JNI from the Android engine module, Swift C
+interop on iOS. Native UI stays native. What was triplicated is what is shared;
+nothing else changes.
 
-Measured on PR #37 against `8703621`:
+Phase 1 proved the pipeline on the one operation that already had exact-rect
+assertions on every platform, the drawn-checkbox heuristic (SDD §6.2 contract 2),
+so the fixtures decided the result rather than opinion.
 
 | | Result |
 |---|---|
 | Android instrumented tests | **21 passed** on 2026-08-16; **28 passed** on the 2026-09-13 rebase (the suite grew), same fixtures now exercising the shared implementation |
-| iOS tests | **37 passed** on 2026-08-16; **48 passed** on the 2026-09-13 rebase, including `CheckboxTests.testDrawnSquareDetectedMarkAddedAndRoundTrips` and the #98 search canary |
-| Android APK size | 15,781,313 → 15,783,453 bytes — **+2,140 bytes (+0.014%)** on 2026-08-16; debug-APK artifact 15,926,383 → 15,928,966 bytes (**+2,583**) on the 2026-09-13 rebase |
-| Build wiring, Android | **one CMake line** (source + include dir); compiles into the existing `.so`, so no second binary ships and there is no runtime ABI boundary |
-| Build wiring, iOS | source entry in `project.yml`, a one-line bridging header, `HEADER_SEARCH_PATHS` |
-| Net code | 154 lines of core (with its documentation) replacing two hand-written copies; both deleted |
-| CI time | no measurable change (within run-to-run noise) |
+| iOS tests | **37 passed** on 2026-08-16; **48 passed** on 2026-09-13, including `CheckboxTests.testDrawnSquareDetectedMarkAddedAndRoundTrips` and the #98 search canary |
+| Desktop (Windows + macOS, `MegaPDF.Core`) | **162 Core tests passed** on GPD-DAVE and on the Mac mini with `DetectCheckboxSquares` forwarding to the core; `DrawnCheckboxTests` and `SearchCropBoxTests` unchanged |
+| Android APK size | +2,140 bytes (+0.014%) on 2026-08-16; +2,583 bytes on the debug-APK artifact after the rebase |
+| Build wiring, Android | one CMake line; compiles into the existing `.so`, no second binary, no runtime ABI boundary |
+| Build wiring, iOS | a source entry in `project.yml`, a one-line bridging header, `HEADER_SEARCH_PATHS` |
+| Build wiring, desktop | `core/CMakeLists.txt` → `megapdf_core.dll` (win-x64; pdfium import library generated from the DLL's export table) and a universal `libmegapdf_core.dylib` (links the fetched pdfium, loads it via `@loader_path`); `MegaPDF.Core.csproj` runs `tools/build-core.*` when the artifact is missing or stale and copies it next to pdfium, so it reaches the Windows app, the MSIX and the Mac bundle the way pdfium does |
+| Net code | 154 lines of core replacing **three** hand-written copies, all deleted |
+| CI | `ci.yml` builds the core as its own step on `windows-latest`; the macOS app workflow builds it for both RIDs and runs the Core suite against it; no measurable time change |
 
-**The ABI shape that made both bindings trivial**, and which any further migration
-should keep:
-
-- **C only.** No C++ types cross, no exceptions escape.
-- **Handles are bare `void*`** — the caller passes its `FPDF_PAGE` straight
-  through, and the header includes nothing from pdfium, so binding code needs
-  that one file and nothing else.
-- **Caller-owned buffers**, count-then-fill. This is what keeps JNI and P/Invoke
-  marshalling boring.
-- **Coordinates come back in crop space.** Deliberate: the conversion being missed
-  is #30 exactly, so it now happens once in the core instead of in each binding.
-
-A side effect worth naming: Android's shim got *simpler*. `engine.cpp` has always
-described itself as "marshalling only, no policy"; after this it finally is.
+The Windows leg, which the draft called a distribution decision, resolved itself:
+the developer machine and the runners both have MSVC 14.44, Windows SDK 10.0.26100,
+CMake and Ninja, so the core is **built from source everywhere and no binary of our
+own code is vendored**. A committed prebuilt would have been the "somebody
+remembers to rebuild it" failure waiting to happen, and would have let the C# side
+silently lag the phones.
 
 ## Context
 
@@ -46,61 +46,103 @@ not happen — not a discipline failure, but what an architecture with three
 hand-written copies of the same policy asks for.
 
 That triplication is survivable for small closed-form contracts. It is not
-survivable for in-place text editing, which SDD §4.3 already calls "the product's
-dominant schedule risk" and which is mostly *subtle policy* — subset-font coverage
+survivable for in-place text editing, which SDD §4.3 calls "the product's dominant
+schedule risk" and which is mostly *subtle policy*: subset-font coverage
 approximated by scanning sibling objects, substitution that must preserve matrix,
 colour, marks and z-order, undo via detach-and-restore, and pdfium quirks such as
-`FPDFTextObj_GetText` reporting bytes where the header says wide chars. Writing
-that three times means three quirk sets and three chances to miss the next
-CropBox.
+`FPDFTextObj_GetText` reporting bytes where the header says wide chars. It kept
+growing while this draft waited: the 2026-09-13 corpus stress run (#92) put a
+render-size clamp and a preview-first render into the desktops (#93–#95) and the
+phones got neither (#115).
 
-## What the spike did not settle: Windows
+## The ABI rules (kept from phase 1)
 
-The mobile legs were cheap because both platforms already compile C++ and link
-PDFium. Windows does neither — it P/Invokes a prebuilt `pdfium.dll` and has **no
-native build step at all**. Two concrete obstacles surfaced while attempting it:
+- **C only.** No C++ types cross the boundary; no exceptions escape.
+- **Caller-owned buffers**, count-then-fill. Allocation stays on the binding's side,
+  which is what keeps JNI and P/Invoke marshalling boring.
+- **Coordinates come back in crop space**, bottom-left origin, PDF points. The
+  conversion being missed is #30 exactly, so it happens once, in the core.
+- The header includes nothing from pdfium; a binding needs one file.
 
-1. **No import library is vendored.** `libs/pdfium/win-x64/` holds only
-   `pdfium.dll`, so linking a core DLL against it requires generating one:
-   `dumpbin /exports` → `.def` → `lib /def /machine:x64`. That works (461 symbols,
-   verified locally) but it is a build step someone must own.
-2. **The developer machine could not build it** when this was written: VS 2017
-   Build Tools with no Windows SDK, so the compile failed on `stddef.h`. *No longer
-   true as of 2026-09-13*: GPD-DAVE has VS 2022 Build Tools with MSVC 14.44,
-   Windows SDK 10.0.26100 (UCRT headers present), CMake and Ninja under the Build
-   Tools tree, and `dumpbin`/`lib` for the import library. The `windows-latest`
-   runner has the same. #38 therefore builds from source.
+## Decisions for phase 2 onward (what the draft left open)
 
-That turns the Windows leg into a **distribution decision, not a coding one**:
+1. **The core owns documents.** Phase 1 passes the binding's `FPDF_PAGE` through as
+   `void*`, which leaves document loading, the form-fill environment, page lifetime
+   and serialisation on each platform. Text editing cannot be written that way:
+   detach-and-restore undo keeps native objects alive between calls, substitution
+   needs the document's font state, and every mutation must run under one lock.
+   From #105 the ABI is `megapdf_open(bytes, length, password) → doc`,
+   `megapdf_page(doc, index) → page`, `megapdf_close(doc)`; the form-fill
+   environment and page cache live inside the core; detached objects are opaque
+   integer ids owned by the document and freed with it. Bindings pass bytes and
+   receive handles and never see an `FPDF_*` type again. The phase-1 `void* page`
+   entry stays as a shim until the checkbox contract is re-bound to the new handles
+   (#105), then goes.
+2. **Threading is the core's.** PDFium is not thread-safe; that is a property of the
+   library, not of Android's dispatcher or C#'s lock. Every ABI call serialises on a
+   mutex inside the core. Bindings may keep their own thread discipline (the Kotlin
+   single-thread executor, the Swift actor, `PdfiumLibrary.Lock`) as an extra layer,
+   but correctness does not depend on it.
+3. **No silent failure.** Every entry returns a status code (`0` ok, negative error)
+   or a count; `megapdf_last_error()` returns a message for the calling thread.
+   Nothing throws across the boundary and nothing crashes on a PDFium refusal —
+   the 3 GB bitmap in #93 is a status, not a process death.
+4. **What stays per platform.** Bitmap allocation and presentation (WriteableBitmap,
+   Android `Bitmap`, `CGContext`), file I/O and the atomic-replace / verify-before-
+   overwrite protocol, pickers, the recovery journal's storage, and all UI. What
+   moves: every decision in between, including render *policy* — the pixel-size
+   clamp, the render flags, form-field drawing — even though the pixels are written
+   into a platform buffer (#111).
+5. **Tests live where the code lives.** A C++ test target over `core/` (#104) runs
+   on all three CI OSes against `tools/gen_test_fixtures.py` output and the #98
+   schematic, with AddressSanitizer on Linux. The per-platform suites keep their
+   assertions as the parity gate; the corpus stress harness (`tools/stress`)
+   exercises the core on 4,337 real files through the `IPdfEngine` adapter.
+6. **Migration order.** Contracts move one at a time, each behind the tests that
+   already assert it, in the order they are needed by text editing: geometry and
+   search (#105), text runs and lines (#106), form fields (#107), stamps and marks
+   (#108), whiteout and text boxes with detached-object undo (#109), save/flatten/
+   images (#110); render policy (#111) in parallel. Body-text editing is then
+   written once (#112) and the phones grow only their editing UI (#113, #114).
+7. **Same pinned PDFium everywhere** (152.x from bblanchon/pdfium-binaries), one
+   header set (the Android tree's, vendored) for every native build, and
+   `tools/gen_third_party_notices.py` re-run whenever the pin moves. The iOS core is
+   compiled into the app binary, never a loose dylib (14 rejected builds taught
+   that); Android keeps the 16 KB page-size linker flag.
 
-- **Vendor a prebuilt `megapdf_core.dll`** the way PDFium is vendored. Local builds
-  keep working with no new toolchain, at the cost of a committed binary of our own
-  source that a human must remember to rebuild.
-- **Build from source in the pipeline** and require the Windows SDK locally.
-  Honest and reproducible; it changes what a contributor needs installed to build
-  the only shipping product, which is already three releases behind on the Store
-  (#31).
+## Options considered
 
-Neither is obviously right, and the choice belongs to whoever maintains the Windows
-release. It is written up in #38 with the recipe that worked.
+**A — Status quo, hand-port the text layer to Kotlin and Swift.** No new machinery;
+each platform idiomatic. Rejected: it triples the hardest logic in the product at
+the moment it stops being closed-form, and #30 is what that already cost on a
+simple contract.
 
-## Consequences if this is accepted
+**B — Shared native core with a C ABI, native UI on top.** Chosen, for the numbers
+above: the build cost measured in bytes and single lines, and a CropBox-class bug
+becomes structurally hard to miss.
 
-- New engine policy is written **once**, in `core/`, and the bindings stay
-  marshalling. Text editing (#34's deferred half) becomes a single implementation
-  rather than three.
-- A CropBox-class bug becomes structurally hard: the conversion lives in the core.
-- The cost is a C++ codebase that all three platforms depend on, debugging that
-  crosses an FFI boundary, and memory safety that is now ours. The `+2 KB` and
-  one-CMake-line results say the *build* cost is small; the *ownership* cost is
-  real and does not show up in a measurement.
-- **SDD §6.1 is unchanged.** Native UI per platform, zero shared UI code; MAUI and
-  Uno stay rejected. What is shared is the layer below the UI and above PDFium,
-  which was already duplicated three ways.
+**C — Kotlin Multiplatform for the shared layer.** Rejected: drags a KMP runtime
+into the iOS binary, still needs C interop to reach PDFium, and does nothing for
+the C# side, so the policy would be shared across two platforms and duplicated
+for the third.
 
-## Recommendation
+**D — Host `MegaPDF.Core` itself on the phones (.NET for iOS / Android).** Not in
+the draft; considered during the 2026-09-13 review because Core already runs
+unmodified on macOS. Rejected for now: it puts a .NET runtime into two Swift and
+Kotlin apps that do not need one. It is the fallback if the C ABI's packaging ever
+fights back on a platform, and would be measured before hand-porting anything a
+third time.
 
-Accept for the mobile platforms now (PR #37 is green), and treat Windows as a
-separate decision once #38's packaging question is answered. Do not migrate more
-operations until Windows is settled — a core that two of three platforms use is a
-fourth copy waiting to happen.
+## Consequences
+
+- New engine policy is written **once**, in `core/`, and the bindings are
+  marshalling. Text editing on the phones becomes one implementation plus two UIs.
+- C++ memory safety is ours. Mitigated by the allocation rules, a small surface,
+  and ASan in CI; not eliminated.
+- Debugging crosses an FFI boundary on three platforms. Mitigated by decision 3.
+- For the length of phase 2 the phones run the core for some contracts while the
+  desktops still run `PdfiumEngine.cs` for others. The per-platform fixture
+  assertions are what make that interval safe; they are not to be thinned.
+- **SDD §6.1's "native per platform" now means native UI.** The layer below the UI
+  and above PDFium is shared by design; MAUI and Uno stay rejected; the product
+  principles are untouched.
