@@ -44,6 +44,12 @@ public sealed record PageView(
     /// </summary>
     public bool RenderFailed { get; init; }
 
+    /// <summary>
+    /// The bitmap is a stand-in — a quarter-size raster, or the previous zoom's
+    /// raster stretched to the new size — and the full render is still owed (#94).
+    /// </summary>
+    public bool IsPreview { get; init; }
+
     public Visibility FailedVisibility => RenderFailed ? Visibility.Visible : Visibility.Collapsed;
     public string FailedMessage => Strings.PageRenderFailed;
 }
@@ -366,14 +372,26 @@ public partial class MainViewModel(Window window) : ObservableObject
 
                 // Render missing pages, nearest-to-viewport-center first.
                 var center = (_viewFirst + _viewLast) / 2;
-                foreach (var i in Enumerable.Range(lo, hi - lo + 1).OrderBy(i => Math.Abs(i - center)))
+                var order = Enumerable.Range(lo, hi - lo + 1).OrderBy(i => Math.Abs(i - center)).ToList();
+
+                // Two passes (#94): first a quarter-size preview of every empty slot, so a
+                // heavy page shows something within a frame or two, then the full raster
+                // for every slot still holding a preview (including the stretched previous
+                // zoom SetZoomAsync leaves behind).
+                foreach (var preview in new[] { true, false })
                 {
-                    if (generation != _openGeneration)
-                        return;
-                    if (Pages[i].Source is null && !Pages[i].RenderFailed)
-                        Pages[i] = await RenderPageAsync(doc, i);
+                    foreach (var i in order)
+                    {
+                        if (generation != _openGeneration)
+                            return;
+                        var slot = Pages[i];
+                        if (!slot.RenderFailed && (preview ? slot.Source is null : slot.Source is null || slot.IsPreview))
+                            Pages[i] = await RenderPageAsync(doc, i, preview);
+                        if (_viewportDirty)
+                            break; // the window moved — restart with the new one
+                    }
                     if (_viewportDirty)
-                        break; // the window moved — restart with the new one
+                        break;
                 }
             } while (_viewportDirty);
         }
@@ -383,7 +401,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
     }
 
-    private async Task<PageView> RenderPageAsync(IPdfDocument doc, int pageIndex)
+    private async Task<PageView> RenderPageAsync(IPdfDocument doc, int pageIndex, bool preview = false)
     {
         // Render at monitor rasterization scale × zoom so pages stay crisp.
         var scale = (window.Content?.XamlRoot?.RasterizationScale ?? 1.0) * ZoomFactor;
@@ -392,9 +410,10 @@ public partial class MainViewModel(Window window) : ObservableObject
         RenderedPage rendered;
         double pointsW, pointsH;
         List<InteractiveRegion> regions;
+        bool isPreview;
         try
         {
-            (rendered, pointsW, pointsH, regions) = await Task.Run(() => RenderPage(doc, pageIndex, scale));
+            (rendered, pointsW, pointsH, regions, isPreview) = await Task.Run(() => RenderPage(doc, pageIndex, scale, preview));
         }
         catch (Exception ex)
         {
@@ -417,7 +436,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
         return new PageView(pageIndex, bitmap, pointsW, pointsH,
             pointsW * 96 / 72 * zoom, pointsH * 96 / 72 * zoom, regions)
-        { Highlights = HighlightsFor(pageIndex, zoom) };
+        { Highlights = HighlightsFor(pageIndex, zoom), IsPreview = isPreview };
     }
 
     /// <summary>
@@ -437,22 +456,30 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <see cref="_cappedRenders"/> at every zoom until an edit invalidates it. That
     /// is the difference between 20 s and 0 s per zoom click on an 88 MB scan (#94).
     /// </summary>
-    private (RenderedPage Rendered, double PointsW, double PointsH, List<InteractiveRegion> Regions)
-        RenderPage(IPdfDocument doc, int pageIndex, double scale)
+    private (RenderedPage Rendered, double PointsW, double PointsH, List<InteractiveRegion> Regions, bool IsPreview)
+        RenderPage(IPdfDocument doc, int pageIndex, double scale, bool preview)
     {
         using var page = doc.GetPage(pageIndex);
-        var regions = BuildRegions(page);
 
         if (_cappedRenders.TryGet(pageIndex, out var kept))
-            return (kept, page.Width, page.Height, regions);
+            return (kept, page.Width, page.Height, BuildRegions(page), false);
 
         var idealW = page.Width * 96 / 72 * scale;
         var idealH = page.Height * 96 / 72 * scale;
+        if (preview)
+        {
+            // A quarter of the size is a sixteenth of the work for anything
+            // fill-rate bound, and the interaction map can wait for the full pass.
+            var (pw, ph) = RenderLimits.Fit(idealW / 4, idealH / 4);
+            return (page.Render(pw, ph), page.Width, page.Height, [], true);
+        }
+
+        var regions = BuildRegions(page);
         var (w, h) = RenderLimits.Fit(idealW, idealH);
         var rendered = page.Render(w, h);
         if (RenderLimits.IsCapped(idealW, idealH))
             _cappedRenders.Put(pageIndex, rendered);
-        return (rendered, page.Width, page.Height, regions);
+        return (rendered, page.Width, page.Height, regions, false);
     }
 
     /// <summary>Interaction map in HitTest priority order: stamps, form fields, squares, text.</summary>
@@ -512,9 +539,22 @@ public partial class MainViewModel(Window window) : ObservableObject
         ZoomPercent = Math.Clamp(percent, MinZoom, MaxZoom);
         if (_document is null)
             return;
-        // Resize every slot (placeholders included) and re-render just the viewport.
+        // Resize every slot and re-render just the viewport. A slot that already has
+        // a raster keeps it, stretched to the new size, as the preview the full render
+        // replaces (#94) — a zoom step no longer flashes to blank paper first.
         for (var i = 0; i < Pages.Count; i++)
-            Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+        {
+            var slot = Pages[i];
+            Pages[i] = slot.Source is null || slot.RenderFailed
+                ? Placeholder(i, slot.PointsWidth, slot.PointsHeight)
+                : slot with
+                {
+                    Width = slot.PointsWidth * 96 / 72 * ZoomFactor,
+                    Height = slot.PointsHeight * 96 / 72 * ZoomFactor,
+                    IsPreview = true,
+                    Highlights = HighlightsFor(i, ZoomFactor),
+                };
+        }
         await UpdateViewportAsync(_viewFirst, _viewLast);
     }
 

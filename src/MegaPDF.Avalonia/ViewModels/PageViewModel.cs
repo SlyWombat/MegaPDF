@@ -250,10 +250,22 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         var (pixelWidth, pixelHeight) = RenderLimits.Fit(idealWidth, idealHeight);
         var document = _document;
         var index = Index;
+        // An empty slot gets a quarter-size preview first (#94): a sixteenth of the
+        // work for anything fill-rate bound, so a heavy page shows something within a
+        // frame or two. A slot that already has a raster needs none — the item
+        // template stretches the old raster to the new layout size until the full
+        // render lands, which is the same effect for free.
+        var wantPreview = Image is null && !capped;
+        var (previewWidth, previewHeight) = RenderLimits.Fit(idealWidth / 4, idealHeight / 4);
 
         Task.Run(() =>
         {
             using var page = document.GetPage(index);
+            if (wantPreview)
+            {
+                var small = page.Render(previewWidth, previewHeight);
+                Dispatcher.UIThread.Post(() => ApplyPreview(small, dpiScale, generation));
+            }
             var rendered = page.Render(pixelWidth, pixelHeight);
             // Refreshed alongside the raster, because an edit changes both.
             var regions = BuildRegions(page);
@@ -273,6 +285,16 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             var (rendered, regions) = task.Result;
             Apply(PageBitmap.FromRenderedPage(rendered, dpiScale), regions, zoom, dpiScale, generation, capped);
         }), TaskScheduler.Default);
+    }
+
+    /// <summary>UI thread: the stand-in raster, shown only while the slot is still empty.</summary>
+    private void ApplyPreview(RenderedPage small, double dpiScale, int generation)
+    {
+        if (_disposed || generation != _renderGeneration || Image is not null)
+            return;
+        // Not recorded as rendered: EnsureRendered keeps treating the page as pending
+        // until the full raster arrives through Apply.
+        Image = PageBitmap.FromRenderedPage(small, dpiScale);
     }
 
     /// <summary>UI thread: shows a raster, then chases the zoom if it moved while rendering.</summary>
