@@ -6,14 +6,21 @@
 // framework-free: a test is a function, a failure is a line on stderr and a
 // non-zero exit.
 //
-// Usage: megapdf_core_tests <fixtures-dir> <schematic.pdf>
-//   fixtures-dir  output of tools/gen_test_fixtures.py
-//   schematic.pdf tests/MegaPDF.Core.Tests/Fixtures/microbit-v2-schematic.pdf (#98)
+// Usage: megapdf_core_tests <fixtures-dir> <schematic.pdf> <text_runs.txt>
+//   fixtures-dir   output of tools/gen_test_fixtures.py
+//   schematic.pdf  tests/MegaPDF.Core.Tests/Fixtures/microbit-v2-schematic.pdf (#98)
+//   text_runs.txt  core/tests/expected/text_runs.txt — the desktop engine's text
+//                  runs and lines for every fixture, captured before #106 moved
+//                  that contract into the core (`MegaPDF.Stress dump-text`)
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -288,11 +295,251 @@ void test_schematic(const std::string& schematic) {
     }
 }
 
+// --------------------------------------------------------------------------
+// Contract 2 (#106): the core's text runs and visual lines must be what the
+// desktop engine produced before the port, for every fixture. The expectation
+// file is `MegaPDF.Stress dump-text` output: per page a header, then one `run`
+// line per run in object order and one `line` per visual line, coordinates in
+// crop space, strings as hex UTF-16 code units.
+//
+// The policy — which objects are runs, their text, size and marks, which runs
+// share a line and in what order — is compared exactly on every OS. The fixtures
+// use non-embedded base-14 fonts, so PDFium substitutes a system face: on Windows
+// (where the expectation was captured) that is Arial and the family name and
+// glyph boxes match exactly; elsewhere the family differs and the boxes move by a
+// fraction of a point, so those two compare loosely (1.5 pt — a wrong crop origin
+// is off by 100).
+#if defined(_WIN32)
+constexpr bool kSameFontsAsExpectation = true;
+#else
+constexpr bool kSameFontsAsExpectation = false;
+#endif
+constexpr double kBoundsTolerance = kSameFontsAsExpectation ? 0.002 : 1.5;
+
+using U16 = std::vector<unsigned short>;
+
+U16 unhex(const std::string& h) {
+    U16 out;
+    if (h == "-") return out;   // the dump's spelling of an empty string
+    for (size_t i = 0; i + 4 <= h.size(); i += 4) out.push_back(static_cast<unsigned short>(std::strtoul(h.substr(i, 4).c_str(), nullptr, 16)));
+    return out;
+}
+
+std::string show(const U16& s) {
+    std::string out;
+    for (unsigned short c : s) out += (c < 0x80 && c >= 0x20) ? static_cast<char>(c) : '?';
+    return out;
+}
+
+struct ExpectedRun { int object_index; megapdf_rect bounds; double size; U16 font, box_id, box_font, text; };
+struct ExpectedLine { megapdf_rect bounds; std::vector<size_t> runs; };
+struct ExpectedPage { std::string file; int index; double width, height; std::vector<ExpectedRun> runs; std::vector<ExpectedLine> lines; };
+
+std::vector<ExpectedPage> parse_expected(const std::string& path) {
+    std::vector<ExpectedPage> pages;
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+        std::istringstream ss(line);
+        std::string kind;
+        ss >> kind;
+        if (kind == "page") {
+            ExpectedPage p;
+            size_t nr, nl;
+            ss >> p.file >> p.index >> p.width >> p.height >> nr >> nl;
+            pages.push_back(p);
+        } else if (kind == "run" && !pages.empty()) {
+            ExpectedRun r;
+            size_t i;
+            std::string font, id, bf, text;
+            ss >> i >> r.object_index >> r.bounds.left >> r.bounds.bottom >> r.bounds.right >> r.bounds.top >> r.size >> font >> id >> bf >> text;
+            r.font = unhex(font); r.box_id = unhex(id); r.box_font = unhex(bf); r.text = unhex(text);
+            pages.back().runs.push_back(r);
+        } else if (kind == "line" && !pages.empty()) {
+            ExpectedLine l;
+            size_t j;
+            std::string runs;
+            ss >> j >> l.bounds.left >> l.bounds.bottom >> l.bounds.right >> l.bounds.top >> runs;
+            std::istringstream rs(runs);
+            std::string tok;
+            while (std::getline(rs, tok, ',')) l.runs.push_back(std::strtoul(tok.c_str(), nullptr, 10));
+            pages.back().lines.push_back(l);
+        }
+    }
+    return pages;
+}
+
+bool rect_close(const megapdf_rect& a, const megapdf_rect& b, double tol = kBoundsTolerance) {
+    return close_to(a.left, b.left, tol) && close_to(a.bottom, b.bottom, tol) && close_to(a.right, b.right, tol) && close_to(a.top, b.top, tol);
+}
+
+std::string rect_str(const megapdf_rect& r) {
+    char buf[128];
+    std::snprintf(buf, sizeof buf, "%.3f %.3f %.3f %.3f", r.left, r.bottom, r.right, r.top);
+    return buf;
+}
+
+U16 run_string(const megapdf_text* t, size_t i, megapdf_text_field f) {
+    const size_t n = megapdf_text_run_string(t, i, f, nullptr, 0);
+    U16 out(n);
+    if (n > 0) megapdf_text_run_string(t, i, f, out.data(), n);
+    return out;
+}
+
+void test_text_runs(const std::string& fixtures, const std::string& schematic, const std::string& expected_path) {
+    auto pages = parse_expected(expected_path);
+    check(!pages.empty(), "text expectation file parses", expected_path);
+    std::map<std::string, megapdf_document*> docs;
+    for (const auto& ep : pages) {
+        const std::string tag = ep.file + " page " + std::to_string(ep.index + 1);
+        if (docs.find(ep.file) == docs.end()) {
+            const std::string path = ep.file == "microbit-v2-schematic.pdf" ? schematic : fixtures + "/" + ep.file;
+            auto bytes = read_file(path);
+            docs[ep.file] = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        }
+        megapdf_document* d = docs[ep.file];
+        if (!d) { check(false, "text fixture opens", tag); continue; }
+        Page p(d, ep.index);
+        if (!p.page) { check(false, "text fixture page loads", tag); continue; }
+        check(close_to(megapdf_page_width(p.page), ep.width, 0.002) && close_to(megapdf_page_height(p.page), ep.height, 0.002), "page size matches", tag);
+
+        megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+        if (!t) { check(false, "text loads", tag); continue; }
+
+        const size_t nr = megapdf_text_run_count(t);
+        check(nr == ep.runs.size(), "run count matches the desktop engine", tag + ": " + std::to_string(nr) + " vs " + std::to_string(ep.runs.size()));
+        int reported = 0;
+        for (size_t i = 0; i < nr && i < ep.runs.size(); i++) {
+            megapdf_text_run r{};
+            check(megapdf_text_run_get(t, i, &r) == MEGAPDF_OK, "run reads", tag);
+            const auto& e = ep.runs[i];
+            const U16 font = run_string(t, i, MEGAPDF_TEXT_RUN_FONT);
+            const bool font_ok = kSameFontsAsExpectation ? font == e.font : font.empty() == e.font.empty();
+            // The dump lists a box's face as the desktop engine resolved it — "Helvetica"
+            // when the box carries no `font` param — so every box has a non-empty face
+            // there, and the core's "" for a missing param maps to that default.
+            static const U16 kDefaultFace = {'H', 'e', 'l', 'v', 'e', 't', 'i', 'c', 'a'};
+            U16 box_font = run_string(t, i, MEGAPDF_TEXT_RUN_BOX_FONT);
+            if (r.is_text_box && box_font.empty()) box_font = kDefaultFace;
+            const bool same = r.object_index == e.object_index && rect_close(r.bounds, e.bounds) && close_to(r.font_size, e.size, 0.002) &&
+                              run_string(t, i, MEGAPDF_TEXT_RUN_TEXT) == e.text && font_ok &&
+                              run_string(t, i, MEGAPDF_TEXT_RUN_BOX_ID) == e.box_id && box_font == e.box_font &&
+                              (r.is_text_box == 1) == !e.box_font.empty();
+            if (!same && reported++ < 3) {
+                check(false, "run matches the desktop engine",
+                      tag + " run " + std::to_string(i) + ": got obj " + std::to_string(r.object_index) + " [" + rect_str(r.bounds) + "] " +
+                          std::to_string(r.font_size) + " '" + show(run_string(t, i, MEGAPDF_TEXT_RUN_FONT)) + "' '" + show(run_string(t, i, MEGAPDF_TEXT_RUN_TEXT)) +
+                          "' box=" + std::to_string(r.is_text_box) + "; expected obj " + std::to_string(e.object_index) + " [" + rect_str(e.bounds) + "] " +
+                          std::to_string(e.size) + " '" + show(e.font) + "' '" + show(e.text) + "' id='" + show(e.box_id) + "'");
+            } else if (!same) {
+                failures++;
+            }
+        }
+
+        std::vector<ExpectedLine> got;
+        const size_t nl = megapdf_text_line_count(t);
+        for (size_t j = 0; j < nl; j++) {
+            ExpectedLine l;
+            megapdf_text_line_get(t, j, &l.bounds);
+            const size_t n = megapdf_text_line_runs(t, j, nullptr, 0);
+            l.runs.resize(n);
+            if (n > 0) megapdf_text_line_runs(t, j, l.runs.data(), n);
+            got.push_back(l);
+        }
+        // Lines match by membership. The desktop engine sorted both its lines and
+        // the runs within a baseline group with .NET's introsort, which is unstable
+        // above 16 elements, so runs with the same left edge (the schematic draws
+        // some labels four times over) came out in arbitrary order there; the core
+        // keeps them in object order. Off Windows, substituted fonts can also swap
+        // near-equal edges. The core's own left-to-right order is checked below.
+        auto key = [](std::vector<size_t> runs) {
+            std::sort(runs.begin(), runs.end());
+            return runs;
+        };
+        std::map<std::vector<size_t>, megapdf_rect> got_by_runs;
+        for (const auto& l : got) got_by_runs[key(l.runs)] = l.bounds;
+        check(got.size() == ep.lines.size(), "line count matches the desktop engine", tag + ": " + std::to_string(got.size()) + " vs " + std::to_string(ep.lines.size()));
+        reported = 0;
+        for (const auto& w : ep.lines) {
+            auto it = got_by_runs.find(key(w.runs));
+            const bool same = it != got_by_runs.end() && rect_close(it->second, w.bounds);
+            if (!same && reported++ < 3) {
+                std::string wr;
+                for (size_t k : w.runs) {
+                    megapdf_text_run r{};
+                    megapdf_text_run_get(t, k, &r);
+                    char buf[64];
+                    std::snprintf(buf, sizeof buf, "%zu@%.6f,", k, r.bounds.left);
+                    wr += buf;
+                }
+                std::string same_set;
+                auto sorted = w.runs;
+                std::sort(sorted.begin(), sorted.end());
+                for (const auto& l : got) {
+                    auto g = l.runs;
+                    std::sort(g.begin(), g.end());
+                    if (g == sorted) { same_set = " (core has that set in order "; for (size_t k : l.runs) same_set += std::to_string(k) + ","; same_set += ")"; }
+                }
+                check(false, "line matches the desktop engine",
+                      tag + ": expected a line of runs " + wr + " at [" + rect_str(w.bounds) + "]" +
+                          (it == got_by_runs.end() ? " — no such line" + same_set : " — got [" + rect_str(it->second) + "]"));
+            } else if (!same) {
+                failures++;
+            }
+        }
+        // The core's own order: lines top to bottom, runs within a line left to right.
+        for (size_t j = 1; j < nl; j++) {
+            megapdf_rect a{}, b{};
+            megapdf_text_line_get(t, j - 1, &a);
+            megapdf_text_line_get(t, j, &b);
+            if (b.top > a.top + 1e-9) { check(false, "lines are ordered top to bottom", tag); break; }
+        }
+        for (const auto& l : got) {
+            for (size_t k = 1; k < l.runs.size(); k++) {
+                megapdf_text_run a{}, b{};
+                megapdf_text_run_get(t, l.runs[k - 1], &a);
+                megapdf_text_run_get(t, l.runs[k], &b);
+                if (b.bounds.left < a.bounds.left) { check(false, "runs within a line are ordered left to right", tag); break; }
+                if (b.bounds.left == a.bounds.left && l.runs[k] < l.runs[k - 1]) { check(false, "tied runs keep object order", tag); break; }
+            }
+        }
+        megapdf_text_free(t);
+    }
+    // A boxes-only load lists just the marked objects, with the same run data.
+    {
+        Page tp(docs["textbox.pdf"], 0);
+        megapdf_text* all = megapdf_text_load(tp.page, MEGAPDF_TEXT_ALL);
+        megapdf_text* boxes = megapdf_text_load(tp.page, MEGAPDF_TEXT_BOXES_ONLY);
+        size_t marked = 0;
+        for (size_t i = 0; i < megapdf_text_run_count(all); i++) {
+            megapdf_text_run r{};
+            megapdf_text_run_get(all, i, &r);
+            if (r.is_text_box) marked++;
+        }
+        check(marked == 4 && megapdf_text_run_count(boxes) == 4, "textbox.pdf has four marked boxes either way",
+              std::to_string(marked) + " / " + std::to_string(megapdf_text_run_count(boxes)));
+        megapdf_text_run first{};
+        check(megapdf_text_run_get(boxes, 0, &first) == MEGAPDF_OK && first.is_text_box == 1 && first.object_index == 1, "boxes-only run 0 is object 1");
+        check(show(run_string(boxes, 0, MEGAPDF_TEXT_RUN_BOX_ID)) == "text:fixture-1", "boxes-only run 0 carries its id",
+              show(run_string(boxes, 0, MEGAPDF_TEXT_RUN_BOX_ID)));
+        megapdf_text_free(all);
+        megapdf_text_free(boxes);
+    }
+    for (auto& kv : docs) megapdf_close(kv.second);
+
+    // Bad handles and indices.
+    check(megapdf_text_load(nullptr, MEGAPDF_TEXT_ALL) == nullptr, "text of a null page is NULL");
+    check(megapdf_text_run_count(nullptr) == 0 && megapdf_text_line_count(nullptr) == 0, "null text has no runs or lines");
+    megapdf_text_run r{};
+    check(megapdf_text_run_get(nullptr, 0, &r) == MEGAPDF_ERR_ARGUMENT, "run_get rejects a null handle");
+    megapdf_text_free(nullptr);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf>\n", argv[0]);
+    if (argc < 4) {
+        std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
         return 2;
     }
     test_null_handles();
@@ -302,6 +549,7 @@ int main(int argc, char** argv) {
     test_fixture_square(argv[1]);
     test_search(argv[1]);
     test_schematic(argv[2]);
+    test_text_runs(argv[1], argv[2], argv[3]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

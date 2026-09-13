@@ -6,6 +6,10 @@ below govern phase 2 (#105–#111), phase 3 (#112) and phase 4 (#113, #114).
 Phase 2 progress: #105 (core-owned documents, CropBox geometry, text search) landed
 2026-09-13 — the ABI is `megapdf_open` / `megapdf_load_page` / `megapdf_search_page`
 as decided below, and the corpus search totals were identical before and after.
+#106 (text runs and visual lines) landed the same day: `megapdf_text_load` with
+lines built on first use, a `MEGAPDF_TEXT_BOXES_ONLY` load for text-box listings, and
+`core/tests/expected/text_runs.txt` — the desktop engine's answer for every fixture,
+captured before the port — as the regression gate.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 

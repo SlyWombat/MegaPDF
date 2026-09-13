@@ -121,6 +121,8 @@ if(MEGAPDF_CORE_TESTS)
         message(FATAL_ERROR "MEGAPDF_CORE_TESTS needs -DMEGAPDF_FIXTURES_DIR=<dir written by tools/gen_test_fixtures.py>")
     endif()
 
+    set(MEGAPDF_TEXT_EXPECTED "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/text_runs.txt" CACHE FILEPATH
+        "The desktop engine's text runs and lines for every fixture, captured before #106 moved them into the core")
     add_executable(megapdf_core_tests tests/core_tests.cpp)
     target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/libs/pdfium/android/include)
     target_link_libraries(megapdf_core_tests PRIVATE megapdf_core ${PDFIUM_LINK})
@@ -141,6 +143,6 @@ if(MEGAPDF_CORE_TESTS)
     endif()
 
     add_test(NAME core
-        COMMAND megapdf_core_tests ${MEGAPDF_FIXTURES_DIR} ${MEGAPDF_SCHEMATIC}
+        COMMAND megapdf_core_tests ${MEGAPDF_FIXTURES_DIR} ${MEGAPDF_SCHEMATIC} ${MEGAPDF_TEXT_EXPECTED}
         WORKING_DIRECTORY $<TARGET_FILE_DIR:megapdf_core_tests>)
 endif()

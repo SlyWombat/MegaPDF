@@ -140,6 +140,65 @@ MEGAPDF_API size_t megapdf_search_page(const megapdf_page* page, const unsigned 
                                        double* out, size_t capacity);
 
 /* --------------------------------------------------------------------------
+ * Contract 2: text runs and visual lines (#106) — the inputs to body-text
+ * editing. A page's runs and lines are computed once into an opaque result that
+ * outlives the page; strings come out count-then-fill as UTF-16 code units.
+ * ----------------------------------------------------------------------- */
+
+/** One text object with visible text: a run of body text in one font and size. */
+typedef struct megapdf_text_run {
+    int object_index;        /* index into the page's object list */
+    megapdf_rect bounds;     /* crop space */
+    double font_size;
+    int is_text_box;         /* 1 when the object carries the MegaPDFTextBox mark (SDD §6.2 contract 4) */
+} megapdf_text_run;
+
+/** Which string of a run megapdf_text_run_string() returns. */
+typedef enum megapdf_text_field {
+    MEGAPDF_TEXT_RUN_TEXT = 0,      /* the glyphs, as FPDFTextObj_GetText reports them */
+    MEGAPDF_TEXT_RUN_FONT = 1,      /* the font's family name ("" when the font is unreadable) */
+    MEGAPDF_TEXT_RUN_BOX_ID = 2,    /* the `id` mark param, "" when none */
+    MEGAPDF_TEXT_RUN_BOX_FONT = 3   /* the `font` mark param, "" when none (the binding applies its default) */
+} megapdf_text_field;
+
+typedef struct megapdf_text megapdf_text;
+
+/** Flags for megapdf_text_load(). */
+enum {
+    MEGAPDF_TEXT_ALL = 0,
+    /** Only objects carrying the MegaPDFTextBox mark — what a text-box listing needs,
+        without reading every body-text object on the page. Lines are not meaningful
+        for such a load. */
+    MEGAPDF_TEXT_BOXES_ONLY = 1
+};
+
+/**
+ * Reads every text object on the page in object order, skipping objects whose
+ * text is empty or all whitespace. Visual lines are computed on first use: runs
+ * whose vertical centres are within half the taller run's height share a
+ * baseline; a baseline is split where the horizontal gap to the next run (left
+ * to right) exceeds twice the larger of the two font sizes (columns, page-number
+ * gutters). Lines are ordered top to bottom, then left to right. Returns NULL
+ * only when the page is NULL or the core cannot allocate.
+ */
+MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* page, unsigned int flags);
+MEGAPDF_API void megapdf_text_free(megapdf_text* text);
+
+MEGAPDF_API size_t megapdf_text_run_count(const megapdf_text* text);
+/** MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a bad handle or index. */
+MEGAPDF_API int megapdf_text_run_get(const megapdf_text* text, size_t index, megapdf_text_run* out);
+/** UTF-16 code units, no terminator, count-then-fill. 0 for a bad handle, index or field. */
+MEGAPDF_API size_t megapdf_text_run_string(const megapdf_text* text, size_t index, megapdf_text_field field,
+                                           unsigned short* out, size_t capacity);
+
+MEGAPDF_API size_t megapdf_text_line_count(const megapdf_text* text);
+/** The line's bounds (the union of its runs) in crop space. */
+MEGAPDF_API int megapdf_text_line_get(const megapdf_text* text, size_t index, megapdf_rect* out_bounds);
+/** The run indices making up the line, left to right; count-then-fill. */
+MEGAPDF_API size_t megapdf_text_line_runs(const megapdf_text* text, size_t index, size_t* out_run_indices,
+                                          size_t capacity);
+
+/* --------------------------------------------------------------------------
  * Raw handles — for the contracts that have not migrated yet. Bindings use these
  * to keep calling PDFium directly for stamps, text, forms, save; each disappears
  * as its contract moves into the core.

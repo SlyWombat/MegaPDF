@@ -7,6 +7,7 @@
 
 #include "megapdf_core.h"
 
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -341,9 +342,323 @@ MEGAPDF_API size_t megapdf_search_page(const megapdf_page* p, const unsigned sho
     return written;
 }
 
+}  // extern "C"
+
+// --------------------------------------------------------------------------
+// Contract 2: text runs and visual lines (#106)
+// --------------------------------------------------------------------------
+
+namespace {
+
+using U16 = std::vector<unsigned short>;
+
+struct TextRun {
+    megapdf_text_run info{};
+    U16 text;
+    U16 font;
+    U16 box_id;
+    U16 box_font;
+};
+
+struct TextLine {
+    megapdf_rect bounds{};
+    std::vector<size_t> runs;
+};
+
+// .NET's char.IsWhiteSpace, which is what the desktop engine used to skip
+// runs with nothing visible in them.
+bool IsWhiteSpace(unsigned short c) {
+    return (c >= 0x09 && c <= 0x0D) || c == 0x20 || c == 0x85 || c == 0xA0 || c == 0x1680 ||
+           (c >= 0x2000 && c <= 0x200A) || c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x3000;
+}
+
+bool AllWhiteSpace(const U16& s) {
+    for (unsigned short c : s) if (!IsWhiteSpace(c)) return false;
+    return true;
+}
+
+U16 Utf8ToUtf16(const std::vector<unsigned char>& in) {
+    U16 out;
+    size_t i = 0;
+    while (i < in.size()) {
+        unsigned int cp;
+        unsigned char b = in[i];
+        size_t extra;
+        if (b < 0x80) { cp = b; extra = 0; }
+        else if ((b & 0xE0) == 0xC0) { cp = b & 0x1F; extra = 1; }
+        else if ((b & 0xF0) == 0xE0) { cp = b & 0x0F; extra = 2; }
+        else if ((b & 0xF8) == 0xF0) { cp = b & 0x07; extra = 3; }
+        else { cp = 0xFFFD; extra = 0; }
+        for (size_t k = 1; k <= extra; k++) {
+            if (i + k >= in.size() || (in[i + k] & 0xC0) != 0x80) { cp = 0xFFFD; extra = k - 1; break; }
+            cp = (cp << 6) | (in[i + k] & 0x3F);
+        }
+        i += extra + 1;
+        if (cp >= 0x10000) {
+            cp -= 0x10000;
+            out.push_back(static_cast<unsigned short>(0xD800 + (cp >> 10)));
+            out.push_back(static_cast<unsigned short>(0xDC00 + (cp & 0x3FF)));
+        } else {
+            out.push_back(static_cast<unsigned short>(cp));
+        }
+    }
+    return out;
+}
+
+// FPDFTextObj_GetText's length is in BYTES including the UTF-16 terminator,
+// whatever the header says — verified against pdfium 152 on every platform.
+U16 ReadObjectText(FPDF_PAGEOBJECT obj, FPDF_TEXTPAGE text_page) {
+    const unsigned long bytes = FPDFTextObj_GetText(obj, text_page, nullptr, 0);
+    if (bytes <= 2) return {};
+    U16 buf(bytes / 2);
+    FPDFTextObj_GetText(obj, text_page, buf.data(), bytes);
+    buf.resize(bytes / 2 - 1);
+    return buf;
+}
+
+U16 ReadFontFamily(FPDF_PAGEOBJECT obj) {
+    FPDF_FONT font = FPDFTextObj_GetFont(obj);
+    if (font == nullptr) return {};
+    const size_t bytes = FPDFFont_GetFamilyName(font, nullptr, 0);   // UTF-8, with terminator
+    if (bytes <= 1) return {};
+    std::vector<unsigned char> buf(bytes);
+    FPDFFont_GetFamilyName(font, reinterpret_cast<char*>(buf.data()), static_cast<unsigned long>(bytes));
+    buf.resize(bytes - 1);
+    return Utf8ToUtf16(buf);
+}
+
+bool HasMark(FPDF_PAGEOBJECT obj, const U16& name) {
+    const int marks = FPDFPageObj_CountMarks(obj);
+    for (int m = 0; m < marks; m++) {
+        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_GetMark(obj, static_cast<unsigned long>(m));
+        if (mark == nullptr) continue;
+        unsigned long bytes = 0;
+        FPDFPageObjMark_GetName(mark, nullptr, 0, &bytes);
+        if (bytes <= 2) continue;
+        U16 buf(bytes / 2);
+        FPDFPageObjMark_GetName(mark, buf.data(), bytes, &bytes);
+        buf.resize(bytes / 2 - 1);
+        if (buf == name) return true;
+    }
+    return false;
+}
+
+U16 ReadMarkParam(FPDF_PAGEOBJECT obj, const char* key) {
+    const int marks = FPDFPageObj_CountMarks(obj);
+    for (int m = 0; m < marks; m++) {
+        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_GetMark(obj, static_cast<unsigned long>(m));
+        if (mark == nullptr) continue;
+        unsigned long bytes = 0;
+        FPDFPageObjMark_GetParamStringValue(mark, key, nullptr, 0, &bytes);
+        if (bytes <= 2) continue;
+        U16 buf(bytes / 2);
+        if (!FPDFPageObjMark_GetParamStringValue(mark, key, buf.data(), bytes, &bytes)) continue;
+        buf.resize(bytes / 2 - 1);
+        return buf;
+    }
+    return {};
+}
+
+const U16 kTextBoxMark = {'M', 'e', 'g', 'a', 'P', 'D', 'F', 'T', 'e', 'x', 't', 'B', 'o', 'x'};
+
+}  // namespace
+
+struct megapdf_text {
+    std::vector<TextRun> runs;
+    std::vector<TextLine> lines;
+    bool lines_built = false;   // built on first use: a text-box listing never pays for it
+};
+
+namespace {
+
+// The desktop line-merging rule, in crop space (bottom-left). Heights, centre
+// distances and left-to-right order are the same in either orientation; "top to
+// bottom" is descending `top` here.
+void BuildLines(megapdf_text* t) {
+    if (t->lines_built) return;
+    t->lines_built = true;
+    const auto& runs = t->runs;
+    std::vector<bool> used(runs.size(), false);
+    auto height = [](const megapdf_rect& r) { return r.top - r.bottom; };
+    auto centre = [](const megapdf_rect& r) { return (r.top + r.bottom) / 2.0; };
+
+    for (size_t i = 0; i < runs.size(); i++) {
+        if (used[i]) continue;
+        std::vector<size_t> members{i};
+        used[i] = true;
+        for (size_t j = i + 1; j < runs.size(); j++) {
+            if (used[j]) continue;
+            const auto& a = runs[i].info.bounds;
+            const auto& b = runs[j].info.bounds;
+            const double tolerance = (height(a) > height(b) ? height(a) : height(b)) * 0.5;
+            const double d = centre(a) - centre(b);
+            if ((d < 0 ? -d : d) <= tolerance) {
+                members.push_back(j);
+                used[j] = true;
+            }
+        }
+        std::stable_sort(members.begin(), members.end(), [&](size_t x, size_t y) {
+            return runs[x].info.bounds.left < runs[y].info.bounds.left;
+        });
+        std::vector<size_t> current{members[0]};
+        auto flush = [&]() {
+            TextLine line;
+            line.runs = current;
+            const auto& first = runs[current[0]].info.bounds;
+            line.bounds = first;
+            for (size_t k = 1; k < current.size(); k++) {
+                const auto& r = runs[current[k]].info.bounds;
+                if (r.left < line.bounds.left) line.bounds.left = r.left;
+                if (r.bottom < line.bounds.bottom) line.bounds.bottom = r.bottom;
+                if (r.right > line.bounds.right) line.bounds.right = r.right;
+                if (r.top > line.bounds.top) line.bounds.top = r.top;
+            }
+            t->lines.push_back(std::move(line));
+        };
+        for (size_t k = 1; k < members.size(); k++) {
+            const auto& prev = runs[current.back()];
+            const auto& next = runs[members[k]];
+            const double gap = next.info.bounds.left - prev.info.bounds.right;
+            const double bigger = prev.info.font_size > next.info.font_size ? prev.info.font_size : next.info.font_size;
+            if (gap > bigger * 2) {
+                flush();
+                current.clear();
+            }
+            current.push_back(members[k]);
+        }
+        flush();
+    }
+    // Top to bottom, then left to right, then by first run — a total order, so
+    // every platform lists the same page the same way.
+    std::stable_sort(t->lines.begin(), t->lines.end(), [](const TextLine& a, const TextLine& b) {
+        if (a.bounds.top != b.bounds.top) return a.bounds.top > b.bounds.top;
+        if (a.bounds.left != b.bounds.left) return a.bounds.left < b.bounds.left;
+        return a.runs[0] < b.runs[0];
+    });
+}
+
+}  // namespace
+
+extern "C" {
+
+MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int flags) {
+    if (p == nullptr) return nullptr;
+    const bool boxes_only = (flags & MEGAPDF_TEXT_BOXES_ONLY) != 0;
+    Guard guard(CoreLock());
+    auto* t = new (std::nothrow) megapdf_text();
+    if (t == nullptr) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return nullptr;
+    }
+    try {
+        FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+        const int count = FPDFPage_CountObjects(p->page);
+        for (int i = 0; i < count; i++) {
+            FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
+            if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) continue;
+            const bool is_box = HasMark(obj, kTextBoxMark);
+            if (boxes_only && !is_box) continue;
+            float l = 0, b = 0, r = 0, tp = 0;
+            if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &tp)) continue;
+            U16 text = ReadObjectText(obj, text_page);
+            if (text.empty() || AllWhiteSpace(text)) continue;
+
+            TextRun run;
+            run.info.object_index = i;
+            run.info.bounds.left = static_cast<double>(l) - p->crop_x;
+            run.info.bounds.bottom = static_cast<double>(b) - p->crop_y;
+            run.info.bounds.right = static_cast<double>(r) - p->crop_x;
+            run.info.bounds.top = static_cast<double>(tp) - p->crop_y;
+            float size = 0;
+            FPDFTextObj_GetFontSize(obj, &size);
+            run.info.font_size = static_cast<double>(size);
+            run.info.is_text_box = is_box ? 1 : 0;
+            run.text = std::move(text);
+            run.font = ReadFontFamily(obj);
+            if (run.info.is_text_box) {
+                run.box_id = ReadMarkParam(obj, "id");
+                run.box_font = ReadMarkParam(obj, "font");
+            }
+            t->runs.push_back(std::move(run));
+        }
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+    } catch (...) {
+        delete t;
+        SetError(FPDF_ERR_UNKNOWN, "out of memory reading text");
+        return nullptr;
+    }
+    return t;
+}
+
+MEGAPDF_API void megapdf_text_free(megapdf_text* t) { delete t; }
+
+MEGAPDF_API size_t megapdf_text_run_count(const megapdf_text* t) { return t ? t->runs.size() : 0; }
+
+MEGAPDF_API int megapdf_text_run_get(const megapdf_text* t, size_t index, megapdf_text_run* out) {
+    if (t == nullptr || out == nullptr || index >= t->runs.size()) return MEGAPDF_ERR_ARGUMENT;
+    *out = t->runs[index].info;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_text_run_string(const megapdf_text* t, size_t index, megapdf_text_field field,
+                                           unsigned short* out, size_t capacity) {
+    if (t == nullptr || index >= t->runs.size()) return 0;
+    const TextRun& run = t->runs[index];
+    const U16* s = nullptr;
+    switch (field) {
+        case MEGAPDF_TEXT_RUN_TEXT: s = &run.text; break;
+        case MEGAPDF_TEXT_RUN_FONT: s = &run.font; break;
+        case MEGAPDF_TEXT_RUN_BOX_ID: s = &run.box_id; break;
+        case MEGAPDF_TEXT_RUN_BOX_FONT: s = &run.box_font; break;
+        default: return 0;
+    }
+    if (out != nullptr) {
+        const size_t n = s->size() < capacity ? s->size() : capacity;
+        for (size_t i = 0; i < n; i++) out[i] = (*s)[i];
+    }
+    return s->size();
+}
+
+// Lines are built lazily; the handle is logically const to the caller, so the
+// build happens through the mutable pointer the core handed out.
+static void EnsureLines(const megapdf_text* t) {
+    Guard guard(CoreLock());
+    BuildLines(const_cast<megapdf_text*>(t));
+}
+
+MEGAPDF_API size_t megapdf_text_line_count(const megapdf_text* t) {
+    if (t == nullptr) return 0;
+    EnsureLines(t);
+    return t->lines.size();
+}
+
+MEGAPDF_API int megapdf_text_line_get(const megapdf_text* t, size_t index, megapdf_rect* out) {
+    if (t == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    EnsureLines(t);
+    if (index >= t->lines.size()) return MEGAPDF_ERR_ARGUMENT;
+    *out = t->lines[index].bounds;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_text_line_runs(const megapdf_text* t, size_t index, size_t* out, size_t capacity) {
+    if (t == nullptr) return 0;
+    EnsureLines(t);
+    if (index >= t->lines.size()) return 0;
+    const auto& runs = t->lines[index].runs;
+    if (out != nullptr) {
+        const size_t n = runs.size() < capacity ? runs.size() : capacity;
+        for (size_t i = 0; i < n; i++) out[i] = runs[i];
+    }
+    return runs.size();
+}
+
+}  // extern "C"
+
 // --------------------------------------------------------------------------
 // Raw handles (transitional)
 // --------------------------------------------------------------------------
+
+extern "C" {
 
 MEGAPDF_API void* megapdf_document_raw(const megapdf_document* d) { return d ? d->doc : nullptr; }
 MEGAPDF_API void* megapdf_document_form_raw(const megapdf_document* d) { return d ? d->form : nullptr; }

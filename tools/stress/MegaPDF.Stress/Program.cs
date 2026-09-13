@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -36,6 +37,7 @@ internal static class Program
             "find" => Tools.Find(opts),
             "open-bench" => Tools.OpenBench(opts),
             "inspect" => Tools.Inspect(opts),
+            "dump-text" => Tools.DumpText(opts),
             "flags-bench" => FlagsBench.Run(opts),
             _ => Usage(),
         };
@@ -662,6 +664,50 @@ internal static class Tools
         finally
         {
             Directory.Delete(tmpDir, recursive: true);
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Text runs and visual lines of every page of every file in <c>--files</c>, in the
+    /// line format <c>core/tests/core_tests.cpp</c> compares against (#106): the desktop
+    /// engine's answer, captured before the contract moved into the shared core, is the
+    /// checked-in expectation the core must reproduce. Coordinates are crop space
+    /// (bottom-left origin, points); strings are hex-encoded UTF-16 code units so the
+    /// format needs no quoting.
+    /// </summary>
+    public static int DumpText(Options opts)
+    {
+        // "-" for an empty string keeps every record the same number of whitespace-separated fields.
+        static string Hex(string text) => text.Length == 0 ? "-" : string.Concat(text.Select(c => ((int)c).ToString("x4")));
+        static string Num(double v) => v.ToString("F3", CultureInfo.InvariantCulture);
+        var engine = new PdfiumEngine();
+        foreach (var file in opts.List("files", "").Where(f => f.Length > 0))
+        {
+            using var doc = engine.Open(file);
+            for (var pageIndex = 0; pageIndex < doc.PageCount; pageIndex++)
+            {
+                using var page = doc.GetPage(pageIndex);
+                var runs = page.GetTextRuns();
+                var boxes = page.GetTextBoxes().ToDictionary(b => b.ObjectIndex);
+                var lines = page.GetTextLines();
+                Console.WriteLine($"page {Path.GetFileName(file)} {pageIndex} {Num(page.Width)} {Num(page.Height)} {runs.Count} {lines.Count}");
+                string Crop(PdfRect r) => $"{Num(r.X)} {Num(page.Height - r.Bottom)} {Num(r.Right)} {Num(page.Height - r.Y)}";
+                for (var i = 0; i < runs.Count; i++)
+                {
+                    var r = runs[i];
+                    boxes.TryGetValue(r.ObjectIndex, out var box);
+                    Console.WriteLine($"run {i} {r.ObjectIndex} {Crop(r.Bounds)} {Num(r.FontSize)} {Hex(r.FontName)} {Hex(box?.TextBoxId ?? "")} {Hex(box?.TextBoxFont ?? "")} {Hex(r.Text)}");
+                }
+                // GetTextLines re-reads the runs, so match by object index, which is unique per run.
+                var index = new Dictionary<int, int>();
+                for (var i = 0; i < runs.Count; i++) index[runs[i].ObjectIndex] = i;
+                for (var j = 0; j < lines.Count; j++)
+                {
+                    var l = lines[j];
+                    Console.WriteLine($"line {j} {Crop(l.Bounds)} {string.Join(",", l.Runs.Select(r => index[r.ObjectIndex]))}");
+                }
+            }
         }
         return 0;
     }

@@ -365,61 +365,65 @@ internal sealed class PdfiumPage : IPdfPage
 
     public IReadOnlyList<PdfTextLine> GetTextLines()
     {
-        var runs = GetTextRuns();
-        var lines = new List<PdfTextLine>();
-        var used = new bool[runs.Count];
-
-        for (var i = 0; i < runs.Count; i++)
+        ThrowIfDisposed();
+        // Contract 2 (#106): which runs share a baseline, where a baseline splits into
+        // columns, and how lines are ordered is decided once, in the core.
+        var text = CoreNative.megapdf_text_load(_core, CoreNative.TextAll);
+        if (text == IntPtr.Zero)
+            return [];
+        try
         {
-            if (used[i])
-                continue;
-
-            // Gather everything sharing this run's baseline (vertical-center tolerance).
-            var members = new List<PdfTextRun> { runs[i] };
-            used[i] = true;
-            for (var j = i + 1; j < runs.Count; j++)
+            var runs = ReadRuns(text, boxesOnly: false);
+            var byIndex = runs.ToDictionary(r => r.Index, r => r.Run);
+            var count = (int)CoreNative.megapdf_text_line_count(text);
+            var lines = new List<PdfTextLine>(count);
+            for (var j = 0; j < count; j++)
             {
-                if (used[j])
-                    continue;
-                var a = runs[i].Bounds;
-                var b = runs[j].Bounds;
-                var tolerance = Math.Max(a.Height, b.Height) * 0.5;
-                if (Math.Abs(a.Center.Y - b.Center.Y) <= tolerance)
-                {
-                    members.Add(runs[j]);
-                    used[j] = true;
-                }
+                var n = (int)CoreNative.megapdf_text_line_runs(text, (nuint)j, null, 0);
+                var indices = new nuint[n];
+                CoreNative.megapdf_text_line_runs(text, (nuint)j, indices, (nuint)n);
+                CoreNative.megapdf_text_line_get(text, (nuint)j, out var b);
+                var members = indices.Select(k => byIndex[(int)k]).ToList();
+                lines.Add(new PdfTextLine(members, string.Concat(members.Select(r => r.Text)),
+                    CropToView(b.Left, b.Bottom, b.Right, b.Top), members[0].FontName, members[0].FontSize));
             }
-
-            // Left-to-right, then split where a gap is too wide to be the same line
-            // (columns, page-number gutters).
-            members.Sort((x, y) => x.Bounds.X.CompareTo(y.Bounds.X));
-            var current = new List<PdfTextRun> { members[0] };
-            for (var k = 1; k < members.Count; k++)
-            {
-                var gap = members[k].Bounds.X - current[^1].Bounds.Right;
-                if (gap > Math.Max(current[^1].FontSize, members[k].FontSize) * 2)
-                {
-                    lines.Add(MakeLine(current));
-                    current = [];
-                }
-                current.Add(members[k]);
-            }
-            lines.Add(MakeLine(current));
+            return lines;
         }
-
-        lines.Sort((x, y) => x.Bounds.Y.CompareTo(y.Bounds.Y));
-        return lines;
+        finally
+        {
+            CoreNative.megapdf_text_free(text);
+        }
     }
 
-    private static PdfTextLine MakeLine(List<PdfTextRun> runs)
+    /// <summary>
+    /// The core's runs as <see cref="PdfTextRun"/>s with their run index. With
+    /// <paramref name="boxesOnly"/> only MegaPDF text boxes, carrying their id and face
+    /// (SDD §6.2 contract 4); otherwise every run, with the box fields left null as
+    /// GetTextRuns always has.
+    /// </summary>
+    private List<(int Index, PdfTextRun Run)> ReadRuns(IntPtr text, bool boxesOnly)
     {
-        var text = string.Concat(runs.Select(r => r.Text));
-        var x = runs.Min(r => r.Bounds.X);
-        var y = runs.Min(r => r.Bounds.Y);
-        var right = runs.Max(r => r.Bounds.Right);
-        var bottom = runs.Max(r => r.Bounds.Bottom);
-        return new PdfTextLine(runs, text, new PdfRect(x, y, right - x, bottom - y), runs[0].FontName, runs[0].FontSize);
+        var count = (int)CoreNative.megapdf_text_run_count(text);
+        var runs = new List<(int, PdfTextRun)>(count);
+        for (var i = 0; i < count; i++)
+        {
+            CoreNative.megapdf_text_run_get(text, (nuint)i, out var r);
+            if (boxesOnly && r.IsTextBox == 0)
+                continue;
+            var bounds = CropToView(r.Bounds.Left, r.Bounds.Bottom, r.Bounds.Right, r.Bounds.Top);
+            var content = CoreNative.TextRunString(text, (nuint)i, CoreNative.TextRunText);
+            var font = CoreNative.TextRunString(text, (nuint)i, CoreNative.TextRunFont);
+            if (!boxesOnly)
+            {
+                runs.Add((i, new PdfTextRun(r.ObjectIndex, content, bounds, font, r.FontSize)));
+                continue;
+            }
+            var id = CoreNative.TextRunString(text, (nuint)i, CoreNative.TextRunBoxId);
+            var face = CoreNative.TextRunString(text, (nuint)i, CoreNative.TextRunBoxFont);
+            runs.Add((i, new PdfTextRun(r.ObjectIndex, content, bounds, font, r.FontSize,
+                id.Length == 0 ? null : id, face.Length == 0 ? StandardTextBoxFonts.Default : face)));
+        }
+        return runs;
     }
 
     public IReadOnlyList<PdfRect> DetectCheckboxSquares()
@@ -561,38 +565,18 @@ internal sealed class PdfiumPage : IPdfPage
     public IReadOnlyList<PdfTextRun> GetTextRuns()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        // Contract 2 (#106): every text object with visible text, in object order,
+        // read once in the core (including the FPDFTextObj_GetText length-in-bytes quirk).
+        var text = CoreNative.megapdf_text_load(_core, CoreNative.TextAll);
+        if (text == IntPtr.Zero)
+            return [];
+        try
         {
-            var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
-            try
-            {
-                var runs = new List<PdfTextRun>();
-                var count = PdfiumNative.FPDFPage_CountObjects(_handle);
-                for (var i = 0; i < count; i++)
-                {
-                    var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
-                    if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-                        continue;
-                    if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
-                        continue;
-
-                    var text = ReadTextObjectText(obj, textPage);
-                    if (string.IsNullOrWhiteSpace(text))
-                        continue;
-
-                    PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
-
-                    // PDF coords are bottom-left origin; our page space is top-left (Geometry.cs).
-                    var bounds = new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom);
-                    runs.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize));
-                }
-                return runs;
-            }
-            finally
-            {
-                if (textPage != IntPtr.Zero)
-                    PdfiumNative.FPDFText_ClosePage(textPage);
-            }
+            return ReadRuns(text, boxesOnly: false).Select(r => r.Run).ToList();
+        }
+        finally
+        {
+            CoreNative.megapdf_text_free(text);
         }
     }
 
@@ -905,39 +889,18 @@ internal sealed class PdfiumPage : IPdfPage
     public IReadOnlyList<PdfTextRun> GetTextBoxes()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        // The runs that carry the MegaPDFTextBox mark, with their id and face — the
+        // core reads the marks with the runs (#106), and skips everything else.
+        var text = CoreNative.megapdf_text_load(_core, CoreNative.TextBoxesOnly);
+        if (text == IntPtr.Zero)
+            return [];
+        try
         {
-            var textPage = PdfiumNative.FPDFText_LoadPage(_handle);
-            try
-            {
-                var boxes = new List<PdfTextRun>();
-                var count = PdfiumNative.FPDFPage_CountObjects(_handle);
-                for (var i = 0; i < count; i++)
-                {
-                    var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
-                    if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-                        continue;
-                    if (!HasMark(obj, TextBoxMarkName))
-                        continue;
-                    if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
-                        continue;
-
-                    var text = ReadTextObjectText(obj, textPage);
-                    if (string.IsNullOrWhiteSpace(text))
-                        continue;
-
-                    PdfiumNative.FPDFTextObj_GetFontSize(obj, out var fontSize);
-                    var bounds = new PdfRect(ViewX(left), ViewY(top), right - left, top - bottom);
-                    boxes.Add(new PdfTextRun(i, text, bounds, ReadFontFamily(obj), fontSize,
-                        ReadTextBoxId(obj), ReadTextBoxFont(obj)));
-                }
-                return boxes;
-            }
-            finally
-            {
-                if (textPage != IntPtr.Zero)
-                    PdfiumNative.FPDFText_ClosePage(textPage);
-            }
+            return ReadRuns(text, boxesOnly: true).Select(r => r.Run).ToList();
+        }
+        finally
+        {
+            CoreNative.megapdf_text_free(text);
         }
     }
 
@@ -1335,12 +1298,6 @@ internal sealed class PdfiumPage : IPdfPage
         var buffer = new byte[lengthInBytes];
         PdfiumNative.FPDFTextObj_GetText(obj, textPage, buffer, lengthInBytes);
         return System.Text.Encoding.Unicode.GetString(buffer, 0, (int)lengthInBytes - 2);
-    }
-
-    private static string ReadFontFamily(IntPtr obj)
-    {
-        var font = PdfiumNative.FPDFTextObj_GetFont(obj);
-        return font == IntPtr.Zero ? "" : ReadFontName(font, useBaseName: false);
     }
 
     private static string ReadFontName(IntPtr font, bool useBaseName)

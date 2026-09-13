@@ -13,6 +13,14 @@ run's numbers and the issues it produced are recorded there.
 
 One-file diagnostics: `find`, `open-bench`, `inspect`, `flags-bench`.
 
+`dump-text --files a.pdf,b.pdf` prints every page's text runs and visual lines in
+the format `core/tests/core_tests.cpp` compares against
+(`core/tests/expected/text_runs.txt`). That file is the desktop engine's answer
+captured before #106 moved the contract into the shared core; regenerate it only
+when the contract is meant to change, from the generated fixtures plus the
+micro:bit schematic, on Windows (the fixtures use non-embedded fonts, so glyph
+boxes and family names are the Windows substitutes').
+
 Everything written to `--out` contains file names and stays private (the corpus is
 the owner's own documents). The report prints indices and numbers only.
 

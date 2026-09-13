@@ -94,7 +94,64 @@ internal static class CoreNative
     public static extern nuint megapdf_search_page(IntPtr page,
         [MarshalAs(UnmanagedType.LPWStr)] string term, [Out] double[]? outDoubles, nuint capacity);
 
-    // Raw handles, for the contracts still bound directly (#106–#112) --------
+    // Contract 2: text runs and visual lines (#106) --------------------------
+
+    /// <summary>One text object with visible text; bounds in crop space.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TextRun
+    {
+        public int ObjectIndex;
+        public Rect Bounds;
+        public double FontSize;
+        public int IsTextBox;
+    }
+
+    public const uint TextAll = 0;
+    public const uint TextBoxesOnly = 1;
+
+    public const int TextRunText = 0;
+    public const int TextRunFont = 1;
+    public const int TextRunBoxId = 2;
+    public const int TextRunBoxFont = 3;
+
+    /// <summary>Reads a page's runs (lines on first use); the result outlives the page. Zero on failure.</summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_text_load(IntPtr page, uint flags);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_text_free(IntPtr text);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_text_run_count(IntPtr text);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_text_run_get(IntPtr text, nuint index, out TextRun run);
+
+    /// <summary>UTF-16 code units, no terminator, count-then-fill.</summary>
+    [DllImport(Dll)]
+    public static extern nuint megapdf_text_run_string(IntPtr text, nuint index, int field, [Out] ushort[]? outUnits, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_text_line_count(IntPtr text);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_text_line_get(IntPtr text, nuint index, out Rect bounds);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_text_line_runs(IntPtr text, nuint index, [Out] nuint[]? outRunIndices, nuint capacity);
+
+    /// <summary>A run's string field, decoded.</summary>
+    public static string TextRunString(IntPtr text, nuint index, int field)
+    {
+        var n = (int)megapdf_text_run_string(text, index, field, null, 0);
+        if (n == 0)
+            return "";
+        var units = new ushort[n];
+        megapdf_text_run_string(text, index, field, units, (nuint)n);
+        return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
+    }
+
+    // Raw handles, for the contracts still bound directly (#107–#112) --------
 
     [DllImport(Dll)]
     public static extern IntPtr megapdf_document_raw(IntPtr document);
