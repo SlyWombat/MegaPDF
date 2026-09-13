@@ -214,7 +214,7 @@ The heuristic detector for drawn squares is a differentiating feature — compet
 #### Engineering requirements
 
 - **Atomic writes.** Save writes to a temp file in the same directory, fsyncs, then replaces the original via `ReplaceFile` (which preserves ACLs, alternate data streams, and creates the optional backup). A crash or full disk mid-save must never corrupt or truncate the user's original (P3).
-- **Incremental save** where the engine supports it (append-only update sections) for large documents, falling back to full rewrite; either way the atomic-replace protocol applies.
+- **Save is a full rewrite.** PDFium's incremental mode was tried and measured on the 4,337-file corpus (#97, 2026-09-13): its writer appends every loaded object rather than only changed ones, and since the viewer loads every page at open the result was a doubled file (p50 1.97×) instead of a small appendix. `FPDF_SaveAsCopy` with the default flags it is; the atomic-replace protocol applies regardless.
 - **Locked/readonly handling:** if the target is read-only, locked by another process, or on unavailable media, Save transparently degrades to the Save As flow with a plain-language explanation: *"This file can't be overwritten (it may be open in another program). Save a copy instead?"*
 - **OneDrive/network paths** work through normal file APIs; MegaPDF performs no special cloud sync logic. (Note: per the atomic-replace protocol, OneDrive sees a single file update — no partial-state uploads.)
 - **Crash recovery:** a session journal in `%LOCALAPPDATA%\MegaPDF\Recovery\` records unsaved edit operations; on next launch after an unclean exit, the user is offered a one-click restore.
