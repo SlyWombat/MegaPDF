@@ -75,31 +75,114 @@
           </StackPanel>
         
           <Button.Flyout>
+            <!-- The signature library (#100). One card per signature: the ink on a white
+                 sheet — white in dark mode too, because it is paper — with its name
+                 beneath and an overflow for Rename and Delete. The card is the click
+                 target that arms placement; the same two actions sit on right-click. -->
             <Flyout Placement="BottomEdgeAlignedLeft">
-              <StackPanel Width="260" Spacing="{DynamicResource SpaceS}">
-                <TextBlock Text="{x:Static loc:Strings.YourSignatures}" FontWeight="SemiBold" />
-                <TextBlock Text="{x:Static loc:Strings.NoSignaturesYet}"
-                           TextWrapping="Wrap" Opacity="0.7"
-                           IsVisible="{Binding !HasSignatures}" />
-                <ListBox Name="SignatureList" ItemsSource="{Binding Signatures}"
-                         MaxHeight="220" IsVisible="{Binding HasSignatures}">
-                  <ListBox.ItemTemplate>
-                    <DataTemplate>
-                      <!-- 2, not SpaceXs: the thumbnail and its name are one item in the
-                           list, and 4 starts to read as two. docs/design-tokens.md §3
-                           allows an off-grid value that carries its reason. -->
-                      <StackPanel Spacing="2" Margin="0,4">
-                        <Image Source="{Binding Thumbnail}" Height="40"
-                               HorizontalAlignment="Left" Stretch="Uniform" />
-                        <TextBlock Text="{Binding Name}" />
-                      </StackPanel>
-                    </DataTemplate>
-                  </ListBox.ItemTemplate>
-                </ListBox>
-                <Button Name="DrawSignatureButton" Content="{x:Static loc:Strings.DrawNewSignature}"
-                        HorizontalAlignment="Stretch" />
-                <Button Name="ImportSignatureButton" Content="{x:Static loc:Strings.UsePhotoOfSignature}"
-                        HorizontalAlignment="Stretch" />
+              <!-- Paddings and margins below are the Space* token values written out
+                   (4 / 8 / 12): a Thickness cannot take the x:Double resources directly. -->
+              <StackPanel Width="300" Spacing="{DynamicResource SpaceM}">
+                <TextBlock Text="{x:Static loc:Strings.SignaturesTitle}" FontWeight="SemiBold"
+                           FontSize="{DynamicResource TypeBody}" />
+
+                <Border IsVisible="{Binding !HasSignatures}"
+                        Background="{DynamicResource BrandAccentSubtle}" CornerRadius="8"
+                        Padding="12">
+                  <TextBlock Text="{x:Static loc:Strings.NoSignaturesYet}" TextWrapping="Wrap"
+                             FontSize="{DynamicResource TypeBody}" />
+                </Border>
+
+                <ScrollViewer MaxHeight="300" IsVisible="{Binding HasSignatures}"
+                              HorizontalScrollBarVisibility="Disabled">
+                  <ItemsControl Name="SignatureList" ItemsSource="{Binding Signatures}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="{DynamicResource SpaceS}" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SignatureItem">
+                        <Grid ColumnDefinitions="*,Auto">
+                          <Button Classes="signature-card"
+                                  Command="{Binding Owner.PlaceSignatureCommand}"
+                                  CommandParameter="{Binding}"
+                                  AutomationProperties.Name="{Binding AccessibleName}"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                  Padding="4" CornerRadius="10"
+                                  Background="Transparent" BorderThickness="0">
+                            <StackPanel Spacing="{DynamicResource SpaceXs}">
+                              <Border Background="White" CornerRadius="6" Height="64"
+                                      BorderBrush="{DynamicResource BrandRule}" BorderThickness="1"
+                                      Padding="8">
+                                <Image Source="{Binding Thumbnail}" Stretch="Uniform"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                              </Border>
+                              <TextBlock Text="{Binding Name}" FontSize="{DynamicResource TypeBody}"
+                                         TextTrimming="CharacterEllipsis" Margin="4,0,0,0" />
+                            </StackPanel>
+                            <Button.ContextMenu>
+                              <ContextMenu>
+                                <MenuItem Header="{x:Static loc:Strings.RenameSignature}"
+                                          Command="{Binding Owner.RequestRenameSignatureCommand}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="{x:Static loc:Strings.DeleteSignature}"
+                                          Command="{Binding Owner.RequestDeleteSignatureCommand}"
+                                          CommandParameter="{Binding}" />
+                              </ContextMenu>
+                            </Button.ContextMenu>
+                          </Button>
+
+                          <!-- Bottom-aligned so the dots sit on the name's line, not floating
+                               beside the sheet. -->
+                          <Button Grid.Column="1" Classes="signature-more" VerticalAlignment="Bottom"
+                                  Width="28" Height="28" Padding="0" CornerRadius="14"
+                                  Margin="4,4,4,0"
+                                  Background="Transparent" BorderThickness="0"
+                                  AutomationProperties.Name="{x:Static loc:Strings.SignatureOptions}"
+                                  ToolTip.Tip="{x:Static loc:Strings.SignatureOptions}">
+                            <Path Data="{StaticResource IconMore}" Width="18" Height="18"
+                                  Fill="{Binding $parent[Button].Foreground}" Stretch="Uniform" />
+                            <Button.Flyout>
+                              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuItem Header="{x:Static loc:Strings.RenameSignature}"
+                                          Command="{Binding Owner.RequestRenameSignatureCommand}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="{x:Static loc:Strings.DeleteSignature}"
+                                          Command="{Binding Owner.RequestDeleteSignatureCommand}"
+                                          CommandParameter="{Binding}" />
+                              </MenuFlyout>
+                            </Button.Flyout>
+                          </Button>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Two equal ways in, side by side. -->
+                <Grid ColumnDefinitions="*,*">
+                  <Button Name="DrawSignatureButton" Grid.Column="0"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          Margin="0,0,4,0">
+                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+                      <Path Data="{StaticResource IconSign}" Width="16" Height="16"
+                            Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                            StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+                      <TextBlock Text="{x:Static loc:Strings.SignatureDraw}" />
+                    </StackPanel>
+                  </Button>
+                  <Button Name="ImportSignatureButton" Grid.Column="1"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          Margin="4,0,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+                      <Path Data="{StaticResource IconPhoto}" Width="16" Height="16"
+                            Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                            StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+                      <TextBlock Text="{x:Static loc:Strings.SignatureFromPhoto}" />
+                    </StackPanel>
+                  </Button>
+                </Grid>
               </StackPanel>
             </Flyout>
           </Button.Flyout>

@@ -92,8 +92,50 @@ public static partial class Strings
     /// <summary>Your signatures</summary>
     public static string YourSignatures => Get("YourSignatures");
 
-    /// <summary>Nothing saved yet — draw one below.</summary>
+    /// <summary>No signatures yet. Draw one with the trackpad, or use a photo of your signature on white paper — the background is removed automatically.</summary>
     public static string NoSignaturesYet => Get("NoSignaturesYet");
+
+    /// <summary>Signatures</summary>
+    public static string SignaturesTitle => Get("SignaturesTitle");
+
+    /// <summary>Draw</summary>
+    public static string SignatureDraw => Get("SignatureDraw");
+
+    /// <summary>From photo</summary>
+    public static string SignatureFromPhoto => Get("SignatureFromPhoto");
+
+    /// <summary>Signature options</summary>
+    public static string SignatureOptions => Get("SignatureOptions");
+
+    /// <summary>{0}, signature. Click to place it on the page.</summary>
+    public static string SignatureCardA11y(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignatureCardA11y"), arg0);
+
+    /// <summary>Rename…</summary>
+    public static string RenameSignature => Get("RenameSignature");
+
+    /// <summary>Delete…</summary>
+    public static string DeleteSignature => Get("DeleteSignature");
+
+    /// <summary>Rename signature</summary>
+    public static string RenameSignatureTitle => Get("RenameSignatureTitle");
+
+    /// <summary>Name</summary>
+    public static string SignatureName => Get("SignatureName");
+
+    /// <summary>Rename</summary>
+    public static string Rename => Get("Rename");
+
+    /// <summary>Delete</summary>
+    public static string Delete => Get("Delete");
+
+    /// <summary>Delete signature</summary>
+    public static string DeleteSignatureTitle => Get("DeleteSignatureTitle");
+
+    /// <summary>Delete "{0}"? This cannot be undone.</summary>
+    public static string DeleteSignaturePrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("DeleteSignaturePrompt"), arg0);
+
+    /// <summary>Renamed to "{0}".</summary>
+    public static string SignatureRenamed(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignatureRenamed"), arg0);
 
     /// <summary>Draw a new signature…</summary>
     public static string DrawNewSignature => Get("DrawNewSignature");

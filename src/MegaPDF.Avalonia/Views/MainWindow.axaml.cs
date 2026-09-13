@@ -92,8 +92,14 @@ public partial class MainWindow : Window
             vm.EditLineRequested += ShowLineEditor;
             vm.PasswordRequested += AskForPasswordAsync;
             vm.EditFieldRequested += ShowFieldEditor;
+            vm.RenameSignatureRequested += OnRenameSignatureRequested;
+            vm.DeleteSignatureRequested += OnDeleteSignatureRequested;
             vm.PropertyChanged += (_, args) =>
             {
+                // A card was clicked: placement is armed, so the library closes and
+                // the next click goes to the page.
+                if (args.PropertyName is nameof(MainViewModel.IsPlacingSignature) && vm.IsPlacingSignature)
+                    SignButton.Flyout?.Hide();
                 // The chrome is positioned in device-independent pixels, so it has to
                 // be rebuilt when the selection changes and when zoom moves it.
                 if (args.PropertyName is nameof(MainViewModel.Selection) or nameof(MainViewModel.Zoom))
@@ -575,17 +581,10 @@ public partial class MainWindow : Window
 
     private void WireSignatures()
     {
-        // Choosing one arms placement and closes the flyout, so the next click lands
-        // on the page rather than being swallowed by an open popup.
-        SignatureList.SelectionChanged += (_, _) =>
-        {
-            if (SignatureList.SelectedItem is not SignatureItem item || ViewModel is not { } vm)
-                return;
-
-            SignatureList.SelectedItem = null;
-            SignButton.Flyout?.Hide();
-            vm.BeginPlacing(item);
-        };
+        // The cards themselves command the view model (PlaceSignatureCommand); what
+        // the view owns is closing the flyout the moment placement is armed, so the
+        // next click lands on the page rather than being swallowed by an open popup.
+        // Wired on the view model's own event in OnDataContextChanged, below.
 
         DrawSignatureButton.Click += async (_, _) =>
         {
@@ -598,6 +597,49 @@ public partial class MainWindow : Window
             SignButton.Flyout?.Hide();
             await ImportSignatureAsync();
         };
+    }
+
+    /// <summary>
+    /// Opens the signature library and keeps it open, for the `sign` screenshot
+    /// state. A capture run's window is never the active one, and a flyout
+    /// light-dismisses the moment activation is elsewhere, so the close is refused
+    /// until the process exits.
+    /// </summary>
+    internal void ShowSignaturesFlyout()
+    {
+        if (SignButton.Flyout is not global::Avalonia.Controls.Primitives.PopupFlyoutBase flyout)
+        {
+            Console.Error.WriteLine("::error::--screenshot-state sign: the Sign button has no flyout");
+            return;
+        }
+        flyout.Closing += (_, e) => e.Cancel = true;
+        flyout.ShowAt(SignButton);
+    }
+
+    /// <summary>Rename, from the card's menu (#100): a small prefilled prompt.</summary>
+    private async void OnRenameSignatureRequested(SignatureItem item)
+    {
+        if (ViewModel is not { } vm)
+            return;
+        SignButton.Flyout?.Hide();
+        var dialog = new RenameSignatureWindow();
+        dialog.SetName(item.Name);
+        await dialog.ShowDialog(this);
+        if (dialog.NewName is { } newName && newName != item.Name)
+            vm.RenameSignature(item.Entry.Id, newName);
+    }
+
+    /// <summary>Delete, from the card's menu (#100): asks once, then removes.</summary>
+    private async void OnDeleteSignatureRequested(SignatureItem item)
+    {
+        if (ViewModel is not { } vm)
+            return;
+        SignButton.Flyout?.Hide();
+        var dialog = new ConfirmDeleteWindow();
+        dialog.SetPrompt(item.Name);
+        await dialog.ShowDialog(this);
+        if (dialog.Confirmed)
+            vm.RemoveSignature(item.Entry.Id);
     }
 
     /// <summary>
