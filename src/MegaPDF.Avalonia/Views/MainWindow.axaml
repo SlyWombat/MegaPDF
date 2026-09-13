@@ -82,7 +82,7 @@
             <Flyout Placement="BottomEdgeAlignedLeft">
               <!-- Paddings and margins below are the Space* token values written out
                    (4 / 8 / 12): a Thickness cannot take the x:Double resources directly. -->
-              <StackPanel Width="300" Spacing="{DynamicResource SpaceM}">
+              <StackPanel Width="360" Spacing="{DynamicResource SpaceM}">
                 <TextBlock Text="{x:Static loc:Strings.SignaturesTitle}" FontWeight="SemiBold"
                            FontSize="{DynamicResource TypeBody}" />
 
