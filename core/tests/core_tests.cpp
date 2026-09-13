@@ -535,6 +535,91 @@ void test_text_runs(const std::string& fixtures, const std::string& schematic, c
     megapdf_text_free(nullptr);
 }
 
+// --------------------------------------------------------------------------
+// Contract 3 (#107): AcroForm fields, read and driven through the core's form
+// environment. forms.pdf has one checkbox widget (agree, [100 600 115 615]);
+// formtext.pdf one text field (fullname). AcroFormTests, Android's
+// CheckboxTest and iOS's CheckboxTests assert the same through the bindings.
+
+U16 field_string(const megapdf_form_fields* f, size_t i, megapdf_field_string which) {
+    const size_t n = megapdf_form_field_string(f, i, which, nullptr, 0);
+    U16 out(n);
+    if (n > 0) megapdf_form_field_string(f, i, which, out.data(), n);
+    return out;
+}
+
+void test_form_fields(const std::string& fixtures) {
+    // Checkbox: list, click to check, click to uncheck.
+    {
+        Doc d(fixtures + "/forms.pdf");
+        if (!d.doc) { check(false, "forms.pdf opens"); return; }
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "forms.pdf page loads"); return; }
+        megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+        check(f != nullptr && megapdf_form_field_count(f) == 1, "forms.pdf has one field", std::to_string(megapdf_form_field_count(f)));
+        megapdf_form_field field{};
+        check(megapdf_form_field_get(f, 0, &field) == MEGAPDF_OK, "field reads");
+        check(field.kind == MEGAPDF_FIELD_CHECKBOX && field.is_checked == 0, "forms.pdf field is an unchecked checkbox",
+              std::to_string(field.kind) + "/" + std::to_string(field.is_checked));
+        check(close_to(field.bounds.left, 100) && close_to(field.bounds.bottom, 600) && close_to(field.bounds.top, 615), "checkbox bounds are (100,600)-(115,615) in crop space",
+              rect_str(field.bounds));
+        check(show(field_string(f, 0, MEGAPDF_FIELD_NAME)) == "agree", "checkbox name is agree", show(field_string(f, 0, MEGAPDF_FIELD_NAME)));
+        megapdf_form_fields_free(f);
+
+        const double cx = (field.bounds.left + field.bounds.right) / 2, cy = (field.bounds.bottom + field.bounds.top) / 2;
+        check(megapdf_form_click(p.page, cx, cy) == MEGAPDF_OK, "click returns OK");
+        f = megapdf_form_fields_load(p.page);
+        megapdf_form_field_get(f, 0, &field);
+        check(field.is_checked == 1, "a click checks the box");
+        megapdf_form_fields_free(f);
+        megapdf_form_click(p.page, cx, cy);
+        f = megapdf_form_fields_load(p.page);
+        megapdf_form_field_get(f, 0, &field);
+        check(field.is_checked == 0, "a second click unchecks it");
+        megapdf_form_fields_free(f);
+        check(megapdf_form_click(p.page, 500, 400) == MEGAPDF_OK, "a click on nothing is harmless");
+    }
+    // Text field: list, set a value, read it back.
+    {
+        Doc d(fixtures + "/formtext.pdf");
+        if (!d.doc) { check(false, "formtext.pdf opens"); return; }
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "formtext.pdf page loads"); return; }
+        megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+        check(f != nullptr && megapdf_form_field_count(f) == 1, "formtext.pdf has one field", std::to_string(megapdf_form_field_count(f)));
+        megapdf_form_field field{};
+        megapdf_form_field_get(f, 0, &field);
+        check(field.kind == MEGAPDF_FIELD_TEXT, "formtext.pdf field is a text field", std::to_string(field.kind));
+        check(show(field_string(f, 0, MEGAPDF_FIELD_NAME)) == "fullname", "text field name is fullname", show(field_string(f, 0, MEGAPDF_FIELD_NAME)));
+        check(field_string(f, 0, MEGAPDF_FIELD_VALUE).empty(), "text field starts empty", show(field_string(f, 0, MEGAPDF_FIELD_VALUE)));
+        megapdf_form_fields_free(f);
+
+        auto value = utf16("Ada Lovelace");
+        const double cx = (field.bounds.left + field.bounds.right) / 2, cy = (field.bounds.bottom + field.bounds.top) / 2;
+        check(megapdf_form_set_text(p.page, cx, cy, value.data()) == MEGAPDF_OK, "set_text returns OK");
+        megapdf_form_commit(d.doc);
+        f = megapdf_form_fields_load(p.page);
+        check(show(field_string(f, 0, MEGAPDF_FIELD_VALUE)) == "Ada Lovelace", "the value reads back", show(field_string(f, 0, MEGAPDF_FIELD_VALUE)));
+        megapdf_form_fields_free(f);
+    }
+    // A page without widgets, and bad handles.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        Page p(d.doc, 0);
+        megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+        check(f != nullptr && megapdf_form_field_count(f) == 0, "fixture.pdf has no fields");
+        megapdf_form_fields_free(f);
+    }
+    check(megapdf_form_fields_load(nullptr) == nullptr, "fields of a null page is NULL");
+    check(megapdf_form_field_count(nullptr) == 0, "null fields count 0");
+    megapdf_form_field out{};
+    check(megapdf_form_field_get(nullptr, 0, &out) == MEGAPDF_ERR_ARGUMENT, "field_get rejects a null handle");
+    check(megapdf_form_click(nullptr, 0, 0) == MEGAPDF_ERR_ARGUMENT, "click rejects a null page");
+    check(megapdf_form_set_text(nullptr, 0, 0, nullptr) == MEGAPDF_ERR_ARGUMENT, "set_text rejects a null page");
+    megapdf_form_commit(nullptr);
+    megapdf_form_fields_free(nullptr);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -550,6 +635,7 @@ int main(int argc, char** argv) {
     test_search(argv[1]);
     test_schematic(argv[2]);
     test_text_runs(argv[1], argv[2], argv[3]);
+    test_form_fields(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

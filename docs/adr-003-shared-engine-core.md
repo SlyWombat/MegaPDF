@@ -9,7 +9,10 @@ as decided below, and the corpus search totals were identical before and after.
 #106 (text runs and visual lines) landed the same day: `megapdf_text_load` with
 lines built on first use, a `MEGAPDF_TEXT_BOXES_ONLY` load for text-box listings, and
 `core/tests/expected/text_runs.txt` — the desktop engine's answer for every fixture,
-captured before the port — as the regression gate.
+captured before the port — as the regression gate. #107 (AcroForm fields) followed:
+`megapdf_form_fields_load`, `megapdf_form_click`, `megapdf_form_set_text` and
+`megapdf_form_commit` (the kill-focus-before-save rule), which left the phones with
+a filter and a struct copy where they had form code.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 

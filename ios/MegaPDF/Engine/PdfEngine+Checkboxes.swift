@@ -27,41 +27,34 @@ extension PdfRect {
 
 extension PdfEngine {
 
-    /// Checkbox and radio widgets on the page, with checked state.
+    /// Checkbox and radio widgets on the page, with checked state — read through
+    /// the core's form environment (#107); surfacing only buttons is this app's choice.
     func formFields(_ document: PdfDocument, pageIndex: Int) throws -> [PdfFormField] {
-        try withPage(document, index: pageIndex) { page in
-            guard let form = document.formHandle else { return [] }
-            let crop = cropOrigin(page)
+        try withCorePage(document, index: pageIndex) { page in
+            guard let fields = megapdf_form_fields_load(page) else { return [] }
+            defer { megapdf_form_fields_free(fields) }
             var result: [PdfFormField] = []
-            for i in 0..<FPDFPage_GetAnnotCount(page) {
-                guard let annot = FPDFPage_GetAnnot(page, i) else { continue }
-                defer { FPDFPage_CloseAnnot(annot) }
-                guard FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET else { continue }
-                let type = FPDFAnnot_GetFormFieldType(form, annot)
-                guard type == FPDF_FORMFIELD_CHECKBOX || type == FPDF_FORMFIELD_RADIOBUTTON
+            for i in 0..<megapdf_form_field_count(fields) {
+                var f = megapdf_form_field()
+                guard megapdf_form_field_get(fields, i, &f) == MEGAPDF_OK else { continue }
+                guard f.kind == MEGAPDF_FIELD_CHECKBOX.rawValue || f.kind == MEGAPDF_FIELD_RADIO.rawValue
                 else { continue }
-                var r = FS_RECTF()
-                guard FPDFAnnot_GetRect(annot, &r) != 0 else { continue }
                 result.append(PdfFormField(
-                    isRadio: type == FPDF_FORMFIELD_RADIOBUTTON,
-                    isChecked: FPDFAnnot_IsChecked(form, annot) != 0,
-                    rect: PdfRect(left: Double(r.left), bottom: Double(r.bottom),
-                                  right: Double(r.right), top: Double(r.top)).toCrop(crop)))
+                    isRadio: f.kind == MEGAPDF_FIELD_RADIO.rawValue,
+                    isChecked: f.is_checked != 0,
+                    rect: PdfRect(left: f.bounds.left, bottom: f.bounds.bottom,
+                                  right: f.bounds.right, top: f.bounds.top)))
             }
             return result
         }
     }
 
-    /// Simulated click at page coordinates (points, bottom-left origin) —
-    /// toggles the field under the point via PDFium's form machinery, keeping
-    /// `/V`, `/AS`, and radio-group siblings consistent.
+    /// Simulated click at page coordinates (points, bottom-left origin, crop
+    /// space) — toggles the field under the point via PDFium's form machinery,
+    /// keeping `/V`, `/AS`, and radio-group siblings consistent. In the core.
     func clickAt(_ document: PdfDocument, pageIndex: Int, x: Double, y: Double) throws {
-        try withPage(document, index: pageIndex) { page in
-            guard let form = document.formHandle else { return }
-            let crop = cropOrigin(page)
-            FORM_OnLButtonDown(form, page, 0, x + crop.x, y + crop.y)
-            FORM_OnLButtonUp(form, page, 0, x + crop.x, y + crop.y)
-            FORM_ForceToKillFocus(form)
+        try withCorePage(document, index: pageIndex) { page in
+            _ = megapdf_form_click(page, x, y)
         }
     }
 

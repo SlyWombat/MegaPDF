@@ -99,11 +99,6 @@ internal static class PdfiumNative
     // The FPDF_FORMFILLINFO environment, page load/close hooks, document open and
     // text search moved into the shared core with #105 (ADR-003); the form handle
     // used below comes from CoreNative.megapdf_document_form_raw.
-    [DllImport(Dll)] public static extern int FORM_OnLButtonDown(IntPtr formHandle, IntPtr page, int modifier, double pageX, double pageY);
-    [DllImport(Dll)] public static extern int FORM_OnLButtonUp(IntPtr formHandle, IntPtr page, int modifier, double pageX, double pageY);
-    [DllImport(Dll)] public static extern int FORM_SelectAllText(IntPtr formHandle, IntPtr page);
-    [DllImport(Dll)] public static extern void FORM_ReplaceSelection(IntPtr formHandle, IntPtr page, [MarshalAs(UnmanagedType.LPWStr)] string text);
-    [DllImport(Dll)] public static extern int FORM_ForceToKillFocus(IntPtr formHandle);
     [DllImport(Dll)] public static extern void FPDF_FFLDraw(IntPtr formHandle, IntPtr bitmap, IntPtr page, int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
     // --- Annotations (fpdf_annot.h) ---
@@ -119,12 +114,8 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern void FPDFPage_CloseAnnot(IntPtr annot);
     [DllImport(Dll)] public static extern int FPDFAnnot_GetSubtype(IntPtr annot);
     [DllImport(Dll)] public static extern int FPDFAnnot_GetRect(IntPtr annot, out FS_RECTF rect);
-    [DllImport(Dll)] public static extern int FPDFAnnot_GetFormFieldType(IntPtr formHandle, IntPtr annot);
     /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
-    [DllImport(Dll)] public static extern uint FPDFAnnot_GetFormFieldName(IntPtr formHandle, IntPtr annot, [Out] byte[]? buffer, uint buflen);
     /// <summary>UTF-16 buffer; returns length in bytes incl. NUL.</summary>
-    [DllImport(Dll)] public static extern uint FPDFAnnot_GetFormFieldValue(IntPtr formHandle, IntPtr annot, [Out] byte[]? buffer, uint buflen);
-    [DllImport(Dll)] public static extern int FPDFAnnot_IsChecked(IntPtr formHandle, IntPtr annot);
 
     // --- Drawn-square detection & mark stamps (SDD §3.2) ---
 

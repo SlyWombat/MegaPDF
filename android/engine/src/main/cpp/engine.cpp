@@ -206,7 +206,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeSave(JNIEnv* env, jobject, jlong handle,
                                                 jobject outputStream) {
     auto* d = reinterpret_cast<Document*>(handle);
-    if (d->form) FORM_ForceToKillFocus(d->form);
+    megapdf_form_commit(d->core);   // commit any in-progress field edit (#107)
 
     jclass streamClass = env->GetObjectClass(outputStream);
     jmethodID write = env->GetMethodID(streamClass, "write", "([BII)V");
@@ -365,35 +365,28 @@ std::vector<jchar> ReadMegaPdfId(FPDF_ANNOTATION annot) {
 
 extern "C" {
 
-// Widget checkbox/radio fields, packed [type, checked, l, b, r, t] per field.
+// Widget checkbox/radio fields, packed [type, checked, l, b, r, t] per field —
+// read through the core's form environment (#107); the checkbox/radio filter is
+// this platform's choice of what to surface.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject,
                                                             jlong handle) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
-    FPDF_FORMHANDLE form = p->owner->form;
     std::vector<double> packed;
-    if (form != nullptr) {
-        const int count = FPDFPage_GetAnnotCount(p->page);
-        for (int i = 0; i < count; i++) {
-            FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
-            if (annot == nullptr) continue;
-            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) {
-                const int type = FPDFAnnot_GetFormFieldType(form, annot);
-                if (type == FPDF_FORMFIELD_CHECKBOX || type == FPDF_FORMFIELD_RADIOBUTTON) {
-                    FS_RECTF r;
-                    if (FPDFAnnot_GetRect(annot, &r)) {
-                        packed.push_back(type);
-                        packed.push_back(FPDFAnnot_IsChecked(form, annot) ? 1 : 0);
-                        packed.push_back(r.left - crop.x);
-                        packed.push_back(r.bottom - crop.y);
-                        packed.push_back(r.right - crop.x);
-                        packed.push_back(r.top - crop.y);
-                    }
-                }
-            }
-            FPDFPage_CloseAnnot(annot);
+    if (megapdf_form_fields* fields = megapdf_form_fields_load(p->core)) {
+        const size_t count = megapdf_form_field_count(fields);
+        for (size_t i = 0; i < count; i++) {
+            megapdf_form_field f{};
+            if (megapdf_form_field_get(fields, i, &f) != MEGAPDF_OK) continue;
+            if (f.kind != MEGAPDF_FIELD_CHECKBOX && f.kind != MEGAPDF_FIELD_RADIO) continue;
+            packed.push_back(f.kind == MEGAPDF_FIELD_RADIO ? FPDF_FORMFIELD_RADIOBUTTON : FPDF_FORMFIELD_CHECKBOX);
+            packed.push_back(f.is_checked ? 1 : 0);
+            packed.push_back(f.bounds.left);
+            packed.push_back(f.bounds.bottom);
+            packed.push_back(f.bounds.right);
+            packed.push_back(f.bounds.top);
         }
+        megapdf_form_fields_free(fields);
     }
     jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
     if (out && !packed.empty()) {
@@ -402,19 +395,14 @@ Java_com_megapdf_engine_PdfiumNative_nativeFormFieldsPacked(JNIEnv* env, jobject
     return out;
 }
 
-// Simulated click in page coordinates (PDF bottom-left origin) — toggles the
-// field under the point through PDFium's form machinery, keeping /V, /AS and
-// radio-group siblings consistent. Desktop: PdfiumEngine.ToggleCheckbox.
+// Simulated click in page coordinates (PDF bottom-left origin, crop space) —
+// toggles the field under the point through PDFium's form machinery, keeping
+// /V, /AS and radio-group siblings consistent. One implementation, in the core.
 JNIEXPORT void JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeClickAt(JNIEnv*, jobject, jlong handle,
                                                    jdouble x, jdouble y) {
     auto* p = reinterpret_cast<Page*>(handle);
-    const CropOrigin crop = cropOrigin(p);
-    FPDF_FORMHANDLE form = p->owner->form;
-    if (form == nullptr) return;
-    FORM_OnLButtonDown(form, p->page, 0, x + crop.x, y + crop.y);
-    FORM_OnLButtonUp(form, p->page, 0, x + crop.x, y + crop.y);
-    FORM_ForceToKillFocus(form);
+    megapdf_form_click(p->core, x, y);
 }
 
 // Drawn-checkbox candidates, packed [l, b, r, t] per square. Contract constants:

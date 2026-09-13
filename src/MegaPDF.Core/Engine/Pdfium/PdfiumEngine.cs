@@ -103,8 +103,8 @@ internal sealed class PdfiumDocument : IPdfDocument
         ThrowIfDisposed();
         lock (PdfiumLibrary.Lock)
         {
-            // Commit any in-progress form-field editing before serializing.
-            PdfiumNative.FORM_ForceToKillFocus(_forms);
+            // Commit any in-progress form-field editing before serializing (#107: the core's rule).
+            CoreNative.megapdf_form_commit(_core);
 
             // Always a full rewrite, on purpose (#97). PDFium's FPDF_INCREMENTAL does
             // not track which objects changed: it copies the original file and then
@@ -161,7 +161,7 @@ internal sealed class PdfiumDocument : IPdfDocument
         lock (PdfiumLibrary.Lock)
         {
             // Commit any in-progress form editing, then bake every page.
-            PdfiumNative.FORM_ForceToKillFocus(_forms);
+            CoreNative.megapdf_form_commit(_core);
             var pageCount = PdfiumNative.FPDF_GetPageCount(_handle);
             for (var i = 0; i < pageCount; i++)
             {
@@ -611,48 +611,35 @@ internal sealed class PdfiumPage : IPdfPage
     public IReadOnlyList<PdfFormField> GetFormFields()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        // Contract 3 (#107): every widget on the page, read through the core's form
+        // environment; kinds, names, values and checked state come from one place.
+        var fields = CoreNative.megapdf_form_fields_load(_core);
+        if (fields == IntPtr.Zero)
+            return [];
+        try
         {
-            var fields = new List<PdfFormField>();
-            var count = PdfiumNative.FPDFPage_GetAnnotCount(_handle);
+            var count = (int)CoreNative.megapdf_form_field_count(fields);
+            var result = new List<PdfFormField>(count);
             for (var i = 0; i < count; i++)
             {
-                var annot = PdfiumNative.FPDFPage_GetAnnot(_handle, i);
-                if (annot == IntPtr.Zero)
-                    continue;
-                try
+                CoreNative.megapdf_form_field_get(fields, (nuint)i, out var f);
+                var kind = f.Kind switch
                 {
-                    if (PdfiumNative.FPDFAnnot_GetSubtype(annot) != PdfiumNative.FPDF_ANNOT_SUBTYPE_WIDGET)
-                        continue;
-
-                    var kind = PdfiumNative.FPDFAnnot_GetFormFieldType(_forms, annot) switch
-                    {
-                        PdfiumNative.FPDF_FORMFIELD_TEXTFIELD => FormFieldKind.Text,
-                        PdfiumNative.FPDF_FORMFIELD_CHECKBOX => FormFieldKind.Checkbox,
-                        PdfiumNative.FPDF_FORMFIELD_RADIOBUTTON => FormFieldKind.RadioButton,
-                        _ => FormFieldKind.Other,
-                    };
-
-                    if (PdfiumNative.FPDFAnnot_GetRect(annot, out var rect) == 0)
-                        continue;
-                    // PDF rect (bottom-left origin) → our top-left page space.
-                    var bounds = new PdfRect(ViewX(rect.Left), ViewY(rect.Top), rect.Right - rect.Left, rect.Top - rect.Bottom);
-
-                    var name = ReadUtf16ByteLengthString(
-                        (buffer, length) => PdfiumNative.FPDFAnnot_GetFormFieldName(_forms, annot, buffer, length));
-                    var value = ReadUtf16ByteLengthString(
-                        (buffer, length) => PdfiumNative.FPDFAnnot_GetFormFieldValue(_forms, annot, buffer, length));
-                    var isChecked = kind is FormFieldKind.Checkbox or FormFieldKind.RadioButton
-                        && PdfiumNative.FPDFAnnot_IsChecked(_forms, annot) != 0;
-
-                    fields.Add(new PdfFormField(name, kind, bounds, value, isChecked));
-                }
-                finally
-                {
-                    PdfiumNative.FPDFPage_CloseAnnot(annot);
-                }
+                    CoreNative.FieldText => FormFieldKind.Text,
+                    CoreNative.FieldCheckbox => FormFieldKind.Checkbox,
+                    CoreNative.FieldRadio => FormFieldKind.RadioButton,
+                    _ => FormFieldKind.Other,
+                };
+                result.Add(new PdfFormField(
+                    CoreNative.FormFieldString(fields, (nuint)i, CoreNative.FieldName), kind,
+                    CropToView(f.Bounds.Left, f.Bounds.Bottom, f.Bounds.Right, f.Bounds.Top),
+                    CoreNative.FormFieldString(fields, (nuint)i, CoreNative.FieldValue), f.IsChecked != 0));
             }
-            return fields;
+            return result;
+        }
+        finally
+        {
+            CoreNative.megapdf_form_fields_free(fields);
         }
     }
 
@@ -1317,37 +1304,27 @@ internal sealed class PdfiumPage : IPdfPage
     public void SetFormFieldValue(PdfFormField field, string value)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            ClickField(field);
-            PdfiumNative.FORM_SelectAllText(_forms, _handle);
-            PdfiumNative.FORM_ReplaceSelection(_forms, _handle, value);
-            PdfiumNative.FORM_ForceToKillFocus(_forms);
-        }
+        // Click to focus, select all, replace, release — in the core (#107).
+        var (x, y) = FieldCentreInCropSpace(field);
+        CoreNative.megapdf_form_set_text(_core, x, y, value);
     }
 
     public void ToggleCheckbox(PdfFormField field)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            // A simulated click is the same path the Chrome PDF viewer uses:
-            // PDFium updates /V, /AS, and radio-group siblings consistently.
-            ClickField(field);
-            PdfiumNative.FORM_ForceToKillFocus(_forms);
-        }
+        // A simulated click is the same path the Chrome PDF viewer uses:
+        // PDFium updates /V, /AS, and radio-group siblings consistently.
+        var (x, y) = FieldCentreInCropSpace(field);
+        CoreNative.megapdf_form_click(_core, x, y);
     }
 
-    /// <summary>Simulates a primary-button click at the field's center, in PDF user space.</summary>
-    private void ClickField(PdfFormField field)
+    /// <summary>The field's centre in the core's crop space (bottom-left origin).</summary>
+    private (double X, double Y) FieldCentreInCropSpace(PdfFormField field)
     {
-        var center = field.Bounds.Center;
-        // Back to PDF user space, through the crop origin on both axes.
-        var pdfX = UserX(center.X);
-        var pdfY = UserY(center.Y);
-        PdfiumNative.FORM_OnLButtonDown(_forms, _handle, 0, pdfX, pdfY);
-        PdfiumNative.FORM_OnLButtonUp(_forms, _handle, 0, pdfX, pdfY);
+        var centre = field.Bounds.Center;
+        return (centre.X, Height - centre.Y);
     }
+
     public string AddImageStamp(ReadOnlyMemory<byte> bgra, int pixelWidth, int pixelHeight, PdfRect bounds, string? stampId = null)
     {
         ThrowIfDisposed();

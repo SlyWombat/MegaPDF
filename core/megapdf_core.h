@@ -22,7 +22,7 @@
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
 //
-// Migration note: until every contract has moved (#106–#112), bindings still
+// Migration note: until every contract has moved (#108–#112), bindings still
 // call PDFium directly for the rest, through the *_raw accessors. Those go away
 // with the last migrated contract.
 #ifndef MEGAPDF_CORE_H
@@ -197,6 +197,68 @@ MEGAPDF_API int megapdf_text_line_get(const megapdf_text* text, size_t index, me
 /** The run indices making up the line, left to right; count-then-fill. */
 MEGAPDF_API size_t megapdf_text_line_runs(const megapdf_text* text, size_t index, size_t* out_run_indices,
                                           size_t capacity);
+
+/* --------------------------------------------------------------------------
+ * Contract 3: AcroForm fields (#107). The form-fill environment lives in the
+ * core, so reading fields and driving them through PDFium's form machinery
+ * (a simulated click, which keeps /V, /AS and radio-group siblings consistent,
+ * exactly as the Chrome viewer does) happens here for every platform.
+ * ----------------------------------------------------------------------- */
+
+typedef enum megapdf_field_kind {
+    MEGAPDF_FIELD_OTHER = 0,
+    MEGAPDF_FIELD_TEXT = 1,
+    MEGAPDF_FIELD_CHECKBOX = 2,
+    MEGAPDF_FIELD_RADIO = 3
+} megapdf_field_kind;
+
+typedef struct megapdf_form_field {
+    int kind;                /* megapdf_field_kind */
+    int is_checked;          /* checkbox and radio only; 0 otherwise */
+    megapdf_rect bounds;     /* crop space */
+} megapdf_form_field;
+
+typedef enum megapdf_field_string {
+    MEGAPDF_FIELD_NAME = 0,  /* the fully qualified field name */
+    MEGAPDF_FIELD_VALUE = 1  /* the current value (text fields; the export value of a checked box) */
+} megapdf_field_string;
+
+typedef struct megapdf_form_fields megapdf_form_fields;
+
+/**
+ * Every widget annotation on the page, in annotation order, with its kind, state
+ * and bounds; a snapshot that outlives the page. Returns NULL only when the page
+ * is NULL or the core cannot allocate (a document without a form environment
+ * yields zero fields).
+ */
+MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* page);
+MEGAPDF_API void megapdf_form_fields_free(megapdf_form_fields* fields);
+MEGAPDF_API size_t megapdf_form_field_count(const megapdf_form_fields* fields);
+MEGAPDF_API int megapdf_form_field_get(const megapdf_form_fields* fields, size_t index, megapdf_form_field* out);
+/** UTF-16 code units, no terminator, count-then-fill. */
+MEGAPDF_API size_t megapdf_form_field_string(const megapdf_form_fields* fields, size_t index,
+                                             megapdf_field_string which, unsigned short* out, size_t capacity);
+
+/**
+ * A primary-button click at (x, y) in crop space, then focus released: toggles a
+ * checkbox or radio under the point through the form environment. Returns
+ * MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT when the page is NULL or the document has
+ * no form environment.
+ */
+MEGAPDF_API int megapdf_form_click(const megapdf_page* page, double x, double y);
+
+/**
+ * Sets the text of the field under (x, y) in crop space: click to focus, select
+ * all, replace the selection with `value_utf16` (NUL-terminated), release focus.
+ */
+MEGAPDF_API int megapdf_form_set_text(const megapdf_page* page, double x, double y,
+                                      const unsigned short* value_utf16);
+
+/**
+ * Commits any in-progress field edit (FORM_ForceToKillFocus). Call before
+ * serialising; the rule every platform had to remember on its own until now.
+ */
+MEGAPDF_API void megapdf_form_commit(const megapdf_document* document);
 
 /* --------------------------------------------------------------------------
  * Raw handles — for the contracts that have not migrated yet. Bindings use these

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
 #include "fpdf_text.h"
@@ -650,6 +651,145 @@ MEGAPDF_API size_t megapdf_text_line_runs(const megapdf_text* t, size_t index, s
         for (size_t i = 0; i < n; i++) out[i] = runs[i];
     }
     return runs.size();
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
+// Contract 3: AcroForm fields (#107)
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct FormField {
+    megapdf_form_field info{};
+    U16 name;
+    U16 value;
+};
+
+// FPDFAnnot_GetFormFieldName/Value: UTF-16, length in bytes including the terminator.
+template <typename F>
+U16 ReadAnnotWide(F read) {
+    const unsigned long bytes = read(nullptr, 0);
+    if (bytes <= 2) return {};
+    U16 buf(bytes / 2);
+    read(buf.data(), bytes);
+    buf.resize(bytes / 2 - 1);
+    return buf;
+}
+
+int KindOf(int pdfium_type) {
+    switch (pdfium_type) {
+        case FPDF_FORMFIELD_TEXTFIELD: return MEGAPDF_FIELD_TEXT;
+        case FPDF_FORMFIELD_CHECKBOX: return MEGAPDF_FIELD_CHECKBOX;
+        case FPDF_FORMFIELD_RADIOBUTTON: return MEGAPDF_FIELD_RADIO;
+        default: return MEGAPDF_FIELD_OTHER;
+    }
+}
+
+}  // namespace
+
+struct megapdf_form_fields {
+    std::vector<FormField> fields;
+};
+
+extern "C" {
+
+MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* p) {
+    if (p == nullptr) return nullptr;
+    Guard guard(CoreLock());
+    auto* f = new (std::nothrow) megapdf_form_fields();
+    if (f == nullptr) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return nullptr;
+    }
+    FPDF_FORMHANDLE form = p->owner ? p->owner->form : nullptr;
+    if (form == nullptr) return f;
+    try {
+        const int count = FPDFPage_GetAnnotCount(p->page);
+        for (int i = 0; i < count; i++) {
+            FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, i);
+            if (annot == nullptr) continue;
+            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) {
+                FS_RECTF r{};
+                if (FPDFAnnot_GetRect(annot, &r)) {
+                    FormField field;
+                    field.info.kind = KindOf(FPDFAnnot_GetFormFieldType(form, annot));
+                    field.info.bounds.left = static_cast<double>(r.left) - p->crop_x;
+                    field.info.bounds.bottom = static_cast<double>(r.bottom) - p->crop_y;
+                    field.info.bounds.right = static_cast<double>(r.right) - p->crop_x;
+                    field.info.bounds.top = static_cast<double>(r.top) - p->crop_y;
+                    field.info.is_checked =
+                        (field.info.kind == MEGAPDF_FIELD_CHECKBOX || field.info.kind == MEGAPDF_FIELD_RADIO) &&
+                        FPDFAnnot_IsChecked(form, annot) ? 1 : 0;
+                    field.name = ReadAnnotWide([&](FPDF_WCHAR* buf, unsigned long len) {
+                        return FPDFAnnot_GetFormFieldName(form, annot, buf, len);
+                    });
+                    field.value = ReadAnnotWide([&](FPDF_WCHAR* buf, unsigned long len) {
+                        return FPDFAnnot_GetFormFieldValue(form, annot, buf, len);
+                    });
+                    f->fields.push_back(std::move(field));
+                }
+            }
+            FPDFPage_CloseAnnot(annot);
+        }
+    } catch (...) {
+        delete f;
+        SetError(FPDF_ERR_UNKNOWN, "out of memory reading form fields");
+        return nullptr;
+    }
+    return f;
+}
+
+MEGAPDF_API void megapdf_form_fields_free(megapdf_form_fields* f) { delete f; }
+
+MEGAPDF_API size_t megapdf_form_field_count(const megapdf_form_fields* f) { return f ? f->fields.size() : 0; }
+
+MEGAPDF_API int megapdf_form_field_get(const megapdf_form_fields* f, size_t index, megapdf_form_field* out) {
+    if (f == nullptr || out == nullptr || index >= f->fields.size()) return MEGAPDF_ERR_ARGUMENT;
+    *out = f->fields[index].info;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_form_field_string(const megapdf_form_fields* f, size_t index, megapdf_field_string which,
+                                             unsigned short* out, size_t capacity) {
+    if (f == nullptr || index >= f->fields.size()) return 0;
+    const U16* s = which == MEGAPDF_FIELD_NAME ? &f->fields[index].name
+                 : which == MEGAPDF_FIELD_VALUE ? &f->fields[index].value : nullptr;
+    if (s == nullptr) return 0;
+    if (out != nullptr) {
+        const size_t n = s->size() < capacity ? s->size() : capacity;
+        for (size_t i = 0; i < n; i++) out[i] = (*s)[i];
+    }
+    return s->size();
+}
+
+MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
+    if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    FPDF_FORMHANDLE form = p->owner->form;
+    FORM_OnLButtonDown(form, p->page, 0, x + p->crop_x, y + p->crop_y);
+    FORM_OnLButtonUp(form, p->page, 0, x + p->crop_x, y + p->crop_y);
+    FORM_ForceToKillFocus(form);
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_form_set_text(const megapdf_page* p, double x, double y, const unsigned short* value_utf16) {
+    if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr || value_utf16 == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    FPDF_FORMHANDLE form = p->owner->form;
+    FORM_OnLButtonDown(form, p->page, 0, x + p->crop_x, y + p->crop_y);
+    FORM_OnLButtonUp(form, p->page, 0, x + p->crop_x, y + p->crop_y);
+    FORM_SelectAllText(form, p->page);
+    FORM_ReplaceSelection(form, p->page, reinterpret_cast<FPDF_WIDESTRING>(value_utf16));
+    FORM_ForceToKillFocus(form);
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API void megapdf_form_commit(const megapdf_document* d) {
+    if (d == nullptr || d->form == nullptr) return;
+    Guard guard(CoreLock());
+    FORM_ForceToKillFocus(d->form);
 }
 
 }  // extern "C"

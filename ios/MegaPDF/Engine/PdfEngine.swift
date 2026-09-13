@@ -171,7 +171,7 @@ actor PdfEngine {
     /// Serializes the document (`FPDF_SaveAsCopy`, full rewrite). Atomicity is
     /// the caller's job, as on the other platforms.
     func save(_ document: PdfDocument) throws -> Data {
-        if let form = document.form { FORM_ForceToKillFocus(form) }
+        megapdf_form_commit(document.core)   // commit any in-progress field edit (#107)
         Self.saveSink = Data()
         var writer = FPDF_FILEWRITE(version: 1, WriteBlock: { _, data, size in
             guard let data, size > 0 else { return 1 }
@@ -261,7 +261,7 @@ actor PdfEngine {
 /// destroy via `close`.
 final class PdfDocument {
     /// The core's handle.
-    fileprivate let core: OpaquePointer
+    let core: OpaquePointer
     /// Raw PDFium handles, for the extensions still bound directly (stamps, text, forms, save).
     let docHandle: FPDF_DOCUMENT
     let formHandle: FPDF_FORMHANDLE?

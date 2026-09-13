@@ -151,7 +151,61 @@ internal static class CoreNative
         return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
     }
 
-    // Raw handles, for the contracts still bound directly (#107–#112) --------
+    // Contract 3: AcroForm fields (#107) ------------------------------------
+
+    public const int FieldOther = 0;
+    public const int FieldText = 1;
+    public const int FieldCheckbox = 2;
+    public const int FieldRadio = 3;
+    public const int FieldName = 0;
+    public const int FieldValue = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FormField
+    {
+        public int Kind;
+        public int IsChecked;
+        public Rect Bounds;
+    }
+
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_form_fields_load(IntPtr page);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_form_fields_free(IntPtr fields);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_form_field_count(IntPtr fields);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_form_field_get(IntPtr fields, nuint index, out FormField field);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_form_field_string(IntPtr fields, nuint index, int which, [Out] ushort[]? outUnits, nuint capacity);
+
+    /// <summary>A simulated click at (x, y) in crop space, focus released afterwards.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_form_click(IntPtr page, double x, double y);
+
+    /// <summary>Click, select all, replace the selection, release focus.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_form_set_text(IntPtr page, double x, double y, [MarshalAs(UnmanagedType.LPWStr)] string value);
+
+    /// <summary>Commits any in-progress field edit; call before serialising.</summary>
+    [DllImport(Dll)]
+    public static extern void megapdf_form_commit(IntPtr document);
+
+    public static string FormFieldString(IntPtr fields, nuint index, int which)
+    {
+        var n = (int)megapdf_form_field_string(fields, index, which, null, 0);
+        if (n == 0)
+            return "";
+        var units = new ushort[n];
+        megapdf_form_field_string(fields, index, which, units, (nuint)n);
+        return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
+    }
+
+    // Raw handles, for the contracts still bound directly (#108–#112) --------
 
     [DllImport(Dll)]
     public static extern IntPtr megapdf_document_raw(IntPtr document);
