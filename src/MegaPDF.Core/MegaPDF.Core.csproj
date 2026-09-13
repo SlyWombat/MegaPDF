@@ -34,6 +34,34 @@
     <None Include="$(PdfiumMacDylib)" Link="libpdfium.dylib" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- The shared engine core (core/megapdf_core.cpp, ADR-003, #38): built from
+       source by tools/build-core.* into core/build/<platform>/ (gitignored) and
+       copied next to pdfium, the same way pdfium itself flows to referencing
+       projects. The build target below runs the script when the artifact is
+       missing or older than the core sources, so `dotnet build` stays the only
+       command anyone types; it needs CMake and a C++ toolchain (VS 2022 Build
+       Tools with the C++ workload on Windows, Xcode CLT + Homebrew cmake on macOS). -->
+  <PropertyGroup>
+    <MegaPdfCoreDir>$(MSBuildThisFileDirectory)..\..\core\</MegaPdfCoreDir>
+    <MegaPdfCoreArtifact Condition="!$([MSBuild]::IsOSPlatform('OSX'))">$(MegaPdfCoreDir)build\win-x64\Release\megapdf_core.dll</MegaPdfCoreArtifact>
+    <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(MegaPdfCoreDir)build/osx/libmegapdf_core.dylib</MegaPdfCoreArtifact>
+    <MegaPdfCoreBuildCommand Condition="!$([MSBuild]::IsOSPlatform('OSX'))">powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)..\..\tools\build-core.ps1"</MegaPdfCoreBuildCommand>
+    <MegaPdfCoreBuildCommand Condition="$([MSBuild]::IsOSPlatform('OSX'))">bash "$(MSBuildThisFileDirectory)../../tools/build-core.sh"</MegaPdfCoreBuildCommand>
+  </PropertyGroup>
+
+  <Target Name="BuildMegaPdfCore" BeforeTargets="BeforeBuild"
+          Inputs="$(MegaPdfCoreDir)megapdf_core.cpp;$(MegaPdfCoreDir)megapdf_core.h;$(MegaPdfCoreDir)CMakeLists.txt"
+          Outputs="$(MegaPdfCoreArtifact)">
+    <Exec Command="$(MegaPdfCoreBuildCommand)" />
+  </Target>
+
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
+    <None Include="$(MegaPdfCoreArtifact)" Link="megapdf_core.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <None Include="$(MegaPdfCoreArtifact)" Link="libmegapdf_core.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="MegaPDF.Core.Tests" />
   </ItemGroup>

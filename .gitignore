@@ -69,3 +69,6 @@ libs/pdfium/mac-univ/
 # picked up by the build when present, never shipped.
 src/MegaPDF.App/Strings/qps-ploc/
 src/MegaPDF.Avalonia/Strings/Strings.qps-ploc.resx
+
+# Native build output of the shared engine core (tools/build-core.*)
+core/build/

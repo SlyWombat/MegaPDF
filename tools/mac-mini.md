@@ -30,7 +30,7 @@ things a runner cannot see.
 | Piece | Where | Note |
 |---|---|---|
 | Xcode 26.6 | `/Applications/Xcode.app` | licence accepted; iOS 26.5 simulators, iPhone 17 line and the current iPads |
-| Homebrew | `/opt/homebrew` | `xcodegen`, `ffmpeg` |
+| Homebrew | `/opt/homebrew` | `xcodegen`, `ffmpeg`, `cmake`, `ninja` (the last two build the shared engine core, `tools/build-core.sh`, 2026-09-13) |
 | .NET 8 SDK | `~/.dotnet` | per-user, from `dotnet-install.sh`; builds the Avalonia app |
 | Repo | `~/Projects/MegaPDF` | clone over the read-write deploy key; `git pull` before a session |
 | iOS PDFium | `~/Projects/MegaPDF/ios/Vendor` | `ios/scripts/fetch-pdfium.sh`, gitignored |

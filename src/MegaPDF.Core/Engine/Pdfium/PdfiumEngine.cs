@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using MegaPDF.Core.Engine.Core;
 
 namespace MegaPDF.Core.Engine.Pdfium;
 
@@ -421,38 +422,30 @@ internal sealed class PdfiumPage : IPdfPage
         return new PdfTextLine(runs, text, new PdfRect(x, y, right - x, bottom - y), runs[0].FontName, runs[0].FontSize);
     }
 
-    /// <summary>SDD §3.2 size window for a drawn checkbox, in points.</summary>
-    private const double MinSquareSize = 6;
-    private const double MaxSquareSize = 24;
-
     public IReadOnlyList<PdfRect> DetectCheckboxSquares()
     {
         ThrowIfDisposed();
         lock (PdfiumLibrary.Lock)
         {
-            var squares = new List<PdfRect>();
-            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
-            for (var i = 0; i < count; i++)
+            // The heuristic (SDD §3.2: stroked-not-filled paths, 6–24 pt, square
+            // within 25%) lives in the shared engine core and is no longer written
+            // here — one implementation serves all platforms (ADR-003, #38). The
+            // core hands back crop-relative rects with PDF's bottom-left origin; page
+            // space here is top-left, so each one goes back through the crop origin
+            // and the same ViewX/ViewY every other coordinate in this class uses.
+            var count = (int)CoreNative.megapdf_detect_checkbox_squares(_handle, null, 0);
+            if (count == 0)
+                return [];
+            var buffer = new CoreNative.Rect[count];
+            var filled = (int)CoreNative.megapdf_detect_checkbox_squares(_handle, buffer, (nuint)count);
+            CoreNative.megapdf_crop_origin(_handle, out var cropX, out var cropY);
+
+            var squares = new List<PdfRect>(filled);
+            for (var i = 0; i < filled; i++)
             {
-                var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
-                if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_PATH)
-                    continue;
-                if (PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top) == 0)
-                    continue;
-
-                double width = right - left, height = top - bottom;
-                // Small, roughly square (bounds include stroke width, so allow slack).
-                if (width is < MinSquareSize or > MaxSquareSize || height is < MinSquareSize or > MaxSquareSize)
-                    continue;
-                if (Math.Abs(width - height) > Math.Max(width, height) * 0.25)
-                    continue;
-                // Checkbox outlines are stroked, not filled — filled squares are
-                // usually decoration (bullets, table shading), per SDD §3.2.
-                if (PdfiumNative.FPDFPath_GetDrawMode(obj, out var fillMode, out var stroke) == 0
-                    || stroke == 0 || fillMode != 0)
-                    continue;
-
-                squares.Add(new PdfRect(ViewX(left), ViewY(top), width, height));
+                var r = buffer[i];
+                squares.Add(new PdfRect(
+                    ViewX(r.Left + cropX), ViewY(r.Top + cropY), r.Right - r.Left, r.Top - r.Bottom));
             }
             return squares;
         }

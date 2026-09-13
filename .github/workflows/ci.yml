@@ -44,6 +44,11 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # The Core project would run this itself, but a separate step makes a native
+      # build failure legible instead of buried in MSBuild output (#38, ADR-003).
+      - name: Build the shared engine core (megapdf_core.dll)
+        run: pwsh tools/build-core.ps1
+
       - name: Build
         run: dotnet build MegaPDF.sln --configuration Release
 
