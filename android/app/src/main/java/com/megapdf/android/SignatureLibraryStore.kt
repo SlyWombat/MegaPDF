@@ -60,6 +60,11 @@ class SignatureLibraryStore(private val dir: File) {
         writeIndex(entries.filterNot { it.id == id })
     }
 
+    /** Changes the display name only; the file and id stay put (#99). */
+    fun rename(id: String, displayName: String) {
+        writeIndex(load().map { if (it.id == id) it.copy(displayName = displayName) else it })
+    }
+
     fun loadBitmap(entry: SignatureEntry): Bitmap? =
         BitmapFactory.decodeFile(File(dir, entry.fileName).absolutePath)
 

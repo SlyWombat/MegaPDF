@@ -93,10 +93,18 @@
     <string name="signatures">Signatures</string>
     <string name="draw">Draw</string>
     <string name="draw_your_signature">Draw your signature</string>
-    <string name="add_from_photos">Add from Photos</string>
+    <string name="add_from_photos">From photo</string>
     <string name="no_signatures_yet">No signatures yet. Draw one with your finger, or add a photo of your signature on white paper — the background is removed automatically.</string>
-    <string name="pick_signature_hint">Tap a signature, then tap the page where it should go.</string>
     <string name="tap_to_place_signature">Tap the page where the signature should go</string>
+    <!-- Library sheet (#99): card actions and the two small dialogs behind its menu. -->
+    <string name="signature_place">Place on the page</string>
+    <string name="signature_options">Options for %1$s</string>
+    <string name="signature_card_a11y">%1$s. Tap to place, long-press for options.</string>
+    <string name="signature_rename">Rename</string>
+    <string name="signature_rename_title">Rename signature</string>
+    <string name="signature_name">Name</string>
+    <string name="signature_delete_title">Delete %1$s?</string>
+    <string name="signature_delete_body">This cannot be undone.</string>
     <!-- Default library name; persisted at creation time, so it keeps the language it was created in. -->
     <string name="signature_default_name">Signature %1$d</string>
     <string name="signature_added">Signature added</string>

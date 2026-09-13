@@ -118,6 +118,8 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 },
                 onSaveDrawnSignature = viewModel::addDrawnSignature,
                 onDeleteSignature = viewModel::deleteSignature,
+                onRenameSignature = viewModel::renameSignature,
+                loadSignatureBitmap = viewModel::loadSignatureBitmap,
                 screenshotSheet = viewModel.screenshotSheet,
                 onUndo = viewModel::undo,
                 onRedo = viewModel::redo,

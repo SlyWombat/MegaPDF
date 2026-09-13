@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
@@ -134,6 +133,8 @@ fun ViewerScreen(
     onAddSignature: () -> Unit,
     onSaveDrawnSignature: (Bitmap) -> Unit,
     onDeleteSignature: (String) -> Unit,
+    onRenameSignature: (id: String, name: String) -> Unit,
+    loadSignatureBitmap: suspend (SignatureEntry) -> Bitmap?,
     screenshotSheet: String? = null,
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -170,11 +171,15 @@ fun ViewerScreen(
         if (screenshotSheet == "search") searchOpen = true
     }
     if (signDialogOpen) {
-        SignatureDialog(
+        // A bottom sheet, not a dialog (#99): the page stays visible above it and
+        // each entry shows its ink. The sheet hides itself before calling back.
+        SignaturesSheet(
             signatures = signatures,
-            onPick = { signDialogOpen = false; onStartPlacement(it) },
-            onAdd = onAddSignature,
-            onDraw = { signDialogOpen = false; drawDialogOpen = true },
+            loadBitmap = loadSignatureBitmap,
+            onPick = onStartPlacement,
+            onDraw = { drawDialogOpen = true },
+            onAddFromPhoto = onAddSignature,
+            onRename = onRenameSignature,
             onDelete = onDeleteSignature,
             onDismiss = { signDialogOpen = false },
         )
@@ -574,53 +579,6 @@ private fun SearchHighlightOverlay(
             }
         }
     }
-}
-
-@Composable
-private fun SignatureDialog(
-    signatures: List<SignatureEntry>,
-    onPick: (SignatureEntry) -> Unit,
-    onAdd: () -> Unit,
-    onDraw: () -> Unit,
-    onDelete: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.signatures)) },
-        text = {
-            androidx.compose.foundation.layout.Column {
-                if (signatures.isEmpty()) {
-                    Text(stringResource(R.string.no_signatures_yet))
-                } else {
-                    Text(stringResource(R.string.pick_signature_hint))
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 280.dp),
-                    ) {
-                        items(signatures.size, key = { signatures[it].id }) { i ->
-                            val entry = signatures[i]
-                            androidx.compose.foundation.layout.Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                TextButton(
-                                    onClick = { onPick(entry) },
-                                    modifier = Modifier.weight(1f),
-                                ) { Text(entry.displayName) }
-                                TextButton(onClick = { onDelete(entry.id) }) { Text(stringResource(R.string.delete)) }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            androidx.compose.foundation.layout.Row {
-                TextButton(onClick = onDraw) { Text(stringResource(R.string.draw)) }
-                TextButton(onClick = onAdd) { Text(stringResource(R.string.add_from_photos)) }
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
-    )
 }
 
 /**
