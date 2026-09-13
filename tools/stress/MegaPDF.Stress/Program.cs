@@ -1,0 +1,924 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using MegaPDF.Core.Engine;
+using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Imaging;
+
+namespace MegaPDF.Stress;
+
+/// <summary>
+/// Corpus stress harness (#92).
+///
+/// <c>run</c> enumerates every PDF under <c>--root</c>, then feeds file indices to a
+/// pool of <c>worker</c> child processes over stdin. Each worker exercises one file
+/// at a time through MegaPDF.Core in the same call pattern as the apps and prints a
+/// JSON result line. The parent owns <c>results.jsonl</c>, records a worker that dies
+/// (native crash) or stops heartbeating (hang) against the file it was on, and starts
+/// a fresh worker in its place. Re-running with the same <c>--out</c> resumes.
+///
+/// Everything written to <c>--out</c> contains file names and is private.
+/// </summary>
+internal static class Program
+{
+    private static int Main(string[] args)
+    {
+        if (args.Length == 0)
+            return Usage();
+        var opts = Options.Parse(args.Skip(1));
+        return args[0] switch
+        {
+            "run" => Orchestrator.Run(opts),
+            "worker" => Worker.Run(opts),
+            _ => Usage(),
+        };
+    }
+
+    private static int Usage()
+    {
+        Console.Error.WriteLine(
+            "usage: MegaPDF.Stress run --root <dir> --out <dir> [--workers N] [--scale S]\n" +
+            "         [--phases scroll,search,zoom,save,images] [--terms Seaman,the]\n" +
+            "         [--limit N] [--filter substring] [--hang-seconds 180] [--cap-base 300] [--cap-per-page 2]\n" +
+            "       MegaPDF.Stress worker --list <files.txt> --root <dir> [--scale S] [--phases ...] [--terms ...]");
+        return 2;
+    }
+}
+
+internal sealed class Options
+{
+    private readonly Dictionary<string, string> _values = new(StringComparer.OrdinalIgnoreCase);
+
+    public static Options Parse(IEnumerable<string> args)
+    {
+        var o = new Options();
+        string? key = null;
+        foreach (var a in args)
+        {
+            if (a.StartsWith("--", StringComparison.Ordinal))
+            {
+                if (key is not null)
+                    o._values[key] = "true";
+                key = a[2..];
+            }
+            else if (key is not null)
+            {
+                o._values[key] = a;
+                key = null;
+            }
+        }
+        if (key is not null)
+            o._values[key] = "true";
+        return o;
+    }
+
+    public string? Get(string key) => _values.TryGetValue(key, out var v) ? v : null;
+    public string Require(string key) => Get(key) ?? throw new ArgumentException($"--{key} is required");
+    public int Int(string key, int fallback) => int.TryParse(Get(key), out var v) ? v : fallback;
+    public double Double(string key, double fallback) => double.TryParse(Get(key), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : fallback;
+    public string[] List(string key, string fallback) => (Get(key) ?? fallback).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+}
+
+// ---------------------------------------------------------------------------
+// Result model — one JSON line per file.
+// ---------------------------------------------------------------------------
+
+internal sealed class FileResult
+{
+    [JsonPropertyName("i")] public int Index { get; set; }
+    [JsonPropertyName("path")] public string Path { get; set; } = "";
+    [JsonPropertyName("bytes")] public long Bytes { get; set; }
+    [JsonPropertyName("outcome")] public string Outcome { get; set; } = "ok";
+    [JsonPropertyName("error")] public string? Error { get; set; }
+    [JsonPropertyName("errors")] public Dictionary<string, string>? PhaseErrors { get; set; }
+    [JsonPropertyName("exit_code")] public int? ExitCode { get; set; }
+    [JsonPropertyName("last_phase")] public string? LastPhase { get; set; }
+    [JsonPropertyName("last_page")] public int? LastPage { get; set; }
+    [JsonPropertyName("pages")] public int? Pages { get; set; }
+    [JsonPropertyName("read_ms")] public double? ReadMs { get; set; }
+    [JsonPropertyName("open_ms")] public double? OpenMs { get; set; }
+    [JsonPropertyName("sizepass_ms")] public double? SizePassMs { get; set; }
+    [JsonPropertyName("page0_pt")] public double[]? Page0Points { get; set; }
+    [JsonPropertyName("largest_pt")] public double[]? LargestPoints { get; set; }
+    [JsonPropertyName("largest_page")] public int? LargestPage { get; set; }
+    [JsonPropertyName("scroll")] public ScrollResult? Scroll { get; set; }
+    [JsonPropertyName("search")] public Dictionary<string, SearchResult>? Search { get; set; }
+    [JsonPropertyName("zoom")] public List<ZoomResult>? Zoom { get; set; }
+    [JsonPropertyName("save")] public SaveResult? Save { get; set; }
+    [JsonPropertyName("images")] public ImagesResult? Images { get; set; }
+    [JsonPropertyName("mem")] public MemResult? Mem { get; set; }
+    [JsonPropertyName("wall_ms")] public double? WallMs { get; set; }
+    [JsonPropertyName("worker")] public int? WorkerPid { get; set; }
+}
+
+internal sealed class ScrollResult
+{
+    [JsonPropertyName("scale")] public double Scale { get; set; }
+    [JsonPropertyName("total_ms")] public double TotalMs { get; set; }
+    [JsonPropertyName("render_ms")] public int[] RenderMs { get; set; } = [];
+    [JsonPropertyName("regions_ms")] public int[] RegionsMs { get; set; } = [];
+    [JsonPropertyName("max_px")] public long MaxPixels { get; set; }
+    [JsonPropertyName("blank_pages")] public List<int> BlankPages { get; set; } = [];
+    [JsonPropertyName("blank_with_text")] public List<int> BlankWithText { get; set; } = [];
+    [JsonPropertyName("text_chars")] public long TextChars { get; set; }
+    [JsonPropertyName("lines")] public int Lines { get; set; }
+    [JsonPropertyName("fields")] public int Fields { get; set; }
+    [JsonPropertyName("squares")] public int Squares { get; set; }
+    [JsonPropertyName("stamps")] public int Stamps { get; set; }
+    [JsonPropertyName("first3_ms")] public double First3Ms { get; set; }
+}
+
+internal sealed class SearchResult
+{
+    [JsonPropertyName("ms")] public double Ms { get; set; }
+    [JsonPropertyName("hits")] public int Hits { get; set; }
+    [JsonPropertyName("pages_with_hits")] public int PagesWithHits { get; set; }
+    [JsonPropertyName("first_hit_page")] public int? FirstHitPage { get; set; }
+    [JsonPropertyName("first_hit_ms")] public double? FirstHitMs { get; set; }
+    [JsonPropertyName("max_page_ms")] public double MaxPageMs { get; set; }
+    [JsonPropertyName("max_page")] public int MaxPage { get; set; }
+}
+
+internal sealed class ZoomResult
+{
+    [JsonPropertyName("page")] public int Page { get; set; }
+    [JsonPropertyName("zoom")] public double Zoom { get; set; }
+    [JsonPropertyName("px")] public int[] Pixels { get; set; } = [];
+    [JsonPropertyName("ms")] public double? Ms { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+}
+
+internal sealed class SaveResult
+{
+    [JsonPropertyName("ms")] public double Ms { get; set; }
+    [JsonPropertyName("bytes")] public long Bytes { get; set; }
+    [JsonPropertyName("reopen_ms")] public double? ReopenMs { get; set; }
+    [JsonPropertyName("reopen_pages")] public int? ReopenPages { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+}
+
+internal sealed class ImagesResult
+{
+    [JsonPropertyName("list_ms")] public double ListMs { get; set; }
+    [JsonPropertyName("count")] public int Count { get; set; }
+    [JsonPropertyName("stored_bytes")] public long StoredBytes { get; set; }
+    [JsonPropertyName("max_px")] public long MaxPixels { get; set; }
+    [JsonPropertyName("eligible")] public int Eligible { get; set; }
+    [JsonPropertyName("decode_ms")] public double DecodeMs { get; set; }
+    [JsonPropertyName("decode_max_ms")] public double DecodeMaxMs { get; set; }
+    [JsonPropertyName("decode_errors")] public int DecodeErrors { get; set; }
+}
+
+internal sealed class MemResult
+{
+    [JsonPropertyName("ws_before")] public long WsBefore { get; set; }
+    [JsonPropertyName("ws_after")] public long WsAfter { get; set; }
+    [JsonPropertyName("ws_after_gc")] public long WsAfterGc { get; set; }
+    [JsonPropertyName("ws_peak")] public long? WsPeak { get; set; }
+    [JsonPropertyName("gc_heap")] public long GcHeap { get; set; }
+}
+
+internal static class Json
+{
+    public static readonly JsonSerializerOptions Options = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = false,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Worker — one file at a time, driven over stdin.
+// ---------------------------------------------------------------------------
+
+internal static class Worker
+{
+    private const double PointsToPixels = 96.0 / 72.0;
+    private const double MaxZoom = 3.0;   // MainViewModel.MaxZoom = 300
+    private const double MinZoom = 0.5;   // MainViewModel.MinZoom = 50
+
+    public static int Run(Options opts)
+    {
+        var listPath = opts.Require("list");
+        var root = opts.Require("root");
+        var scale = opts.Double("scale", 1.0);
+        var phases = new HashSet<string>(opts.List("phases", "scroll,search,zoom,save,images"), StringComparer.OrdinalIgnoreCase);
+        var terms = opts.List("terms", "Seaman,the");
+        var files = File.ReadAllLines(listPath);
+
+        var stdout = Console.Out;
+        var engine = new PdfiumEngine();
+        var tmpDir = Directory.CreateTempSubdirectory("megapdf-stress-").FullName;
+        var pid = Environment.ProcessId;
+
+        try
+        {
+            string? line;
+            while ((line = Console.In.ReadLine()) is not null)
+            {
+                if (!int.TryParse(line.Trim(), out var index) || index < 0 || index >= files.Length)
+                    continue;
+                var result = new FileResult { Index = index, Path = files[index], WorkerPid = pid };
+                var wall = Stopwatch.StartNew();
+                try
+                {
+                    ProcessFile(engine, Path.Combine(root, files[index]), result, scale, phases, terms, tmpDir, stdout);
+                }
+                catch (Exception ex)
+                {
+                    result.Outcome = "error";
+                    result.Error = Describe(ex);
+                }
+                result.WallMs = wall.Elapsed.TotalMilliseconds;
+                stdout.WriteLine("RESULT " + JsonSerializer.Serialize(result, Json.Options));
+                stdout.WriteLine($"DONE {index}");
+                stdout.Flush();
+            }
+            return 0;
+        }
+        finally
+        {
+            try { Directory.Delete(tmpDir, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private static string Describe(Exception ex) => $"{ex.GetType().Name}: {ex.Message}";
+
+    private static void Heartbeat(TextWriter w, int index, string phase, int n)
+    {
+        w.WriteLine($"HB {index} {phase} {n}");
+        w.Flush();
+    }
+
+    private static void ProcessFile(PdfiumEngine engine, string fullPath, FileResult r, double scale,
+                                    HashSet<string> phases, string[] terms, string tmpDir, TextWriter hb)
+    {
+        var proc = Process.GetCurrentProcess();
+        proc.Refresh();
+        var mem = new MemResult { WsBefore = proc.WorkingSet64 };
+        r.Mem = mem;
+        var i = r.Index;
+
+        // 1. Read from wherever the corpus lives (share or local disk), then park a
+        //    copy on local temp so open_ms measures parsing, not the network.
+        Heartbeat(hb, i, "read", 0);
+        var sw = Stopwatch.StartNew();
+        var bytes = File.ReadAllBytes(fullPath);
+        r.ReadMs = sw.Elapsed.TotalMilliseconds;
+        r.Bytes = bytes.LongLength;
+        var local = Path.Combine(tmpDir, "doc.pdf");
+        File.WriteAllBytes(local, bytes);
+        bytes = [];
+
+        // 2. Open — what MainViewModel.OpenDocumentAsync does first.
+        Heartbeat(hb, i, "open", 0);
+        IPdfDocument doc;
+        sw.Restart();
+        try
+        {
+            doc = engine.Open(local);
+        }
+        catch (PdfLoadException ex)
+        {
+            r.OpenMs = sw.Elapsed.TotalMilliseconds;
+            r.Outcome = ex.IsPasswordError ? "password" : ex.IsFormatError ? "format" : ex.IsFileError ? "file" : $"load-{ex.ErrorCode}";
+            r.Error = Describe(ex);
+            return;
+        }
+        r.OpenMs = sw.Elapsed.TotalMilliseconds;
+
+        using (doc)
+        {
+            // 3. Size-only pass over every page (open-time geometry, SDD §4.2).
+            Heartbeat(hb, i, "sizepass", 0);
+            sw.Restart();
+            var count = doc.PageCount;
+            r.Pages = count;
+            hb.WriteLine($"PAGES {i} {count}");
+            hb.Flush();
+            var sizes = new (double W, double H)[count];
+            for (var p = 0; p < count; p++)
+            {
+                using var page = doc.GetPage(p);
+                sizes[p] = (page.Width, page.Height);
+            }
+            r.SizePassMs = sw.Elapsed.TotalMilliseconds;
+            if (count > 0)
+            {
+                r.Page0Points = [Math.Round(sizes[0].W, 1), Math.Round(sizes[0].H, 1)];
+                var largest = 0;
+                for (var p = 1; p < count; p++)
+                    if (sizes[p].W * sizes[p].H > sizes[largest].W * sizes[largest].H)
+                        largest = p;
+                r.LargestPage = largest;
+                r.LargestPoints = [Math.Round(sizes[largest].W, 1), Math.Round(sizes[largest].H, 1)];
+            }
+
+            var errors = new Dictionary<string, string>();
+
+            // 4. Scroll to the end: every page rendered at the viewport scale plus the
+            //    interaction-region pass the apps run on the same task (BuildRegions).
+            if (phases.Contains("scroll"))
+            {
+                try { r.Scroll = ScrollToEnd(doc, count, scale, i, hb); }
+                catch (Exception ex) { errors["scroll"] = Describe(ex); }
+            }
+
+            // 5. Whole-document search, page by page, exactly like SearchAsync/Search.
+            if (phases.Contains("search"))
+            {
+                r.Search = new Dictionary<string, SearchResult>();
+                foreach (var term in terms)
+                {
+                    try { r.Search[term] = SearchAll(doc, count, term, i, hb); }
+                    catch (Exception ex) { errors["search:" + term] = Describe(ex); }
+                }
+            }
+
+            // 6. Zoom extremes on the first page and the largest page.
+            if (phases.Contains("zoom") && count > 0)
+            {
+                r.Zoom = [];
+                var targets = new List<int> { 0 };
+                if (r.LargestPage is int lp && lp != 0)
+                    targets.Add(lp);
+                foreach (var p in targets)
+                {
+                    Heartbeat(hb, i, "zoom", p);
+                    r.Zoom.Add(RenderAtZoom(doc, p, MaxZoom, scale));
+                    r.Zoom.Add(RenderAtZoom(doc, p, MinZoom, scale));
+                }
+            }
+
+            // 7. Save (incremental path) and reopen the result.
+            if (phases.Contains("save"))
+            {
+                Heartbeat(hb, i, "save", 0);
+                r.Save = SaveAndReopen(engine, doc, Path.Combine(tmpDir, "saved.pdf"));
+            }
+
+            // 8. Shrink-for-email: list images and decode the ones the shrinker would re-encode.
+            if (phases.Contains("images"))
+            {
+                try { r.Images = DecodeShrinkCandidates(doc, i, hb); }
+                catch (Exception ex) { errors["images"] = Describe(ex); }
+            }
+
+            if (errors.Count > 0)
+            {
+                r.PhaseErrors = errors;
+                r.Outcome = "partial";
+            }
+
+            proc.Refresh();
+            mem.WsAfter = proc.WorkingSet64;
+            try { mem.WsPeak = proc.PeakWorkingSet64; } catch { /* not on every OS */ }
+        }
+
+        try { File.Delete(local); } catch { /* best effort */ }
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        proc.Refresh();
+        mem.WsAfterGc = proc.WorkingSet64;
+        mem.GcHeap = GC.GetTotalMemory(false);
+    }
+
+    private static ScrollResult ScrollToEnd(IPdfDocument doc, int count, double scale, int index, TextWriter hb)
+    {
+        var res = new ScrollResult { Scale = scale, RenderMs = new int[count], RegionsMs = new int[count] };
+        var total = Stopwatch.StartNew();
+        var sw = new Stopwatch();
+        for (var p = 0; p < count; p++)
+        {
+            Heartbeat(hb, index, "scroll", p);
+            using var page = doc.GetPage(p);
+            var pw = Math.Max(1, (int)(page.Width * PointsToPixels * scale));
+            var ph = Math.Max(1, (int)(page.Height * PointsToPixels * scale));
+            sw.Restart();
+            var rendered = page.Render(pw, ph);
+            res.RenderMs[p] = (int)sw.ElapsedMilliseconds;
+            res.MaxPixels = Math.Max(res.MaxPixels, (long)pw * ph);
+
+            sw.Restart();
+            var stamps = page.GetStamps().Count;
+            _ = page.GetTextBoxes().Count;
+            var fields = page.GetFormFields().Count;
+            var lines = page.GetTextLines();
+            _ = page.GetWhiteouts().Count;
+            var squares = page.DetectCheckboxSquares().Count;
+            res.RegionsMs[p] = (int)sw.ElapsedMilliseconds;
+
+            res.Stamps += stamps;
+            res.Fields += fields;
+            res.Lines += lines.Count;
+            res.Squares += squares;
+            long chars = 0;
+            foreach (var l in lines)
+                chars += l.Text.Length;
+            res.TextChars += chars;
+
+            if (IsBlank(rendered.Bgra))
+            {
+                res.BlankPages.Add(p);
+                if (chars > 0)
+                    res.BlankWithText.Add(p);
+            }
+            if (p == Math.Min(2, count - 1))
+                res.First3Ms = total.Elapsed.TotalMilliseconds;
+        }
+        res.TotalMs = total.Elapsed.TotalMilliseconds;
+        return res;
+    }
+
+    private static bool IsBlank(byte[] bgra)
+    {
+        var px = MemoryMarshal.Cast<byte, uint>(bgra);
+        foreach (var v in px)
+            if (v != 0xFFFFFFFFu)
+                return false;
+        return true;
+    }
+
+    private static SearchResult SearchAll(IPdfDocument doc, int count, string term, int index, TextWriter hb)
+    {
+        var res = new SearchResult();
+        var total = Stopwatch.StartNew();
+        var sw = new Stopwatch();
+        for (var p = 0; p < count; p++)
+        {
+            if (p % 10 == 0)
+                Heartbeat(hb, index, "search", p);
+            sw.Restart();
+            using var page = doc.GetPage(p);
+            var matches = page.FindText(term);
+            var ms = sw.Elapsed.TotalMilliseconds;
+            if (ms > res.MaxPageMs)
+            {
+                res.MaxPageMs = ms;
+                res.MaxPage = p;
+            }
+            if (matches.Count > 0)
+            {
+                res.PagesWithHits++;
+                if (res.FirstHitPage is null)
+                {
+                    res.FirstHitPage = p;
+                    res.FirstHitMs = total.Elapsed.TotalMilliseconds;
+                }
+                res.Hits += matches.Count;
+            }
+        }
+        res.Ms = total.Elapsed.TotalMilliseconds;
+        return res;
+    }
+
+    private static ZoomResult RenderAtZoom(IPdfDocument doc, int p, double zoom, double scale)
+    {
+        var z = new ZoomResult { Page = p, Zoom = zoom };
+        try
+        {
+            using var page = doc.GetPage(p);
+            var pw = Math.Max(1, (int)(page.Width * PointsToPixels * scale * zoom));
+            var ph = Math.Max(1, (int)(page.Height * PointsToPixels * scale * zoom));
+            z.Pixels = [pw, ph];
+            var sw = Stopwatch.StartNew();
+            _ = page.Render(pw, ph);
+            z.Ms = sw.Elapsed.TotalMilliseconds;
+        }
+        catch (Exception ex)
+        {
+            z.Error = Describe(ex);
+        }
+        return z;
+    }
+
+    private static SaveResult SaveAndReopen(PdfiumEngine engine, IPdfDocument doc, string savedPath)
+    {
+        var s = new SaveResult();
+        try
+        {
+            var sw = Stopwatch.StartNew();
+            using (var stream = File.Create(savedPath))
+                doc.Save(stream);
+            s.Ms = sw.Elapsed.TotalMilliseconds;
+            s.Bytes = new FileInfo(savedPath).Length;
+            sw.Restart();
+            using (var reopened = engine.Open(savedPath))
+            {
+                s.ReopenPages = reopened.PageCount;
+            }
+            s.ReopenMs = sw.Elapsed.TotalMilliseconds;
+        }
+        catch (Exception ex)
+        {
+            s.Error = Describe(ex);
+        }
+        finally
+        {
+            try { File.Delete(savedPath); } catch { /* best effort */ }
+        }
+        return s;
+    }
+
+    /// <summary>Mirrors ImageShrinker.Shrink's selection rules and its decode step, without the JPEG encode.</summary>
+    private static ImagesResult DecodeShrinkCandidates(IPdfDocument doc, int index, TextWriter hb)
+    {
+        var res = new ImagesResult();
+        Heartbeat(hb, index, "images", 0);
+        var sw = Stopwatch.StartNew();
+        var images = doc.GetImages();
+        res.ListMs = sw.Elapsed.TotalMilliseconds;
+        res.Count = images.Count;
+        var n = 0;
+        foreach (var image in images)
+        {
+            res.StoredBytes += image.StoredByteLength;
+            res.MaxPixels = Math.Max(res.MaxPixels, (long)image.PixelWidth * image.PixelHeight);
+
+            var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * ImageShrinker.TargetDpi);
+            var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * ImageShrinker.TargetDpi);
+            var oversized = image.PixelWidth > targetWidth * 1.2;
+            if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
+                continue;
+            if (image.PixelWidth < ImageShrinker.MinTargetPixels || image.PixelHeight < ImageShrinker.MinTargetPixels)
+                continue;
+            targetWidth = Math.Clamp(targetWidth, ImageShrinker.MinTargetPixels, image.PixelWidth);
+            targetHeight = Math.Clamp(targetHeight, ImageShrinker.MinTargetPixels, image.PixelHeight);
+
+            res.Eligible++;
+            if (++n % 5 == 0)
+                Heartbeat(hb, index, "images", n);
+            sw.Restart();
+            try
+            {
+                _ = doc.RenderImageAt(image, targetWidth, targetHeight);
+            }
+            catch
+            {
+                res.DecodeErrors++;
+            }
+            var ms = sw.Elapsed.TotalMilliseconds;
+            res.DecodeMs += ms;
+            res.DecodeMaxMs = Math.Max(res.DecodeMaxMs, ms);
+        }
+        return res;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator — worker pool, crash/hang isolation, resume, progress.
+// ---------------------------------------------------------------------------
+
+internal static class Orchestrator
+{
+    public static int Run(Options opts)
+    {
+        var root = Path.GetFullPath(opts.Require("root"));
+        var outDir = Path.GetFullPath(opts.Require("out"));
+        Directory.CreateDirectory(outDir);
+        var workers = Math.Max(1, opts.Int("workers", 4));
+        var scale = opts.Double("scale", 1.0);
+        var phases = string.Join(",", opts.List("phases", "scroll,search,zoom,save,images"));
+        var terms = string.Join(",", opts.List("terms", "Seaman,the"));
+        var hangSeconds = opts.Int("hang-seconds", 180);
+        var capBase = opts.Int("cap-base", 300);
+        var capPerPage = opts.Double("cap-per-page", 2);
+        var limit = opts.Int("limit", int.MaxValue);
+        var filter = opts.Get("filter");
+
+        var listPath = Path.Combine(outDir, "files.txt");
+        string[] files;
+        if (File.Exists(listPath))
+        {
+            files = File.ReadAllLines(listPath);
+            Log(outDir, $"resuming: {files.Length} files listed in {listPath}");
+        }
+        else
+        {
+            var options = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                MatchCasing = MatchCasing.CaseInsensitive,
+                AttributesToSkip = FileAttributes.Device,
+            };
+            files = Directory.EnumerateFiles(root, "*.pdf", options)
+                .Select(f => Path.GetRelativePath(root, f))
+                .Where(f => filter is null || f.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.Ordinal)
+                .Take(limit)
+                .ToArray();
+            File.WriteAllLines(listPath, files);
+            Log(outDir, $"enumerated {files.Length} PDFs under {root}");
+        }
+
+        var resultsPath = Path.Combine(outDir, "results.jsonl");
+        var done = new HashSet<int>();
+        if (File.Exists(resultsPath))
+        {
+            foreach (var line in File.ReadLines(resultsPath))
+            {
+                try
+                {
+                    using var d = JsonDocument.Parse(line);
+                    if (d.RootElement.TryGetProperty("i", out var ip))
+                        done.Add(ip.GetInt32());
+                }
+                catch { /* truncated tail line from a killed run */ }
+            }
+        }
+
+        var queue = new ConcurrentQueue<int>(Enumerable.Range(0, files.Length).Where(i => !done.Contains(i)));
+        var total = files.Length;
+        var alreadyDone = done.Count;
+        Log(outDir, $"{queue.Count} to do, {alreadyDone} already done; workers={workers} scale={scale} phases={phases} terms={terms}");
+
+        File.WriteAllText(Path.Combine(outDir, "run.json"), JsonSerializer.Serialize(new
+        {
+            root, started = DateTimeOffset.Now, workers, scale, phases, terms, hangSeconds, capBase, capPerPage,
+            os = RuntimeInformation.OSDescription, arch = RuntimeInformation.OSArchitecture.ToString(),
+            machine = Environment.MachineName, cpus = Environment.ProcessorCount,
+            pdfium = PdfiumPin(),
+        }, new JsonSerializerOptions { WriteIndented = true }));
+
+        var results = new StreamWriter(new FileStream(resultsPath, FileMode.Append, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
+        var resultsLock = new object();
+        var stats = new Stats { Done = alreadyDone, Total = total };
+        var stopFile = Path.Combine(outDir, "STOP");
+        var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+        var tasks = new List<Task>();
+        for (var w = 0; w < workers; w++)
+        {
+            var slot = w;
+            tasks.Add(Task.Run(() => WorkerLoop(slot, queue, files, root, outDir, listPath, scale, phases, terms,
+                hangSeconds, capBase, capPerPage, results, resultsLock, stats, stopFile, cts.Token)));
+        }
+
+        var started = Stopwatch.StartNew();
+        var lastReport = 0L;
+        while (!Task.WaitAll(tasks.ToArray(), 5000))
+        {
+            if (File.Exists(stopFile) && !cts.IsCancellationRequested)
+            {
+                Log(outDir, "STOP file seen — stopping workers");
+                cts.Cancel();
+            }
+            if (started.ElapsedMilliseconds - lastReport >= 30000)
+            {
+                lastReport = started.ElapsedMilliseconds;
+                Progress(outDir, stats, started.Elapsed, alreadyDone);
+            }
+        }
+        Progress(outDir, stats, started.Elapsed, alreadyDone);
+        results.Dispose();
+        Log(outDir, $"finished: done={stats.Done}/{stats.Total} ok={stats.Ok} nonok={stats.NonOk} crashes={stats.Crashes} hangs={stats.Hangs} in {started.Elapsed:hh\\:mm\\:ss}");
+        return 0;
+    }
+
+    /// <summary>The pinned PDFium build (libs/pdfium/win-x64/VERSION), found by walking up from the binary.</summary>
+    private static string? PdfiumPin()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var candidate = Path.Combine(dir.FullName, "libs", "pdfium", "win-x64", "VERSION");
+            if (File.Exists(candidate))
+                return File.ReadAllText(candidate).Replace("\r", "").Replace("\n", " ").Trim();
+            dir = dir.Parent;
+        }
+        return null;
+    }
+
+    private sealed class Stats
+    {
+        public int Total;
+        public int Done;
+        public int Ok;
+        public int NonOk;
+        public int Crashes;
+        public int Hangs;
+        public long Pages;
+    }
+
+    private static void Progress(string outDir, Stats s, TimeSpan elapsed, int alreadyDone)
+    {
+        var doneThisRun = s.Done - alreadyDone;
+        var rate = doneThisRun / Math.Max(1.0, elapsed.TotalSeconds);
+        var remaining = s.Total - s.Done;
+        var eta = rate > 0 ? TimeSpan.FromSeconds(remaining / rate) : TimeSpan.Zero;
+        Log(outDir, $"progress {s.Done}/{s.Total} ok={s.Ok} nonok={s.NonOk} crashes={s.Crashes} hangs={s.Hangs} pages={s.Pages} " +
+                    $"elapsed={elapsed:hh\\:mm\\:ss} rate={rate * 60:F1}/min eta={eta:hh\\:mm\\:ss}");
+    }
+
+    private static readonly object LogLock = new();
+
+    private static void Log(string outDir, string message)
+    {
+        var line = $"{DateTime.Now:HH:mm:ss} {message}";
+        lock (LogLock)
+        {
+            Console.WriteLine(line);
+            File.AppendAllText(Path.Combine(outDir, "run.log"), line + Environment.NewLine);
+        }
+    }
+
+    private static void WorkerLoop(int slot, ConcurrentQueue<int> queue, string[] files, string root, string outDir,
+                                   string listPath, double scale, string phases, string terms, int hangSeconds,
+                                   int capBase, double capPerPage, StreamWriter results, object resultsLock,
+                                   Stats stats, string stopFile, CancellationToken cancel)
+    {
+        Process? proc = null;
+        BlockingCollection<string>? lines = null;
+        StreamWriter? stderrLog = null;
+
+        void Spawn()
+        {
+            Kill();
+            var psi = new ProcessStartInfo(Environment.ProcessPath!)
+            {
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = AppContext.BaseDirectory,
+            };
+            foreach (var a in new[] { "worker", "--list", listPath, "--root", root, "--scale", scale.ToString(System.Globalization.CultureInfo.InvariantCulture), "--phases", phases, "--terms", terms })
+                psi.ArgumentList.Add(a);
+            psi.Environment["DOTNET_gcServer"] = "0";
+            proc = Process.Start(psi)!;
+            var local = new BlockingCollection<string>();
+            lines = local;
+            var p = proc;
+            stderrLog ??= new StreamWriter(new FileStream(Path.Combine(outDir, $"worker-{slot}.stderr.log"), FileMode.Append, FileAccess.Write, FileShare.Read)) { AutoFlush = true };
+            var errLog = stderrLog;
+            p.ErrorDataReceived += (_, e) => { if (e.Data is not null) errLog.WriteLine($"[pid {p.Id}] {e.Data}"); };
+            p.BeginErrorReadLine();
+            Task.Run(() =>
+            {
+                try
+                {
+                    string? l;
+                    while ((l = p.StandardOutput.ReadLine()) is not null)
+                        local.Add(l);
+                }
+                catch { /* process gone */ }
+                local.CompleteAdding();
+            });
+            Log(outDir, $"worker {slot}: started pid {proc.Id}");
+        }
+
+        void Kill()
+        {
+            if (proc is null)
+                return;
+            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
+            try { proc.WaitForExit(5000); } catch { /* ignore */ }
+            proc.Dispose();
+            proc = null;
+        }
+
+        try
+        {
+            Spawn();
+            while (!cancel.IsCancellationRequested && queue.TryDequeue(out var index))
+            {
+                if (proc is null || proc.HasExited)
+                    Spawn();
+
+                var result = RunOne(index);
+                if (result.Outcome == "aborted")
+                {
+                    queue.Enqueue(index); // not done — a resumed run picks it up
+                    break;
+                }
+                lock (resultsLock)
+                {
+                    results.WriteLine(JsonSerializer.Serialize(result, Json.Options));
+                }
+                lock (stats)
+                {
+                    stats.Done++;
+                    if (result.Outcome == "ok") stats.Ok++; else stats.NonOk++;
+                    if (result.Outcome == "crash") stats.Crashes++;
+                    if (result.Outcome == "hang") stats.Hangs++;
+                    stats.Pages += result.Pages ?? 0;
+                }
+                if (result.Outcome is "crash" or "hang" or "error")
+                    Log(outDir, $"worker {slot}: file {index} -> {result.Outcome} {result.Error} (phase {result.LastPhase} page {result.LastPage})");
+            }
+        }
+        finally
+        {
+            try { proc?.StandardInput.Close(); } catch { /* ignore */ }
+            try { proc?.WaitForExit(3000); } catch { /* ignore */ }
+            Kill();
+            stderrLog?.Dispose();
+        }
+
+        FileResult RunOne(int index)
+        {
+            var p = proc!;
+            var lineQueue = lines!;
+            var started = Stopwatch.StartNew();
+            var lastBeat = Stopwatch.StartNew();
+            string? lastPhase = null;
+            int? lastPage = null;
+            double capSeconds = capBase;
+            FileResult? result = null;
+
+            try
+            {
+                p.StandardInput.WriteLine(index.ToString());
+                p.StandardInput.Flush();
+            }
+            catch (Exception ex)
+            {
+                return Failure("crash", $"could not talk to worker: {ex.Message}");
+            }
+
+            while (true)
+            {
+                if (lineQueue.TryTake(out var line, 1000))
+                {
+                    lastBeat.Restart();
+                    if (line.StartsWith("HB ", StringComparison.Ordinal))
+                    {
+                        var parts = line.Split(' ');
+                        if (parts.Length >= 4)
+                        {
+                            lastPhase = parts[2];
+                            lastPage = int.TryParse(parts[3], out var pg) ? pg : null;
+                        }
+                    }
+                    else if (line.StartsWith("PAGES ", StringComparison.Ordinal))
+                    {
+                        var parts = line.Split(' ');
+                        if (parts.Length >= 3 && int.TryParse(parts[2], out var n))
+                            capSeconds = capBase + n * capPerPage;
+                    }
+                    else if (line.StartsWith("RESULT ", StringComparison.Ordinal))
+                    {
+                        try { result = JsonSerializer.Deserialize<FileResult>(line[7..], Json.Options); }
+                        catch (Exception ex) { result = Failure("error", $"unparseable result: {ex.Message}"); }
+                    }
+                    else if (line.StartsWith("DONE ", StringComparison.Ordinal))
+                    {
+                        return result ?? Failure("error", "worker reported DONE without a result");
+                    }
+                    continue;
+                }
+
+                if (p.HasExited || lineQueue.IsCompleted)
+                {
+                    var code = 0;
+                    try { code = p.ExitCode; } catch { /* ignore */ }
+                    var f = Failure("crash", $"worker exited with code {code} (0x{code:X8})");
+                    f.ExitCode = code;
+                    Spawn();
+                    return f;
+                }
+                if (lastBeat.Elapsed.TotalSeconds > hangSeconds)
+                {
+                    var f = Failure("hang", $"no heartbeat for {hangSeconds}s");
+                    Spawn();
+                    return f;
+                }
+                if (started.Elapsed.TotalSeconds > capSeconds)
+                {
+                    var f = Failure("hang", $"exceeded per-file cap of {capSeconds:F0}s");
+                    Spawn();
+                    return f;
+                }
+                if (cancel.IsCancellationRequested)
+                {
+                    var f = Failure("aborted", "run stopped");
+                    return f;
+                }
+            }
+
+            FileResult Failure(string outcome, string message) => new()
+            {
+                Index = index,
+                Path = files[index],
+                Outcome = outcome,
+                Error = message,
+                LastPhase = lastPhase,
+                LastPage = lastPage,
+                WallMs = started.Elapsed.TotalMilliseconds,
+                WorkerPid = SafePid(p),
+            };
+        }
+    }
+
+    private static int? SafePid(Process p)
+    {
+        try { return p.Id; } catch { return null; }
+    }
+}

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Corpus stress harness (#92). Drives MegaPDF.Core exactly the way the apps do
+       (open, size pass, viewport render + interaction regions, whole-document
+       search, zoom extremes, save, shrink decode) over a directory of real PDFs,
+       one worker process per CPU slot so a native crash or hang inside PDFium
+       loses one file, not the run. Not part of the solution and never shipped. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\MegaPDF.Core\MegaPDF.Core.csproj" />
+  </ItemGroup>
+
+</Project>
