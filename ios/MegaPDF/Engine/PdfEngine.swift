@@ -168,22 +168,22 @@ actor PdfEngine {
         }
     }
 
-    /// Serializes the document (`FPDF_SaveAsCopy`, full rewrite). Atomicity is
-    /// the caller's job, as on the other platforms.
+    /// Serializes the document (full rewrite, #97) through the core, which commits
+    /// any in-progress form edit first. Atomicity is the caller's job, as on the
+    /// other platforms.
     func save(_ document: PdfDocument) throws -> Data {
-        megapdf_form_commit(document.core)   // commit any in-progress field edit (#107)
-        Self.saveSink = Data()
-        var writer = FPDF_FILEWRITE(version: 1, WriteBlock: { _, data, size in
-            guard let data, size > 0 else { return 1 }
-            PdfEngine.saveSink.append(
-                Data(bytes: data, count: Int(size)))
-            return 1
-        })
-        let ok = FPDF_SaveAsCopy(document.doc, &writer, 0)
-        let result = Self.saveSink
-        Self.saveSink = Data()
-        guard ok != 0, !result.isEmpty else { throw PdfError.saveFailed }
-        return result
+        final class Sink { var data = Data() }
+        let sink = Sink()
+        let status = withExtendedLifetime(sink) { () -> Int32 in
+            let context = Unmanaged.passUnretained(sink).toOpaque()
+            return megapdf_save(document.core, { context, bytes, count in
+                guard let context, let bytes, count > 0 else { return 1 }
+                Unmanaged<Sink>.fromOpaque(context).takeUnretainedValue().data.append(Data(bytes: bytes, count: count))
+                return 1
+            }, context)
+        }
+        guard status == MEGAPDF_OK, !sink.data.isEmpty else { throw PdfError.saveFailed }
+        return sink.data
     }
 
     /// All MegaPDF-placed stamps on the page (`MegaPDF_Id`-tagged, any platform),
@@ -209,10 +209,6 @@ actor PdfEngine {
     }
 
     // MARK: - internals
-
-    // WriteBlock is a C function pointer with no user-context slot; the actor
-    // serializes saves, so a static sink is safe.
-    nonisolated(unsafe) static var saveSink = Data()
 
     /// The core's page handles for the raw pages currently inside a `withPage`
     /// body, so the extensions still written against `FPDF_PAGE` can ask the core

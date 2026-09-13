@@ -21,7 +21,12 @@ three-face rule and the mark params, `megapdf_restyle_text_box` (the #45 id-pres
 restyle anchored on the bottom-left corner), find/move/remove by id including the
 `text:untagged#N` handle for pre-id boxes, and `megapdf_detach_object` /
 `megapdf_restore_object` / `megapdf_discard_detached`, with the document freeing any
-detached object still held at close (decision 1 made concrete).
+detached object still held at close (decision 1 made concrete). #110 (save, flatten,
+images) moved `megapdf_save` (full rewrite through a caller write callback, form edits
+committed first), `megapdf_flatten_all`, the image list, `megapdf_render_image`,
+`megapdf_replace_image_jpeg` and `megapdf_shrink_images` — the shrink-for-email
+decision rules with the JPEG encoder injected — into the core; file I/O and the atomic
+replace stay per platform.
 (Numbered 003: ADR-002 became the macOS desktop decision while this sat on its
 branch as a draft.)
 

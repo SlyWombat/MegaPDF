@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -919,6 +920,208 @@ void test_whiteouts_and_text_boxes(const std::string& fixtures) {
     check(megapdf_find_text_box(nullptr, nullptr) == -1, "find on null is -1");
 }
 
+// --------------------------------------------------------------------------
+// Contract 6 (#110): save, flatten and images.
+
+int collect(void* ctx, const void* data, size_t size) {
+    auto* out = static_cast<std::vector<unsigned char>*>(ctx);
+    out->insert(out->end(), static_cast<const unsigned char*>(data), static_cast<const unsigned char*>(data) + size);
+    return 1;
+}
+
+int refuse(void*, const void*, size_t) { return 0; }
+
+// A one-page PDF drawing a raw RGB image of `px` × `px` at `pt` × `pt` points.
+std::vector<unsigned char> image_pdf(int px, double pt) {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>");
+    std::string pixels(static_cast<size_t>(px) * px * 3, '\0');
+    for (size_t i = 0; i < pixels.size(); i += 3) { pixels[i] = static_cast<char>(40); pixels[i + 1] = static_cast<char>(80); pixels[i + 2] = static_cast<char>(200); }
+    add("<< /Type /XObject /Subtype /Image /Width " + std::to_string(px) + " /Height " + std::to_string(px) +
+        " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length " + std::to_string(pixels.size()) + " >>\nstream\n" + pixels + "\nendstream");
+    char content[128];
+    std::snprintf(content, sizeof content, "q %.0f 0 0 %.0f 100 600 cm /Im1 Do Q", pt, pt);
+    add("<< /Length " + std::to_string(std::strlen(content)) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// A real 8×8 JPEG, so the replace path exercises PDFium's DCT loader.
+const unsigned char kTinyJpeg[] = {
+    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+    0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x10, 0x0b, 0x0c, 0x0e, 0x0c, 0x0a, 0x10,
+    0x0e, 0x0d, 0x0e, 0x12, 0x11, 0x10, 0x13, 0x18, 0x28, 0x1a, 0x18, 0x16, 0x16, 0x18, 0x31, 0x23,
+    0x25, 0x1d, 0x28, 0x3a, 0x33, 0x3d, 0x3c, 0x39, 0x33, 0x38, 0x37, 0x40, 0x48, 0x5c, 0x4e, 0x40,
+    0x44, 0x57, 0x45, 0x37, 0x38, 0x50, 0x6d, 0x51, 0x57, 0x5f, 0x62, 0x67, 0x68, 0x67, 0x3e, 0x4d,
+    0x71, 0x79, 0x70, 0x64, 0x78, 0x5c, 0x65, 0x67, 0x63, 0xff, 0xdb, 0x00, 0x43, 0x01, 0x11, 0x12,
+    0x12, 0x18, 0x15, 0x18, 0x2f, 0x1a, 0x1a, 0x2f, 0x63, 0x42, 0x38, 0x42, 0x63, 0x63, 0x63, 0x63,
+    0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63,
+    0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63,
+    0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0x63, 0xff, 0xc0,
+    0x00, 0x11, 0x08, 0x00, 0x08, 0x00, 0x08, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11,
+    0x01, 0xff, 0xc4, 0x00, 0x1f, 0x00, 0x00, 0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+    0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x10, 0x00, 0x02, 0x01, 0x03, 0x03, 0x02, 0x04, 0x03, 0x05,
+    0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7d, 0x01, 0x02, 0x03, 0x00, 0x04, 0x11, 0x05, 0x12, 0x21,
+    0x31, 0x41, 0x06, 0x13, 0x51, 0x61, 0x07, 0x22, 0x71, 0x14, 0x32, 0x81, 0x91, 0xa1, 0x08, 0x23,
+    0x42, 0xb1, 0xc1, 0x15, 0x52, 0xd1, 0xf0, 0x24, 0x33, 0x62, 0x72, 0x82, 0x09, 0x0a, 0x16, 0x17,
+    0x18, 0x19, 0x1a, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a,
+    0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a,
+    0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
+    0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99,
+    0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7,
+    0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5,
+    0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf1,
+    0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xff, 0xc4, 0x00, 0x1f, 0x01, 0x00, 0x03,
+    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+    0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0xff, 0xc4, 0x00, 0xb5, 0x11, 0x00,
+    0x02, 0x01, 0x02, 0x04, 0x04, 0x03, 0x04, 0x07, 0x05, 0x04, 0x04, 0x00, 0x01, 0x02, 0x77, 0x00,
+    0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21, 0x31, 0x06, 0x12, 0x41, 0x51, 0x07, 0x61, 0x71, 0x13,
+    0x22, 0x32, 0x81, 0x08, 0x14, 0x42, 0x91, 0xa1, 0xb1, 0xc1, 0x09, 0x23, 0x33, 0x52, 0xf0, 0x15,
+    0x62, 0x72, 0xd1, 0x0a, 0x16, 0x24, 0x34, 0xe1, 0x25, 0xf1, 0x17, 0x18, 0x19, 0x1a, 0x26, 0x27,
+    0x28, 0x29, 0x2a, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+    0x4a, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69,
+    0x6a, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88,
+    0x89, 0x8a, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6,
+    0xa7, 0xa8, 0xa9, 0xaa, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xc2, 0xc3, 0xc4,
+    0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xe2,
+    0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9,
+    0xfa, 0xff, 0xda, 0x00, 0x0c, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00, 0xc8,
+    0xa2, 0x8a, 0x2b, 0xe8, 0x0e, 0x13, 0xff, 0xd9
+};
+
+int fake_encode(void* ctx, const unsigned char*, int w, int h, double quality, unsigned char** out, size_t* len) {
+    auto* calls = static_cast<std::vector<std::string>*>(ctx);
+    calls->push_back(std::to_string(w) + "x" + std::to_string(h) + "@" + std::to_string(quality));
+    *out = const_cast<unsigned char*>(kTinyJpeg);
+    *len = sizeof kTinyJpeg;
+    return 1;
+}
+
+void test_save_flatten_images(const std::string& fixtures) {
+    // Save: bytes come back through the callback and reopen; an edit survives.
+    {
+        Doc d(fixtures + "/fixture.pdf");
+        if (!d.doc) { check(false, "fixture.pdf opens for save"); return; }
+        std::vector<unsigned char> out;
+        check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "save returns OK");
+        check(out.size() > 4 && std::string(out.begin(), out.begin() + 4) == "%PDF", "saved bytes are a PDF", std::to_string(out.size()));
+        megapdf_document* again = megapdf_open(out.data(), out.size(), nullptr);
+        check(again != nullptr && megapdf_page_count(again) == 2, "saved document reopens with 2 pages");
+        megapdf_close(again);
+
+        Page p(d.doc, 0);
+        const megapdf_rect area{100, 500, 200, 540};
+        int index = -1;
+        megapdf_add_whiteout(p.page, &area, &index);
+        out.clear();
+        check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "save after an edit returns OK");
+        again = megapdf_open(out.data(), out.size(), nullptr);
+        if (again) {
+            Page rp(again, 0);
+            check(rp.page && whiteouts_of(rp.page).size() == 1, "the whiteout survives save and reopen");
+        } else {
+            check(false, "edited document reopens");
+        }
+        megapdf_close(again);
+        check(megapdf_save(d.doc, refuse, nullptr) == MEGAPDF_ERR_PDFIUM, "a refusing callback fails the save");
+        check(megapdf_save(nullptr, collect, &out) == MEGAPDF_ERR_ARGUMENT && megapdf_save(d.doc, nullptr, nullptr) == MEGAPDF_ERR_ARGUMENT, "save rejects nulls");
+    }
+    // Flatten: stamps and fields bake into content; the text is still there.
+    {
+        Doc d(fixtures + "/stamped.pdf");
+        Page p(d.doc, 0);
+        if (!p.page) { check(false, "stamped.pdf page loads for flatten"); return; }
+        check(stamps_of(p.page).ids.size() == 2, "two stamps before flatten");
+        check(megapdf_flatten_all(d.doc) == MEGAPDF_OK, "flatten returns OK");
+        // Flattening replaces the page's object tree; look through a fresh page handle.
+        Page after(d.doc, 0);
+        check(after.page && stamps_of(after.page).ids.empty(), "no stamp annotations after flatten", std::to_string(stamps_of(after.page).ids.size()));
+        check(after.page && search(after.page, "interop").size() == 1, "the page text is still there after flatten");
+        std::vector<unsigned char> out;
+        check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "flattened document saves");
+        megapdf_document* again = megapdf_open(out.data(), out.size(), nullptr);
+        if (again) { Page rp(again, 0); check(rp.page && stamps_of(rp.page).ids.empty(), "flattened save has no stamps on reopen"); }
+        megapdf_close(again);
+    }
+    {
+        Doc d(fixtures + "/forms.pdf");
+        Page p(d.doc, 0);
+        megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+        check(megapdf_form_field_count(f) == 1, "one field before flatten");
+        megapdf_form_fields_free(f);
+        check(megapdf_flatten_all(d.doc) == MEGAPDF_OK, "forms.pdf flattens");
+        Page after(d.doc, 0);
+        f = megapdf_form_fields_load(after.page);
+        check(megapdf_form_field_count(f) == 0, "no fields after flatten", std::to_string(megapdf_form_field_count(f)));
+        megapdf_form_fields_free(f);
+    }
+    // Images: list, render at a size, replace with a JPEG, and the shrink rules.
+    {
+        auto bytes = image_pdf(64, 20);   // 64 px drawn at 20 pt: oversized (target 42 px), 12,288 bytes stored
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "image pdf opens");
+        if (!d) return;
+        megapdf_images* imgs = megapdf_images_load(d);
+        check(megapdf_image_count(imgs) == 1, "one image listed", std::to_string(megapdf_image_count(imgs)));
+        megapdf_image_info info{};
+        megapdf_image_get(imgs, 0, &info);
+        check(info.page_index == 0 && info.pixel_width == 64 && info.pixel_height == 64 && close_to(info.display_width, 20) &&
+                  close_to(info.display_height, 20) && info.stored_bytes == 64 * 64 * 3,
+              "image info reports pixel, display and stored sizes",
+              std::to_string(info.pixel_width) + " " + std::to_string(info.display_width) + " " + std::to_string(info.stored_bytes));
+        megapdf_images_free(imgs);
+
+        megapdf_image* rendered = megapdf_render_image(d, 0, info.object_index, 16, 12);
+        check(rendered && megapdf_image_width(rendered) == 16 && megapdf_image_height(rendered) == 12, "image renders at the requested size");
+        if (rendered) {
+            std::vector<unsigned char> px(megapdf_image_pixels(rendered, nullptr, 0));
+            megapdf_image_pixels(rendered, px.data(), px.size());
+            check(px.size() == 16 * 12 * 4 && px[0] > 150 && px[2] < 100, "rendered pixels are the blue the image holds", std::to_string(px[0]) + "," + std::to_string(px[1]) + "," + std::to_string(px[2]));
+        }
+        megapdf_image_free(rendered);
+        check(megapdf_render_image(d, 0, 9999, 8, 8) == nullptr, "rendering a non-image fails cleanly");
+
+        std::vector<std::string> calls;
+        int replaced = -1;
+        check(megapdf_shrink_images(d, fake_encode, nullptr, &calls, &replaced) == MEGAPDF_OK, "shrink returns OK");
+        check(replaced == 1, "the oversized image was replaced", std::to_string(replaced));
+        check(calls.size() == 1 && calls[0] == "42x42@0.750000", "encoder asked for 150 dpi of the placed size at quality 0.75", calls.empty() ? "no calls" : calls[0]);
+        imgs = megapdf_images_load(d);
+        megapdf_image_get(imgs, 0, &info);
+        check(megapdf_image_count(imgs) == 1 && info.pixel_width == 8 && info.pixel_height == 8 && info.stored_bytes == static_cast<long long>(sizeof kTinyJpeg),
+              "the image now holds the JPEG", std::to_string(info.pixel_width) + " " + std::to_string(info.stored_bytes));
+        megapdf_images_free(imgs);
+        // Shrinking again finds nothing worth doing: 632 bytes is under the 8 KB floor.
+        calls.clear();
+        megapdf_shrink_images(d, fake_encode, nullptr, &calls, &replaced);
+        check(replaced == 0 && calls.empty(), "a second shrink leaves the small JPEG alone");
+        std::vector<unsigned char> out;
+        check(megapdf_save(d, collect, &out) == MEGAPDF_OK && out.size() < bytes.size(), "the shrunk document saves smaller",
+              std::to_string(out.size()) + " vs " + std::to_string(bytes.size()));
+        megapdf_close(d);
+
+        // Not worth touching: right-sized and small.
+        auto small = image_pdf(32, 216);   // 32 px over 3 inches: not oversized, 3 KB stored
+        d = megapdf_open(small.data(), small.size(), nullptr);
+        calls.clear();
+        megapdf_shrink_images(d, fake_encode, nullptr, &calls, &replaced);
+        check(replaced == 0 && calls.empty(), "a small right-sized image is skipped");
+        check(megapdf_replace_image_jpeg(d, 0, 9999, kTinyJpeg, sizeof kTinyJpeg) == MEGAPDF_ERR_ARGUMENT, "replacing a non-image is an argument error");
+        megapdf_close(d);
+    }
+    check(megapdf_flatten_all(nullptr) == MEGAPDF_ERR_ARGUMENT, "flatten rejects null");
+    check(megapdf_images_load(nullptr) == nullptr && megapdf_image_count(nullptr) == 0, "images of null");
+    check(megapdf_shrink_images(nullptr, fake_encode, nullptr, nullptr, nullptr) == MEGAPDF_ERR_ARGUMENT, "shrink rejects null");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -937,6 +1140,7 @@ int main(int argc, char** argv) {
     test_form_fields(argv[1]);
     test_stamps(argv[1]);
     test_whiteouts_and_text_boxes(argv[1]);
+    test_save_flatten_images(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

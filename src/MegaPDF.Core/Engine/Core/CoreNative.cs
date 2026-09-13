@@ -325,7 +325,50 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern void megapdf_discard_detached(IntPtr detached);
 
-    // Raw handles, for the contracts still bound directly (#110–#112) --------
+    // Contract 6: save, flatten and images (#110) -----------------------------
+
+    /// <summary>Receives one block of the serialised PDF; return 1 to continue, 0 to abort.</summary>
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate int WriteDelegate(IntPtr context, IntPtr data, nuint size);
+
+    /// <summary>Commits form edits and writes the whole document (full rewrite, #97) through the callback.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_save(IntPtr document, WriteDelegate write, IntPtr context);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_flatten_all(IntPtr document);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct ImageInfo
+    {
+        public int PageIndex;
+        public int ObjectIndex;
+        public int PixelWidth;
+        public int PixelHeight;
+        public double DisplayWidth;
+        public double DisplayHeight;
+        public long StoredBytes;
+    }
+
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_images_load(IntPtr document);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_images_free(IntPtr images);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_image_count(IntPtr images);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_image_get(IntPtr images, nuint index, out ImageInfo info);
+
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_render_image(IntPtr document, int pageIndex, int objectIndex, int width, int height);
+
+    [DllImport(Dll)]
+    public static extern unsafe int megapdf_replace_image_jpeg(IntPtr document, int pageIndex, int objectIndex, byte* jpeg, nuint length);
+
+    // Raw handles, for the contracts still bound directly (#111–#112) --------
 
     [DllImport(Dll)]
     public static extern IntPtr megapdf_document_raw(IntPtr document);

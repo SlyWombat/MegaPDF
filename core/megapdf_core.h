@@ -22,7 +22,7 @@
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
 //
-// Migration note: until every contract has moved (#110–#112), bindings still
+// Migration note: until every contract has moved (#111–#112), bindings still
 // call PDFium directly for the rest, through the *_raw accessors. Those go away
 // with the last migrated contract.
 #ifndef MEGAPDF_CORE_H
@@ -398,6 +398,71 @@ typedef struct megapdf_detached megapdf_detached;
 MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* page, int object_index);
 MEGAPDF_API int megapdf_restore_object(const megapdf_page* page, megapdf_detached* detached, int object_index);
 MEGAPDF_API void megapdf_discard_detached(megapdf_detached* detached);
+
+/* --------------------------------------------------------------------------
+ * Contract 6: save, flatten and images (#110). File I/O, atomic replace and
+ * verify-before-overwrite stay per platform; the core serialises to a caller
+ * write callback exactly as FPDF_FILEWRITE does.
+ * ----------------------------------------------------------------------- */
+
+/** Receives one block of the serialised PDF; return 1 to continue, 0 to abort. */
+typedef int (*megapdf_write_fn)(void* context, const void* data, size_t size);
+
+/**
+ * Commits any in-progress form edit and writes the whole document — always a
+ * full rewrite (#97): PDFium's incremental save appends every loaded object,
+ * which for a document whose pages were all loaded is the document again.
+ * MEGAPDF_ERR_PDFIUM when PDFium refuses or the callback aborts.
+ */
+MEGAPDF_API int megapdf_save(const megapdf_document* document, megapdf_write_fn write, void* context);
+
+/** Commits form edits, then bakes every page's annotations and fields into its content. */
+MEGAPDF_API int megapdf_flatten_all(const megapdf_document* document);
+
+typedef struct megapdf_image_info {
+    int page_index;
+    int object_index;
+    int pixel_width;         /* stored resolution */
+    int pixel_height;
+    double display_width;    /* points, as placed */
+    double display_height;
+    long long stored_bytes;  /* the raw stream length */
+} megapdf_image_info;
+
+typedef struct megapdf_images megapdf_images;
+
+/** Every raster image object in the document, page by page; a snapshot. */
+MEGAPDF_API megapdf_images* megapdf_images_load(const megapdf_document* document);
+MEGAPDF_API void megapdf_images_free(megapdf_images* images);
+MEGAPDF_API size_t megapdf_image_count(const megapdf_images* images);
+MEGAPDF_API int megapdf_image_get(const megapdf_images* images, size_t index, megapdf_image_info* out);
+
+/** The image object rendered at width × height pixels (BGRA; see megapdf_image_*). NULL on failure. */
+MEGAPDF_API megapdf_image* megapdf_render_image(const megapdf_document* document, int page_index, int object_index,
+                                                int width, int height);
+
+/** Replaces the image object's data with a JPEG stream (DCTDecode), inline. */
+MEGAPDF_API int megapdf_replace_image_jpeg(const megapdf_document* document, int page_index, int object_index,
+                                           const unsigned char* jpeg, size_t length);
+
+/**
+ * Encodes BGRA pixels as JPEG at `quality` (0..1) into a buffer the callback owns;
+ * return 1 with `out_jpeg`/`out_length` set, 0 on failure. The core calls `release`
+ * with the buffer when it is done with it.
+ */
+typedef int (*megapdf_jpeg_encode_fn)(void* context, const unsigned char* bgra, int width, int height, double quality,
+                                      unsigned char** out_jpeg, size_t* out_length);
+typedef void (*megapdf_jpeg_release_fn)(void* context, unsigned char* jpeg);
+
+/**
+ * Shrink-for-email (SDD §3.7), the decision rules in one place: every image is
+ * re-encoded at 150 dpi of its placed size, quality 0.75, unless it is already
+ * about the right resolution and under 100 KB, under 8 KB, or under 8 px on a
+ * side, or unless the re-encode would save less than 10%. `out_replaced` counts
+ * the images replaced. Callers work on a copy: this degrades quality by design.
+ */
+MEGAPDF_API int megapdf_shrink_images(const megapdf_document* document, megapdf_jpeg_encode_fn encode,
+                                      megapdf_jpeg_release_fn release, void* context, int* out_replaced);
 
 /* --------------------------------------------------------------------------
  * Raw handles — for the contracts that have not migrated yet. Bindings use these

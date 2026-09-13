@@ -101,34 +101,19 @@ internal sealed class PdfiumDocument : IPdfDocument
     public void Save(Stream target)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            // Commit any in-progress form-field editing before serializing (#107: the core's rule).
-            CoreNative.megapdf_form_commit(_core);
-
-            // Always a full rewrite, on purpose (#97). PDFium's FPDF_INCREMENTAL does
-            // not track which objects changed: it copies the original file and then
-            // appends every indirect object the document has loaded. The apps load
-            // every page at open for the size pass, so that appendix is the whole
-            // document again — measured over 4,263 corpus files it made the saved file
-            // 1.97x the original at the median (3.36x worst) against 1.00x (2.51x worst)
-            // for this rewrite. A real append-only update needs a writer with change
-            // tracking, which PDFium does not offer.
-            WriteWith(target, PdfiumNative.SAVE_DEFAULT);
-        }
-    }
-
-    /// <summary>One FPDF_SaveAsCopy pass into <paramref name="target"/>.</summary>
-    private void WriteWith(Stream target, uint flags)
-    {
+        // Always a full rewrite, on purpose (#97): PDFium's FPDF_INCREMENTAL does not
+        // track which objects changed — it copies the original file and then appends
+        // every indirect object the document has loaded, which after the open-time
+        // size pass is the whole document again (1.97x the original at the median
+        // over 4,263 corpus files, against 1.00x for the rewrite). The core commits
+        // any in-progress form edit first and streams blocks to this callback (#110).
         Exception? writeError = null;
-
-        int WriteBlock(IntPtr self, IntPtr data, uint size)
+        int Write(IntPtr _, IntPtr data, nuint size)
         {
             try
             {
-                var buffer = new byte[size];
-                Marshal.Copy(data, buffer, 0, (int)size);
+                var buffer = new byte[(int)size];
+                Marshal.Copy(data, buffer, 0, buffer.Length);
                 target.Write(buffer, 0, buffer.Length);
                 return 1;
             }
@@ -139,72 +124,77 @@ internal sealed class PdfiumDocument : IPdfDocument
             }
         }
 
-        var callback = new PdfiumNative.WriteBlockDelegate(WriteBlock);
-        var fileWrite = new PdfiumNative.FPDF_FILEWRITE
-        {
-            Version = 1,
-            WriteBlock = Marshal.GetFunctionPointerForDelegate(callback),
-        };
-
-        var ok = PdfiumNative.FPDF_SaveAsCopy(_handle, ref fileWrite, flags);
+        var callback = new CoreNative.WriteDelegate(Write);
+        var status = CoreNative.megapdf_save(_core, callback, IntPtr.Zero);
         GC.KeepAlive(callback);
 
         if (writeError is not null)
             throw new IOException("Writing the PDF failed.", writeError);
-        if (ok == 0)
+        if (status != 0)
             throw new IOException("PDFium could not serialize the document.");
     }
 
     public void FlattenAllPages()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
-        {
-            // Commit any in-progress form editing, then bake every page.
-            CoreNative.megapdf_form_commit(_core);
-            var pageCount = PdfiumNative.FPDF_GetPageCount(_handle);
-            for (var i = 0; i < pageCount; i++)
-            {
-                using var page = (PdfiumPage)GetPage(i);
-                page.FlattenInternal();
-            }
-        }
+        // Commits any in-progress form editing, then bakes every page — in the core.
+        if (CoreNative.megapdf_flatten_all(_core) != 0)
+            throw new InvalidOperationException("Flattening the document failed.");
     }
 
     public IReadOnlyList<PdfImageInfo> GetImages()
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        var images = CoreNative.megapdf_images_load(_core);
+        if (images == IntPtr.Zero)
+            return [];
+        try
         {
-            var images = new List<PdfImageInfo>();
-            var pageCount = PdfiumNative.FPDF_GetPageCount(_handle);
-            for (var p = 0; p < pageCount; p++)
+            var count = (int)CoreNative.megapdf_image_count(images);
+            var result = new List<PdfImageInfo>(count);
+            for (var i = 0; i < count; i++)
             {
-                using var page = (PdfiumPage)GetPage(p);
-                images.AddRange(page.GetImagesInternal(p));
+                CoreNative.megapdf_image_get(images, (nuint)i, out var info);
+                result.Add(new PdfImageInfo(info.PageIndex, info.ObjectIndex, info.PixelWidth, info.PixelHeight,
+                    info.DisplayWidth, info.DisplayHeight, info.StoredBytes));
             }
-            return images;
+            return result;
+        }
+        finally
+        {
+            CoreNative.megapdf_images_free(images);
         }
     }
 
     public StampImage RenderImageAt(PdfImageInfo image, int targetWidth, int targetHeight)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        var rendered = CoreNative.megapdf_render_image(_core, image.PageIndex, image.ObjectIndex, targetWidth, targetHeight);
+        if (rendered == IntPtr.Zero)
+            throw new InvalidOperationException("The image could not be rendered.");
+        try
         {
-            using var page = (PdfiumPage)GetPage(image.PageIndex);
-            return page.RenderImageAtInternal(image.ObjectIndex, targetWidth, targetHeight);
+            var pixels = new byte[(int)CoreNative.megapdf_image_pixels(rendered, null, 0)];
+            CoreNative.megapdf_image_pixels(rendered, pixels, (nuint)pixels.Length);
+            return new StampImage(pixels, CoreNative.megapdf_image_width(rendered), CoreNative.megapdf_image_height(rendered));
+        }
+        finally
+        {
+            CoreNative.megapdf_image_free(rendered);
         }
     }
 
     public void ReplaceImageWithJpeg(PdfImageInfo image, byte[] jpegBytes)
     {
         ThrowIfDisposed();
-        lock (PdfiumLibrary.Lock)
+        int status;
+        unsafe
         {
-            using var page = (PdfiumPage)GetPage(image.PageIndex);
-            page.ReplaceImageWithJpegInternal(image.ObjectIndex, jpegBytes);
+            fixed (byte* p = jpegBytes)
+                status = CoreNative.megapdf_replace_image_jpeg(_core, image.PageIndex, image.ObjectIndex, p, (nuint)jpegBytes.Length);
         }
+        if (status != 0)
+            throw new InvalidOperationException("The compressed image could not be applied.");
     }
 
     public void Dispose()
@@ -896,114 +886,6 @@ internal sealed class PdfiumPage : IPdfPage
             (false, true) => "Helvetica-Oblique",
             _ => "Helvetica",
         };
-    }
-
-    internal List<PdfImageInfo> GetImagesInternal(int pageIndex)
-    {
-        var images = new List<PdfImageInfo>();
-        lock (PdfiumLibrary.Lock)
-        {
-            var count = PdfiumNative.FPDFPage_CountObjects(_handle);
-            for (var i = 0; i < count; i++)
-            {
-                var obj = PdfiumNative.FPDFPage_GetObject(_handle, i);
-                if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_IMAGE)
-                    continue;
-                if (PdfiumNative.FPDFImageObj_GetImagePixelSize(obj, out var pxWidth, out var pxHeight) == 0)
-                    continue;
-                PdfiumNative.FPDFPageObj_GetBounds(obj, out var left, out var bottom, out var right, out var top);
-                var stored = (long)PdfiumNative.FPDFImageObj_GetImageDataRaw(obj, null, 0);
-                images.Add(new PdfImageInfo(pageIndex, i, (int)pxWidth, (int)pxHeight,
-                    right - left, top - bottom, stored));
-            }
-        }
-        return images;
-    }
-
-    internal StampImage RenderImageAtInternal(int objectIndex, int targetWidth, int targetHeight)
-    {
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
-            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_IMAGE)
-                throw new InvalidOperationException($"Object {objectIndex} is not an image.");
-
-            // Same trick as stamp extraction: render through a temporary matrix
-            // sized to the target pixels, then restore the placement.
-            PdfiumNative.FPDFPageObj_GetMatrix(obj, out var placement);
-            var renderMatrix = new PdfiumNative.FS_MATRIX { A = targetWidth, B = 0, C = 0, D = targetHeight, E = 0, F = 0 };
-            PdfiumNative.FPDFPageObj_SetMatrix(obj, ref renderMatrix);
-            var bitmap = PdfiumNative.FPDFImageObj_GetRenderedBitmap(_document, _handle, obj);
-            PdfiumNative.FPDFPageObj_SetMatrix(obj, ref placement);
-            if (bitmap == IntPtr.Zero)
-                throw new InvalidOperationException("The image could not be rendered.");
-            try
-            {
-                var width = PdfiumNative.FPDFBitmap_GetWidth(bitmap);
-                var height = PdfiumNative.FPDFBitmap_GetHeight(bitmap);
-                var stride = PdfiumNative.FPDFBitmap_GetStride(bitmap);
-                var buffer = PdfiumNative.FPDFBitmap_GetBuffer(bitmap);
-                var pixels = new byte[width * height * 4];
-                for (var row = 0; row < height; row++)
-                    Marshal.Copy(buffer + row * stride, pixels, row * width * 4, width * 4);
-                return new StampImage(pixels, width, height);
-            }
-            finally
-            {
-                PdfiumNative.FPDFBitmap_Destroy(bitmap);
-            }
-        }
-    }
-
-    internal void ReplaceImageWithJpegInternal(int objectIndex, byte[] jpegBytes)
-    {
-        lock (PdfiumLibrary.Lock)
-        {
-            var obj = PdfiumNative.FPDFPage_GetObject(_handle, objectIndex);
-            if (obj == IntPtr.Zero || PdfiumNative.FPDFPageObj_GetType(obj) != PdfiumNative.FPDF_PAGEOBJ_IMAGE)
-                throw new InvalidOperationException($"Object {objectIndex} is not an image.");
-
-            var pin = GCHandle.Alloc(jpegBytes, GCHandleType.Pinned);
-            try
-            {
-                int GetBlock(IntPtr _, uint position, IntPtr buffer, uint size)
-                {
-                    if (position + size > jpegBytes.Length)
-                        return 0;
-                    Marshal.Copy(jpegBytes, (int)position, buffer, (int)size);
-                    return 1;
-                }
-
-                var callback = new PdfiumNative.GetBlockDelegate(GetBlock);
-                var access = new PdfiumNative.FPDF_FILEACCESS
-                {
-                    FileLen = (uint)jpegBytes.Length,
-                    GetBlock = Marshal.GetFunctionPointerForDelegate(callback),
-                    Param = IntPtr.Zero,
-                };
-                // Inline: pdfium consumes the data during the call.
-                var ok = PdfiumNative.FPDFImageObj_LoadJpegFileInline([_handle], 1, obj, ref access);
-                GC.KeepAlive(callback);
-                if (ok == 0)
-                    throw new InvalidOperationException("The compressed image could not be applied.");
-                GenerateContent();
-            }
-            finally
-            {
-                pin.Free();
-            }
-        }
-    }
-
-    /// <summary>Bakes this page's annotations/fields into its content stream.</summary>
-    internal void FlattenInternal()
-    {
-        lock (PdfiumLibrary.Lock)
-        {
-            if (PdfiumNative.FPDFPage_Flatten(_handle, PdfiumNative.FLAT_NORMALDISPLAY) == 0)
-                throw new InvalidOperationException($"Flattening page {Index} failed.");
-            GenerateContent();
-        }
     }
 
     /// <summary>Test hook: runs the tier-2 substitution path unconditionally.</summary>

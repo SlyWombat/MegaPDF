@@ -8,6 +8,7 @@
 #include "megapdf_core.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -16,6 +17,8 @@
 #include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
+#include "fpdf_flatten.h"
+#include "fpdf_save.h"
 #include "fpdf_text.h"
 #include "fpdf_transformpage.h"  // FPDFPage_GetCropBox
 #include "fpdfview.h"
@@ -866,6 +869,33 @@ struct megapdf_image {
 
 namespace {
 
+// Renders a page object through `matrix` (temporarily replacing its placement)
+// into a fresh BGRA image; NULL when PDFium cannot.
+megapdf_image* RenderObjectUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, FPDF_PAGEOBJECT obj, const FS_MATRIX& matrix) {
+    FS_MATRIX placement{};
+    if (!FPDFPageObj_GetMatrix(obj, &placement)) return nullptr;
+    FPDFPageObj_SetMatrix(obj, &matrix);
+    FPDF_BITMAP bmp = FPDFImageObj_GetRenderedBitmap(doc, page, obj);
+    FPDFPageObj_SetMatrix(obj, &placement);
+    if (bmp == nullptr) return nullptr;
+    const int w = FPDFBitmap_GetWidth(bmp);
+    const int h = FPDFBitmap_GetHeight(bmp);
+    const int stride = FPDFBitmap_GetStride(bmp);
+    const auto* buf = static_cast<const unsigned char*>(FPDFBitmap_GetBuffer(bmp));
+    megapdf_image* img = nullptr;
+    if (buf != nullptr && w > 0 && h > 0) {
+        img = new (std::nothrow) megapdf_image();
+        if (img != nullptr) {
+            img->width = w;
+            img->height = h;
+            img->bgra.resize(static_cast<size_t>(w) * h * 4);
+            for (int y = 0; y < h; y++) std::memcpy(img->bgra.data() + static_cast<size_t>(y) * w * 4, buf + static_cast<size_t>(y) * stride, static_cast<size_t>(w) * 4);
+        }
+    }
+    FPDFBitmap_Destroy(bmp);
+    return img;
+}
+
 megapdf_image* LoadStampImageUnlocked(const megapdf_page* p, int annot_index) {
     FPDF_ANNOTATION annot = FPDFPage_GetAnnot(p->page, annot_index);
     if (annot == nullptr) return nullptr;
@@ -884,26 +914,7 @@ megapdf_image* LoadStampImageUnlocked(const megapdf_page* p, int annot_index) {
         if (FPDFImageObj_GetImagePixelSize(obj, &pw, &ph) && pw > 0 && ph > 0) {
             native = FS_MATRIX{static_cast<float>(pw), 0, 0, static_cast<float>(ph), 0, 0};
         }
-        FPDFPageObj_SetMatrix(obj, &native);
-        FPDF_BITMAP bmp = FPDFImageObj_GetRenderedBitmap(p->owner ? p->owner->doc : nullptr, p->page, obj);
-        FPDFPageObj_SetMatrix(obj, &placement);
-        if (bmp == nullptr) continue;
-
-        const int w = FPDFBitmap_GetWidth(bmp);
-        const int h = FPDFBitmap_GetHeight(bmp);
-        const int stride = FPDFBitmap_GetStride(bmp);
-        const auto* buf = static_cast<const unsigned char*>(FPDFBitmap_GetBuffer(bmp));
-        auto* img = new (std::nothrow) megapdf_image();
-        if (img != nullptr && buf != nullptr && w > 0 && h > 0) {
-            img->width = w;
-            img->height = h;
-            img->bgra.resize(static_cast<size_t>(w) * h * 4);
-            for (int y = 0; y < h; y++) std::memcpy(img->bgra.data() + static_cast<size_t>(y) * w * 4, buf + static_cast<size_t>(y) * stride, static_cast<size_t>(w) * 4);
-            result = img;
-        } else {
-            delete img;
-        }
-        FPDFBitmap_Destroy(bmp);
+        result = RenderObjectUnlocked(p->owner ? p->owner->doc : nullptr, p->page, obj, native);
     }
     FPDFPage_CloseAnnot(annot);
     return result;
@@ -1410,6 +1421,221 @@ MEGAPDF_API void megapdf_discard_detached(megapdf_detached* x) {
     }
     FPDFPageObj_Destroy(x->object);
     delete x;
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
+// Contract 6: save, flatten and images (#110)
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct WriteBridge {
+    FPDF_FILEWRITE fw;   // first, so PDFium's pointer downcasts
+    megapdf_write_fn write;
+    void* context;
+    bool failed;
+};
+
+int WriteBlockThunk(FPDF_FILEWRITE* self, const void* data, unsigned long size) {
+    auto* b = reinterpret_cast<WriteBridge*>(self);
+    if (b->failed) return 0;
+    if (size == 0) return 1;
+    if (!b->write(b->context, data, static_cast<size_t>(size))) { b->failed = true; return 0; }
+    return 1;
+}
+
+struct ReadBridge {
+    const unsigned char* data;
+    size_t length;
+};
+
+int GetBlockThunk(void* param, unsigned long position, unsigned char* buf, unsigned long size) {
+    auto* r = static_cast<ReadBridge*>(param);
+    if (position + size > r->length) return 0;
+    std::memcpy(buf, r->data + position, size);
+    return 1;
+}
+
+// A page opened through the ABI for the duration of a document-level operation.
+struct ScopedPage {
+    megapdf_page* page;
+    explicit ScopedPage(const megapdf_document* d, int index) : page(megapdf_load_page(const_cast<megapdf_document*>(d), index)) {}
+    ~ScopedPage() { megapdf_close_page(page); }
+};
+
+FPDF_PAGEOBJECT ImageObjectAt(const megapdf_page* p, int object_index) {
+    if (p == nullptr || object_index < 0) return nullptr;
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
+    if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) return nullptr;
+    return obj;
+}
+
+int ReplaceImageJpegUnlocked(const megapdf_page* p, int object_index, const unsigned char* jpeg, size_t length) {
+    FPDF_PAGEOBJECT obj = ImageObjectAt(p, object_index);
+    if (obj == nullptr) { SetError(0, "the object is not an image"); return MEGAPDF_ERR_ARGUMENT; }
+    ReadBridge bridge{jpeg, length};
+    FPDF_FILEACCESS access{};
+    access.m_FileLen = static_cast<unsigned long>(length);
+    access.m_GetBlock = GetBlockThunk;
+    access.m_Param = &bridge;
+    FPDF_PAGE pages[1] = {p->page};
+    // Inline: PDFium consumes the data during the call, so the bridge may die after.
+    if (!FPDFImageObj_LoadJpegFileInline(pages, 1, obj, &access)) {
+        SetError(FPDF_ERR_UNKNOWN, "the compressed image could not be applied");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+}
+
+}  // namespace
+
+struct megapdf_images {
+    std::vector<megapdf_image_info> images;
+};
+
+extern "C" {
+
+MEGAPDF_API int megapdf_save(const megapdf_document* d, megapdf_write_fn write, void* context) {
+    if (d == nullptr || write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    WriteBridge bridge{};
+    bridge.fw.version = 1;
+    bridge.fw.WriteBlock = WriteBlockThunk;
+    bridge.write = write;
+    bridge.context = context;
+    bridge.failed = false;
+    const FPDF_BOOL ok = FPDF_SaveAsCopy(d->doc, &bridge.fw, 0);
+    if (bridge.failed) { SetError(0, "the write callback aborted the save"); return MEGAPDF_ERR_PDFIUM; }
+    if (!ok) { SetError(FPDF_ERR_UNKNOWN, "PDFium could not serialize the document"); return MEGAPDF_ERR_PDFIUM; }
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_flatten_all(const megapdf_document* d) {
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    const int count = FPDF_GetPageCount(d->doc);
+    for (int i = 0; i < count; i++) {
+        ScopedPage sp(d, i);
+        if (sp.page == nullptr) { SetError(FPDF_ERR_UNKNOWN, "a page could not be loaded for flattening"); return MEGAPDF_ERR_PDFIUM; }
+        if (FPDFPage_Flatten(sp.page->page, FLAT_NORMALDISPLAY) == FLATTEN_FAIL) {
+            SetError(FPDF_ERR_UNKNOWN, "flattening a page failed");
+            return MEGAPDF_ERR_PDFIUM;
+        }
+        if (!GenerateContent(sp.page)) return MEGAPDF_ERR_PDFIUM;
+    }
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API megapdf_images* megapdf_images_load(const megapdf_document* d) {
+    if (d == nullptr) return nullptr;
+    Guard guard(CoreLock());
+    auto* result = new (std::nothrow) megapdf_images();
+    if (result == nullptr) { SetError(FPDF_ERR_UNKNOWN, "out of memory"); return nullptr; }
+    try {
+        const int pages = FPDF_GetPageCount(d->doc);
+        for (int pi = 0; pi < pages; pi++) {
+            ScopedPage sp(d, pi);
+            if (sp.page == nullptr) continue;
+            const int count = FPDFPage_CountObjects(sp.page->page);
+            for (int i = 0; i < count; i++) {
+                FPDF_PAGEOBJECT obj = FPDFPage_GetObject(sp.page->page, i);
+                if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
+                unsigned int pw = 0, ph = 0;
+                if (!FPDFImageObj_GetImagePixelSize(obj, &pw, &ph)) continue;
+                float l = 0, b = 0, r = 0, t = 0;
+                FPDFPageObj_GetBounds(obj, &l, &b, &r, &t);
+                megapdf_image_info info{};
+                info.page_index = pi;
+                info.object_index = i;
+                info.pixel_width = static_cast<int>(pw);
+                info.pixel_height = static_cast<int>(ph);
+                info.display_width = static_cast<double>(r - l);
+                info.display_height = static_cast<double>(t - b);
+                info.stored_bytes = static_cast<long long>(FPDFImageObj_GetImageDataRaw(obj, nullptr, 0));
+                result->images.push_back(info);
+            }
+        }
+    } catch (...) {
+        delete result;
+        SetError(FPDF_ERR_UNKNOWN, "out of memory listing images");
+        return nullptr;
+    }
+    return result;
+}
+
+MEGAPDF_API void megapdf_images_free(megapdf_images* images) { delete images; }
+MEGAPDF_API size_t megapdf_image_count(const megapdf_images* images) { return images ? images->images.size() : 0; }
+
+MEGAPDF_API int megapdf_image_get(const megapdf_images* images, size_t index, megapdf_image_info* out) {
+    if (images == nullptr || out == nullptr || index >= images->images.size()) return MEGAPDF_ERR_ARGUMENT;
+    *out = images->images[index];
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API megapdf_image* megapdf_render_image(const megapdf_document* d, int page_index, int object_index, int width, int height) {
+    if (d == nullptr || width <= 0 || height <= 0) return nullptr;
+    Guard guard(CoreLock());
+    ScopedPage sp(d, page_index);
+    FPDF_PAGEOBJECT obj = ImageObjectAt(sp.page, object_index);
+    if (obj == nullptr) { SetError(0, "the object is not an image"); return nullptr; }
+    // Same trick as stamp extraction: render through a temporary matrix sized to
+    // the target pixels, then restore the placement.
+    const FS_MATRIX target{static_cast<float>(width), 0, 0, static_cast<float>(height), 0, 0};
+    megapdf_image* img = RenderObjectUnlocked(d->doc, sp.page->page, obj, target);
+    if (img == nullptr) SetError(FPDF_ERR_UNKNOWN, "the image could not be rendered");
+    return img;
+}
+
+MEGAPDF_API int megapdf_replace_image_jpeg(const megapdf_document* d, int page_index, int object_index,
+                                           const unsigned char* jpeg, size_t length) {
+    if (d == nullptr || jpeg == nullptr || length == 0) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    ScopedPage sp(d, page_index);
+    if (sp.page == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    return ReplaceImageJpegUnlocked(sp.page, object_index, jpeg, length);
+}
+
+MEGAPDF_API int megapdf_shrink_images(const megapdf_document* d, megapdf_jpeg_encode_fn encode, megapdf_jpeg_release_fn release,
+                                      void* context, int* out_replaced) {
+    if (d == nullptr || encode == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (out_replaced != nullptr) *out_replaced = 0;
+    megapdf_images* list = megapdf_images_load(d);
+    if (list == nullptr) return MEGAPDF_ERR_MEMORY;
+    int replaced = 0;
+    int status = MEGAPDF_OK;
+    for (const megapdf_image_info& image : list->images) {
+        // The desktop rules (ImageShrinker), rounding half to even as .NET does.
+        int target_w = static_cast<int>(std::nearbyint(image.display_width / 72.0 * 150.0));
+        int target_h = static_cast<int>(std::nearbyint(image.display_height / 72.0 * 150.0));
+        const bool oversized = image.pixel_width > target_w * 1.2;
+        if ((!oversized && image.stored_bytes < 100000) || image.stored_bytes < 8000) continue;
+        if (image.pixel_width < 8 || image.pixel_height < 8) continue;
+        target_w = target_w < 8 ? 8 : (target_w > image.pixel_width ? image.pixel_width : target_w);
+        target_h = target_h < 8 ? 8 : (target_h > image.pixel_height ? image.pixel_height : target_h);
+
+        megapdf_image* pixels = megapdf_render_image(d, image.page_index, image.object_index, target_w, target_h);
+        if (pixels == nullptr) continue;
+        unsigned char* jpeg = nullptr;
+        size_t length = 0;
+        const int encoded = encode(context, pixels->bgra.data(), pixels->width, pixels->height, 0.75, &jpeg, &length);
+        megapdf_image_free(pixels);
+        if (!encoded || jpeg == nullptr) continue;
+        // A re-encode that saves less than 10% is not worth the quality loss.
+        if (static_cast<double>(length) < image.stored_bytes * 0.9) {
+            ScopedPage sp(d, image.page_index);
+            const int one = sp.page ? ReplaceImageJpegUnlocked(sp.page, image.object_index, jpeg, length) : MEGAPDF_ERR_ARGUMENT;
+            if (one == MEGAPDF_OK) replaced++; else status = one;
+        }
+        if (release != nullptr) release(context, jpeg);
+    }
+    megapdf_images_free(list);
+    if (out_replaced != nullptr) *out_replaced = replaced;
+    return status;
 }
 
 }  // extern "C"

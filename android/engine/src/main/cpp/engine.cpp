@@ -47,17 +47,16 @@ struct Page {
 
 constexpr int kRenderFlags = FPDF_ANNOT | FPDF_LCD_TEXT | FPDF_REVERSE_BYTE_ORDER;
 
-// FPDF_FILEWRITE bridging FPDF_SaveAsCopy blocks to a java.io.OutputStream.
+// Bridges the core's save callback to a java.io.OutputStream.
 struct StreamWriter {
-    FPDF_FILEWRITE fw;  // must be first: PDFium hands us fw*, we downcast.
     JNIEnv* env;
     jobject stream;
     jmethodID write;
     bool failed;
 };
 
-int WriteBlock(FPDF_FILEWRITE* self, const void* data, unsigned long size) {
-    auto* w = reinterpret_cast<StreamWriter*>(self);
+int WriteToStream(void* context, const void* data, size_t size) {
+    auto* w = static_cast<StreamWriter*>(context);
     if (w->failed) return 0;
     if (size == 0) return 1;
     JNIEnv* env = w->env;
@@ -188,22 +187,14 @@ JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeSave(JNIEnv* env, jobject, jlong handle,
                                                 jobject outputStream) {
     auto* d = reinterpret_cast<Document*>(handle);
-    megapdf_form_commit(d->core);   // commit any in-progress field edit (#107)
-
     jclass streamClass = env->GetObjectClass(outputStream);
     jmethodID write = env->GetMethodID(streamClass, "write", "([BII)V");
     if (write == nullptr) return JNI_FALSE;
 
-    StreamWriter writer{};
-    writer.fw.version = 1;
-    writer.fw.WriteBlock = WriteBlock;
-    writer.env = env;
-    writer.stream = outputStream;
-    writer.write = write;
-    writer.failed = false;
-
-    const FPDF_BOOL ok = FPDF_SaveAsCopy(d->doc, &writer.fw, 0);
-    return (ok && !writer.failed) ? JNI_TRUE : JNI_FALSE;
+    // The core commits any in-progress form edit and does the full rewrite (#97, #110).
+    StreamWriter writer{env, outputStream, write, false};
+    const int status = megapdf_save(d->core, WriteToStream, &writer);
+    return (status == MEGAPDF_OK && !writer.failed) ? JNI_TRUE : JNI_FALSE;
 }
 
 }  // extern "C"

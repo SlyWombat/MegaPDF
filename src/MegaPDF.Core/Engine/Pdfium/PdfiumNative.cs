@@ -16,7 +16,6 @@ internal static class PdfiumNative
     public const int FPDF_LCD_TEXT = 0x02;
 
     // FPDF_SaveAsCopy flags
-    public const uint SAVE_DEFAULT = 0;
     public const uint FPDF_INCREMENTAL = 1;
 
     // FPDF_GetLastError codes
@@ -26,7 +25,6 @@ internal static class PdfiumNative
 
     [DllImport(Dll)] public static extern void FPDF_InitLibrary();
 
-    [DllImport(Dll)] public static extern int FPDF_GetPageCount(IntPtr document);
 
     [DllImport(Dll)] public static extern IntPtr FPDFBitmap_Create(int width, int height, int alpha);
     [DllImport(Dll)] public static extern int FPDFBitmap_FillRect(IntPtr bitmap, int left, int top, int width, int height, uint color);
@@ -35,7 +33,6 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFBitmap_GetStride(IntPtr bitmap);
     [DllImport(Dll)] public static extern void FPDFBitmap_Destroy(IntPtr bitmap);
 
-    [DllImport(Dll)] public static extern int FPDF_SaveAsCopy(IntPtr document, ref FPDF_FILEWRITE fileWrite, uint flags);
 
     // --- Text extraction & editing (fpdf_edit.h, fpdf_text.h) ---
 
@@ -47,7 +44,6 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFPage_CountObjects(IntPtr page);
     [DllImport(Dll)] public static extern IntPtr FPDFPage_GetObject(IntPtr page, int index);
     [DllImport(Dll)] public static extern int FPDFPageObj_GetType(IntPtr pageObject);
-    [DllImport(Dll)] public static extern int FPDFPageObj_GetBounds(IntPtr pageObject, out float left, out float bottom, out float right, out float top);
 
     /// <summary>Buffer is UTF-16LE; length in FPDF_WCHARs; returns chars incl. NUL.</summary>
     [DllImport(Dll)] public static extern uint FPDFTextObj_GetText(IntPtr textObject, IntPtr textPage, [Out] byte[]? buffer, uint length);
@@ -123,34 +119,15 @@ internal static class PdfiumNative
 
     public const int FPDFBitmap_BGRA = 4;
 
-    [DllImport(Dll)] public static extern int FPDFBitmap_GetWidth(IntPtr bitmap);
-    [DllImport(Dll)] public static extern int FPDFBitmap_GetHeight(IntPtr bitmap);
     /// <summary>Renders the image object (masks applied) to a new BGRA bitmap the caller destroys.</summary>
-    [DllImport(Dll)] public static extern IntPtr FPDFImageObj_GetRenderedBitmap(IntPtr document, IntPtr page, IntPtr imageObject);
-    [DllImport(Dll)] public static extern int FPDFImageObj_GetImagePixelSize(IntPtr imageObject, out uint width, out uint height);
 
     /// <summary>Bakes annotations and form fields into page content. 0=fail, 1=success, 2=nothing to do.</summary>
-    [DllImport(Dll)] public static extern int FPDFPage_Flatten(IntPtr page, int flags);
-    public const int FLAT_NORMALDISPLAY = 0;
 
     // --- Image compression (shrink-for-email) ---
 
     /// <summary>Returns the image's stored (compressed) stream length in bytes.</summary>
-    [DllImport(Dll)] public static extern nuint FPDFImageObj_GetImageDataRaw(IntPtr imageObject, [Out] byte[]? buffer, nuint buflen);
 
     /// <summary>Replaces the image's stream with a JPEG read synchronously (inline) from the file access.</summary>
-    [DllImport(Dll)] public static extern int FPDFImageObj_LoadJpegFileInline(IntPtr[]? pages, int count, IntPtr imageObject, ref FPDF_FILEACCESS fileAccess);
-
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate int GetBlockDelegate(IntPtr param, uint position, IntPtr buffer, uint size);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FPDF_FILEACCESS
-    {
-        public uint FileLen;      // unsigned long is 4 bytes on Windows
-        public IntPtr GetBlock;
-        public IntPtr Param;
-    }
 
     public const int FPDF_PAGEOBJ_IMAGE = 3;
 
@@ -166,15 +143,6 @@ internal static class PdfiumNative
     [DllImport(Dll)] public static extern int FPDFPageObjMark_GetParamStringValue(IntPtr mark, [MarshalAs(UnmanagedType.LPUTF8Str)] string key, [Out] byte[]? buffer, uint buflen, out uint outBuflen);
 
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate int WriteBlockDelegate(IntPtr self, IntPtr data, uint size);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct FPDF_FILEWRITE
-    {
-        public int Version;
-        public IntPtr WriteBlock;
-    }
 }
 
 /// <summary>
