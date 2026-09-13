@@ -58,6 +58,17 @@ final class SignatureStore {
         write(entries.filter { $0.id != id })
     }
 
+    /// Renames an entry in place; order and the PNG are untouched (#100).
+    func rename(id: String, displayName: String) {
+        write(load().map { entry in
+            entry.id == id
+                ? SignatureEntry(id: entry.id, displayName: displayName, fileName: entry.fileName,
+                                 pixelWidth: entry.pixelWidth, pixelHeight: entry.pixelHeight,
+                                 createdEpochMs: entry.createdEpochMs)
+                : entry
+        })
+    }
+
     func loadImage(_ entry: SignatureEntry) -> CGImage? {
         UIImage(contentsOfFile: dir.appendingPathComponent(entry.fileName).path)?.cgImage
     }
