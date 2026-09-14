@@ -1,0 +1,22 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp	2026-09-13 20:27:41.047202989 -0400
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp	2026-09-13 20:27:41.067202997 -0400
+@@ -998,6 +998,19 @@
+   WriteFloat(*buf, pTextObj->GetFontSize()) << " Tf ";
+   *buf << static_cast<int>(pTextObj->GetTextRenderMode()) << " Tr ";
+ 
++  // Character and word spacing are part of the text state the object was parsed
++  // with, and its glyph positions depend on them. Without them a rewritten stream
++  // re-spaces every text object in it. Both are restored by the Q that closes the
++  // object's graphics state.
++  const float char_space = pTextObj->text_state().GetCharSpace();
++  if (char_space != 0) {
++    WriteFloat(*buf, char_space) << " Tc ";
++  }
++  const float word_space = pTextObj->text_state().GetWordSpace();
++  if (word_space != 0) {
++    WriteFloat(*buf, word_space) << " Tw ";
++  }
++
+   *buf << "[";
+   ByteString text;
+   for (auto [char_code, char_kerning] :

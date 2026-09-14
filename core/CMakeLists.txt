@@ -91,7 +91,10 @@ elseif(APPLE)
         COMMENT "pointing libmegapdf_core at the libpdfium.dylib beside it")
 else()
     # Linux is the core test target's home (#104); no app ships from here.
-    set(PDFIUM_LINUX ${REPO}/libs/pdfium/linux-x64)
+    # MEGAPDF_PDFIUM_DIR points at another build's staging directory, such as a local
+    # tools/pdfium/build-pdfium.sh run, to test a PDFium patch before it is released (#120).
+    set(MEGAPDF_PDFIUM_DIR "${REPO}/libs/pdfium/linux-x64" CACHE PATH "PDFium to link on Linux (include/, lib/, VERSION)")
+    set(PDFIUM_LINUX ${MEGAPDF_PDFIUM_DIR})
     if(NOT EXISTS ${PDFIUM_LINUX}/lib/libpdfium.so)
         message(FATAL_ERROR "libs/pdfium/linux-x64 is missing (fetch the pinned pdfium-binaries linux-x64 build)")
     endif()
@@ -101,6 +104,24 @@ else()
 endif()
 
 target_link_libraries(megapdf_core PRIVATE ${PDFIUM_LINK})
+
+# How many MegaPDF patches the linked PDFium carries (tools/pdfium/patches, #119). The
+# core tests expect a page rewrite to keep what each patch fixes, and nothing more.
+get_filename_component(PDFIUM_LIB_DIR ${PDFIUM_RUNTIME} DIRECTORY)
+if(WIN32)
+    # pdfium.dll sits beside VERSION; the import library is generated in the build tree.
+    set(PDFIUM_VERSION_FILE ${PDFIUM_LIB_DIR}/VERSION)
+else()
+    set(PDFIUM_VERSION_FILE ${PDFIUM_LIB_DIR}/../VERSION)
+endif()
+set(MEGAPDF_PDFIUM_PATCHES 0)
+if(EXISTS ${PDFIUM_VERSION_FILE})
+    file(STRINGS ${PDFIUM_VERSION_FILE} patch_line REGEX "^MEGAPDF_PATCHES=")
+    if(patch_line)
+        string(REGEX REPLACE "^MEGAPDF_PATCHES=" "" MEGAPDF_PDFIUM_PATCHES "${patch_line}")
+    endif()
+endif()
+message(STATUS "pdfium: ${PDFIUM_LINK} (MegaPDF patches: ${MEGAPDF_PDFIUM_PATCHES})")
 
 if(MEGAPDF_ASAN AND NOT MSVC)
     target_compile_options(megapdf_core PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
@@ -125,6 +146,7 @@ if(MEGAPDF_CORE_TESTS)
         "The desktop engine's text runs and lines for every fixture, captured before #106 moved them into the core")
     add_executable(megapdf_core_tests tests/core_tests.cpp)
     target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/libs/pdfium/android/include)
+    target_compile_definitions(megapdf_core_tests PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES})
     target_link_libraries(megapdf_core_tests PRIVATE megapdf_core ${PDFIUM_LINK})
     if(MEGAPDF_ASAN AND NOT MSVC)
         target_compile_options(megapdf_core_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)

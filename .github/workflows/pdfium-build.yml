@@ -1,0 +1,111 @@
+# Builds PDFium with MegaPDF's patch series (tools/pdfium/patches) for every target
+# the apps ship, and optionally publishes the set as a release in this repository
+# (#119, #120). Manual only: a full run is hours of runner time.
+#
+# Each target runs tools/pdfium/build-pdfium.sh, which drives bblanchon/pdfium-binaries
+# at the tag matching the pinned Chromium branch, and produces an archive named like
+# the upstream releases (pdfium-<os>[-<env>]-<cpu>.tgz) with VERSION recording the
+# patch count and a hash of the series.
+name: PDFium (patched) build
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Chromium branch
+        required: false
+        default: chromium/7934
+      release:
+        description: Publish the archives as a release of this repository
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.env }} ${{ matrix.cpu }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux,   cpu: x64,   env: '',        runner: ubuntu-24.04 }
+          - { os: android, cpu: arm64, env: '',        runner: ubuntu-24.04 }
+          - { os: android, cpu: x64,   env: '',        runner: ubuntu-24.04 }
+          - { os: win,     cpu: x64,   env: '',        runner: windows-2022 }
+          - { os: mac,     cpu: arm64, env: '',        runner: macos-15 }
+          - { os: mac,     cpu: x64,   env: '',        runner: macos-15 }
+          - { os: ios,     cpu: arm64, env: device,    runner: macos-15 }
+          - { os: ios,     cpu: arm64, env: simulator, runner: macos-15 }
+          - { os: ios,     cpu: x64,   env: simulator, runner: macos-15 }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        shell: bash
+        env:
+          PDFIUM_BRANCH: ${{ inputs.branch }}
+        run: bash tools/pdfium/build-pdfium.sh "$RUNNER_TEMP/pdfium-build" ${{ matrix.os }} ${{ matrix.cpu }} ${{ matrix.env }}
+      - name: Show VERSION
+        shell: bash
+        run: cat "$RUNNER_TEMP/pdfium-build/staging/VERSION" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdfium-${{ matrix.os }}${{ matrix.env && format('-{0}', matrix.env) || '' }}-${{ matrix.cpu }}
+          path: ${{ runner.temp }}/pdfium-build/pdfium-${{ matrix.os }}${{ matrix.env && format('-{0}', matrix.env) || '' }}-${{ matrix.cpu }}.tgz
+          if-no-files-found: error
+
+  mac-univ:
+    name: mac universal
+    needs: build
+    runs-on: macos-15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pdfium-mac-*
+          merge-multiple: true
+      - name: lipo arm64 + x64
+        run: |
+          mkdir arm64 x64 univ
+          tar xzf pdfium-mac-arm64.tgz -C arm64
+          tar xzf pdfium-mac-x64.tgz -C x64
+          cp -R arm64/. univ/
+          sed -i '' '/target_cpu/d' univ/args.gn
+          lipo -create arm64/lib/libpdfium.dylib x64/lib/libpdfium.dylib -output univ/lib/libpdfium.dylib
+          lipo -info univ/lib/libpdfium.dylib
+          (cd univ && tar czf ../pdfium-mac-univ.tgz -- *)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pdfium-mac-univ
+          path: pdfium-mac-univ.tgz
+          if-no-files-found: error
+
+  release:
+    name: publish
+    if: inputs.release
+    needs: [build, mac-univ]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pdfium-*
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir v && tar xzf pdfium-linux-x64.tgz -C v VERSION
+          BUILD=$(sed -n 's/^BUILD=//p' v/VERSION)
+          SERIES=$(sed -n 's/^MEGAPDF_SERIES=//p' v/VERSION)
+          PATCHES=$(sed -n 's/^MEGAPDF_PATCHES=//p' v/VERSION)
+          TAG="pdfium-$BUILD-megapdf-$SERIES"
+          gh release create "$TAG" pdfium-*.tgz \
+            --title "PDFium $BUILD + MegaPDF patches ($PATCHES, series $SERIES)" \
+            --notes "PDFium chromium/$BUILD built with bblanchon/pdfium-binaries and MegaPDF's content-writer patch series (tools/pdfium/patches at $GITHUB_SHA). See #119." \
+            --prerelease

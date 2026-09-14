@@ -27,6 +27,11 @@
 
 #include "megapdf_core.h"
 
+// How many MegaPDF patches the linked PDFium carries (core/CMakeLists.txt reads VERSION).
+#ifndef MEGAPDF_PDFIUM_PATCHES
+#define MEGAPDF_PDFIUM_PATCHES 0
+#endif
+
 namespace {
 
 int failures = 0;
@@ -35,6 +40,10 @@ void check(bool ok, const char* what, const std::string& detail = "") {
     if (ok) return;
     failures++;
     std::fprintf(stderr, "FAIL: %s%s%s\n", what, detail.empty() ? "" : " — ", detail.c_str());
+}
+
+void check(bool ok, const std::string& what, const std::string& detail = "") {
+    check(ok, what.c_str(), detail);
 }
 
 // Not "near": that is a legacy macro in <windef.h>, which pdfium's headers pull in on Windows.
@@ -1275,7 +1284,9 @@ std::vector<unsigned char> spaced_text_pdf() {
 
 void test_text_editing(const std::string& fixtures) {
     // #118: a page PDFium cannot rewrite faithfully refuses edits and deletions, and is left untouched.
-    {
+    // Stock PDFium only: the spacing patch (#121) makes this page editable, and
+    // test_rewrite_fidelity holds the refusal cases for every patch level.
+    if (MEGAPDF_PDFIUM_PATCHES < 1) {
         auto bytes = spaced_text_pdf();
         megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
         check(d != nullptr, "spaced-text pdf opens");
@@ -1540,6 +1551,144 @@ void test_text_editing(const std::string& fixtures) {
 
 }  // namespace
 
+// --------------------------------------------------------------------------
+// #119: what rewriting a page must keep. Any body-text edit makes PDFium regenerate
+// the whole content stream, so each case is one page whose first line is retyped
+// longer, then saved and reopened: every other line must keep its text and place.
+// `fixed_by` is the MegaPDF PDFium patch (tools/pdfium/patches) that makes the case
+// editable; 0 means stock PDFium already keeps it. Below that level the guard must
+// refuse the edit and leave the page exactly as it was.
+
+std::vector<unsigned char> one_page_pdf(const std::string& content, const std::string& font_dict,
+                                        const std::string& extra_resources = "") {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> " + extra_resources +
+        " >> /Contents 5 0 R >>");
+    add(font_dict);
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+struct RunShot {
+    int object_index;
+    megapdf_rect bounds;
+    U16 text;   // authored text, trailing separators trimmed
+};
+
+std::vector<RunShot> run_shots(const megapdf_page* page) {
+    std::vector<RunShot> out;
+    megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
+    for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+        megapdf_text_run r{};
+        megapdf_text_run_get(t, i, &r);
+        U16 text = run_string(t, i, MEGAPDF_TEXT_RUN_TEXT);
+        while (!text.empty() && (text.back() == 0 || text.back() == ' ' || text.back() == '\r' || text.back() == '\n')) text.pop_back();
+        out.push_back(RunShot{r.object_index, r.bounds, text});
+    }
+    megapdf_text_free(t);
+    return out;
+}
+
+void test_rewrite_fidelity() {
+    const int patches = MEGAPDF_PDFIUM_PATCHES;
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    struct Case {
+        const char* name;
+        std::string content;
+        int fixed_by;
+    };
+    const std::vector<Case> cases = {
+        {"plain text", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET", 0},
+        {"kerned TJ", "BT /F1 18 Tf 72 700 Td [(Ke) -120 (rned) 250 (heading)] TJ ET BT /F1 12 Tf 72 660 Td [(Body) -300 (kerned)] TJ ET", 0},
+        {"character spacing, inherited by the next line",
+         "BT /F1 18 Tf 4 Tc 72 700 Td (Spaced heading) Tj ET BT /F1 12 Tf 72 660 Td (Inherits the spacing) Tj ET", 1},
+        {"word spacing", "BT /F1 18 Tf 10 Tw 72 700 Td (Word spaced heading) Tj ET BT /F1 12 Tf 72 660 Td (Body with several words) Tj ET", 1},
+        {"character and word spacing",
+         "BT /F1 18 Tf 2 Tc 6 Tw 72 700 Td (Both kinds of spacing) Tj ET BT /F1 12 Tf 72 660 Td (Body with both kinds) Tj ET", 1},
+        {"negative character spacing", "BT /F1 18 Tf -0.8 Tc 72 700 Td (Tight heading) Tj ET BT /F1 12 Tf 72 660 Td (Tight body line) Tj ET", 1},
+        {"spacing reset for the next line",
+         "BT /F1 18 Tf 3 Tc 72 700 Td (Spaced heading) Tj ET BT /F1 12 Tf 0 Tc 72 660 Td (Unspaced body) Tj ET", 1},
+        {"spacing only on the untouched line",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 2 Tc 5 Tw 72 660 Td (Spaced body line below) Tj ET", 1},
+        {"kerned TJ under character spacing",
+         "BT /F1 18 Tf 1.5 Tc 72 700 Td [(Ke) -120 (rned) 250 (heading)] TJ ET BT /F1 12 Tf 72 660 Td [(Body) -300 (kerned)] TJ ET", 1},
+        {"horizontal scaling with character spacing",
+         "BT /F1 18 Tf 80 Tz 2 Tc 72 700 Td (Scaled spaced heading) Tj ET BT /F1 12 Tf 72 660 Td (Body inherits both) Tj ET", 1},
+        // Not written by the stock or spacing-patched writer: DeviceCMYK colour (#122).
+        {"CMYK text colour", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0.1 0.9 0.2 0 k BT /F1 12 Tf 72 660 Td (Magenta body line) Tj ET", 2},
+    };
+
+    const auto replacement = utf16("A much longer replacement for the heading");
+    U16 replacement_text(replacement.begin(), replacement.end() - 1);
+    for (const Case& c : cases) {
+        const std::string name = c.name;
+        auto bytes = one_page_pdf(c.content, helvetica);
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, name + ": opens");
+        if (!d) continue;
+        {
+            Page p(d, 0);
+            megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            size_t first_run = 0;
+            const bool has_line = megapdf_text_line_count(t) > 0 && megapdf_text_line_runs(t, 0, &first_run, 1) > 0;
+            megapdf_text_run target{};
+            if (has_line) megapdf_text_run_get(t, first_run, &target);
+            megapdf_text_free(t);
+            check(has_line, name + ": has a first line");
+            const std::vector<RunShot> before = run_shots(p.page);
+            const bool expect_editable = patches >= c.fixed_by;
+            const int editable = megapdf_text_editable(p.page, target.object_index);
+            check(editable == (expect_editable ? 1 : 0), name + ": editable with " + std::to_string(patches) + " patch(es)",
+                  std::to_string(editable));
+
+            int outcome = -1;
+            const int status = megapdf_set_text(p.page, target.object_index, replacement.data(), 0, &outcome, nullptr);
+            if (!expect_editable) {
+                check(status == MEGAPDF_ERR_LAYOUT, name + ": refused while unpatched", std::to_string(status));
+                const std::vector<RunShot> after = run_shots(p.page);
+                bool untouched = after.size() == before.size();
+                for (size_t i = 0; untouched && i < before.size(); i++)
+                    untouched = after[i].text == before[i].text && rect_close(after[i].bounds, before[i].bounds, 0.01);
+                check(untouched, name + ": a refused page is untouched");
+            } else {
+                check(status == MEGAPDF_OK, name + ": the edit goes through", std::to_string(status));
+                std::vector<unsigned char> saved;
+                check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, name + ": saves");
+                megapdf_document* again = megapdf_open(saved.data(), saved.size(), nullptr);
+                check(again != nullptr, name + ": the saved file reopens");
+                if (again) {
+                    Page q(again, 0);
+                    const std::vector<RunShot> reopened = run_shots(q.page);
+                    bool edited_found = false;
+                    for (const RunShot& r : reopened) edited_found = edited_found || r.text == replacement_text;
+                    check(edited_found, name + ": the new text reads back after reopening");
+                    for (const RunShot& b : before) {
+                        if (b.object_index == target.object_index || b.text.empty()) continue;
+                        double best = 1e9;
+                        for (const RunShot& r : reopened) {
+                            if (r.text != b.text) continue;
+                            const double moved = std::max({std::fabs(r.bounds.left - b.bounds.left), std::fabs(r.bounds.bottom - b.bounds.bottom),
+                                                           std::fabs(r.bounds.right - b.bounds.right), std::fabs(r.bounds.top - b.bounds.top)});
+                            best = std::min(best, moved);
+                        }
+                        check(best <= 0.5, name + ": an untouched line keeps its text and place", best > 1e8 ? "text changed" : std::to_string(best) + " pt");
+                    }
+                }
+                megapdf_close(again);
+            }
+        }
+        megapdf_close(d);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -1560,6 +1709,7 @@ int main(int argc, char** argv) {
     test_render();
     test_render_page(argv[1]);
     test_text_editing(argv[1]);
+    test_rewrite_fidelity();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
