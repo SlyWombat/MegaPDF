@@ -197,6 +197,9 @@ internal sealed class EditItem
     [JsonPropertyName("delete_counts")] public string? DeleteCounts { get; set; }
     /// <summary>Every edit, counts: runs overlapping the line's area "before->after" reopen (#136).</summary>
     [JsonPropertyName("line_overlap")] public string? LineOverlap { get; set; }
+    /// <summary>Pixels changed outside the edited line's row band after save and reopen, and the render's pixel total (#127).</summary>
+    [JsonPropertyName("render_outside_px")] public int? RenderOutsidePx { get; set; }
+    [JsonPropertyName("render_px")] public int? RenderPx { get; set; }
     [JsonPropertyName("untouched")] public int Untouched { get; set; }
     [JsonPropertyName("untouched_missing")] public int UntouchedMissing { get; set; }
     [JsonPropertyName("worst_shift_pt")] public double? WorstShiftPt { get; set; }
@@ -708,6 +711,8 @@ internal static class Worker
             using var fresh = engine.Open(pristine);
             PdfTextLine line;
             IReadOnlyList<PdfTextRun> before;
+            RenderedPage beforeShot;
+            double shotScale;
             using (var page = fresh.GetPage(pageIndex))
             {
                 // Lines are chosen on another open of the same file, and PDFium can group a
@@ -723,6 +728,10 @@ internal static class Worker
                 }
                 line = lines[lineIndex];
                 before = page.GetTextRuns();
+                // The page as it was, for the render check after reopening (#127). Long side
+                // capped at 1,000 px: enough to see a moved line or a lost image, cheap per edit.
+                shotScale = Math.Min(PointsToPixels, 1000.0 / Math.Max(1, Math.Max(page.Width, page.Height)));
+                beforeShot = page.Render(Math.Max(1, (int)(page.Width * shotScale)), Math.Max(1, (int)(page.Height * shotScale)));
                 item.Editable = line.Runs.All(r => r.TextBoxId is not null || page.IsTextEditable(r.ObjectIndex));
             }
             item.Runs = line.Runs.Count;
@@ -792,6 +801,35 @@ internal static class Worker
                                                   && r.Bounds.X < lineRight && r.Bounds.X + r.Bounds.Width > lineLeft
                                                   && r.Bounds.Y < lineBottom && r.Bounds.Y + r.Bounds.Height > lineTop;
             item.LineOverlap = $"{before.Count(WhereTheLineWas)}->{after.Count(WhereTheLineWas)}";
+
+            // Render fidelity of the rest of the page (#127): pixels that changed outside the
+            // band of rows the line sat in. The band spans the page's width because longer or
+            // substituted text is meant to change it; text elsewhere is checked run by run below.
+            // Same per-pixel threshold as the core's layout guard.
+            var afterShot = reopenedPage.Render(beforeShot.PixelWidth, beforeShot.PixelHeight);
+            if (afterShot.PixelWidth == beforeShot.PixelWidth && afterShot.PixelHeight == beforeShot.PixelHeight)
+            {
+                const double padPt = 2;
+                var bandTop = Math.Max(0, (int)Math.Floor((lineTop - padPt) * shotScale));
+                var bandBottom = Math.Min(beforeShot.PixelHeight, (int)Math.Ceiling((lineBottom + padPt) * shotScale));
+                var changed = 0;
+                for (var y = 0; y < beforeShot.PixelHeight; y++)
+                {
+                    if (y >= bandTop && y < bandBottom)
+                        continue;
+                    var row = y * beforeShot.PixelWidth * 4;
+                    for (var x = 0; x < beforeShot.PixelWidth; x++)
+                    {
+                        var i = row + x * 4;
+                        var d = Math.Abs(beforeShot.Bgra[i] - afterShot.Bgra[i]) + Math.Abs(beforeShot.Bgra[i + 1] - afterShot.Bgra[i + 1])
+                                + Math.Abs(beforeShot.Bgra[i + 2] - afterShot.Bgra[i + 2]);
+                        if (d > 60)
+                            changed++;
+                    }
+                }
+                item.RenderOutsidePx = changed;
+                item.RenderPx = beforeShot.PixelWidth * beforeShot.PixelHeight;
+            }
 
             if (kind == "delete")
             {
