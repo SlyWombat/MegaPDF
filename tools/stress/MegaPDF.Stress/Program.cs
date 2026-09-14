@@ -193,6 +193,8 @@ internal sealed class EditItem
     // in_place | substituted | deleted | layout | no_font | not_extractable | refused | skipped | error
     [JsonPropertyName("result")] public string Result { get; set; } = "";
     [JsonPropertyName("read_back")] public bool? ReadBack { get; set; }
+    /// <summary>Deletes only, counts: "text before→after, runs before→after, overlapping after".</summary>
+    [JsonPropertyName("delete_counts")] public string? DeleteCounts { get; set; }
     [JsonPropertyName("untouched")] public int Untouched { get; set; }
     [JsonPropertyName("untouched_missing")] public int UntouchedMissing { get; set; }
     [JsonPropertyName("worst_shift_pt")] public double? WorstShiftPt { get; set; }
@@ -629,6 +631,19 @@ internal static class Worker
 
     private static string Normalized(string text) => text.TrimEnd();
 
+    private static string Squeezed(string text) => string.Concat(text.Where(c => !char.IsWhiteSpace(c)));
+
+    private static int Occurrences(string haystack, string needle)
+    {
+        var count = 0;
+        for (var at = haystack.IndexOf(needle, StringComparison.Ordinal); at >= 0;
+             at = haystack.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+        return count;
+    }
+
     private static EditsResult EditBattery(PdfiumEngine engine, IPdfDocument doc, int pageCount, string tmpDir)
     {
         var result = new EditsResult();
@@ -746,9 +761,24 @@ internal static class Worker
             var lineObjects = line.Runs.Select(r => r.ObjectIndex).ToHashSet();
             if (kind == "delete")
             {
-                var lineText = Normalized(line.Text);
-                item.ReadBack = after.Count(r => Normalized(r.Text) == lineText) < before.Count(r => Normalized(r.Text) == lineText)
-                                || after.Count < before.Count;
+                // Counted in the page's whole text, not run by run: PDFium can regroup a
+                // long line's runs on reopen, so neither the run count nor a run-for-run
+                // match has to drop when the line has really gone.
+                var lineText = Squeezed(line.Text);
+                var textBefore = lineText.Length == 0 ? 0 : Occurrences(Squeezed(string.Concat(before.Select(r => r.Text))), lineText);
+                var textAfter = lineText.Length == 0 ? 0 : Occurrences(Squeezed(string.Concat(after.Select(r => r.Text))), lineText);
+                item.ReadBack = lineText.Length == 0 ? after.Count < before.Count : textAfter < textBefore;
+
+                // A second drawn copy of the line (fake bold, a shadow) survives a delete of
+                // the copy the line grouping chose: count what still sits where the line was.
+                var left = line.Runs.Min(r => r.Bounds.X);
+                var top = line.Runs.Min(r => r.Bounds.Y);
+                var right = line.Runs.Max(r => r.Bounds.X + r.Bounds.Width);
+                var bottom = line.Runs.Max(r => r.Bounds.Y + r.Bounds.Height);
+                var overlapping = after.Count(r => !string.IsNullOrWhiteSpace(r.Text)
+                                                   && r.Bounds.X < right && r.Bounds.X + r.Bounds.Width > left
+                                                   && r.Bounds.Y < bottom && r.Bounds.Y + r.Bounds.Height > top);
+                item.DeleteCounts = $"text {textBefore}->{textAfter}, runs {before.Count}->{after.Count}, line runs {line.Runs.Count}, overlapping after {overlapping}";
             }
             else
             {
