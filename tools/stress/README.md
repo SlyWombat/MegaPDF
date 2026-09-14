@@ -26,6 +26,15 @@ be refused) and deleting the line. Each item records the guard's verdict, the ou
 whether the edit reads back after save and reopen, and how far any other line on the
 page moved. Kinds, positions and numbers only; no document text.
 
+Protected documents (#131) are their own outcome, never a failure: `encrypted` when a
+password is needed, `unsupported-security` when the document uses a security handler
+PDFium cannot open. To exercise protected documents instead of only counting them,
+point `MEGAPDF_STRESS_UNLOCK_LIST` at a private file with one line per document: its
+path relative to `--root`, a tab, then its password. Workers inherit the variable from
+`run`; a document opened that way records `"unlocked": true` and goes through every
+phase. Nothing from the list is logged or reported. The side-by-side table counts
+protected, unlocked and unsupported documents.
+
 One-file diagnostics: `find`, `open-bench`, `inspect`, `flags-bench`.
 
 `dump-text --files a.pdf,b.pdf` prints every page's text runs and visual lines in

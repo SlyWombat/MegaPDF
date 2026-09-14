@@ -1697,9 +1697,11 @@ struct megapdf_images {
 
 extern "C" {
 
-MEGAPDF_API int megapdf_save(const megapdf_document* d, megapdf_write_fn write, void* context) {
-    if (d == nullptr || write == nullptr) return MEGAPDF_ERR_ARGUMENT;
-    Guard guard(CoreLock());
+// Serialises through the caller's write callback: with the security the document
+// has, with none, or with new security (#131). The caller holds the core lock.
+static int SaveDocument(const megapdf_document* d, megapdf_write_fn write, void* context, FPDF_DWORD flags,
+                        bool new_security, const char* user_utf8, const char* owner_utf8,
+                        unsigned int permissions) {
     if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
     WriteBridge bridge{};
     bridge.fw.version = 1;
@@ -1707,10 +1709,58 @@ MEGAPDF_API int megapdf_save(const megapdf_document* d, megapdf_write_fn write, 
     bridge.write = write;
     bridge.context = context;
     bridge.failed = false;
-    const FPDF_BOOL ok = FPDF_SaveAsCopy(d->doc, &bridge.fw, 0);
+    const FPDF_BOOL ok = new_security
+        ? FPDF_SaveAsCopyWithSecurity(d->doc, &bridge.fw, flags, user_utf8 != nullptr ? user_utf8 : "",
+                                      owner_utf8 != nullptr ? owner_utf8 : "", permissions & MEGAPDF_PERMIT_ALL)
+        : FPDF_SaveAsCopy(d->doc, &bridge.fw, flags);
     if (bridge.failed) { SetError(0, "the write callback aborted the save"); return MEGAPDF_ERR_PDFIUM; }
     if (!ok) { SetError(FPDF_ERR_UNKNOWN, "PDFium could not serialize the document"); return MEGAPDF_ERR_PDFIUM; }
     return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_save(const megapdf_document* d, megapdf_write_fn write, void* context) {
+    if (d == nullptr || write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    return SaveDocument(d, write, context, 0, false, nullptr, nullptr, 0);
+}
+
+// PDFium reports every permission for an unprotected document and for an owner
+// open; MEGAPDF_PERMIT_ALL is the bits that mean something.
+static unsigned int OpenPermissions(const megapdf_document* d) {
+    return static_cast<unsigned int>(FPDF_GetDocPermissions(d->doc) & MEGAPDF_PERMIT_ALL);
+}
+
+MEGAPDF_API int megapdf_security_info(const megapdf_document* d, megapdf_security* out) {
+    if (d == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    const int revision = FPDF_GetSecurityHandlerRevision(d->doc);
+    out->encrypted = revision >= 0 ? 1 : 0;
+    out->revision = revision >= 0 ? revision : -1;
+    out->permissions = OpenPermissions(d);
+    out->full_access = out->permissions == MEGAPDF_PERMIT_ALL ? 1 : 0;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_save_with_security(const megapdf_document* d, const char* user_password_utf8,
+                                           const char* owner_password_utf8, unsigned int permissions,
+                                           megapdf_write_fn write, void* context) {
+    if (d == nullptr || write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (OpenPermissions(d) != MEGAPDF_PERMIT_ALL) {
+        SetError(FPDF_ERR_SECURITY, "changing this document's security needs its owner password");
+        return MEGAPDF_ERR_RESTRICTED;
+    }
+    return SaveDocument(d, write, context, 0, true, user_password_utf8, owner_password_utf8, permissions);
+}
+
+MEGAPDF_API int megapdf_save_without_security(const megapdf_document* d, megapdf_write_fn write, void* context) {
+    if (d == nullptr || write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (OpenPermissions(d) != MEGAPDF_PERMIT_ALL) {
+        SetError(FPDF_ERR_SECURITY, "removing this document's security needs its owner password");
+        return MEGAPDF_ERR_RESTRICTED;
+    }
+    return SaveDocument(d, write, context, FPDF_REMOVE_SECURITY, false, nullptr, nullptr, 0);
 }
 
 MEGAPDF_API int megapdf_flatten_all(const megapdf_document* d) {

@@ -338,6 +338,32 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_save(IntPtr document, WriteDelegate write, IntPtr context);
 
+    // Document security (#131) ------------------------------------------------
+
+    /// <summary>megapdf_security: 32-bit permissions on every platform, so one layout.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct megapdf_security
+    {
+        public int encrypted;
+        public int revision;
+        public uint permissions;
+        public int full_access;
+    }
+
+    [DllImport(Dll)]
+    public static extern int megapdf_security_info(IntPtr document, out megapdf_security security);
+
+    /// <summary>A copy under new AES-256 security. MEGAPDF_ERR_RESTRICTED (-6) without full access.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_save_with_security(IntPtr document,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? userPassword,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? ownerPassword,
+        uint permissions, WriteDelegate write, IntPtr context);
+
+    /// <summary>A copy with no security. MEGAPDF_ERR_RESTRICTED (-6) without full access.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_save_without_security(IntPtr document, WriteDelegate write, IntPtr context);
+
     [DllImport(Dll)]
     public static extern int megapdf_flatten_all(IntPtr document);
 

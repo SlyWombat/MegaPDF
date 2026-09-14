@@ -195,6 +195,55 @@ Java_com_megapdf_engine_PdfiumNative_nativeSave(JNIEnv* env, jobject, jlong hand
     return (status == MEGAPDF_OK && !writer.failed) ? JNI_TRUE : JNI_FALSE;
 }
 
+// --- Document security (#131). [encrypted, revision, permissions, full access].
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSecurityInfo(JNIEnv* env, jobject, jlong handle) {
+    megapdf_security s{};
+    megapdf_security_info(reinterpret_cast<Document*>(handle)->core, &s);
+    const jint values[4] = {s.encrypted, s.revision, static_cast<jint>(s.permissions), s.full_access};
+    jintArray out = env->NewIntArray(4);
+    if (out != nullptr) env->SetIntArrayRegion(out, 0, 4, values);
+    return out;
+}
+
+// Passwords arrive as NUL-terminated UTF-8 bytes rather than jstrings: JNI's "modified
+// UTF-8" writes characters outside the BMP differently from the UTF-8 a PDF's security
+// handler hashes. Returns the core's status; MEGAPDF_ERR_RESTRICTED without full access.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSaveWithSecurity(JNIEnv* env, jobject, jlong handle, jobject outputStream,
+                                                           jbyteArray userUtf8, jbyteArray ownerUtf8,
+                                                           jint permissions) {
+    auto* d = reinterpret_cast<Document*>(handle);
+    jclass streamClass = env->GetObjectClass(outputStream);
+    jmethodID write = env->GetMethodID(streamClass, "write", "([BII)V");
+    if (write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+
+    jbyte* user = env->GetByteArrayElements(userUtf8, nullptr);
+    jbyte* owner = ownerUtf8 != nullptr ? env->GetByteArrayElements(ownerUtf8, nullptr) : nullptr;
+    StreamWriter writer{env, outputStream, write, false};
+    int status = megapdf_save_with_security(d->core, reinterpret_cast<const char*>(user),
+                                            reinterpret_cast<const char*>(owner),
+                                            static_cast<unsigned int>(permissions), WriteToStream, &writer);
+    if (owner != nullptr) env->ReleaseByteArrayElements(ownerUtf8, owner, JNI_ABORT);
+    env->ReleaseByteArrayElements(userUtf8, user, JNI_ABORT);
+    if (status == MEGAPDF_OK && writer.failed) status = MEGAPDF_ERR_PDFIUM;
+    return status;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSaveWithoutSecurity(JNIEnv* env, jobject, jlong handle,
+                                                              jobject outputStream) {
+    auto* d = reinterpret_cast<Document*>(handle);
+    jclass streamClass = env->GetObjectClass(outputStream);
+    jmethodID write = env->GetMethodID(streamClass, "write", "([BII)V");
+    if (write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+
+    StreamWriter writer{env, outputStream, write, false};
+    int status = megapdf_save_without_security(d->core, WriteToStream, &writer);
+    if (status == MEGAPDF_OK && writer.failed) status = MEGAPDF_ERR_PDFIUM;
+    return status;
+}
+
 }  // extern "C"
 
 // --- Checkbox surface (#15). Behavioral reference: PdfiumEngine.cs; the

@@ -77,6 +77,57 @@ final class PdfEngineTests: XCTestCase {
         XCTAssertEqual(count, 1)
     }
 
+    func testNewSecurityNeedsItsPasswordAndGrantsOnlyWhatWasAllowed() async throws {
+        // #131: a copy saved with new AES-256 security, then one with none.
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("fixture"))
+        let initial = await engine.security(doc)
+        XCTAssertEqual(initial, .unprotected)
+        let locked = try await engine.save(doc, userPassword: "new-user", ownerPassword: "new-owner",
+                                           permissions: .print)
+        await engine.close(doc)
+
+        do {
+            let stray = try await engine.open(locked)
+            await engine.close(stray)
+            XCTFail("the copy should need a password")
+        } catch PdfError.passwordRequired {
+        }
+
+        let asUser = try await engine.open(locked, password: "new-user")
+        let userSecurity = await engine.security(asUser)
+        await engine.close(asUser)
+        XCTAssertEqual(userSecurity,
+                       PdfSecurity(isEncrypted: true, revision: 6, permissions: .print, hasFullAccess: false))
+
+        let asOwner = try await engine.open(locked, password: "new-owner")
+        let ownerSecurity = await engine.security(asOwner)
+        let unprotected = try await engine.saveWithoutSecurity(asOwner)
+        await engine.close(asOwner)
+        XCTAssertTrue(ownerSecurity.hasFullAccess)
+
+        let reopened = try await engine.open(unprotected)
+        let reopenedSecurity = await engine.security(reopened)
+        await engine.close(reopened)
+        XCTAssertEqual(reopenedSecurity, .unprotected)
+    }
+
+    func testRestrictedDocumentRefusesToChangeItsSecurity() async throws {
+        // #131: owner-only.pdf opens without a password but allows nothing.
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("owner-only"))
+        let security = await engine.security(doc)
+        XCTAssertTrue(security.isEncrypted)
+        XCTAssertFalse(security.hasFullAccess)
+        XCTAssertFalse(security.allows(.print))
+        do {
+            _ = try await engine.saveWithoutSecurity(doc)
+            XCTFail("only the owner may remove the security")
+        } catch PdfError.restricted {
+        }
+        await engine.close(doc)
+    }
+
     func testInvalidBytesThrow() async throws {
         let engine = PdfEngine.shared
         do {

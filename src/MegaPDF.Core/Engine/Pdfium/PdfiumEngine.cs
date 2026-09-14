@@ -127,6 +127,35 @@ internal sealed class PdfiumDocument : IPdfDocument
         // size pass is the whole document again (1.97x the original at the median
         // over 4,263 corpus files, against 1.00x for the rewrite). The core commits
         // any in-progress form edit first and streams blocks to this callback (#110).
+        ThroughCore(target, write => CoreNative.megapdf_save(_core, write, IntPtr.Zero));
+    }
+
+    public PdfSecurity Security
+    {
+        get
+        {
+            ThrowIfDisposed();
+            CoreNative.megapdf_security_info(_core, out var s);
+            return new PdfSecurity(s.encrypted != 0, s.revision, (PdfPermissions)s.permissions, s.full_access != 0);
+        }
+    }
+
+    public void SaveWithSecurity(Stream target, string userPassword, string? ownerPassword, PdfPermissions permissions)
+    {
+        ThrowIfDisposed();
+        ThroughCore(target, write => CoreNative.megapdf_save_with_security(
+            _core, userPassword, ownerPassword, (uint)permissions, write, IntPtr.Zero));
+    }
+
+    public void SaveWithoutSecurity(Stream target)
+    {
+        ThrowIfDisposed();
+        ThroughCore(target, write => CoreNative.megapdf_save_without_security(_core, write, IntPtr.Zero));
+    }
+
+    /// <summary>Runs one of the core's saves, streaming its blocks to <paramref name="target"/>.</summary>
+    private static void ThroughCore(Stream target, Func<CoreNative.WriteDelegate, int> save)
+    {
         Exception? writeError = null;
         int Write(IntPtr _, IntPtr data, nuint size)
         {
@@ -145,14 +174,19 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
 
         var callback = new CoreNative.WriteDelegate(Write);
-        var status = CoreNative.megapdf_save(_core, callback, IntPtr.Zero);
+        var status = save(callback);
         GC.KeepAlive(callback);
 
         if (writeError is not null)
             throw new IOException("Writing the PDF failed.", writeError);
+        if (status == MegapdfErrRestricted)
+            throw new DocumentRestrictedException();
         if (status != 0)
             throw new IOException("PDFium could not serialize the document.");
     }
+
+    /// <summary>MEGAPDF_ERR_RESTRICTED (#131).</summary>
+    private const int MegapdfErrRestricted = -6;
 
     public void FlattenAllPages()
     {

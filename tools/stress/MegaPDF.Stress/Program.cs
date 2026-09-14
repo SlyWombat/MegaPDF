@@ -100,6 +100,8 @@ internal sealed class FileResult
     [JsonPropertyName("path")] public string Path { get; set; } = "";
     [JsonPropertyName("bytes")] public long Bytes { get; set; }
     [JsonPropertyName("outcome")] public string Outcome { get; set; } = "ok";
+    /// <summary>Opened with a password from the private unlock list (#131).</summary>
+    [JsonPropertyName("unlocked")] public bool? Unlocked { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
     [JsonPropertyName("errors")] public Dictionary<string, string>? PhaseErrors { get; set; }
     [JsonPropertyName("exit_code")] public int? ExitCode { get; set; }
@@ -300,6 +302,27 @@ internal static class Worker
 
     private static string Describe(Exception ex) => $"{ex.GetType().Name}: {ex.Message}";
 
+    /// <summary>
+    /// Passwords for protected corpus files (#131), so they are exercised rather than only
+    /// counted: the file MEGAPDF_STRESS_UNLOCK_LIST names, one line per document, its path
+    /// relative to <c>--root</c>, a tab, then its password. Private like the corpus itself;
+    /// nothing from it is logged or reported. Workers inherit the variable from <c>run</c>.
+    /// </summary>
+    private static readonly Lazy<Dictionary<string, string>> UnlockList = new(() =>
+    {
+        var list = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var path = Environment.GetEnvironmentVariable("MEGAPDF_STRESS_UNLOCK_LIST");
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return list;
+        foreach (var line in File.ReadAllLines(path))
+        {
+            var tab = line.IndexOf('\t');
+            if (tab > 0)
+                list[line[..tab].Replace('\\', '/')] = line[(tab + 1)..];
+        }
+        return list;
+    });
+
     private static void Heartbeat(TextWriter w, int index, string phase, int n)
     {
         w.WriteLine($"HB {index} {phase} {n}");
@@ -334,10 +357,32 @@ internal static class Worker
         {
             doc = engine.Open(local);
         }
+        catch (PdfLoadException ex) when (ex.IsPasswordError &&
+                                          UnlockList.Value.TryGetValue(r.Path.Replace('\\', '/'), out var unlock))
+        {
+            try
+            {
+                doc = engine.Open(local, unlock);
+                r.Unlocked = true;
+            }
+            catch (PdfLoadException retry)
+            {
+                r.OpenMs = sw.Elapsed.TotalMilliseconds;
+                r.Outcome = "encrypted";
+                r.Error = Describe(retry);
+                return;
+            }
+        }
         catch (PdfLoadException ex)
         {
             r.OpenMs = sw.Elapsed.TotalMilliseconds;
-            r.Outcome = ex.IsPasswordError ? "password" : ex.IsFormatError ? "format" : ex.IsFileError ? "file" : $"load-{ex.ErrorCode}";
+            // A protected document is its own reason, never a failure (#131); an unsupported
+            // security handler (FPDF_ERR_SECURITY) is one the apps must explain.
+            r.Outcome = ex.IsPasswordError ? "encrypted"
+                : ex.ErrorCode == 6 ? "unsupported-security"
+                : ex.IsFormatError ? "format"
+                : ex.IsFileError ? "file"
+                : $"load-{ex.ErrorCode}";
             r.Error = Describe(ex);
             return;
         }

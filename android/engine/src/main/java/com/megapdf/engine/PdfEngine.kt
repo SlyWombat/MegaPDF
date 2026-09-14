@@ -157,6 +157,42 @@ class PdfDocument internal constructor(
         out.flush()
     }
 
+    /** Whether the document is encrypted and what this open may do (#131). */
+    suspend fun security(): PdfSecurity = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        val v = PdfiumNative.nativeSecurityInfo(handle)
+        PdfSecurity(isEncrypted = v[0] != 0, revision = v[1], permissions = v[2], hasFullAccess = v[3] != 0)
+    }
+
+    /**
+     * Writes a copy encrypted with AES-256 under new passwords, in place of any security
+     * the document had (#131). The owner password opens it with every permission; null
+     * means the same as the user password. The copy no longer opens like this document:
+     * verify it with the new password.
+     * @throws PdfRestrictedException without full access
+     */
+    suspend fun saveWithSecurity(
+        out: OutputStream, userPassword: String, ownerPassword: String?, permissions: Int,
+    ): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        checkSecurityStatus(
+            PdfiumNative.nativeSaveWithSecurity(
+                handle, out, userPassword.nulTerminatedUtf8(), ownerPassword?.nulTerminatedUtf8(), permissions,
+            ),
+        )
+        out.flush()
+    }
+
+    /**
+     * Writes a copy with no security (#131).
+     * @throws PdfRestrictedException without full access
+     */
+    suspend fun saveWithoutSecurity(out: OutputStream): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        checkSecurityStatus(PdfiumNative.nativeSaveWithoutSecurity(handle, out))
+        out.flush()
+    }
+
     // NonCancellable: close must run even from a cancelled caller, or the native
     // document leaks.
     suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {

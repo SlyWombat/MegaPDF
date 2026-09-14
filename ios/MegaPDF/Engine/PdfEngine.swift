@@ -22,6 +22,8 @@ enum PdfError: Error, Equatable {
     case editFailed
     /// PDFium would change the rest of the page if it rewrote this text (#118).
     case layoutWouldChange
+    /// The document's security doesn't allow it; its owner password would (#131).
+    case restricted
 }
 
 /// What `error.localizedDescription` says for an engine failure — short and
@@ -43,6 +45,8 @@ extension PdfError: LocalizedError {
             return String(localized: "Couldn't change the document.")
         case .layoutWouldChange:
             return String(localized: "This page's text can't be changed without disturbing its layout.")
+        case .restricted:
+            return String(localized: "This document's security doesn't allow that without its owner password.")
         }
     }
 }
@@ -148,16 +152,51 @@ actor PdfEngine {
     /// any in-progress form edit first. Atomicity is the caller's job, as on the
     /// other platforms.
     func save(_ document: PdfDocument) throws -> Data {
+        try serialize { write, context in megapdf_save(document.core, write, context) }
+    }
+
+    /// Whether the document is encrypted and what this open may do (#131).
+    func security(_ document: PdfDocument) -> PdfSecurity {
+        var s = megapdf_security()
+        _ = megapdf_security_info(document.core, &s)
+        return PdfSecurity(isEncrypted: s.encrypted != 0, revision: Int(s.revision),
+                           permissions: PdfPermissions(rawValue: s.permissions),
+                           hasFullAccess: s.full_access != 0)
+    }
+
+    /// A copy encrypted with AES-256 under new passwords, in place of any security the
+    /// document had (#131). The owner password opens it with every permission; nil means
+    /// the same as the user password. The copy no longer opens like `document`: verify it
+    /// with the new password. Throws `PdfError.restricted` without full access.
+    func save(_ document: PdfDocument, userPassword: String, ownerPassword: String?,
+              permissions: PdfPermissions) throws -> Data {
+        try userPassword.withCString { user in
+            try (ownerPassword ?? "").withCString { owner in
+                try serialize { write, context in
+                    megapdf_save_with_security(document.core, user, owner, permissions.rawValue, write, context)
+                }
+            }
+        }
+    }
+
+    /// A copy with no security (#131). Throws `PdfError.restricted` without full access.
+    func saveWithoutSecurity(_ document: PdfDocument) throws -> Data {
+        try serialize { write, context in megapdf_save_without_security(document.core, write, context) }
+    }
+
+    /// Runs one of the core's saves, collecting its blocks.
+    private func serialize(_ save: (megapdf_write_fn, UnsafeMutableRawPointer) -> Int32) throws -> Data {
         final class Sink { var data = Data() }
         let sink = Sink()
-        let status = withExtendedLifetime(sink) { () -> Int32 in
-            let context = Unmanaged.passUnretained(sink).toOpaque()
-            return megapdf_save(document.core, { context, bytes, count in
-                guard let context, let bytes, count > 0 else { return 1 }
-                Unmanaged<Sink>.fromOpaque(context).takeUnretainedValue().data.append(Data(bytes: bytes, count: count))
-                return 1
-            }, context)
+        let write: megapdf_write_fn = { context, bytes, count in
+            guard let context, let bytes, count > 0 else { return 1 }
+            Unmanaged<Sink>.fromOpaque(context).takeUnretainedValue().data.append(Data(bytes: bytes, count: count))
+            return 1
         }
+        let status = withExtendedLifetime(sink) { () -> Int32 in
+            save(write, Unmanaged.passUnretained(sink).toOpaque())
+        }
+        if status == MEGAPDF_ERR_RESTRICTED { throw PdfError.restricted }
         guard status == MEGAPDF_OK, !sink.data.isEmpty else { throw PdfError.saveFailed }
         return sink.data
     }

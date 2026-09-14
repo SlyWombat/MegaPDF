@@ -62,7 +62,8 @@ enum {
     MEGAPDF_ERR_PDFIUM = -2,      /* PDFium refused; see megapdf_last_error_message() */
     MEGAPDF_ERR_MEMORY = -3,      /* the core could not allocate */
     MEGAPDF_ERR_NO_FONT = -4,     /* no font could render the text, not even a standard substitute (tier 2 failed) */
-    MEGAPDF_ERR_LAYOUT = -5       /* PDFium would change how the page looks if it rewrote this text (#118) */
+    MEGAPDF_ERR_LAYOUT = -5,      /* PDFium would change how the page looks if it rewrote this text (#118) */
+    MEGAPDF_ERR_RESTRICTED = -6   /* the document's security does not allow it; its owner password would (#131) */
 };
 
 /* --------------------------------------------------------------------------
@@ -426,6 +427,53 @@ typedef int (*megapdf_write_fn)(void* context, const void* data, size_t size);
  * MEGAPDF_ERR_PDFIUM when PDFium refuses or the callback aborts.
  */
 MEGAPDF_API int megapdf_save(const megapdf_document* document, megapdf_write_fn write, void* context);
+
+/* --------------------------------------------------------------------------
+ * Document security (#131). megapdf_open() takes the password; these report
+ * what that open may do and write copies with new security or none.
+ * ----------------------------------------------------------------------- */
+
+/** What an open may do: the standard security handler's permission bits (ISO 32000-2, Table 22). */
+#define MEGAPDF_PERMIT_PRINT          (1u << 2)
+#define MEGAPDF_PERMIT_MODIFY         (1u << 3)
+#define MEGAPDF_PERMIT_COPY           (1u << 4)
+#define MEGAPDF_PERMIT_ANNOTATE       (1u << 5)
+#define MEGAPDF_PERMIT_FILL_FORMS     (1u << 8)
+#define MEGAPDF_PERMIT_ACCESSIBILITY  (1u << 9)
+#define MEGAPDF_PERMIT_ASSEMBLE       (1u << 10)
+#define MEGAPDF_PERMIT_PRINT_HIGH     (1u << 11)
+#define MEGAPDF_PERMIT_ALL            (0xF3Cu)
+
+/* `unsigned int`, not `unsigned long`: 32 bits on every platform the apps ship, so the
+ * desktop binding marshals one layout on Windows and macOS alike. */
+typedef struct megapdf_security {
+    int encrypted;              /* 1 when the document has a security handler */
+    int revision;               /* the standard handler's revision, 2-6; -1 when not encrypted */
+    unsigned int permissions;   /* MEGAPDF_PERMIT_* this open may do; MEGAPDF_PERMIT_ALL unless restricted */
+    int full_access;            /* 1 when this open may do everything, including change or remove the security:
+                                   an unprotected document, an owner-password open, or one that restricts nothing */
+} megapdf_security;
+
+/** MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a NULL document or `out`. */
+MEGAPDF_API int megapdf_security_info(const megapdf_document* document, megapdf_security* out);
+
+/**
+ * Writes a copy encrypted with AES-256 (the standard handler at revision 6)
+ * under new passwords, in place of any security the document had. The user
+ * password (UTF-8; NULL or empty for none) opens the copy with `permissions`
+ * (MEGAPDF_PERMIT_*); the owner password opens it with all of them, and NULL or
+ * empty means the same as the user password. The document itself keeps the
+ * security it was opened with, so megapdf_open_like() does not open the copy;
+ * open it with the new password. Needs full access: MEGAPDF_ERR_RESTRICTED
+ * otherwise. Needs MegaPDF's PDFium patch 0010.
+ */
+MEGAPDF_API int megapdf_save_with_security(const megapdf_document* document, const char* user_password_utf8,
+                                           const char* owner_password_utf8, unsigned int permissions,
+                                           megapdf_write_fn write, void* context);
+
+/** Writes a copy with no security at all. Needs full access: MEGAPDF_ERR_RESTRICTED otherwise. */
+MEGAPDF_API int megapdf_save_without_security(const megapdf_document* document, megapdf_write_fn write,
+                                              void* context);
 
 /** Commits form edits, then bakes every page's annotations and fields into its content. */
 MEGAPDF_API int megapdf_flatten_all(const megapdf_document* document);

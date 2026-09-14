@@ -33,6 +33,25 @@ public interface IPdfDocument : IDisposable
     /// </summary>
     void Save(Stream target);
 
+    /// <summary>Whether the document is encrypted and what this open may do (#131).</summary>
+    PdfSecurity Security { get; }
+
+    /// <summary>
+    /// Writes a copy encrypted with AES-256 under new passwords, in place of any security
+    /// the document had (#131). <paramref name="userPassword"/> opens the copy with
+    /// <paramref name="permissions"/>; <paramref name="ownerPassword"/> opens it with all of
+    /// them, and null means the same as the user password. The copy no longer opens like
+    /// this document — verify it with the new password. Throws
+    /// <see cref="DocumentRestrictedException"/> unless <see cref="PdfSecurity.HasFullAccess"/>.
+    /// </summary>
+    void SaveWithSecurity(Stream target, string userPassword, string? ownerPassword, PdfPermissions permissions);
+
+    /// <summary>
+    /// Writes a copy with no security (#131). Throws <see cref="DocumentRestrictedException"/>
+    /// unless <see cref="PdfSecurity.HasFullAccess"/>.
+    /// </summary>
+    void SaveWithoutSecurity(Stream target);
+
     /// <summary>
     /// Bakes marks, signatures, and form values permanently into page content
     /// (SDD §3.3 "flatten on save", off by default). Irreversible: annotations

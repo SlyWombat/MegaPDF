@@ -86,6 +86,42 @@ FPDF_SaveWithVersion(FPDF_DOCUMENT document,
                      FPDF_DWORD flags,
                      int file_version);
 
+// Experimental API (MegaPDF patch series).
+// Function: FPDF_SaveAsCopyWithSecurity
+//          Saves a copy of the document encrypted with the standard security
+//          handler at revision 6 (AES-256, ISO 32000-2), replacing whatever
+//          security it had. To save a copy with no security, use
+//          FPDF_SaveAsCopy() with FPDF_REMOVE_SECURITY.
+// Parameters:
+//          document        -   Handle to document.
+//          file_write      -   A pointer to a custom file write structure.
+//          flags           -   Flags as for FPDF_SaveAsCopy(). The copy is
+//                              always written in full, so FPDF_INCREMENTAL
+//                              makes the call fail.
+//          user_password   -   UTF-8, NUL-terminated: opens the document with
+//                              the permissions below. May be empty, so the
+//                              document opens without one.
+//          owner_password  -   UTF-8, NUL-terminated: opens it with every
+//                              permission. Empty or NULL means the same as
+//                              `user_password`.
+//          permissions     -   The P bits granted to a user-password open
+//                              (ISO 32000-2, Table 22): 1 << 2 print,
+//                              1 << 3 modify, 1 << 4 copy, 1 << 5 annotate,
+//                              1 << 8 fill forms, 1 << 9 extract for
+//                              accessibility, 1 << 10 assemble,
+//                              1 << 11 print at full quality. The reserved
+//                              bits are set for the caller.
+// Return value:
+//          TRUE for success, FALSE for failure.
+//
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDF_SaveAsCopyWithSecurity(FPDF_DOCUMENT document,
+                            FPDF_FILEWRITE* file_write,
+                            FPDF_DWORD flags,
+                            FPDF_BYTESTRING user_password,
+                            FPDF_BYTESTRING owner_password,
+                            unsigned long permissions);
+
 #ifdef __cplusplus
 }
 #endif

@@ -2124,6 +2124,151 @@ void test_edit_scenarios() {
     }
 }
 
+// The first text run on page 1, ASCII only (enough to see the document decrypted).
+std::string first_run_text(megapdf_document* d) {
+    Page p(d, 0);
+    if (!p.page) return "";
+    megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+    const size_t n = megapdf_text_run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT, nullptr, 0);
+    std::vector<unsigned short> s(n);
+    if (n) megapdf_text_run_string(t, 0, MEGAPDF_TEXT_RUN_TEXT, s.data(), n);
+    megapdf_text_free(t);
+    std::string out;
+    for (unsigned short c : s)
+        if (c) out += c < 128 ? static_cast<char>(c) : '?';
+    return out;
+}
+
+// #131: every standard security handler the apps open, what an open may do, and copies
+// written with new security or none. Fixtures: tools/gen_security_fixtures.sh.
+void test_security(const std::string& fixtures) {
+    const std::string dir = MEGAPDF_SECURITY_FIXTURES;
+    struct Encrypted { const char* file; int revision; const char* user; const char* owner; };
+    const Encrypted matrix[] = {
+        {"rc4-40.pdf", 2, "u-rc4-40", "o-rc4-40"},
+        {"rc4-128.pdf", 3, "u-rc4-128", "o-rc4-128"},
+        {"aes-128.pdf", 4, "u-aes-128", "o-aes-128"},
+        {"aes-256.pdf", 6, "u-aes-256", "o-aes-256"},
+        {"nonascii-aes-256.pdf", 6, "cl\xC3\xA9-\xC3\xA9t\xC3\xA9", "o-nonascii"},
+        {"nonascii-rc4-128.pdf", 3, "cl\xC3\xA9", "o-nonascii-rc4"},
+        {"metadata-clear.pdf", 6, "u-meta", "o-meta"},
+    };
+    for (const Encrypted& f : matrix) {
+        const std::string name = f.file;
+        const auto bytes = read_file(dir + "/" + f.file);
+        megapdf_document* bare = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(bare == nullptr && megapdf_last_error() == 4 /* FPDF_ERR_PASSWORD */, name + ": needs a password");
+        megapdf_close(bare);
+        megapdf_document* wrong = megapdf_open(bytes.data(), bytes.size(), "not-it");
+        check(wrong == nullptr, name + ": a wrong password is refused");
+        megapdf_close(wrong);
+
+        megapdf_document* as_user = megapdf_open(bytes.data(), bytes.size(), f.user);
+        check(as_user != nullptr, name + ": the user password opens it", megapdf_last_error_message());
+        if (as_user) {
+            megapdf_security s{};
+            check(megapdf_security_info(as_user, &s) == MEGAPDF_OK && s.encrypted == 1 && s.revision == f.revision,
+                  name + ": reports its revision", std::to_string(s.revision));
+            check(first_run_text(as_user).find("MegaPDF") != std::string::npos, name + ": its text reads",
+                  first_run_text(as_user));
+            megapdf_close(as_user);
+        }
+        megapdf_document* as_owner = megapdf_open(bytes.data(), bytes.size(), f.owner);
+        megapdf_security s{};
+        check(as_owner != nullptr && megapdf_security_info(as_owner, &s) == MEGAPDF_OK && s.full_access == 1 &&
+                  s.permissions == MEGAPDF_PERMIT_ALL,
+              name + ": the owner password opens it with full access", std::to_string(s.permissions));
+        megapdf_close(as_owner);
+    }
+
+    // Restricted, with no user password: opens freely, may do nothing, and only the owner
+    // may change or remove its security.
+    {
+        const auto bytes = read_file(dir + "/owner-only.pdf");
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "owner-only.pdf opens without a password");
+        if (d) {
+            megapdf_security s{};
+            check(megapdf_security_info(d, &s) == MEGAPDF_OK && s.encrypted == 1 && s.full_access == 0,
+                  "owner-only.pdf: a plain open is restricted");
+            const unsigned int forbidden = MEGAPDF_PERMIT_PRINT | MEGAPDF_PERMIT_MODIFY | MEGAPDF_PERMIT_COPY |
+                                            MEGAPDF_PERMIT_ANNOTATE | MEGAPDF_PERMIT_FILL_FORMS;
+            check((s.permissions & forbidden) == 0,
+                  "owner-only.pdf: no printing, modifying, copying, annotating or form filling",
+                  std::to_string(s.permissions));
+            std::vector<unsigned char> out;
+            check(megapdf_save_without_security(d, collect, &out) == MEGAPDF_ERR_RESTRICTED,
+                  "owner-only.pdf: removing its security needs the owner password");
+            check(megapdf_save_with_security(d, "x", "y", MEGAPDF_PERMIT_ALL, collect, &out) == MEGAPDF_ERR_RESTRICTED,
+                  "owner-only.pdf: so does changing it");
+            megapdf_close(d);
+        }
+        megapdf_document* owner = megapdf_open(bytes.data(), bytes.size(), "o-restricted");
+        check(owner != nullptr, "owner-only.pdf: the owner password opens it");
+        if (owner) {
+            std::vector<unsigned char> plain;
+            check(megapdf_save_without_security(owner, collect, &plain) == MEGAPDF_OK,
+                  "owner-only.pdf: the owner removes its security");
+            megapdf_document* open = megapdf_open(plain.data(), plain.size(), nullptr);
+            megapdf_security s{};
+            check(open != nullptr && megapdf_security_info(open, &s) == MEGAPDF_OK && s.encrypted == 0 &&
+                      s.full_access == 1,
+                  "the copy without security opens with full access");
+            megapdf_close(open);
+            megapdf_close(owner);
+        }
+    }
+
+    // New security on an unprotected document, then changed by its owner.
+    {
+        const auto bytes = read_file(fixtures + "/fixture.pdf");
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        megapdf_security s{};
+        check(d != nullptr && megapdf_security_info(d, &s) == MEGAPDF_OK && s.encrypted == 0 && s.revision == -1 &&
+                  s.full_access == 1,
+              "fixture.pdf has no security and full access");
+        std::vector<unsigned char> locked;
+        check(d != nullptr && megapdf_save_with_security(d, "new-user", "new-owner", MEGAPDF_PERMIT_PRINT, collect,
+                                                         &locked) == MEGAPDF_OK,
+              "a copy saves with new security");
+        megapdf_close(d);
+
+        megapdf_document* bare = megapdf_open(locked.data(), locked.size(), nullptr);
+        check(bare == nullptr, "the copy needs a password");
+        megapdf_close(bare);
+        megapdf_document* u = megapdf_open(locked.data(), locked.size(), "new-user");
+        check(u != nullptr && megapdf_security_info(u, &s) == MEGAPDF_OK && s.revision == 6 && s.full_access == 0 &&
+                  s.permissions == MEGAPDF_PERMIT_PRINT,
+              "the new user password opens it, permitted only to print", std::to_string(s.permissions));
+        if (u) {
+            check(first_run_text(u).find("MegaPDF") != std::string::npos, "the copy's text reads");
+            std::vector<unsigned char> x;
+            check(megapdf_save_without_security(u, collect, &x) == MEGAPDF_ERR_RESTRICTED,
+                  "a user open cannot remove the new security");
+            megapdf_close(u);
+        }
+        megapdf_document* o = megapdf_open(locked.data(), locked.size(), "new-owner");
+        check(o != nullptr && megapdf_security_info(o, &s) == MEGAPDF_OK && s.full_access == 1,
+              "the new owner password opens it with full access");
+        if (o) {
+            std::vector<unsigned char> changed;
+            check(megapdf_save_with_security(o, "changed", nullptr, MEGAPDF_PERMIT_ALL, collect, &changed) ==
+                      MEGAPDF_OK,
+                  "the owner changes the password");
+            megapdf_document* stale = megapdf_open(changed.data(), changed.size(), "new-user");
+            check(stale == nullptr, "the old password no longer opens the changed copy");
+            megapdf_close(stale);
+            megapdf_document* c = megapdf_open(changed.data(), changed.size(), "changed");
+            check(c != nullptr && megapdf_security_info(c, &s) == MEGAPDF_OK && s.full_access == 1,
+                  "the changed password opens it, as owner when no owner password was given");
+            megapdf_close(c);
+            megapdf_close(o);
+        }
+    }
+    megapdf_security none{};
+    check(megapdf_security_info(nullptr, &none) == MEGAPDF_ERR_ARGUMENT, "security info needs a document");
+}
+
 // #132: a protected document saves still protected, and megapdf_open_like() reads the
 // copy back with the credentials the document was opened with. Every platform's save
 // check reopened the copy without them, so every protected save failed.
@@ -2175,6 +2320,7 @@ int main(int argc, char** argv) {
     test_whiteouts_and_text_boxes(argv[1]);
     test_save_flatten_images(argv[1]);
     test_protected_save(argv[1]);
+    test_security(argv[1]);
     test_render();
     test_render_page(argv[1]);
     test_text_editing(argv[1]);

@@ -118,6 +118,78 @@ class PdfEngineTest {
     }
 
     @Test
+    fun newSecurityNeedsItsPasswordAndGrantsOnlyWhatWasAllowed() {
+        // #131: a copy saved with new AES-256 security, then one with none.
+        runBlocking {
+            val doc = engine.open(fixtureBytes())
+            val locked = ByteArrayOutputStream()
+            try {
+                assertEquals(PdfSecurity.UNPROTECTED, doc.security())
+                doc.saveWithSecurity(locked, "new-user", "new-owner", PdfPermissions.PRINT)
+            } finally {
+                doc.close()
+            }
+
+            try {
+                engine.open(locked.toByteArray()).close()
+                fail("the copy should need a password")
+            } catch (expected: PdfPasswordException) {
+                // expected
+            }
+
+            val asUser = engine.open(locked.toByteArray(), "new-user")
+            try {
+                assertEquals(
+                    PdfSecurity(isEncrypted = true, revision = 6, permissions = PdfPermissions.PRINT, hasFullAccess = false),
+                    asUser.security(),
+                )
+            } finally {
+                asUser.close()
+            }
+
+            val asOwner = engine.open(locked.toByteArray(), "new-owner")
+            val unprotected = ByteArrayOutputStream()
+            try {
+                assertTrue(asOwner.security().hasFullAccess)
+                asOwner.saveWithoutSecurity(unprotected)
+            } finally {
+                asOwner.close()
+            }
+
+            val reopened = engine.open(unprotected.toByteArray())
+            try {
+                assertEquals(PdfSecurity.UNPROTECTED, reopened.security())
+            } finally {
+                reopened.close()
+            }
+        }
+    }
+
+    @Test
+    fun restrictedDocumentRefusesToChangeItsSecurity() {
+        // #131: owner-only.pdf opens without a password but allows nothing.
+        runBlocking {
+            val bytes = InstrumentationRegistry.getInstrumentation().context.assets
+                .open("owner-only.pdf").use { it.readBytes() }
+            val doc = engine.open(bytes)
+            try {
+                val security = doc.security()
+                assertTrue(security.isEncrypted)
+                assertEquals(false, security.hasFullAccess)
+                assertEquals(false, security.allows(PdfPermissions.PRINT))
+                try {
+                    doc.saveWithoutSecurity(ByteArrayOutputStream())
+                    fail("only the owner may remove the security")
+                } catch (expected: PdfRestrictedException) {
+                    // expected
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
     fun invalidBytesThrowLoadException() {
         runBlocking {
             try {

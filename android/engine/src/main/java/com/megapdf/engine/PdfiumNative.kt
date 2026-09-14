@@ -27,6 +27,14 @@ internal object PdfiumNative {
     external fun nativeRenderSize(idealWidth: Double, idealHeight: Double): IntArray
     external fun nativeSave(handle: Long, out: OutputStream): Boolean
 
+    // Document security (#131). Passwords go over as NUL-terminated UTF-8 bytes; the
+    // saves return the core's status (-6 when the document's security forbids it).
+    external fun nativeSecurityInfo(handle: Long): IntArray
+    external fun nativeSaveWithSecurity(
+        handle: Long, out: OutputStream, userUtf8: ByteArray, ownerUtf8: ByteArray?, permissions: Int,
+    ): Int
+    external fun nativeSaveWithoutSecurity(handle: Long, out: OutputStream): Int
+
     // Checkbox surface (#15). Packed arrays keep the JNI boundary simple:
     // form fields are [type, checked, l, b, r, t] per field; squares and annot
     // rects are [l, b, r, t] each, all in PDF points, bottom-left origin.

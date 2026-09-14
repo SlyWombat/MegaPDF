@@ -341,7 +341,11 @@ def section_errors(run, out, top):
         oc = r.get("outcome")
         if oc in ("ok",):
             continue
-        if oc in ("password", "format", "file") or (oc or "").startswith("load-"):
+        # A protected document is not a failure (#131): it is counted in the side-by-side
+        # table, and exercised when the private unlock list has its password.
+        if oc in ("encrypted", "password"):
+            continue
+        if oc in ("format", "file", "unsupported-security") or (oc or "").startswith("load-"):
             groups[(oc, "open", "")].append(r["i"])
             continue
         if oc in ("crash", "hang", "error", "aborted"):
@@ -384,6 +388,9 @@ def section_compare(runs, out):
 
     row("files ok", lambda r: sum(1 for x in r.results if x.get("outcome") == "ok"))
     row("files not opened", lambda r: sum(1 for x in r.results if x.get("pages") is None))
+    row("files protected, not opened (#131)", lambda r: sum(1 for x in r.results if x.get("outcome") in ("encrypted", "password")))
+    row("files unlocked from the private list", lambda r: sum(1 for x in r.results if x.get("unlocked")))
+    row("files with unsupported security", lambda r: sum(1 for x in r.results if x.get("outcome") == "unsupported-security"))
     row("crashes + hangs", lambda r: sum(1 for x in r.results if x.get("outcome") in ("crash", "hang")))
     row("open ms p50", lambda r: pct([x["open_ms"] for x in r.ok()], 50), 1)
     row("open ms p99", lambda r: pct([x["open_ms"] for x in r.ok()], 99))

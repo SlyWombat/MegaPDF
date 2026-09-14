@@ -146,7 +146,9 @@ if(MEGAPDF_CORE_TESTS)
         "The desktop engine's text runs and lines for every fixture, captured before #106 moved them into the core")
     add_executable(megapdf_core_tests tests/core_tests.cpp)
     target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/libs/pdfium/android/include)
-    target_compile_definitions(megapdf_core_tests PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES})
+    target_compile_definitions(megapdf_core_tests PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES}
+        # Committed encrypted fixtures (#131, tools/gen_security_fixtures.sh).
+        "MEGAPDF_SECURITY_FIXTURES=\"${REPO}/tests/MegaPDF.Core.Tests/Fixtures/security\"")
     target_link_libraries(megapdf_core_tests PRIVATE megapdf_core ${PDFIUM_LINK})
     if(MEGAPDF_ASAN AND NOT MSVC)
         target_compile_options(megapdf_core_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
