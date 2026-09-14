@@ -1,0 +1,56 @@
+--- a/core/fpdfapi/page/cpdf_pageobjectholder.h
++++ b/core/fpdfapi/page/cpdf_pageobjectholder.h
+@@ -45,6 +45,9 @@
+ struct FontData {
+   ByteString baseFont;
+   ByteString type;
++  // The font dictionary's object number, or 0 for an inline dictionary. Fonts can
++  // share a BaseFont and type yet differ in encoding, widths or embedded program.
++  uint32_t dict_objnum = 0;
+ 
+   bool operator<(const FontData& other) const;
+ };
+--- a/core/fpdfapi/page/cpdf_pageobjectholder.cpp
++++ b/core/fpdfapi/page/cpdf_pageobjectholder.cpp
+@@ -32,6 +32,9 @@
+ }
+ 
+ bool FontData::operator<(const FontData& other) const {
++  if (dict_objnum != other.dict_objnum) {
++    return dict_objnum < other.dict_objnum;
++  }
+   if (baseFont != other.baseFont) {
+     return baseFont < other.baseFont;
+   }
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -1041,10 +1041,16 @@
+     pEncoding = font->AsTrueTypeFont()->GetEncoding();
+   } else if (font->IsCIDFont()) {
+     data.type = "Type0";
++  } else if (font->IsType3Font()) {
++    data.type = "Type3";
+   } else {
++    // Close what was opened above rather than leave the stream inside BT and q.
++    *buf << "ET";
++    EndProcessGraphics(*buf);
+     return;
+   }
+   data.baseFont = font->GetBaseFontName();
++  data.dict_objnum = font->GetFontDict()->GetObjNum();
+ 
+   ByteString dict_name;
+   std::optional<ByteString> maybe_name = obj_holder_->FontsMapSearch(data);
+@@ -1052,6 +1058,12 @@
+     dict_name = std::move(maybe_name.value());
+   } else {
+     RetainPtr<const CPDF_Object> pIndirectFont = font->GetFontDict();
++    if (pIndirectFont->IsInline() && font->IsType3Font()) {
++      // A Type3 font is its own glyph programs, not a standard font to name.
++      RetainPtr<CPDF_Object> copy = pIndirectFont->Clone();
++      document_->AddIndirectObject(copy);
++      pIndirectFont = std::move(copy);
++    }
+     if (pIndirectFont->IsInline()) {
+       // In this case we assume it must be a standard font
+       auto font_dict = document_->New<CPDF_Dictionary>();

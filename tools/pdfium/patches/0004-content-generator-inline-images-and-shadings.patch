@@ -1,0 +1,79 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
+@@ -27,6 +27,7 @@
+ class CPDF_PageObjectHolder;
+ class CPDF_Path;
+ class CPDF_PathObject;
++class CPDF_ShadingObject;
+ class CPDF_TextObject;
+ 
+ class CPDF_PageContentGenerator {
+@@ -44,6 +45,7 @@
+   void ProcessPathPoints(fxcrt::ostringstream* buf, CPDF_Path* pPath);
+   void ProcessPath(fxcrt::ostringstream* buf, CPDF_PathObject* pPathObj);
+   void ProcessForm(fxcrt::ostringstream* buf, CPDF_FormObject* pFormObj);
++  void ProcessShading(fxcrt::ostringstream* buf, CPDF_ShadingObject* shading_obj);
+   void ProcessImage(fxcrt::ostringstream* buf, CPDF_ImageObject* pImageObj);
+   void ProcessGraphics(fxcrt::ostringstream* buf, CPDF_PageObject* pPageObj);
+   void ProcessDefaultGraphics(fxcrt::ostringstream* buf);
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -11,6 +11,8 @@
+ #include "core/fpdfapi/page/cpdf_color.h"
+ #include "core/fpdfapi/page/cpdf_colorspace.h"
+ #include "core/fpdfapi/page/cpdf_pattern.h"
++#include "core/fpdfapi/page/cpdf_shadingobject.h"
++#include "core/fpdfapi/page/cpdf_shadingpattern.h"
+ 
+ #include <map>
+ #include <memory>
+@@ -662,6 +664,8 @@
+     ProcessPath(buf, pPathObj);
+   } else if (CPDF_TextObject* pTextObj = pPageObj->AsText()) {
+     ProcessText(buf, pTextObj);
++  } else if (CPDF_ShadingObject* pShadingObj = pPageObj->AsShading()) {
++    ProcessShading(buf, pShadingObj);
+   }
+   pPageObj->SetDirty(false);
+ }
+@@ -673,10 +677,9 @@
+     return;
+   }
+ 
++  // Inline images (BI ... ID ... EI) are written back as image XObjects below;
++  // returning here dropped them from every rewritten stream.
+   RetainPtr<CPDF_Image> pImage = pImageObj->GetImage();
+-  if (pImage->IsInline()) {
+-    return;
+-  }
+ 
+   RetainPtr<const CPDF_Stream> pStream = pImage->GetStream();
+   if (!pStream) {
+@@ -788,6 +791,27 @@
+ // Processing path painting with operators from Table 4.10 of PDF spec 1.7:
+ // Path painting operators: "S", "n", "B", "f", "B*", "f*", depending on
+ // the filling mode and whether we want stroking the path or not.
++// A shading painted with "sh": the shading dictionary as a resource, drawn under
++// the object's graphics state and clip, in the space it was painted in.
++void CPDF_PageContentGenerator::ProcessShading(
++    fxcrt::ostringstream* buf,
++    CPDF_ShadingObject* shading_obj) {
++  const CPDF_ShadingPattern* pattern = shading_obj->pattern();
++  RetainPtr<const CPDF_Object> shading =
++      pattern ? pattern->GetShadingObject() : nullptr;
++  if (!shading) {
++    return;
++  }
++  ProcessGraphics(buf, shading_obj);
++  const CFX_Matrix& matrix = shading_obj->matrix();
++  if (!matrix.IsIdentity()) {
++    WriteMatrix(*buf, matrix) << " cm ";
++  }
++  const ByteString name = RealizeResourceOnce(shading.Get(), "Shading");
++  *buf << "/" << PDF_NameEncode(name) << " sh";
++  EndProcessGraphics(*buf);
++}
++
+ void CPDF_PageContentGenerator::ProcessPath(fxcrt::ostringstream* buf,
+                                             CPDF_PathObject* pPathObj) {
+   ProcessGraphics(buf, pPathObj);

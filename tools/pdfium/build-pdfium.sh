@@ -63,7 +63,13 @@ fi
 
 # pdfium-binaries writes staging/VERSION only when told the version.
 export PDFium_VERSION=${PDFIUM_VERSION:-152.0.${PDFIUM_BRANCH#chromium/}.0}
-./build.sh -b "$PDFIUM_BRANCH" -g "$START_STEP" "$OS" "$CPU" ${ENVIRONMENT:+"$ENVIRONMENT"}
+# pdfium-binaries' steps normally run as separate Actions steps that pick up the
+# environment and path files GitHub provides. Run in one step, build.sh only sources
+# those files, so nothing in them reaches gclient: without DEPOT_TOOLS_WIN_TOOLCHAIN=0
+# exported, a Windows build tries to download Google's internal Visual Studio toolchain
+# and fails. Point build.sh at its own local files and export what child processes need.
+export DEPOT_TOOLS_WIN_TOOLCHAIN=0
+env -u GITHUB_ENV -u GITHUB_PATH ./build.sh -b "$PDFIUM_BRANCH" -g "$START_STEP" "$OS" "$CPU" ${ENVIRONMENT:+"$ENVIRONMENT"}
 
 # What this build is: the Chromium build number plus a hash of the patch series, so a
 # binary can always be traced back to the exact patches it carries.

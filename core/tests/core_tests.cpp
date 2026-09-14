@@ -1559,17 +1559,21 @@ void test_text_editing(const std::string& fixtures) {
 // editable; 0 means stock PDFium already keeps it. Below that level the guard must
 // refuse the edit and leave the page exactly as it was.
 
+// Objects 1-5 are the catalog, page tree, page, /F1 and the content stream; `extra_fonts`
+// adds entries to the page's /Font dictionary, and `extra_objects` become objects 6, 7, ...
 std::vector<unsigned char> one_page_pdf(const std::string& content, const std::string& font_dict,
-                                        const std::string& extra_resources = "") {
+                                        const std::string& extra_resources = "", const std::string& extra_fonts = "",
+                                        const std::vector<std::string>& extra_objects = {}) {
     std::string pdf = "%PDF-1.4\n";
     std::vector<size_t> offsets;
     auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
     add("<< /Type /Catalog /Pages 2 0 R >>");
     add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> " + extra_resources +
-        " >> /Contents 5 0 R >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R " + extra_fonts + " >> " +
+        extra_resources + " >> /Contents 5 0 R >>");
     add(font_dict);
     add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    for (const std::string& object : extra_objects) add(object);
     const size_t xref = pdf.size();
     pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
     for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
@@ -1604,7 +1608,11 @@ void test_rewrite_fidelity() {
         const char* name;
         std::string content;
         int fixed_by;
+        std::string resources = "";   // extra entries for the page's /Resources
+        std::string fonts = "";       // extra entries for its /Font dictionary
+        std::vector<std::string> objects = {};   // objects 6, 7, ...
     };
+    const std::string type3_glyph = "<< /Length 38 >>\nstream\n1000 0 0 0 750 750 d1 0 0 750 750 re f\nendstream";
     const std::vector<Case> cases = {
         {"plain text", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET", 0},
         {"kerned TJ", "BT /F1 18 Tf 72 700 Td [(Ke) -120 (rned) 250 (heading)] TJ ET BT /F1 12 Tf 72 660 Td [(Body) -300 (kerned)] TJ ET", 0},
@@ -1622,15 +1630,66 @@ void test_rewrite_fidelity() {
          "BT /F1 18 Tf 1.5 Tc 72 700 Td [(Ke) -120 (rned) 250 (heading)] TJ ET BT /F1 12 Tf 72 660 Td [(Body) -300 (kerned)] TJ ET", 1},
         {"horizontal scaling with character spacing",
          "BT /F1 18 Tf 80 Tz 2 Tc 72 700 Td (Scaled spaced heading) Tj ET BT /F1 12 Tf 72 660 Td (Body inherits both) Tj ET", 1},
-        // Not written by the stock or spacing-patched writer: DeviceCMYK colour (#122).
+        // Colour: the stock writer keeps only DeviceRGB and DeviceGray; every other
+        // colour space fell back to black (#122).
+        {"gray text colour", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0.4 g BT /F1 12 Tf 72 660 Td (Gray body line) Tj ET", 0},
         {"CMYK text colour", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0.1 0.9 0.2 0 k BT /F1 12 Tf 72 660 Td (Magenta body line) Tj ET", 2},
+        {"CMYK outlined text",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0 0.8 0.8 0 K 1 w BT /F1 16 Tf 1 Tr 72 660 Td (Outlined body line) Tj ET", 2},
+        {"CMYK box beside the text",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0.7 0.1 0 0 k 72 600 200 30 re f 0 g BT /F1 12 Tf 72 560 Td (Body under a box) Tj ET", 2},
+        {"spot (Separation) colour",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET /CS1 cs 1 scn BT /F1 12 Tf 72 660 Td (Spot coloured body) Tj ET", 2,
+         "/ColorSpace << /CS1 [/Separation /Spot /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 1 0.2 0] /N 1 >>] >>"},
+        {"indexed colour",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET /CS1 cs 1 sc BT /F1 12 Tf 72 660 Td (Indexed colour body) Tj ET", 2,
+         "/ColorSpace << /CS1 [/Indexed /DeviceRGB 1 <FF000000A040>] >>"},
+        {"CalRGB colour",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET /CS1 cs 0.2 0.6 0.9 sc BT /F1 12 Tf 72 660 Td (Calibrated body) Tj ET", 2,
+         "/ColorSpace << /CS1 [/CalRGB << /WhitePoint [0.9505 1 1.089] /Gamma [2.2 2.2 2.2] >>] >>"},
+        {"Lab colour",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET /CS1 cs 50 60 -40 sc BT /F1 12 Tf 72 660 Td (Lab coloured body) Tj ET", 2,
+         "/ColorSpace << /CS1 [/Lab << /WhitePoint [0.9505 1 1.089] /Range [-100 100 -100 100] >>] >>"},
+        // Fonts: Type3 text was dropped from a rewritten stream, after an unbalanced
+        // q BT (#123); and two different fonts sharing a BaseFont were merged into
+        // whichever the writer met first.
+        {"Type3 text on the untouched line",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F2 14 Tf 72 660 Td (aaaa) Tj ET BT /F1 12 Tf 72 620 Td (After the Type3 line) Tj ET", 3,
+         "", "/F2 6 0 R",
+         {"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 750 750] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 7 0 R >> "
+          "/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] /Resources << >> >>",
+          type3_glyph}},
+        {"two fonts sharing a BaseFont",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F2 14 Tf 72 660 Td (ABBA) Tj ET", 3,
+         "", "/F2 6 0 R",
+         {"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding "
+          "/Differences [65 /Z 66 /Y] >> >>"}},
+        // Objects the stock writer dropped or never wrote: inline images and shading
+        // (sh) objects (#124). Forms and clipping are written by stock PDFium.
+        {"inline image beside the text",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 100 0 0 50 72 580 cm BI /W 2 /H 2 /BPC 8 /CS /RGB /F /AHx ID "
+         "FF000000FF000000FFFFFF00> EI Q BT /F1 12 Tf 72 540 Td (Body under an image) Tj ET", 4},
+        {"shading (sh) under a clip",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 72 570 330 40 re W n /Sh1 sh Q BT /F1 12 Tf 72 540 Td (Body under a gradient) Tj ET", 4,
+         "/Shading << /Sh1 << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [72 580 400 580] "
+         "/Function << /FunctionType 2 /Domain [0 1] /C0 [1 1 0] /C1 [0 0.5 1] /N 1 >> >> >>"},
+        {"form XObject beside the text",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 1 0 0 1 72 580 cm /Fm1 Do Q BT /F1 12 Tf 72 540 Td (Body under a form) Tj ET", 0,
+         "/XObject << /Fm1 6 0 R >>", "",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Length 24 >>\nstream\n0 0 1 rg 0 0 100 50 re f\nendstream"}},
+        {"clipped body text",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 72 650 90 30 re W n BT /F1 14 Tf 72 660 Td (Clipped body line runs past its clip) Tj ET Q", 0},
+        {"gradient pattern on text",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET /Pattern cs /P1 scn BT /F1 24 Tf 72 640 Td (Gradient body line) Tj ET", 2,
+         "/Pattern << /P1 << /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [72 0 400 0] "
+         "/Function << /FunctionType 2 /Domain [0 1] /C0 [1 0 0] /C1 [0 0 1] /N 1 >> >> >> >>"},
     };
 
     const auto replacement = utf16("A much longer replacement for the heading");
     U16 replacement_text(replacement.begin(), replacement.end() - 1);
     for (const Case& c : cases) {
         const std::string name = c.name;
-        auto bytes = one_page_pdf(c.content, helvetica);
+        auto bytes = one_page_pdf(c.content, helvetica, c.resources, c.fonts, c.objects);
         megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
         check(d != nullptr, name + ": opens");
         if (!d) continue;

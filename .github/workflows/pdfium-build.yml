@@ -61,6 +61,8 @@ jobs:
   mac-univ:
     name: mac universal
     needs: build
+    # Only the two mac archives matter here; another target failing must not skip it.
+    if: ${{ !cancelled() }}
     runs-on: macos-15
     steps:
       - uses: actions/download-artifact@v4
