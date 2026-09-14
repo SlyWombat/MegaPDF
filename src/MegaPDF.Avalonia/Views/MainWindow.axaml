@@ -45,6 +45,17 @@
             <TextBlock Text="{x:Static loc:Strings.SaveAs}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
+        <!-- Set, change or remove the password; on a restricted document it offers the
+             owner password instead (#131, ADR-004). -->
+        <Button Name="SecurityButton" IsEnabled="{Binding IsDocumentOpen}"
+                ToolTip.Tip="{x:Static loc:Strings.SecurityTooltip}" >
+          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+            <Path Data="{StaticResource IconLock}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+            <TextBlock Text="{x:Static loc:Strings.SecurityToolbar}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Button>
         <Button Name="PrintButton" Command="{Binding PrintCommand}" >
           <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconPrint}" Width="18" Height="18"
@@ -66,7 +77,7 @@
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
              placement, and the next click on the page puts it there. -->
-        <Button Name="SignButton" IsEnabled="{Binding IsDocumentOpen}">
+        <Button Name="SignButton" IsEnabled="{Binding CanSign}">
           <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconSign}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -211,7 +222,7 @@
         <!-- Display names, not the raw PostScript names and enum values the
              engine speaks: "Times", not "Times-Roman"; "Croix", not "Cross". -->
         <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
-                  SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding IsDocumentOpen}">
+                  SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding CanEditContent}">
           <ComboBox.ItemTemplate>
             <DataTemplate DataType="vm:FontChoice">
               <TextBlock Text="{Binding Label}" />
@@ -219,7 +230,7 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
         <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
-                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding IsDocumentOpen}" />
+                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding CanEditContent}" />
         <ToggleButton Name="WhiteoutButton"
                       IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
                       Command="{Binding ToggleWhiteoutCommand}" >
@@ -329,6 +340,18 @@
     <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsModeActive}"
             Background="{DynamicResource BrandAccent}">
       <TextBlock Text="{Binding ModeHint}" Foreground="{DynamicResource BrandAccentOn}" />
+    </Border>
+
+    <!-- A restricted open says so and offers the owner password (#131, ADR-004 §3).
+         Not dismissable: it describes the document for as long as it is open. -->
+    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsRestricted}"
+            Background="{DynamicResource BrandAccentSubtle}">
+      <DockPanel>
+        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0"
+                Content="{x:Static loc:Strings.UnlockEllipsis}" />
+        <TextBlock Text="{x:Static loc:Strings.RestrictedBanner}" VerticalAlignment="Center"
+                   TextWrapping="Wrap" />
+      </DockPanel>
     </Border>
 
     <!-- Find bar (SDD §3.6). Hidden until asked for, so it costs nothing until it

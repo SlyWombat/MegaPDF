@@ -153,6 +153,18 @@ fun ViewerScreen(
     onRemoveTextBox: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    // Document security (#131).
+    capabilities: DocumentCapabilities = DocumentCapabilities.FULL,
+    hasDocumentFile: Boolean = false,
+    unlockPrompt: UnlockPrompt? = null,
+    passwordPrompt: PasswordCommandMode? = null,
+    onStartUnlock: () -> Unit = {},
+    onUnlock: (String) -> Unit = {},
+    onCancelUnlock: () -> Unit = {},
+    onStartPasswordCommand: () -> Unit = {},
+    onSetPassword: (String) -> Unit = {},
+    onRemovePassword: () -> Unit = {},
+    onCancelPasswordCommand: () -> Unit = {},
     onClose: () -> Unit,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -311,6 +323,27 @@ fun ViewerScreen(
         )
     }
 
+    if (unlockPrompt != null) {
+        // A restricted document's owner password (#131). Reopening from the file drops
+        // unsaved changes, so the dialog says so when there are any.
+        UnlockDialog(
+            prompt = unlockPrompt,
+            discardsChanges = isDirty,
+            onSubmit = onUnlock,
+            onDismiss = onCancelUnlock,
+        )
+    }
+
+    if (passwordPrompt != null) {
+        DocumentPasswordDialog(
+            mode = passwordPrompt,
+            onSet = onSetPassword,
+            onRemove = onRemovePassword,
+            onUnlock = onStartUnlock,
+            onDismiss = onCancelPasswordCommand,
+        )
+    }
+
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
@@ -354,8 +387,13 @@ fun ViewerScreen(
                         IconButton(onClick = { searchOpen = true }) {
                             Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
                         }
-                        TextButton(onClick = { signDialogOpen = true }) { Text(stringResource(R.string.sign)) }
-                        TextButton(onClick = onStartTextPlacement) { Text(stringResource(R.string.text)) }
+                        // A restricted document disables what its owner did not allow (#131).
+                        TextButton(onClick = { signDialogOpen = true }, enabled = capabilities.canSign) {
+                            Text(stringResource(R.string.sign))
+                        }
+                        TextButton(onClick = onStartTextPlacement, enabled = capabilities.canEditContent) {
+                            Text(stringResource(R.string.text))
+                        }
                         TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
                             Text(stringResource(if (isSaving) R.string.saving else R.string.save))
                         }
@@ -368,6 +406,18 @@ fun ViewerScreen(
                                 enabled = !isSaving,
                                 onClick = { menuOpen = false; onSaveAs() },
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.security_password_menu)) },
+                                enabled = hasDocumentFile && !isSaving,
+                                onClick = { menuOpen = false; onStartPasswordCommand() },
+                            )
+                            if (capabilities.isRestricted) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.security_unlock_menu)) },
+                                    enabled = hasDocumentFile && !isSaving,
+                                    onClick = { menuOpen = false; onStartUnlock() },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.redo)) },
                                 enabled = canRedo,

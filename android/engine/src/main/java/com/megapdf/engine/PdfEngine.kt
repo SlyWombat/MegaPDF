@@ -29,12 +29,13 @@ class PdfEngine {
     /**
      * Opens a document from its full bytes (the caller reads them from SAF or assets;
      * the source file is never held open — same rationale as the desktop engine).
+     * The password crosses JNI as UTF-8 bytes, not a jstring (#131, ADR-004 decision 9).
      * @throws PdfPasswordException wrong or missing password
-     * @throws PdfLoadException corrupt or unreadable document
+     * @throws PdfLoadException corrupt or unreadable document, or security PDFium cannot open
      */
     suspend fun open(bytes: ByteArray, password: String? = null): PdfDocument =
         withContext(dispatcher) {
-            val handle = PdfiumNative.nativeOpen(bytes, password)
+            val handle = PdfiumNative.nativeOpen(bytes, password?.nulTerminatedUtf8())
             if (handle == 0L) {
                 val error = PdfiumNative.nativeLastError()
                 if (error == PdfiumNative.ERR_PASSWORD) throw PdfPasswordException()
@@ -590,7 +591,13 @@ const val DEFAULT_FONT = "Helvetica"
 class PdfPasswordException : Exception("Password required or incorrect password")
 
 class PdfLoadException(val errorCode: Int) :
-    Exception("Failed to load document (FPDF error $errorCode)")
+    Exception("Failed to load document (FPDF error $errorCode)") {
+    /**
+     * The document uses a security handler PDFium cannot open — a certificate handler,
+     * say. Not corrupt and not a wrong password (#131, ADR-004 decision 8).
+     */
+    val isUnsupportedSecurity: Boolean get() = errorCode == PdfiumNative.ERR_SECURITY
+}
 
 class PdfSaveException : Exception("Failed to serialize document")
 

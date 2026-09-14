@@ -9,6 +9,7 @@ using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Services;
 using MegaPDF.Core.Viewing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -180,7 +181,8 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility), nameof(IsDocumentOpen))]
-    [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand))]
+    [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsPrintAllowed))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand), nameof(SecurityCommand))]
     private string? _documentPath;
 
     /// <summary>The live document — printing renders what's on screen, unsaved edits included.</summary>
@@ -199,6 +201,52 @@ public partial class MainViewModel(Window window) : ObservableObject
     private int _currentPage = 1;
 
     public bool IsDocumentOpen => DocumentPath is not null;
+
+    // --- Document security (#131, ADR-004 §2, §3) ---
+
+    /// <summary>
+    /// What this open of the document may do. Read from the document on every open, so
+    /// an owner-restricted document is not an editing loophole; every tool until then.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsPrintAllowed))]
+    [NotifyCanExecuteChangedFor(nameof(ShrinkForEmailCommand))]
+    private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
+
+    /// <summary>Editing text, whiteout and text boxes (modify).</summary>
+    public bool IsEditingAllowed => IsDocumentOpen && Capabilities.CanEditContent;
+
+    /// <summary>Signatures and check marks (annotate).</summary>
+    public bool IsSigningAllowed => IsDocumentOpen && Capabilities.CanSign;
+
+    public bool IsPrintAllowed => IsDocumentOpen && Capabilities.CanPrint;
+
+    /// <summary>The owner restricted this document; the notice offers the owner password.</summary>
+    [ObservableProperty]
+    private bool _isRestrictedNoticeOpen;
+
+    /// <summary>Opened with a password, so nothing is journaled (#135, ADR-004 §7).</summary>
+    [ObservableProperty]
+    private bool _isRecoveryOffNoticeOpen;
+
+    [ObservableProperty]
+    private bool _isSecurityNoticeOpen;
+
+    /// <summary>"Password set." and its siblings. Never carries the password itself.</summary>
+    [ObservableProperty]
+    private string _securityNotice = "";
+
+    /// <summary>
+    /// Whether a click on this kind of region may do anything. When it may not, the
+    /// restricted notice says why rather than the click silently doing nothing.
+    /// </summary>
+    public bool AllowsInteraction(PageHitKind kind)
+    {
+        if (Capabilities.Allows(kind))
+            return true;
+        IsRestrictedNoticeOpen = true;
+        return false;
+    }
 
     public string OpenDocumentName => DocumentPath is null ? "" : Path.GetFileName(DocumentPath);
 
@@ -231,13 +279,18 @@ public partial class MainViewModel(Window window) : ObservableObject
             await OpenDocumentAsync(file.Path);
     }
 
-    public async Task OpenDocumentAsync(string path)
+    /// <param name="initialPassword">
+    /// Tried first, without prompting — how the document reopens after its password was
+    /// set or changed (#131). Held only for the length of the open; the core keeps what
+    /// the document was opened with, and nothing here stores it.
+    /// </param>
+    public async Task OpenDocumentAsync(string path, string? initialPassword = null)
     {
         SaveViewState(); // remember where we left the previous document
         var generation = ++_openGeneration;
 
         IPdfDocument doc;
-        string? password = null;
+        var password = initialPassword;
         while (true)
         {
             try
@@ -248,7 +301,9 @@ public partial class MainViewModel(Window window) : ObservableObject
             }
             catch (PdfLoadException ex) when (ex.IsPasswordError)
             {
-                password = await ShowPasswordPromptAsync(Path.GetFileName(path), wrongPassword: password is not null);
+                var fileName = Path.GetFileName(path);
+                password = await ShowPasswordPromptAsync(Strings.PasswordRequiredTitle, Strings.PasswordPrompt(fileName),
+                    Strings.PasswordWrong, Strings.Open, wrongPassword: password is not null);
                 if (password is null)
                     return; // user cancelled
             }
@@ -259,6 +314,12 @@ public partial class MainViewModel(Window window) : ObservableObject
             }
         }
 
+        await AdoptDocumentAsync(doc, path, openedWithPassword: password is not null, generation);
+    }
+
+    /// <summary>Makes a loaded document the open one: state, journal, notices, pages.</summary>
+    private async Task AdoptDocumentAsync(IPdfDocument doc, string path, bool openedWithPassword, int generation)
+    {
         if (generation != _openGeneration)
         {
             // A newer open superseded this one while it loaded.
@@ -270,13 +331,27 @@ public partial class MainViewModel(Window window) : ObservableObject
         _document?.Dispose();
         _cappedRenders.Clear();
         _document = doc;
+
+        // Permissions first, so nothing bound to the new path sees the old document's (#131).
+        Capabilities = DocumentCapabilities.From(doc.Security);
+        if (!Capabilities.CanEditContent)
+        {
+            IsWhiteoutMode = false;
+            IsTextBoxMode = false;
+        }
+        if (!Capabilities.CanSign)
+            PendingSignature = null;
+        IsRestrictedNoticeOpen = Capabilities.IsRestricted;
+        IsRecoveryOffNoticeOpen = openedWithPassword;
+        IsSecurityNoticeOpen = false;
+
         DocumentPath = path;
         HasUnsavedChanges = false;
         _undoStack.Clear();
         ClearSearch(); // matches belong to the previous document
         // Not journaled when opened with a password: its text must not reach disk
-        // unencrypted (#135).
-        _journal.BeginSession(path, contentIsProtected: password is not null);
+        // unencrypted (#135). The notice above says so (ADR-004 §7).
+        _journal.BeginSession(path, contentIsProtected: openedWithPassword);
         _recentFiles.Add(path);
         if (rememberedView is not null)
             ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
@@ -801,12 +876,22 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public void StartWhiteoutMode()
     {
+        if (!Capabilities.CanEditContent)
+        {
+            IsRestrictedNoticeOpen = true; // #131: the owner does not allow changes
+            return;
+        }
         CancelPlacementModes();
         IsWhiteoutMode = true;
     }
 
     public void StartTextBoxMode()
     {
+        if (!Capabilities.CanEditContent)
+        {
+            IsRestrictedNoticeOpen = true;
+            return;
+        }
         CancelPlacementModes();
         IsTextBoxMode = true;
     }
@@ -960,7 +1045,15 @@ public partial class MainViewModel(Window window) : ObservableObject
         Signatures.Remove(item);
     }
 
-    public void SelectSignatureForPlacement(SignatureItem item) => PendingSignature = item;
+    public void SelectSignatureForPlacement(SignatureItem item)
+    {
+        if (!Capabilities.CanSign)
+        {
+            IsRestrictedNoticeOpen = true; // #131: the owner does not allow annotations
+            return;
+        }
+        PendingSignature = item;
+    }
 
     public void CancelSignaturePlacement() => PendingSignature = null;
 
@@ -997,6 +1090,13 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     private async Task DoEditAsync(IPageEditOperation op)
     {
+        // The central gate (#131): every entry point above checks first so no editor
+        // opens, and this is what holds if one is ever missed.
+        if (!Capabilities.Allows(op))
+        {
+            IsRestrictedNoticeOpen = true;
+            return;
+        }
         await Task.Run(() => _undoStack.Do(op));
         _journal.Record(op.ToJournalEntry(inverse: false));
         HasUnsavedChanges = true;
@@ -1150,7 +1250,10 @@ public partial class MainViewModel(Window window) : ObservableObject
     private const double EmailTargetDpi = 150;
     private const double JpegQuality = 0.75;
 
-    [RelayCommand(CanExecute = nameof(CanSave))]
+    /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
+    private bool CanShrink() => IsDocumentOpen && Capabilities.CanShrink;
+
+    [RelayCommand(CanExecute = nameof(CanShrink))]
     private async Task ShrinkForEmailAsync()
     {
         if (DocumentPath is null)
@@ -1312,8 +1415,216 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <summary>Called when the window closes with the user's consent — nothing left to recover.</summary>
     public void EndJournalSession() => _journal.EndSession();
 
-    /// <summary>Password prompt for protected PDFs. Returns null on cancel.</summary>
-    private async Task<string?> ShowPasswordPromptAsync(string fileName, bool wrongPassword)
+    // --- Password: unlock, set, change, remove (#131, ADR-004 §3, §5, §6) ---
+
+    /// <summary>
+    /// Offers the owner password for a restricted document and reopens it with full
+    /// access. A password that opens it but not as its owner (the user password) is
+    /// wrong for this purpose, and says so like any other wrong password.
+    /// </summary>
+    public async Task UnlockAsync()
+    {
+        if (_document is null || DocumentPath is null)
+            return;
+
+        var path = DocumentPath;
+        var fileName = Path.GetFileName(path);
+        var wrong = false;
+        while (true)
+        {
+            var ownerPassword = await ShowPasswordPromptAsync(Strings.UnlockTitle, Strings.UnlockPrompt(fileName),
+                Strings.UnlockWrong, Strings.Unlock, wrongPassword: wrong);
+            if (ownerPassword is null)
+                return; // cancelled: the document stays open, restricted
+
+            IPdfDocument doc;
+            try
+            {
+                doc = await Task.Run(() => Engine.Open(path, ownerPassword));
+            }
+            catch (PdfLoadException ex) when (ex.IsPasswordError)
+            {
+                wrong = true;
+                continue;
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(Strings.CouldNotOpenTitle, UserFacing.Describe(ex));
+                return;
+            }
+
+            if (!doc.Security.HasFullAccess)
+            {
+                doc.Dispose();
+                wrong = true;
+                continue;
+            }
+
+            if (DocumentPath != path)
+            {
+                doc.Dispose(); // another document opened while the prompt was up
+                return;
+            }
+
+            SaveViewState();
+            await AdoptDocumentAsync(doc, path, openedWithPassword: true, ++_openGeneration);
+            return;
+        }
+    }
+
+    /// <summary>
+    /// The toolbar's Password command. Without full access it can only offer the owner
+    /// password; otherwise it sets a password on an unprotected document, or changes or
+    /// removes the one it has (ADR-004 §5: one password, every permission).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanSave))]
+    private async Task SecurityAsync()
+    {
+        if (_document is null || DocumentPath is null)
+            return;
+
+        var security = _document.Security;
+        if (!security.HasFullAccess)
+        {
+            await UnlockAsync();
+            return;
+        }
+
+        var fileName = Path.GetFileName(DocumentPath);
+        if (!security.IsEncrypted)
+        {
+            if (await ShowNewPasswordDialogAsync(Strings.SetPasswordTitle, Strings.SetPasswordButton, fileName) is { } password)
+                await ApplySecurityAsync(password, Strings.PasswordSetNotice);
+            return;
+        }
+
+        switch (await ShowProtectedDialogAsync(fileName))
+        {
+            case ContentDialogResult.Primary:
+                if (await ShowNewPasswordDialogAsync(Strings.ChangePasswordTitle, Strings.ChangePasswordButton, fileName) is { } changed)
+                    await ApplySecurityAsync(changed, Strings.PasswordChangedNotice);
+                break;
+            case ContentDialogResult.Secondary:
+                await ApplySecurityAsync(null, Strings.PasswordRemovedNotice);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Setting, changing or removing security is a save (ADR-004 §6): the document,
+    /// unsaved edits included, goes to its own file through the same atomic, verified
+    /// write Save uses — checked by opening the copy with the new password, or without one
+    /// — and the saved file is reopened, so the open document matches what is on disk.
+    /// A refusal or failed write leaves the original untouched.
+    /// </summary>
+    /// <param name="newPassword">The new password, or null to remove security.</param>
+    private async Task ApplySecurityAsync(string? newPassword, string doneMessage)
+    {
+        if (_document is null || DocumentPath is null)
+            return;
+
+        var document = _document;
+        var path = DocumentPath;
+        var flattened = false;
+        try
+        {
+            flattened = await FlattenIfConfiguredAsync(document);
+            await Task.Run(() =>
+            {
+                if (newPassword is null)
+                    VerifiedSave.ToPathWithoutSecurity(Engine, document, path);
+                else
+                    VerifiedSave.ToPathWithSecurity(Engine, document, path, newPassword, ownerPassword: null, PdfPermissions.All);
+            });
+        }
+        catch (Exception ex)
+        {
+            if (flattened)
+                await OnDocumentFlattenedAsync();
+            await ShowErrorAsync(Strings.CouldNotChangeSecurityTitle, UserFacing.Describe(ex));
+            return;
+        }
+
+        HasUnsavedChanges = false;
+        _journal.MarkSaved(path);
+        await OpenDocumentAsync(path, newPassword);
+        if (_document is not null && DocumentPath == path)
+        {
+            SecurityNotice = doneMessage;
+            IsSecurityNoticeOpen = true;
+        }
+    }
+
+    /// <summary>New password and its confirmation; null on cancel. Validates before closing.</summary>
+    private async Task<string?> ShowNewPasswordDialogAsync(string title, string primaryText, string fileName)
+    {
+        if (window.Content?.XamlRoot is not { } xamlRoot)
+            return null;
+
+        var first = new PasswordBox { PlaceholderText = Strings.NewPasswordPlaceholder };
+        var second = new PasswordBox { PlaceholderText = Strings.ConfirmPasswordPlaceholder };
+        AutomationProperties.SetName(first, Strings.NewPasswordPlaceholder);
+        AutomationProperties.SetName(second, Strings.ConfirmPasswordPlaceholder);
+        var problem = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+            Visibility = Visibility.Collapsed,
+        };
+        AutomationProperties.SetLiveSetting(problem, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Assertive);
+
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(new TextBlock { Text = Strings.SetPasswordBody(fileName), TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(first);
+        panel.Children.Add(second);
+        panel.Children.Add(problem);
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = panel,
+            PrimaryButtonText = primaryText,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        dialog.PrimaryButtonClick += (_, args) =>
+        {
+            var message = first.Password.Length == 0 ? Strings.PasswordEmpty
+                : first.Password != second.Password ? Strings.PasswordsDontMatch
+                : null;
+            if (message is null)
+                return;
+            args.Cancel = true;
+            problem.Text = message;
+            problem.Visibility = Visibility.Visible;
+        };
+        first.Loaded += (_, _) => first.Focus(FocusState.Programmatic);
+
+        return await dialog.ShowAsync() == ContentDialogResult.Primary ? first.Password : null;
+    }
+
+    /// <summary>A protected document with full access: Primary changes, Secondary removes.</summary>
+    private async Task<ContentDialogResult> ShowProtectedDialogAsync(string fileName)
+    {
+        if (window.Content?.XamlRoot is not { } xamlRoot)
+            return ContentDialogResult.None;
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.DocumentPasswordTitle,
+            Content = new TextBlock { Text = Strings.ProtectedBody(fileName), TextWrapping = TextWrapping.Wrap },
+            PrimaryButtonText = Strings.ChangePasswordEllipsis,
+            SecondaryButtonText = Strings.RemovePassword,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        return await dialog.ShowAsync();
+    }
+
+    /// <summary>Password prompt: opening a protected PDF, or unlocking a restricted one. Returns null on cancel.</summary>
+    private async Task<string?> ShowPasswordPromptAsync(string title, string prompt, string wrongPrompt, string primaryText, bool wrongPassword)
     {
         if (window.Content?.XamlRoot is not { } xamlRoot)
             return null;
@@ -1322,18 +1633,16 @@ public partial class MainViewModel(Window window) : ObservableObject
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(new TextBlock
         {
-            Text = wrongPassword
-                ? Strings.PasswordWrong
-                : Strings.PasswordPrompt(fileName),
+            Text = wrongPassword ? wrongPrompt : prompt,
             TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
         });
         panel.Children.Add(box);
 
         var dialog = new ContentDialog
         {
-            Title = Strings.PasswordRequiredTitle,
+            Title = title,
             Content = panel,
-            PrimaryButtonText = Strings.Open,
+            PrimaryButtonText = primaryText,
             CloseButtonText = Strings.Cancel,
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,

@@ -35,6 +35,8 @@ public partial class MainWindow : Window
         SaveAsButton.Click += async (_, _) => await SaveAsAsync();
         EmptyOpenButton.Click += async (_, _) => await OpenDocumentAsync();
         ShrinkButton.Click += async (_, _) => await ShrinkForEmailAsync();
+        SecurityButton.Click += async (_, _) => await ChangeSecurityAsync();
+        UnlockButton.Click += async (_, _) => await UnlockAsync();
 
         RecentList.SelectionChanged += async (_, _) =>
         {
@@ -504,7 +506,11 @@ public partial class MainWindow : Window
         {
             var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
             var at = e.GetPosition(SurfaceOf(container));
-            return page.KindAt(new PdfPoint(at.X * dipToPoint, at.Y * dipToPoint)) switch
+            var kind = page.KindAt(new PdfPoint(at.X * dipToPoint, at.Y * dipToPoint));
+            // No clickable affordance for what the document's owner does not allow (#131).
+            if (!vm.Capabilities.Allows(kind))
+                return StandardCursorType.Arrow;
+            return kind switch
             {
                 PageHitKind.TextRun or PageHitKind.FormTextField => StandardCursorType.Ibeam,
                 PageHitKind.FormCheckbox or PageHitKind.DrawnCheckbox
@@ -1102,6 +1108,102 @@ public partial class MainWindow : Window
                 vm.SaveAsTo(stream, file.TryGetLocalPath(), file.Name);
 
             _openedFile = file;
+        }
+        catch (Exception ex)
+        {
+            vm.ReportSaveFailure(ex);
+        }
+    }
+
+    // --- Password: unlock, set, change, remove (#131, ADR-004) ---
+
+    /// <summary>
+    /// Asks for a restricted document's owner password until it unlocks, the person
+    /// cancels, or the reopen fails for another reason (which the status line reports).
+    /// </summary>
+    private async Task UnlockAsync()
+    {
+        if (ViewModel is not { IsDocumentOpen: true } vm)
+            return;
+
+        var retry = false;
+        while (true)
+        {
+            var dialog = new PasswordWindow();
+            dialog.SetUnlockPrompt(vm.DocumentName ?? "", retry);
+            await dialog.ShowDialog(this);
+            if (string.IsNullOrEmpty(dialog.Password))
+                return;
+            if (vm.Unlock(dialog.Password) != MainViewModel.UnlockOutcome.WrongPassword)
+                return;
+            retry = true;
+        }
+    }
+
+    /// <summary>
+    /// The Password command. Setting, changing or removing security is a save
+    /// (ADR-004 §6), so it writes the way <see cref="SaveAsync"/> does — AtomicFileWriter
+    /// where there is a usable path, the granted file's stream under the sandbox — except
+    /// that the verified bytes are produced first, so a refusal or an unreadable result
+    /// never opens (and so never truncates) the user's file. The saved file is then
+    /// reopened with the new password.
+    /// </summary>
+    private async Task ChangeSecurityAsync()
+    {
+        if (ViewModel is not { IsDocumentOpen: true } vm)
+            return;
+
+        if (!vm.Capabilities.CanChangeSecurity)
+        {
+            // Never offered without full access (ADR-004 §3); the prompt says why.
+            await UnlockAsync();
+            return;
+        }
+
+        if (_openedFile is null)
+        {
+            vm.Status = Strings.NowhereToSave;
+            return;
+        }
+
+        // The reopen needs a path; a copy saved somewhere the platform gives no path for
+        // could be written but not reopened, so it is refused before anything is written.
+        if (vm.DocumentPath is not { } path)
+        {
+            vm.Status = Strings.FileNotLocal;
+            return;
+        }
+
+        var dialog = new SecurityWindow();
+        dialog.Configure(vm.DocumentName ?? Path.GetFileName(path), vm.IsEncrypted);
+        await dialog.ShowDialog(this);
+        if (dialog.Choice == SecurityWindow.Decision.None)
+            return;
+
+        var newPassword = dialog.Choice == SecurityWindow.Decision.Remove ? null : dialog.NewPassword;
+        var done = dialog.Choice switch
+        {
+            SecurityWindow.Decision.Set => Strings.PasswordSetStatus,
+            SecurityWindow.Decision.Change => Strings.PasswordChangedStatus,
+            _ => Strings.PasswordRemovedStatus,
+        };
+
+        try
+        {
+            var bytes = vm.PrepareSecuredCopy(newPassword);
+
+            var local = _openedFile.TryGetLocalPath();
+            if (local is not null && !OperatingSystem.IsMacOS())
+            {
+                AtomicFileWriter.Write(local, target => target.Write(bytes));
+            }
+            else
+            {
+                await using var stream = await _openedFile.OpenWriteAsync();
+                await stream.WriteAsync(bytes);
+            }
+
+            vm.AdoptSecuredFile(path, newPassword, done);
         }
         catch (Exception ex)
         {

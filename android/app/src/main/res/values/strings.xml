@@ -45,6 +45,8 @@
     <!-- Opening -->
     <string name="open_failed">Couldn\'t open this file.</string>
     <string name="open_failed_code">Couldn\'t open this file (error %1$d).</string>
+    <!-- A security handler PDFium doesn't support, e.g. certificate security (#131). -->
+    <string name="open_unsupported_security">This PDF uses a kind of protection MegaPDF can\'t open.</string>
     <string name="open_access_revoked">Access to this file was revoked. Pick it again to reopen it.</string>
     <!-- Display name when the provider gives none. -->
     <string name="document">Document</string>
@@ -72,6 +74,34 @@
     <string name="saved">Saved</string>
     <string name="save_no_permission">No permission to write here anymore — use Save a copy.</string>
     <string name="save_failed">Couldn\'t save. Use Save a copy.</string>
+
+    <!-- Document security (#131): restricted documents, the owner password, and the Password command. -->
+    <string name="security_restricted_notice">The owner of this document restricted changes to it. To edit it, unlock it with the owner password from the menu.</string>
+    <string name="security_restricted_edit">This document\'s owner doesn\'t allow that change. Unlock it with the owner password first.</string>
+    <string name="security_unlock_menu">Unlock with owner password…</string>
+    <string name="security_unlock_title">Unlock document</string>
+    <string name="security_unlock_body">Enter the owner password to allow every change to this document.</string>
+    <string name="security_unlock_discards">Unsaved changes will be lost.</string>
+    <string name="security_owner_password">Owner password</string>
+    <string name="security_unlock_wrong">That isn\'t the owner password. Try again.</string>
+    <string name="security_unlock">Unlock</string>
+    <string name="security_unlock_ellipsis">Unlock…</string>
+    <string name="security_password_menu">Password…</string>
+    <string name="security_password_title">Document password</string>
+    <string name="security_password_restricted_body">The owner of this document restricted it. Without the owner password, its password can\'t be set, changed or removed.</string>
+    <string name="security_set_title">Set a password</string>
+    <string name="security_set_body">Anyone who opens this document will need this password. Setting it saves the document.</string>
+    <string name="security_change_body">This document is protected with a password. Changing or removing it saves the document.</string>
+    <string name="security_new_password">New password</string>
+    <string name="security_confirm_password">Confirm password</string>
+    <string name="security_password_empty">Enter a password.</string>
+    <string name="security_password_mismatch">The passwords don\'t match.</string>
+    <string name="security_set">Set password</string>
+    <string name="security_change">Change password</string>
+    <string name="security_remove">Remove password</string>
+    <string name="security_password_set">Password set.</string>
+    <string name="security_password_changed">Password changed.</string>
+    <string name="security_password_removed">Password removed.</string>
 
     <!-- Added text -->
     <string name="add_text">Add text</string>

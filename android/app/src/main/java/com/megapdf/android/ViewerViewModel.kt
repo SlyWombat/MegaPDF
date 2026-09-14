@@ -16,6 +16,8 @@ import com.megapdf.engine.PdfDocument
 import com.megapdf.engine.PdfEngine
 import com.megapdf.engine.PdfLoadException
 import com.megapdf.engine.PdfPasswordException
+import com.megapdf.engine.PdfPermissions
+import com.megapdf.engine.PdfSecurity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -82,6 +84,17 @@ sealed interface ViewerUiState {
 }
 
 /**
+ * The owner-password dialog's state (#131). [attempt] counts wrong passwords so the field
+ * empties after each; the password itself is never kept here.
+ */
+data class UnlockPrompt(
+    val attempt: Int = 0,
+    val wrongPassword: Boolean = false,
+    /** True while the typed password is being tried. */
+    val isChecking: Boolean = false,
+)
+
+/**
  * Owns the engine and the open document; renders a ±[RENDER_MARGIN]-page window
  * around the visible pages at the requested pixel width — the mobile port of the
  * desktop `MainViewModel` render-window virtualization. Bitmaps outside the
@@ -91,7 +104,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val engine = PdfEngine()
     private var document: PdfDocument? = null
-    private var currentUri: Uri? = null
+    // Observable so the Password command can enable itself on it (#131).
+    private var currentUri: Uri? by mutableStateOf(null)
     private val recentsStore =
         RecentFilesStore(File(application.filesDir, "recent.json"))
     private val signatureStore =
@@ -191,6 +205,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     closeCurrent()
                     document = doc
+                    capabilities = DocumentCapabilities.fromSecurity(doc.security())
                     uiState = ViewerUiState.Viewing(app.getString(R.string.screenshot_document_name), sizes)
                     if (state == "search") {
                         // Seed here, not from the UI: the document and the
@@ -260,6 +275,23 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun consumeStatus() {
         statusMessage = null
     }
+
+    // --- Document security (#131) ---
+
+    /** What the open document's security lets the user do; everything when nothing is open. */
+    var capabilities: DocumentCapabilities by mutableStateOf(DocumentCapabilities.FULL)
+        private set
+
+    /** Whether the open document has a file to write back to, which the Password command needs. */
+    val hasDocumentFile: Boolean get() = currentUri != null
+
+    /** Non-null while the owner-password dialog is up. */
+    var unlockPrompt: UnlockPrompt? by mutableStateOf(null)
+        private set
+
+    /** Non-null while the Password command's dialog is up. */
+    var passwordPrompt: PasswordCommandMode? by mutableStateOf(null)
+        private set
 
     // --- Text search (#26) ---
 
@@ -347,42 +379,77 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openUri(uri: Uri, password: String? = null) {
         uiState = ViewerUiState.Loading
-        viewModelScope.launch {
-            try {
-                val bytes = withContext(Dispatchers.IO) {
-                    getApplication<Application>().contentResolver.openInputStream(uri)
-                        ?.use { it.readBytes() }
-                        ?: throw IllegalStateException("provider returned no stream")
-                }
-                val doc = engine.open(bytes, password)
-                val count = doc.pageCount()
-                val sizes = ArrayList<PageSize>(count)
-                for (i in 0 until count) {
-                    val page = doc.openPage(i)
-                    sizes += PageSize(page.widthPoints, page.heightPoints)
-                    page.close()
-                }
-                closeCurrent()
-                document = doc
-                currentUri = uri
-                isDirty = false
-                val name = queryDisplayName(uri)
-                persistReadPermission(uri)
-                recentsStore.add(
-                    RecentEntry(uri.toString(), name, System.currentTimeMillis())
-                )
-                uiState = ViewerUiState.Viewing(name, sizes)
-            } catch (_: PdfPasswordException) {
-                uiState = ViewerUiState.PasswordNeeded(uri, wrongPassword = password != null)
-            } catch (e: PdfLoadException) {
-                toHome(str(R.string.open_failed_code, e.errorCode))
-            } catch (_: SecurityException) {
-                recentsStore.remove(uri.toString())
-                toHome(str(R.string.open_access_revoked))
-            } catch (_: Exception) {
-                toHome(str(R.string.open_failed))
-            }
+        viewModelScope.launch { openAndShow(uri, password) }
+    }
+
+    /** [openUri]'s work, for a caller already in a coroutine: true once the document is on screen. */
+    private suspend fun openAndShow(uri: Uri, password: String?): Boolean {
+        val failed: ViewerUiState = try {
+            show(readAndOpen(uri, password), uri)
+            return true
+        } catch (_: PdfPasswordException) {
+            ViewerUiState.PasswordNeeded(uri, wrongPassword = password != null)
+        } catch (e: PdfLoadException) {
+            // ADR-004 decision 8: protection PDFium can't open is neither corrupt nor a wrong password.
+            ViewerUiState.Home(
+                recentsStore.load(),
+                if (e.isUnsupportedSecurity) str(R.string.open_unsupported_security)
+                else str(R.string.open_failed_code, e.errorCode),
+            )
+        } catch (_: SecurityException) {
+            recentsStore.remove(uri.toString())
+            ViewerUiState.Home(recentsStore.load(), str(R.string.open_access_revoked))
+        } catch (_: Exception) {
+            ViewerUiState.Home(recentsStore.load(), str(R.string.open_failed))
         }
+        // A security save reopens its file from the viewer (#131); if that fails, the document
+        // still open no longer matches the file, so it goes too. From home this is a no-op.
+        closeCurrent()
+        uiState = failed
+        return false
+    }
+
+    /** A document read from its uri and opened, not yet on screen. */
+    private class OpenedDocument(val doc: PdfDocument, val pageSizes: List<PageSize>, val security: PdfSecurity)
+
+    private suspend fun readAndOpen(uri: Uri, password: String?): OpenedDocument {
+        val bytes = withContext(Dispatchers.IO) {
+            getApplication<Application>().contentResolver.openInputStream(uri)
+                ?.use { it.readBytes() }
+                ?: throw IllegalStateException("provider returned no stream")
+        }
+        val doc = engine.open(bytes, password)
+        try {
+            val count = doc.pageCount()
+            val sizes = ArrayList<PageSize>(count)
+            for (i in 0 until count) {
+                val page = doc.openPage(i)
+                sizes += PageSize(page.widthPoints, page.heightPoints)
+                page.close()
+            }
+            return OpenedDocument(doc, sizes, doc.security())
+        } catch (e: Exception) {
+            doc.close()
+            throw e
+        }
+    }
+
+    /** Puts [opened] on screen in place of whatever was open. */
+    private fun show(opened: OpenedDocument, uri: Uri) {
+        closeCurrent()
+        document = opened.doc
+        currentUri = uri
+        isDirty = false
+        capabilities = DocumentCapabilities.fromSecurity(opened.security)
+        val name = queryDisplayName(uri)
+        persistReadPermission(uri)
+        // The uri and name only: whatever password opened it stays with the open document.
+        recentsStore.add(
+            RecentEntry(uri.toString(), name, System.currentTimeMillis())
+        )
+        uiState = ViewerUiState.Viewing(name, opened.pageSizes)
+        // ADR-004 decision 3: a restricted open says so; the menu offers the owner password.
+        if (capabilities.isRestricted) showNotice(str(R.string.security_restricted_notice))
     }
 
     /**
@@ -468,6 +535,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     .filter { it.id.startsWith("sig:") }
                     .firstOrNull { it.rect.contains(x, y) }
                 if (signature != null) {
+                    if (!capabilities.canSign) {
+                        // #131: moving or removing it is an edit the owner did not allow.
+                        selectedStamp = null
+                        selectedTextBox = null
+                        showRestricted()
+                        return@launch
+                    }
                     // Selection only — move/resize/remove happen via the overlay.
                     selectedStamp = SelectedStamp(
                         pageIndex, signature.annotIndex, signature.id, signature.rect)
@@ -485,6 +559,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     it.rect.grownBy(TAP_SLOP_POINTS).contains(x, y)
                 }
                 if (box != null) {
+                    if (!capabilities.canEditContent) {
+                        selectedTextBox = null
+                        showRestricted()
+                        return@launch
+                    }
                     if (box.id.startsWith(UNTAGGED_TEXT_PREFIX)) {
                         // A box written by MegaPDF for Windows 1.6.x, before boxes
                         // carried an id. Its only handle is its page-object index,
@@ -539,7 +618,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     if (line != null) {
                         // #118: on pages PDFium cannot rewrite faithfully, say so now
                         // rather than after the user has typed.
-                        if (line.runs.all { page.textEditable(it.objectIndex) }) {
+                        // #131: and on a document whose owner did not allow changes, say that.
+                        if (!capabilities.canEditContent) {
+                            showRestricted()
+                        } else if (line.runs.all { page.textEditable(it.objectIndex) }) {
                             pendingBodyEdit = PendingBodyEdit(pageIndex, line)
                         } else {
                             showNotice(str(R.string.body_text_layout))
@@ -602,10 +684,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** The notice for an edit the document's owner did not allow (#131). */
+    private fun showRestricted() = showNotice(str(R.string.security_restricted_edit))
+
     // --- Added text (#34) ---
 
     /** Arms the next tap to place text. Tapping the page opens the text field. */
     fun startTextPlacement() {
+        if (!capabilities.canEditContent) {
+            showRestricted()
+            return
+        }
         cancelPlacement()
         selectedStamp = null
         selectedTextBox = null
@@ -698,6 +787,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun editSelectedTextBox() {
         val sel = selectedTextBox ?: return
         selectedTextBox = null
+        if (!capabilities.canEditContent) {
+            showRestricted()
+            return
+        }
         pendingTextTap = PendingTextTap(
             sel.pageIndex, sel.rect.left, sel.rect.bottom,
             editingId = sel.id, fontSize = sel.fontSize, fontName = sel.fontName,
@@ -763,8 +856,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** The single funnel for every reversible change. */
+    /**
+     * The single funnel for every reversible change. It asks the document's permissions
+     * first (#131, ADR-004 decision 2): the entry points ask too, so this is the backstop
+     * for any path they miss — form fields and check marks rely on it.
+     */
     private suspend fun perform(operation: PdfEditOperation, doc: PdfDocument) {
+        if (!capabilities.allows(operation)) {
+            showRestricted()
+            return
+        }
         history.perform(operation, doc)
         afterHistoryChange(operation.pageIndex)
     }
@@ -867,6 +968,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
 
     fun startPlacement(entry: SignatureEntry) {
+        if (!capabilities.canSign) {
+            showRestricted()
+            return
+        }
         selectedTextBox = null
         pendingSignature = entry
         statusMessage = str(R.string.tap_to_place_signature)
@@ -1018,35 +1123,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (isSaving) return
         isSaving = true
         viewModelScope.launch {
-            val app = getApplication<Application>()
-            val temp = File(app.cacheDir, "save-${System.currentTimeMillis()}.pdf")
             try {
-                withContext(Dispatchers.IO) { temp.parentFile?.mkdirs() }
-                // Opening and closing the stream is disk I/O and belongs off the
-                // main thread like its neighbours (#55) — doc.save suspends onto
-                // the engine thread, but the open, and the flush at close, did not.
-                withContext(Dispatchers.IO) {
-                    java.io.FileOutputStream(temp).use { doc.save(it) }
-                }
-
-                val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
-                check(bytes.isNotEmpty()) { "engine produced an empty document" }
-                // Verify the output parses before touching the destination, opened like the
-                // document: a protected document's copy is still protected (#132).
-                engine.openLike(doc, bytes).close()
-
-                withContext(Dispatchers.IO) {
-                    // "wt" guarantees truncation; plain "w" can leave a stale tail
-                    // when the new file is shorter.
-                    val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
-                        ?: throw IllegalStateException("provider returned no descriptor")
-                    pfd.use {
-                        java.io.FileOutputStream(it.fileDescriptor).use { out ->
-                            out.write(bytes)
-                            out.fd.sync()
-                        }
-                    }
-                }
+                // Verified opened like the document: a protected document's copy is still
+                // protected (#132).
+                writeVerified(uri, { doc.save(it) }, { engine.openLike(doc, it).close() })
 
                 if (isSaveAs) {
                     currentUri = uri
@@ -1064,9 +1144,166 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             } catch (_: Exception) {
                 statusMessage = str(R.string.save_failed)
             } finally {
-                temp.delete()
                 isSaving = false
             }
+        }
+    }
+
+    /**
+     * The verified write every save shares (#18, #131): [serialize] into an app-cache temp
+     * file, so a PDFium failure never touches the user's file; [verify] the bytes by opening
+     * them, which throws when they don't; only then stream them to [uri] with truncation and
+     * fsync. Throws on any failure, for the caller to report. Bytes that did not verify
+     * never reach the destination.
+     */
+    private suspend fun writeVerified(
+        uri: Uri,
+        serialize: suspend (java.io.OutputStream) -> Unit,
+        verify: suspend (ByteArray) -> Unit,
+    ) {
+        val app = getApplication<Application>()
+        val temp = File(app.cacheDir, "save-${System.currentTimeMillis()}.pdf")
+        try {
+            withContext(Dispatchers.IO) { temp.parentFile?.mkdirs() }
+            // Opening and closing the stream is disk I/O and belongs off the
+            // main thread like its neighbours (#55) — the serializer suspends onto
+            // the engine thread, but the open, and the flush at close, did not.
+            withContext(Dispatchers.IO) {
+                java.io.FileOutputStream(temp).use { serialize(it) }
+            }
+
+            val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
+            check(bytes.isNotEmpty()) { "engine produced an empty document" }
+            verify(bytes)
+
+            withContext(Dispatchers.IO) {
+                // "wt" guarantees truncation; plain "w" can leave a stale tail
+                // when the new file is shorter.
+                val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
+                    ?: throw IllegalStateException("provider returned no descriptor")
+                pfd.use {
+                    java.io.FileOutputStream(it.fileDescriptor).use { out ->
+                        out.write(bytes)
+                        out.fd.sync()
+                    }
+                }
+            }
+        } finally {
+            temp.delete()
+        }
+    }
+
+    // --- Document security (#131) ---
+
+    /** Opens the owner-password dialog for a restricted document (ADR-004 decision 3). */
+    fun startUnlock() {
+        if (!capabilities.isRestricted || currentUri == null) return
+        passwordPrompt = null
+        unlockPrompt = UnlockPrompt()
+    }
+
+    /** Cancel keeps the restricted document as it is. */
+    fun cancelUnlock() {
+        unlockPrompt = null
+    }
+
+    /**
+     * Reopens the document's file with [ownerPassword]. Only full access unlocks it: a user
+     * password opens the file too, with the same restrictions, so it counts as wrong and the
+     * dialog stays. Reopening from the file drops unsaved changes; the dialog says so.
+     */
+    fun unlock(ownerPassword: String) {
+        val prompt = unlockPrompt ?: return
+        val uri = currentUri ?: return
+        if (prompt.isChecking) return
+        unlockPrompt = prompt.copy(isChecking = true)
+        viewModelScope.launch {
+            val opened = try {
+                readAndOpen(uri, ownerPassword)
+            } catch (_: PdfPasswordException) {
+                null
+            } catch (_: Exception) {
+                unlockPrompt = null
+                statusMessage = str(R.string.open_failed)
+                return@launch
+            }
+            if (unlockPrompt == null || currentUri != uri) {
+                // Cancelled, or the document closed, while the password was tried.
+                opened?.doc?.close()
+                return@launch
+            }
+            if (opened == null || !opened.security.hasFullAccess) {
+                opened?.doc?.close()
+                unlockPrompt = UnlockPrompt(attempt = prompt.attempt + 1, wrongPassword = true)
+                return@launch
+            }
+            unlockPrompt = null
+            show(opened, uri)
+        }
+    }
+
+    /** The Password command; its dialog follows from the document's security (ADR-004 decision 5). */
+    fun startPasswordCommand() {
+        if (document == null || currentUri == null || isSaving) return
+        unlockPrompt = null
+        passwordPrompt = PasswordCommandMode.of(capabilities)
+    }
+
+    fun cancelPasswordCommand() {
+        passwordPrompt = null
+    }
+
+    /** Sets or changes the password: AES-256, one password, every permission (decisions 4 and 5). */
+    fun setPassword(newPassword: String) = saveSecurity(newPassword)
+
+    fun removePassword() = saveSecurity(null)
+
+    /**
+     * Setting, changing or removing security is a save (ADR-004 decision 6): the verified
+     * write, checked by opening the copy with the new password — or with none when
+     * [newPassword] is null and the security goes — and then the file is reopened that way,
+     * so the open document, its credentials and its permissions match what is on disk.
+     */
+    private fun saveSecurity(newPassword: String?) {
+        passwordPrompt = null
+        val doc = document ?: return
+        val uri = currentUri ?: return
+        if (isSaving) return
+        if (!capabilities.canChangeSecurity) {
+            // The dialog never offers this without full access, and the core refuses it too.
+            showRestricted()
+            return
+        }
+        val done = when {
+            newPassword == null -> R.string.security_password_removed
+            capabilities.isEncrypted -> R.string.security_password_changed
+            else -> R.string.security_password_set
+        }
+        isSaving = true
+        viewModelScope.launch {
+            try {
+                if (newPassword == null) {
+                    writeVerified(uri, { doc.saveWithoutSecurity(it) }, { engine.open(it).close() })
+                } else {
+                    writeVerified(
+                        uri,
+                        { doc.saveWithSecurity(it, newPassword, null, PdfPermissions.ALL) },
+                        { engine.open(it, newPassword).close() },
+                    )
+                }
+                isDirty = false
+            } catch (_: SecurityException) {
+                statusMessage = str(R.string.save_no_permission)
+                return@launch
+            } catch (_: Exception) {
+                // PdfRestrictedException and a copy that didn't verify land here: the file
+                // was not written.
+                statusMessage = str(R.string.save_failed)
+                return@launch
+            } finally {
+                isSaving = false
+            }
+            if (openAndShow(uri, newPassword)) showNotice(str(done))
         }
     }
 
@@ -1075,10 +1312,6 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun closeDocument() {
         closeCurrent()
         uiState = ViewerUiState.Home(recentsStore.load())
-    }
-
-    private fun toHome(error: String) {
-        uiState = ViewerUiState.Home(recentsStore.load(), error)
     }
 
     private fun closeCurrent() {
@@ -1101,6 +1334,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         pendingTextTap = null
         pendingBodyEdit = null
         scannedHintShown = false
+        capabilities = DocumentCapabilities.FULL
+        unlockPrompt = null
+        passwordPrompt = null
         val doc = document ?: return
         document = null
         viewModelScope.launch { doc.close() }

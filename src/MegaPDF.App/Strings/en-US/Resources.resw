@@ -51,6 +51,16 @@
   <data name="LabelSaveAs.Text" xml:space="preserve">
     <value>Save As</value>
   </data>
+  <data name="SecurityButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Set, change or remove the document's password</value>
+    <comment>#131</comment>
+  </data>
+  <data name="SecurityButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="LabelSecurity.Text" xml:space="preserve">
+    <value>Password…</value>
+  </data>
   <data name="ShrinkButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Save a smaller copy for email</value>
   </data>
@@ -303,6 +313,18 @@
   <data name="ChooseDefaultAppsButton.Content" xml:space="preserve">
     <value>Choose default apps</value>
   </data>
+  <data name="RestrictedNoticeBar.Message" xml:space="preserve">
+    <value>The owner of this document restricted it, so some tools are unavailable.</value>
+    <comment>#131: shown when a document opens without full access</comment>
+  </data>
+  <data name="UnlockButton.Content" xml:space="preserve">
+    <value>Unlock…</value>
+    <comment>#131: asks for the owner password</comment>
+  </data>
+  <data name="RecoveryOffNoticeBar.Message" xml:space="preserve">
+    <value>Crash recovery is off for password-protected documents, so unsaved changes can't be restored if MegaPDF closes unexpectedly.</value>
+    <comment>#131, #135</comment>
+  </data>
 
   <!-- Find bar -->
   <data name="FindQuery.PlaceholderText" xml:space="preserve">
@@ -459,6 +481,74 @@ Saved as {2} — ready to email.</value>
     <value>OK</value>
   </data>
 
+  <!-- ===== Document security (#131, ADR-004) ===== -->
+  <data name="UnlockTitle" xml:space="preserve">
+    <value>Unlock document</value>
+  </data>
+  <data name="UnlockPrompt" xml:space="preserve">
+    <value>The owner of “{0}” restricted what can be done with it. Enter the owner password to use every tool.</value>
+    <comment>{0} is the file name</comment>
+  </data>
+  <data name="UnlockWrong" xml:space="preserve">
+    <value>That password didn't unlock the document — try again.</value>
+  </data>
+  <data name="Unlock" xml:space="preserve">
+    <value>Unlock</value>
+  </data>
+  <data name="SetPasswordTitle" xml:space="preserve">
+    <value>Set password</value>
+  </data>
+  <data name="SetPasswordButton" xml:space="preserve">
+    <value>Set password</value>
+  </data>
+  <data name="ChangePasswordTitle" xml:space="preserve">
+    <value>Change password</value>
+  </data>
+  <data name="ChangePasswordButton" xml:space="preserve">
+    <value>Change password</value>
+  </data>
+  <data name="SetPasswordBody" xml:space="preserve">
+    <value>Anyone who opens “{0}” will need this password. MegaPDF can't recover it if it's forgotten.</value>
+    <comment>{0} is the file name</comment>
+  </data>
+  <data name="NewPasswordPlaceholder" xml:space="preserve">
+    <value>New password</value>
+  </data>
+  <data name="ConfirmPasswordPlaceholder" xml:space="preserve">
+    <value>Confirm password</value>
+  </data>
+  <data name="PasswordEmpty" xml:space="preserve">
+    <value>Enter a password.</value>
+  </data>
+  <data name="PasswordsDontMatch" xml:space="preserve">
+    <value>The passwords don't match.</value>
+  </data>
+  <data name="DocumentPasswordTitle" xml:space="preserve">
+    <value>Document password</value>
+  </data>
+  <data name="ProtectedBody" xml:space="preserve">
+    <value>“{0}” is protected by a password. You can change it or remove it.</value>
+    <comment>{0} is the file name</comment>
+  </data>
+  <data name="ChangePasswordEllipsis" xml:space="preserve">
+    <value>Change password…</value>
+  </data>
+  <data name="RemovePassword" xml:space="preserve">
+    <value>Remove password</value>
+  </data>
+  <data name="PasswordSetNotice" xml:space="preserve">
+    <value>Password set.</value>
+  </data>
+  <data name="PasswordChangedNotice" xml:space="preserve">
+    <value>Password changed.</value>
+  </data>
+  <data name="PasswordRemovedNotice" xml:space="preserve">
+    <value>Password removed.</value>
+  </data>
+  <data name="CouldNotChangeSecurityTitle" xml:space="preserve">
+    <value>Couldn't change the password</value>
+  </data>
+
   <!-- ===== Code (MainWindow.xaml.cs) ===== -->
   <data name="TextSizeName" xml:space="preserve">
     <value>Text size</value>
@@ -559,6 +649,14 @@ Saved as {2} — ready to email.</value>
   </data>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
     <value>This page's text can't be changed without disturbing its layout: rewriting it would shift the spacing of other text. Cover it with whiteout and add new text instead.</value>
+  </data>
+  <data name="ErrorUnsupportedSecurity" xml:space="preserve">
+    <value>This PDF uses a kind of protection MegaPDF can't open.</value>
+    <comment>#131: a security handler PDFium does not support</comment>
+  </data>
+  <data name="ErrorRestricted" xml:space="preserve">
+    <value>The document's owner doesn't allow this. Unlock it with the owner password first.</value>
+    <comment>#131: DocumentRestrictedException</comment>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Something went wrong.</value>

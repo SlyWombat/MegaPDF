@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.SecurityWindow"
+        Title="{x:Static loc:Strings.DocumentPasswordTitle}"
+        Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <!-- The Password command (#131, ADR-004 §5). A protected document first offers
+       Change or Remove; setting or changing shows the entry fields. -->
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <StackPanel Name="ManagePanel" Spacing="{DynamicResource SpaceM}" IsVisible="False">
+      <TextBlock Name="ManageText" TextWrapping="Wrap" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+        <Button Name="ManageCancelButton" Content="{x:Static loc:Strings.Cancel}" />
+        <Button Name="RemoveButton" Content="{x:Static loc:Strings.RemovePassword}" />
+        <Button Name="ChangeButton" Content="{x:Static loc:Strings.ChangePasswordEllipsis}" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Name="EntryPanel" Spacing="{DynamicResource SpaceM}" IsVisible="False">
+      <TextBlock Name="EntryText" TextWrapping="Wrap" />
+      <TextBox Name="NewBox" PasswordChar="•" Watermark="{x:Static loc:Strings.NewPassword}" />
+      <TextBox Name="ConfirmBox" PasswordChar="•" Watermark="{x:Static loc:Strings.ConfirmPassword}" />
+      <TextBlock Name="ProblemText" TextWrapping="Wrap" IsVisible="False"
+                 Foreground="{DynamicResource SystemControlErrorTextForegroundBrush}" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+        <Button Name="EntryCancelButton" Content="{x:Static loc:Strings.Cancel}" />
+        <Button Name="ConfirmButton" />
+      </StackPanel>
+    </StackPanel>
+  </StackPanel>
+</Window>

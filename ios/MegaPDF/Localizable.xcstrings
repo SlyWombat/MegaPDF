@@ -97,6 +97,38 @@
         }
       }
     },
+    "Anyone opening this document will need this password. MegaPDF can't recover it if it's forgotten." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce mot de passe sera nécessaire pour ouvrir ce document. MegaPDF ne peut pas le récupérer s'il est oublié."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce mot de passe sera nécessaire pour ouvrir ce document. MegaPDF ne peut pas le récupérer s'il est oublié."
+          }
+        }
+      }
+    },
+    "Anyone will be able to open this document without a password." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout le monde pourra ouvrir ce document sans mot de passe."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tout le monde pourra ouvrir ce document sans mot de passe."
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "fr" : {
@@ -109,6 +141,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Annuler"
+          }
+        }
+      }
+    },
+    "Change" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changer"
           }
         }
       }
@@ -157,6 +205,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fermer"
+          }
+        }
+      }
+    },
+    "Confirm password" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmer le mot de passe"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirmer le mot de passe"
           }
         }
       }
@@ -513,6 +577,22 @@
         }
       }
     },
+    "Couldn't unlock this document." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déverrouiller ce document."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de déverrouiller ce document."
+          }
+        }
+      }
+    },
     "Delete" : {
       "localizations" : {
         "fr" : {
@@ -573,6 +653,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Document"
+          }
+        }
+      }
+    },
+    "Document unlocked." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Document déverrouillé."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Document déverrouillé."
           }
         }
       }
@@ -901,6 +997,22 @@
         }
       }
     },
+    "Owner password" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe du propriétaire"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe du propriétaire"
+          }
+        }
+      }
+    },
     "Page %lld" : {
       "localizations" : {
         "fr" : {
@@ -933,6 +1045,38 @@
         }
       }
     },
+    "Password changed." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe changé."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe changé."
+          }
+        }
+      }
+    },
+    "Password removed." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe retiré."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe retiré."
+          }
+        }
+      }
+    },
     "Password required" : {
       "localizations" : {
         "fr" : {
@@ -961,6 +1105,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mot de passe requis."
+          }
+        }
+      }
+    },
+    "Password set." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe défini."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe défini."
+          }
+        }
+      }
+    },
+    "Password…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mot de passe…"
           }
         }
       }
@@ -1057,6 +1233,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rétablir"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer"
           }
         }
       }
@@ -1185,6 +1377,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enregistrement…"
+          }
+        }
+      }
+    },
+    "Set" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Définir"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Définir"
+          }
+        }
+      }
+    },
+    "Set password" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Définir un mot de passe"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Définir un mot de passe"
           }
         }
       }
@@ -1445,6 +1669,54 @@
         }
       }
     },
+    "The owner of this document has restricted changes. Unlock it with the owner password to edit it." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le propriétaire de ce document a restreint les modifications. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le propriétaire de ce document a restreint les modifications. Déverrouillez-le avec le mot de passe du propriétaire pour le modifier."
+          }
+        }
+      }
+    },
+    "The owner of this document restricted what can be changed in it. Enter the owner password to unlock it." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le propriétaire de ce document a restreint ce qui peut y être modifié. Entrez le mot de passe du propriétaire pour le déverrouiller."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le propriétaire de ce document a restreint ce qui peut y être modifié. Entrez le mot de passe du propriétaire pour le déverrouiller."
+          }
+        }
+      }
+    },
+    "The passwords don't match." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les mots de passe ne correspondent pas."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Les mots de passe ne correspondent pas."
+          }
+        }
+      }
+    },
     "Third-party notices" : {
       "localizations" : {
         "fr" : {
@@ -1457,6 +1729,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Avis de tiers"
+          }
+        }
+      }
+    },
+    "This PDF uses a kind of protection MegaPDF can't open." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir."
+          }
+        }
+      }
+    },
+    "This also saves your changes." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vos modifications seront aussi enregistrées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vos modifications seront aussi enregistrées."
           }
         }
       }
@@ -1505,6 +1809,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document est protégé."
+          }
+        }
+      }
+    },
+    "This document's security doesn't allow that without its owner password." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sécurité de ce document ne le permet pas sans le mot de passe du propriétaire."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La sécurité de ce document ne le permet pas sans le mot de passe du propriétaire."
           }
         }
       }
@@ -1633,6 +1953,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Annuler"
+          }
+        }
+      }
+    },
+    "Unlock" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller"
+          }
+        }
+      }
+    },
+    "Unlock document" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller le document"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller le document"
+          }
+        }
+      }
+    },
+    "Unlock with owner password…" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller avec le mot de passe du propriétaire…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Déverrouiller avec le mot de passe du propriétaire…"
           }
         }
       }

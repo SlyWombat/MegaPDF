@@ -44,6 +44,15 @@
   <data name="LabelSaveAs.Text" xml:space="preserve">
     <value>Enregistrer sous</value>
   </data>
+  <data name="SecurityButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
+    <value>Définir, modifier ou retirer le mot de passe du document</value>
+  </data>
+  <data name="SecurityButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Mot de passe</value>
+  </data>
+  <data name="LabelSecurity.Text" xml:space="preserve">
+    <value>Mot de passe…</value>
+  </data>
   <data name="ShrinkButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Enregistrer une copie réduite pour courriel</value>
   </data>
@@ -296,6 +305,15 @@
   <data name="ChooseDefaultAppsButton.Content" xml:space="preserve">
     <value>Choisir les applications par défaut</value>
   </data>
+  <data name="RestrictedNoticeBar.Message" xml:space="preserve">
+    <value>Le propriétaire de ce document l'a restreint; certains outils ne sont pas disponibles.</value>
+  </data>
+  <data name="UnlockButton.Content" xml:space="preserve">
+    <value>Déverrouiller…</value>
+  </data>
+  <data name="RecoveryOffNoticeBar.Message" xml:space="preserve">
+    <value>La récupération après une fermeture inattendue est désactivée pour les documents protégés par mot de passe; les modifications non enregistrées ne pourront pas être restaurées.</value>
+  </data>
 
   <!-- Barre de recherche -->
   <data name="FindQuery.PlaceholderText" xml:space="preserve">
@@ -446,6 +464,71 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <value>OK</value>
   </data>
 
+  <!-- ===== Sécurité du document (#131, ADR-004) ===== -->
+  <data name="UnlockTitle" xml:space="preserve">
+    <value>Déverrouiller le document</value>
+  </data>
+  <data name="UnlockPrompt" xml:space="preserve">
+    <value>Le propriétaire de « {0} » a restreint ce qu'on peut en faire. Entrez le mot de passe du propriétaire pour utiliser tous les outils.</value>
+  </data>
+  <data name="UnlockWrong" xml:space="preserve">
+    <value>Ce mot de passe n'a pas déverrouillé le document. Réessayez.</value>
+  </data>
+  <data name="Unlock" xml:space="preserve">
+    <value>Déverrouiller</value>
+  </data>
+  <data name="SetPasswordTitle" xml:space="preserve">
+    <value>Définir un mot de passe</value>
+  </data>
+  <data name="SetPasswordButton" xml:space="preserve">
+    <value>Définir le mot de passe</value>
+  </data>
+  <data name="ChangePasswordTitle" xml:space="preserve">
+    <value>Modifier le mot de passe</value>
+  </data>
+  <data name="ChangePasswordButton" xml:space="preserve">
+    <value>Modifier le mot de passe</value>
+  </data>
+  <data name="SetPasswordBody" xml:space="preserve">
+    <value>Toute personne qui ouvre « {0} » aura besoin de ce mot de passe. MegaPDF ne peut pas le récupérer s'il est oublié.</value>
+  </data>
+  <data name="NewPasswordPlaceholder" xml:space="preserve">
+    <value>Nouveau mot de passe</value>
+  </data>
+  <data name="ConfirmPasswordPlaceholder" xml:space="preserve">
+    <value>Confirmer le mot de passe</value>
+  </data>
+  <data name="PasswordEmpty" xml:space="preserve">
+    <value>Entrez un mot de passe.</value>
+  </data>
+  <data name="PasswordsDontMatch" xml:space="preserve">
+    <value>Les mots de passe ne correspondent pas.</value>
+  </data>
+  <data name="DocumentPasswordTitle" xml:space="preserve">
+    <value>Mot de passe du document</value>
+  </data>
+  <data name="ProtectedBody" xml:space="preserve">
+    <value>« {0} » est protégé par un mot de passe. Vous pouvez le modifier ou le retirer.</value>
+  </data>
+  <data name="ChangePasswordEllipsis" xml:space="preserve">
+    <value>Modifier le mot de passe…</value>
+  </data>
+  <data name="RemovePassword" xml:space="preserve">
+    <value>Retirer le mot de passe</value>
+  </data>
+  <data name="PasswordSetNotice" xml:space="preserve">
+    <value>Mot de passe défini.</value>
+  </data>
+  <data name="PasswordChangedNotice" xml:space="preserve">
+    <value>Mot de passe modifié.</value>
+  </data>
+  <data name="PasswordRemovedNotice" xml:space="preserve">
+    <value>Mot de passe retiré.</value>
+  </data>
+  <data name="CouldNotChangeSecurityTitle" xml:space="preserve">
+    <value>Impossible de modifier le mot de passe</value>
+  </data>
+
   <!-- ===== Code (MainWindow.xaml.cs) ===== -->
   <data name="TextSizeName" xml:space="preserve">
     <value>Taille du texte</value>
@@ -541,6 +624,12 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   </data>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
     <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page : le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
+  </data>
+  <data name="ErrorUnsupportedSecurity" xml:space="preserve">
+    <value>Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</value>
+  </data>
+  <data name="ErrorRestricted" xml:space="preserve">
+    <value>Le propriétaire du document ne permet pas cette action. Déverrouillez-le d'abord avec le mot de passe du propriétaire.</value>
   </data>
   <data name="ErrorGeneric" xml:space="preserve">
     <value>Une erreur s'est produite.</value>

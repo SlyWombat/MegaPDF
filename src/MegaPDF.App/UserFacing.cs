@@ -21,7 +21,10 @@ internal static class UserFacing
         PdfLoadException { IsFileError: true } => Strings.ErrorFileUnreadable,
         PdfLoadException { IsFormatError: true } => Strings.ErrorNotAPdf,
         PdfLoadException { IsPasswordError: true } => Strings.ErrorPasswordProtected,
+        // Not corrupt and not a wrong password: a handler PDFium cannot open (ADR-004 §8).
+        PdfLoadException { IsSecurityError: true } => Strings.ErrorUnsupportedSecurity,
         PdfLoadException load => Strings.ErrorCouldNotOpen(load.ErrorCode),
+        DocumentRestrictedException => Strings.ErrorRestricted,
         TextEditException { Reason: TextEditFailure.NoUsableFont } => Strings.ErrorNoUsableFont,
         TextEditException { Reason: TextEditFailure.NotExtractable } => Strings.ErrorNotExtractable,
         TextEditException { Reason: TextEditFailure.LayoutWouldChange } => Strings.ErrorLayoutWouldChange,

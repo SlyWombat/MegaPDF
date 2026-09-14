@@ -173,6 +173,10 @@ public sealed partial class MainWindow : Window
         }
 
         var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
+        // #131: on a restricted document a click on something the owner does not allow
+        // changing opens no editor and selects nothing; the notice says why.
+        if (!ViewModel.AllowsInteraction(hit.Kind))
+            return;
         switch (hit.Kind)
         {
             case PageHitKind.FormCheckbox:
@@ -264,6 +268,8 @@ public sealed partial class MainWindow : Window
         var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
         if (hit.Kind != PageHitKind.TextBox || hit.TextLine is not { } line)
             return false;
+        if (!ViewModel.AllowsInteraction(hit.Kind))
+            return true; // #131: handled — the restricted notice is showing
 
         Deselect();
         // An *added* box, not the document's own text: it has no inherited
@@ -713,7 +719,8 @@ public sealed partial class MainWindow : Window
         {
             foreach (var candidate in pageView.Regions)
             {
-                if (candidate.Bounds.Contains(point))
+                // No clickable affordance for what the document's owner does not allow (#131).
+                if (candidate.Bounds.Contains(point) && ViewModel.Capabilities.Allows(candidate.Kind))
                 {
                     region = candidate;
                     break;
@@ -840,8 +847,16 @@ public sealed partial class MainWindow : Window
             _ = ViewModel.UpdateViewportAsync(firstVisible, lastVisible);
     }
 
-    private async void OnPrintClicked(object sender, RoutedEventArgs e) =>
-        await _printer.ShowPrintUiAsync();
+    private async void OnPrintClicked(object sender, RoutedEventArgs e)
+    {
+        // The button is disabled without the print permission; Ctrl+P rides on it (#131).
+        if (ViewModel.IsPrintAllowed)
+            await _printer.ShowPrintUiAsync();
+    }
+
+    /// <summary>The restricted notice's action: ask for the owner password and reopen (#131).</summary>
+    private async void OnUnlockClicked(object sender, RoutedEventArgs e) =>
+        await ViewModel.UnlockAsync();
 
     // --- Find in document (toolbar Find / Ctrl+F, issue #26: the Edge-style find bar) ---
 
@@ -934,7 +949,7 @@ public sealed partial class MainWindow : Window
 
     private TextBlock[] ToolbarLabels =>
     [
-        LabelOpen, LabelSave, LabelSaveAs, LabelShrink, LabelPrint, LabelUndo,
+        LabelOpen, LabelSave, LabelSaveAs, LabelSecurity, LabelShrink, LabelPrint, LabelUndo,
         LabelRedo, LabelSignatures, LabelWhiteout, LabelAddText, LabelFind,
     ];
 

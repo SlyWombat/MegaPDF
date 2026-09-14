@@ -101,6 +101,15 @@ final class ViewerModel: ObservableObject {
     @Published var draftSize = defaultTextSize
     @Published var draftFont = PdfEngine.defaultFont
 
+    /// The open document's security and what it lets the tools do (#131). Unprotected
+    /// until a document is open; reset on close.
+    @Published private(set) var security: PdfSecurity = .unprotected
+    var capabilities: DocumentCapabilities { DocumentCapabilities(security: security) }
+    /// The Password command's sheet, and what it says when an unlock fails (#131).
+    @Published var securitySheet: SecuritySheetMode?
+    @Published private(set) var securityError: String?
+    @Published private(set) var isUnlocking = false
+
     /// The size and face the last box was given (#43). Sticky for the session, so
     /// filling six fields on one form is not six trips through the pickers. Not
     /// persisted: a new document is usually a new job.
@@ -246,8 +255,10 @@ final class ViewerModel: ObservableObject {
             for i in 0..<count {
                 sizes.append(try await PdfEngine.shared.pageSize(doc, index: i))
             }
+            let openedSecurity = await PdfEngine.shared.security(doc)
             closeCurrent()
             document = doc
+            security = openedSecurity
             self.sourceURL = sourceURL
             if let sourceURL,
                let bookmark = try? sourceURL.bookmarkData() {
@@ -257,9 +268,14 @@ final class ViewerModel: ObservableObject {
                     lastOpenedEpochMs: Int64(Date().timeIntervalSince1970 * 1000)))
             }
             state = .viewing(displayName: displayName, pageSizes: sizes)
+            // A restricted open says so, and where the owner password goes (ADR-004 §3).
+            if capabilities.isRestricted { showRestrictedNotice() }
         } catch PdfError.passwordRequired {
             state = .passwordNeeded(bytes: bytes, displayName: displayName,
                                     sourceURL: sourceURL, wrongPassword: password != nil)
+        } catch PdfError.unsupportedSecurity {
+            // Not corrupt and not a wrong password: say which it is (ADR-004 §8).
+            toHome(String(localized: "This PDF uses a kind of protection MegaPDF can't open."))
         } catch {
             // A plain sentence, not the raw error: the engine's own description is
             // not something the home screen should print.
@@ -315,8 +331,13 @@ final class ViewerModel: ObservableObject {
         let x = xFraction * size.width
         let y = (1 - yFraction) * size.height  // view top-left → PDF bottom-left
 
+        // Every branch that would change the document checks what this open may do
+        // first (#131) and shows the restricted notice instead of editing.
+        let caps = capabilities
+
         if let entry = pendingSignature {
             pendingSignature = nil
+            guard permits(caps.canSign) else { return }
             placeSignature(entry, doc: doc, pageIndex: index, pageSize: size, x: x, y: y)
             return
         }
@@ -324,6 +345,7 @@ final class ViewerModel: ObservableObject {
         if isPlacingText {
             isPlacingText = false
             statusMessage = nil
+            guard permits(caps.canEditContent) else { return }
             draftText = ""
             draftSize = lastFontSize
             draftFont = lastFontName
@@ -340,6 +362,8 @@ final class ViewerModel: ObservableObject {
                 if let sig = allStamps.first(where: {
                     $0.id.hasPrefix("sig:") && $0.rect.contains(x: x, y: y)
                 }) {
+                    // Selecting is the way in to moving and removing it.
+                    guard permits(caps.canSign) else { return }
                     selectedStamp = SelectedStamp(pageIndex: index, annotIndex: sig.annotIndex,
                                                   id: sig.id, rect: sig.rect)
                     selectedTextBox = nil
@@ -365,6 +389,10 @@ final class ViewerModel: ObservableObject {
                         // it fall through and toggle whatever is underneath.
                         selectedTextBox = nil
                         statusMessage = String(localized: "This text was added by an older version and can't be edited here.")
+                        return
+                    }
+                    guard permits(caps.canEditContent) else {
+                        selectedTextBox = nil
                         return
                     }
                     let wasSelected = selectedTextBox?.id == box.id
@@ -406,6 +434,8 @@ final class ViewerModel: ObservableObject {
                                               id: "mark:\(UUID().uuidString)", adding: true)
                 }
                 if let operation {
+                    // Form fields need fill-forms, marks need annotate (#131).
+                    guard permits(caps.allows(operation)) else { return }
                     try await perform(operation, doc: doc)
                     return
                 }
@@ -416,6 +446,7 @@ final class ViewerModel: ObservableObject {
                 if let line = lines.first(where: {
                     $0.rect.grown(by: Self.tapSlopPoints).contains(x: x, y: y)
                 }) {
+                    guard permits(caps.canEditContent) else { return }
                     // #118: on pages PDFium cannot rewrite faithfully, say so now rather
                     // than after the user has typed.
                     var editable = true
@@ -449,6 +480,7 @@ final class ViewerModel: ObservableObject {
     func commitBodyEdit(_ text: String) {
         guard let pending = pendingBodyEdit, let doc = document else { return }
         pendingBodyEdit = nil
+        guard permits(capabilities.canEditContent) else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed != pending.line.text else { return }
         Task {
@@ -485,10 +517,25 @@ final class ViewerModel: ObservableObject {
         }
     }
 
+    // MARK: - document security (#131)
+
+    /// Why a restricted document won't take an edit, and how to get past it.
+    private func showRestrictedNotice() {
+        showNotice(String(localized: "The owner of this document has restricted changes. Unlock it with the owner password to edit it."))
+    }
+
+    /// Passes `allowed` through, showing the restricted notice when it is false — the
+    /// check every editing entry point makes before it touches the document.
+    private func permits(_ allowed: Bool) -> Bool {
+        if !allowed { showRestrictedNotice() }
+        return allowed
+    }
+
     // MARK: - added text (#34)
 
     /// Arms the next tap to place text. Tapping the page opens the text field.
     func startTextPlacement() {
+        guard permits(capabilities.canEditContent) else { return }
         cancelPlacement()
         selectedStamp = nil
         selectedTextBox = nil
@@ -510,6 +557,7 @@ final class ViewerModel: ObservableObject {
         guard let pending = pendingText, let doc = document else { return }
         pendingText = nil
         draftText = ""
+        guard permits(capabilities.canEditContent) else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         lastFontSize = fontSize
@@ -555,6 +603,7 @@ final class ViewerModel: ObservableObject {
     func commitTextBoxRect(_ newRect: PdfRect) {
         guard let sel = selectedTextBox, let doc = document,
               case let .viewing(_, pageSizes) = state else { return }
+        guard permits(capabilities.canEditContent) else { return }
         let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
         // A tap that slipped into a drag can land a sub-point move; don't put a
         // no-op on the undo stack for it.
@@ -579,6 +628,7 @@ final class ViewerModel: ObservableObject {
     func editSelectedTextBox() {
         guard let sel = selectedTextBox else { return }
         selectedTextBox = nil
+        guard permits(capabilities.canEditContent) else { return }
         draftText = sel.text
         draftSize = sel.fontSize
         draftFont = sel.fontName
@@ -590,6 +640,7 @@ final class ViewerModel: ObservableObject {
 
     func removeSelectedTextBox() {
         guard let sel = selectedTextBox, let doc = document else { return }
+        guard permits(capabilities.canEditContent) else { return }
         Task {
             do {
                 // boundsAnchored: the coordinates are the box's reported rect, so
@@ -649,6 +700,9 @@ final class ViewerModel: ObservableObject {
     /// Applies an edit through the history and refreshes everything that depends
     /// on it. The single funnel for every reversible change.
     private func perform(_ operation: PdfEditOperation, doc: PdfDocument) async throws {
+        // The backstop behind every gated entry point (#131): an open without the
+        // permission never reaches the engine, even if a tool forgot to check.
+        guard capabilities.allows(operation) else { throw PdfError.restricted }
         try await history.perform(operation, PdfEngine.shared, doc)
         afterHistoryChange(operation.pageIndex)
     }
@@ -766,6 +820,7 @@ final class ViewerModel: ObservableObject {
     }
 
     func startPlacement(_ entry: SignatureEntry) {
+        guard permits(capabilities.canSign) else { return }
         selectedTextBox = nil
         pendingSignature = entry
         statusMessage = String(localized: "Tap the page where the signature should go")
@@ -778,6 +833,7 @@ final class ViewerModel: ObservableObject {
     func commitStampRect(_ newRect: PdfRect) {
         guard let sel = selectedStamp, let doc = document,
               case let .viewing(_, pageSizes) = state else { return }
+        guard permits(capabilities.canSign) else { return }
         let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
         Task {
             do {
@@ -808,6 +864,7 @@ final class ViewerModel: ObservableObject {
 
     func removeSelectedStamp() {
         guard let sel = selectedStamp, let doc = document else { return }
+        guard permits(capabilities.canSign) else { return }
         Task {
             do {
                 let engine = PdfEngine.shared
@@ -928,27 +985,38 @@ final class ViewerModel: ObservableObject {
                 let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
                 await engine.close(verify)
 
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                var coordError: NSError?
-                var writeError: Error?
-                NSFileCoordinator().coordinate(
-                    writingItemAt: url, options: .forReplacing, error: &coordError
-                ) { target in
-                    do { try data.write(to: target, options: .atomic) }
-                    catch { writeError = error }
-                }
-                if let error = coordError { throw error }
-                if let error = writeError { throw error }
+                try write(data, to: url)
                 isDirty = false
                 statusMessage = String(localized: "Saved")
             } catch {
-                // The OS/engine description follows as its own sentence; it is
-                // already localised (PdfError is a LocalizedError).
-                statusMessage = String(localized: "Save failed — use Save a copy.")
-                    + " " + error.localizedDescription
+                showSaveFailed(error)
             }
         }
+    }
+
+    /// Writes already-verified bytes over the opened file: security-scoped access,
+    /// coordinated with any other writer, atomic. Save and the Password command share
+    /// it; both verify `data` before calling, so nothing unchecked reaches the file.
+    private func write(_ data: Data, to url: URL) throws {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        var coordError: NSError?
+        var writeError: Error?
+        NSFileCoordinator().coordinate(
+            writingItemAt: url, options: .forReplacing, error: &coordError
+        ) { target in
+            do { try data.write(to: target, options: .atomic) }
+            catch { writeError = error }
+        }
+        if let error = coordError { throw error }
+        if let error = writeError { throw error }
+    }
+
+    private func showSaveFailed(_ error: Error) {
+        // The OS/engine description follows as its own sentence; it is
+        // already localised (PdfError is a LocalizedError).
+        statusMessage = String(localized: "Save failed — use Save a copy.")
+            + " " + error.localizedDescription
     }
 
     /// Serialized (and engine-verified) bytes for the Save-a-copy exporter.
@@ -969,6 +1037,139 @@ final class ViewerModel: ObservableObject {
     func markSavedCopy() {
         isDirty = false
         statusMessage = String(localized: "Saved")
+    }
+
+    // MARK: - password command (#131)
+
+    /// The Password command saves, so it needs a file to save to and nothing else in flight.
+    var canUsePasswordCommand: Bool { sourceURL != nil && !isSaving && !isUnlocking }
+
+    /// Opens the Password sheet in the mode this open's security calls for: without full
+    /// access it can only explain and offer the owner password (ADR-004 §3).
+    func showPasswordCommand() {
+        guard document != nil, canUsePasswordCommand else { return }
+        securityError = nil
+        if !capabilities.canChangeSecurity {
+            securitySheet = .unlock
+        } else {
+            securitySheet = security.isEncrypted ? .change : .set
+        }
+    }
+
+    func showUnlock() {
+        guard document != nil, capabilities.isRestricted, !isUnlocking else { return }
+        securityError = nil
+        securitySheet = .unlock
+    }
+
+    func dismissSecuritySheet() {
+        securitySheet = nil
+        securityError = nil
+    }
+
+    /// Reopens a restricted document with its owner password, for full access (ADR-004 §3).
+    /// The bytes are the document as it stands, its security kept, so the demo and any
+    /// change its restrictions did allow come along. A wrong password keeps the sheet open
+    /// and says so; nothing about the open document changes until the password is right.
+    func unlock(_ ownerPassword: String) {
+        guard let doc = document, !isUnlocking, !isSaving,
+              case let .viewing(displayName, _) = state else { return }
+        securityError = nil
+        isUnlocking = true
+        Task {
+            defer { isUnlocking = false }
+            let engine = PdfEngine.shared
+            let wrong = String(localized: "That password didn't work. Try again.")
+            do {
+                let data = try await engine.save(doc)
+                let trial: PdfDocument
+                do {
+                    trial = try await engine.open(data, password: ownerPassword)
+                } catch PdfError.passwordRequired {
+                    securityError = wrong
+                    return
+                }
+                let trialSecurity = await engine.security(trial)
+                await engine.close(trial)
+                // A user password opens it as well, but only with the restrictions.
+                guard trialSecurity.hasFullAccess else {
+                    securityError = wrong
+                    return
+                }
+                guard document === doc else { return }
+                let wasDirty = isDirty
+                let url = sourceURL
+                securitySheet = nil
+                await open(bytes: data, password: ownerPassword, displayName: displayName, sourceURL: url)
+                guard case .viewing = state else { return }
+                // The reopen starts clean; edits made before the unlock are still unsaved.
+                isDirty = wasDirty
+                showNotice(String(localized: "Document unlocked."))
+            } catch {
+                securityError = String(localized: "Couldn't unlock this document.")
+            }
+        }
+    }
+
+    /// Sets or changes the password: one password that opens the document with every
+    /// permission, AES-256 (ADR-004 §4 and §5).
+    func setPassword(_ newPassword: String) {
+        changeSecurity(to: newPassword)
+    }
+
+    /// Takes the document's security off.
+    func removePassword() {
+        changeSecurity(to: nil)
+    }
+
+    /// Setting, changing and removing security is a save (ADR-004 §6): serialize with the
+    /// new security, check the copy opens with the new password (or with none), write it
+    /// over the file exactly as Save does, then reopen what was written, so the open
+    /// document, its credentials and its permissions match what is on disk. Unsaved
+    /// changes are part of that save.
+    private func changeSecurity(to newPassword: String?) {
+        guard let doc = document, let url = sourceURL, !isSaving, !isUnlocking,
+              case let .viewing(displayName, _) = state else { return }
+        guard capabilities.canChangeSecurity else {
+            // The sheet only offers this with full access, and the core refuses it too.
+            securitySheet = nil
+            showRestrictedNotice()
+            return
+        }
+        let wasEncrypted = security.isEncrypted
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            let engine = PdfEngine.shared
+            do {
+                let data: Data
+                if let newPassword {
+                    data = try await engine.save(doc, userPassword: newPassword, ownerPassword: nil,
+                                                 permissions: .all)
+                    let verify = try await engine.open(data, password: newPassword)
+                    await engine.close(verify)
+                } else {
+                    data = try await engine.saveWithoutSecurity(doc)
+                    let verify = try await engine.open(data)
+                    await engine.close(verify)
+                }
+                try write(data, to: url)
+                securitySheet = nil
+                await open(bytes: data, password: newPassword, displayName: displayName, sourceURL: url)
+                guard case .viewing = state else { return }
+                if newPassword == nil {
+                    showNotice(String(localized: "Password removed."))
+                } else if wasEncrypted {
+                    showNotice(String(localized: "Password changed."))
+                } else {
+                    showNotice(String(localized: "Password set."))
+                }
+            } catch {
+                // An alert can't show over the sheet, so the sheet goes first.
+                securitySheet = nil
+                showSaveFailed(error)
+            }
+        }
     }
 
     // MARK: - closing
@@ -1003,6 +1204,10 @@ final class ViewerModel: ObservableObject {
         isPlacingText = false
         pendingText = nil
         draftText = ""
+        // Security is the open document's; the next one reads its own (#131).
+        security = .unprotected
+        securitySheet = nil
+        securityError = nil
         if let doc = document {
             document = nil
             Task { await PdfEngine.shared.close(doc) }

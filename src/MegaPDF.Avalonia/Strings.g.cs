@@ -526,4 +526,88 @@ public static partial class Strings
 
     /// <summary>e.g. Dave</summary>
     public static string NameExample => Get("NameExample");
+
+    /// <summary>Password…</summary>
+    public static string SecurityToolbar => Get("SecurityToolbar");
+
+    /// <summary>Set, change or remove the document's password</summary>
+    public static string SecurityTooltip => Get("SecurityTooltip");
+
+    /// <summary>The owner of this document restricted it, so some tools are unavailable.</summary>
+    public static string RestrictedBanner => Get("RestrictedBanner");
+
+    /// <summary>Unlock…</summary>
+    public static string UnlockEllipsis => Get("UnlockEllipsis");
+
+    /// <summary>Unlock</summary>
+    public static string Unlock => Get("Unlock");
+
+    /// <summary>Unlock document</summary>
+    public static string UnlockDocument => Get("UnlockDocument");
+
+    /// <summary>The owner of "{0}" restricted what can be done with it. Enter the owner password to use every tool.</summary>
+    public static string UnlockPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UnlockPrompt"), arg0);
+
+    /// <summary>That password did not unlock "{0}". Try again?</summary>
+    public static string UnlockRetryPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UnlockRetryPrompt"), arg0);
+
+    /// <summary>Unlocked. Every tool is available.</summary>
+    public static string DocumentUnlocked => Get("DocumentUnlocked");
+
+    /// <summary>The document's owner does not allow that. Unlock it with the owner password first.</summary>
+    public static string ActionRestricted => Get("ActionRestricted");
+
+    /// <summary>Crash recovery is off for password-protected documents.</summary>
+    public static string RecoveryOffForProtected => Get("RecoveryOffForProtected");
+
+    /// <summary>This PDF uses a kind of protection MegaPDF can't open.</summary>
+    public static string UnsupportedProtection => Get("UnsupportedProtection");
+
+    /// <summary>Document password</summary>
+    public static string DocumentPasswordTitle => Get("DocumentPasswordTitle");
+
+    /// <summary>"{0}" is protected by a password. You can change it or remove it.</summary>
+    public static string ProtectedPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ProtectedPrompt"), arg0);
+
+    /// <summary>Change password…</summary>
+    public static string ChangePasswordEllipsis => Get("ChangePasswordEllipsis");
+
+    /// <summary>Remove password</summary>
+    public static string RemovePassword => Get("RemovePassword");
+
+    /// <summary>Set password</summary>
+    public static string SetPasswordTitle => Get("SetPasswordTitle");
+
+    /// <summary>Change password</summary>
+    public static string ChangePasswordTitle => Get("ChangePasswordTitle");
+
+    /// <summary>Anyone who opens "{0}" will need this password. MegaPDF cannot recover it if it is forgotten.</summary>
+    public static string SetPasswordPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SetPasswordPrompt"), arg0);
+
+    /// <summary>New password</summary>
+    public static string NewPassword => Get("NewPassword");
+
+    /// <summary>Confirm password</summary>
+    public static string ConfirmPassword => Get("ConfirmPassword");
+
+    /// <summary>Enter a password.</summary>
+    public static string PasswordEmpty => Get("PasswordEmpty");
+
+    /// <summary>The passwords do not match.</summary>
+    public static string PasswordsDoNotMatch => Get("PasswordsDoNotMatch");
+
+    /// <summary>Set password</summary>
+    public static string SetPasswordButton => Get("SetPasswordButton");
+
+    /// <summary>Change password</summary>
+    public static string ChangePasswordButton => Get("ChangePasswordButton");
+
+    /// <summary>Password set.</summary>
+    public static string PasswordSetStatus => Get("PasswordSetStatus");
+
+    /// <summary>Password changed.</summary>
+    public static string PasswordChangedStatus => Get("PasswordChangedStatus");
+
+    /// <summary>Password removed.</summary>
+    public static string PasswordRemovedStatus => Get("PasswordRemovedStatus");
 }

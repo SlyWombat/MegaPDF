@@ -11,6 +11,8 @@ internal static class PdfiumNative
     public const uint FPDF_ERR_FILE = 2;
     public const uint FPDF_ERR_FORMAT = 3;
     public const uint FPDF_ERR_PASSWORD = 4;
+    /// <summary>A security handler PDFium does not support — a certificate handler, say (#131).</summary>
+    public const uint FPDF_ERR_SECURITY = 6;
     public const int FPDF_PAGEOBJ_TEXT = 1;
 }
 

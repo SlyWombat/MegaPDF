@@ -130,7 +130,43 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(FitWidthCommand))]
     [NotifyCanExecuteChangedFor(nameof(FitPageCommand))]
     [NotifyPropertyChangedFor(nameof(CanShrink))]
+    [NotifyPropertyChangedFor(nameof(CanEditContent))]
+    [NotifyPropertyChangedFor(nameof(CanSign))]
+    [NotifyPropertyChangedFor(nameof(CanPrint))]
+    [NotifyPropertyChangedFor(nameof(IsRestricted))]
     private bool _isDocumentOpen;
+
+    // --- Document security (#131, ADR-004 §2, §3) ---
+
+    /// <summary>
+    /// What this open of the document may do, read from it on every open so an
+    /// owner-restricted document is not an editing loophole. The commands and flags
+    /// below read it, so it notifies them the way IsDocumentOpen does (#58).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanEditContent))]
+    [NotifyPropertyChangedFor(nameof(CanSign))]
+    [NotifyPropertyChangedFor(nameof(CanPrint))]
+    [NotifyPropertyChangedFor(nameof(CanShrink))]
+    [NotifyPropertyChangedFor(nameof(IsRestricted))]
+    [NotifyCanExecuteChangedFor(nameof(PrintCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleAddTextCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
+    private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
+
+    /// <summary>Editing text, covers and added text (modify).</summary>
+    public bool CanEditContent => IsDocumentOpen && Capabilities.CanEditContent;
+
+    /// <summary>Signatures and check marks (annotate).</summary>
+    public bool CanSign => IsDocumentOpen && Capabilities.CanSign;
+
+    public bool CanPrint => IsDocumentOpen && Capabilities.CanPrint;
+
+    /// <summary>The owner restricted this document; the banner offers the owner password.</summary>
+    public bool IsRestricted => IsDocumentOpen && Capabilities.IsRestricted;
+
+    /// <summary>Whether the open document has any security at all — what the Password command offers.</summary>
+    public bool IsEncrypted => _document?.Security.IsEncrypted ?? false;
 
     /// <summary>
     /// The edited-marker convention macOS and Windows share: the title carries the
@@ -202,7 +238,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        Adopt(document, path, openedWithPassword: password is not null);
+    }
+
+    /// <summary>Makes a loaded document the open one. The caller has closed the previous one.</summary>
+    private void Adopt(IPdfDocument document, string path, bool openedWithPassword)
+    {
         _document = document;
+        // Permissions before IsDocumentOpen, so no tool is enabled for a moment it should
+        // not be (#131).
+        Capabilities = DocumentCapabilities.From(document.Security);
         _matches.Clear();
         MatchCount = 0;
         CurrentMatchIndex = -1;
@@ -221,13 +266,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // is why it happens after a successful open and not before. A document opened
         // with a password is not journaled at all, so its text never reaches disk
         // unencrypted (#135).
-        _journal.BeginSession(path, contentIsProtected: password is not null);
+        _journal.BeginSession(path, contentIsProtected: openedWithPassword);
         OnPropertyChanged(nameof(PageIndicator));
         OnPropertyChanged(nameof(ShowEmptyState));
         IsDirty = false;
         Status = Strings.Plural(document.PageCount,
             Strings.DocumentOpenedOne(DocumentName, document.PageCount),
             Strings.DocumentOpenedOther(DocumentName, document.PageCount));
+        // After the "opened" line, which would otherwise replace it: nothing of this
+        // document is journaled, and the person should know before they start (ADR-004 §7).
+        if (openedWithPassword)
+            Status = Strings.RecoveryOffForProtected;
 
         // A restore that had to wait for the password replays now that it is open (#133).
         if (_pendingRestore is { } restore && restore.DocumentPath == path)
@@ -247,6 +296,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         { IsPasswordError: true } => Strings.PdfIsPasswordProtected,
         { IsFileError: true } => Strings.FileCouldNotBeRead,
         { IsFormatError: true } => Strings.FileNotValidPdf,
+        // Not corrupt and not a wrong password: a handler PDFium cannot open (ADR-004 §8).
+        { IsSecurityError: true } => Strings.UnsupportedProtection,
         _ => Strings.FileCouldNotBeOpened(ex.ErrorCode),
     };
 
@@ -320,6 +371,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;   // the view drives these — an editor and a drag respectively
 
         var hit = HitTest(pageIndex, point);
+        // #131: what the document's owner does not allow opens no editor and selects
+        // nothing; the status says why.
+        if (!Capabilities.Allows(hit.Kind))
+        {
+            Status = Strings.ActionRestricted;
+            return;
+        }
         switch (hit.Kind)
         {
             case PageHitKind.FormCheckbox:
@@ -375,6 +433,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void Apply(IPageEditOperation operation, string doneMessage)
     {
+        // The central gate (#131): the entry points check first so no editor opens, and
+        // this is what holds if one is ever missed.
+        if (!Capabilities.Allows(operation))
+        {
+            Status = Strings.ActionRestricted;
+            return;
+        }
         _undoStack.Do(operation);
         // Journalled after Apply, because an operation's entry can only be written
         // once it knows what it did — a placed stamp's id, for instance.
@@ -436,7 +501,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// Sandbox is inside the container, and is deleted as soon as the operation
     /// returns.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    [RelayCommand(CanExecute = nameof(CanPrint))]
     private void Print()
     {
         if (_document is null)
@@ -510,7 +575,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         return (result, buffer.ToArray());
     }
 
-    public bool CanShrink => IsDocumentOpen && !IsDirty;
+    /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
+    public bool CanShrink => IsDocumentOpen && !IsDirty && Capabilities.CanShrink;
 
     // --- Recent documents (SDD §2.2 empty state) ---
 
@@ -932,14 +998,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
     public IReadOnlyList<double> TextSizes { get; } = [8, 9, 10, 11, 12, 14, 16, 18, 24];
 
-    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    [RelayCommand(CanExecute = nameof(CanEditContent))]
     private void ToggleAddText() => SetMode(Mode == PageMode.AddText ? PageMode.Select : PageMode.AddText);
 
-    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    [RelayCommand(CanExecute = nameof(CanEditContent))]
     private void ToggleWhiteout() => SetMode(Mode == PageMode.Whiteout ? PageMode.Select : PageMode.Whiteout);
 
     private void SetMode(PageMode mode)
     {
+        // Both modes change page content (#131).
+        if (mode != PageMode.Select && !Capabilities.CanEditContent)
+        {
+            Status = Strings.ActionRestricted;
+            return;
+        }
+
         Selection = null;
         // Arming one mode disarms everything else, signature placement included.
         if (PendingSignature is not null && mode != PageMode.Select)
@@ -970,6 +1043,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
 
         var operation = new LineEditOperation(_document, pageIndex, line, newText);
+        // Not routed through Apply, so gated here as well (#131).
+        if (!Capabilities.Allows(operation))
+        {
+            Status = Strings.ActionRestricted;
+            return;
+        }
         try
         {
             _undoStack.Do(operation);
@@ -1329,6 +1408,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void BeginPlacing(SignatureEntry entry)
     {
+        // A signature is an annotation (#131). The library itself stays usable.
+        if (!Capabilities.CanSign)
+        {
+            Status = Strings.ActionRestricted;
+            return;
+        }
         PendingSignature = entry;
         Status = Strings.ClickWhereSignatureGoes(entry.Name);
     }
@@ -1523,9 +1608,99 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// sentence; anything else gets the lead sentence and the exception's message.
     /// </summary>
     public void ReportSaveFailure(Exception ex) =>
-        Status = ex is VerifiedSave.UnreadableOutputException
-            ? Strings.SavedDocumentUnreadable
-            : Strings.WithDetail(Strings.CouldNotSave, ex.Message);
+        Status = ex switch
+        {
+            VerifiedSave.UnreadableOutputException => Strings.SavedDocumentUnreadable,
+            DocumentRestrictedException => Strings.ActionRestricted,
+            _ => Strings.WithDetail(Strings.CouldNotSave, ex.Message),
+        };
+
+    // --- Password: unlock, set, change, remove (#131, ADR-004 §3, §5, §6) ---
+
+    public enum UnlockOutcome { Unlocked, WrongPassword, Failed }
+
+    /// <summary>
+    /// Reopens the open document with its owner password, for full access. The current
+    /// document stays open until the password is proven: a password that opens it but
+    /// not as its owner (the user password) is as wrong as one that does not open it.
+    /// </summary>
+    public UnlockOutcome Unlock(string ownerPassword)
+    {
+        if (_document is null || DocumentPath is not { } path)
+            return UnlockOutcome.Failed;
+
+        IPdfDocument unlocked;
+        try
+        {
+            unlocked = _engine.Open(path, ownerPassword);
+        }
+        catch (PdfLoadException ex) when (ex.IsPasswordError)
+        {
+            return UnlockOutcome.WrongPassword;
+        }
+        catch (PdfLoadException ex)
+        {
+            Status = DescribeLoadFailure(ex);
+            return UnlockOutcome.Failed;
+        }
+        catch (Exception ex)
+        {
+            // Moved, locked, or the grant lapsed: the restricted document stays open.
+            Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+            return UnlockOutcome.Failed;
+        }
+
+        if (!unlocked.Security.HasFullAccess)
+        {
+            unlocked.Dispose();
+            return UnlockOutcome.WrongPassword;
+        }
+
+        CloseDocument();
+        Adopt(unlocked, path, openedWithPassword: true);
+        Status = Strings.WithDetail(Strings.DocumentUnlocked, Strings.RecoveryOffForProtected);
+        return UnlockOutcome.Unlocked;
+    }
+
+    /// <summary>
+    /// The open document, unsaved edits included, under new security or none — verified by
+    /// opening it with the new password, or without one — as bytes, before any
+    /// destination is opened. Opening the user's file for writing truncates it (#59), so
+    /// a refusal (<see cref="DocumentRestrictedException"/>) or an unreadable result
+    /// must throw here, while the file is still untouched.
+    /// </summary>
+    /// <param name="newPassword">The one password (ADR-004 §5), or null to remove security.</param>
+    public byte[] PrepareSecuredCopy(string? newPassword)
+    {
+        if (_document is null)
+            throw new InvalidOperationException("No document is open.");
+
+        if (FlattenOnSave)
+            FlattenOpenDocument();
+
+        using var buffer = new MemoryStream();
+        if (newPassword is null)
+            VerifiedSave.ToStreamWithoutSecurity(_engine, _document, buffer);
+        else
+            VerifiedSave.ToStreamWithSecurity(_engine, _document, buffer, newPassword, ownerPassword: null, PdfPermissions.All);
+        return buffer.ToArray();
+    }
+
+    /// <summary>
+    /// After the secured copy was written over the document's own file: reopen that file
+    /// with the new password, so the open document, its credentials and its permissions
+    /// match what is on disk (ADR-004 §6).
+    /// </summary>
+    public void AdoptSecuredFile(string path, string? newPassword, string doneMessage)
+    {
+        _journal.MarkSaved(path);
+        IsDirty = false;
+        Open(path, newPassword);
+        if (IsDocumentOpen)
+            Status = newPassword is null
+                ? doneMessage
+                : Strings.WithDetail(doneMessage, Strings.RecoveryOffForProtected);
+    }
 
     // --- Zoom ---
 
@@ -1626,6 +1801,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         DocumentName = null;
         IsDocumentOpen = false;
         IsDirty = false;
+        Capabilities = DocumentCapabilities.Unprotected;
         OnPropertyChanged(nameof(ShowEmptyState));
     }
 

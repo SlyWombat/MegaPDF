@@ -114,14 +114,24 @@ struct ViewerView: View {
                     Image(systemName: "magnifyingglass")
                 }
                 .accessibilityLabel("Find in document")
+                // A restricted open can't use the tools its owner withheld (#131);
+                // the notice shown when it opened says why.
                 Button("Sign") { signaturesOpen = true }
+                    .disabled(!model.capabilities.canSign)
                 Button("Text") { model.startTextPlacement() }
                     .accessibilityLabel("Add text")
+                    .disabled(!model.capabilities.canEditContent)
                 Button(saveLabel) { model.save() }
                     .disabled(!model.isDirty || model.isSaving)
                 Menu {
                     Button("Save a copy", action: onSaveCopy)
                         .disabled(model.isSaving)
+                    Button("Password…", action: model.showPasswordCommand)
+                        .disabled(!model.canUsePasswordCommand)
+                    if model.capabilities.isRestricted {
+                        Button("Unlock with owner password…", action: model.showUnlock)
+                            .disabled(model.isUnlocking)
+                    }
                     Button("Redo", action: model.redo)
                         .disabled(!model.canRedo)
                 } label: {
@@ -172,6 +182,19 @@ struct ViewerView: View {
                 text: $model.bodyDraft,
                 onSave: { model.commitBodyEdit(model.bodyDraft) },
                 onCancel: model.cancelBodyEdit
+            )
+        }
+        // Unlocking a restricted document; setting, changing or removing its password (#131).
+        .sheet(item: $model.securitySheet) { mode in
+            DocumentSecuritySheet(
+                mode: mode,
+                savesChanges: model.isDirty,
+                isBusy: model.isSaving || model.isUnlocking,
+                error: model.securityError,
+                onUnlock: model.unlock,
+                onSetPassword: model.setPassword,
+                onRemovePassword: model.removePassword,
+                onCancel: model.dismissSecuritySheet
             )
         }
         .overlay(alignment: .bottom) {

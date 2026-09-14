@@ -24,6 +24,8 @@ enum PdfError: Error, Equatable {
     case layoutWouldChange
     /// The document's security doesn't allow it; its owner password would (#131).
     case restricted
+    /// A security handler PDFium can't open, such as a certificate handler (#131, ADR-004 §8).
+    case unsupportedSecurity
 }
 
 /// What `error.localizedDescription` says for an engine failure — short and
@@ -47,6 +49,8 @@ extension PdfError: LocalizedError {
             return String(localized: "This page's text can't be changed without disturbing its layout.")
         case .restricted:
             return String(localized: "This document's security doesn't allow that without its owner password.")
+        case .unsupportedSecurity:
+            return String(localized: "This PDF uses a kind of protection MegaPDF can't open.")
         }
     }
 }
@@ -82,6 +86,7 @@ actor PdfEngine {
         guard let core else {
             let code = Int(megapdf_last_error())
             if code == FPDF_ERR_PASSWORD { throw PdfError.passwordRequired }
+            if code == FPDF_ERR_SECURITY { throw PdfError.unsupportedSecurity }
             throw PdfError.load(code: code)
         }
         return PdfDocument(core: core)
@@ -96,6 +101,7 @@ actor PdfEngine {
         guard let core else {
             let code = Int(megapdf_last_error())
             if code == FPDF_ERR_PASSWORD { throw PdfError.passwordRequired }
+            if code == FPDF_ERR_SECURITY { throw PdfError.unsupportedSecurity }
             throw PdfError.load(code: code)
         }
         return PdfDocument(core: core)

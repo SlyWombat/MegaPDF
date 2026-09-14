@@ -70,13 +70,16 @@ Java_com_megapdf_engine_PdfiumNative_nativeInit(JNIEnv*, jobject) {
 
 JNIEXPORT jlong JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeOpen(JNIEnv* env, jobject, jbyteArray bytes,
-                                                jstring password) {
-    // The core copies the bytes, so the JNI array is only borrowed for the call.
+                                                jbyteArray passwordUtf8) {
+    // The core copies the bytes, so the JNI array is only borrowed for the call. The
+    // password arrives as NUL-terminated UTF-8 bytes, like the security saves' (#131,
+    // ADR-004 decision 9): GetStringUTFChars gives modified UTF-8, which writes characters
+    // outside the BMP differently from the UTF-8 a security handler hashes.
     const jsize len = env->GetArrayLength(bytes);
     jbyte* data = env->GetByteArrayElements(bytes, nullptr);
-    const char* pw = password ? env->GetStringUTFChars(password, nullptr) : nullptr;
-    megapdf_document* core = megapdf_open(data, static_cast<size_t>(len), pw);
-    if (pw) env->ReleaseStringUTFChars(password, pw);
+    jbyte* pw = passwordUtf8 != nullptr ? env->GetByteArrayElements(passwordUtf8, nullptr) : nullptr;
+    megapdf_document* core = megapdf_open(data, static_cast<size_t>(len), reinterpret_cast<const char*>(pw));
+    if (pw != nullptr) env->ReleaseByteArrayElements(passwordUtf8, pw, JNI_ABORT);
     env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
     if (core == nullptr) return 0;
 

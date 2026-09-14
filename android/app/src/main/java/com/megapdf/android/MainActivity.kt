@@ -137,6 +137,17 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onRemoveTextBox = viewModel::removeSelectedTextBox,
                 onSave = viewModel::save,
                 onSaveAs = { createDocument.launch(state.displayName) },
+                capabilities = viewModel.capabilities,
+                hasDocumentFile = viewModel.hasDocumentFile,
+                unlockPrompt = viewModel.unlockPrompt,
+                passwordPrompt = viewModel.passwordPrompt,
+                onStartUnlock = viewModel::startUnlock,
+                onUnlock = viewModel::unlock,
+                onCancelUnlock = viewModel::cancelUnlock,
+                onStartPasswordCommand = viewModel::startPasswordCommand,
+                onSetPassword = viewModel::setPassword,
+                onRemovePassword = viewModel::removePassword,
+                onCancelPasswordCommand = viewModel::cancelPasswordCommand,
                 onClose = viewModel::closeDocument,
             )
         }

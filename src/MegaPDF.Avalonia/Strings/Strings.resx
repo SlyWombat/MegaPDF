@@ -651,4 +651,97 @@
     <value>e.g. Dave</value>
     <comment>Signature name watermark</comment>
   </data>
+
+  <!-- Document security (#131, ADR-004) -->
+  <data name="SecurityToolbar" xml:space="preserve">
+    <value>Password…</value>
+    <comment>Toolbar label (#131)</comment>
+  </data>
+  <data name="SecurityTooltip" xml:space="preserve">
+    <value>Set, change or remove the document's password</value>
+  </data>
+  <data name="RestrictedBanner" xml:space="preserve">
+    <value>The owner of this document restricted it, so some tools are unavailable.</value>
+  </data>
+  <data name="UnlockEllipsis" xml:space="preserve">
+    <value>Unlock…</value>
+    <comment>Banner button: asks for the owner password</comment>
+  </data>
+  <data name="Unlock" xml:space="preserve">
+    <value>Unlock</value>
+  </data>
+  <data name="UnlockDocument" xml:space="preserve">
+    <value>Unlock document</value>
+    <comment>Window title</comment>
+  </data>
+  <data name="UnlockPrompt" xml:space="preserve">
+    <value>The owner of "{0}" restricted what can be done with it. Enter the owner password to use every tool.</value>
+  </data>
+  <data name="UnlockRetryPrompt" xml:space="preserve">
+    <value>That password did not unlock "{0}". Try again?</value>
+  </data>
+  <data name="DocumentUnlocked" xml:space="preserve">
+    <value>Unlocked. Every tool is available.</value>
+  </data>
+  <data name="ActionRestricted" xml:space="preserve">
+    <value>The document's owner does not allow that. Unlock it with the owner password first.</value>
+  </data>
+  <data name="RecoveryOffForProtected" xml:space="preserve">
+    <value>Crash recovery is off for password-protected documents.</value>
+  </data>
+  <data name="UnsupportedProtection" xml:space="preserve">
+    <value>This PDF uses a kind of protection MegaPDF can't open.</value>
+    <comment>PdfLoadException FPDF_ERR_SECURITY</comment>
+  </data>
+  <data name="DocumentPasswordTitle" xml:space="preserve">
+    <value>Document password</value>
+    <comment>Window title</comment>
+  </data>
+  <data name="ProtectedPrompt" xml:space="preserve">
+    <value>"{0}" is protected by a password. You can change it or remove it.</value>
+  </data>
+  <data name="ChangePasswordEllipsis" xml:space="preserve">
+    <value>Change password…</value>
+  </data>
+  <data name="RemovePassword" xml:space="preserve">
+    <value>Remove password</value>
+  </data>
+  <data name="SetPasswordTitle" xml:space="preserve">
+    <value>Set password</value>
+  </data>
+  <data name="ChangePasswordTitle" xml:space="preserve">
+    <value>Change password</value>
+  </data>
+  <data name="SetPasswordPrompt" xml:space="preserve">
+    <value>Anyone who opens "{0}" will need this password. MegaPDF cannot recover it if it is forgotten.</value>
+  </data>
+  <data name="NewPassword" xml:space="preserve">
+    <value>New password</value>
+    <comment>Watermark</comment>
+  </data>
+  <data name="ConfirmPassword" xml:space="preserve">
+    <value>Confirm password</value>
+    <comment>Watermark</comment>
+  </data>
+  <data name="PasswordEmpty" xml:space="preserve">
+    <value>Enter a password.</value>
+  </data>
+  <data name="PasswordsDoNotMatch" xml:space="preserve">
+    <value>The passwords do not match.</value>
+  </data>
+  <data name="SetPasswordButton" xml:space="preserve">
+    <value>Set password</value>
+  </data>
+  <data name="ChangePasswordButton" xml:space="preserve">
+    <value>Change password</value>
+  </data>
+  <data name="PasswordSetStatus" xml:space="preserve">
+    <value>Password set.</value>
+  </data>
+  <data name="PasswordChangedStatus" xml:space="preserve">
+    <value>Password changed.</value>
+  </data>
+  <data name="PasswordRemovedStatus" xml:space="preserve">
+    <value>Password removed.</value>
+  </data>
 </root>

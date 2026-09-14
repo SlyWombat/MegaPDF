@@ -121,6 +121,69 @@ public static partial class Strings
     /// <summary>OK</summary>
     public static string OK => Get("OK");
 
+    /// <summary>Unlock document</summary>
+    public static string UnlockTitle => Get("UnlockTitle");
+
+    /// <summary>The owner of “{0}” restricted what can be done with it. Enter the owner password to use every tool.</summary>
+    public static string UnlockPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UnlockPrompt"), arg0);
+
+    /// <summary>That password didn't unlock the document — try again.</summary>
+    public static string UnlockWrong => Get("UnlockWrong");
+
+    /// <summary>Unlock</summary>
+    public static string Unlock => Get("Unlock");
+
+    /// <summary>Set password</summary>
+    public static string SetPasswordTitle => Get("SetPasswordTitle");
+
+    /// <summary>Set password</summary>
+    public static string SetPasswordButton => Get("SetPasswordButton");
+
+    /// <summary>Change password</summary>
+    public static string ChangePasswordTitle => Get("ChangePasswordTitle");
+
+    /// <summary>Change password</summary>
+    public static string ChangePasswordButton => Get("ChangePasswordButton");
+
+    /// <summary>Anyone who opens “{0}” will need this password. MegaPDF can't recover it if it's forgotten.</summary>
+    public static string SetPasswordBody(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SetPasswordBody"), arg0);
+
+    /// <summary>New password</summary>
+    public static string NewPasswordPlaceholder => Get("NewPasswordPlaceholder");
+
+    /// <summary>Confirm password</summary>
+    public static string ConfirmPasswordPlaceholder => Get("ConfirmPasswordPlaceholder");
+
+    /// <summary>Enter a password.</summary>
+    public static string PasswordEmpty => Get("PasswordEmpty");
+
+    /// <summary>The passwords don't match.</summary>
+    public static string PasswordsDontMatch => Get("PasswordsDontMatch");
+
+    /// <summary>Document password</summary>
+    public static string DocumentPasswordTitle => Get("DocumentPasswordTitle");
+
+    /// <summary>“{0}” is protected by a password. You can change it or remove it.</summary>
+    public static string ProtectedBody(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ProtectedBody"), arg0);
+
+    /// <summary>Change password…</summary>
+    public static string ChangePasswordEllipsis => Get("ChangePasswordEllipsis");
+
+    /// <summary>Remove password</summary>
+    public static string RemovePassword => Get("RemovePassword");
+
+    /// <summary>Password set.</summary>
+    public static string PasswordSetNotice => Get("PasswordSetNotice");
+
+    /// <summary>Password changed.</summary>
+    public static string PasswordChangedNotice => Get("PasswordChangedNotice");
+
+    /// <summary>Password removed.</summary>
+    public static string PasswordRemovedNotice => Get("PasswordRemovedNotice");
+
+    /// <summary>Couldn't change the password</summary>
+    public static string CouldNotChangeSecurityTitle => Get("CouldNotChangeSecurityTitle");
+
     /// <summary>Text size</summary>
     public static string TextSizeName => Get("TextSizeName");
 
@@ -213,6 +276,12 @@ public static partial class Strings
 
     /// <summary>This page's text can't be changed without disturbing its layout: rewriting it would shift the spacing of other text. Cover it with whiteout and add new text instead.</summary>
     public static string ErrorLayoutWouldChange => Get("ErrorLayoutWouldChange");
+
+    /// <summary>This PDF uses a kind of protection MegaPDF can't open.</summary>
+    public static string ErrorUnsupportedSecurity => Get("ErrorUnsupportedSecurity");
+
+    /// <summary>The document's owner doesn't allow this. Unlock it with the owner password first.</summary>
+    public static string ErrorRestricted => Get("ErrorRestricted");
 
     /// <summary>Something went wrong.</summary>
     public static string ErrorGeneric => Get("ErrorGeneric");

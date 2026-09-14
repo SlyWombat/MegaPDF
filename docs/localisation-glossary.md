@@ -103,6 +103,13 @@ Conventions (OQLF, Canadian French):
 | Password required | Mot de passe requis | |
 | That password wasn't right — try again. | Ce mot de passe est incorrect. Réessayez. | |
 | "{0}" is protected. Enter its password to open it. | « {0} » est protégé. Entrez son mot de passe pour l'ouvrir. | |
+| Owner password | Mot de passe du propriétaire | #131 |
+| Unlock | Déverrouiller | #131 |
+| Unlock with owner password… | Déverrouiller avec le mot de passe du propriétaire… | #131 |
+| restricted (changes) | restreint (les modifications) | #131: « Le propriétaire de ce document a restreint les modifications. » |
+| Set password | Définir un mot de passe | #131 |
+| Remove password | Retirer le mot de passe | #131; *Retirer*, as for Remove |
+| crash recovery | récupération après une fermeture inattendue | #131, desktops |
 | Unsaved changes | Modifications non enregistrées | |
 | Save changes to {0}? | Enregistrer les modifications de {0}? | |
 | Your changes will be lost if you don't save them. | Vos modifications seront perdues si vous ne les enregistrez pas. | |

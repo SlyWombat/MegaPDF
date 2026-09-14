@@ -17,11 +17,18 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
     /// <summary>True when the bytes are not a PDF at all.</summary>
     public bool IsFormatError => ErrorCode == PdfiumNative.FPDF_ERR_FORMAT;
 
+    /// <summary>
+    /// True when the document uses a security handler PDFium cannot open: not corrupt,
+    /// and not a wrong password either (ADR-004 §8).
+    /// </summary>
+    public bool IsSecurityError => ErrorCode == PdfiumNative.FPDF_ERR_SECURITY;
+
     private static string MessageFor(string path, uint code) => code switch
     {
         PdfiumNative.FPDF_ERR_FILE => $"The file could not be read: {path}",
         PdfiumNative.FPDF_ERR_FORMAT => $"The file is not a valid PDF: {path}",
         PdfiumNative.FPDF_ERR_PASSWORD => $"The PDF is password-protected: {path}",
+        PdfiumNative.FPDF_ERR_SECURITY => $"The PDF uses an unsupported security handler: {path}",
         _ => $"The PDF could not be opened (error {code}): {path}",
     };
 }

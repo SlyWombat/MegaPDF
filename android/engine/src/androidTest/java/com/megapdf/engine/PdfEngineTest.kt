@@ -166,6 +166,29 @@ class PdfEngineTest {
     }
 
     @Test
+    fun opensWithAPasswordOutsideTheBasicMultilingualPlane() {
+        // #131, ADR-004 decision 9: open passes UTF-8 bytes like the saves do. As a
+        // jstring, modified UTF-8 would encode the emoji differently and the copy saved
+        // under it would not open.
+        runBlocking {
+            val secret = "clé-🔒"
+            val locked = ByteArrayOutputStream()
+            val doc = engine.open(fixtureBytes())
+            try {
+                doc.saveWithSecurity(locked, secret, null, PdfPermissions.ALL)
+            } finally {
+                doc.close()
+            }
+            val reopened = engine.open(locked.toByteArray(), secret)
+            try {
+                assertTrue(reopened.security().hasFullAccess)
+            } finally {
+                reopened.close()
+            }
+        }
+    }
+
+    @Test
     fun restrictedDocumentRefusesToChangeItsSecurity() {
         // #131: owner-only.pdf opens without a password but allows nothing.
         runBlocking {

@@ -72,6 +72,15 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
+                <!-- Set, change or remove the document's password; on a restricted
+                     document, offers the owner password instead (#131, ADR-004). -->
+                <Button Command="{x:Bind ViewModel.SecurityCommand}" x:Uid="SecurityButton" AutomationProperties.AutomationId="SecurityButton">
+                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                        <FontIcon Glyph="&#xE72E;" FontSize="{ThemeResource TypeSubtitle}" />
+                        <TextBlock x:Name="LabelSecurity" x:Uid="LabelSecurity" />
+                    </StackPanel>
+                </Button>
+
                 <Button Command="{x:Bind ViewModel.ShrinkForEmailCommand}" x:Uid="ShrinkButton" AutomationProperties.AutomationId="ShrinkButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xE715;" FontSize="{ThemeResource TypeSubtitle}" />
@@ -79,7 +88,7 @@
                     </StackPanel>
                 </Button>
 
-                <Button Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" x:Uid="PrintButton" AutomationProperties.AutomationId="PrintButton">
+                <Button Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsPrintAllowed, Mode=OneWay}" x:Uid="PrintButton" AutomationProperties.AutomationId="PrintButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xE749;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelPrint" x:Uid="LabelPrint" />
@@ -113,7 +122,9 @@
 
                 <AppBarSeparator />
 
-                <Button x:Name="SignaturesToolbarButton" x:Uid="SignaturesButton" AutomationProperties.AutomationId="SignaturesButton">
+                <!-- The three editing tools follow the document's permissions (#131):
+                     annotate for signatures, modify for whiteout and added text. -->
+                <Button x:Name="SignaturesToolbarButton" IsEnabled="{x:Bind ViewModel.IsSigningAllowed, Mode=OneWay}" x:Uid="SignaturesButton" AutomationProperties.AutomationId="SignaturesButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelSignatures" x:Uid="LabelSignatures" />
@@ -134,14 +145,14 @@
                     </Button.Flyout>
                 </Button>
 
-                <Button Click="OnWhiteoutModeClicked" x:Uid="WhiteoutButton" AutomationProperties.AutomationId="WhiteoutButton">
+                <Button Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" x:Uid="WhiteoutButton" AutomationProperties.AutomationId="WhiteoutButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xE75C;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelWhiteout" x:Uid="LabelWhiteout" />
                     </StackPanel>
                 </Button>
 
-                <Button Click="OnTextBoxModeClicked" x:Uid="AddTextButton" AutomationProperties.AutomationId="AddTextButton">
+                <Button Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" x:Uid="AddTextButton" AutomationProperties.AutomationId="AddTextButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xE8D2;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelAddText" x:Uid="LabelAddText" />
@@ -413,6 +424,32 @@
                     Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     IsOpen="{x:Bind ViewModel.IsScannedHintOpen, Mode=TwoWay}"
                     Severity="Informational"
+                    IsClosable="True" />
+                <!-- Document security (#131, ADR-004 §3, §7): a restricted open says so
+                     and offers the owner password; a password open says crash recovery
+                     is off; the Password command reports what it did. -->
+                <InfoBar
+                    x:Uid="RestrictedNoticeBar"
+                    AutomationProperties.AutomationId="RestrictedNoticeBar"
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                    IsOpen="{x:Bind ViewModel.IsRestrictedNoticeOpen, Mode=TwoWay}"
+                    Severity="Informational"
+                    IsClosable="True">
+                    <InfoBar.ActionButton>
+                        <Button x:Uid="UnlockButton" Click="OnUnlockClicked" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+                <InfoBar
+                    x:Uid="RecoveryOffNoticeBar"
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                    IsOpen="{x:Bind ViewModel.IsRecoveryOffNoticeOpen, Mode=TwoWay}"
+                    Severity="Informational"
+                    IsClosable="True" />
+                <InfoBar
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                    IsOpen="{x:Bind ViewModel.IsSecurityNoticeOpen, Mode=TwoWay}"
+                    Message="{x:Bind ViewModel.SecurityNotice, Mode=OneWay}"
+                    Severity="Success"
                     IsClosable="True" />
             </StackPanel>
 

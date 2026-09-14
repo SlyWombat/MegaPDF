@@ -28,4 +28,14 @@ public partial class PasswordWindow : Window
             ? Strings.PasswordRetryPrompt(fileName)
             : Strings.PasswordPrompt(fileName);
     }
+
+    /// <summary>The same dialog, asking for a restricted document's owner password (#131).</summary>
+    internal void SetUnlockPrompt(string fileName, bool retry)
+    {
+        Title = Strings.UnlockDocument;
+        OpenButton.Content = Strings.Unlock;
+        PromptText.Text = retry
+            ? Strings.UnlockRetryPrompt(fileName)
+            : Strings.UnlockPrompt(fileName);
+    }
 }

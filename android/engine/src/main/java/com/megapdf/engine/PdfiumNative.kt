@@ -14,7 +14,8 @@ internal object PdfiumNative {
     }
 
     external fun nativeInit()
-    external fun nativeOpen(bytes: ByteArray, password: String?): Long
+    /** [passwordUtf8] is NUL-terminated UTF-8, as for the security saves below (#131). */
+    external fun nativeOpen(bytes: ByteArray, passwordUtf8: ByteArray?): Long
     external fun nativeOpenLike(like: Long, bytes: ByteArray): Long
     external fun nativeLastError(): Int
     external fun nativeCloseDocument(handle: Long)
@@ -87,4 +88,6 @@ internal object PdfiumNative {
 
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4
+    /** FPDF_ERR_SECURITY: a security handler PDFium does not support (#131). */
+    const val ERR_SECURITY = 6
 }
