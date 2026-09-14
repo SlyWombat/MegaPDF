@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetches the pinned PDFium linux-x64 prebuilt (bblanchon/pdfium-binaries) for the
+# Fetches the pinned PDFium linux-x64 prebuilt (MegaPDF's patched build, libs/pdfium/RELEASE) for the
 # shared engine core's test target (#104, ADR-003). No app ships from Linux; this
 # exists so `core/` can be built and tested on the cheapest CI runner, with
 # AddressSanitizer. Same doctrine as tools/fetch-pdfium-mac.sh: the build is read
@@ -25,7 +25,7 @@ fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-URL="https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F${BUILD}/pdfium-linux-x64.tgz"
+URL="$(tr -d '[:space:]' < "$ROOT/libs/pdfium/RELEASE")/pdfium-linux-x64.tgz"
 echo "fetching $URL"
 curl -fsSL "$URL" -o "$TMP/linux.tgz"
 mkdir -p "$TMP/x"

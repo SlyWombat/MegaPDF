@@ -14,6 +14,7 @@ on:
       - '.github/workflows/macos-app.yml'
       - 'tools/build-macos-app.sh'
       - 'tools/fetch-pdfium-mac.sh'
+      - 'libs/pdfium/RELEASE'
       - 'src/MegaPDF.Avalonia/**'
       # Core is shared with the Windows app, so a Core change that breaks the Mac
       # build has to surface here rather than at release time. This is the one

@@ -4,8 +4,9 @@
 # CPdfium module headers. Vendor/ is gitignored — run this before xcodegen.
 set -euo pipefail
 
-RELEASE="chromium%2F7934"   # 152.0.7934 — keep in lockstep with the other platforms
-BASE="https://github.com/bblanchon/pdfium-binaries/releases/download/${RELEASE}"
+# MegaPDF's patched PDFium release (#119, #120). libs/pdfium/RELEASE is the one place
+# every platform reads the pinned build's location from.
+BASE="$(tr -d '[:space:]' < "$(cd "$(dirname "$0")/../.." && pwd)/libs/pdfium/RELEASE")"
 VENDOR="$(cd "$(dirname "$0")/.." && pwd)/Vendor"
 
 # The modulemap is rewritten even when the xcframework is cached (CI restores

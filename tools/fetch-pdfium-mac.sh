@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetches the pinned PDFium macOS universal prebuilt (bblanchon/pdfium-binaries)
+# Fetches the pinned PDFium macOS universal prebuilt (MegaPDF's patched build, libs/pdfium/RELEASE)
 # for ADR-002's spike. Unlike ios/scripts/fetch-pdfium.sh, which hardcodes the
 # release tag, this reads the pin from libs/pdfium/win-x64/VERSION and then
 # *verifies* the downloaded slice reports the same build — which makes SDD §6.1's
@@ -35,7 +35,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 # mac-univ is a genuine 2-slice fat binary (x86_64 + arm64), so one download
 # covers Apple Silicon and Intel. Verified 2026-08-27 against build 7934.
-URL="https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F${BUILD}/pdfium-mac-univ.tgz"
+URL="$(tr -d '[:space:]' < "$ROOT/libs/pdfium/RELEASE")/pdfium-mac-univ.tgz"
 echo "fetching $URL"
 curl -fsSL "$URL" -o "$TMP/mac.tgz"
 mkdir -p "$TMP/x"
