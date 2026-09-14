@@ -195,6 +195,8 @@ internal sealed class EditItem
     [JsonPropertyName("read_back")] public bool? ReadBack { get; set; }
     /// <summary>Deletes only, counts: "text before→after, runs before→after, overlapping after".</summary>
     [JsonPropertyName("delete_counts")] public string? DeleteCounts { get; set; }
+    /// <summary>Every edit, counts: runs overlapping the line's area "before->after" reopen (#136).</summary>
+    [JsonPropertyName("line_overlap")] public string? LineOverlap { get; set; }
     [JsonPropertyName("untouched")] public int Untouched { get; set; }
     [JsonPropertyName("untouched_missing")] public int UntouchedMissing { get; set; }
     [JsonPropertyName("worst_shift_pt")] public double? WorstShiftPt { get; set; }
@@ -759,6 +761,18 @@ internal static class Worker
             var after = reopenedPage.GetTextRuns();
 
             var lineObjects = line.Runs.Select(r => r.ObjectIndex).ToHashSet();
+
+            // Runs where the line was, before and after (#136): a line drawn twice keeps
+            // its hidden copy through an edit or a delete, and the copy surfaces here.
+            var lineLeft = line.Runs.Min(r => r.Bounds.X);
+            var lineTop = line.Runs.Min(r => r.Bounds.Y);
+            var lineRight = line.Runs.Max(r => r.Bounds.X + r.Bounds.Width);
+            var lineBottom = line.Runs.Max(r => r.Bounds.Y + r.Bounds.Height);
+            bool WhereTheLineWas(PdfTextRun r) => !string.IsNullOrWhiteSpace(r.Text)
+                                                  && r.Bounds.X < lineRight && r.Bounds.X + r.Bounds.Width > lineLeft
+                                                  && r.Bounds.Y < lineBottom && r.Bounds.Y + r.Bounds.Height > lineTop;
+            item.LineOverlap = $"{before.Count(WhereTheLineWas)}->{after.Count(WhereTheLineWas)}";
+
             if (kind == "delete")
             {
                 // Counted in the page's whole text, not run by run: PDFium can regroup a
