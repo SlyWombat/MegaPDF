@@ -1,0 +1,175 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
+@@ -51,8 +51,11 @@
+   void ProcessDefaultGraphics(fxcrt::ostringstream* buf);
+   void ProcessText(fxcrt::ostringstream* buf, CPDF_TextObject* pTextObj);
+   ByteString GetOrCreateDefaultGraphics() const;
++  // Returns a name in the `type` resource dictionary for `pResource`: a name that
++  // already refers to it (`current_name` first), or a new one.
+   ByteString RealizeResource(const CPDF_Object* pResource,
+-                             ByteStringView type) const;
++                             ByteStringView type,
++                             const ByteString& current_name = ByteString()) const;
+   // Like RealizeResource(), but names each resource once per generation, and gives
+   // a direct object (an array inside /Resources) an indirect copy it can refer to.
+   ByteString RealizeResourceOnce(const CPDF_Object* resource,
+@@ -89,6 +92,9 @@
+   ByteString default_graphics_name_;
+   std::map<std::pair<ByteString, const CPDF_Object*>, ByteString>
+       realized_resources_;
++  // Per resource type, where RealizeResource() resumes its search for a free name in
++  // this generation, instead of from 1 for every new name (#138).
++  mutable std::map<ByteString, int> next_resource_ids_;
+ };
+ 
+ #endif  // CORE_FPDFAPI_EDIT_CPDF_PAGECONTENTGENERATOR_H_
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -557,7 +557,8 @@
+ 
+ ByteString CPDF_PageContentGenerator::RealizeResource(
+     const CPDF_Object* pResource,
+-    ByteStringView type) const {
++    ByteStringView type,
++    const ByteString& current_name) const {
+   DCHECK(pResource);
+   if (!obj_holder_->GetResources()) {
+     obj_holder_->SetResources(document_->NewIndirect<CPDF_Dictionary>());
+@@ -568,13 +569,49 @@
+ 
+   RetainPtr<CPDF_Dictionary> resource_dict =
+       obj_holder_->GetMutableResources()->GetOrCreateDictFor(type);
+-  const auto& all_removed_resources_map =
+-      obj_holder_->all_removed_resources_map();
++  auto& all_removed_resources_map = obj_holder_->all_removed_resources_map();
+   auto it = all_removed_resources_map.find(type);
+-  const CPDF_PageObjectHolder::RemovedResourceMap* removed_resource_map =
++  CPDF_PageObjectHolder::RemovedResourceMap* removed_resource_map =
+       it != all_removed_resources_map.end() ? &it->second : nullptr;
++
++  // Keep a name that already refers to this object (#138). A new name on every
++  // regeneration retired the old one into `all_removed_resources_map`, which only
++  // grows, and the search below walked past all of them for every image and form:
++  // each regeneration of a page was slower than the last.
++  const uint32_t objnum = pResource->GetObjNum();
++  if (objnum) {
++    auto refers_to_resource = [objnum](const CPDF_Object* value) {
++      const CPDF_Reference* ref = value ? value->AsReference() : nullptr;
++      return ref && ref->GetRefObjNum() == objnum;
++    };
++    if (!current_name.IsEmpty()) {
++      if (refers_to_resource(
++              resource_dict->GetObjectFor(current_name.AsStringView()).Get())) {
++        return current_name;
++      }
++      // Retired while the object was off the page: put it back.
++      if (removed_resource_map &&
++          !resource_dict->KeyExist(current_name.AsStringView())) {
++        auto removed = removed_resource_map->find(current_name);
++        if (removed != removed_resource_map->end() &&
++            refers_to_resource(removed->second.Get())) {
++          resource_dict->SetFor(current_name, std::move(removed->second));
++          removed_resource_map->erase(removed);
++          return current_name;
++        }
++      }
++    }
++    CPDF_DictionaryLocker locker(resource_dict);
++    for (const auto& entry : locker) {
++      if (refers_to_resource(entry.second.Get())) {
++        return entry.first;
++      }
++    }
++  }
++
+   ByteString name;
+-  int idnum = 1;
++  int& idnum = next_resource_ids_[ByteString(type)];
++  idnum = std::max(idnum, 1);
+   while (true) {
+     name = ByteString::Format("FX%c%d", type[0], idnum);
+     // Avoid name collisions with existing `resource_dict` entries.
+@@ -734,7 +771,8 @@
+     pImage->ConvertStreamToIndirectObject();
+   }
+ 
+-  ByteString name = RealizeResource(pStream, "XObject");
++  ByteString name =
++      RealizeResource(pStream, "XObject", pImageObj->GetResourceName());
+   pImageObj->SetResourceName(name);
+ 
+   if (bWasInline) {
+@@ -763,7 +801,8 @@
+ 
+   RetainPtr<const CPDF_Stream> pStream = pFormObj->form()->GetStream();
+   CHECK(pStream);
+-  ByteString name = RealizeResource(pStream.Get(), "XObject");
++  ByteString name =
++      RealizeResource(pStream.Get(), "XObject", pFormObj->GetResourceName());
+   pFormObj->SetResourceName(name);
+ 
+   ProcessGraphics(buf, pFormObj);
+@@ -893,9 +932,19 @@
+   }
+   const CPDF_Object* indirect = resource;
+   if (resource->GetObjNum() == 0) {
+-    RetainPtr<CPDF_Object> copy = resource->Clone();
+-    document_->AddIndirectObject(copy);
+-    indirect = copy.Get();
++    // Reuse the copy an earlier regeneration of this page made, while it is still
++    // in the document (#138).
++    CPDF_PageObjectHolder::RealizedCopy& realized =
++        obj_holder_->realized_copies()[key];
++    if (!realized.copy ||
++        document_->GetIndirectObject(realized.copy->GetObjNum()) !=
++            realized.copy) {
++      RetainPtr<CPDF_Object> copy = resource->Clone();
++      document_->AddIndirectObject(copy);
++      realized.source = pdfium::WrapRetain(resource);
++      realized.copy = std::move(copy);
++    }
++    indirect = realized.copy.Get();
+   }
+   ByteString name = RealizeResource(indirect, type);
+   realized_resources_[key] = name;
+--- a/core/fpdfapi/page/cpdf_pageobjectholder.h
++++ b/core/fpdfapi/page/cpdf_pageobjectholder.h
+@@ -69,6 +69,17 @@
+   using AllRemovedResourcesMap =
+       std::map<ByteString, RemovedResourceMap, std::less<>>;
+ 
++  // An indirect copy the content generator made of a direct resource object (an
++  // array inside /Resources) so it can be named. `source` is held so its address,
++  // part of the key, cannot be reused by another object.
++  struct RealizedCopy {
++    RetainPtr<const CPDF_Object> source;
++    RetainPtr<const CPDF_Object> copy;
++  };
++  // Key: The resource type and the direct object.
++  using RealizedCopyMap =
++      std::map<std::pair<ByteString, const CPDF_Object*>, RealizedCopy>;
++
+   using iterator = std::deque<std::unique_ptr<CPDF_PageObject>>::iterator;
+   using const_iterator =
+       std::deque<std::unique_ptr<CPDF_PageObject>>::const_iterator;
+@@ -149,6 +160,8 @@
+     return all_removed_resources_map_;
+   }
+ 
++  RealizedCopyMap& realized_copies() { return realized_copies_; }
++
+  protected:
+   void LoadTransparencyInfo();
+ 
+@@ -176,6 +189,11 @@
+   // All the resources from `resources_` that are unused. Hold on to them here
+   // in case they need to be restored.
+   AllRemovedResourcesMap all_removed_resources_map_;
++
++  // Lives as long as the page, not one content generation: a generator is built
++  // for every regeneration, and a copy made per generator was written again each
++  // time, leaving the last one unreferenced in the file (#138).
++  RealizedCopyMap realized_copies_;
+ };
+ 
+ #endif  // CORE_FPDFAPI_PAGE_CPDF_PAGEOBJECTHOLDER_H_
