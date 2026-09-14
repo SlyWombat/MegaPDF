@@ -18,6 +18,7 @@ through that writer, so the apps ship a PDFium built from this patch series.
 | `0008-content-generator-open-rectangles` | #125 | open four-cornered paths stay open (upstream wrote them as the closed `re`) |
 | `0009-content-generator-self-contained-streams` | #125 | exact geometry when state straddles streams: each regenerated stream starts and ends at the page CTM instead of threading it through float inverses |
 | `0010-save-with-new-security` | #131 | `FPDF_SaveAsCopyWithSecurity`: a copy encrypted with AES-256 (R6) under new user and owner passwords and permissions — upstream can only keep or remove security, and never wrote AES-256 owner entries |
+| `0011-font-has-glyph` | #130 | `FPDFFont_HasGlyph`: whether a font program has a real glyph (not .notdef, with an outline) for a character, which reading text back cannot show |
 
 The #118 layout guard stays in the core regardless: every body-text edit is rehearsed on
 a copy of the page and refused if anything else would change. The patches make that
