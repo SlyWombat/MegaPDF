@@ -9,6 +9,11 @@ public interface IPdfEngine : IDisposable
     /// <summary>Opens a document; <paramref name="password"/> for protected files.
     /// Throws <see cref="Pdfium.PdfLoadException"/> with a password error code when one is required/wrong.</summary>
     IPdfDocument Open(string filePath, string? password = null);
+
+    /// <summary>Opens a saved copy of <paramref name="like"/> with the credentials it was opened
+    /// with (#132): a copy of a protected document is still protected, so reading it back needs
+    /// the same password. Throws <see cref="Pdfium.PdfLoadException"/> when it does not open.</summary>
+    IPdfDocument OpenLike(IPdfDocument like, string filePath);
 }
 
 public interface IPdfDocument : IDisposable

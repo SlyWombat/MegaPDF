@@ -15,6 +15,7 @@ internal object PdfiumNative {
 
     external fun nativeInit()
     external fun nativeOpen(bytes: ByteArray, password: String?): Long
+    external fun nativeOpenLike(like: Long, bytes: ByteArray): Long
     external fun nativeLastError(): Int
     external fun nativeCloseDocument(handle: Long)
     external fun nativePageCount(handle: Long): Int

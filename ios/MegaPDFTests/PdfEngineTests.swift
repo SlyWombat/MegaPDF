@@ -57,6 +57,26 @@ final class PdfEngineTests: XCTestCase {
         XCTAssertEqual(count, 2)
     }
 
+    func testProtectedDocumentSavesStillProtectedAndReadsBack() async throws {
+        // #132: the save check reopened the copy without the password, and the copy is
+        // still protected, so every protected save failed.
+        let engine = PdfEngine.shared
+        let unlock = "u123"   // tools/gen_test_fixtures.py
+        let doc = try await engine.open(try fixture("encrypted"), password: unlock)
+        let saved = try await engine.save(doc)
+        do {
+            let stray = try await engine.open(saved)
+            await engine.close(stray)
+            XCTFail("the saved copy should still be protected")
+        } catch PdfError.passwordRequired {
+        }
+        let reopened = try await engine.open(saved, like: doc)
+        let count = await engine.pageCount(reopened)
+        await engine.close(reopened)
+        await engine.close(doc)
+        XCTAssertEqual(count, 1)
+    }
+
     func testInvalidBytesThrow() async throws {
         let engine = PdfEngine.shared
         do {

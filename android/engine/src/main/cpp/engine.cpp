@@ -85,6 +85,22 @@ Java_com_megapdf_engine_PdfiumNative_nativeOpen(JNIEnv* env, jobject, jbyteArray
     return reinterpret_cast<jlong>(d);
 }
 
+// Opens bytes with the credentials `like` was opened with (#132): a protected document's
+// saved copy is still protected, so reading it back needs the same password.
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeOpenLike(JNIEnv* env, jobject, jlong like, jbyteArray bytes) {
+    const jsize len = env->GetArrayLength(bytes);
+    jbyte* data = env->GetByteArrayElements(bytes, nullptr);
+    megapdf_document* core =
+        megapdf_open_like(reinterpret_cast<Document*>(like)->core, data, static_cast<size_t>(len));
+    env->ReleaseByteArrayElements(bytes, data, JNI_ABORT);
+    if (core == nullptr) return 0;
+
+    auto* d = new Document();
+    d->core = core;
+    return reinterpret_cast<jlong>(d);
+}
+
 JNIEXPORT jint JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeLastError(JNIEnv*, jobject) {
     return static_cast<jint>(megapdf_last_error());

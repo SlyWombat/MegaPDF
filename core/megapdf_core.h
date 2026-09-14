@@ -93,6 +93,16 @@ MEGAPDF_API const char* megapdf_last_error_message(void);
  */
 MEGAPDF_API megapdf_document* megapdf_open(const void* bytes, size_t length, const char* password_utf8);
 
+/**
+ * Opens `bytes` with the credentials `like` was opened with (#132). A save of a
+ * protected document writes a copy that is still protected, so reading that copy
+ * back needs the same password; every platform's save check opens it this way.
+ * The core keeps the password with the document, in memory only, and
+ * megapdf_close() wipes it. Returns NULL, with megapdf_last_error() set, when `like`
+ * is NULL or the bytes do not open.
+ */
+MEGAPDF_API megapdf_document* megapdf_open_like(const megapdf_document* like, const void* bytes, size_t length);
+
 /** Closes every page still open on it, tears down the form environment, frees it. NULL is fine. */
 MEGAPDF_API void megapdf_close(megapdf_document* document);
 

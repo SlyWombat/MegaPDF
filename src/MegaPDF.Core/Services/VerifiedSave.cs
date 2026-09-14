@@ -68,8 +68,10 @@ public static class VerifiedSave
             try
             {
                 // Reopened with the engine, not merely length-checked: "parses" is
-                // the property that matters, and only a parse establishes it.
-                using var reopened = engine.Open(stagingPath);
+                // the property that matters, and only a parse establishes it. Opened
+                // like the document, because a protected document's copy is still
+                // protected and needs the same password to read back (#132).
+                using var reopened = engine.OpenLike(document, stagingPath);
                 if (reopened.PageCount == 0)
                     throw new InvalidDataException("the saved document has no pages");
             }

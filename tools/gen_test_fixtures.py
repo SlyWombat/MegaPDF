@@ -24,6 +24,7 @@ Writes:
 
 Deterministic output; both platforms' engine tests assert against these.
 """
+import hashlib
 import os
 import sys
 
@@ -403,6 +404,66 @@ def gen_textbox():
     return build(objs)
 
 
+# #132: a protected document, so every platform can test that a save stays protected
+# and reads back. The standard security handler at V1/R2 (RC4, 40-bit) is what the
+# standard library can build; the full set of handlers comes from qpdf in #131.
+_SECURITY_PAD = bytes([0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+             0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A])
+
+
+def _rc4(key, data):
+    s = list(range(256))
+    j = 0
+    for i in range(256):
+        j = (j + s[i] + key[i % len(key)]) & 0xFF
+        s[i], s[j] = s[j], s[i]
+    out = bytearray()
+    i = j = 0
+    for b in data:
+        i = (i + 1) & 0xFF
+        j = (j + s[i]) & 0xFF
+        s[i], s[j] = s[j], s[i]
+        out.append(b ^ s[(s[i] + s[j]) & 0xFF])
+    return bytes(out)
+
+
+def gen_encrypted(unlock_text="u123"):
+    padded = (unlock_text.encode("latin-1") + _SECURITY_PAD)[:32]
+    file_id = bytes((i * 7 + 3) & 0xFF for i in range(16))
+    perms = -3904
+    o_entry = _rc4(hashlib.md5(padded).digest()[:5], padded)  # owner text == user text
+    key = hashlib.md5(padded + o_entry + perms.to_bytes(4, "little", signed=True) + file_id).digest()[:5]
+    u_entry = _rc4(key, _SECURITY_PAD)
+
+    def obj_key(num, gen=0):
+        return hashlib.md5(key + num.to_bytes(3, "little") + gen.to_bytes(2, "little")).digest()[:10]
+
+    content = b"BT /F1 24 Tf 72 700 Td (MegaPDF encrypted fixture) Tj ET"
+    enc = _rc4(obj_key(4), content)
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        b"<< /Length %d >>\nstream\n" % len(enc) + enc + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+        b"<< /Filter /Standard /V 1 /R 2 /O <" + o_entry.hex().encode() + b"> /U <" + u_entry.hex().encode()
+        + b"> /P %d >>" % perms,
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for n, body in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n" % n + body + b"\nendobj\n"
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1)
+    for o in offsets:
+        out += b"%010d 00000 n \n" % o
+    hid = file_id.hex().encode()
+    out += (b"trailer\n<< /Size %d /Root 1 0 R /Encrypt 6 0 R /ID [<" % (len(objs) + 1) + hid + b"> <" + hid
+            + b">] >>\nstartxref\n%d\n%%%%EOF\n" % xref)
+    return bytes(out)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
@@ -413,7 +474,8 @@ def main():
                        ("demo-fr-blank.pdf", gen_demo("fr", filled=False)),
                        ("formtext.pdf", gen_formtext()),
                               ("cropped.pdf", gen_cropped()),
-                       ("textbox.pdf", gen_textbox())):
+                       ("textbox.pdf", gen_textbox()),
+                       ("encrypted.pdf", gen_encrypted())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)

@@ -50,6 +50,10 @@ internal static class CoreNative
     public static extern unsafe IntPtr megapdf_open(byte* bytes, nuint length,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string? password);
 
+    /// <summary>Opens bytes with the credentials <paramref name="like"/> was opened with (#132). Zero on failure.</summary>
+    [DllImport(Dll)]
+    public static extern unsafe IntPtr megapdf_open_like(IntPtr like, byte* bytes, nuint length);
+
     [DllImport(Dll)]
     public static extern void megapdf_close(IntPtr document);
 

@@ -30,6 +30,25 @@ public class VerifiedSaveTests : IDisposable
     }
 
     [Fact]
+    public void ToPath_ProtectedDocument_SavesAndStaysProtectedWithTheSameUnlock()
+    {
+        // #132: the verification reopened the staged copy without the document's
+        // password. The copy is still encrypted, so every protected save failed.
+        const string unlock = "hunter2";
+        var source = Path.Combine(_dir, "protected.pdf");
+        File.WriteAllBytes(source, SamplePdf.BuildEncrypted(unlock));
+        var destination = Path.Combine(_dir, "protected-out.pdf");
+        using var document = _engine.Open(source, unlock);
+
+        VerifiedSave.ToPath(_engine, document, destination);
+
+        var locked = Assert.Throws<PdfLoadException>(() => _engine.Open(destination));
+        Assert.True(locked.IsPasswordError);
+        using var reopened = _engine.Open(destination, unlock);
+        Assert.Equal(document.PageCount, reopened.PageCount);
+    }
+
+    [Fact]
     public void ToPath_WritesADocumentThatReopens()
     {
         var source = WriteSample();

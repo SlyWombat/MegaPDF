@@ -83,6 +83,20 @@ actor PdfEngine {
         return PdfDocument(core: core)
     }
 
+    /// Opens `bytes` with the credentials `like` was opened with (#132): a saved copy of a
+    /// protected document is still protected, so reading it back needs the same password.
+    func open(_ bytes: Data, like: PdfDocument) throws -> PdfDocument {
+        let core: OpaquePointer? = bytes.withUnsafeBytes { raw in
+            megapdf_open_like(like.core, raw.baseAddress, raw.count)
+        }
+        guard let core else {
+            let code = Int(megapdf_last_error())
+            if code == FPDF_ERR_PASSWORD { throw PdfError.passwordRequired }
+            throw PdfError.load(code: code)
+        }
+        return PdfDocument(core: core)
+    }
+
     func close(_ document: PdfDocument) {
         document.destroy()
     }

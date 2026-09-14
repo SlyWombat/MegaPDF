@@ -925,7 +925,7 @@ final class ViewerModel: ObservableObject {
             do {
                 let engine = PdfEngine.shared
                 let data = try await engine.save(doc)
-                let verify = try await engine.open(data)
+                let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
                 await engine.close(verify)
 
                 let scoped = url.startAccessingSecurityScopedResource()
@@ -957,7 +957,7 @@ final class ViewerModel: ObservableObject {
         do {
             let engine = PdfEngine.shared
             let data = try await engine.save(doc)
-            let verify = try await engine.open(data)
+            let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
             await engine.close(verify)
             return data
         } catch {

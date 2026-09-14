@@ -54,6 +54,25 @@ public sealed class PdfiumEngine : IPdfEngine
         }
     }
 
+    public IPdfDocument OpenLike(IPdfDocument like, string filePath)
+    {
+        if (like is not PdfiumDocument source)
+            throw new ArgumentException("The document was not opened by this engine.", nameof(like));
+        var bytes = File.ReadAllBytes(filePath);
+        lock (PdfiumLibrary.Lock)
+        {
+            IntPtr core;
+            unsafe
+            {
+                fixed (byte* p = bytes)
+                    core = CoreNative.megapdf_open_like(source.Core, p, (nuint)bytes.Length);
+            }
+            if (core == IntPtr.Zero)
+                throw new PdfLoadException(filePath, CoreNative.megapdf_last_error());
+            return new PdfiumDocument(core);
+        }
+    }
+
     public void Dispose()
     {
         // PDFium itself stays initialized for the process lifetime (PdfiumLibrary).
@@ -67,6 +86,16 @@ internal sealed class PdfiumDocument : IPdfDocument
     private bool _disposed;
 
     internal PdfiumDocument(IntPtr core) => _core = core;
+
+    /// <summary>The core handle, for opening a saved copy like this document (#132).</summary>
+    internal IntPtr Core
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _core;
+        }
+    }
 
     public int PageCount
     {

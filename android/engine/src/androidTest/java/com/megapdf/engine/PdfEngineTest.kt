@@ -88,6 +88,36 @@ class PdfEngineTest {
     }
 
     @Test
+    fun protectedDocumentSavesStillProtectedAndReadsBack() {
+        // #132: the save check reopened the copy without the password, and the copy is
+        // still protected, so every protected save failed.
+        runBlocking {
+            val bytes = InstrumentationRegistry.getInstrumentation().context.assets
+                .open("encrypted.pdf").use { it.readBytes() }
+            val unlock = "u123"   // tools/gen_test_fixtures.py
+            val doc = engine.open(bytes, unlock)
+            try {
+                val saved = ByteArrayOutputStream()
+                doc.save(saved)
+                try {
+                    engine.open(saved.toByteArray()).close()
+                    fail("the saved copy should still be protected")
+                } catch (expected: PdfPasswordException) {
+                    // expected
+                }
+                val reopened = engine.openLike(doc, saved.toByteArray())
+                try {
+                    assertEquals(1, reopened.pageCount())
+                } finally {
+                    reopened.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
     fun invalidBytesThrowLoadException() {
         runBlocking {
             try {

@@ -2124,6 +2124,39 @@ void test_edit_scenarios() {
     }
 }
 
+// #132: a protected document saves still protected, and megapdf_open_like() reads the
+// copy back with the credentials the document was opened with. Every platform's save
+// check reopened the copy without them, so every protected save failed.
+void test_protected_save(const std::string& fixtures) {
+    const auto bytes = read_file(fixtures + "/encrypted.pdf");
+    check(megapdf_open(bytes.data(), bytes.size(), nullptr) == nullptr, "encrypted.pdf does not open without unlocking");
+    check(megapdf_last_error() == 4 /* FPDF_ERR_PASSWORD */, "encrypted.pdf reports FPDF_ERR_PASSWORD",
+          std::to_string(megapdf_last_error()));
+    const char* unlock = "u123";   // tools/gen_test_fixtures.py
+    megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), unlock);
+    check(d != nullptr, "encrypted.pdf opens once unlocked");
+    if (!d) return;
+
+    std::vector<unsigned char> saved;
+    check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, "the unlocked document saves");
+    check(megapdf_open(saved.data(), saved.size(), nullptr) == nullptr, "the saved copy is still protected");
+    megapdf_document* again = megapdf_open_like(d, saved.data(), saved.size());
+    check(again != nullptr, "megapdf_open_like reads the saved copy back", std::to_string(megapdf_last_error()));
+    if (again) {
+        check(megapdf_page_count(again) == megapdf_page_count(d), "the copy has the same pages");
+        megapdf_close(again);
+    }
+    megapdf_close(d);
+
+    const auto plain = read_file(fixtures + "/fixture.pdf");
+    megapdf_document* p = megapdf_open(plain.data(), plain.size(), nullptr);
+    megapdf_document* like_plain = p ? megapdf_open_like(p, plain.data(), plain.size()) : nullptr;
+    check(like_plain != nullptr, "an unprotected document opens like itself");
+    megapdf_close(like_plain);
+    megapdf_close(p);
+    check(megapdf_open_like(nullptr, plain.data(), plain.size()) == nullptr, "no document to open like returns NULL");
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -2141,6 +2174,7 @@ int main(int argc, char** argv) {
     test_stamps(argv[1]);
     test_whiteouts_and_text_boxes(argv[1]);
     test_save_flatten_images(argv[1]);
+    test_protected_save(argv[1]);
     test_render();
     test_render_page(argv[1]);
     test_text_editing(argv[1]);

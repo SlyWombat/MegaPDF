@@ -1031,7 +1031,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
                 val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
                 check(bytes.isNotEmpty()) { "engine produced an empty document" }
-                engine.open(bytes).close()  // verify the output parses before touching the destination
+                // Verify the output parses before touching the destination, opened like the
+                // document: a protected document's copy is still protected (#132).
+                engine.openLike(doc, bytes).close()
 
                 withContext(Dispatchers.IO) {
                     // "wt" guarantees truncation; plain "w" can leave a stale tail

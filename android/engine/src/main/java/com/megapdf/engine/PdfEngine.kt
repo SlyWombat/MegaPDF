@@ -43,6 +43,23 @@ class PdfEngine {
             PdfDocument(this@PdfEngine, handle)
         }
 
+    /**
+     * Opens [bytes] with the credentials [like] was opened with (#132): a saved copy of a
+     * protected document is still protected, so reading it back needs the same password.
+     * @throws PdfPasswordException the bytes need a different password
+     * @throws PdfLoadException corrupt or unreadable document
+     */
+    suspend fun openLike(like: PdfDocument, bytes: ByteArray): PdfDocument =
+        withContext(dispatcher) {
+            val handle = PdfiumNative.nativeOpenLike(like.nativeHandle(), bytes)
+            if (handle == 0L) {
+                val error = PdfiumNative.nativeLastError()
+                if (error == PdfiumNative.ERR_PASSWORD) throw PdfPasswordException()
+                throw PdfLoadException(error)
+            }
+            PdfDocument(this@PdfEngine, handle)
+        }
+
     companion object {
         /**
          * The pixel size to render a page at when it would ideally be [idealWidth] ×
@@ -106,6 +123,12 @@ class PdfDocument internal constructor(
     private val handle: Long,
 ) {
     private var closed = false
+
+    /** The native handle, for opening a saved copy like this document (#132). */
+    internal fun nativeHandle(): Long {
+        check(!closed) { "document is closed" }
+        return handle
+    }
 
     suspend fun pageCount(): Int = withContext(engine.dispatcher) {
         check(!closed) { "document is closed" }

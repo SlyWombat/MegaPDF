@@ -40,6 +40,10 @@ struct megapdf_document {
     std::vector<megapdf_page*> open_pages;  // closed for the caller if still open at megapdf_close()
     std::vector<megapdf_detached*> detached;  // freed at megapdf_close() if never restored or discarded
     std::map<std::pair<int, int>, bool> rewrite_keeps_page;  // #118 verdicts by (page index, object index)
+    // What the document was opened with, so megapdf_open_like() can read back a saved
+    // copy that is still protected (#132). Memory only; megapdf_close() wipes it.
+    std::string unlock;
+    bool has_unlock = false;
 };
 
 struct megapdf_detached {
@@ -182,11 +186,41 @@ MEGAPDF_API megapdf_document* megapdf_open(const void* bytes, size_t length, con
                                                   : "PDFium could not load the document");
         return nullptr;
     }
+    if (password_utf8 != nullptr) {
+        try {
+            d->unlock.assign(password_utf8);
+            d->has_unlock = true;
+        } catch (...) {
+            // Only megapdf_open_like() is affected; the document itself is open.
+        }
+    }
     InitFormFillInfo(&d->ffi);
     d->form = FPDFDOC_InitFormFillEnvironment(d->doc, &d->ffi);
     // A missing form environment is survivable (no AcroForm interaction); every
     // platform has treated it that way.
     SetError(0, "");
+    return d;
+}
+
+MEGAPDF_API megapdf_document* megapdf_open_like(const megapdf_document* like, const void* bytes, size_t length) {
+    std::string unlock;
+    bool has_unlock = false;
+    {
+        Guard guard(CoreLock());
+        if (like == nullptr) {
+            SetError(FPDF_ERR_UNKNOWN, "no document to open like");
+            return nullptr;
+        }
+        try {
+            unlock = like->unlock;
+        } catch (...) {
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return nullptr;
+        }
+        has_unlock = like->has_unlock;
+    }
+    megapdf_document* d = megapdf_open(bytes, length, has_unlock ? unlock.c_str() : nullptr);
+    std::fill(unlock.begin(), unlock.end(), '\0');
     return d;
 }
 
@@ -207,6 +241,7 @@ MEGAPDF_API void megapdf_close(megapdf_document* d) {
     d->detached.clear();
     if (d->form != nullptr) FPDFDOC_ExitFormFillEnvironment(d->form);
     if (d->doc != nullptr) FPDF_CloseDocument(d->doc);
+    std::fill(d->unlock.begin(), d->unlock.end(), '\0');
     delete d;
 }
 
