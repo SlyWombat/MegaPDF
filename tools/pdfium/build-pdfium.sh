@@ -61,6 +61,13 @@ popd
 EOF
 fi
 
+# Step 9 builds pdfium-binaries' example against the staged library. On the Windows
+# runner, run from this single step, its CMake cannot find a compiler; the library is
+# already built by then, and MegaPDF's own core tests exercise it on every platform.
+if [[ "$OS" == "win" ]]; then
+    printf '#!/bin/bash -eu\necho "example test skipped on Windows (tools/pdfium/build-pdfium.sh)"\n' >steps/09-test.sh
+fi
+
 # pdfium-binaries writes staging/VERSION only when told the version.
 export PDFium_VERSION=${PDFIUM_VERSION:-152.0.${PDFIUM_BRANCH#chromium/}.0}
 # pdfium-binaries' steps normally run as separate Actions steps that pick up the

@@ -1246,8 +1246,18 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, int object_in
         const int indices[1] = {page_index};
         FPDF_PAGE page = FPDF_ImportPagesByIndex(scratch, d->doc, indices, 1, 0) ? FPDF_LoadPage(scratch, 0) : nullptr;
         if (page != nullptr) {
-            const ScratchShot before = RenderScratchPage(page);
-            const std::vector<ScratchRun> runs_before = ScratchRuns(page);
+            // Compare like with like (#128). PDFium resolves a non-embedded font once per
+            // document, against a process-wide face cache: the first document to ask can get
+            // a different face from every later one. Rendering the copy before the rewrite
+            // straight from memory therefore compared a cold lookup with the reopened
+            // document's warm one, and refused edits that changed nothing. Resolve the
+            // page's fonts here first, then judge a reopened copy of the page as it was
+            // against a reopened copy of the rewrite.
+            RenderScratchPage(page);
+            ScratchWriter unchanged{};
+            unchanged.fw.version = 1;
+            unchanged.fw.WriteBlock = ScratchWriteBlock;
+            const bool saved_unchanged = FPDF_SaveAsCopy(scratch, &unchanged.fw, 0);
             FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, object_index);
             bool rewritten = false;
             if (obj != nullptr && FPDFPage_RemoveObject(page, obj)) {
@@ -1259,14 +1269,19 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, int object_in
             ScratchWriter writer{};
             writer.fw.version = 1;
             writer.fw.WriteBlock = ScratchWriteBlock;
-            if (rewritten && FPDF_SaveAsCopy(scratch, &writer.fw, 0)) {
+            if (saved_unchanged && rewritten && FPDF_SaveAsCopy(scratch, &writer.fw, 0)) {
+                FPDF_DOCUMENT was = FPDF_LoadMemDocument64(unchanged.out.data(), unchanged.out.size(), nullptr);
                 FPDF_DOCUMENT again = FPDF_LoadMemDocument64(writer.out.data(), writer.out.size(), nullptr);
+                FPDF_PAGE was_page = was ? FPDF_LoadPage(was, 0) : nullptr;
                 FPDF_PAGE reopened = again ? FPDF_LoadPage(again, 0) : nullptr;
-                if (reopened != nullptr) {
-                    keeps = SameShot(before, RenderScratchPage(reopened)) && SameRuns(runs_before, ScratchRuns(reopened));
-                    FPDF_ClosePage(reopened);
+                if (was_page != nullptr && reopened != nullptr) {
+                    keeps = SameShot(RenderScratchPage(was_page), RenderScratchPage(reopened)) &&
+                            SameRuns(ScratchRuns(was_page), ScratchRuns(reopened));
                 }
+                if (reopened != nullptr) FPDF_ClosePage(reopened);
+                if (was_page != nullptr) FPDF_ClosePage(was_page);
                 if (again != nullptr) FPDF_CloseDocument(again);
+                if (was != nullptr) FPDF_CloseDocument(was);
             }
         }
         FPDF_CloseDocument(scratch);
@@ -2081,7 +2096,10 @@ MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const 
         SetError(0, "no substitute font could be loaded");
         return MEGAPDF_ERR_NO_FONT;
     }
-    const int status = ReplaceTextObjectUnlocked(p, obj, object_index, standard, text, /*verify=*/false, out_replaced);
+    // Verified like tier 1 (#130): PDFium writes a stand-in code for any character the
+    // face cannot encode (CJK into Helvetica reads back as U+00FF), so an unverified
+    // substitute reported success for text that draws nothing like what was typed.
+    const int status = ReplaceTextObjectUnlocked(p, obj, object_index, standard, text, /*verify=*/true, out_replaced);
     FPDFFont_Close(standard);   // the text object keeps its own reference
     if (status == MEGAPDF_OK && out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_SUBSTITUTED;
     return status;

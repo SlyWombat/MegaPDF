@@ -24,6 +24,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <tuple>
 
 #include "megapdf_core.h"
 
@@ -1563,13 +1565,14 @@ void test_text_editing(const std::string& fixtures) {
 // adds entries to the page's /Font dictionary, and `extra_objects` become objects 6, 7, ...
 std::vector<unsigned char> one_page_pdf(const std::string& content, const std::string& font_dict,
                                         const std::string& extra_resources = "", const std::string& extra_fonts = "",
-                                        const std::vector<std::string>& extra_objects = {}) {
+                                        const std::vector<std::string>& extra_objects = {},
+                                        const std::string& page_extra = "") {
     std::string pdf = "%PDF-1.4\n";
     std::vector<size_t> offsets;
     auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
     add("<< /Type /Catalog /Pages 2 0 R >>");
     add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R " + extra_fonts + " >> " +
+    add("<< /Type /Page /Parent 2 0 R " + page_extra + " /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R " + extra_fonts + " >> " +
         extra_resources + " >> /Contents 5 0 R >>");
     add(font_dict);
     add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
@@ -1748,6 +1751,320 @@ void test_rewrite_fidelity() {
     }
 }
 
+// --------------------------------------------------------------------------
+// #126: the edits people actually make, beyond fixing a spelling mistake. These are
+// plain pages every PDFium level can rewrite; what is under test is the edit itself:
+// what it accepts, what reads back, where it lands, what undo restores.
+
+U16 u16(const char* utf8) {
+    U16 out;
+    const unsigned char* c = reinterpret_cast<const unsigned char*>(utf8);
+    while (*c) {
+        uint32_t cp;
+        if (*c < 0x80) { cp = *c++; }
+        else if ((*c >> 5) == 0x6) { cp = ((c[0] & 0x1Fu) << 6) | (c[1] & 0x3Fu); c += 2; }
+        else if ((*c >> 4) == 0xE) { cp = ((c[0] & 0x0Fu) << 12) | ((c[1] & 0x3Fu) << 6) | (c[2] & 0x3Fu); c += 3; }
+        else { cp = ((c[0] & 0x07u) << 18) | ((c[1] & 0x3Fu) << 12) | ((c[2] & 0x3Fu) << 6) | (c[3] & 0x3Fu); c += 4; }
+        if (cp >= 0x10000) {
+            cp -= 0x10000;
+            out.push_back(static_cast<unsigned short>(0xD800 + (cp >> 10)));
+            out.push_back(static_cast<unsigned short>(0xDC00 + (cp & 0x3FF)));
+        } else {
+            out.push_back(static_cast<unsigned short>(cp));
+        }
+    }
+    out.push_back(0);
+    return out;
+}
+
+U16 without_nul(const U16& z) { return z.empty() ? z : U16(z.begin(), z.end() - 1); }
+
+struct OpenDoc {
+    std::vector<unsigned char> bytes;
+    megapdf_document* doc = nullptr;
+    explicit OpenDoc(std::vector<unsigned char> b) : bytes(std::move(b)) { doc = megapdf_open(bytes.data(), bytes.size(), nullptr); }
+    ~OpenDoc() { megapdf_close(doc); }
+    OpenDoc(const OpenDoc&) = delete;
+    OpenDoc& operator=(const OpenDoc&) = delete;
+};
+
+int first_line_object(const megapdf_page* page, size_t line = 0) {
+    megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
+    int index = -1;
+    size_t run = 0;
+    if (megapdf_text_line_count(t) > line && megapdf_text_line_runs(t, line, &run, 1) > 0) {
+        megapdf_text_run r{};
+        megapdf_text_run_get(t, run, &r);
+        index = r.object_index;
+    }
+    megapdf_text_free(t);
+    return index;
+}
+
+int index_of_text(const megapdf_page* page, const char* text) {
+    const U16 want = without_nul(u16(text));
+    for (const RunShot& r : run_shots(page)) if (r.text == want) return r.object_index;
+    return -1;
+}
+
+U16 text_of(const megapdf_page* page, int object_index) {
+    for (const RunShot& r : run_shots(page)) if (r.object_index == object_index) return r.text;
+    return {};
+}
+
+double font_size_of(const megapdf_page* page, int object_index) {
+    megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
+    double size = -1;
+    for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+        megapdf_text_run r{};
+        megapdf_text_run_get(t, i, &r);
+        if (r.object_index == object_index) size = r.font_size;
+    }
+    megapdf_text_free(t);
+    return size;
+}
+
+std::vector<unsigned char> save_bytes(megapdf_document* d) {
+    std::vector<unsigned char> out;
+    megapdf_save(d, collect, &out);
+    return out;
+}
+
+std::vector<unsigned char> render_page(const megapdf_page* page) {
+    std::vector<unsigned char> px(612 * 792 * 4, 0);
+    megapdf_render(page, px.data(), 612, 792, 612 * 4, MEGAPDF_RENDER_BGRA);
+    return px;
+}
+
+bool same_runs(const std::vector<RunShot>& a, const std::vector<RunShot>& b, double tol) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++)
+        if (a[i].text != b[i].text || !rect_close(a[i].bounds, b[i].bounds, tol)) return false;
+    return true;
+}
+
+void test_edit_scenarios() {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    const std::string two_lines = "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET";
+
+    // Accents, French punctuation, symbols, money and dates all exist in WinAnsi: each
+    // stays in the run's own font and reads back exactly.
+    for (const char* text : {"Reçu : « déjà payé » l’été", "€1 234,56 © 2026 – “reçu”", "$1,234.56 due 2026-09-13",
+                             "13 sept. 2026, 14 h 05"}) {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const int idx = first_line_object(p.page);
+        const U16 want = u16(text);
+        int outcome = -1;
+        check(megapdf_set_text(p.page, idx, want.data(), 0, &outcome, nullptr) == MEGAPDF_OK, std::string("retype: ") + text);
+        check(outcome == MEGAPDF_EDIT_IN_PLACE, std::string("stays in the run's own font: ") + text, std::to_string(outcome));
+        check(text_of(p.page, idx) == without_nul(want), std::string("reads back exactly: ") + text);
+    }
+
+    // Text no available face can draw is refused, and the page is left as it was (#130).
+    for (const char* text : {"Invoice 請求書", "Paid ✅", "Thanks 😀"}) {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const int idx = first_line_object(p.page);
+        const auto before = run_shots(p.page);
+        const U16 want = u16(text);
+        int outcome = -1;
+        const int status = megapdf_set_text(p.page, idx, want.data(), 0, &outcome, nullptr);
+        check(status == MEGAPDF_ERR_NO_FONT, std::string("refused, not a single glyph missing: ") + text, "status " + std::to_string(status));
+        check(same_runs(before, run_shots(p.page), 0.01), std::string("and the page is untouched: ") + text);
+    }
+    {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const int idx = first_line_object(p.page);
+        const auto before = run_shots(p.page);
+        const U16 cjk = u16("日本語の見出し");
+        int outcome = -1;
+        megapdf_detached* original = nullptr;
+        const int status = megapdf_set_text(p.page, idx, cjk.data(), 0, &outcome, &original);
+        check(status == MEGAPDF_ERR_NO_FONT, "text no standard face can draw is refused",
+              "status " + std::to_string(status) + " outcome " + std::to_string(outcome));
+        if (status == MEGAPDF_OK) megapdf_discard_detached(original);
+        check(same_runs(before, run_shots(p.page), 0.01), "a refused edit leaves the page untouched");
+    }
+
+    // Empty text is an argument error, not a deletion.
+    {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const U16 empty = {0};
+        int outcome = -1;
+        check(megapdf_set_text(p.page, first_line_object(p.page), empty.data(), 0, &outcome, nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "empty text is refused as an argument error");
+    }
+
+    // Much longer, then down to one word: each edit replaces the run at its own index.
+    {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const int idx = first_line_object(p.page);
+        const auto before = run_shots(p.page);
+        const U16 longer = u16("A heading that has grown to several times the length it had before the edit");
+        const U16 shorter = u16("Short");
+        int outcome = -1;
+        check(megapdf_set_text(p.page, idx, longer.data(), 0, &outcome, nullptr) == MEGAPDF_OK, "lengthen a line a lot");
+        megapdf_rect grown{};
+        for (const RunShot& r : run_shots(p.page)) if (r.object_index == idx) grown = r.bounds;
+        // Bounds are glyph boxes, so the left edge moves by the difference in the first
+        // letters' side bearings ("P" to "A"), not by where the line starts.
+        check(grown.right > before[0].bounds.right + 100 && std::fabs(grown.left - before[0].bounds.left) <= 2.0,
+              "the longer line grows to the right from the same start",
+              "left " + std::to_string(before[0].bounds.left) + " -> " + std::to_string(grown.left) + ", right " +
+                  std::to_string(before[0].bounds.right) + " -> " + std::to_string(grown.right));
+        check(megapdf_set_text(p.page, idx, shorter.data(), 0, &outcome, nullptr) == MEGAPDF_OK, "then shorten it to one word");
+        check(text_of(p.page, idx) == without_nul(shorter) && run_shots(p.page).size() == before.size(),
+              "the last edit reads back and no run was added or lost");
+    }
+
+    // Two edits to one line, undone in reverse order, end exactly where it started.
+    {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const int idx = first_line_object(p.page);
+        const auto before = run_shots(p.page);
+        const U16 first = u16("First revision"), second = u16("Second revision");
+        megapdf_detached* r1 = nullptr;
+        megapdf_detached* r2 = nullptr;
+        int outcome = -1;
+        check(megapdf_set_text(p.page, idx, first.data(), 0, &outcome, &r1) == MEGAPDF_OK && r1, "first edit hands back the original");
+        check(megapdf_set_text(p.page, idx, second.data(), 0, &outcome, &r2) == MEGAPDF_OK && r2, "second edit hands back the first revision");
+        megapdf_discard_detached(megapdf_detach_object(p.page, idx));
+        check(megapdf_restore_object(p.page, r2, idx) == MEGAPDF_OK && text_of(p.page, idx) == without_nul(first), "undo the second edit");
+        megapdf_discard_detached(megapdf_detach_object(p.page, idx));
+        check(megapdf_restore_object(p.page, r1, idx) == MEGAPDF_OK, "undo the first edit");
+        check(same_runs(before, run_shots(p.page), 0.01), "two undos put the page back exactly");
+    }
+
+    // Two lines edited, only the heading undone: the body keeps its edit.
+    {
+        OpenDoc d(one_page_pdf(two_lines, helvetica));
+        Page p(d.doc, 0);
+        const int head = first_line_object(p.page, 0), body = first_line_object(p.page, 1);
+        const U16 head_text = text_of(p.page, head);
+        const U16 new_head = u16("New heading"), new_body = u16("New body line");
+        megapdf_detached* r_head = nullptr;
+        megapdf_detached* r_body = nullptr;
+        int outcome = -1;
+        check(megapdf_set_text(p.page, head, new_head.data(), 0, &outcome, &r_head) == MEGAPDF_OK, "edit the heading");
+        check(megapdf_set_text(p.page, body, new_body.data(), 0, &outcome, &r_body) == MEGAPDF_OK, "edit the body");
+        megapdf_discard_detached(megapdf_detach_object(p.page, head));
+        check(megapdf_restore_object(p.page, r_head, head) == MEGAPDF_OK, "undo only the heading");
+        check(text_of(p.page, head) == head_text && text_of(p.page, body) == without_nul(new_body),
+              "the heading is back and the body keeps its edit");
+        megapdf_discard_detached(r_body);
+    }
+
+    // Deleting one word of a two-run line, then undoing it.
+    {
+        OpenDoc d(two_run_line_pdf());
+        Page p(d.doc, 0);
+        const auto before = run_shots(p.page);
+        check(before.size() == 2, "two-run line has two runs", std::to_string(before.size()));
+        if (before.size() == 2) {
+            megapdf_detached* word = megapdf_detach_object(p.page, before[1].object_index);
+            check(word != nullptr && run_shots(p.page).size() == 1, "the second word comes off");
+            check(word && megapdf_restore_object(p.page, word, before[1].object_index) == MEGAPDF_OK, "and goes back");
+            check(same_runs(before, run_shots(p.page), 0.01), "the line is exactly as it was");
+        }
+    }
+
+    // Edit, save, reopen, edit again: every generation reads back and the body survives.
+    {
+        std::vector<unsigned char> bytes = one_page_pdf(two_lines, helvetica);
+        for (const char* text : {"Second generation heading", "Third generation heading"}) {
+            {
+                OpenDoc d(bytes);
+                Page p(d.doc, 0);
+                const U16 want = u16(text);
+                int outcome = -1;
+                check(megapdf_set_text(p.page, first_line_object(p.page), want.data(), 0, &outcome, nullptr) == MEGAPDF_OK,
+                      std::string("edit generation: ") + text);
+                bytes = save_bytes(d.doc);
+            }
+            OpenDoc again(bytes);
+            Page q(again.doc, 0);
+            check(index_of_text(q.page, text) >= 0 && index_of_text(q.page, "Body line under it") >= 0,
+                  std::string("after reopening, the edit and the body are both there: ") + text);
+        }
+    }
+
+    // A rotated page and rotated text: the edit lands where the line was, and the rest stays put.
+    const std::string rotated_text =
+        "BT /F1 18 Tf 0.7071 0.7071 -0.7071 0.7071 150 450 Tm (Rotated heading) Tj ET BT /F1 12 Tf 72 700 Td (Body line under it) Tj ET";
+    for (const auto& [name, content, page_extra, target] : {
+             std::tuple<const char*, std::string, std::string, const char*>{"rotated page", two_lines, "/Rotate 90", "Plain heading"},
+             std::tuple<const char*, std::string, std::string, const char*>{"rotated text", rotated_text, "", "Rotated heading"}}) {
+        OpenDoc d(one_page_pdf(content, helvetica, "", "", {}, page_extra));
+        Page p(d.doc, 0);
+        const int idx = index_of_text(p.page, target);
+        check(idx >= 0, std::string(name) + ": the line is found");
+        if (idx < 0) continue;
+        megapdf_rect was{};
+        megapdf_rect body_was{};
+        for (const RunShot& r : run_shots(p.page)) {
+            if (r.object_index == idx) was = r.bounds;
+            else body_was = r.bounds;
+        }
+        const U16 want = u16("Edited line");
+        int outcome = -1;
+        check(megapdf_set_text(p.page, idx, want.data(), 0, &outcome, nullptr) == MEGAPDF_OK, std::string(name) + ": edits");
+        auto bytes = save_bytes(d.doc);
+        OpenDoc again(bytes);
+        Page q(again.doc, 0);
+        bool landed = false, body_kept = false;
+        for (const RunShot& r : run_shots(q.page)) {
+            if (r.text == without_nul(want))
+                landed = r.bounds.left < was.right && was.left < r.bounds.right && r.bounds.bottom < was.top && was.bottom < r.bounds.top;
+            else if (rect_close(r.bounds, body_was, 0.5))
+                body_kept = true;
+        }
+        check(landed, std::string(name) + ": the edit overlaps where the line was");
+        check(body_kept, std::string(name) + ": the other line keeps its place");
+    }
+
+    // Invisible OCR text over a scan (render mode 3): correcting it must not paint it.
+    {
+        OpenDoc d(one_page_pdf("0.85 g 72 500 468 250 re f 0 g BT 3 Tr /F1 14 Tf 90 700 Td (Scanned invoice words) Tj ET", helvetica));
+        Page p(d.doc, 0);
+        const auto before_px = render_page(p.page);
+        const int idx = index_of_text(p.page, "Scanned invoice words");
+        const U16 want = u16("Corrected invoice words");
+        int outcome = -1;
+        check(idx >= 0 && megapdf_set_text(p.page, idx, want.data(), 0, &outcome, nullptr) == MEGAPDF_OK, "OCR text layer: edits");
+        const auto after_px = render_page(p.page);
+        size_t differing = 0;
+        for (size_t i = 0; i < before_px.size(); i += 4)
+            if (std::abs(before_px[i] - after_px[i]) + std::abs(before_px[i + 1] - after_px[i + 1]) + std::abs(before_px[i + 2] - after_px[i + 2]) > 60)
+                differing++;
+        check(differing == 0, "OCR text layer: the corrected text stays invisible", std::to_string(differing) + " pixels");
+        check(index_of_text(p.page, "Corrected invoice words") >= 0, "OCR text layer: and is still there to search and copy");
+    }
+
+    // A substituted font keeps the line's size and starting point.
+    {
+        OpenDoc d(symbol_font_pdf());
+        Page p(d.doc, 0);
+        const auto before = run_shots(p.page);
+        const int idx = before.empty() ? -1 : before[0].object_index;
+        const double size = font_size_of(p.page, idx);
+        const U16 hello = u16("Hello");
+        int outcome = -1;
+        check(idx >= 0 && megapdf_set_text(p.page, idx, hello.data(), 0, &outcome, nullptr) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_SUBSTITUTED,
+              "a Symbol-font line takes Latin text through a substitute");
+        megapdf_rect now{};
+        for (const RunShot& r : run_shots(p.page)) if (r.object_index == idx) now = r.bounds;
+        check(std::fabs(font_size_of(p.page, idx) - size) < 0.01, "the substitute keeps the font size");
+        // Glyph boxes again: a Symbol alpha and a Helvetica H have different side bearings.
+        check(!before.empty() && std::fabs(now.left - before[0].bounds.left) <= 2.0, "the substitute starts where the line started",
+              before.empty() ? "" : "left " + std::to_string(before[0].bounds.left) + " -> " + std::to_string(now.left));
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -1769,6 +2086,7 @@ int main(int argc, char** argv) {
     test_render_page(argv[1]);
     test_text_editing(argv[1]);
     test_rewrite_fidelity();
+    test_edit_scenarios();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
