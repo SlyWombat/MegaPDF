@@ -191,17 +191,11 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     /// ordered by hit-test priority instead, because a click wants the topmost
     /// thing and the keyboard wants the next thing.
     ///
-    /// Rows are banded rather than sorted on raw Y: glyphs on one line rarely share
-    /// an exact baseline, and sorting on Y alone would zig-zag across a row.
+    /// The ordering itself lives in Core (<see cref="PageReadingOrder"/>) so the
+    /// Windows app tabs through a page in exactly the same order.
     /// </summary>
-    internal IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> RegionsInReadingOrder()
-    {
-        const double rowBand = 6;   // points; a line's worth of baseline wobble
-        return Regions
-            .OrderBy(r => Math.Round(r.Bounds.Y / rowBand))
-            .ThenBy(r => r.Bounds.X)
-            .ToList();
-    }
+    internal IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)> RegionsInReadingOrder() =>
+        PageReadingOrder.Order(Regions);
 
     /// <summary>What is under this point, in page space. Empty means bare page.</summary>
     internal PageHitKind KindAt(PdfPoint point)

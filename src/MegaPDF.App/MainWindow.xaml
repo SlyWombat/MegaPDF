@@ -9,6 +9,22 @@
     </Window.SystemBackdrop>
 
     <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged">
+        <Grid.Resources>
+            <!-- The keyboard focus ring on a page region (SDD §2.2, #2; MainWindow.Keyboard.cs).
+                 The system focus-visual pair, so a high-contrast theme swaps in its own
+                 colours; ThemeResource in a style setter follows theme changes live. -->
+            <Style x:Key="PageFocusRingOuterStyle" TargetType="Border">
+                <Setter Property="BorderBrush" Value="{ThemeResource FocusStrokeColorOuterBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+            <Style x:Key="PageFocusRingInnerStyle" TargetType="Border">
+                <Setter Property="BorderBrush" Value="{ThemeResource FocusStrokeColorInnerBrush}" />
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="CornerRadius" Value="2" />
+                <Setter Property="Margin" Value="2" />
+            </Style>
+        </Grid.Resources>
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindAccelerator" />
         </Grid.KeyboardAccelerators>
@@ -40,7 +56,7 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}">
-                <Button Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" x:Uid="OpenButton" AutomationProperties.AutomationId="OpenButton">
+                <Button x:Name="OpenButton" Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" x:Uid="OpenButton" AutomationProperties.AutomationId="OpenButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xE8E5;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelOpen" x:Uid="LabelOpen" />
@@ -336,8 +352,16 @@
                 </StackPanel>
             </StackPanel>
 
+            <!-- A tab stop (SDD §2.2, #2): Tab onto the pages lands on the first field,
+                 checkbox or line of the page on screen, and walks on from there. Focus
+                 stays here while the ring moves; see MainWindow.Keyboard.cs. -->
             <ScrollViewer
                 x:Name="PagesScroll"
+                x:Uid="PagesScroll"
+                AutomationProperties.AutomationId="PagesScroll"
+                IsTabStop="True"
+                GettingFocus="OnPagesGettingFocus"
+                GotFocus="OnPagesGotFocus"
                 Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}"
                 HorizontalScrollBarVisibility="Auto"
                 VerticalScrollBarVisibility="Auto"

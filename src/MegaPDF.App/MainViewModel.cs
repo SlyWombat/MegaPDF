@@ -359,6 +359,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
         LoadRecentDocuments();
         OnPropertyChanged(nameof(RecentDocumentsVisibility));
+        ResetPageFocus(); // keyboard focus and maps belong to the previous document (#2)
         Pages.Clear();
         PageCount = doc.PageCount;
         CurrentPage = 1;
@@ -646,6 +647,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
             return;
         _cappedRenders.Remove(pageIndex); // the edit changed what the page looks like
+        _keyboardMaps.TryRemove(pageIndex, out _); // and what is on it (#2)
         Pages[pageIndex] = await RenderPageAsync(_document, pageIndex);
     }
 
@@ -781,6 +783,15 @@ public partial class MainViewModel(Window window) : ObservableObject
     private void ScrollToCurrentMatch()
     {
         var (pageIndex, rects) = _searchMatches[CurrentSearchMatch - 1];
+        SearchScrollRequested?.Invoke(ContentTargetFor(pageIndex, rects));
+    }
+
+    /// <summary>
+    /// Where page-space rectangles sit in the scroll content, in DIPs — for a search
+    /// hit, and for the keyboard-focused region (#2), which is revealed by the same rules.
+    /// </summary>
+    internal SearchScrollTarget ContentTargetFor(int pageIndex, IReadOnlyList<PdfRect> rects)
+    {
         var toDip = 96.0 / 72 * ZoomFactor;
 
         // Mirrors the layout math in OnPagesScrollViewChanged: 24 panel padding,
@@ -797,8 +808,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         var matchTop = rects.Min(r => r.Y) * toDip;
         var matchBottom = rects.Max(r => r.Y + r.Height) * toDip;
 
-        SearchScrollRequested?.Invoke(new SearchScrollTarget(
-            24 + left, top + matchTop, right - left, matchBottom - matchTop));
+        return new SearchScrollTarget(
+            24 + left, top + matchTop, right - left, matchBottom - matchTop);
     }
 
     /// <summary>Hit-tests a click (page-space points, top-left origin): form fields, then body text.</summary>
@@ -1206,6 +1217,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         _undoStack.Clear();
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
+        _keyboardMaps.Clear(); // stamps are page content now (#2)
         for (var i = 0; i < Pages.Count; i++)
         {
             if (Pages[i].Source is not null)
@@ -1405,6 +1417,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             _journal.Record(entry);
 
         HasUnsavedChanges = applied > 0;
+        _keyboardMaps.Clear(); // the replay changed what is on the pages (#2)
         // Drop any already-rendered bitmaps (they predate the replay) and re-render the viewport.
         for (var i = 0; i < Pages.Count; i++)
         {

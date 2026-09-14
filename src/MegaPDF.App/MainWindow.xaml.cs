@@ -38,6 +38,7 @@ public sealed partial class MainWindow : Window
         ViewModel.SearchScrollRequested += target =>
             DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
         AppWindow.Closing += OnAppWindowClosing;
+        InitializePageKeyboard();
 
         // Keyboard interaction with the selected signature (SDD §3.3):
         // Delete removes, arrows nudge 1pt (Shift = 10pt), Esc deselects.
@@ -51,6 +52,14 @@ public sealed partial class MainWindow : Window
                 {
                     args.Handled = true;
                     ViewModel.CancelPlacementModes();
+                    return;
+                }
+
+                // Tab, Enter and Space on the page (SDD §2.2, #2). Esc lets go of a
+                // selected signature before it lets go of the page.
+                if ((args.Key != VirtualKey.Escape || _selection is null) && HandlePageKey(args.Key))
+                {
+                    args.Handled = true;
                     return;
                 }
 
@@ -117,15 +126,30 @@ public sealed partial class MainWindow : Window
             await ViewModel.OpenDocumentAsync(pdf.Path);
     }
 
-    /// <summary>
-    /// The document is the interface (SDD §2.2): what you click determines what happens —
-    /// checkboxes toggle, form fields and body text edit in place, empty space does nothing.
-    /// </summary>
     private async void OnPageTapped(object sender, TappedRoutedEventArgs e)
     {
         if (sender is not Grid pageGrid || pageGrid.DataContext is not PageView pageView)
             return;
 
+        // A pointer takes over from the keyboard (#2): the ring would otherwise stay
+        // on a region the person has moved away from.
+        ViewModel.ClearPageFocus();
+
+        var position = e.GetPosition(pageGrid);
+        var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
+        await RoutePageActivationAsync(pageGrid, pageView,
+            new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint));
+    }
+
+    /// <summary>
+    /// The document is the interface (SDD §2.2): what you click determines what happens —
+    /// checkboxes toggle, form fields and body text edit in place, empty space does nothing.
+    ///
+    /// A tap comes here, and so do Enter and Space on a keyboard-focused region, aimed
+    /// at its centre (#2) — one routing, so the keyboard cannot diverge from the mouse.
+    /// </summary>
+    private async Task RoutePageActivationAsync(Grid pageGrid, PageView pageView, PdfPoint pagePoint)
+    {
         // A tap outside an open editor commits it. The page canvas isn't focusable,
         // so LostFocus alone would never fire for clicks on empty page space.
         if (_activeEditorCommit is { } pendingCommit)
@@ -146,10 +170,6 @@ public sealed partial class MainWindow : Window
             _suppressNextTap = false;
             return;
         }
-
-        var position = e.GetPosition(pageGrid);
-        var dipToPoint = 72.0 / 96 / ViewModel.ZoomFactor;
-        var pagePoint = new PdfPoint(position.X * dipToPoint, position.Y * dipToPoint);
 
         // Signature placement mode: the next page click stamps the pending signature.
         if (ViewModel.PendingSignature is not null)
@@ -361,17 +381,33 @@ public sealed partial class MainWindow : Window
 
         // PreviewKeyDown, not KeyDown: TextBox handles Escape internally (reverting
         // its text) and marks it handled, so KeyDown never sees it.
+        //
+        // Opened from the keyboard (#2), closing hands focus back to the page, and Tab
+        // commits and moves on to the next region — filling a form is type, Tab, type.
+        // Not for added text boxes: there Tab has to reach the size and face pickers.
         editor.PreviewKeyDown += async (_, args) =>
         {
             if (args.Key == VirtualKey.Enter)
             {
                 args.Handled = true;
-                await CommitAsync();
+                var committing = CommitAsync(); // closes the editor before its first await
+                ReturnFocusToPage();
+                await committing;
             }
             else if (args.Key == VirtualKey.Escape)
             {
                 args.Handled = true;
                 CloseEditor(pageGrid, editor);
+                ReturnFocusToPage();
+            }
+            else if (args.Key == VirtualKey.Tab && style is null && ViewModel.PageFocus is not null)
+            {
+                args.Handled = true;
+                var forward = !IsShiftDown();
+                var committing = CommitAsync();
+                ReturnFocusToPage();
+                await committing;
+                await StepPageFocusAsync(forward);
             }
         };
         // Focus moving into the pickers must not commit and tear the editor down.
@@ -1029,7 +1065,8 @@ public sealed partial class MainWindow : Window
             PagesScroll.ExtentWidth);
 
         if (decision.MovesAnything)
-            PagesScroll.ChangeView(decision.Horizontal, decision.Vertical, null);
+            PagesScroll.ChangeView(decision.Horizontal, decision.Vertical, null,
+                disableAnimation: !AnimationsEnabled); // reduced motion (SDD §2.2)
     }
 
     private async void OnFitWidthClicked(object sender, RoutedEventArgs e) =>
@@ -1233,6 +1270,9 @@ public sealed partial class MainWindow : Window
     {
         ViewModel.SelectSignatureForPlacement(item);
         SignaturesFlyout.Hide();
+        // The placement hint says "click"; a keyboard user places it with Enter (#2).
+        if (ViewModel.PendingSignature is not null)
+            Announce(Strings.PlaceSignatureKeyHint);
     }
 
     /// <summary>Opens the library flyout on its toolbar button.</summary>

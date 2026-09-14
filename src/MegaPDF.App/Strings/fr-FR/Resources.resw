@@ -657,4 +657,65 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="CouldNotRenameSignatureTitle" xml:space="preserve">
     <value>Impossible de renommer cette signature</value>
   </data>
+
+  <!-- ===== Keyboard traversal of the page (SDD §2.2, #2; MainWindow.Keyboard.cs) ===== -->
+  <data name="PagesScroll.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Pages du document</value>
+  </data>
+  <data name="PagesScroll.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.HelpText" xml:space="preserve">
+    <value>Tab passe d'un champ, d'une case ou d'un texte à l'autre. Entrée ou Espace l'active. Échap revient à la barre d'outils.</value>
+  </data>
+  <data name="NothingKeyboardEditable" xml:space="preserve">
+    <value>Rien dans ce document ne peut être modifié au clavier.</value>
+  </data>
+  <data name="RegionCheckboxTicked" xml:space="preserve">
+    <value>Case de formulaire, cochée</value>
+  </data>
+  <data name="RegionCheckboxNotTicked" xml:space="preserve">
+    <value>Case de formulaire, non cochée</value>
+  </data>
+  <data name="RegionBoxToTick" xml:space="preserve">
+    <value>Case à cocher</value>
+    <comment>A drawn (non-form) box</comment>
+  </data>
+  <data name="RegionFormField" xml:space="preserve">
+    <value>Champ de formulaire</value>
+  </data>
+  <data name="RegionTextEditable" xml:space="preserve">
+    <value>Texte modifiable</value>
+  </data>
+  <data name="RegionAddedText" xml:space="preserve">
+    <value>Texte ajouté</value>
+  </data>
+  <data name="RegionSignatureOrMark" xml:space="preserve">
+    <value>Signature ou coche</value>
+  </data>
+  <data name="RegionCover" xml:space="preserve">
+    <value>Correcteur</value>
+    <comment>A placed whiteout</comment>
+  </data>
+  <data name="RegionPage" xml:space="preserve">
+    <value>Page</value>
+  </data>
+  <data name="PageRegionDescription" xml:space="preserve">
+    <value>Page {0}, {1}</value>
+    <comment>{0} page number, {1} region description</comment>
+  </data>
+  <data name="PageRegionControlType" xml:space="preserve">
+    <value>zone de la page</value>
+    <comment>UIA localized control type of the keyboard focus ring; lower case, like "button"</comment>
+  </data>
+  <data name="SignatureSelectedKeyHint" xml:space="preserve">
+    <value>Signature sélectionnée. Les flèches la déplacent, Supprimer la retire, Échap la désélectionne.</value>
+  </data>
+  <data name="TextBoxSelectedKeyHint" xml:space="preserve">
+    <value>Texte sélectionné. Les flèches le déplacent, Entrée le modifie, Supprimer le retire, Échap le désélectionne.</value>
+  </data>
+  <data name="CoverSelectedKeyHint" xml:space="preserve">
+    <value>Correcteur sélectionné. Supprimer le retire, Échap le désélectionne.</value>
+  </data>
+  <data name="PlaceSignatureKeyHint" xml:space="preserve">
+    <value>Avec Tab, allez à l'endroit où placer la signature, puis appuyez sur Entrée.</value>
+    <comment>Announced by Narrator after a signature is picked from the library</comment>
+  </data>
 </root>

@@ -306,4 +306,52 @@ public static partial class Strings
 
     /// <summary>Couldn't rename that signature</summary>
     public static string CouldNotRenameSignatureTitle => Get("CouldNotRenameSignatureTitle");
+
+    /// <summary>Nothing on this document can be changed from the keyboard.</summary>
+    public static string NothingKeyboardEditable => Get("NothingKeyboardEditable");
+
+    /// <summary>Checkbox, ticked</summary>
+    public static string RegionCheckboxTicked => Get("RegionCheckboxTicked");
+
+    /// <summary>Checkbox, not ticked</summary>
+    public static string RegionCheckboxNotTicked => Get("RegionCheckboxNotTicked");
+
+    /// <summary>Box to tick</summary>
+    public static string RegionBoxToTick => Get("RegionBoxToTick");
+
+    /// <summary>Form field</summary>
+    public static string RegionFormField => Get("RegionFormField");
+
+    /// <summary>Text, editable</summary>
+    public static string RegionTextEditable => Get("RegionTextEditable");
+
+    /// <summary>Added text</summary>
+    public static string RegionAddedText => Get("RegionAddedText");
+
+    /// <summary>Signature or tick mark</summary>
+    public static string RegionSignatureOrMark => Get("RegionSignatureOrMark");
+
+    /// <summary>Cover</summary>
+    public static string RegionCover => Get("RegionCover");
+
+    /// <summary>Page</summary>
+    public static string RegionPage => Get("RegionPage");
+
+    /// <summary>Page {0}, {1}</summary>
+    public static string PageRegionDescription(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("PageRegionDescription"), arg0, arg1);
+
+    /// <summary>page region</summary>
+    public static string PageRegionControlType => Get("PageRegionControlType");
+
+    /// <summary>Signature selected. Arrow keys move it, Delete removes it, Esc lets it go.</summary>
+    public static string SignatureSelectedKeyHint => Get("SignatureSelectedKeyHint");
+
+    /// <summary>Text selected. Arrow keys move it, Enter edits it, Delete removes it, Esc lets it go.</summary>
+    public static string TextBoxSelectedKeyHint => Get("TextBoxSelectedKeyHint");
+
+    /// <summary>Cover selected. Delete removes it, Esc lets it go.</summary>
+    public static string CoverSelectedKeyHint => Get("CoverSelectedKeyHint");
+
+    /// <summary>Tab to where the signature goes on the page, then press Enter.</summary>
+    public static string PlaceSignatureKeyHint => Get("PlaceSignatureKeyHint");
 }
