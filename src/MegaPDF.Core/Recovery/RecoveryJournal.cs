@@ -19,6 +19,7 @@ public sealed class RecoveryJournal : IDisposable
     private readonly string _directory;
     private string? _journalPath;
     private StreamWriter? _writer;
+    private bool _contentIsProtected;
 
     /// <param name="directory">Defaults to %LOCALAPPDATA%\MegaPDF\Recovery; injectable for tests.</param>
     public RecoveryJournal(string? directory = null)
@@ -29,10 +30,25 @@ public sealed class RecoveryJournal : IDisposable
         Directory.CreateDirectory(_directory);
     }
 
-    public void BeginSession(string documentPath)
+    /// <summary>
+    /// Starts journaling edits to <paramref name="documentPath"/>, truncating any earlier
+    /// journal for it. A document whose content is protected — opened with a password — is
+    /// not journaled at all: entries carry document text, which would otherwise sit on disk
+    /// unencrypted beside a file its owner encrypted (#135). A journal an earlier version
+    /// left for such a document is deleted; a restore has already read its entries.
+    /// </summary>
+    public void BeginSession(string documentPath, bool contentIsProtected = false)
     {
         EndSession();
-        _journalPath = Path.Combine(_directory, $"{HashPath(documentPath)}.journal");
+        _contentIsProtected = contentIsProtected;
+        var journalPath = Path.Combine(_directory, $"{HashPath(documentPath)}.journal");
+        if (contentIsProtected)
+        {
+            if (File.Exists(journalPath))
+                File.Delete(journalPath);
+            return;
+        }
+        _journalPath = journalPath;
         _writer = new StreamWriter(new FileStream(_journalPath, FileMode.Create, FileAccess.Write, FileShare.Read));
         _writer.WriteLine(JsonSerializer.Serialize(new Header(documentPath)));
         _writer.Flush();
@@ -47,7 +63,7 @@ public sealed class RecoveryJournal : IDisposable
     }
 
     /// <summary>The document was saved — recorded edits are now durable, so restart the log.</summary>
-    public void MarkSaved(string documentPath) => BeginSession(documentPath);
+    public void MarkSaved(string documentPath) => BeginSession(documentPath, _contentIsProtected);
 
     /// <summary>Clean close (or the user discarded changes): nothing to recover.</summary>
     public void EndSession()

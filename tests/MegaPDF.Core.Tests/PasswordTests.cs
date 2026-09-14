@@ -44,6 +44,31 @@ public class PasswordTests : IDisposable
     }
 
     [Fact]
+    public void OpenLike_ReopensAnUnlockedDocumentsOwnFile()
+    {
+        // #134: shrink-for-email works on a fresh copy read from disk. For a protected
+        // document that copy has to open like the document, not bare.
+        var path = WriteEncryptedPdf("hunter2");
+        using var doc = _engine.Open(path, "hunter2");
+        Assert.True(Assert.Throws<PdfLoadException>(() => _engine.Open(path)).IsPasswordError);
+
+        using var copy = _engine.OpenLike(doc, path);
+        Assert.Equal(doc.PageCount, copy.PageCount);
+        using var page = copy.GetPage(0);
+        Assert.Equal("Hello MegaPDF", Assert.Single(page.GetTextRuns()).Text);
+    }
+
+    [Fact]
+    public void OpenLike_AnUnprotectedDocument_OpensItsFile()
+    {
+        var path = Path.Combine(_dir, "open-like.pdf");
+        File.WriteAllBytes(path, SamplePdf.Build());
+        using var doc = _engine.Open(path);
+        using var copy = _engine.OpenLike(doc, path);
+        Assert.Equal(1, copy.PageCount);
+    }
+
+    [Fact]
     public void UnprotectedFile_IgnoresSuppliedPassword()
     {
         var path = Path.Combine(_dir, "open.pdf");

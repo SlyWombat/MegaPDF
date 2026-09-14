@@ -147,6 +147,63 @@ public class RecoveryJournalTests : IDisposable
         Assert.IsType<CheckToggleEntry>(entries[0]);
     }
 
+    [Fact]
+    public void ProtectedDocument_IsNeverJournaled_EvenAcrossASaveAndACrash()
+    {
+        // #135: journal entries carry document text; a document opened with a password
+        // must not leave it on disk unencrypted.
+        var docPath = WriteFormPdf();
+        using (var journal = new RecoveryJournal(_journalDir))
+        {
+            journal.BeginSession(docPath, contentIsProtected: true);
+            journal.Record(new FormTextEntry(0, "FullName", "Pat Q. Administrator"));
+            journal.MarkSaved(docPath);
+            journal.Record(new FormTextEntry(0, "FullName", "Still private after the save"));
+            // Simulated crash: the session is never ended.
+        }
+
+        Assert.Empty(Directory.GetFiles(_journalDir));
+        using var scanner = new RecoveryJournal(_journalDir);
+        Assert.Empty(scanner.FindRecoverableSessions());
+    }
+
+    [Fact]
+    public void ProtectedSession_RemovesAnOlderJournal_OnceItsEntriesHaveBeenRead()
+    {
+        // #133, #135: an earlier version journaled protected documents. A restore reads the
+        // entries first; opening the document then must not leave that plaintext behind.
+        var docPath = WriteFormPdf();
+        using (var old = new RecoveryJournal(_journalDir))
+        {
+            old.BeginSession(docPath);
+            old.Record(new CheckToggleEntry(0, "Agree"));
+        }
+        string journalPath;
+        using (var scanner = new RecoveryJournal(_journalDir))
+            journalPath = Assert.Single(scanner.FindRecoverableSessions()).JournalPath;
+
+        var entries = RecoveryJournal.LoadEntries(journalPath);
+        using var journal = new RecoveryJournal(_journalDir);
+        journal.BeginSession(docPath, contentIsProtected: true);
+
+        Assert.IsType<CheckToggleEntry>(Assert.Single(entries));
+        Assert.False(File.Exists(journalPath));
+    }
+
+    [Fact]
+    public void UnprotectedSession_AfterAProtectedOne_JournalsAgain()
+    {
+        var protectedDoc = WriteFormPdf();
+        var plainDoc = WriteFormPdf();
+        using var journal = new RecoveryJournal(_journalDir);
+        journal.BeginSession(protectedDoc, contentIsProtected: true);
+        journal.BeginSession(plainDoc);
+        journal.Record(new CheckToggleEntry(0, "Agree"));
+
+        using var scanner = new RecoveryJournal(_journalDir);
+        Assert.Equal(plainDoc, Assert.Single(scanner.FindRecoverableSessions()).DocumentPath);
+    }
+
     private string WriteFormPdf()
     {
         var path = Path.Combine(_dir, $"form-{Guid.NewGuid():N}.pdf");

@@ -218,14 +218,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsDocumentOpen = true;
         CurrentPage = 1;
         // Starting a session truncates any previous journal for this document, which
-        // is why it happens after a successful open and not before.
-        _journal.BeginSession(path);
+        // is why it happens after a successful open and not before. A document opened
+        // with a password is not journaled at all, so its text never reaches disk
+        // unencrypted (#135).
+        _journal.BeginSession(path, contentIsProtected: password is not null);
         OnPropertyChanged(nameof(PageIndicator));
         OnPropertyChanged(nameof(ShowEmptyState));
         IsDirty = false;
         Status = Strings.Plural(document.PageCount,
             Strings.DocumentOpenedOne(DocumentName, document.PageCount),
             Strings.DocumentOpenedOther(DocumentName, document.PageCount));
+
+        // A restore that had to wait for the password replays now that it is open (#133).
+        if (_pendingRestore is { } restore && restore.DocumentPath == path)
+        {
+            _pendingRestore = null;
+            ReplayRecovered(restore.Entries);
+        }
     }
 
     /// <summary>
@@ -251,6 +260,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         if (string.IsNullOrEmpty(password))
         {
+            // Nothing opened, so no session truncated the journal: a cancelled restore is
+            // still on disk to be offered next time (#133).
+            _pendingRestore = null;
             Status = Strings.OpeningCancelled;
             return;
         }
@@ -484,7 +496,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return (new ImageShrinker.Result(0), null);
         }
 
-        using var copy = _engine.Open(DocumentPath);
+        // Opened like the document, so a protected one opens with its own password; the
+        // copy then saves and verifies protected like any other (#134).
+        if (_document is null)
+            return (new ImageShrinker.Result(0), null);
+        using var copy = _engine.OpenLike(_document, DocumentPath);
         var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
         if (result.ImagesReplaced == 0)
             return (result, null);
@@ -541,7 +557,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         var entries = RecoveryJournal.LoadEntries(session.JournalPath);
 
+        // For a protected document Open() only starts the password prompt and returns.
+        // The entries wait here and replay when the retry opens it; checking only after
+        // Open() returned lost them, and the retry's new session truncated the journal (#133).
+        _pendingRestore = (session.DocumentPath, entries);
         Open(session.DocumentPath);
+        if (PendingPasswordPath is null)
+            _pendingRestore = null;   // opened and replayed, or failed outright
+    }
+
+    /// <summary>A restore waiting on its document's password prompt (#133).</summary>
+    private (string DocumentPath, IReadOnlyList<JournalEntry> Entries)? _pendingRestore;
+
+    private void ReplayRecovered(IReadOnlyList<JournalEntry> entries)
+    {
         if (_document is null || entries.Count == 0)
             return;
 

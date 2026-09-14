@@ -274,7 +274,9 @@ public partial class MainViewModel(Window window) : ObservableObject
         HasUnsavedChanges = false;
         _undoStack.Clear();
         ClearSearch(); // matches belong to the previous document
-        _journal.BeginSession(path);
+        // Not journaled when opened with a password: its text must not reach disk
+        // unencrypted (#135).
+        _journal.BeginSession(path, contentIsProtected: password is not null);
         _recentFiles.Add(path);
         if (rememberedView is not null)
             ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
@@ -1160,13 +1162,17 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
 
         var sourcePath = DocumentPath;
+        var original = _document;
+        if (original is null)
+            return;
         var originalBytes = new FileInfo(sourcePath).Length;
 
-        // Work on a fresh copy from disk so the open document is never degraded.
+        // Work on a fresh copy from disk so the open document is never degraded. Opened
+        // like the document, so a protected one opens with its own password (#134).
         IPdfDocument copy;
         try
         {
-            copy = await Task.Run(() => Engine.Open(sourcePath));
+            copy = await Task.Run(() => Engine.OpenLike(original, sourcePath));
         }
         catch (Exception ex)
         {
