@@ -402,14 +402,50 @@ MEGAPDF_API int megapdf_move_text_box(const megapdf_page* page, int object_index
 MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* page, const unsigned short* id);
 
 /**
- * Detached objects: a page object removed from its page but kept alive so an
- * undo can put it back byte-identical. The core owns it; restoring consumes the
+ * Detached objects: page objects removed from their page but kept alive so an
+ * undo can put them back byte-identical. The core owns them; restoring consumes the
  * handle, discarding frees it, and closing the document frees any still held.
+ *
+ * megapdf_detach_object() takes exactly the one object at `object_index`, whatever it
+ * is; megapdf_restore_object() puts a one-object handle back at `object_index`, and
+ * refuses a handle holding more (MEGAPDF_ERR_ARGUMENT, the handle stays valid).
  */
 typedef struct megapdf_detached megapdf_detached;
 MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* page, int object_index);
 MEGAPDF_API int megapdf_restore_object(const megapdf_page* page, megapdf_detached* detached, int object_index);
 MEGAPDF_API void megapdf_discard_detached(megapdf_detached* detached);
+
+/**
+ * Removes body text, a line or a single run, with the hidden copies drawn under it
+ * (#136). Producers draw a line twice for fake bold, an outline or a shadow; PDFium's
+ * text layer reads one copy and the other extracts as empty text, so it is never a run,
+ * and removing only the runs leaves the line on the page. `object_indices` are the runs'
+ * indices as the page is now, in any order, without repeats. Everything is taken at
+ * once into one handle; megapdf_restore_detached() puts every object back where it was.
+ *
+ * NULL, with the page untouched, for a bad index, an object that is not text, a repeat,
+ * or body text megapdf_text_editable() refuses (text boxes are not judged).
+ */
+MEGAPDF_API megapdf_detached* megapdf_detach_text_runs(const megapdf_page* page, const int* object_indices, size_t count);
+
+/**
+ * Undoes whatever produced `detached`, which it consumes: puts every object it holds
+ * back at the index it had, and for a megapdf_set_text()/megapdf_set_line_text() handle
+ * first takes the edited run off the page. The page must be as that call left it, apart
+ * from changes already undone; later edits must be undone first. MEGAPDF_ERR_ARGUMENT,
+ * with the page and the handle untouched, when the page is not the handle's or cannot be
+ * as the call left it.
+ */
+MEGAPDF_API int megapdf_restore_detached(const megapdf_page* page, megapdf_detached* detached);
+
+typedef struct megapdf_detached_part {
+    int object_index;   /* where the object stood before it was taken, and where restoring puts it */
+    int copy_of;        /* the object index of the run it is a hidden copy of; -1 for a run itself */
+} megapdf_detached_part;
+
+/** How many objects a handle holds, ascending by object index; for a recovery journal. */
+MEGAPDF_API size_t megapdf_detached_count(const megapdf_detached* detached);
+MEGAPDF_API int megapdf_detached_get(const megapdf_detached* detached, size_t index, megapdf_detached_part* out);
 
 /* --------------------------------------------------------------------------
  * Contract 6: save, flatten and images (#110). File I/O, atomic replace and
@@ -590,12 +626,15 @@ enum {
  *
  * The original object is never modified. Either way the edited run is a new
  * text object at `object_index` — same font size, matrix, colours, render mode
- * and text-box identity — and the original leaves the page detached. It is handed
- * back through `out_replaced` when non-NULL, so an undo restores it byte-identical:
- * detach the edited run at `object_index`, then megapdf_restore_object() the
- * original there. With `out_replaced` NULL it is freed. (PDFium cannot read a text
- * object's character codes back, so an edit made on the original itself could
- * never be undone exactly, #117.)
+ * and text-box identity — and the original leaves the page detached, together with
+ * any hidden copy of the run drawn under it (#136; see megapdf_detach_text_runs). They
+ * are handed back through `out_replaced` when non-NULL, so an undo restores them
+ * byte-identical with megapdf_restore_detached(), which takes the edited run off
+ * first. With `out_replaced` NULL they are freed. (PDFium cannot read a text object's
+ * character codes back, so an edit made on the original itself could never be undone
+ * exactly, #117.) When the run had no hidden copy the handle holds the one original,
+ * and detaching the edited run and megapdf_restore_object() at `object_index` undoes
+ * the edit as well.
  *
  * MEGAPDF_ERR_ARGUMENT for a non-text object, empty text or an unknown flag;
  * MEGAPDF_ERR_NO_FONT when not even the substitute can draw the text;
@@ -603,6 +642,18 @@ enum {
  */
 MEGAPDF_API int megapdf_set_text(const megapdf_page* page, int object_index, const unsigned short* text,
                                  unsigned int flags, int* out_outcome, megapdf_detached** out_replaced);
+
+/**
+ * Retypes a visual line: megapdf_set_text() on `object_indices[0]`, and the line's other
+ * runs removed, all in one call, with the hidden copies of every run (#136). Indices as
+ * the page is now, without repeats. One handle holds every original; undo it with
+ * megapdf_restore_detached(). The same errors as megapdf_set_text(), with the page
+ * untouched; MEGAPDF_ERR_ARGUMENT too for a bad or repeated index among the rest, and
+ * MEGAPDF_ERR_LAYOUT when megapdf_text_editable() refuses any of the runs.
+ */
+MEGAPDF_API int megapdf_set_line_text(const megapdf_page* page, const int* object_indices, size_t count,
+                                      const unsigned short* text, unsigned int flags, int* out_outcome,
+                                      megapdf_detached** out_replaced);
 
 /**
  * Inserts a text object at `object_index` with its baseline starting at
@@ -622,10 +673,12 @@ MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* page, int object_ind
  * its writer drops text state it has no syntax for — character and word spacing,
  * horizontal scaling, rise — and turns colour spaces into device colour. On many
  * real documents that moves or restyles text the user never touched. The answer
- * comes from a dry run on a copy of the page: rewrite the stream there, save, reopen,
- * and compare the render and every text object's position and text. Cached per page
- * and object. megapdf_set_text() and megapdf_detach_object() (for body text) refuse
- * what this refuses, so the apps can ask first and say so when a line is tapped.
+ * comes from a dry run on a copy of the page: rewrite the stream there, with the
+ * object's hidden copies (#136), save, reopen, and compare the render and every text
+ * object's position and text. Cached per page and object until the page next changes
+ * (#137). megapdf_set_text(), megapdf_set_line_text(), megapdf_detach_text_runs() and
+ * megapdf_detach_object() (for body text) refuse what this refuses, so the apps can ask
+ * first and say so when a line is tapped.
  */
 MEGAPDF_API int megapdf_text_editable(const megapdf_page* page, int object_index);
 

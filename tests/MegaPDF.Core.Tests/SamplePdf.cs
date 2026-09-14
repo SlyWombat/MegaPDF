@@ -122,6 +122,40 @@ internal static class SamplePdf
     /// ("Hello ", "cruel ", "world") plus a separate second line — mirrors how
     /// real generators split paragraphs.
     /// </summary>
+    /// <summary>
+    /// Lines drawn twice, as producers fake bold, outlines and shadows (#136); the same page as
+    /// tools/gen_test_fixtures.py writes to doubled.pdf. PDFium's text layer reads one copy of
+    /// each and the other extracts as empty text. Objects in content order: 0 "A plain body line";
+    /// 1 "Fake bold heading" and 2 its copy 0.3 pt right; 3 "Filled then stroked" and 4 its
+    /// stroked copy; 5 "Shadowed line" in grey 1 pt right and down, 6 the same in black;
+    /// 7 "Two runs" and 8 "drawn twice" on one line, 9 and 10 their copies; 11 "The closing line".
+    /// </summary>
+    public static byte[] BuildDoubledLines()
+    {
+        static string Text(string x, string y, string s) => $"BT /F1 14 Tf {x} {y} Td ({s}) Tj ET\n";
+        var content =
+            Text("72", "720", "A plain body line") +
+            Text("72", "680", "Fake bold heading") +
+            Text("72.3", "680", "Fake bold heading") +
+            Text("72", "640", "Filled then stroked") +
+            "q 0.4 w BT 1 Tr /F1 14 Tf 72 640 Td (Filled then stroked) Tj ET Q\n" +
+            "q 0.6 g " + Text("73", "599", "Shadowed line") + "Q\n" +
+            Text("72", "600", "Shadowed line") +
+            Text("72", "560", "Two runs") +
+            Text("150", "560", "drawn twice") +
+            Text("72.3", "560", "Two runs") +
+            Text("150.3", "560", "drawn twice") +
+            Text("72", "520", "The closing line");
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n",
+        ]);
+    }
+
     public static byte[] BuildMultiRun()
     {
         var content =

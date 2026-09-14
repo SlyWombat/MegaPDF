@@ -52,7 +52,11 @@ public sealed record LineEditEntry(int PageIndex, int FirstIndex, string NewText
 /// <summary>Line delete: all listed runs detached (indexes pre-recorded descending).</summary>
 public sealed record LineDeleteEntry(int PageIndex, int[] DetachIndexes) : JournalEntry(PageIndex);
 
-/// <summary>Undo of a line edit/delete: recreate runs ascending; FirstIndex ≥ 0 also restores that run's text.</summary>
+/// <summary>
+/// Undo of a line edit/delete: recreate runs ascending; FirstIndex ≥ 0 also restores that run's text.
+/// Restores may include a run's hidden copies (#136), recreated like the run at their own index. With
+/// FirstIndex ≥ 0 and no FirstText, the edited run is taken off first and Restores recreates it too.
+/// </summary>
 public sealed record LineRestoreEntry(int PageIndex, int FirstIndex, string? FirstText, RestoreRun[] Restores) : JournalEntry(PageIndex);
 
 public sealed record WhiteoutAddEntry(int PageIndex, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);

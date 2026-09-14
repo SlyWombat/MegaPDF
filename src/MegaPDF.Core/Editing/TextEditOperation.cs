@@ -12,6 +12,7 @@ namespace MegaPDF.Core.Editing;
 public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfTextRun run, string newText) : IPageEditOperation
 {
     private DetachedTextRun? _original;
+    private IReadOnlyList<DetachedPart> _taken = [];
 
     public int PageIndex { get; } = pageIndex;
 
@@ -25,6 +26,7 @@ public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfT
         using var page = document.GetPage(PageIndex);
         LastOutcome = page.SetTextRunText(run, newText, out var original);
         _original = original;
+        _taken = original.Parts;
     }
 
     public void Revert()
@@ -34,8 +36,10 @@ public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfT
         _original = null;
     }
 
-    public JournalEntry ToJournalEntry(bool inverse) =>
-        new TextEditEntry(PageIndex, run.ObjectIndex, inverse ? run.Text : newText);
+    // A run drawn with hidden copies (#136) is undone on replay like a line of one.
+    public JournalEntry ToJournalEntry(bool inverse) => inverse && _taken.Count > 1
+        ? LineJournal.EditUndo(PageIndex, [run], _taken)
+        : new TextEditEntry(PageIndex, run.ObjectIndex, inverse ? run.Text : newText);
 }
 
 /// <summary>
@@ -46,6 +50,7 @@ public sealed class TextEditOperation(IPdfDocument document, int pageIndex, PdfT
 public sealed class DeleteTextOperation(IPdfDocument document, int pageIndex, PdfTextRun run) : IPageEditOperation
 {
     private DetachedTextRun? _detached;
+    private IReadOnlyList<DetachedPart> _taken = [];
 
     public int PageIndex { get; } = pageIndex;
 
@@ -54,7 +59,9 @@ public sealed class DeleteTextOperation(IPdfDocument document, int pageIndex, Pd
     public void Apply()
     {
         using var page = document.GetPage(PageIndex);
+        // The hidden copies drawn under the run leave with it (#136).
         _detached = page.DetachTextRun(run);
+        _taken = _detached.Parts;
     }
 
     public void Revert()
@@ -64,8 +71,11 @@ public sealed class DeleteTextOperation(IPdfDocument document, int pageIndex, Pd
         _detached = null;
     }
 
+    // A run taken with hidden copies (#136) is undone on replay like a line of one, copies recreated.
     public JournalEntry ToJournalEntry(bool inverse) => inverse
-        ? new TextRestoreEntry(PageIndex, run.ObjectIndex, run.Text, run.FontName, run.FontSize,
-            run.Bounds.X, run.Bounds.Y, run.Bounds.Width, run.Bounds.Height)
+        ? _taken.Count > 1
+            ? LineJournal.DeleteUndo(PageIndex, [run], _taken)
+            : new TextRestoreEntry(PageIndex, run.ObjectIndex, run.Text, run.FontName, run.FontSize,
+                run.Bounds.X, run.Bounds.Y, run.Bounds.Width, run.Bounds.Height)
         : new TextDeleteEntry(PageIndex, run.ObjectIndex);
 }

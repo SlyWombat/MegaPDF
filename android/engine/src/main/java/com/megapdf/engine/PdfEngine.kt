@@ -474,6 +474,45 @@ class PdfPage internal constructor(
         }
 
     /**
+     * Retypes a visual line (#136): [text] goes into the run at the first of [objectIndices], the
+     * line's other runs leave the page, and so do the hidden copies a producer drew under any of
+     * them for fake bold, an outline or a shadow, all in one call. Taking them one at a time would
+     * move the indices of those still to be taken. [restoreDetached] undoes it byte-identical.
+     */
+    suspend fun setLineText(objectIndices: List<Int>, text: String): TextEdit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        require(objectIndices.isNotEmpty()) { "a line has at least one run" }
+        require(text.isNotEmpty()) { "text must not be empty" }
+        val result = PdfiumNative.nativeSetLineText(handle, objectIndices.toIntArray(), text)
+        if (result.size == 3 && result[0] == -5L) throw TextLayoutException()
+        check(result.size == 3 && result[0] == 0L && result[2] != 0L) { "failed to change text" }
+        TextEdit(
+            if (result[1] == 1L) TextEditOutcome.SUBSTITUTED else TextEditOutcome.IN_PLACE,
+            DetachedObject(result[2]),
+        )
+    }
+
+    /** Removes a visual line's runs with the hidden copies drawn under them (#136), kept for [restoreDetached]. */
+    suspend fun detachTextRuns(objectIndices: List<Int>): DetachedObject = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        require(objectIndices.isNotEmpty()) { "a line has at least one run" }
+        val detached = PdfiumNative.nativeDetachTextRuns(handle, objectIndices.toIntArray())
+        check(detached != 0L) { "failed to remove the text" }
+        DetachedObject(detached)
+    }
+
+    /** Undoes [setLineText] or [detachTextRuns]: every object back at its own index, the edited run off first. */
+    suspend fun restoreDetached(detached: DetachedObject): Unit =
+        withContext(engine.dispatcher) {
+            check(!closed) { "page is closed" }
+            check(detached.handle != 0L) { "the text was already restored" }
+            check(PdfiumNative.nativeRestoreDetached(handle, detached.handle)) {
+                "failed to restore the text"
+            }
+            detached.handle = 0L
+        }
+
+    /**
      * Case-insensitive literal substring search on this page (#26), matches in
      * reading order. A match that wraps across lines carries one rect per line.
      */

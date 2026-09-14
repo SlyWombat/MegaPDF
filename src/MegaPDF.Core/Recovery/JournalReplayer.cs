@@ -32,15 +32,13 @@ public static class JournalReplayer
                     break;
 
                 case LineEditEntry lineEdit:
-                    page.SetTextRunText(new PdfTextRun(lineEdit.FirstIndex, "", default, "", 0), lineEdit.NewText);
-                    foreach (var index in lineEdit.DetachIndexes) // recorded descending
-                        page.DetachTextRun(new PdfTextRun(index, "", default, "", 0));
+                    // As the edit was made: one call, which takes the hidden copies too (#136).
+                    page.SetLineText([Stub(lineEdit.FirstIndex), .. lineEdit.DetachIndexes.Select(Stub)], lineEdit.NewText, out _);
                     applied++;
                     break;
 
                 case LineDeleteEntry lineDelete:
-                    foreach (var index in lineDelete.DetachIndexes) // recorded descending
-                        page.DetachTextRun(new PdfTextRun(index, "", default, "", 0));
+                    page.DetachTextRuns(lineDelete.DetachIndexes.Select(Stub).ToArray());
                     applied++;
                     break;
 
@@ -67,6 +65,14 @@ public static class JournalReplayer
                 }
 
                 case LineRestoreEntry lineRestore:
+                    if (lineRestore is { FirstIndex: >= 0, FirstText: null })
+                    {
+                        // The edit took hidden copies of its first run (#136): take the edited run
+                        // off where it stands while the rest are away, then the whole line comes
+                        // back below, each copy recreated exactly like its run.
+                        var standing = lineRestore.FirstIndex - lineRestore.Restores.Count(r => r.Index < lineRestore.FirstIndex);
+                        page.DetachObjectAt(standing);
+                    }
                     foreach (var run in lineRestore.Restores) // recorded ascending
                         page.InsertTextRun(run.Index, run.Text, run.FontName, run.FontSize,
                             new PdfRect(run.X, run.Y, run.Width, run.Height));
@@ -155,6 +161,9 @@ public static class JournalReplayer
         }
         return applied;
     }
+
+    /// <summary>A run known only by its object index, which is all replay records.</summary>
+    private static PdfTextRun Stub(int objectIndex) => new(objectIndex, "", default, "", 0);
 
     private static PdfFormField? FindField(IPdfPage page, string name) =>
         page.GetFormFields().FirstOrDefault(f => f.Name == name);

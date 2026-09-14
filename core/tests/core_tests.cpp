@@ -2621,6 +2621,245 @@ void test_form_xobject_text() {
     check(differing == 0, "form XObject: the form and the body under it render as before", std::to_string(differing) + " pixels");
 }
 
+// --------------------------------------------------------------------------
+// #136: a line drawn twice (fake bold, fill then stroke, a shadow). PDFium's text layer reads
+// one copy; the other extracts as empty text, is never a run, and a delete or an edit that
+// took only the runs left it drawn. doubled.pdf, in content order: 0 a plain line; 1 fake bold
+// and 2 its copy; 3 filled and 4 its stroked copy; 5 a grey shadow and 6 the black text;
+// 7 and 8 a two-run line with 9 and 10 their copies; 11 a closing line.
+
+int objects_on(const megapdf_page* page) {
+    int n = 0;
+    while (megapdf_object_type(page, n) >= 0) n++;
+    return n;
+}
+
+// Text objects overlapping `box`, runs or not: whatever is still drawn where a line was.
+int text_objects_over(const megapdf_page* page, const megapdf_rect& box) {
+    int n = 0;
+    for (int i = 0; megapdf_object_type(page, i) >= 0; i++) {
+        megapdf_rect r{};
+        if (megapdf_object_type(page, i) != 1 || megapdf_object_bounds(page, i, &r) != MEGAPDF_OK) continue;
+        if (r.left < box.right && r.right > box.left && r.bottom < box.top && r.top > box.bottom) n++;
+    }
+    return n;
+}
+
+std::string parts_of(const megapdf_detached* x) {
+    std::string s;
+    for (size_t i = 0; i < megapdf_detached_count(x); i++) {
+        megapdf_detached_part part{};
+        megapdf_detached_get(x, i, &part);
+        s += "[" + std::to_string(part.object_index) + " of " + std::to_string(part.copy_of) + "]";
+    }
+    return s;
+}
+
+void test_hidden_copies(const std::string& fixtures) {
+    const auto bytes = read_file(fixtures + "/doubled.pdf");
+    struct Line {
+        const char* name;
+        std::vector<int> runs;   // as a caller passes them, in any order
+        const char* taken;       // what the handle holds: [object index of the run it copies, or -1]
+        megapdf_rect box;        // where the line is drawn
+    };
+    const std::vector<Line> lines = {
+        {"fake bold", {1}, "[1 of -1][2 of 1]", {70, 674, 240, 694}},
+        {"fill then stroke", {3}, "[3 of -1][4 of 3]", {70, 636, 240, 654}},
+        {"shadow", {5}, "[5 of -1][6 of 5]", {70, 596, 240, 614}},
+        {"two runs drawn twice", {8, 7}, "[7 of -1][8 of -1][9 of 7][10 of 8]", {70, 556, 240, 574}},
+    };
+    const megapdf_rect plain_box{70, 714, 240, 734}, closing_box{70, 512, 240, 534};
+    const U16 retyped = u16("Retyped");
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        check(p.page != nullptr, "doubled.pdf: opens");
+        if (p.page == nullptr) return;
+        check(objects_on(p.page) == 12 && run_shots(p.page).size() == 7, "doubled.pdf: PDFium reads one copy of each doubled line",
+              std::to_string(objects_on(p.page)) + " objects, " + std::to_string(run_shots(p.page).size()) + " runs");
+        for (const Line& line : lines) check(megapdf_text_editable(p.page, line.runs[0]) == 1, std::string("doubled.pdf: editable: ") + line.name);
+    }
+
+    for (const Line& line : lines) {
+        const std::string name = std::string("hidden copies: ") + line.name;
+        const auto count = line.runs.size();
+        const int taken = static_cast<int>(std::count(line.taken, line.taken + std::strlen(line.taken), '['));
+        // Delete, then undo.
+        {
+            OpenDoc d(bytes);
+            Page p(d.doc, 0);
+            const auto px = render_page(p.page);
+            const auto shots = run_shots(p.page);
+            megapdf_detached* x = megapdf_detach_text_runs(p.page, line.runs.data(), count);
+            check(x != nullptr && parts_of(x) == line.taken, name + ": the delete takes the runs and their hidden copies", parts_of(x));
+            check(objects_on(p.page) == 12 - taken && text_objects_over(p.page, line.box) == 0,
+                  name + ": nothing of the line is left drawn", std::to_string(text_objects_over(p.page, line.box)));
+            check(text_objects_over(p.page, plain_box) == 1 && text_objects_over(p.page, closing_box) == 1, name + ": the other lines stay");
+            check(megapdf_restore_object(p.page, x, line.runs[0]) == MEGAPDF_ERR_ARGUMENT && objects_on(p.page) == 12 - taken,
+                  name + ": a handle of several objects does not go back as one");
+            check(megapdf_restore_detached(p.page, x) == MEGAPDF_OK, name + ": the delete undoes");
+            check(objects_on(p.page) == 12 && same_runs(shots, run_shots(p.page), 0.01) && render_page(p.page) == px,
+                  name + ": undoing the delete puts both copies back where they were");
+        }
+        // Delete, save, reopen: the copy must not surface as the line.
+        {
+            OpenDoc d(bytes);
+            {
+                Page p(d.doc, 0);
+                megapdf_discard_detached(megapdf_detach_text_runs(p.page, line.runs.data(), count));
+            }
+            OpenDoc again(save_bytes(d.doc, "hidden-copies"));
+            Page q(again.doc, 0);
+            check(q.page != nullptr && text_objects_over(q.page, line.box) == 0 && run_shots(q.page).size() == 7 - count &&
+                      text_objects_over(q.page, plain_box) == 1 && text_objects_over(q.page, closing_box) == 1,
+                  name + ": after saving and reopening, the line is gone and nothing surfaces in its place");
+        }
+        // Edit, undo, edit again, save, reopen.
+        {
+            OpenDoc d(bytes);
+            {
+                Page p(d.doc, 0);
+                const auto px = render_page(p.page);
+                const auto shots = run_shots(p.page);
+                int outcome = -1;
+                megapdf_detached* x = nullptr;
+                check(megapdf_set_line_text(p.page, line.runs.data(), count, retyped.data(), 0, &outcome, &x) == MEGAPDF_OK &&
+                          outcome == MEGAPDF_EDIT_IN_PLACE,
+                      name + ": the edit lands in the run's own font");
+                check(parts_of(x) == line.taken, name + ": the edit hands back the runs and their hidden copies", parts_of(x));
+                check(text_objects_over(p.page, line.box) == 1 && objects_on(p.page) == 12 - taken + 1,
+                      name + ": only the new text is drawn where the line was", std::to_string(text_objects_over(p.page, line.box)));
+                check(megapdf_restore_detached(p.page, x) == MEGAPDF_OK && objects_on(p.page) == 12 &&
+                          same_runs(shots, run_shots(p.page), 0.01) && render_page(p.page) == px,
+                      name + ": undoing the edit puts both copies back where they were");
+                x = nullptr;
+                check(megapdf_set_line_text(p.page, line.runs.data(), count, retyped.data(), 0, &outcome, &x) == MEGAPDF_OK,
+                      name + ": and it edits again");
+                megapdf_discard_detached(x);
+            }
+            OpenDoc again(save_bytes(d.doc, "hidden-copies"));
+            Page q(again.doc, 0);
+            int over = 0;
+            bool reads = false;
+            for (const RunShot& r : run_shots(q.page)) {
+                if (r.bounds.left < line.box.right && r.bounds.right > line.box.left && r.bounds.bottom < line.box.top && r.bounds.top > line.box.bottom) {
+                    over++;
+                    reads = r.text == without_nul(retyped);
+                }
+            }
+            check(over == 1 && reads && text_objects_over(q.page, line.box) == 1,
+                  name + ": after reopening, one run where the line was, reading as the edit, and nothing under it", std::to_string(over));
+        }
+    }
+
+    // Several changes, undone last first: each handle's indices are the page's as it stood then.
+    // Undone out of order, the page cannot be as that change left it, and nothing is touched.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        const auto px = render_page(p.page);
+        const int closing = 11, bold = 1, plain = 0;
+        const int two[] = {7, 8};
+        megapdf_detached* last_line = megapdf_detach_text_runs(p.page, &closing, 1);
+        megapdf_detached* two_runs = megapdf_detach_text_runs(p.page, two, 2);
+        int outcome = -1;
+        megapdf_detached* edited = nullptr;
+        check(last_line != nullptr && two_runs != nullptr &&
+                  megapdf_set_line_text(p.page, &bold, 1, retyped.data(), 0, &outcome, &edited) == MEGAPDF_OK && edited != nullptr,
+              "stacked: delete two lines, then edit a doubled one");
+        check(objects_on(p.page) == 6, "stacked: six objects are left", std::to_string(objects_on(p.page)));
+        megapdf_detached* first_line = megapdf_detach_text_runs(p.page, &plain, 1);
+        check(megapdf_restore_detached(p.page, last_line) == MEGAPDF_ERR_ARGUMENT, "stacked: a delete undone before the later changes is refused");
+        check(megapdf_restore_detached(p.page, edited) == MEGAPDF_ERR_ARGUMENT, "stacked: an edit undone before a later delete is refused");
+        check(objects_on(p.page) == 5, "stacked: and the refusals changed nothing");
+        check(megapdf_restore_detached(p.page, first_line) == MEGAPDF_OK && megapdf_restore_detached(p.page, edited) == MEGAPDF_OK &&
+                  megapdf_restore_detached(p.page, two_runs) == MEGAPDF_OK && megapdf_restore_detached(p.page, last_line) == MEGAPDF_OK,
+              "stacked: undone last first, every undo lands");
+        check(objects_on(p.page) == 12 && render_page(p.page) == px, "stacked: the page is as it was");
+    }
+
+    // A line drawn once takes only itself, and undoing its edit the pre-#136 way still works.
+    // megapdf_set_text on a doubled run takes the copy too.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        const auto px = render_page(p.page);
+        const int plain = 0, bold = 1;
+        megapdf_detached* x = megapdf_detach_text_runs(p.page, &plain, 1);
+        check(parts_of(x) == "[0 of -1]", "plain line: only its run is taken", parts_of(x));
+        check(megapdf_restore_object(p.page, x, 0) == MEGAPDF_OK && render_page(p.page) == px, "plain line: a one-object handle goes back with megapdf_restore_object");
+        const U16 plain_text = u16("Retyped plain line");
+        int outcome = -1;
+        megapdf_detached* original = nullptr;
+        check(megapdf_set_text(p.page, plain, plain_text.data(), 0, &outcome, &original) == MEGAPDF_OK && parts_of(original) == "[0 of -1]",
+              "plain line: its edit hands back only the original", parts_of(original));
+        megapdf_discard_detached(megapdf_detach_object(p.page, plain));
+        check(megapdf_restore_object(p.page, original, plain) == MEGAPDF_OK && render_page(p.page) == px,
+              "plain line: detaching the edit and restoring the original undoes it, as before");
+        original = nullptr;
+        check(megapdf_set_text(p.page, bold, retyped.data(), 0, &outcome, &original) == MEGAPDF_OK && parts_of(original) == "[1 of -1][2 of 1]",
+              "megapdf_set_text takes a doubled run's hidden copy", parts_of(original));
+        check(megapdf_restore_detached(p.page, original) == MEGAPDF_OK && render_page(p.page) == px, "megapdf_restore_detached undoes it");
+    }
+
+    // The same text on another line is a run of its own, never a copy.
+    {
+        OpenDoc d(one_page_pdf("BT /F1 14 Tf 72 700 Td (Repeated line) Tj ET BT /F1 14 Tf 72 680 Td (Repeated line) Tj ET",
+                               "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
+        Page p(d.doc, 0);
+        const int first = 0;
+        megapdf_detached* x = megapdf_detach_text_runs(p.page, &first, 1);
+        check(parts_of(x) == "[0 of -1]" && run_shots(p.page).size() == 1, "a repeated line elsewhere is not taken as a copy", parts_of(x));
+        megapdf_discard_detached(x);
+    }
+
+    // Refusals leave the page alone.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        const int repeated[] = {1, 1};
+        const int missing[] = {1, 99};
+        check(megapdf_detach_text_runs(p.page, repeated, 2) == nullptr && megapdf_detach_text_runs(p.page, missing, 2) == nullptr &&
+                  megapdf_detach_text_runs(p.page, repeated, 0) == nullptr && megapdf_detach_text_runs(nullptr, repeated, 1) == nullptr &&
+                  objects_on(p.page) == 12,
+              "hidden copies: a repeated or missing index, no runs or no page is refused, and nothing is taken");
+        int outcome = -1;
+        megapdf_detached* x = reinterpret_cast<megapdf_detached*>(1);
+        check(megapdf_set_line_text(p.page, missing, 2, retyped.data(), 0, &outcome, &x) == MEGAPDF_ERR_ARGUMENT && x == nullptr &&
+                  objects_on(p.page) == 12 && render_page(p.page) == [&] { OpenDoc fresh(bytes); Page f(fresh.doc, 0); return render_page(f.page); }(),
+              "hidden copies: a line edit naming a missing object is refused before anything changes");
+        check(megapdf_restore_detached(p.page, nullptr) == MEGAPDF_ERR_ARGUMENT && megapdf_restore_detached(nullptr, nullptr) == MEGAPDF_ERR_ARGUMENT &&
+                  megapdf_detached_count(nullptr) == 0,
+              "hidden copies: null handles are refused");
+    }
+}
+
+// #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves
+// object indices and rewrites the page's streams. After a change every answer must be what a
+// fresh open of the saved page gives. PDFium regenerates every stream of a page (patch 5), so one
+// page's verdicts agree with each other and the stale answer shows when a change alters whether
+// the page can be rewritten at all: here, text used as a clip (render mode 7) that the writer
+// cannot keep. Removing the path before it, which the guard does not judge, moves both texts down.
+void test_verdicts_follow_changes() {
+    const std::string content = "0 0 1 rg 72 500 50 50 re f BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET "
+                                "BT /F1 30 Tf 7 Tr 72 600 Td (CLIP) Tj ET 1 0 0 rg 72 590 200 40 re f";
+    OpenDoc d(one_page_pdf(content, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
+    std::vector<int> after;
+    {
+        Page p(d.doc, 0);
+        check(megapdf_text_editable(p.page, 1) >= 0 && megapdf_text_editable(p.page, 2) >= 0, "verdicts: both texts are judged before the change");
+        megapdf_discard_detached(megapdf_detach_object(p.page, 0));
+        check(megapdf_object_type(p.page, 0) == 1 && megapdf_object_type(p.page, 1) == 1, "verdicts: the change moved both texts down one");
+        after = {megapdf_text_editable(p.page, 0), megapdf_text_editable(p.page, 1)};
+    }
+    OpenDoc fresh(save_bytes(d.doc, "verdicts"));
+    Page q(fresh.doc, 0);
+    const std::vector<int> expected = {megapdf_text_editable(q.page, 0), megapdf_text_editable(q.page, 1)};
+    check(after == expected, "verdicts: after a change they are what a fresh open of the saved page says",
+          std::to_string(after[0]) + std::to_string(after[1]) + " vs " + std::to_string(expected[0]) + std::to_string(expected[1]));
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -2649,6 +2888,8 @@ int main(int argc, char** argv) {
     test_edit_scenarios();
     test_edit_beside_fields_and_annotations();
     test_form_xobject_text();
+    test_hidden_copies(argv[1]);
+    test_verdicts_follow_changes();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

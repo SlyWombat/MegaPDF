@@ -46,9 +46,24 @@ struct megapdf_document {
     bool has_unlock = false;
 };
 
+// Page objects taken off a page and kept for undo. One object for megapdf_detach_object();
+// for a line, its runs and the hidden copies drawn with them (#136), ascending by the index
+// each had before it was taken, which is where megapdf_restore_detached() puts it back.
 struct megapdf_detached {
+    struct Part {
+        int index;
+        int copy_of;   // the run's object index when this is a hidden copy of it, -1 otherwise
+        FPDF_PAGEOBJECT object;
+    };
     megapdf_document* owner = nullptr;
-    FPDF_PAGEOBJECT object = nullptr;
+    int page_index = -1;
+    std::vector<Part> parts;
+    // megapdf_set_text() / megapdf_set_line_text(): the edited run stands at this index in
+    // place of the part that has it, until megapdf_restore_detached() takes it off. -1 otherwise.
+    int edited_index = -1;
+    // Its bounds when the edit made it: how the undo knows the object it takes off is the edit.
+    // (A page reloaded between the edit and its undo holds new objects, so the pointer cannot.)
+    float edited_left = 0, edited_bottom = 0, edited_right = 0, edited_top = 0;
 };
 
 struct megapdf_page {
@@ -235,7 +250,7 @@ MEGAPDF_API void megapdf_close(megapdf_document* d) {
     }
     d->open_pages.clear();
     for (megapdf_detached* x : d->detached) {
-        FPDFPageObj_Destroy(x->object);
+        for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
         delete x;
     }
     d->detached.clear();
@@ -1267,13 +1282,168 @@ bool SameRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b
     return true;
 }
 
-// The dry run behind megapdf_text_editable(). Rewrites the stream holding the object
-// on a copy of the page — take the object off and put it straight back, which is what
-// any edit forces — then saves, reopens and compares with the copy before the rewrite.
-bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, int object_index) {
-    const auto key = std::make_pair(page_index, object_index);
-    const auto cached = d->rewrite_keeps_page.find(key);
-    if (cached != d->rewrite_keeps_page.end()) return cached->second;
+// --------------------------------------------------------------------------
+// #136: the hidden copy of a line drawn twice
+// --------------------------------------------------------------------------
+//
+// Producers draw text twice for fake bold, an outline or a shadow. PDFium's text layer
+// (CPDF_TextPage::IsSameAsPreTextObject) gives the characters of a text object that repeats
+// one of the few text objects before it (same character codes and font size, overlapping,
+// offset by less than a character) to the earlier one. The later copy extracts as empty
+// text, so it is never a run, and a delete or an edit that touches only the run leaves the
+// copy drawn: the line stays, or the old text shows under the new.
+//
+// The API cannot read character codes, so a copy is recognised by what the same codes in
+// the same font imply. A text object is a hidden copy of a run when it:
+//   - is not a text box, and its extracted text is empty or whitespace (never a run's text);
+//   - comes after the run in content order, with fewer than five other text objects in
+//     between (PDFium looks back over five; copies already taken do not count, as matches
+//     do not count in PDFium);
+//   - has the same font (object, or base name), the same font size and the same matrix
+//     scale, skew and rotation;
+//   - has bounds of the same size within 10% of the em (one character more or less changes
+//     the width by far more; a stroked copy grows by its line width, a few tenths of a
+//     point), placed within a quarter of the em. Fake bold is offset 0.2-0.5 pt and a shadow
+//     about 1 pt at body sizes of 8-14 pt, and PDFium itself allows most of a character's
+//     width. The em is the font size scaled by the object's matrix, so the tolerance follows
+//     the text's drawn size rather than its bounds, which are short for text like "...".
+// A copy drawn in different pieces from its run (split, or spanning two runs) is not taken.
+
+constexpr int kCopyReach = 5;
+constexpr float kCopyOffset = 0.25f;
+constexpr float kCopySize = 0.10f;
+
+std::string ReadFontNameUtf8(FPDF_FONT font, bool base_name);
+
+struct TextShape {
+    float l = 0, b = 0, r = 0, t = 0;
+    float size = 0;
+    float em = 0;
+    FS_MATRIX m{};
+    FPDF_FONT font = nullptr;
+};
+
+bool ReadShape(FPDF_PAGEOBJECT obj, TextShape* s) {
+    if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return false;
+    if (!FPDFPageObj_GetBounds(obj, &s->l, &s->b, &s->r, &s->t) || !FPDFTextObj_GetFontSize(obj, &s->size) ||
+        !FPDFPageObj_GetMatrix(obj, &s->m)) {
+        return false;
+    }
+    s->font = FPDFTextObj_GetFont(obj);
+    s->em = std::fabs(s->size) * std::sqrt(std::fabs(s->m.a * s->m.d - s->m.b * s->m.c));
+    return s->em > 0 && s->r > s->l;
+}
+
+bool SameValue(float a, float b) {
+    const float scale = std::fabs(a) > 1.0f ? std::fabs(a) : 1.0f;
+    return std::fabs(a - b) <= 0.001f * scale;
+}
+
+bool LooksLikeCopy(const TextShape& run, const TextShape& other) {
+    const float offset = kCopyOffset * run.em;
+    const float size = kCopySize * run.em;
+    return SameValue(other.size, run.size) && SameValue(other.m.a, run.m.a) && SameValue(other.m.b, run.m.b) &&
+           SameValue(other.m.c, run.m.c) && SameValue(other.m.d, run.m.d) &&
+           std::fabs((other.r - other.l) - (run.r - run.l)) <= size && std::fabs((other.t - other.b) - (run.t - run.b)) <= size &&
+           std::fabs(other.l - run.l) <= offset && std::fabs(other.b - run.b) <= offset;
+}
+
+// The hidden copies of the text objects at `runs` on `page`, as (copy index, run index) pairs
+// ascending by copy index. `text_page` is the page's text layer as the page is now.
+std::vector<std::pair<int, int>> HiddenCopies(FPDF_PAGE page, FPDF_TEXTPAGE text_page, std::vector<int> runs) {
+    std::vector<std::pair<int, int>> copies;
+    const int count = FPDFPage_CountObjects(page);
+    if (text_page == nullptr || count <= 0) return copies;
+    std::vector<char> taken(static_cast<size_t>(count), 0);
+    for (int i : runs) if (i >= 0 && i < count) taken[static_cast<size_t>(i)] = 1;
+    std::sort(runs.begin(), runs.end());
+    for (int i : runs) {
+        if (i < 0 || i >= count) continue;
+        FPDF_PAGEOBJECT run = FPDFPage_GetObject(page, i);
+        TextShape shape;
+        if (!ReadShape(run, &shape) || HasMark(run, kTextBoxMark)) continue;
+        std::string run_base;
+        bool run_base_read = false;
+        int passed = 0;
+        for (int j = i + 1; j < count && passed < kCopyReach; j++) {
+            FPDF_PAGEOBJECT other = FPDFPage_GetObject(page, j);
+            if (other == nullptr || FPDFPageObj_GetType(other) != FPDF_PAGEOBJ_TEXT) continue;
+            TextShape o;
+            bool copy = taken[static_cast<size_t>(j)] == 0 && ReadShape(other, &o) && LooksLikeCopy(shape, o) &&
+                        !HasMark(other, kTextBoxMark);
+            if (copy && o.font != shape.font) {
+                if (!run_base_read) {
+                    run_base = shape.font != nullptr ? ReadFontNameUtf8(shape.font, true) : "";
+                    run_base_read = true;
+                }
+                copy = !run_base.empty() && o.font != nullptr && ReadFontNameUtf8(o.font, true) == run_base;
+            }
+            if (copy) {
+                const U16 text = ReadObjectText(other, text_page);
+                copy = text.empty() || AllWhiteSpace(text);
+            }
+            if (copy) {
+                taken[static_cast<size_t>(j)] = 1;
+                copies.emplace_back(j, i);
+            } else {
+                passed++;
+            }
+        }
+    }
+    std::sort(copies.begin(), copies.end());
+    return copies;
+}
+
+// `runs` and their hidden copies, ascending and without repeats.
+std::vector<int> WithHiddenCopies(FPDF_PAGE page, const std::vector<int>& runs) {
+    std::vector<int> all = runs;
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+    for (const auto& copy : HiddenCopies(page, text_page, runs)) all.push_back(copy.first);
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
+    std::sort(all.begin(), all.end());
+    all.erase(std::unique(all.begin(), all.end()), all.end());
+    return all;
+}
+
+// Takes the objects at `indices` (ascending) off a scratch page, highest first, and puts
+// them straight back: the rewrite of every stream holding them that any change forces.
+bool RewriteObjectsUnlocked(FPDF_PAGE page, const std::vector<int>& indices) {
+    std::vector<FPDF_PAGEOBJECT> objects;
+    for (int i : indices) {
+        FPDF_PAGEOBJECT obj = i >= 0 ? FPDFPage_GetObject(page, i) : nullptr;
+        if (obj == nullptr) return false;
+        objects.push_back(obj);
+    }
+    size_t removed = 0;
+    while (removed < objects.size() && FPDFPage_RemoveObject(page, objects[objects.size() - 1 - removed])) removed++;
+    bool ok = removed == objects.size();
+    for (size_t k = objects.size() - removed; k < objects.size(); k++) {
+        // PDFium frees an object it fails to insert; the copy is thrown away either way.
+        if (ok) ok = FPDFPage_InsertObjectAtIndex(page, objects[k], static_cast<size_t>(indices[k]));
+        else FPDFPageObj_Destroy(objects[k]);
+    }
+    return ok && FPDFPage_GenerateContent(page);
+}
+
+// A change to the page moves object indices, so every verdict for it is stale (#137).
+void ForgetVerdicts(megapdf_document* d, int page_index) {
+    auto& verdicts = d->rewrite_keeps_page;
+    auto it = verdicts.lower_bound(std::make_pair(page_index, -2147483647 - 1));
+    while (it != verdicts.end() && it->first.first == page_index) it = verdicts.erase(it);
+}
+
+// The dry run behind megapdf_text_editable(). Rewrites the streams holding the objects and
+// their hidden copies (#136) on a copy of the page — take them off and put them straight
+// back, which is what any edit forces — then saves, reopens and compares with the copy
+// before the rewrite. One dry run judges a whole line; the verdict is cached per object.
+bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, const std::vector<int>& runs) {
+    bool all_judged = true;
+    for (int i : runs) {
+        const auto cached = d->rewrite_keeps_page.find(std::make_pair(page_index, i));
+        if (cached == d->rewrite_keeps_page.end()) all_judged = false;
+        else if (!cached->second) return false;
+    }
+    if (all_judged) return true;
 
     bool keeps = false;
     FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
@@ -1293,13 +1463,7 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, int object_in
             unchanged.fw.version = 1;
             unchanged.fw.WriteBlock = ScratchWriteBlock;
             const bool saved_unchanged = FPDF_SaveAsCopy(scratch, &unchanged.fw, 0);
-            FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, object_index);
-            bool rewritten = false;
-            if (obj != nullptr && FPDFPage_RemoveObject(page, obj)) {
-                // PDFium frees the object if re-insertion fails, and the copy is thrown away either way.
-                rewritten = FPDFPage_InsertObjectAtIndex(page, obj, static_cast<size_t>(object_index)) &&
-                            FPDFPage_GenerateContent(page);
-            }
+            const bool rewritten = RewriteObjectsUnlocked(page, WithHiddenCopies(page, runs));
             FPDF_ClosePage(page);
             ScratchWriter writer{};
             writer.fw.version = 1;
@@ -1321,8 +1485,17 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, int object_in
         }
         FPDF_CloseDocument(scratch);
     }
-    d->rewrite_keeps_page[key] = keeps;
-    return keeps;
+    if (keeps || runs.size() == 1) {
+        for (int i : runs) d->rewrite_keeps_page[std::make_pair(page_index, i)] = keeps;
+        return keeps;
+    }
+    // A refused batch says nothing about which run PDFium cannot rewrite: judge each alone,
+    // so every verdict cached is that object's own, and the answer is theirs together.
+    bool all_keep = true;
+    for (int i : runs) {
+        if (!RewriteKeepsPageUnlocked(d, page_index, std::vector<int>{i})) all_keep = false;
+    }
+    return all_keep;
 }
 
 }  // namespace
@@ -1334,7 +1507,7 @@ MEGAPDF_API int megapdf_text_editable(const megapdf_page* p, int object_index) {
     Guard guard(CoreLock());
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return MEGAPDF_ERR_ARGUMENT;
-    return RewriteKeepsPageUnlocked(p->owner, p->index, object_index) ? 1 : 0;
+    return RewriteKeepsPageUnlocked(p->owner, p->index, std::vector<int>{object_index}) ? 1 : 0;
 }
 
 }  // extern "C"
@@ -1355,7 +1528,10 @@ bool IsStandardTextBoxFont(const char* name) {
                                std::strcmp(name, "Courier") == 0);
 }
 
+// Every change to a page's objects ends here: once per call, however many objects it
+// moved (a page of thousands of objects takes seconds to regenerate).
 bool GenerateContent(const megapdf_page* p) {
+    if (p->owner != nullptr) ForgetVerdicts(p->owner, p->index);
     if (!FPDFPage_GenerateContent(p->page)) {
         SetError(FPDF_ERR_UNKNOWN, "PDFium failed to regenerate the page content stream");
         return false;
@@ -1460,6 +1636,93 @@ int AddTextBoxUnlocked(const megapdf_page* p, int object_index, const unsigned s
     if (!GenerateContent(p)) return MEGAPDF_ERR_PDFIUM;
     if (out_object_index != nullptr) *out_object_index = object_index;
     return MEGAPDF_OK;
+}
+
+void Unlist(megapdf_detached* x) {
+    if (x->owner == nullptr) return;
+    auto& list = x->owner->detached;
+    for (size_t i = 0; i < list.size(); i++) if (list[i] == x) { list[i] = list.back(); list.pop_back(); break; }
+}
+
+// A handle for `parts` (ascending by index, off the page), kept by the document until it is
+// restored or discarded. NULL, with the objects freed, when out of memory.
+megapdf_detached* NewHandle(const megapdf_page* p, std::vector<megapdf_detached::Part> parts, int edited_index) {
+    megapdf_detached* x = new (std::nothrow) megapdf_detached();
+    if (x != nullptr) {
+        x->owner = p->owner;
+        x->page_index = p->index;
+        x->parts = std::move(parts);   // noexcept
+        x->edited_index = edited_index;
+        try {
+            if (p->owner != nullptr) p->owner->detached.push_back(x);
+            return x;
+        } catch (...) {
+            for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
+            delete x;
+        }
+    } else {
+        for (const auto& part : parts) FPDFPageObj_Destroy(part.object);
+    }
+    SetError(FPDF_ERR_UNKNOWN, "out of memory");
+    return nullptr;
+}
+
+// Takes `parts` (ascending, objects filled) off the page, highest index first, so every
+// index is still the object's own when it is taken. On failure puts back what it took.
+bool TakeParts(const megapdf_page* p, const std::vector<megapdf_detached::Part>& parts) {
+    size_t taken = 0;
+    while (taken < parts.size() && FPDFPage_RemoveObject(p->page, parts[parts.size() - 1 - taken].object)) taken++;
+    if (taken == parts.size()) return true;
+    for (size_t k = parts.size() - taken; k < parts.size(); k++) {
+        FPDFPage_InsertObjectAtIndex(p->page, parts[k].object, static_cast<size_t>(parts[k].index));
+    }
+    SetError(FPDF_ERR_UNKNOWN, "could not remove the text");
+    return false;
+}
+
+// The text runs at `indices` as parts, with their hidden copies (#136), ascending. False
+// for a bad index, an object that is not text, or a repeat. Throws only std::bad_alloc.
+bool PlanTextRuns(const megapdf_page* p, const int* indices, size_t count, std::vector<megapdf_detached::Part>* out) {
+    const int objects = FPDFPage_CountObjects(p->page);
+    std::vector<int> runs(indices, indices + count);
+    std::sort(runs.begin(), runs.end());
+    for (size_t k = 0; k < runs.size(); k++) {
+        FPDF_PAGEOBJECT obj = runs[k] >= 0 && runs[k] < objects ? FPDFPage_GetObject(p->page, runs[k]) : nullptr;
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT || (k > 0 && runs[k] == runs[k - 1])) {
+            SetError(0, "every index must be a different text object on the page");
+            out->clear();
+            return false;
+        }
+        out->push_back(megapdf_detached::Part{runs[k], -1, obj});
+    }
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+    std::vector<std::pair<int, int>> copies;
+    try {
+        copies = HiddenCopies(p->page, text_page, runs);
+    } catch (...) {
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+        throw;
+    }
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
+    for (const auto& copy : copies) {
+        out->push_back(megapdf_detached::Part{copy.first, copy.second, FPDFPage_GetObject(p->page, copy.first)});
+    }
+    std::sort(out->begin(), out->end(),
+              [](const megapdf_detached::Part& a, const megapdf_detached::Part& b) { return a.index < b.index; });
+    return true;
+}
+
+// #118 for the body text among `indices`; text boxes are MegaPDF's own and are not judged,
+// except that megapdf_set_text() has always judged the run it edits.
+bool BodyTextRewriteKeepsPage(const megapdf_page* p, const int* indices, size_t count, bool judge_first_always) {
+    if (p->owner == nullptr || p->index < 0) return true;
+    std::vector<int> body;
+    for (size_t k = 0; k < count; k++) {
+        if ((k == 0 && judge_first_always) || !HasMark(FPDFPage_GetObject(p->page, indices[k]), kTextBoxMark)) {
+            body.push_back(indices[k]);
+        }
+    }
+    return body.empty() || RewriteKeepsPageUnlocked(p->owner, p->index, body);
 }
 
 }  // namespace
@@ -1582,32 +1845,39 @@ MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* p, int o
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr) { SetError(0, "no page object at that index"); return nullptr; }
     if (FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT && !HasMark(obj, kTextBoxMark) && p->index >= 0 &&
-        !RewriteKeepsPageUnlocked(p->owner, p->index, object_index)) {
+        !RewriteKeepsPageUnlocked(p->owner, p->index, std::vector<int>{object_index})) {
         SetError(0, "PDFium would change how this page looks if its text were rewritten");
+        return nullptr;
+    }
+    std::vector<megapdf_detached::Part> parts;
+    try {
+        parts.push_back(megapdf_detached::Part{object_index, -1, obj});
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
         return nullptr;
     }
     if (!FPDFPage_RemoveObject(p->page, obj)) { SetError(FPDF_ERR_UNKNOWN, "could not remove the object"); return nullptr; }
     GenerateContent(p);
-    auto* x = new (std::nothrow) megapdf_detached();
-    if (x == nullptr) { FPDFPageObj_Destroy(obj); SetError(FPDF_ERR_UNKNOWN, "out of memory"); return nullptr; }
-    x->owner = p->owner;
-    x->object = obj;
-    p->owner->detached.push_back(x);
-    return x;
+    return NewHandle(p, std::move(parts), -1);
 }
 
 MEGAPDF_API int megapdf_restore_object(const megapdf_page* p, megapdf_detached* x, int object_index) {
     if (p == nullptr || x == nullptr || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
-    if (!FPDFPage_InsertObjectAtIndex(p->page, x->object, static_cast<size_t>(object_index))) {
+    if (x->parts.size() != 1) {
+        SetError(0, "this handle holds more than one object; restore it with megapdf_restore_detached");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    if (!FPDFPage_InsertObjectAtIndex(p->page, x->parts[0].object, static_cast<size_t>(object_index))) {
+        // PDFium frees an object it fails to insert.
+        x->parts.clear();
+        Unlist(x);
+        delete x;
         SetError(FPDF_ERR_UNKNOWN, "could not restore the object");
         return MEGAPDF_ERR_PDFIUM;
     }
     // The page owns it again; the handle is spent.
-    if (x->owner != nullptr) {
-        auto& list = x->owner->detached;
-        for (size_t i = 0; i < list.size(); i++) if (list[i] == x) { list[i] = list.back(); list.pop_back(); break; }
-    }
+    Unlist(x);
     delete x;
     return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
 }
@@ -1615,12 +1885,102 @@ MEGAPDF_API int megapdf_restore_object(const megapdf_page* p, megapdf_detached* 
 MEGAPDF_API void megapdf_discard_detached(megapdf_detached* x) {
     if (x == nullptr) return;
     Guard guard(CoreLock());
-    if (x->owner != nullptr) {
-        auto& list = x->owner->detached;
-        for (size_t i = 0; i < list.size(); i++) if (list[i] == x) { list[i] = list.back(); list.pop_back(); break; }
-    }
-    FPDFPageObj_Destroy(x->object);
+    Unlist(x);
+    for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
     delete x;
+}
+
+MEGAPDF_API megapdf_detached* megapdf_detach_text_runs(const megapdf_page* p, const int* indices, size_t count) {
+    if (p == nullptr || p->owner == nullptr || indices == nullptr || count == 0) {
+        SetError(0, "no text runs to remove");
+        return nullptr;
+    }
+    Guard guard(CoreLock());
+    std::vector<megapdf_detached::Part> parts;
+    try {
+        if (!PlanTextRuns(p, indices, count, &parts)) return nullptr;
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return nullptr;
+    }
+    if (!BodyTextRewriteKeepsPage(p, indices, count, /*judge_first_always=*/false)) {
+        SetError(0, "PDFium would change how this page looks if its text were rewritten");
+        return nullptr;
+    }
+    if (!TakeParts(p, parts)) return nullptr;
+    GenerateContent(p);
+    return NewHandle(p, std::move(parts), -1);
+}
+
+MEGAPDF_API int megapdf_restore_detached(const megapdf_page* p, megapdf_detached* x) {
+    if (p == nullptr || x == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if ((x->owner != nullptr && p->owner != x->owner) || (x->page_index >= 0 && p->index != x->page_index)) {
+        SetError(0, "the detached objects belong to another page");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    // Check everything before changing anything. The edited run stands at its original's
+    // index less the parts before it that are still off the page.
+    const int count = FPDFPage_CountObjects(p->page);
+    FPDF_PAGEOBJECT edited = nullptr;
+    if (x->edited_index >= 0) {
+        int before = 0;
+        for (const auto& part : x->parts) if (part.index < x->edited_index) before++;
+        edited = FPDFPage_GetObject(p->page, x->edited_index - before);
+        float l = 0, b = 0, r = 0, t = 0;
+        // Bounds survive a content rewrite and a page reload to well within this.
+        const float tolerance = 0.1f;
+        if (edited == nullptr || FPDFPageObj_GetType(edited) != FPDF_PAGEOBJ_TEXT || !FPDFPageObj_GetBounds(edited, &l, &b, &r, &t) ||
+            std::fabs(l - x->edited_left) > tolerance || std::fabs(b - x->edited_bottom) > tolerance ||
+            std::fabs(r - x->edited_right) > tolerance || std::fabs(t - x->edited_top) > tolerance) {
+            SetError(0, "the edited text is no longer where the edit left it");
+            return MEGAPDF_ERR_ARGUMENT;
+        }
+    }
+    const int base = count - (edited != nullptr ? 1 : 0);
+    for (size_t k = 0; k < x->parts.size(); k++) {
+        if (x->parts[k].index > base + static_cast<int>(k)) {
+            SetError(0, "the page no longer has room for the detached objects where they were");
+            return MEGAPDF_ERR_ARGUMENT;
+        }
+    }
+    if (edited != nullptr) {
+        if (!FPDFPage_RemoveObject(p->page, edited)) {
+            SetError(FPDF_ERR_UNKNOWN, "could not take the edited text off");
+            return MEGAPDF_ERR_PDFIUM;
+        }
+        FPDFPageObj_Destroy(edited);
+    }
+    // Lowest first: every object before this one is back, so its index is its own again.
+    int status = MEGAPDF_OK;
+    for (const auto& part : x->parts) {
+        if (status != MEGAPDF_OK) {
+            FPDFPageObj_Destroy(part.object);
+        } else if (!FPDFPage_InsertObjectAtIndex(p->page, part.object, static_cast<size_t>(part.index))) {
+            // PDFium frees an object it fails to insert.
+            SetError(FPDF_ERR_UNKNOWN, "could not restore the object");
+            status = MEGAPDF_ERR_PDFIUM;
+        }
+    }
+    Unlist(x);
+    delete x;
+    const bool generated = GenerateContent(p);
+    return status != MEGAPDF_OK ? status : generated ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+}
+
+MEGAPDF_API size_t megapdf_detached_count(const megapdf_detached* x) {
+    if (x == nullptr) return 0;
+    Guard guard(CoreLock());
+    return x->parts.size();
+}
+
+MEGAPDF_API int megapdf_detached_get(const megapdf_detached* x, size_t index, megapdf_detached_part* out) {
+    if (x == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (index >= x->parts.size()) return MEGAPDF_ERR_ARGUMENT;
+    out->object_index = x->parts[index].index;
+    out->copy_of = x->parts[index].copy_of;
+    return MEGAPDF_OK;
 }
 
 }  // extern "C"
@@ -2055,32 +2415,19 @@ bool NeedsSubstitution(const megapdf_page* p, FPDF_PAGEOBJECT obj, const unsigne
     return false;
 }
 
-// Detaches `original` into the document's keeping and hands it back through
-// `out_replaced`, or frees it when the caller does not want it.
-void HandBackOriginal(const megapdf_page* p, FPDF_PAGEOBJECT original, megapdf_detached** out_replaced) {
-    megapdf_detached* held = (out_replaced != nullptr && p->owner != nullptr) ? new (std::nothrow) megapdf_detached() : nullptr;
-    if (held == nullptr) {
-        FPDFPageObj_Destroy(original);
-        return;
-    }
-    held->owner = p->owner;
-    held->object = original;
-    p->owner->detached.push_back(held);
-    *out_replaced = held;
-}
-
 // Replaces the text object at `object_index` with a new one drawing `text` in
 // `font`, carrying over the original's font size, matrix, fill and stroke colour,
 // render mode and text-box identity (#45). The original is never modified —
 // PDFium can set a text object's character codes but not read them, so an edit
-// tried on the original could not be rolled back or undone exactly (#117). It
-// leaves the page and goes to HandBackOriginal().
+// tried on the original could not be rolled back or undone exactly (#117). On
+// success it is off the page and the caller's, and the content is not yet regenerated.
 //
 // With `verify` the new object must read back as exactly `text` (#116). If it
 // does not, the page is put back as it was and MEGAPDF_ERR_NO_FONT is returned so
-// the caller can fall back to a substitute face.
+// the caller can fall back to a substitute face. Any other failure also leaves the
+// page as it was.
 int ReplaceTextObjectUnlocked(const megapdf_page* p, FPDF_PAGEOBJECT original, int object_index, FPDF_FONT font,
-                              const unsigned short* text, bool verify, megapdf_detached** out_replaced) {
+                              const unsigned short* text, bool verify) {
     FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
     float font_size = 0;
     FPDFTextObj_GetFontSize(original, &font_size);
@@ -2149,65 +2496,110 @@ int ReplaceTextObjectUnlocked(const megapdf_page* p, FPDF_PAGEOBJECT original, i
             return MEGAPDF_ERR_NO_FONT;
         }
     }
-    HandBackOriginal(p, original, out_replaced);
-    return GenerateContent(p) ? MEGAPDF_OK : MEGAPDF_ERR_PDFIUM;
+    return MEGAPDF_OK;
 }
 
 }  // namespace
 
 extern "C" {
 
-MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const unsigned short* text, unsigned int flags,
-                                 int* out_outcome, megapdf_detached** out_replaced) {
+MEGAPDF_API int megapdf_set_line_text(const megapdf_page* p, const int* indices, size_t count, const unsigned short* text,
+                                      unsigned int flags, int* out_outcome, megapdf_detached** out_replaced) {
     if (out_replaced != nullptr) *out_replaced = nullptr;
     const bool force_substitute = (flags & MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE) != 0;
-    if (p == nullptr || object_index < 0 || text == nullptr || text[0] == 0 || (flags & ~static_cast<unsigned int>(MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE)) != 0) {
+    if (p == nullptr || indices == nullptr || count == 0 || indices[0] < 0 || text == nullptr || text[0] == 0 ||
+        (flags & ~static_cast<unsigned int>(MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE)) != 0) {
         SetError(0, "PDFium cannot set empty text on a text object");
         return MEGAPDF_ERR_ARGUMENT;
     }
     Guard guard(CoreLock());
+    const int object_index = indices[0];
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) {
         SetError(0, "the object is no longer a text object");
         return MEGAPDF_ERR_ARGUMENT;
     }
-    // #118: if PDFium cannot write this stream back without changing the page, the
+    // Every original the edit takes: the edited run, the line's other runs, and the hidden
+    // copies of all of them (#136). `rest` is what leaves the page besides the edited run.
+    std::vector<megapdf_detached::Part> parts;
+    std::vector<megapdf_detached::Part> rest;
+    try {
+        if (!PlanTextRuns(p, indices, count, &parts)) return MEGAPDF_ERR_ARGUMENT;
+        for (const auto& part : parts) if (part.object != obj) rest.push_back(part);
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return MEGAPDF_ERR_MEMORY;
+    }
+    // #118: if PDFium cannot write these streams back without changing the page, the
     // edit would silently alter text the user never touched. Refuse before either
     // tier modifies anything.
-    if (p->owner != nullptr && p->index >= 0 && !RewriteKeepsPageUnlocked(p->owner, p->index, object_index)) {
+    if (!BodyTextRewriteKeepsPage(p, indices, count, /*judge_first_always=*/true)) {
         SetError(0, "PDFium would change how this page looks if its text were rewritten");
         return MEGAPDF_ERR_LAYOUT;
     }
 
-    // Tier 1: the run's own font, if it can carry the text.
+    // Tier 1: the run's own font, if it can carry the text. The line's other runs and the
+    // copies are still on the page, so the coverage and the read-back see what they always did.
+    int outcome = -1;
+    int status = MEGAPDF_ERR_NO_FONT;
     if (!force_substitute && !NeedsSubstitution(p, obj, text)) {
         if (FPDF_FONT own = FPDFTextObj_GetFont(obj)) {
-            const int status = ReplaceTextObjectUnlocked(p, obj, object_index, own, text, /*verify=*/true, out_replaced);
-            if (status == MEGAPDF_OK) {
-                if (out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_IN_PLACE;
-                return MEGAPDF_OK;
-            }
-            if (status != MEGAPDF_ERR_NO_FONT) return status;
-            // The page is as it was; fall through to the substitute.
+            status = ReplaceTextObjectUnlocked(p, obj, object_index, own, text, /*verify=*/true);
+            if (status == MEGAPDF_OK) outcome = MEGAPDF_EDIT_IN_PLACE;
+            else if (status != MEGAPDF_ERR_NO_FONT) return status;
+            // Otherwise the page is as it was; fall through to the substitute.
         }
     }
 
     // Tier 2: the closest standard face.
-    FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
-    FPDF_FONT old_font = FPDFTextObj_GetFont(obj);
-    const std::string original = old_font ? ReadFontNameUtf8(old_font, false) : "";
-    FPDF_FONT standard = FPDFText_LoadStandardFont(doc, MapToStandard(original).c_str());
-    if (standard == nullptr) {
-        SetError(0, "no substitute font could be loaded");
-        return MEGAPDF_ERR_NO_FONT;
+    if (status != MEGAPDF_OK) {
+        FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
+        FPDF_FONT old_font = FPDFTextObj_GetFont(obj);
+        const std::string original = old_font ? ReadFontNameUtf8(old_font, false) : "";
+        FPDF_FONT standard = FPDFText_LoadStandardFont(doc, MapToStandard(original).c_str());
+        if (standard == nullptr) {
+            SetError(0, "no substitute font could be loaded");
+            return MEGAPDF_ERR_NO_FONT;
+        }
+        // Verified like tier 1 (#130): PDFium writes a stand-in code for any character the
+        // face cannot encode (CJK into Helvetica reads back as U+00FF), so an unverified
+        // substitute reported success for text that draws nothing like what was typed.
+        status = ReplaceTextObjectUnlocked(p, obj, object_index, standard, text, /*verify=*/true);
+        FPDFFont_Close(standard);   // the text object keeps its own reference
+        if (status != MEGAPDF_OK) return status;
+        outcome = MEGAPDF_EDIT_SUBSTITUTED;
     }
-    // Verified like tier 1 (#130): PDFium writes a stand-in code for any character the
-    // face cannot encode (CJK into Helvetica reads back as U+00FF), so an unverified
-    // substitute reported success for text that draws nothing like what was typed.
-    const int status = ReplaceTextObjectUnlocked(p, obj, object_index, standard, text, /*verify=*/true, out_replaced);
-    FPDFFont_Close(standard);   // the text object keeps its own reference
-    if (status == MEGAPDF_OK && out_outcome != nullptr) *out_outcome = MEGAPDF_EDIT_SUBSTITUTED;
-    return status;
+
+    // The edited run stands at its original's index. Taking the rest, highest first, moves
+    // no index still to be taken; if that fails, put the original back too.
+    float edited_left = 0, edited_bottom = 0, edited_right = 0, edited_top = 0;
+    FPDFPageObj_GetBounds(FPDFPage_GetObject(p->page, object_index), &edited_left, &edited_bottom, &edited_right, &edited_top);
+    if (!TakeParts(p, rest)) {
+        FPDF_PAGEOBJECT inserted = FPDFPage_GetObject(p->page, object_index);
+        if (inserted != nullptr && FPDFPage_RemoveObject(p->page, inserted)) FPDFPageObj_Destroy(inserted);
+        FPDFPage_InsertObjectAtIndex(p->page, obj, static_cast<size_t>(object_index));
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    const bool generated = GenerateContent(p);
+    if (out_replaced != nullptr) {
+        *out_replaced = NewHandle(p, std::move(parts), object_index);
+        if (megapdf_detached* x = *out_replaced) {
+            x->edited_left = edited_left;
+            x->edited_bottom = edited_bottom;
+            x->edited_right = edited_right;
+            x->edited_top = edited_top;
+        }
+    } else {
+        for (const auto& part : parts) FPDFPageObj_Destroy(part.object);
+    }
+    if (!generated) return MEGAPDF_ERR_PDFIUM;
+    if (out_outcome != nullptr) *out_outcome = outcome;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_set_text(const megapdf_page* p, int object_index, const unsigned short* text, unsigned int flags,
+                                 int* out_outcome, megapdf_detached** out_replaced) {
+    return megapdf_set_line_text(p, &object_index, 1, text, flags, out_outcome, out_replaced);
 }
 
 MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* p, int object_index, const unsigned short* text, const char* font_name,

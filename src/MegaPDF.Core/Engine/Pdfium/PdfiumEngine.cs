@@ -615,21 +615,75 @@ internal sealed class PdfiumPage : IPdfPage
         if (string.IsNullOrEmpty(newText))
             throw new ArgumentException("PDFium cannot set empty text on a text object.", nameof(newText));
         var outcome = ApplyTextEdit(run.ObjectIndex, newText, forceSubstitute: false, out var replaced);
-        original = new DetachedTextRun(replaced);
+        original = Wrap(replaced);
         return outcome;
     }
 
     public void RestoreOriginalTextRun(DetachedTextRun original, int objectIndex)
     {
         ThrowIfDisposed();
-        // The edited run is a separate object at the same index (#117): take it off,
-        // then the untouched original goes back exactly where it was.
-        var edited = CoreNative.megapdf_detach_object(_core, objectIndex);
-        if (edited == IntPtr.Zero)
+        // The edited run is a separate object at the same index (#117). The core takes it off
+        // and puts the untouched original back exactly where it was, with any hidden copy of
+        // the run the edit took along (#136).
+        if (CoreNative.megapdf_object_type(_core, objectIndex) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
             throw new InvalidOperationException($"No edited text at object {objectIndex} to take back.");
-        CoreNative.megapdf_discard_detached(edited);
-        if (CoreNative.megapdf_restore_object(_core, original.Handle, objectIndex) != 0)
-            throw new InvalidOperationException("Could not restore the original text.");
+        RestoreDetached(original);
+    }
+
+    public TextEditOutcome SetLineText(IReadOnlyList<PdfTextRun> runs, string newText, out DetachedTextRun originals)
+    {
+        ThrowIfDisposed();
+        if (runs.Count == 0)
+            throw new ArgumentException("A line has at least one run.", nameof(runs));
+        if (string.IsNullOrEmpty(newText))
+            throw new ArgumentException("PDFium cannot set empty text on a text object.", nameof(newText));
+        var indices = runs.Select(r => r.ObjectIndex).ToArray();
+        var status = CoreNative.megapdf_set_line_text(_core, indices, (nuint)indices.Length, newText, 0, out var outcome, out var replaced);
+        ThrowForEditStatus(status, indices[0]);
+        originals = Wrap(replaced);
+        return outcome == CoreNative.EditSubstituted ? TextEditOutcome.EditedWithSubstitutedFont : TextEditOutcome.EditedInPlace;
+    }
+
+    public DetachedTextRun DetachTextRuns(IReadOnlyList<PdfTextRun> runs)
+    {
+        ThrowIfDisposed();
+        if (runs.Count == 0)
+            throw new ArgumentException("A line has at least one run.", nameof(runs));
+        foreach (var run in runs)
+        {
+            if (CoreNative.megapdf_object_type(_core, run.ObjectIndex) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
+                throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
+            // Deleting body text rewrites its stream just as editing does (#118).
+            if (run.TextBoxId is null && CoreNative.megapdf_text_editable(_core, run.ObjectIndex) == 0)
+                throw new TextEditException(TextEditFailure.LayoutWouldChange,
+                    "Removing this text would change how the rest of the page looks.");
+        }
+        var indices = runs.Select(r => r.ObjectIndex).ToArray();
+        // The runs and the hidden copies drawn under them leave together (#136).
+        var handle = CoreNative.megapdf_detach_text_runs(_core, indices, (nuint)indices.Length);
+        if (handle == IntPtr.Zero)
+            throw new InvalidOperationException("Could not remove the text.");
+        return Wrap(handle);
+    }
+
+    public void RestoreDetached(DetachedTextRun detached)
+    {
+        ThrowIfDisposed();
+        if (CoreNative.megapdf_restore_detached(_core, detached.Handle) != 0)
+            throw new InvalidOperationException("Could not restore the text.");
+    }
+
+    /// <summary>A core handle with the parts it holds, read while the handle is alive.</summary>
+    private static DetachedTextRun Wrap(IntPtr handle)
+    {
+        var count = (int)CoreNative.megapdf_detached_count(handle);
+        var parts = new List<DetachedPart>(count);
+        for (var i = 0; i < count; i++)
+        {
+            if (CoreNative.megapdf_detached_get(handle, (nuint)i, out var part) == 0)
+                parts.Add(new DetachedPart(part.ObjectIndex, part.CopyOf));
+        }
+        return new DetachedTextRun(handle, parts);
     }
 
     public bool IsTextEditable(int objectIndex)
@@ -642,26 +696,22 @@ internal sealed class PdfiumPage : IPdfPage
     {
         var status = CoreNative.megapdf_set_text(_core, objectIndex, newText,
             forceSubstitute ? CoreNative.SetTextForceSubstitute : 0, out var outcome, out replaced);
+        ThrowForEditStatus(status, objectIndex);
+        return outcome == CoreNative.EditSubstituted ? TextEditOutcome.EditedWithSubstitutedFont : TextEditOutcome.EditedInPlace;
+    }
+
+    private static void ThrowForEditStatus(int status, int objectIndex)
+    {
         if (status == CoreNative.ErrLayout)
             throw new TextEditException(TextEditFailure.LayoutWouldChange, CoreNative.LastErrorMessage());
         if (status == CoreNative.ErrNoFont)
             throw new TextEditException(TextEditFailure.NoUsableFont, CoreNative.LastErrorMessage());
         if (status != 0)
             throw new InvalidOperationException($"Object {objectIndex} is no longer a text object.");
-        return outcome == CoreNative.EditSubstituted ? TextEditOutcome.EditedWithSubstitutedFont : TextEditOutcome.EditedInPlace;
     }
 
-    public DetachedTextRun DetachTextRun(PdfTextRun run)
-    {
-        ThrowIfDisposed();
-        if (CoreNative.megapdf_object_type(_core, run.ObjectIndex) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
-            throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
-        // Deleting body text rewrites its stream just as editing does (#118).
-        if (run.TextBoxId is null && CoreNative.megapdf_text_editable(_core, run.ObjectIndex) == 0)
-            throw new TextEditException(TextEditFailure.LayoutWouldChange,
-                "Removing this text would change how the rest of the page looks.");
-        return DetachObject(run.ObjectIndex);
-    }
+    // One run is a line of one: the hidden copies drawn under it leave with it (#136).
+    public DetachedTextRun DetachTextRun(PdfTextRun run) => DetachTextRuns([run]);
 
     public DetachedTextRun DetachObjectAt(int objectIndex)
     {
@@ -678,7 +728,7 @@ internal sealed class PdfiumPage : IPdfPage
         var handle = CoreNative.megapdf_detach_object(_core, objectIndex);
         if (handle == IntPtr.Zero)
             throw new InvalidOperationException("Could not remove the object.");
-        return new DetachedTextRun(handle);
+        return Wrap(handle);
     }
 
     public int AppendWhiteout(PdfRect bounds)
@@ -752,6 +802,12 @@ internal sealed class PdfiumPage : IPdfPage
     public void RestoreTextRun(DetachedTextRun detached, int objectIndex)
     {
         ThrowIfDisposed();
+        // A run taken with its hidden copies (#136) goes back as it was taken: each object at its own index.
+        if (detached.Parts.Count > 1)
+        {
+            RestoreDetached(detached);
+            return;
+        }
         if (CoreNative.megapdf_restore_object(_core, detached.Handle, objectIndex) != 0)
             throw new InvalidOperationException("Could not restore the text.");
     }

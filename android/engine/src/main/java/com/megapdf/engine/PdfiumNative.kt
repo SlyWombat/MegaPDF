@@ -83,6 +83,10 @@ internal object PdfiumNative {
     external fun nativeDetachObject(handle: Long, objectIndex: Int): Long
     external fun nativeRestoreObject(handle: Long, detached: Long, objectIndex: Int): Boolean
     external fun nativeRestoreOriginal(handle: Long, original: Long, objectIndex: Int): Boolean
+    // A line at once, with the hidden copies drawn under its runs (#136).
+    external fun nativeSetLineText(handle: Long, objectIndices: IntArray, text: String): LongArray
+    external fun nativeDetachTextRuns(handle: Long, objectIndices: IntArray): Long
+    external fun nativeRestoreDetached(handle: Long, detached: Long): Boolean
     external fun nativeDiscardDetached(detached: Long)
     external fun nativeTextEditable(handle: Long, objectIndex: Int): Int
 

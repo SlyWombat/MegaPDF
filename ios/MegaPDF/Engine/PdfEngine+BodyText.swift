@@ -128,17 +128,62 @@ extension PdfEngine {
     }
 
     /// Undoes `setText`: takes the edited run at `objectIndex` off the page and puts the
-    /// original back where it was.
+    /// original back where it was, with any hidden copy of the run the edit took along (#136).
+    /// The core knows where each object goes; it refuses when the page is not as the edit left it.
     func restoreOriginal(_ document: PdfDocument, pageIndex: Int,
                          _ original: PdfDetachedObject, objectIndex: Int) throws {
-        guard let handle = original.handle else { throw PdfError.editFailed }
+        try restoreDetached(document, pageIndex: pageIndex, original)
+    }
+
+    /// Retypes a visual line (#136): `text` goes into the run at the first of `objectIndices`,
+    /// the line's other runs leave the page, and so do the hidden copies a producer drew under
+    /// any of them for fake bold, an outline or a shadow, all in one core call. Taking them one
+    /// at a time would move the indices of those still to be taken. `restoreDetached` undoes it
+    /// byte-identical.
+    func setLineText(_ document: PdfDocument, pageIndex: Int, objectIndices: [Int],
+                     text: String) throws -> (outcome: PdfTextEditOutcome, original: PdfDetachedObject) {
+        guard !text.isEmpty, !objectIndices.isEmpty else { throw PdfError.editFailed }
+        return try withCorePage(document, index: pageIndex) { page in
+            let wide = Array(text.utf16) + [0]
+            let indices = objectIndices.map { Int32($0) }
+            var outcome: Int32 = -1
+            var replaced: OpaquePointer?
+            let status = wide.withUnsafeBufferPointer { chars in
+                indices.withUnsafeBufferPointer {
+                    megapdf_set_line_text(page, $0.baseAddress, $0.count, chars.baseAddress, 0, &outcome, &replaced)
+                }
+            }
+            if status == MEGAPDF_ERR_LAYOUT { throw PdfError.layoutWouldChange }
+            guard status == MEGAPDF_OK, let replaced else { throw PdfError.editFailed }
+            return (outcome == MEGAPDF_EDIT_SUBSTITUTED ? .substituted : .inPlace,
+                    PdfDetachedObject(handle: replaced))
+        }
+    }
+
+    /// Removes a visual line's runs with the hidden copies drawn under them (#136), all at once,
+    /// and keeps them for undo with `restoreDetached`.
+    func detachTextRuns(_ document: PdfDocument, pageIndex: Int,
+                        objectIndices: [Int]) throws -> PdfDetachedObject {
+        guard !objectIndices.isEmpty else { throw PdfError.editFailed }
+        return try withCorePage(document, index: pageIndex) { page in
+            let indices = objectIndices.map { Int32($0) }
+            let handle = indices.withUnsafeBufferPointer {
+                megapdf_detach_text_runs(page, $0.baseAddress, $0.count)
+            }
+            guard let handle else { throw PdfError.editFailed }
+            return PdfDetachedObject(handle: handle)
+        }
+    }
+
+    /// Undoes `setLineText`, `setText` or `detachTextRuns`: every object goes back at its own
+    /// index, after the edited run is taken off.
+    func restoreDetached(_ document: PdfDocument, pageIndex: Int, _ detached: PdfDetachedObject) throws {
+        guard let handle = detached.handle else { throw PdfError.editFailed }
         try withCorePage(document, index: pageIndex) { page in
-            guard let edited = megapdf_detach_object(page, Int32(objectIndex)) else { throw PdfError.editFailed }
-            megapdf_discard_detached(edited)
-            guard megapdf_restore_object(page, handle, Int32(objectIndex)) == MEGAPDF_OK else {
+            guard megapdf_restore_detached(page, handle) == MEGAPDF_OK else {
                 throw PdfError.editFailed
             }
-            original.handle = nil
+            detached.handle = nil   // the page owns them again
         }
     }
 

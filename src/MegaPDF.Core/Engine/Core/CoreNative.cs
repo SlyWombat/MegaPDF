@@ -317,16 +317,40 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_remove_text_box(IntPtr page, [MarshalAs(UnmanagedType.LPWStr)] string id);
 
-    /// <summary>Removes a page object and keeps it alive for undo; the core owns it until restored, discarded or the document closes.</summary>
+    /// <summary>Removes exactly one page object and keeps it alive for undo; the core owns it until restored, discarded or the document closes.</summary>
     [DllImport(Dll)]
     public static extern IntPtr megapdf_detach_object(IntPtr page, int objectIndex);
 
-    /// <summary>Puts a detached object back at the index; consumes the handle on success.</summary>
+    /// <summary>Puts a one-object handle back at the index; consumes the handle on success. Refuses a handle holding more (#136).</summary>
     [DllImport(Dll)]
     public static extern int megapdf_restore_object(IntPtr page, IntPtr detached, int objectIndex);
 
     [DllImport(Dll)]
     public static extern void megapdf_discard_detached(IntPtr detached);
+
+    /// <summary>
+    /// Removes body text (a line or one run) with the hidden copies drawn under it (#136), all
+    /// in one handle; <see cref="megapdf_restore_detached"/> puts everything back.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_detach_text_runs(IntPtr page, int[] objectIndices, nuint count);
+
+    /// <summary>Undoes whatever produced the handle, every object back at its own index; consumes it on success.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_restore_detached(IntPtr page, IntPtr detached);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DetachedPart
+    {
+        public int ObjectIndex;
+        public int CopyOf;
+    }
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_detached_count(IntPtr detached);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_detached_get(IntPtr detached, nuint index, out DetachedPart part);
 
     // Contract 6: save, flatten and images (#110) -----------------------------
 
@@ -423,12 +447,21 @@ internal static class CoreNative
     public const uint SetTextForceSubstitute = 1;
 
     /// <summary>
-    /// Sets a run's text as a new object at the same index; the untouched original is
-    /// handed back through <paramref name="replaced"/> for a byte-identical undo (#117).
+    /// Sets a run's text as a new object at the same index; the untouched original, with any
+    /// hidden copy of the run (#136), is handed back through <paramref name="replaced"/> for a
+    /// byte-identical undo with <see cref="megapdf_restore_detached"/> (#117).
     /// </summary>
     [DllImport(Dll)]
     public static extern int megapdf_set_text(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,
         uint flags, out int outcome, out IntPtr replaced);
+
+    /// <summary>
+    /// megapdf_set_text on the first index, the line's other runs removed and every run's hidden
+    /// copies with them (#136), in one call and one handle.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_set_line_text(IntPtr page, int[] objectIndices, nuint count,
+        [MarshalAs(UnmanagedType.LPWStr)] string text, uint flags, out int outcome, out IntPtr replaced);
 
     [DllImport(Dll)]
     public static extern int megapdf_insert_text_run(IntPtr page, int objectIndex, [MarshalAs(UnmanagedType.LPWStr)] string text,

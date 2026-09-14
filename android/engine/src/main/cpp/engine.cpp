@@ -762,15 +762,57 @@ Java_com_megapdf_engine_PdfiumNative_nativeRestoreObject(JNIEnv*, jobject, jlong
                ? JNI_TRUE : JNI_FALSE;
 }
 
-// Undoes nativeSetText: takes the edited run off and puts the original back where it was.
+// Undoes nativeSetText: the core takes the edited run off and puts the original back where it
+// was, with any hidden copy of the run the edit took along (#136).
 JNIEXPORT jboolean JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeRestoreOriginal(JNIEnv*, jobject, jlong handle, jlong original,
                                                           jint objectIndex) {
     auto* p = reinterpret_cast<Page*>(handle);
-    megapdf_detached* edited = megapdf_detach_object(p->core, objectIndex);
-    if (edited == nullptr) return JNI_FALSE;
-    megapdf_discard_detached(edited);
-    return megapdf_restore_object(p->core, reinterpret_cast<megapdf_detached*>(original), objectIndex) == MEGAPDF_OK
+    if (megapdf_object_type(p->core, objectIndex) != 1) return JNI_FALSE;   // FPDF_PAGEOBJ_TEXT: the edited run
+    return megapdf_restore_detached(p->core, reinterpret_cast<megapdf_detached*>(original)) == MEGAPDF_OK
+               ? JNI_TRUE : JNI_FALSE;
+}
+
+static std::vector<int> JavaInts(JNIEnv* env, jintArray array) {
+    std::vector<int> out;
+    if (array == nullptr) return out;
+    const jsize n = env->GetArrayLength(array);
+    out.resize(static_cast<size_t>(n));
+    if (n > 0) env->GetIntArrayRegion(array, 0, n, reinterpret_cast<jint*>(out.data()));
+    return out;
+}
+
+// As nativeSetText for a whole line (#136): the text into the first index's run, the other runs
+// and every run's hidden copies off the page, in one core call. [status, outcome, originalsHandle].
+JNIEXPORT jlongArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeSetLineText(JNIEnv* env, jobject, jlong handle, jintArray objectIndices,
+                                                      jstring text) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const std::vector<int> indices = JavaInts(env, objectIndices);
+    std::vector<jchar> wide = JavaChars(env, text);
+    wide.push_back(0);
+    int outcome = -1;
+    megapdf_detached* originals = nullptr;
+    const int status = megapdf_set_line_text(p->core, indices.data(), indices.size(), wide.data(), 0, &outcome, &originals);
+    const jlong values[3] = {status, outcome, reinterpret_cast<jlong>(originals)};
+    jlongArray out = env->NewLongArray(3);
+    if (out != nullptr) env->SetLongArrayRegion(out, 0, 3, values);
+    return out;
+}
+
+// A line's runs and the hidden copies drawn under them (#136), off the page in one handle; 0 on refusal.
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeDetachTextRuns(JNIEnv* env, jobject, jlong handle, jintArray objectIndices) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const std::vector<int> indices = JavaInts(env, objectIndices);
+    return reinterpret_cast<jlong>(megapdf_detach_text_runs(p->core, indices.data(), indices.size()));
+}
+
+// Undoes nativeSetLineText or nativeDetachTextRuns: every object back at its own index.
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRestoreDetached(JNIEnv*, jobject, jlong handle, jlong detached) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    return megapdf_restore_detached(p->core, reinterpret_cast<megapdf_detached*>(detached)) == MEGAPDF_OK
                ? JNI_TRUE : JNI_FALSE;
 }
 

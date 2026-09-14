@@ -6,7 +6,6 @@ import com.megapdf.engine.PdfRect
 import com.megapdf.engine.DetachedObject
 import com.megapdf.engine.TextEditOutcome
 import com.megapdf.engine.TextLine
-import com.megapdf.engine.TextRun
 
 // Undo/redo (#34) — the mobile port of the desktop `IEditOperation` + `UndoStack`
 // (SDD §4.2, command pattern), and the twin of iOS's EditHistory.swift. Two rules
@@ -292,16 +291,16 @@ class MoveTextBoxOperation(
 /**
  * Retyping a visual line: the Android twin of iOS's BodyTextEditOperation and the
  * desktop LineEditOperation. The new text goes into the line's first run; the other
- * runs are detached but kept, and the core hands back the first run's untouched
- * original, so undo restores the line byte-identical (#117).
+ * runs leave the page but are kept, and so are the hidden copies a producer drew under
+ * any run for fake bold, an outline or a shadow (#136). The core hands everything back
+ * with the first run's untouched original, so undo restores the line byte-identical (#117).
  */
 class BodyTextEditOperation(
     override val pageIndex: Int,
     private val line: TextLine,
     private val newText: String,
 ) : PdfEditOperation {
-    private var firstOriginal: DetachedObject? = null
-    private val held = ArrayList<Pair<TextRun, DetachedObject>>()
+    private var originals: DetachedObject? = null
 
     /** How the last apply landed; SUBSTITUTED means the UI owes the user a notice. */
     var lastOutcome: TextEditOutcome? = null
@@ -310,50 +309,35 @@ class BodyTextEditOperation(
     override val name: String get() = "edit text"
 
     override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
-        // The edited first run is a new object at the same index, so the indices of
-        // the runs taken off below do not move because of it.
-        val edit = page.setText(line.runs.first().objectIndex, newText)
-        firstOriginal = edit.original
+        // One core call for the whole line, hidden copies included (#136): taking runs one
+        // at a time moves the indices of those still to be taken.
+        val edit = page.setLineText(line.runs.map { it.objectIndex }, newText)
+        originals = edit.original
         lastOutcome = edit.outcome
-        held.clear()
-        // Highest object index first, so the earlier indices stay valid.
-        for (run in line.runs.drop(1).sortedByDescending { it.objectIndex }) {
-            held.add(Pair(run, page.detachObject(run.objectIndex)))
-        }
     }
 
     override suspend fun revert(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
-        // Lowest index first, so every run lands exactly where it came from.
-        for (entry in held.sortedBy { it.first.objectIndex }) {
-            page.restoreObject(entry.second, entry.first.objectIndex)
-        }
-        held.clear()
-        val original = checkNotNull(firstOriginal) { "nothing to undo" }
-        page.restoreOriginal(original, line.runs.first().objectIndex)
-        firstOriginal = null
+        // Every object goes back at its own index, the edited run off first.
+        page.restoreDetached(checkNotNull(originals) { "nothing to undo" })
+        originals = null
     }
 }
 
-/** Clearing a line in the editor removes it; undo brings every run back exactly. */
+/** Clearing a line in the editor removes it, hidden copies and all (#136); undo brings every object back exactly. */
 class BodyTextDeleteOperation(
     override val pageIndex: Int,
     private val line: TextLine,
 ) : PdfEditOperation {
-    private val held = ArrayList<Pair<TextRun, DetachedObject>>()
+    private var held: DetachedObject? = null
 
     override val name: String get() = "delete text"
 
     override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
-        held.clear()
-        for (run in line.runs.sortedByDescending { it.objectIndex }) {
-            held.add(Pair(run, page.detachObject(run.objectIndex)))
-        }
+        held = page.detachTextRuns(line.runs.map { it.objectIndex })
     }
 
     override suspend fun revert(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
-        for (entry in held.sortedBy { it.first.objectIndex }) {
-            page.restoreObject(entry.second, entry.first.objectIndex)
-        }
-        held.clear()
+        page.restoreDetached(checkNotNull(held) { "nothing to undo" })
+        held = null
     }
 }

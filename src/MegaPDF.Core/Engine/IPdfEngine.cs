@@ -115,8 +115,8 @@ public interface IPdfPage : IDisposable
 
     /// <summary>
     /// As <see cref="SetTextRunText(PdfTextRun, string)"/>, handing back the untouched
-    /// original run so an undo can put it back byte-identical with
-    /// <see cref="RestoreOriginalTextRun"/> — whichever tier the edit took (#117).
+    /// original run, with any hidden copy drawn under it (#136), so an undo can put them back
+    /// byte-identical with <see cref="RestoreOriginalTextRun"/> — whichever tier the edit took (#117).
     /// </summary>
     TextEditOutcome SetTextRunText(PdfTextRun run, string newText, out DetachedTextRun original);
 
@@ -125,6 +125,27 @@ public interface IPdfPage : IDisposable
     /// the edited run at <paramref name="objectIndex"/> off the page and puts the original back.
     /// </summary>
     void RestoreOriginalTextRun(DetachedTextRun original, int objectIndex);
+
+    /// <summary>
+    /// Retypes a visual line (#136): the new text goes into the first of <paramref name="runs"/>,
+    /// the others leave the page, and so do the hidden copies a producer drew under any of them
+    /// (fake bold, outlines, shadows), all at once. Everything taken comes back in
+    /// <paramref name="originals"/>; <see cref="RestoreDetached"/> undoes the edit byte-identical.
+    /// </summary>
+    TextEditOutcome SetLineText(IReadOnlyList<PdfTextRun> runs, string newText, out DetachedTextRun originals);
+
+    /// <summary>
+    /// Removes a visual line's runs with the hidden copies drawn under them (#136), all at once;
+    /// <see cref="RestoreDetached"/> puts every object back where it was.
+    /// </summary>
+    DetachedTextRun DetachTextRuns(IReadOnlyList<PdfTextRun> runs);
+
+    /// <summary>
+    /// Undoes <see cref="SetLineText"/>, <see cref="DetachTextRuns"/> or
+    /// <see cref="DetachTextRun"/>: every object the handle holds goes back at its own index,
+    /// after the edited run is taken off. Later edits on the page must be undone first.
+    /// </summary>
+    void RestoreDetached(DetachedTextRun detached);
 
     /// <summary>
     /// Whether the text object at <paramref name="objectIndex"/> can be edited or removed
@@ -237,12 +258,29 @@ public enum CheckMarkStyle
     FilledSquare,
 }
 
-/// <summary>Opaque handle to a text object removed from its page but kept alive for undo.</summary>
+/// <summary>
+/// Opaque handle to page objects removed from their page but kept alive for undo: one object,
+/// or a line's runs with the hidden copies drawn under them (#136).
+/// </summary>
 public sealed class DetachedTextRun
 {
-    internal DetachedTextRun(IntPtr handle) => Handle = handle;
+    internal DetachedTextRun(IntPtr handle, IReadOnlyList<DetachedPart> parts)
+    {
+        Handle = handle;
+        Parts = parts;
+    }
+
     internal IntPtr Handle { get; }
+
+    /// <summary>What the handle holds, ascending by the object index each had (and goes back to).</summary>
+    public IReadOnlyList<DetachedPart> Parts { get; }
 }
+
+/// <summary>
+/// One object in a <see cref="DetachedTextRun"/>: where it stood, and for a hidden copy of a
+/// run (#136) the object index of that run; <see cref="CopyOf"/> is -1 for a run itself.
+/// </summary>
+public sealed record DetachedPart(int ObjectIndex, int CopyOf);
 
 public enum PageHitKind
 {

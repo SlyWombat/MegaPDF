@@ -21,6 +21,8 @@ Writes:
                 offset that makes user-space and rendered coordinates disagree.
   textbox.pdf - a MegaPDFTextBox-marked text object with an id property (#34),
                 so every platform can prove it reads boxes written elsewhere.
+  doubled.pdf - lines drawn twice (fake bold, fill + stroke, shadow, a two-run
+                line) whose second copy PDFium's text layer hides (#136).
 
 Deterministic output; both platforms' engine tests assert against these.
 """
@@ -346,6 +348,47 @@ def gen_cropped():
     return build(objs)
 
 
+def gen_doubled():
+    """Lines drawn twice, the way producers fake bold, outlines and shadows (#136).
+
+    PDFium's text layer gives the characters of two identical overlapping text objects
+    to the first one; the second extracts as empty text and so is never a run. A delete
+    or an edit that only touched the run left the second copy on the page. In content
+    order (every text object is one Helvetica 14 pt BT..ET):
+      0  "A plain body line"                      a normal line, drawn once
+      1  "Fake bold heading"  2  its copy 0.3 pt to the right
+      3  "Filled then stroked" 4 its copy in render mode 1 (stroke) on top
+      5  "Shadowed line" in grey 1 pt right and down  6  the same text in black
+      7  "Two runs"  8  "drawn twice"  9  copy of 7  10  copy of 8   (one line, two runs)
+      11 "The closing line"                       a normal line after them all
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    text = lambda x, y, s: b"BT /F1 14 Tf %s %s Td (%s) Tj ET\n" % (x, y, s)
+    body = (text(b"72", b"720", b"A plain body line")
+            + text(b"72", b"680", b"Fake bold heading")
+            + text(b"72.3", b"680", b"Fake bold heading")
+            + text(b"72", b"640", b"Filled then stroked")
+            + b"q 0.4 w BT 1 Tr /F1 14 Tf 72 640 Td (Filled then stroked) Tj ET Q\n"
+            + b"q 0.6 g " + text(b"73", b"599", b"Shadowed line") + b"Q\n"
+            + text(b"72", b"600", b"Shadowed line")
+            + text(b"72", b"560", b"Two runs")
+            + text(b"150", b"560", b"drawn twice")
+            + text(b"72.3", b"560", b"Two runs")
+            + text(b"150.3", b"560", b"drawn twice")
+            + text(b"72", b"520", b"The closing line"))
+    content = add(stream(b"", body))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+               % (pages_num, font, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def gen_textbox():
     """A page carrying a MegaPDF *text box* written the way the engines write it
     (#34): a text object wrapped in a marked-content section named
@@ -475,6 +518,7 @@ def main():
                        ("formtext.pdf", gen_formtext()),
                               ("cropped.pdf", gen_cropped()),
                        ("textbox.pdf", gen_textbox()),
+                       ("doubled.pdf", gen_doubled()),
                        ("encrypted.pdf", gen_encrypted())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
