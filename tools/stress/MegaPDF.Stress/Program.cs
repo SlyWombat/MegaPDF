@@ -635,6 +635,13 @@ internal static class Worker
 
     private static string Squeezed(string text) => string.Concat(text.Where(c => !char.IsWhiteSpace(c)));
 
+    /// <summary>The line with its last word taken out, or empty when it has only one.</summary>
+    private static string WithoutLastWord(string text)
+    {
+        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return words.Length < 2 ? "" : string.Join(' ', words[..^1]);
+    }
+
     private static int Occurrences(string haystack, string needle)
     {
         var count = 0;
@@ -672,6 +679,11 @@ internal static class Worker
                     result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, lineIndex, EditKinds[kind % EditKinds.Length], pagePosition, linePosition));
                     kind++;
                 }
+
+                // Deleting a word (#127): one extra edit per page on its first line, outside
+                // the rotation, so every other edit keeps the kind it had in earlier runs and
+                // results stay comparable between builds.
+                result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, 0, "delete_word", pagePosition, "first"));
             }
         }
         catch (Exception ex)
@@ -724,8 +736,16 @@ internal static class Worker
                 "digits" => "$1,234.56 due 2026-09-13",
                 "accented" => "Reçu : déjà payé l’été",
                 "cjk" => "請求書 2026",
+                "delete_word" => WithoutLastWord(line.Text),
                 _ => "",
             };
+            if (kind == "delete_word" && newText.Length == 0)
+            {
+                item.Result = "skipped";
+                item.Error = "the line has a single word";
+                item.Ms = sw.Elapsed.TotalMilliseconds;
+                return item;
+            }
 
             try
             {
