@@ -2013,6 +2013,24 @@ bool AuthoredTextIs(FPDF_TEXTPAGE text_page, FPDF_PAGEOBJECT obj, const unsigned
     return true;
 }
 
+// #130: the read-back cannot see a glyph the font program lacks. PDFium keeps the
+// Unicode and draws .notdef, so every character that should leave ink must have a
+// glyph of its own in `font` (FPDFFont_HasGlyph, MegaPDF's PDFium patch 0011).
+// Whitespace has no outline and is skipped.
+bool EveryCharacterHasGlyph(FPDF_FONT font, const unsigned short* text) {
+    for (size_t i = 0; text[i] != 0; i++) {
+        uint32_t c = text[i];
+        if (c >= 0xD800 && c <= 0xDBFF && text[i + 1] >= 0xDC00 && text[i + 1] <= 0xDFFF) {
+            c = 0x10000 + ((c - 0xD800) << 10) + (static_cast<uint32_t>(text[i + 1]) - 0xDC00);
+            i++;
+        }
+        const bool whitespace = c == 0x20 || c == 0x09 || c == 0xA0 || (c >= 0x2000 && c <= 0x200B) ||
+                                c == 0x202F || c == 0x205F || c == 0x3000;
+        if (!whitespace && !FPDFFont_HasGlyph(font, c)) return false;
+    }
+    return true;
+}
+
 // Tier 2 test (SDD §3.1): the object's font is a subset and the new text needs a
 // glyph the document never used. Coverage is approximated by every character the
 // page draws with the same base font.
@@ -2119,7 +2137,9 @@ int ReplaceTextObjectUnlocked(const megapdf_page* p, FPDF_PAGEOBJECT original, i
         // carry: a font with no slot in its encoding drops the character, one with no
         // mapping draws the wrong glyph, one with no width spreads the letters apart.
         FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
-        const bool took = AuthoredTextIs(text_page, inserted, text);
+        // And every character must have a glyph: PDFium keeps the Unicode of one the
+        // font program lacks, so the read-back alone passes .notdef boxes (#130).
+        const bool took = AuthoredTextIs(text_page, inserted, text) && EveryCharacterHasGlyph(font, text);
         if (text_page != nullptr) FPDFText_ClosePage(text_page);
         if (!took) {
             FPDFPage_RemoveObject(p->page, inserted);

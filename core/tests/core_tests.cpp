@@ -2269,6 +2269,45 @@ void test_security(const std::string& fixtures) {
     check(megapdf_security_info(nullptr, &none) == MEGAPDF_ERR_ARGUMENT, "security info needs a document");
 }
 
+// #130: a heading in an embedded TrueType subset holding only the glyphs of "Hello World"
+// (tools/gen_subset_font_fixture.py). Text the subset can draw stays in its own font. A
+// letter it lacks reads back as typed but would draw .notdef, so the edit must go to the
+// standard substitute. PDFium reports the font's BaseFont without its subset tag, so the
+// subset-name test never caught this; only the glyph check does.
+void test_subset_font_glyphs() {
+    const auto bytes = read_file(std::string(MEGAPDF_REPO_FIXTURES) + "/subset-font.pdf");
+    struct Case { const char* text; int outcome; const char* why; };
+    const Case cases[] = {
+        {"Hello Word", MEGAPDF_EDIT_IN_PLACE, "letters the subset holds stay in its font"},
+        {"World Hello", MEGAPDF_EDIT_IN_PLACE, "reordered letters the subset holds stay in its font"},
+        {"Hex World", MEGAPDF_EDIT_SUBSTITUTED, "an x the subset lacks goes to the substitute"},
+        {"Hello Old", MEGAPDF_EDIT_SUBSTITUTED, "a capital O the subset lacks goes to the substitute"},
+    };
+    for (const Case& c : cases) {
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "subset-font.pdf opens");
+        if (!d) return;
+        {
+            Page p(d, 0);
+            megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+            size_t run = 0;
+            const bool has_line = megapdf_text_line_count(t) > 0 && megapdf_text_line_runs(t, 0, &run, 1) > 0;
+            megapdf_text_run r{};
+            if (has_line) megapdf_text_run_get(t, run, &r);
+            megapdf_text_free(t);
+            check(has_line, "subset-font.pdf has its heading");
+            std::vector<unsigned short> text;
+            for (const char* s = c.text; *s; s++) text.push_back(static_cast<unsigned char>(*s));
+            text.push_back(0);
+            int outcome = -1;
+            const int status = has_line ? megapdf_set_text(p.page, r.object_index, text.data(), 0, &outcome, nullptr) : -99;
+            check(status == MEGAPDF_OK && outcome == c.outcome, std::string("subset font, \"") + c.text + "\": " + c.why,
+                  "status " + std::to_string(status) + ", outcome " + std::to_string(outcome));
+        }
+        megapdf_close(d);
+    }
+}
+
 // #132: a protected document saves still protected, and megapdf_open_like() reads the
 // copy back with the credentials the document was opened with. Every platform's save
 // check reopened the copy without them, so every protected save failed.
@@ -2321,6 +2360,7 @@ int main(int argc, char** argv) {
     test_save_flatten_images(argv[1]);
     test_protected_save(argv[1]);
     test_security(argv[1]);
+    test_subset_font_glyphs();
     test_render();
     test_render_page(argv[1]);
     test_text_editing(argv[1]);

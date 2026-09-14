@@ -1693,6 +1693,22 @@ FPDF_EXPORT FPDF_GLYPHPATH FPDF_CALLCONV FPDFFont_GetGlyphPath(FPDF_FONT font,
                                                                uint32_t glyph,
                                                                float font_size);
 
+// Experimental API (MegaPDF patch series).
+// Whether |font| can draw the character |unicode| with a glyph of its own.
+//
+// font       - the handle to the font object.
+// unicode    - the character, as a Unicode code point.
+//
+// TRUE when the character maps to a code in the font's encoding and the font
+// program has a glyph for that code which is not .notdef and has an outline.
+// PDFium keeps the Unicode of a character whose glyph is missing, so reading
+// text back cannot show this. For a font that is not embedded, a glyph PDFium
+// draws from a substitute or fallback face counts; for an embedded font it does
+// not. Type3 fonts answer TRUE for any character with a code. Whitespace has no
+// outline, so it answers FALSE; callers skip it.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFFont_HasGlyph(FPDF_FONT font,
+                                                      uint32_t unicode);
+
 // Experimental API.
 // Get number of segments inside glyphpath.
 //

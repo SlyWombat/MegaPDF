@@ -148,7 +148,9 @@ if(MEGAPDF_CORE_TESTS)
     target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/libs/pdfium/android/include)
     target_compile_definitions(megapdf_core_tests PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES}
         # Committed encrypted fixtures (#131, tools/gen_security_fixtures.sh).
-        "MEGAPDF_SECURITY_FIXTURES=\"${REPO}/tests/MegaPDF.Core.Tests/Fixtures/security\"")
+        "MEGAPDF_SECURITY_FIXTURES=\"${REPO}/tests/MegaPDF.Core.Tests/Fixtures/security\""
+        # Committed real-font fixtures, e.g. the embedded subset font of #130.
+        "MEGAPDF_REPO_FIXTURES=\"${REPO}/tests/MegaPDF.Core.Tests/Fixtures\"")
     target_link_libraries(megapdf_core_tests PRIVATE megapdf_core ${PDFIUM_LINK})
     if(MEGAPDF_ASAN AND NOT MSVC)
         target_compile_options(megapdf_core_tests PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
