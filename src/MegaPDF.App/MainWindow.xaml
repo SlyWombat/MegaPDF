@@ -152,7 +152,7 @@
                     </StackPanel>
                 </Button>
 
-                <Button Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" x:Uid="AddTextButton" AutomationProperties.AutomationId="AddTextButton">
+                <Button Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsTextBoxAllowed, Mode=OneWay}" x:Uid="AddTextButton" AutomationProperties.AutomationId="AddTextButton">
                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
                         <FontIcon Glyph="&#xE8D2;" FontSize="{ThemeResource TypeSubtitle}" />
                         <TextBlock x:Name="LabelAddText" x:Uid="LabelAddText" />

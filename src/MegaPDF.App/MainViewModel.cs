@@ -181,7 +181,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility), nameof(IsDocumentOpen))]
-    [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsPrintAllowed))]
+    [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsTextBoxAllowed), nameof(IsPrintAllowed))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand), nameof(SecurityCommand))]
     private string? _documentPath;
 
@@ -209,15 +209,18 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// an owner-restricted document is not an editing loophole; every tool until then.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsPrintAllowed))]
+    [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsTextBoxAllowed), nameof(IsPrintAllowed))]
     [NotifyCanExecuteChangedFor(nameof(ShrinkForEmailCommand))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
-    /// <summary>Editing text, whiteout and text boxes (modify).</summary>
+    /// <summary>Editing the document's own text and whiteout (modify).</summary>
     public bool IsEditingAllowed => IsDocumentOpen && Capabilities.CanEditContent;
 
-    /// <summary>Signatures and check marks (annotate).</summary>
+    /// <summary>Signatures and check marks (fill forms or annotate).</summary>
     public bool IsSigningAllowed => IsDocumentOpen && Capabilities.CanSign;
+
+    /// <summary>Adding and changing text boxes (modify, fill forms or annotate).</summary>
+    public bool IsTextBoxAllowed => IsDocumentOpen && Capabilities.CanAddText;
 
     public bool IsPrintAllowed => IsDocumentOpen && Capabilities.CanPrint;
 
@@ -335,10 +338,9 @@ public partial class MainViewModel(Window window) : ObservableObject
         // Permissions first, so nothing bound to the new path sees the old document's (#131).
         Capabilities = DocumentCapabilities.From(doc.Security);
         if (!Capabilities.CanEditContent)
-        {
             IsWhiteoutMode = false;
+        if (!Capabilities.CanAddText)
             IsTextBoxMode = false;
-        }
         if (!Capabilities.CanSign)
             PendingSignature = null;
         IsRestrictedNoticeOpen = Capabilities.IsRestricted;
@@ -887,7 +889,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public void StartTextBoxMode()
     {
-        if (!Capabilities.CanEditContent)
+        if (!Capabilities.CanAddText)
         {
             IsRestrictedNoticeOpen = true;
             return;

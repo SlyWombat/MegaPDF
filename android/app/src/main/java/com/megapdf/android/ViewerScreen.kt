@@ -391,7 +391,7 @@ fun ViewerScreen(
                         TextButton(onClick = { signDialogOpen = true }, enabled = capabilities.canSign) {
                             Text(stringResource(R.string.sign))
                         }
-                        TextButton(onClick = onStartTextPlacement, enabled = capabilities.canEditContent) {
+                        TextButton(onClick = onStartTextPlacement, enabled = capabilities.canAddText) {
                             Text(stringResource(R.string.text))
                         }
                         TextButton(onClick = onSave, enabled = isDirty && !isSaving) {

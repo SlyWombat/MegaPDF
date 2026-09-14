@@ -19,6 +19,8 @@ class DocumentCapabilitiesTest {
     private val bodyEdit = BodyTextDeleteOperation(0, TextLine(emptyList(), rect))
     private val textBox = TextBoxOperation(0, "text:a", "hi", 12.0, 1.0, 1.0, adding = true)
     private val moveTextBox = MoveTextBoxOperation(0, "text:a", 1.0, 1.0, 2.0, 2.0)
+    private val editTextBox = EditTextBoxOperation(
+        0, "text:a", TextBoxStyle("hi", 12.0, "Helvetica"), TextBoxStyle("hello", 14.0, "Helvetica"), 1.0, 1.0)
     private val signature = StampOperation(0, "sig:a", IntArray(1), 1, 1, rect, adding = true)
     private val mark = MarkOperation(0, rect, "mark:a", true)
     private val checkbox = FieldToggleOperation(0, 5.0, 5.0)
@@ -26,51 +28,65 @@ class DocumentCapabilitiesTest {
     @Test
     fun `an unprotected document allows everything`() {
         val c = DocumentCapabilities.fromSecurity(PdfSecurity.UNPROTECTED)
-        assertTrue(c.canEditContent && c.canSign && c.canFillForms && c.canChangeSecurity)
+        assertTrue(c.canEditContent && c.canSign && c.canFillForms && c.canAddText && c.canChangeSecurity)
         assertFalse(c.isEncrypted)
         assertFalse(c.isRestricted)
         assertEquals(DocumentCapabilities.FULL, c)
-        listOf(bodyEdit, textBox, moveTextBox, signature, mark, checkbox).forEach { assertTrue(c.allows(it)) }
+        listOf(bodyEdit, textBox, editTextBox, moveTextBox, signature, mark, checkbox).forEach { assertTrue(c.allows(it)) }
     }
 
     @Test
     fun `an owner-only document that allows nothing is restricted everywhere`() {
         val c = DocumentCapabilities.fromSecurity(restricted(0))
-        assertFalse(c.canEditContent || c.canSign || c.canFillForms || c.canChangeSecurity)
+        assertFalse(c.canEditContent || c.canSign || c.canFillForms || c.canAddText || c.canChangeSecurity)
         assertTrue(c.isEncrypted)
         assertTrue(c.isRestricted)
-        listOf(bodyEdit, textBox, moveTextBox, signature, mark, checkbox).forEach { assertFalse(c.allows(it)) }
+        listOf(bodyEdit, textBox, editTextBox, moveTextBox, signature, mark, checkbox).forEach { assertFalse(c.allows(it)) }
     }
 
     @Test
-    fun `modify gates body text and text boxes only`() {
+    fun `modify allows body text and text boxes, but not filling in`() {
         val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.MODIFY))
-        assertTrue(c.allows(bodyEdit) && c.allows(textBox) && c.allows(moveTextBox))
+        assertTrue(c.canEditContent && c.canAddText)
+        assertFalse(c.canSign || c.canFillForms)
+        assertTrue(c.allows(bodyEdit) && c.allows(textBox) && c.allows(editTextBox) && c.allows(moveTextBox))
         assertFalse(c.allows(signature) || c.allows(mark) || c.allows(checkbox))
         assertFalse(c.canChangeSecurity)
     }
 
     @Test
-    fun `annotate allows signatures, marks and form filling`() {
-        val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.ANNOTATE))
-        assertTrue(c.allows(signature) && c.allows(mark) && c.allows(checkbox))
-        assertFalse(c.allows(bodyEdit) || c.allows(textBox))
+    fun `fill forms allows filling in everything the form offers, but not its own text`() {
+        val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.FILL_FORMS or PdfPermissions.PRINT))
+        assertTrue(c.canFillForms && c.canSign && c.canAddText)
+        assertFalse(c.canEditContent || c.canChangeSecurity)
+        listOf(checkbox, mark, signature, textBox, editTextBox, moveTextBox).forEach { assertTrue(c.allows(it)) }
+        assertFalse(c.allows(bodyEdit))
     }
 
     @Test
-    fun `fill forms alone allows form fields only`() {
-        val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.FILL_FORMS or PdfPermissions.PRINT))
-        assertTrue(c.canFillForms)
-        assertFalse(c.canSign || c.canEditContent)
-        assertTrue(c.allows(checkbox))
-        assertFalse(c.allows(mark))
+    fun `annotate allows the same as fill forms`() {
+        assertEquals(
+            DocumentCapabilities.fromSecurity(restricted(PdfPermissions.FILL_FORMS)),
+            DocumentCapabilities.fromSecurity(restricted(PdfPermissions.ANNOTATE)),
+        )
+    }
+
+    @Test
+    fun `text box edits need canAddText and nothing else`() {
+        val onlyTextBoxes = DocumentCapabilities.fromSecurity(restricted(0)).copy(canAddText = true)
+        val allButTextBoxes = DocumentCapabilities.FULL.copy(canAddText = false)
+        listOf(textBox, editTextBox, moveTextBox).forEach {
+            assertTrue(onlyTextBoxes.allows(it))
+            assertFalse(allButTextBoxes.allows(it))
+        }
+        assertFalse(onlyTextBoxes.allows(bodyEdit))
     }
 
     @Test
     fun `the owner's open of a protected document has full access and is not restricted`() {
         val c = DocumentCapabilities.fromSecurity(
             PdfSecurity(isEncrypted = true, revision = 6, permissions = PdfPermissions.ALL, hasFullAccess = true))
-        assertTrue(c.canChangeSecurity && c.canEditContent && c.canSign && c.canFillForms)
+        assertTrue(c.canChangeSecurity && c.canEditContent && c.canSign && c.canFillForms && c.canAddText)
         assertTrue(c.isEncrypted)
         assertFalse(c.isRestricted)
     }

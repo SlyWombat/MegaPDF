@@ -131,6 +131,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(FitPageCommand))]
     [NotifyPropertyChangedFor(nameof(CanShrink))]
     [NotifyPropertyChangedFor(nameof(CanEditContent))]
+    [NotifyPropertyChangedFor(nameof(CanAddText))]
     [NotifyPropertyChangedFor(nameof(CanSign))]
     [NotifyPropertyChangedFor(nameof(CanPrint))]
     [NotifyPropertyChangedFor(nameof(IsRestricted))]
@@ -145,6 +146,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanEditContent))]
+    [NotifyPropertyChangedFor(nameof(CanAddText))]
     [NotifyPropertyChangedFor(nameof(CanSign))]
     [NotifyPropertyChangedFor(nameof(CanPrint))]
     [NotifyPropertyChangedFor(nameof(CanShrink))]
@@ -154,10 +156,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
-    /// <summary>Editing text, covers and added text (modify).</summary>
+    /// <summary>Editing the document's own text and covers (modify).</summary>
     public bool CanEditContent => IsDocumentOpen && Capabilities.CanEditContent;
 
-    /// <summary>Signatures and check marks (annotate).</summary>
+    /// <summary>Adding and changing text boxes, and their font and size (modify, fill forms or annotate).</summary>
+    public bool CanAddText => IsDocumentOpen && Capabilities.CanAddText;
+
+    /// <summary>Signatures and check marks (fill forms or annotate).</summary>
     public bool CanSign => IsDocumentOpen && Capabilities.CanSign;
 
     public bool CanPrint => IsDocumentOpen && Capabilities.CanPrint;
@@ -998,7 +1003,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
     public IReadOnlyList<double> TextSizes { get; } = [8, 9, 10, 11, 12, 14, 16, 18, 24];
 
-    [RelayCommand(CanExecute = nameof(CanEditContent))]
+    [RelayCommand(CanExecute = nameof(CanAddText))]
     private void ToggleAddText() => SetMode(Mode == PageMode.AddText ? PageMode.Select : PageMode.AddText);
 
     [RelayCommand(CanExecute = nameof(CanEditContent))]
@@ -1006,8 +1011,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void SetMode(PageMode mode)
     {
-        // Both modes change page content (#131).
-        if (mode != PageMode.Select && !Capabilities.CanEditContent)
+        // Added text needs a text-box capability, covering the document's own content
+        // needs modify (#131).
+        var allowed = mode switch
+        {
+            PageMode.AddText => Capabilities.CanAddText,
+            PageMode.Whiteout => Capabilities.CanEditContent,
+            _ => true,
+        };
+        if (!allowed)
         {
             Status = Strings.ActionRestricted;
             return;

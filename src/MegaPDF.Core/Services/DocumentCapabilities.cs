@@ -9,12 +9,18 @@ namespace MegaPDF.Core.Services;
 /// The permission bits are the document owner's; this is the one place they are mapped
 /// to MegaPDF's tools, so Windows and macOS cannot disagree about what "modify" covers:
 ///
-/// | permission | tools |
-/// |---|---|
-/// | modify | editing text, whiteout, text boxes, shrink-for-email |
-/// | annotate | signatures, stamps and check marks |
-/// | fill forms | form fields (annotate allows them too) |
-/// | print | printing |
+/// | capability | granted by | tools |
+/// |---|---|---|
+/// | CanFillForms | fill forms or annotate | form fields |
+/// | CanSign | fill forms or annotate | signatures, stamps and check marks |
+/// | CanAddText | modify, fill forms or annotate | text boxes and their font and size |
+/// | CanEditContent | modify | editing the document's own text, whiteout |
+/// | CanShrink | modify | shrink-for-email |
+/// | CanPrint | print | printing |
+///
+/// A form that allows filling lets people fill in everything it offers: its fields,
+/// check marks on printed boxes, signatures and text boxes. Changing the document
+/// itself needs modify. Annotate implies form filling (ISO 32000).
 ///
 /// Saving is not gated: a restricted open has nothing it may change, and Save a copy
 /// stays available. Changing or removing security needs full access.
@@ -23,6 +29,7 @@ public sealed record DocumentCapabilities(
     bool CanEditContent,
     bool CanSign,
     bool CanFillForms,
+    bool CanAddText,
     bool CanPrint,
     bool CanShrink,
     bool CanChangeSecurity,
@@ -40,11 +47,12 @@ public sealed record DocumentCapabilities(
         bool Allows(PdfPermissions permission) => security.HasFullAccess || security.Allows(permission);
 
         var modify = Allows(PdfPermissions.Modify);
-        var annotate = Allows(PdfPermissions.Annotate);
+        var fillIn = Allows(PdfPermissions.FillForms) || Allows(PdfPermissions.Annotate);
         return new DocumentCapabilities(
             CanEditContent: modify,
-            CanSign: annotate,
-            CanFillForms: annotate || Allows(PdfPermissions.FillForms),
+            CanSign: fillIn,
+            CanFillForms: fillIn,
+            CanAddText: modify || fillIn,
             CanPrint: Allows(PdfPermissions.Print),
             CanShrink: modify,
             CanChangeSecurity: security.HasFullAccess,
@@ -60,7 +68,8 @@ public sealed record DocumentCapabilities(
     {
         PageHitKind.FormCheckbox or PageHitKind.FormTextField => CanFillForms,
         PageHitKind.DrawnCheckbox or PageHitKind.StampAnnotation => CanSign,
-        PageHitKind.TextRun or PageHitKind.TextBox or PageHitKind.Whiteout => CanEditContent,
+        PageHitKind.TextBox => CanAddText,
+        PageHitKind.TextRun or PageHitKind.Whiteout => CanEditContent,
         _ => true,
     };
 
@@ -73,6 +82,8 @@ public sealed record DocumentCapabilities(
         CheckboxToggleOperation or FormTextEditOperation => CanFillForms,
         AddMarkOperation or RemoveMarkOperation
             or AddSignatureOperation or MoveSignatureOperation or RemoveSignatureOperation => CanSign,
+        AddTextBoxOperation or MoveTextBoxOperation
+            or RestyleTextBoxOperation or RemoveTextBoxOperation => CanAddText,
         _ => CanEditContent,
     };
 }

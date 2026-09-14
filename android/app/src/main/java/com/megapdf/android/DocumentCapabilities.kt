@@ -9,12 +9,14 @@ import com.megapdf.engine.PdfSecurity
  * model asks it before every edit, and the toolbar asks it for what to enable.
  */
 data class DocumentCapabilities(
-    /** The document's own text and text boxes: the modify permission. */
+    /** The document's own text: the modify permission. */
     val canEditContent: Boolean,
-    /** Signatures, stamps and check marks: the annotate permission. */
+    /** Signatures, stamps and check marks: fill forms, which annotate also allows. */
     val canSign: Boolean,
     /** Ticking form fields: fill forms, which annotate also allows. */
     val canFillForms: Boolean,
+    /** Adding, correcting, moving and removing text boxes: modify or fill forms. */
+    val canAddText: Boolean,
     /** Setting, changing or removing the password: full access only (decision 3). */
     val canChangeSecurity: Boolean,
     val isEncrypted: Boolean,
@@ -23,20 +25,28 @@ data class DocumentCapabilities(
 ) {
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
-        is BodyTextEditOperation, is BodyTextDeleteOperation,
-        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation -> canEditContent
+        is BodyTextEditOperation, is BodyTextDeleteOperation -> canEditContent
+        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation -> canAddText
         is StampOperation, is MoveStampOperation, is MarkOperation -> canSign
         is FieldToggleOperation -> canFillForms
         else -> canChangeSecurity
     }
 
     companion object {
+        /**
+         * A form that allows filling lets people fill in everything it offers: its fields,
+         * check marks, signatures and text boxes. Changing the document's own text needs
+         * modify. Annotate implies form filling (ISO 32000).
+         */
         fun fromSecurity(security: PdfSecurity): DocumentCapabilities {
             fun may(permission: Int) = security.hasFullAccess || security.allows(permission)
+            val modify = may(PdfPermissions.MODIFY)
+            val fillIn = may(PdfPermissions.FILL_FORMS) || may(PdfPermissions.ANNOTATE)
             return DocumentCapabilities(
-                canEditContent = may(PdfPermissions.MODIFY),
-                canSign = may(PdfPermissions.ANNOTATE),
-                canFillForms = may(PdfPermissions.FILL_FORMS) || may(PdfPermissions.ANNOTATE),
+                canEditContent = modify,
+                canSign = fillIn,
+                canFillForms = fillIn,
+                canAddText = modify || fillIn,
                 canChangeSecurity = security.hasFullAccess,
                 isEncrypted = security.isEncrypted,
                 isRestricted = security.isEncrypted && !security.hasFullAccess,

@@ -120,7 +120,7 @@ struct ViewerView: View {
                     .disabled(!model.capabilities.canSign)
                 Button("Text") { model.startTextPlacement() }
                     .accessibilityLabel("Add text")
-                    .disabled(!model.capabilities.canEditContent)
+                    .disabled(!model.capabilities.canAddText)
                 Button(saveLabel) { model.save() }
                     .disabled(!model.isDirty || model.isSaving)
                 Menu {

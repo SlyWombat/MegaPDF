@@ -29,11 +29,16 @@ well as by PDFium itself.
 
    | permission | what it gates |
    |---|---|
-   | modify | editing text, whiteout, text boxes, shrink-for-email |
-   | annotate | signatures and stamps |
-   | fill forms | form filling (also allowed by annotate) |
+   | modify | editing or deleting the document's own text, whiteout, shrink-for-email, text boxes |
+   | fill forms | form fields, check marks on printed boxes, signatures and stamps, text boxes |
+   | annotate | the same as fill forms (annotate implies form filling in ISO 32000) |
    | copy | copying text |
    | print | printing |
+
+   A form that allows filling lets people fill in everything it offers: its fields, check
+   marks, signatures and text boxes. Changing the document itself (its text, whiteout,
+   shrink) needs modify. Dave's direction, 2026-09-14: "a form filling pdf should allow
+   filling in all of the fields that are open to them".
 
    Saving is not gated: a restricted open has nothing it may change. Save a copy stays
    available.

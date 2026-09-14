@@ -559,7 +559,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     it.rect.grownBy(TAP_SLOP_POINTS).contains(x, y)
                 }
                 if (box != null) {
-                    if (!capabilities.canEditContent) {
+                    if (!capabilities.canAddText) {
                         selectedTextBox = null
                         showRestricted()
                         return@launch
@@ -691,7 +691,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Arms the next tap to place text. Tapping the page opens the text field. */
     fun startTextPlacement() {
-        if (!capabilities.canEditContent) {
+        if (!capabilities.canAddText) {
             showRestricted()
             return
         }
@@ -787,7 +787,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun editSelectedTextBox() {
         val sel = selectedTextBox ?: return
         selectedTextBox = null
-        if (!capabilities.canEditContent) {
+        if (!capabilities.canAddText) {
             showRestricted()
             return
         }

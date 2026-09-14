@@ -222,7 +222,7 @@
         <!-- Display names, not the raw PostScript names and enum values the
              engine speaks: "Times", not "Times-Roman"; "Croix", not "Cross". -->
         <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
-                  SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding CanEditContent}">
+                  SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding CanAddText}">
           <ComboBox.ItemTemplate>
             <DataTemplate DataType="vm:FontChoice">
               <TextBlock Text="{Binding Label}" />
@@ -230,7 +230,7 @@
           </ComboBox.ItemTemplate>
         </ComboBox>
         <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
-                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding CanEditContent}" />
+                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding CanAddText}" />
         <ToggleButton Name="WhiteoutButton"
                       IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
                       Command="{Binding ToggleWhiteoutCommand}" >

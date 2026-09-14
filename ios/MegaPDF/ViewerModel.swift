@@ -345,7 +345,7 @@ final class ViewerModel: ObservableObject {
         if isPlacingText {
             isPlacingText = false
             statusMessage = nil
-            guard permits(caps.canEditContent) else { return }
+            guard permits(caps.canAddText) else { return }
             draftText = ""
             draftSize = lastFontSize
             draftFont = lastFontName
@@ -391,7 +391,7 @@ final class ViewerModel: ObservableObject {
                         statusMessage = String(localized: "This text was added by an older version and can't be edited here.")
                         return
                     }
-                    guard permits(caps.canEditContent) else {
+                    guard permits(caps.canAddText) else {
                         selectedTextBox = nil
                         return
                     }
@@ -535,7 +535,7 @@ final class ViewerModel: ObservableObject {
 
     /// Arms the next tap to place text. Tapping the page opens the text field.
     func startTextPlacement() {
-        guard permits(capabilities.canEditContent) else { return }
+        guard permits(capabilities.canAddText) else { return }
         cancelPlacement()
         selectedStamp = nil
         selectedTextBox = nil
@@ -557,7 +557,7 @@ final class ViewerModel: ObservableObject {
         guard let pending = pendingText, let doc = document else { return }
         pendingText = nil
         draftText = ""
-        guard permits(capabilities.canEditContent) else { return }
+        guard permits(capabilities.canAddText) else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         lastFontSize = fontSize
@@ -603,7 +603,7 @@ final class ViewerModel: ObservableObject {
     func commitTextBoxRect(_ newRect: PdfRect) {
         guard let sel = selectedTextBox, let doc = document,
               case let .viewing(_, pageSizes) = state else { return }
-        guard permits(capabilities.canEditContent) else { return }
+        guard permits(capabilities.canAddText) else { return }
         let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
         // A tap that slipped into a drag can land a sub-point move; don't put a
         // no-op on the undo stack for it.
@@ -628,7 +628,7 @@ final class ViewerModel: ObservableObject {
     func editSelectedTextBox() {
         guard let sel = selectedTextBox else { return }
         selectedTextBox = nil
-        guard permits(capabilities.canEditContent) else { return }
+        guard permits(capabilities.canAddText) else { return }
         draftText = sel.text
         draftSize = sel.fontSize
         draftFont = sel.fontName
@@ -640,7 +640,7 @@ final class ViewerModel: ObservableObject {
 
     func removeSelectedTextBox() {
         guard let sel = selectedTextBox, let doc = document else { return }
-        guard permits(capabilities.canEditContent) else { return }
+        guard permits(capabilities.canAddText) else { return }
         Task {
             do {
                 // boundsAnchored: the coordinates are the box's reported rect, so

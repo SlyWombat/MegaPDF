@@ -22,11 +22,12 @@ public sealed class DocumentCapabilitiesTests : IDisposable
         DocumentCapabilities.From(new PdfSecurity(true, 6, permissions, HasFullAccess: false));
 
     [Fact]
-    public void Modify_GatesContentEditingAndShrink_AndNothingElse()
+    public void Modify_GatesContentEditingShrinkAndTextBoxes_AndNotFilling()
     {
         var caps = Restricted(PdfPermissions.Modify);
         Assert.True(caps.CanEditContent);
         Assert.True(caps.CanShrink);
+        Assert.True(caps.CanAddText);
         Assert.False(caps.CanSign);
         Assert.False(caps.CanFillForms);
         Assert.False(caps.CanPrint);
@@ -35,23 +36,25 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     }
 
     [Fact]
-    public void Annotate_GatesSigning_AndAlsoAllowsForms()
+    public void FillForms_AllowsFillingInEverything_ButNotChangingTheDocument()
     {
-        var caps = Restricted(PdfPermissions.Annotate);
-        Assert.True(caps.CanSign);
+        // A form that allows filling lets people fill in everything it offers.
+        var caps = Restricted(PdfPermissions.FillForms);
         Assert.True(caps.CanFillForms);
+        Assert.True(caps.CanSign);
+        Assert.True(caps.CanAddText);
         Assert.False(caps.CanEditContent);
         Assert.False(caps.CanShrink);
         Assert.False(caps.CanPrint);
+        Assert.False(caps.CanChangeSecurity);
+        Assert.True(caps.IsRestricted);
     }
 
     [Fact]
-    public void FillForms_GatesFormsOnly()
+    public void Annotate_AllowsTheSameAsFillForms()
     {
-        var caps = Restricted(PdfPermissions.FillForms);
-        Assert.True(caps.CanFillForms);
-        Assert.False(caps.CanSign);
-        Assert.False(caps.CanEditContent);
+        // Annotate implies form filling (ISO 32000).
+        Assert.Equal(Restricted(PdfPermissions.FillForms), Restricted(PdfPermissions.Annotate));
     }
 
     [Fact]
@@ -62,13 +65,14 @@ public sealed class DocumentCapabilitiesTests : IDisposable
         Assert.False(caps.CanEditContent);
         Assert.False(caps.CanSign);
         Assert.False(caps.CanFillForms);
+        Assert.False(caps.CanAddText);
     }
 
     [Fact]
     public void EveryBitWithoutTheOwner_AllowsEveryToolButChangingSecurity()
     {
         var caps = Restricted(PdfPermissions.All);
-        Assert.True(caps.CanEditContent && caps.CanSign && caps.CanFillForms && caps.CanPrint && caps.CanShrink);
+        Assert.True(caps.CanEditContent && caps.CanSign && caps.CanFillForms && caps.CanAddText && caps.CanPrint && caps.CanShrink);
         Assert.False(caps.CanChangeSecurity);
         Assert.True(caps.IsRestricted);
     }
@@ -76,7 +80,7 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     [Fact]
     public void Unprotected_AllowsEverything_AndIsNotRestricted()
     {
-        var everything = new DocumentCapabilities(true, true, true, true, true, true, false);
+        var everything = new DocumentCapabilities(true, true, true, true, true, true, true, false);
         Assert.Equal(everything, DocumentCapabilities.Unprotected);
         Assert.Equal(everything, DocumentCapabilities.From(PdfSecurity.Unprotected));
     }
@@ -86,7 +90,7 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     {
         using var doc = _engine.Open(Fixture("owner-only.pdf"));
         var caps = DocumentCapabilities.From(doc.Security);
-        Assert.Equal(new DocumentCapabilities(false, false, false, false, false, false, IsRestricted: true), caps);
+        Assert.Equal(new DocumentCapabilities(false, false, false, false, false, false, false, IsRestricted: true), caps);
     }
 
     [Fact]
@@ -115,24 +119,36 @@ public sealed class DocumentCapabilitiesTests : IDisposable
     }
 
     [Theory]
-    [InlineData(PageHitKind.FormCheckbox, false, false, true)]
-    [InlineData(PageHitKind.FormTextField, false, false, true)]
-    [InlineData(PageHitKind.DrawnCheckbox, false, true, false)]
-    [InlineData(PageHitKind.StampAnnotation, false, true, false)]
-    [InlineData(PageHitKind.TextRun, true, false, false)]
-    [InlineData(PageHitKind.TextBox, true, false, false)]
-    [InlineData(PageHitKind.Whiteout, true, false, false)]
-    public void PageRegions_NeedTheirPermission(PageHitKind kind, bool needsModify, bool needsAnnotate, bool needsForms)
+    [InlineData(PageHitKind.FormCheckbox, false, true)]
+    [InlineData(PageHitKind.FormTextField, false, true)]
+    [InlineData(PageHitKind.DrawnCheckbox, false, true)]
+    [InlineData(PageHitKind.StampAnnotation, false, true)]
+    [InlineData(PageHitKind.TextRun, true, false)]
+    [InlineData(PageHitKind.TextBox, true, true)]
+    [InlineData(PageHitKind.Whiteout, true, false)]
+    public void PageRegions_NeedTheirPermission(PageHitKind kind, bool opensForModify, bool opensForFilling)
     {
         var nothing = Restricted(PdfPermissions.None);
         Assert.False(nothing.Allows(kind));
         Assert.True(nothing.Allows(PageHitKind.None));
 
-        Assert.Equal(needsModify, Restricted(PdfPermissions.Modify).Allows(kind));
-        // Annotate also allows forms, so a form region opens for either bit.
-        Assert.Equal(needsAnnotate || needsForms, Restricted(PdfPermissions.Annotate).Allows(kind));
-        Assert.Equal(needsForms, Restricted(PdfPermissions.FillForms).Allows(kind));
+        Assert.Equal(opensForModify, Restricted(PdfPermissions.Modify).Allows(kind));
+        // Annotate implies form filling, so both bits open the same regions.
+        Assert.Equal(opensForFilling, Restricted(PdfPermissions.FillForms).Allows(kind));
+        Assert.Equal(opensForFilling, Restricted(PdfPermissions.Annotate).Allows(kind));
         Assert.True(DocumentCapabilities.Unprotected.Allows(kind));
+    }
+
+    [Fact]
+    public void TextBoxRegion_NeedsCanAddText_AndNothingElse()
+    {
+        var onlyTextBoxes = new DocumentCapabilities(false, false, false, CanAddText: true, false, false, false, true);
+        Assert.True(onlyTextBoxes.Allows(PageHitKind.TextBox));
+        Assert.False(onlyTextBoxes.Allows(PageHitKind.TextRun));
+        Assert.False(onlyTextBoxes.Allows(PageHitKind.Whiteout));
+
+        var allButTextBoxes = DocumentCapabilities.Unprotected with { CanAddText = false };
+        Assert.False(allButTextBoxes.Allows(PageHitKind.TextBox));
     }
 
     [Fact]
@@ -144,21 +160,56 @@ public sealed class DocumentCapabilitiesTests : IDisposable
         IPageEditOperation mark = new AddMarkOperation(null!, 0, rect);
         IPageEditOperation unsign = new RemoveSignatureOperation(null!, 0, "sig:1", rect);
         IPageEditOperation cover = new AddWhiteoutOperation(null!, 0, rect);
+        IPageEditOperation addText = new AddTextBoxOperation(null!, 0, "Hi", 12, new PdfPoint(10, 10));
+        IPageEditOperation retype = new LineEditOperation(null!, 0, null!, "Hello");
 
         var forms = Restricted(PdfPermissions.FillForms);
         Assert.True(forms.Allows(toggle));
-        Assert.False(forms.Allows(mark));
+        Assert.True(forms.Allows(mark));
+        Assert.True(forms.Allows(unsign));
+        Assert.True(forms.Allows(addText));
         Assert.False(forms.Allows(cover));
+        Assert.False(forms.Allows(retype));
 
         var annotate = Restricted(PdfPermissions.Annotate);
         Assert.True(annotate.Allows(toggle));
         Assert.True(annotate.Allows(mark));
         Assert.True(annotate.Allows(unsign));
+        Assert.True(annotate.Allows(addText));
         Assert.False(annotate.Allows(cover));
+        Assert.False(annotate.Allows(retype));
 
         var modify = Restricted(PdfPermissions.Modify);
         Assert.True(modify.Allows(cover));
+        Assert.True(modify.Allows(retype));
+        Assert.True(modify.Allows(addText));
         Assert.False(modify.Allows(mark));
+        Assert.False(modify.Allows(unsign));
         Assert.False(modify.Allows(toggle));
+    }
+
+    [Fact]
+    public void TextBoxOperations_NeedCanAddText()
+    {
+        var run = new PdfTextRun(3, "Hi", new PdfRect(10, 10, 20, 12), "Helvetica", 12, TextBoxId: "text:1");
+        IPageEditOperation[] textBoxOperations =
+        [
+            new AddTextBoxOperation(null!, 0, "Hi", 12, new PdfPoint(10, 10)),
+            new MoveTextBoxOperation(null!, 0, 3, run.Bounds, new PdfRect(30, 30, 20, 12)),
+            new RestyleTextBoxOperation(null!, 0, 3, run, "Hello", "Helvetica", 14),
+            new RemoveTextBoxOperation(null!, 0, 3, run),
+        ];
+
+        var onlyTextBoxes = new DocumentCapabilities(false, false, false, CanAddText: true, false, false, false, true);
+        var allButTextBoxes = DocumentCapabilities.Unprotected with { CanAddText = false };
+        foreach (var operation in textBoxOperations)
+        {
+            Assert.True(onlyTextBoxes.Allows(operation), operation.GetType().Name);
+            Assert.False(allButTextBoxes.Allows(operation), operation.GetType().Name);
+        }
+
+        // Everything else that changes the page still needs modify.
+        IPageEditOperation cover = new AddWhiteoutOperation(null!, 0, run.Bounds);
+        Assert.False(onlyTextBoxes.Allows(cover));
     }
 }
