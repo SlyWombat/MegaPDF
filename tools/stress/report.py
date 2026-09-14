@@ -404,6 +404,23 @@ def section_compare(runs, out):
     row("edits tried", lambda r: sum(1 for x in r.ok() if x.get("edit") and x["edit"].get("skipped") != "no text"))
     row("edits substituted", lambda r: sum(1 for x in r.ok() if x.get("edit") and x["edit"].get("outcome") == "substituted"))
     row("edits declined (layout, #118)", lambda r: sum(1 for x in r.ok() if x.get("edit") and x["edit"].get("skipped") == "layout"))
+
+    # #127 edit battery: items across every document.
+    def items(r):
+        return [it for x in r.ok() for it in ((x.get("edits") or {}).get("items") or [])]
+    accepted = ("in_place", "substituted", "deleted")
+    row("battery edits", lambda r: len(items(r)))
+    row("battery accepted", lambda r: sum(1 for it in items(r) if it.get("result") in accepted))
+    row("battery declined (layout)", lambda r: sum(1 for it in items(r) if it.get("result") == "layout"))
+    row("battery refused (no font)", lambda r: sum(1 for it in items(r) if it.get("result") == "no_font"))
+    row("battery errors", lambda r: sum(1 for it in items(r) if it.get("result") in ("error", "refused", "not_extractable")))
+    row("battery accepted, not read back", lambda r: sum(1 for it in items(r) if it.get("result") in accepted and it.get("read_back") is False))
+    row("battery accepted, another line moved >= 1 pt", lambda r: sum(1 for it in items(r) if it.get("result") in accepted and (it.get("worst_shift_pt") or 0) >= 1))
+    row("battery accepted, another line lost", lambda r: sum(1 for it in items(r) if it.get("result") in accepted and (it.get("untouched_missing") or 0) > 0))
+    row("battery CJK accepted (must be 0)", lambda r: sum(1 for it in items(r) if it.get("kind") == "cjk" and it.get("result") in accepted))
+    for kind in ("same", "longer", "shorter", "digits", "accented", "cjk", "delete"):
+        row(f"battery {kind}: tried", lambda r, k=kind: sum(1 for it in items(r) if it.get("kind") == k))
+        row(f"battery {kind}: accepted", lambda r, k=kind: sum(1 for it in items(r) if it.get("kind") == k and it.get("result") in accepted))
     row("edit failures", lambda r: sum(1 for x in r.ok() if x.get("edit") and x["edit"].get("error")))
     row("blank pages with text", lambda r: sum(len(x["scroll"].get("blank_with_text", [])) for x in r.ok() if x.get("scroll")))
     row("max worker ws MB", lambda r: max(x["mem"]["ws_after_gc"] for x in r.results if x.get("mem")) / 1e6)

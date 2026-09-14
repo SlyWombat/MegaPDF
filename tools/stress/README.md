@@ -18,6 +18,14 @@ edits tried, edits that needed a substituted font, edits the engine declined
 because PDFium would have disturbed the page's layout (#118; counted as skipped,
 not failed), and failures.
 
+`--phases edits` (#127) runs an edit battery instead of one retype: up to nine lines
+sampled from the first, middle and last pages, each edited from a fresh copy of the
+document through the app's own `LineEditOperation` / `DeleteLineOperation`. The kinds
+rotate: the same text, longer, one word, digits and a date, accented, CJK (which must
+be refused) and deleting the line. Each item records the guard's verdict, the outcome,
+whether the edit reads back after save and reopen, and how far any other line on the
+page moved. Kinds, positions and numbers only; no document text.
+
 One-file diagnostics: `find`, `open-bench`, `inspect`, `flags-bench`.
 
 `dump-text --files a.pdf,b.pdf` prints every page's text runs and visual lines in

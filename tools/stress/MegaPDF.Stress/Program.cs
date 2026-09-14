@@ -1,3 +1,4 @@
+using MegaPDF.Core.Editing;
 using MegaPDF.Core.Viewing;
 using System.Globalization;
 using System.Collections.Concurrent;
@@ -117,6 +118,7 @@ internal sealed class FileResult
     [JsonPropertyName("save")] public SaveResult? Save { get; set; }
     [JsonPropertyName("images")] public ImagesResult? Images { get; set; }
     [JsonPropertyName("edit")] public EditResult? Edit { get; set; }
+    [JsonPropertyName("edits")] public EditsResult? Edits { get; set; }
     [JsonPropertyName("mem")] public MemResult? Mem { get; set; }
     [JsonPropertyName("wall_ms")] public double? WallMs { get; set; }
     [JsonPropertyName("worker")] public int? WorkerPid { get; set; }
@@ -169,6 +171,33 @@ internal sealed class SaveResult
 }
 
 /// <summary>The optional edit phase (#112): retype the first line of page 1, save, reopen, read it back.</summary>
+/// <summary>
+/// The #127 edit battery: realistic edits on sampled lines, each from a fresh copy of the
+/// document. Kinds, positions, verdicts, outcomes and measurements only — never text.
+/// </summary>
+internal sealed class EditsResult
+{
+    [JsonPropertyName("items")] public List<EditItem> Items { get; set; } = new();
+    [JsonPropertyName("error")] public string? Error { get; set; }
+}
+
+internal sealed class EditItem
+{
+    [JsonPropertyName("kind")] public string Kind { get; set; } = "";
+    [JsonPropertyName("page")] public string PagePosition { get; set; } = "";
+    [JsonPropertyName("line")] public string LinePosition { get; set; } = "";
+    [JsonPropertyName("runs")] public int Runs { get; set; }
+    [JsonPropertyName("editable")] public bool? Editable { get; set; }
+    // in_place | substituted | deleted | layout | no_font | not_extractable | refused | skipped | error
+    [JsonPropertyName("result")] public string Result { get; set; } = "";
+    [JsonPropertyName("read_back")] public bool? ReadBack { get; set; }
+    [JsonPropertyName("untouched")] public int Untouched { get; set; }
+    [JsonPropertyName("untouched_missing")] public int UntouchedMissing { get; set; }
+    [JsonPropertyName("worst_shift_pt")] public double? WorstShiftPt { get; set; }
+    [JsonPropertyName("ms")] public double Ms { get; set; }
+    [JsonPropertyName("error")] public string? Error { get; set; }
+}
+
 internal sealed class EditResult
 {
     [JsonPropertyName("ms")] public double Ms { get; set; }
@@ -391,6 +420,15 @@ internal static class Worker
                 catch (Exception ex) { errors["images"] = Describe(ex); }
             }
 
+            // 9a. Optional (#127): a battery of realistic edits on lines sampled from the
+            //     first, middle and last pages, each on a fresh copy, through the app's own
+            //     line operations. Runs before the single retype, which changes `doc`.
+            if (phases.Contains("edits") && count > 0)
+            {
+                Heartbeat(hb, i, "edits", 0);
+                r.Edits = EditBattery(engine, doc, count, tmpDir);
+            }
+
             // 9. Optional (#112): retype the first line of page 1 through the tiered
             //    body-text edit, save, reopen and read the new text back. Last, because
             //    it changes the document.
@@ -538,6 +576,172 @@ internal static class Worker
     // text plus at most trailing whitespace. Anything else — dropped, wrong or
     // spread-apart characters — is a failed edit (#116).
     private static bool IsRetyped(string text) => text.TrimEnd() == RetypedText;
+
+    // #127: what the battery types. Text is generated from the kind, not taken from the
+    // document, except "same" and "shorter", which reuse the line's own words in memory
+    // and never record them.
+    private static readonly string[] EditKinds = { "same", "longer", "shorter", "digits", "accented", "cjk", "delete" };
+
+    private static string Normalized(string text) => text.TrimEnd();
+
+    private static EditsResult EditBattery(PdfiumEngine engine, IPdfDocument doc, int pageCount, string tmpDir)
+    {
+        var result = new EditsResult();
+        var pristine = Path.Combine(tmpDir, "edits-pristine.pdf");
+        var edited = Path.Combine(tmpDir, "edits-edited.pdf");
+        try
+        {
+            using (var stream = File.Create(pristine))
+                doc.Save(stream);
+
+            var pages = new[] { ("first", 0), ("middle", pageCount / 2), ("last", pageCount - 1) }
+                .DistinctBy(p => p.Item2).ToList();
+            var kind = 0;
+            foreach (var (pagePosition, pageIndex) in pages)
+            {
+                int lineCount;
+                using (var probe = engine.Open(pristine))
+                using (var page = probe.GetPage(pageIndex))
+                    lineCount = page.GetTextLines().Count(l => !string.IsNullOrWhiteSpace(l.Text));
+                if (lineCount == 0)
+                    continue;
+                foreach (var (linePosition, lineIndex) in new[] { ("first", 0), ("middle", lineCount / 2), ("last", lineCount - 1) }.DistinctBy(l => l.Item2))
+                {
+                    result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, lineIndex, EditKinds[kind % EditKinds.Length], pagePosition, linePosition));
+                    kind++;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            result.Error = Describe(ex);
+        }
+        finally
+        {
+            try { File.Delete(pristine); } catch { /* best effort */ }
+            try { File.Delete(edited); } catch { /* best effort */ }
+        }
+        return result;
+    }
+
+    private static EditItem OneEdit(PdfiumEngine engine, string pristine, string edited, int pageIndex, int lineIndex,
+                                    string kind, string pagePosition, string linePosition)
+    {
+        var item = new EditItem { Kind = kind, PagePosition = pagePosition, LinePosition = linePosition };
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            using var fresh = engine.Open(pristine);
+            PdfTextLine line;
+            IReadOnlyList<PdfTextRun> before;
+            using (var page = fresh.GetPage(pageIndex))
+            {
+                // Lines are chosen on another open of the same file, and PDFium can group a
+                // page's text into lines differently from one open to the next, so the line
+                // may not be there any more.
+                var lines = page.GetTextLines().Where(l => !string.IsNullOrWhiteSpace(l.Text)).ToList();
+                if (lineIndex >= lines.Count)
+                {
+                    item.Result = "skipped";
+                    item.Error = "line grouping differed between opens";
+                    item.Ms = sw.Elapsed.TotalMilliseconds;
+                    return item;
+                }
+                line = lines[lineIndex];
+                before = page.GetTextRuns();
+                item.Editable = line.Runs.All(r => r.TextBoxId is not null || page.IsTextEditable(r.ObjectIndex));
+            }
+            item.Runs = line.Runs.Count;
+
+            var first = line.Runs[0].Text.Trim();
+            var newText = kind switch
+            {
+                "same" => line.Text,
+                "longer" => line.Text.TrimEnd() + " (revised 2026)",
+                "shorter" => first.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() is { Length: > 0 } word ? word : "Edited",
+                "digits" => "$1,234.56 due 2026-09-13",
+                "accented" => "Reçu : déjà payé l’été",
+                "cjk" => "請求書 2026",
+                _ => "",
+            };
+
+            try
+            {
+                if (kind == "delete")
+                {
+                    new DeleteLineOperation(fresh, pageIndex, line).Apply();
+                    item.Result = "deleted";
+                }
+                else
+                {
+                    var op = new LineEditOperation(fresh, pageIndex, line, newText);
+                    op.Apply();
+                    item.Result = op.LastOutcome == TextEditOutcome.EditedWithSubstitutedFont ? "substituted" : "in_place";
+                }
+            }
+            catch (TextEditException ex)
+            {
+                item.Result = ex.Reason switch
+                {
+                    TextEditFailure.LayoutWouldChange => "layout",
+                    TextEditFailure.NoUsableFont => "no_font",
+                    TextEditFailure.NotExtractable => "not_extractable",
+                    _ => "refused",
+                };
+                item.Ms = sw.Elapsed.TotalMilliseconds;
+                return item;
+            }
+
+            using (var stream = File.Create(edited))
+                fresh.Save(stream);
+            using var reopened = engine.Open(edited);
+            using var reopenedPage = reopened.GetPage(pageIndex);
+            var after = reopenedPage.GetTextRuns();
+
+            var lineObjects = line.Runs.Select(r => r.ObjectIndex).ToHashSet();
+            if (kind == "delete")
+            {
+                var lineText = Normalized(line.Text);
+                item.ReadBack = after.Count(r => Normalized(r.Text) == lineText) < before.Count(r => Normalized(r.Text) == lineText)
+                                || after.Count < before.Count;
+            }
+            else
+            {
+                item.ReadBack = after.Any(r => Normalized(r.Text) == Normalized(newText));
+            }
+
+            // Every other run on the page: matched by text to the nearest run after reopening.
+            var used = new bool[after.Count];
+            double worst = 0;
+            foreach (var run in before)
+            {
+                if (lineObjects.Contains(run.ObjectIndex) || string.IsNullOrWhiteSpace(run.Text))
+                    continue;
+                item.Untouched++;
+                var text = Normalized(run.Text);
+                int best = -1;
+                double bestShift = double.MaxValue;
+                for (int j = 0; j < after.Count; j++)
+                {
+                    if (used[j] || Normalized(after[j].Text) != text)
+                        continue;
+                    var shift = Math.Max(Math.Abs(after[j].Bounds.X - run.Bounds.X), Math.Abs(after[j].Bounds.Y - run.Bounds.Y));
+                    if (shift < bestShift) { bestShift = shift; best = j; }
+                }
+                if (best < 0) { item.UntouchedMissing++; continue; }
+                used[best] = true;
+                worst = Math.Max(worst, bestShift);
+            }
+            item.WorstShiftPt = item.Untouched > 0 ? Math.Round(worst, 3) : null;
+        }
+        catch (Exception ex)
+        {
+            item.Result = "error";
+            item.Error = Describe(ex);
+        }
+        item.Ms = sw.Elapsed.TotalMilliseconds;
+        return item;
+    }
 
     private static EditResult RetypeFirstLine(PdfiumEngine engine, IPdfDocument doc, string savedPath)
     {
