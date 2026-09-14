@@ -18,6 +18,11 @@ class BodyTextTest {
 
     private val engine = PdfEngine()
 
+    private companion object {
+        const val CLIPPED_BY_TEXT =
+            "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q"
+    }
+
     private fun asset(name: String): ByteArray =
         InstrumentationRegistry.getInstrumentation().context.assets
             .open(name).use { it.readBytes() }
@@ -43,15 +48,18 @@ class BodyTextTest {
         return pdf.toString().toByteArray(Charsets.US_ASCII)
     }
 
-    /** One Helvetica line under 4 pt of character spacing, which PDFium cannot write back (#118). */
-    private fun spacedTextPdf(): ByteArray {
+    /**
+     * One Helvetica page. [CLIPPED_BY_TEXT] puts a box clipped by invisible text (7 Tr) under
+     * the heading, which PDFium's writer cannot write back even patched (#118, #119).
+     * Character spacing alone was that example until patch 0001; it is now editable.
+     */
+    private fun helveticaPdf(content: String): ByteArray {
         val pdf = StringBuilder("%PDF-1.4\n")
         val offsets = ArrayList<Int>()
         fun add(body: String) {
             offsets += pdf.length
             pdf.append("${offsets.size} 0 obj\n$body\nendobj\n")
         }
-        val content = "BT /F1 24 Tf 4 Tc 72 700 Td (Spaced report) Tj ET"
         add("<< /Type /Catalog /Pages 2 0 R >>")
         add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
         add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>")
@@ -65,16 +73,26 @@ class BodyTextTest {
     }
 
     @Test
-    fun textPdfiumCannotRewriteFaithfullyIsRefusedAndLeftAlone() = onFirstPage(spacedTextPdf()) { page ->
-        val run = page.textLines().single().runs.single()
+    fun textPdfiumCannotRewriteFaithfullyIsRefusedAndLeftAlone() = onFirstPage(helveticaPdf(CLIPPED_BY_TEXT)) { page ->
+        val before = page.textLines()
+        val run = before.first().runs.first()
         assertEquals("the tap-time check says no", false, page.textEditable(run.objectIndex))
         try {
             page.setText(run.objectIndex, "Annual report")
             throw AssertionError("an edit that would disturb the page must be refused")
         } catch (expected: TextLayoutException) {
         }
-        assertEquals("the page is exactly as it was", run, page.textLines().single().runs.single())
+        assertEquals("the page is exactly as it was", before, page.textLines())
     }
+
+    @Test
+    fun textUnderCharacterSpacingIsEditableNowThatTheWriterKeepsIt() =
+        onFirstPage(helveticaPdf("BT /F1 24 Tf 4 Tc 72 700 Td (Spaced report) Tj ET")) { page ->
+            val run = page.textLines().single().runs.single()
+            assertEquals("the tap-time check says yes", true, page.textEditable(run.objectIndex))
+            page.setText(run.objectIndex, "Annual report")
+            assertEquals("Annual report", page.textLines().single().text.trimEnd())
+        }
 
     private fun <T> onFirstPage(bytes: ByteArray, body: suspend (PdfPage) -> T): T = runBlocking {
         val doc = engine.open(bytes)
