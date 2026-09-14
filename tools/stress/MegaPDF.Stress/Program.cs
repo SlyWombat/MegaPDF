@@ -839,7 +839,10 @@ internal static class Worker
                 var lineText = Squeezed(line.Text);
                 var textBefore = lineText.Length == 0 ? 0 : Occurrences(Squeezed(string.Concat(before.Select(r => r.Text))), lineText);
                 var textAfter = lineText.Length == 0 ? 0 : Occurrences(Squeezed(string.Concat(after.Select(r => r.Text))), lineText);
-                item.ReadBack = lineText.Length == 0 ? after.Count < before.Count : textAfter < textBefore;
+                // A line's text as grouped does not always occur in the runs' own text joined
+                // together (40 corpus deletes had 0 occurrences before). Then the page must have
+                // lost the line's runs instead.
+                item.ReadBack = textBefore > 0 ? textAfter < textBefore : after.Count <= before.Count - line.Runs.Count;
 
                 // A second drawn copy of the line (fake bold, a shadow) survives a delete of
                 // the copy the line grouping chose: count what still sits where the line was.
