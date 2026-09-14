@@ -1,0 +1,16 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -464,8 +464,11 @@
+     *buf << "Q\n";
+ 
+     if (affects_ctm) {
+-      // Update CTM so the next stream gets the expected value.
+-      CFX_Matrix ctm_difference = prev_ctm.GetInverse() * ctm;
++      // Update CTM so the next stream gets the expected value. "cm" prepends its
++      // operand (CTM' = M * CTM), so the matrix that takes `prev_ctm` to `ctm` is
++      // ctm * prev^-1. The reverse order only agrees when the two commute, as
++      // translations do; a flip or scale left open for later streams moved them.
++      CFX_Matrix ctm_difference = ctm * prev_ctm.GetInverse();
+       if (!ctm_difference.IsIdentity()) {
+         WriteMatrix(*buf, ctm_difference) << " cm\n";
+       }

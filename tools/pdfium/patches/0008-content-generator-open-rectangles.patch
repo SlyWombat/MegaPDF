@@ -1,0 +1,14 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -772,7 +772,10 @@
+ void CPDF_PageContentGenerator::ProcessPathPoints(fxcrt::ostringstream* buf,
+                                                   CPDF_Path* pPath) {
+   pdfium::span<const CFX_Path::Point> points = pPath->GetPoints();
+-  if (pPath->IsRect()) {
++  // "re" parses to a closed subpath of five points. Any path with four corners was
++  // written as "re", which closed it: a stroked open box gained its fourth side and
++  // the path gained a segment. Only what "re" itself produces is written as one.
++  if (pPath->IsRect() && points.size() == 5 && points[4].close_figure_) {
+     CFX_PointF diff = points[2].point_ - points[0].point_;
+     WritePoint(*buf, points[0].point_) << " ";
+     WritePoint(*buf, diff) << " re";

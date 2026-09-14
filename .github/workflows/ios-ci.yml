@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['ios/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
+    paths: ['ios/**', 'core/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
   pull_request:
     branches: [main]
-    paths: ['ios/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
+    paths: ['ios/**', 'core/**', 'tools/gen_test_fixtures.py', '.github/workflows/ios-ci.yml']
 
 jobs:
   build:

@@ -180,17 +180,27 @@ third time.
 - For the length of phase 2 the phones run the core for some contracts while the
   desktops still run `PdfiumEngine.cs` for others. The per-platform fixture
   assertions are what make that interval safe; they are not to be thinned.
-- **Body-text edits are bounded by PDFium's content writer (#118).** When it
-  regenerates a modified text object it writes only `Tm`, `Tf`, `Tr` and `Tj`:
-  character and word spacing, horizontal scaling and rise are lost, upstream too,
-  and the public API has no accessors to restore them. So before a body-text edit
-  or deletion touches the document, the core rewrites that page in a scratch copy
-  and compares the render and every text object's geometry; if anything else on
-  the page would move, `megapdf_set_text` returns `MEGAPDF_ERR_LAYOUT` and
-  `megapdf_detach_object` declines, leaving the page untouched.
+- **Body-text edits depend on PDFium's content writer, so MegaPDF patches it
+  (#118, #119).** Changing one object makes PDFium regenerate every object in that
+  content stream, and upstream's writer (identical on `main` today) drops character
+  and word spacing, writes only RGB and gray colour, drops Type3 text, inline images
+  and shading objects, merges distinct fonts that share a name, strands state
+  that straddles content streams, and closes open rectangles. The apps therefore
+  move to PDFium built from `tools/pdfium/patches` (see `tools/pdfium/README.md`);
+  on the corpus the share of first-line edits that can be made faithfully went from
+  46% on stock PDFium to 85% at patch 4 and 99% (3,047 of 3,085) at patch 9, with no
+  regressions against patch 4, and each fix is offered upstream (#129).
+- **The core still rehearses every body-text edit (#118, #128).** Before an edit or
+  deletion touches the document, the core rewrites the page in a scratch copy and
+  compares a reopened copy of the page as it was with a reopened copy of the rewrite
+  (render and every text object's geometry). PDFium resolves non-embedded fonts per
+  document against a process-wide cache, so comparing against the in-memory page
+  made the verdict depend on what had been drawn before. If anything else on the
+  page would change, `megapdf_set_text` returns `MEGAPDF_ERR_LAYOUT` and
+  `megapdf_detach_object` declines, leaving the page untouched;
   `megapdf_text_editable` gives the same verdict (cached per object) so every app
-  says so when the line is tapped rather than after the person has typed. Lifting
-  the bound needs a PDFium that writes those operators, not a binding change.
+  says so when the line is tapped. The patches make that refusal rare, not
+  impossible.
 - **SDD §6.1's "native per platform" now means native UI.** The layer below the UI
   and above PDFium is shared by design; MAUI and Uno stay rejected; the product
   principles are untouched.

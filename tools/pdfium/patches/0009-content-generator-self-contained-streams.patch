@@ -1,0 +1,40 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -384,6 +384,14 @@
+     }
+   }
+ 
++  // Every stream is regenerated together (above), so each is written as a
++  // self-contained unit that starts and ends at the page's own CTM, with every
++  // object carrying its full matrix. Threading the CTM from one regenerated stream
++  // to the next went through float inverses of whatever matrix a producer left
++  // open across streams (a large image matrix, say), and the drift moved text and
++  // resampled images.
++  const bool self_contained_streams = !all_dirty_streams.empty();
++
+   // Start regenerating dirty streams.
+   std::map<int32_t, fxcrt::ostringstream> streams;
+   std::set<int32_t> empty_streams;
+@@ -397,7 +405,10 @@
+     // Set the default graphic state values. Update CTM to be the identity
+     // matrix for the duration of this stream, if it is not already.
+     buf << "q\n";
+-    const CFX_Matrix ctm = obj_holder_->GetCTMAtBeginningOfStream(dirty_stream);
++    const CFX_Matrix ctm =
++        self_contained_streams
++            ? CFX_Matrix()
++            : obj_holder_->GetCTMAtBeginningOfStream(dirty_stream);
+     if (!ctm.IsIdentity()) {
+       WriteMatrix(buf, ctm.GetInverse()) << " cm\n";
+     }
+@@ -447,6 +458,10 @@
+       affects_ctm = false;
+     }
+ 
++    if (self_contained_streams) {
++      affects_ctm = false;
++    }
++
+     const bool is_empty = pdfium::Contains(empty_streams, dirty_stream);
+ 
+     fxcrt::ostringstream* buf = &streams[dirty_stream];

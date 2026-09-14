@@ -1566,14 +1566,14 @@ void test_text_editing(const std::string& fixtures) {
 std::vector<unsigned char> one_page_pdf(const std::string& content, const std::string& font_dict,
                                         const std::string& extra_resources = "", const std::string& extra_fonts = "",
                                         const std::vector<std::string>& extra_objects = {},
-                                        const std::string& page_extra = "") {
+                                        const std::string& page_extra = "", const std::string& contents = "5 0 R") {
     std::string pdf = "%PDF-1.4\n";
     std::vector<size_t> offsets;
     auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
     add("<< /Type /Catalog /Pages 2 0 R >>");
     add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
     add("<< /Type /Page /Parent 2 0 R " + page_extra + " /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R " + extra_fonts + " >> " +
-        extra_resources + " >> /Contents 5 0 R >>");
+        extra_resources + " >> /Contents " + contents + " >>");
     add(font_dict);
     add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
     for (const std::string& object : extra_objects) add(object);
@@ -1614,7 +1614,18 @@ void test_rewrite_fidelity() {
         std::string resources = "";   // extra entries for the page's /Resources
         std::string fonts = "";       // extra entries for its /Font dictionary
         std::vector<std::string> objects = {};   // objects 6, 7, ...
+        std::string contents = "5 0 R";          // the page's /Contents
     };
+    auto stream_object = [](const std::string& body) {
+        return "<< /Length " + std::to_string(body.size()) + " >>\nstream\n" + body + "\nendstream";
+    };
+    const std::string checker_image = [] {
+        std::string pixels;
+        for (int y = 0; y < 16; y++)
+            for (int x = 0; x < 16; x++) pixels += static_cast<char>(((x + y) & 1) ? 255 : 0);
+        return "<< /Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 256 >>\nstream\n" +
+               pixels + "\nendstream";
+    }();
     const std::string type3_glyph = "<< /Length 38 >>\nstream\n1000 0 0 0 750 750 d1 0 0 750 750 re f\nendstream";
     const std::vector<Case> cases = {
         {"plain text", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET", 0},
@@ -1682,6 +1693,54 @@ void test_rewrite_fidelity() {
          {"<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Length 24 >>\nstream\n0 0 1 rg 0 0 100 50 re f\nendstream"}},
         {"clipped body text",
          "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 72 650 90 30 re W n BT /F1 14 Tf 72 660 Td (Clipped body line runs past its clip) Tj ET Q", 0},
+        // Several content streams (#125). PDFium regenerated only the stream holding the
+        // edit, inside its own q/Q; a text block or saved state that straddled a stream
+        // boundary lost what the untouched neighbour depended on, and objects vanished.
+        {"four self-contained content streams",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET", 0, "", "",
+         {stream_object("BT /F1 12 Tf 72 660 Td (Second stream line) Tj ET"), stream_object("BT /F1 12 Tf 72 630 Td (Third stream line) Tj ET"),
+          stream_object("0 0 1 rg 72 580 200 20 re f")},
+         "[5 0 R 6 0 R 7 0 R 8 0 R]"},
+        {"text block split across two content streams",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td", 5, "", "",
+         {stream_object("(Body split across two streams) Tj ET")},
+         "[5 0 R 6 0 R]"},
+        {"saved state split across two content streams",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 1 0 0 1 0 -40 cm", 5, "", "",
+         {stream_object("BT /F1 12 Tf 72 660 Td (Body in a shifted state) Tj ET Q BT /F1 12 Tf 72 600 Td (After the restore) Tj ET")},
+         "[5 0 R 6 0 R]"},
+        // A transform left open across streams that does not commute with the next one (#125).
+        // After a regenerated stream PDFium restored the CTM as prev^-1 * ctm rather than
+        // ctm * prev^-1, so the streams after it drew in the wrong place; once patch 5
+        // regenerated every stream it hit any page whose producer leaves a flip or scale open.
+        // The edited heading sits in the middle stream; translations alone commute and hid it.
+        {"scale then translation left open across content streams",
+         "q 0.5 0 0 0.5 0 0 cm", 7, "", "",
+         {stream_object("q 1 0 0 1 100 400 cm BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET"),
+          stream_object("BT /F1 12 Tf 72 600 Td (Body after both transforms) Tj ET Q Q")},
+         "[5 0 R 6 0 R 7 0 R]"},
+        // An open path shaped like a rectangle (#125). The writer wrote any four-cornered path
+        // as "re", which is closed, so a stroked three-sided box gained its fourth side.
+        {"stroked open three-sided box",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 4 w 0 0 1 RG 72 500 m 72 560 l 272 560 l 272 500 l S Q", 8},
+        // Images drawn inside a q ... cm that one stream opens and the next closes (#125). The
+        // writer threaded the CTM between regenerated streams through float inverses of large
+        // image matrices, and the drift resampled the images.
+        {"images whose saved state straddles content streams",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 431.52 0 0 -186.24 90 666 cm /Im1 Do", 9, "/XObject << /Im1 6 0 R >>", "",
+         {checker_image,
+          stream_object("Q q 112.32 0 0 -46.56 409.68 136.56 cm /Im1 Do"),
+          stream_object("Q BT /F1 12 Tf 72 420 Td (Body under the images) Tj ET")},
+         "[5 0 R 7 0 R 8 0 R]"},
+        // Graphics state (#125): the writer knew only alpha and blend mode, so soft masks
+        // and the other ExtGState entries were dropped, and the miter limit was never written.
+        {"soft mask over a box",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q /GS1 gs 0 0 1 rg 72 560 200 60 re f Q BT /F1 12 Tf 72 520 Td (Body under a masked box) Tj ET", 6,
+         "/ExtGState << /GS1 << /SMask << /S /Luminosity /G 6 0 R >> >> >>", "",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Group << /S /Transparency /CS /DeviceGray >> /Length 22 >>\nstream\n1 g 72 560 100 60 re f\nendstream"}},
+        // The miter limit (patch 6 writes "M") is not a case here: PDFium's rasteriser draws a
+        // stroked corner identically whatever the limit or join, so the render-based guard
+        // cannot see it lost. Its survival belongs to an operator-level check (#126).
         {"gradient pattern on text",
          "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET /Pattern cs /P1 scn BT /F1 24 Tf 72 640 Td (Gradient body line) Tj ET", 2,
          "/Pattern << /P1 << /PatternType 2 /Shading << /ShadingType 2 /ColorSpace /DeviceRGB /Coords [72 0 400 0] "
@@ -1692,7 +1751,7 @@ void test_rewrite_fidelity() {
     U16 replacement_text(replacement.begin(), replacement.end() - 1);
     for (const Case& c : cases) {
         const std::string name = c.name;
-        auto bytes = one_page_pdf(c.content, helvetica, c.resources, c.fonts, c.objects);
+        auto bytes = one_page_pdf(c.content, helvetica, c.resources, c.fonts, c.objects, "", c.contents);
         megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
         check(d != nullptr, name + ": opens");
         if (!d) continue;

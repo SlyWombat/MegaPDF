@@ -1,0 +1,78 @@
+--- a/core/fpdfapi/page/cpdf_generalstate.h
++++ b/core/fpdfapi/page/cpdf_generalstate.h
+@@ -70,6 +70,7 @@
+   void SetUCR(RetainPtr<const CPDF_Object> pObject);
+   void SetHT(RetainPtr<const CPDF_Object> pObject);
+ 
++  float GetFlatness() const;
+   void SetFlatness(float flatness);
+   void SetSmoothness(float smoothness);
+ 
+--- a/core/fpdfapi/page/cpdf_generalstate.cpp
++++ b/core/fpdfapi/page/cpdf_generalstate.cpp
+@@ -240,6 +240,11 @@
+   ref_.GetPrivateCopy()->ht_ = std::move(pObject);
+ }
+ 
++float CPDF_GeneralState::GetFlatness() const {
++  const StateData* data = ref_.GetObject();
++  return data ? data->flatness_ : 1.0f;
++}
++
+ void CPDF_GeneralState::SetFlatness(float flatness) {
+   ref_.GetPrivateCopy()->flatness_ = flatness;
+ }
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -939,6 +939,19 @@
+ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
+                                                 CPDF_PageObject* pPageObj) {
+   *buf << "q ";
++  // Replay the ExtGState dictionaries the object was parsed under, before the
++  // explicit state below, which still wins where both set a value. This writer
++  // only knows alpha and blend mode; soft masks, overprint, transfer functions
++  // and the rest of an ExtGState were otherwise lost.
++  RetainPtr<const CPDF_Dictionary> resources = obj_holder_->GetResources();
++  RetainPtr<const CPDF_Dictionary> ext_gstates =
++      resources ? resources->GetDictFor("ExtGState") : nullptr;
++  for (const ByteString& gs_name :
++       pPageObj->general_state().GetGraphicsResourceNames()) {
++    if (ext_gstates && ext_gstates->KeyExist(gs_name.AsStringView())) {
++      *buf << "/" << PDF_NameEncode(gs_name) << " gs ";
++    }
++  }
+   WriteColor(buf, pPageObj->color_state().GetFillColor(), /*stroke=*/false);
+   WriteColor(buf, pPageObj->color_state().GetStrokeColor(), /*stroke=*/true);
+   float line_width = pPageObj->graph_state().GetLineWidth();
+@@ -965,6 +978,14 @@
+     *buf << "] ";
+     WriteFloat(*buf, pPageObj->graph_state().GetLineDashPhase()) << " d ";
+   }
++  const float miter_limit = pPageObj->graph_state().GetMiterLimit();
++  if (miter_limit != 10.0f) {
++    WriteFloat(*buf, miter_limit) << " M ";
++  }
++  const float flatness = pPageObj->general_state().GetFlatness();
++  if (flatness != 1.0f) {
++    WriteFloat(*buf, flatness) << " i ";
++  }
+ 
+   const CPDF_ClipPath& clip_path = pPageObj->clip_path();
+   if (clip_path.HasRef()) {
+@@ -1017,7 +1038,15 @@
+     }
+     document_->AddIndirectObject(gsDict);
+     name = RealizeResource(std::move(gsDict), "ExtGState");
+-    pPageObj->mutable_general_state().SetGraphicsResourceNames({name});
++    // Add to the names the object was parsed under rather than replace them, or
++    // the next rewrite would no longer know about them.
++    pdfium::span<const ByteString> parsed =
++        pPageObj->general_state().GetGraphicsResourceNames();
++    std::vector<ByteString> names(parsed.begin(), parsed.end());
++    if (std::find(names.begin(), names.end(), name) == names.end()) {
++      names.push_back(name);
++    }
++    pPageObj->mutable_general_state().SetGraphicsResourceNames(std::move(names));
+     obj_holder_->GraphicsMapInsert(graphD, name);
+   }
+   *buf << "/" << PDF_NameEncode(name) << " gs ";

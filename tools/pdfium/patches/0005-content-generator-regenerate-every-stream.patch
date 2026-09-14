@@ -1,0 +1,28 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -365,6 +365,25 @@
+   all_dirty_streams.insert(marked_dirty_streams.begin(),
+                            marked_dirty_streams.end());
+ 
++  // Content streams are concatenated, and producers split BT ... ET blocks and
++  // q ... Q pairs across them. Regenerating one stream as a self-contained unit
++  // strands the state its untouched neighbours depend on, and their objects stop
++  // parsing. When any stream of the page changes, regenerate every stream, so each
++  // object is written with its own complete state.
++  if (!all_dirty_streams.empty()) {
++    for (auto& pPageObj : page_objects_) {
++      all_dirty_streams.insert(pPageObj->GetContentStream());
++    }
++    RetainPtr<const CPDF_Object> contents =
++        obj_holder_->GetDict()->GetDirectObjectFor("Contents");
++    const CPDF_Array* contents_array = contents ? contents->AsArray() : nullptr;
++    const size_t stream_count =
++        contents_array ? contents_array->size() : (contents ? 1u : 0u);
++    for (size_t i = 0; i < stream_count; ++i) {
++      all_dirty_streams.insert(static_cast<int32_t>(i));
++    }
++  }
++
+   // Start regenerating dirty streams.
+   std::map<int32_t, fxcrt::ostringstream> streams;
+   std::set<int32_t> empty_streams;
