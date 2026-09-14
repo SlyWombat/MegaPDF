@@ -53,7 +53,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build; else brew install ninja; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build qpdf; else brew install ninja; fi
 
       - name: Fetch the pinned PDFium prebuilt
         if: matrix.fetch != ''
@@ -76,6 +76,46 @@ jobs:
         shell: bash
         run: cmake --build "$RUNNER_TEMP/core-build" --config Debug
 
+      # On Linux the tests also keep every document they save (MEGAPDF_SAVED_DIR, #126),
+      # for the qpdf check below.
       - name: Test
         shell: bash
-        run: cd "$RUNNER_TEMP/core-build" && ctest -C Debug --output-on-failure
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            export MEGAPDF_SAVED_DIR="$RUNNER_TEMP/saved"
+            mkdir -p "$MEGAPDF_SAVED_DIR"
+          fi
+          cd "$RUNNER_TEMP/core-build" && ctest -C Debug --output-on-failure
+
+      # #126: what the core writes must be a valid PDF by an independent reader, not only
+      # by PDFium reopening its own output. qpdf --check exits 2 on errors (the job fails)
+      # and 3 on warnings (reported, not failed). A document that needs a password to open
+      # is skipped: checking it would mean putting the password on a command line.
+      - name: qpdf --check the saved documents
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          files=0; ok=0; warned=0; failed=0; skipped=0
+          for f in "$RUNNER_TEMP"/saved/*.pdf; do
+            [ -e "$f" ] || continue
+            files=$((files + 1))
+            name=$(basename "$f")
+            if qpdf --requires-password "$f" >/dev/null 2>&1; then
+              skipped=$((skipped + 1))
+              continue
+            fi
+            rc=0
+            out=$(qpdf --check "$f" 2>&1) || rc=$?
+            case $rc in
+              0) ok=$((ok + 1)) ;;
+              3) warned=$((warned + 1))
+                 echo "::warning title=qpdf warnings::$name"
+                 printf '%s\n' "$out" | grep -i 'warning' || true ;;
+              *) failed=$((failed + 1))
+                 echo "::error title=qpdf --check failed::$name (exit $rc)"
+                 printf '%s\n' "$out" ;;
+            esac
+          done
+          echo "qpdf --check: $files files, $ok ok, $warned with warnings, $failed with errors, $skipped skipped (need a password to open)"
+          if [ "$files" -eq 0 ]; then echo "::error::the core tests kept no saved documents"; exit 1; fi
+          [ "$failed" -eq 0 ]

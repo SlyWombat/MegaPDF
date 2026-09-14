@@ -939,6 +939,20 @@ int collect(void* ctx, const void* data, size_t size) {
 
 int refuse(void*, const void*, size_t) { return 0; }
 
+// #126: with MEGAPDF_SAVED_DIR set, a document a test saves is also written to
+// <dir>/<test>-<n>.pdf, so CI can run qpdf --check over what the core writes; reopening
+// it in PDFium only proves PDFium can read its own output. Unset, this does nothing.
+void keep_saved(const char* test, const std::vector<unsigned char>& bytes) {
+    static const char* dir = std::getenv("MEGAPDF_SAVED_DIR");
+    if (dir == nullptr || *dir == 0 || bytes.empty()) return;
+    static std::map<std::string, int> counts;
+    const std::string path = std::string(dir) + "/" + test + "-" + std::to_string(++counts[test]) + ".pdf";
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    out.close();
+    check(out.good(), "a saved document is kept for the qpdf check", path);
+}
+
 // A one-page PDF drawing a raw RGB image of `px` × `px` at `pt` × `pt` points.
 std::vector<unsigned char> image_pdf(int px, double pt) {
     std::string pdf = "%PDF-1.4\n";
@@ -1020,6 +1034,7 @@ void test_save_flatten_images(const std::string& fixtures) {
         if (!d.doc) { check(false, "fixture.pdf opens for save"); return; }
         std::vector<unsigned char> out;
         check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "save returns OK");
+        keep_saved("save", out);
         check(out.size() > 4 && std::string(out.begin(), out.begin() + 4) == "%PDF", "saved bytes are a PDF", std::to_string(out.size()));
         megapdf_document* again = megapdf_open(out.data(), out.size(), nullptr);
         check(again != nullptr && megapdf_page_count(again) == 2, "saved document reopens with 2 pages");
@@ -1031,6 +1046,7 @@ void test_save_flatten_images(const std::string& fixtures) {
         megapdf_add_whiteout(p.page, &area, &index);
         out.clear();
         check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "save after an edit returns OK");
+        keep_saved("save", out);
         again = megapdf_open(out.data(), out.size(), nullptr);
         if (again) {
             Page rp(again, 0);
@@ -1055,6 +1071,7 @@ void test_save_flatten_images(const std::string& fixtures) {
         check(after.page && search(after.page, "interop").size() == 1, "the page text is still there after flatten");
         std::vector<unsigned char> out;
         check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "flattened document saves");
+        keep_saved("flatten", out);
         megapdf_document* again = megapdf_open(out.data(), out.size(), nullptr);
         if (again) { Page rp(again, 0); check(rp.page && stamps_of(rp.page).ids.empty(), "flattened save has no stamps on reopen"); }
         megapdf_close(again);
@@ -1114,6 +1131,7 @@ void test_save_flatten_images(const std::string& fixtures) {
         std::vector<unsigned char> out;
         check(megapdf_save(d, collect, &out) == MEGAPDF_OK && out.size() < bytes.size(), "the shrunk document saves smaller",
               std::to_string(out.size()) + " vs " + std::to_string(bytes.size()));
+        keep_saved("shrink-images", out);
         megapdf_close(d);
 
         // Not worth touching: right-sized and small.
@@ -1521,6 +1539,9 @@ void test_text_editing(const std::string& fixtures) {
               "the replayed run sits at index 0 on its baseline", rect_str(r0.bounds));
         check(!run_string(t, 0, MEGAPDF_TEXT_RUN_FONT).empty() && r0.is_text_box == 0, "the replayed run is body text in a real face");
         megapdf_text_free(t);
+        std::vector<unsigned char> edited;
+        check(megapdf_save(d.doc, collect, &edited) == MEGAPDF_OK, "the edited fixture saves");
+        keep_saved("text-editing", edited);
     }
     // A substituted text box keeps its identity (#45); a legacy untagged box stays untagged.
     {
@@ -1548,6 +1569,9 @@ void test_text_editing(const std::string& fixtures) {
         bool still_untagged = false;
         for (const auto& b : boxes_of(p.page)) if (b.object_index == legacy) still_untagged = b.id.empty();
         check(still_untagged, "a legacy box gains no fabricated id");
+        std::vector<unsigned char> edited;
+        check(megapdf_save(d.doc, collect, &edited) == MEGAPDF_OK, "the retyped text boxes save");
+        keep_saved("text-editing", edited);
     }
 }
 
@@ -1783,6 +1807,7 @@ void test_rewrite_fidelity() {
                 check(status == MEGAPDF_OK, name + ": the edit goes through", std::to_string(status));
                 std::vector<unsigned char> saved;
                 check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, name + ": saves");
+                keep_saved("rewrite-fidelity", saved);
                 megapdf_document* again = megapdf_open(saved.data(), saved.size(), nullptr);
                 check(again != nullptr, name + ": the saved file reopens");
                 if (again) {
@@ -1883,9 +1908,10 @@ double font_size_of(const megapdf_page* page, int object_index) {
     return size;
 }
 
-std::vector<unsigned char> save_bytes(megapdf_document* d) {
+std::vector<unsigned char> save_bytes(megapdf_document* d, const char* test = "edit-scenarios") {
     std::vector<unsigned char> out;
     megapdf_save(d, collect, &out);
+    keep_saved(test, out);
     return out;
 }
 
@@ -2052,12 +2078,15 @@ void test_edit_scenarios() {
         }
     }
 
-    // A rotated page and rotated text: the edit lands where the line was, and the rest stays put.
+    // A rotated page, rotated text and skewed (faux-italic) text: the edit lands where the
+    // line was, reads back exactly, and the rest stays put.
     const std::string rotated_text =
         "BT /F1 18 Tf 0.7071 0.7071 -0.7071 0.7071 150 450 Tm (Rotated heading) Tj ET BT /F1 12 Tf 72 700 Td (Body line under it) Tj ET";
+    const std::string skewed_text = "BT /F1 18 Tf 1 0 0.3 1 72 600 Tm (Skewed heading) Tj ET BT /F1 12 Tf 72 700 Td (Body line under it) Tj ET";
     for (const auto& [name, content, page_extra, target] : {
              std::tuple<const char*, std::string, std::string, const char*>{"rotated page", two_lines, "/Rotate 90", "Plain heading"},
-             std::tuple<const char*, std::string, std::string, const char*>{"rotated text", rotated_text, "", "Rotated heading"}}) {
+             std::tuple<const char*, std::string, std::string, const char*>{"rotated text", rotated_text, "", "Rotated heading"},
+             std::tuple<const char*, std::string, std::string, const char*>{"skewed text", skewed_text, "", "Skewed heading"}}) {
         OpenDoc d(one_page_pdf(content, helvetica, "", "", {}, page_extra));
         Page p(d.doc, 0);
         const int idx = index_of_text(p.page, target);
@@ -2075,13 +2104,16 @@ void test_edit_scenarios() {
         auto bytes = save_bytes(d.doc);
         OpenDoc again(bytes);
         Page q(again.doc, 0);
-        bool landed = false, body_kept = false;
+        bool read_back = false, landed = false, body_kept = false;
         for (const RunShot& r : run_shots(q.page)) {
-            if (r.text == without_nul(want))
+            if (r.text == without_nul(want)) {
+                read_back = true;
                 landed = r.bounds.left < was.right && was.left < r.bounds.right && r.bounds.bottom < was.top && was.bottom < r.bounds.top;
-            else if (rect_close(r.bounds, body_was, 0.5))
+            } else if (rect_close(r.bounds, body_was, 0.5)) {
                 body_kept = true;
+            }
         }
+        check(read_back, std::string(name) + ": the edit reads back exactly after reopening");
         check(landed, std::string(name) + ": the edit overlaps where the line was");
         check(body_kept, std::string(name) + ": the other line keeps its place");
     }
@@ -2209,6 +2241,7 @@ void test_security(const std::string& fixtures) {
             std::vector<unsigned char> plain;
             check(megapdf_save_without_security(owner, collect, &plain) == MEGAPDF_OK,
                   "owner-only.pdf: the owner removes its security");
+            keep_saved("security", plain);
             megapdf_document* open = megapdf_open(plain.data(), plain.size(), nullptr);
             megapdf_security s{};
             check(open != nullptr && megapdf_security_info(open, &s) == MEGAPDF_OK && s.encrypted == 0 &&
@@ -2231,6 +2264,7 @@ void test_security(const std::string& fixtures) {
         check(d != nullptr && megapdf_save_with_security(d, "new-user", "new-owner", MEGAPDF_PERMIT_PRINT, collect,
                                                          &locked) == MEGAPDF_OK,
               "a copy saves with new security");
+        keep_saved("security", locked);
         megapdf_close(d);
 
         megapdf_document* bare = megapdf_open(locked.data(), locked.size(), nullptr);
@@ -2255,6 +2289,7 @@ void test_security(const std::string& fixtures) {
             check(megapdf_save_with_security(o, "changed", nullptr, MEGAPDF_PERMIT_ALL, collect, &changed) ==
                       MEGAPDF_OK,
                   "the owner changes the password");
+            keep_saved("security", changed);
             megapdf_document* stale = megapdf_open(changed.data(), changed.size(), "new-user");
             check(stale == nullptr, "the old password no longer opens the changed copy");
             megapdf_close(stale);
@@ -2303,6 +2338,9 @@ void test_subset_font_glyphs() {
             const int status = has_line ? megapdf_set_text(p.page, r.object_index, text.data(), 0, &outcome, nullptr) : -99;
             check(status == MEGAPDF_OK && outcome == c.outcome, std::string("subset font, \"") + c.text + "\": " + c.why,
                   "status " + std::to_string(status) + ", outcome " + std::to_string(outcome));
+            std::vector<unsigned char> saved;
+            check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, std::string("subset font, \"") + c.text + "\": saves");
+            keep_saved("subset-font", saved);
         }
         megapdf_close(d);
     }
@@ -2323,6 +2361,7 @@ void test_protected_save(const std::string& fixtures) {
 
     std::vector<unsigned char> saved;
     check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, "the unlocked document saves");
+    keep_saved("protected-save", saved);
     check(megapdf_open(saved.data(), saved.size(), nullptr) == nullptr, "the saved copy is still protected");
     megapdf_document* again = megapdf_open_like(d, saved.data(), saved.size());
     check(again != nullptr, "megapdf_open_like reads the saved copy back", std::to_string(megapdf_last_error()));
@@ -2339,6 +2378,247 @@ void test_protected_save(const std::string& fixtures) {
     megapdf_close(like_plain);
     megapdf_close(p);
     check(megapdf_open_like(nullptr, plain.data(), plain.size()) == nullptr, "no document to open like returns NULL");
+}
+
+U16 font_of(const megapdf_page* page, int object_index) {
+    megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
+    U16 font;
+    for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+        megapdf_text_run r{};
+        megapdf_text_run_get(t, i, &r);
+        if (r.object_index == object_index) font = run_string(t, i, MEGAPDF_TEXT_RUN_FONT);
+    }
+    megapdf_text_free(t);
+    return font;
+}
+
+// #126: a heading in an embedded CID font: a Type0 font, Identity-H, over a CIDFontType2
+// subset holding only the glyphs of "Hello World" (tools/gen_cid_font_fixture.py), the way
+// Word, Chrome, LibreOffice and every CJK producer write text. PDFium can edit it in place:
+// it finds a character's CID by reverse lookup in the ToUnicode map. A character the map
+// does not name has no CID to find (Identity-H offers no other route from Unicode to a CID),
+// so PDFium falls back to CID 0, .notdef, and the edit still "succeeds"; the read-back and
+// glyph checks (#116, #130) refuse that, and the edit goes to the standard substitute.
+void test_cid_font_glyphs() {
+    const auto bytes = read_file(std::string(MEGAPDF_REPO_FIXTURES) + "/cid-font.pdf");
+    struct Case { const char* text; int outcome; const char* why; };
+    const Case cases[] = {
+        {"Hello Word", MEGAPDF_EDIT_IN_PLACE, "letters the subset holds stay in the CID font"},
+        {"World Hello", MEGAPDF_EDIT_IN_PLACE, "reordered letters the subset holds stay in the CID font"},
+        {"Hex World", MEGAPDF_EDIT_SUBSTITUTED, "an x the subset lacks goes to the substitute"},
+        {"Hello Old", MEGAPDF_EDIT_SUBSTITUTED, "a capital O the subset lacks goes to the substitute"},
+    };
+    const U16 body_text = without_nul(u16("Body line under it"));
+    for (const Case& c : cases) {
+        const std::string name = std::string("CID font, \"") + c.text + "\": ";
+        OpenDoc d(bytes);
+        check(d.doc != nullptr, "cid-font.pdf opens");
+        if (!d.doc) return;
+        std::vector<unsigned char> saved;
+        megapdf_rect body_was{};
+        {
+            Page p(d.doc, 0);
+            const int idx = first_line_object(p.page);
+            for (const RunShot& r : run_shots(p.page)) if (r.text == body_text) body_was = r.bounds;
+            check(idx >= 0 && text_of(p.page, idx) == without_nul(u16("Hello World")), "cid-font.pdf: the heading reads through its ToUnicode map",
+                  show(text_of(p.page, idx)));
+            const U16 cid_font = font_of(p.page, idx);
+            const U16 want = u16(c.text);
+            int outcome = -1;
+            const int status = idx >= 0 ? megapdf_set_text(p.page, idx, want.data(), 0, &outcome, nullptr) : -99;
+            check(status == MEGAPDF_OK && outcome == c.outcome, name + c.why, "status " + std::to_string(status) + ", outcome " + std::to_string(outcome));
+            check(text_of(p.page, idx) == without_nul(want), name + "reads back exactly", show(text_of(p.page, idx)));
+            const bool in_place = c.outcome == MEGAPDF_EDIT_IN_PLACE;
+            check((font_of(p.page, idx) == cid_font) == in_place, name + (in_place ? "the run keeps the CID font" : "the run leaves the CID font"),
+                  "'" + show(font_of(p.page, idx)) + "' vs '" + show(cid_font) + "'");
+            check(megapdf_save(d.doc, collect, &saved) == MEGAPDF_OK, name + "saves");
+            keep_saved("cid-font", saved);
+        }
+        OpenDoc again(saved);
+        Page q(again.doc, 0);
+        check(index_of_text(q.page, c.text) >= 0, name + "the edit reads back after reopening");
+        bool body_kept = false;
+        for (const RunShot& r : run_shots(q.page)) if (r.text == body_text) body_kept = rect_close(r.bounds, body_was, 0.5);
+        check(body_kept, name + "the body line keeps its place");
+    }
+}
+
+// #126: body text beside AcroForm fields and markup annotations: a filled text field and a
+// checked checkbox with appearance streams, a square and a sticky note. The two markup
+// annotations carry a MegaPDF_Id only so megapdf_stamps_load() reports their rects; to
+// PDFium that is one more dictionary entry.
+std::vector<unsigned char> fields_and_annotations_pdf() {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    auto stream = [](const std::string& dict, const std::string& body) {
+        return "<< " + dict + " /Length " + std::to_string(body.size()) + " >>\nstream\n" + body + "\nendstream";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R 7 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 4 0 R >> >> >> >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R "
+        "/Annots [6 0 R 7 0 R 10 0 R 11 0 R] >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add(stream("", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET"));
+    add("<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /V (Ada Lovelace) /DA (/Helv 12 Tf 0 g) /Rect [300 655 500 675] /F 4 "
+        "/P 3 0 R /AP << /N 8 0 R >> >>");
+    add("<< /Type /Annot /Subtype /Widget /FT /Btn /T (agree) /V /Yes /AS /Yes /Rect [300 700 315 715] /F 4 /P 3 0 R "
+        "/AP << /N << /Yes 9 0 R /Off 12 0 R >> >> >>");
+    add(stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+               "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Ada Lovelace) Tj ET"));
+    add(stream("/Type /XObject /Subtype /Form /BBox [0 0 15 15]", "0.13 G 1 w 0.5 0.5 14 14 re S 1.6 w 3 3 m 12 12 l S 3 12 m 12 3 l S"));
+    add("<< /Type /Annot /Subtype /Square /Rect [72 580 172 630] /C [1 0 0] /BS << /W 3 >> /F 4 /P 3 0 R /MegaPDF_Id (note:square) >>");
+    add("<< /Type /Annot /Subtype /Text /Rect [520 695 540 715] /Contents (A sticky note) /Name /Comment /F 4 /P 3 0 R /MegaPDF_Id (note:text) >>");
+    add(stream("/Type /XObject /Subtype /Form /BBox [0 0 15 15]", "0.13 G 1 w 0.5 0.5 14 14 re S"));
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+struct FieldShot { int kind; int checked; megapdf_rect bounds; U16 name, value; };
+
+std::vector<FieldShot> field_shots(const megapdf_page* page) {
+    std::vector<FieldShot> out;
+    megapdf_form_fields* f = megapdf_form_fields_load(page);
+    for (size_t i = 0; i < megapdf_form_field_count(f); i++) {
+        megapdf_form_field field{};
+        megapdf_form_field_get(f, i, &field);
+        out.push_back(FieldShot{field.kind, field.is_checked, field.bounds, field_string(f, i, MEGAPDF_FIELD_NAME), field_string(f, i, MEGAPDF_FIELD_VALUE)});
+    }
+    megapdf_form_fields_free(f);
+    return out;
+}
+
+bool same_fields(const std::vector<FieldShot>& a, const std::vector<FieldShot>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); i++)
+        if (a[i].kind != b[i].kind || a[i].checked != b[i].checked || a[i].name != b[i].name || a[i].value != b[i].value ||
+            !rect_close(a[i].bounds, b[i].bounds, 0.01))
+            return false;
+    return true;
+}
+
+bool same_stamps(const StampList& a, const StampList& b) {
+    if (a.ids != b.ids || a.stamps.size() != b.stamps.size()) return false;
+    for (size_t i = 0; i < a.stamps.size(); i++)
+        if (!rect_close(a.stamps[i].bounds, b.stamps[i].bounds, 0.01)) return false;
+    return true;
+}
+
+// Strongly red pixels of a 612 x 792 BGRA render inside `r` (PDF points, bottom-left origin).
+size_t red_pixels(const std::vector<unsigned char>& px, const megapdf_rect& r) {
+    size_t n = 0;
+    for (int y = static_cast<int>(792 - r.top); y < static_cast<int>(792 - r.bottom); y++)
+        for (int x = static_cast<int>(r.left); x < static_cast<int>(r.right); x++) {
+            const unsigned char* q = &px[(static_cast<size_t>(y) * 612 + x) * 4];
+            if (q[2] > 180 && q[1] < 90 && q[0] < 90) n++;
+        }
+    return n;
+}
+
+void test_edit_beside_fields_and_annotations() {
+    OpenDoc d(fields_and_annotations_pdf());
+    check(d.doc != nullptr, "beside fields: the page opens");
+    if (!d.doc) return;
+    const megapdf_rect square{72, 580, 172, 630};
+    const U16 heading = without_nul(u16("Plain heading"));
+    const U16 want = u16("A retyped body line beside the fields");
+    std::vector<FieldShot> fields_before;
+    StampList notes_before;
+    size_t red_before = 0;
+    megapdf_rect heading_was{};
+    std::vector<unsigned char> saved;
+    {
+        Page p(d.doc, 0);
+        fields_before = field_shots(p.page);
+        notes_before = stamps_of(p.page);
+        check(fields_before.size() == 2 && fields_before[0].kind == MEGAPDF_FIELD_TEXT && show(fields_before[0].value) == "Ada Lovelace" &&
+                  fields_before[1].kind == MEGAPDF_FIELD_CHECKBOX && fields_before[1].checked == 1,
+              "beside fields: a filled text field and a checked checkbox", std::to_string(fields_before.size()) + " fields");
+        check(notes_before.ids.size() == 2, "beside fields: the square and the sticky note are listed", std::to_string(notes_before.ids.size()));
+        red_before = red_pixels(render_page(p.page), square);
+        check(red_before > 0, "beside fields: the square annotation draws");
+        for (const RunShot& r : run_shots(p.page)) if (r.text == heading) heading_was = r.bounds;
+
+        const int body = index_of_text(p.page, "Body line under it");
+        int outcome = -1;
+        check(body >= 0 && megapdf_set_text(p.page, body, want.data(), 0, &outcome, nullptr) == MEGAPDF_OK && outcome == MEGAPDF_EDIT_IN_PLACE,
+              "beside fields: the body line is retyped in place");
+        check(same_fields(fields_before, field_shots(p.page)) && same_stamps(notes_before, stamps_of(p.page)),
+              "beside fields: the edit leaves every field and annotation as it was");
+        check(megapdf_save(d.doc, collect, &saved) == MEGAPDF_OK, "beside fields: saves");
+        keep_saved("fields-and-annotations", saved);
+    }
+    OpenDoc again(saved);
+    Page q(again.doc, 0);
+    check(index_of_text(q.page, "A retyped body line beside the fields") >= 0, "beside fields: the edit reads back after reopening");
+    bool heading_kept = false;
+    for (const RunShot& r : run_shots(q.page)) if (r.text == heading) heading_kept = rect_close(r.bounds, heading_was, 0.5);
+    check(heading_kept, "beside fields: the heading keeps its place");
+    const auto fields_after = field_shots(q.page);
+    check(same_fields(fields_before, fields_after), "beside fields: after reopening, every field keeps its name, value, state and rect",
+          std::to_string(fields_after.size()) + " fields");
+    const StampList notes_after = stamps_of(q.page);
+    check(same_stamps(notes_before, notes_after), "beside fields: after reopening, every annotation keeps its rect",
+          std::to_string(notes_after.ids.size()) + " annotations");
+    const size_t red_after = red_pixels(render_page(q.page), square);
+    check(red_after == red_before, "beside fields: the square still draws the same", std::to_string(red_before) + " -> " + std::to_string(red_after));
+}
+
+// #126: text drawn inside a form XObject. The core's runs are the page's own text objects,
+// so text inside a form is not offered as a run, and megapdf_set_text() on the form object
+// is an argument error rather than an edit of anything. Search still finds the text, because
+// PDFium's text page reads into forms: the apps could tell a tap on it from a tap on nothing.
+void test_form_xobject_text() {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    const std::string form_body = "BT /F1 14 Tf 0 40 Td (Text inside a form) Tj ET";
+    const std::string form = "<< /Type /XObject /Subtype /Form /BBox [0 0 300 100] /Resources << /Font << /F1 4 0 R >> >> /Length " +
+                             std::to_string(form_body.size()) + " >>\nstream\n" + form_body + "\nendstream";
+    OpenDoc d(one_page_pdf("BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 1 0 0 1 72 560 cm /Fm1 Do Q BT /F1 12 Tf 72 520 Td (Body under a form) Tj ET",
+                           helvetica, "/XObject << /Fm1 6 0 R >>", "", {form}));
+    check(d.doc != nullptr, "form XObject: the page opens");
+    if (!d.doc) return;
+    Page p(d.doc, 0);
+    const auto before = run_shots(p.page);
+    const auto px_before = render_page(p.page);
+    check(before.size() == 2 && index_of_text(p.page, "Text inside a form") < 0, "form XObject: its text is not offered as a run",
+          std::to_string(before.size()) + " runs");
+    check(search(p.page, "inside a form").size() == 1, "form XObject: search still finds its text");
+    int form_index = -1;
+    for (int i = 0; megapdf_object_type(p.page, i) >= 0; i++)
+        if (megapdf_object_type(p.page, i) == 5 /* FPDF_PAGEOBJ_FORM */) form_index = i;
+    check(form_index >= 0, "form XObject: the page lists the form object");
+    if (form_index < 0) return;
+
+    const U16 edit = u16("Edited form text");
+    int outcome = -1;
+    megapdf_detached* original = reinterpret_cast<megapdf_detached*>(1);
+    check(megapdf_set_text(p.page, form_index, edit.data(), 0, &outcome, &original) == MEGAPDF_ERR_ARGUMENT && original == nullptr && outcome == -1,
+          "form XObject: setting text on the form object is refused as an argument error");
+    check(megapdf_text_editable(p.page, form_index) == MEGAPDF_ERR_ARGUMENT, "form XObject: it is not a text object to ask about either");
+    check(same_runs(before, run_shots(p.page), 0.01) && render_page(p.page) == px_before, "form XObject: the refused page is untouched");
+
+    // The heading beside the form still edits, and the form's text survives the rewrite.
+    const U16 retyped = u16("A retyped heading above the form");
+    const int head = index_of_text(p.page, "Plain heading");
+    check(head >= 0 && megapdf_set_text(p.page, head, retyped.data(), 0, &outcome, nullptr) == MEGAPDF_OK,
+          "form XObject: the heading beside it still edits");
+    OpenDoc again(save_bytes(d.doc, "form-xobject"));
+    Page q(again.doc, 0);
+    check(search(q.page, "inside a form").size() == 1 && index_of_text(q.page, "Body under a form") >= 0 &&
+              index_of_text(q.page, "A retyped heading above the form") >= 0,
+          "form XObject: after reopening, the edit, the form's text and the body are all there");
+    const auto px_after = render_page(q.page);
+    size_t differing = 0;
+    for (int y = 792 - 660; y < 792 - 540; y++)
+        for (int x = 72; x < 372; x++) {
+            const size_t i = (static_cast<size_t>(y) * 612 + x) * 4;
+            if (std::abs(px_before[i] - px_after[i]) + std::abs(px_before[i + 1] - px_after[i + 1]) + std::abs(px_before[i + 2] - px_after[i + 2]) > 60)
+                differing++;
+        }
+    check(differing == 0, "form XObject: the form and the body under it render as before", std::to_string(differing) + " pixels");
 }
 
 int main(int argc, char** argv) {
@@ -2361,11 +2641,14 @@ int main(int argc, char** argv) {
     test_protected_save(argv[1]);
     test_security(argv[1]);
     test_subset_font_glyphs();
+    test_cid_font_glyphs();
     test_render();
     test_render_page(argv[1]);
     test_text_editing(argv[1]);
     test_rewrite_fidelity();
     test_edit_scenarios();
+    test_edit_beside_fields_and_annotations();
+    test_form_xobject_text();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
