@@ -2,3 +2,9 @@
 # (tools/gen_third_party_notices.py writes LF). Pin them so a Windows checkout
 # can't rewrite the line endings and make a regenerated file look changed.
 THIRD-PARTY-NOTICES.txt text eol=lf
+
+# The PDFium patch series is hashed into every build's VERSION, and git apply needs
+# the patches byte-identical on every runner. A Windows checkout converted them to
+# CRLF, so the win-x64 build reported a different series.
+tools/pdfium/patches/*.patch text eol=lf
+tools/pdfium/*.sh text eol=lf
