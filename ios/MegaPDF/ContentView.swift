@@ -35,7 +35,7 @@ struct ContentView: View {
                 )
 
             case .loading:
-                ProgressView()
+                OpeningView(busy: model.busy)
 
             case let .passwordNeeded(_, displayName, _, wrongPassword):
                 VStack {
@@ -63,9 +63,12 @@ struct ContentView: View {
             case let .viewing(displayName, pageSizes):
                 ViewerView(
                     model: model,
+                    busy: model.busy,
                     displayName: displayName,
                     pageSizes: pageSizes,
                     onSaveCopy: {
+                        // Repeat taps are ignored while the copy is prepared (#145).
+                        guard !model.fileCommandsBlocked else { return }
                         exportName = displayName
                         Task {
                             if let data = await model.exportData() {
