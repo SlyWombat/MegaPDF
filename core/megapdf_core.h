@@ -63,8 +63,20 @@ enum {
     MEGAPDF_ERR_MEMORY = -3,      /* the core could not allocate */
     MEGAPDF_ERR_NO_FONT = -4,     /* no font could render the text, not even a standard substitute (tier 2 failed) */
     MEGAPDF_ERR_LAYOUT = -5,      /* PDFium would change how the page looks if it rewrote this text (#118) */
-    MEGAPDF_ERR_RESTRICTED = -6   /* the document's security does not allow it; its owner password would (#131) */
+    MEGAPDF_ERR_RESTRICTED = -6,  /* the document's security does not allow it; its owner password would (#131) */
+    MEGAPDF_ERR_CANCELLED = -7,   /* a page check stopped early: its cancel flag was raised or its document is closing (#145) */
+    MEGAPDF_ERR_NOT_JUDGED = -8   /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
 };
+
+/**
+ * A cancel flag for a page check (#145). megapdf_cancel_raise() may be called from any
+ * thread, at any time, also after the check has returned; free the flag once the check has
+ * returned. megapdf_cancel_new() returns NULL only when out of memory.
+ */
+typedef struct megapdf_cancel megapdf_cancel;
+MEGAPDF_API megapdf_cancel* megapdf_cancel_new(void);
+MEGAPDF_API void megapdf_cancel_raise(megapdf_cancel* cancel);
+MEGAPDF_API void megapdf_cancel_free(megapdf_cancel* cancel);
 
 /* --------------------------------------------------------------------------
  * Errors
@@ -754,8 +766,36 @@ MEGAPDF_API int megapdf_last_layout_verdict(megapdf_layout_verdict* out);
  * as megapdf_layout_verdict describes; `where` never has MEGAPDF_LAYOUT_WHERE_OBJECT. A page
  * with no objects has nothing to rewrite and keeps its look. Cached per page until the page
  * next changes (#137).
+ *
+ * The same as megapdf_page_regeneration_verdict_cancellable() with no cancel flag, so it also
+ * lets other calls run between its stages and returns MEGAPDF_ERR_CANCELLED when the
+ * document is closed while it runs.
  */
 MEGAPDF_API int megapdf_page_regeneration_verdict(const megapdf_page* page, megapdf_layout_verdict* out);
+
+/**
+ * megapdf_page_regeneration_verdict() for a check started early, in the background (#145).
+ *
+ * The dry run lets go of the core lock between its stages (copy and render, save, rewrite,
+ * save again, compare), so other calls on any document — rendering, an edit, a save — wait at
+ * most one stage, not the whole run. Between stages it stops when `cancel` (may be NULL) has
+ * been raised or the page's document is being closed, and returns MEGAPDF_ERR_CANCELLED with
+ * `out` untouched; megapdf_close() waits for a running check to stop. The page handle may be
+ * closed while the check runs; its document must stay open until the call has begun.
+ *
+ * The answer is cached as megapdf_page_regeneration_verdict()'s is, except when the page
+ * changed while the check ran: then it describes the page as it was and is not cached. Two
+ * checks of one page at once each do the work; the apps keep one per page.
+ */
+MEGAPDF_API int megapdf_page_regeneration_verdict_cancellable(const megapdf_page* page, const megapdf_cancel* cancel,
+                                                             megapdf_layout_verdict* out);
+
+/**
+ * The cached page verdict, without running anything (#145): 1 or 0 as
+ * megapdf_page_regeneration_verdict() would return, MEGAPDF_ERR_NOT_JUDGED when the page has
+ * not been judged since it last changed, MEGAPDF_ERR_ARGUMENT for a bad page or a NULL `out`.
+ */
+MEGAPDF_API int megapdf_page_regeneration_verdict_cached(const megapdf_page* page, megapdf_layout_verdict* out);
 
 /** 1 when `base_name` is a subset-embedded font's name: six capitals, a plus sign, the name. */
 MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name);

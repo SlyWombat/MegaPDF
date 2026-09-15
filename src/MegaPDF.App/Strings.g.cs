@@ -474,4 +474,40 @@ public static partial class Strings
 
     /// <summary>{0}%</summary>
     public static string ZoomPercent(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ZoomPercent"), arg0);
+
+    /// <summary>Opening…</summary>
+    public static string BusyOpening => Get("BusyOpening");
+
+    /// <summary>Saving…</summary>
+    public static string BusySaving => Get("BusySaving");
+
+    /// <summary>Checking the saved file…</summary>
+    public static string BusyCheckingSavedFile => Get("BusyCheckingSavedFile");
+
+    /// <summary>Checking this page…</summary>
+    public static string BusyCheckingPage => Get("BusyCheckingPage");
+
+    /// <summary>Applying…</summary>
+    public static string BusyApplying => Get("BusyApplying");
+
+    /// <summary>Searching…</summary>
+    public static string BusySearching => Get("BusySearching");
+
+    /// <summary>Making a smaller copy…</summary>
+    public static string BusyShrinking => Get("BusyShrinking");
+
+    /// <summary>Preparing to print…</summary>
+    public static string BusyPrinting => Get("BusyPrinting");
+
+    /// <summary>Restoring your edits…</summary>
+    public static string BusyRestoring => Get("BusyRestoring");
+
+    /// <summary>Couldn't print</summary>
+    public static string CouldNotPrintTitle => Get("CouldNotPrintTitle");
+
+    /// <summary>Couldn't make that change</summary>
+    public static string CouldNotEditTitle => Get("CouldNotEditTitle");
+
+    /// <summary>Couldn't restore your edits</summary>
+    public static string CouldNotRestoreTitle => Get("CouldNotRestoreTitle");
 }

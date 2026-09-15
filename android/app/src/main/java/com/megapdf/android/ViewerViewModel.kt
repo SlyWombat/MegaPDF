@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.megapdf.engine.LayoutCause
+import com.megapdf.engine.PageCheck
 import com.megapdf.engine.PdfDocument
 import com.megapdf.engine.PdfEngine
 import com.megapdf.engine.PdfLoadException
@@ -163,6 +164,40 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     var screenshotSheet: String? by mutableStateOf(null)
         private set
 
+    // --- Busy feedback (#145) ---
+
+    /**
+     * The open document's busy state: the strip under the top bar for opening, saving and
+     * searching, the spinner on a page for the page checks and applying a change, and the lock
+     * that keeps editing, Close and the file commands out while a save or a password change runs.
+     * Reset whenever a document opens or closes.
+     */
+    val busy = BusyState(viewModelScope)
+
+    /** The shared page checks and the warning before a change regenerating a page would alter (#139). */
+    private val pageChecks = PageCheckGate(viewModelScope)
+
+    /** Edits started and not yet finished: a tap or commit while one runs is ignored (#145). */
+    private var editsInFlight by mutableIntStateOf(0)
+
+    /**
+     * True while a change is still going in, waiting on its page check or its warning, or a save
+     * or password change runs. Further edits are blocked, never queued or dropped (#145).
+     */
+    val editingBlocked: Boolean
+        get() = editsInFlight > 0 || pageChecks.isDeciding || busy.locksDocument
+
+    /**
+     * Whether the toolbar's editing tools show disabled: during a save or password change, and
+     * once page work has run long enough to show its spinner. Quicker page work only ignores
+     * taps, so the toolbar doesn't flicker on every checkbox.
+     */
+    val toolsDisabled: Boolean
+        get() = busy.locksDocument || busy.page.isVisible
+
+    /** The page the list reports as current; Add text checks it early (#145). */
+    private var currentPage = 0
+
     /**
      * Marketing screenshot mode (mirrors iOS `-screenshot`): seeds the "Mega W."
      * demo signature and opens the bundled demo agreement in the requested UI
@@ -195,50 +230,56 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             "viewer", "sign", "draw", "search", "text", "text-edit" -> {
                 screenshotSheet = if (state == "viewer") null else state
                 viewModelScope.launch {
-                    val bytes = withContext(Dispatchers.IO) {
-                        app.assets.open(app.getString(R.string.screenshot_demo_asset)).use { it.readBytes() }
-                    }
-                    val doc = engine.open(bytes)
-                    val count = doc.pageCount()
-                    val sizes = ArrayList<PageSize>(count)
-                    for (i in 0 until count) {
-                        val page = doc.openPage(i)
-                        sizes += PageSize(page.widthPoints, page.heightPoints)
-                        page.close()
-                    }
-                    closeCurrent()
-                    document = doc
-                    capabilities = DocumentCapabilities.fromSecurity(doc.security())
-                    uiState = ViewerUiState.Viewing(app.getString(R.string.screenshot_document_name), sizes)
-                    if (state == "search") {
-                        // Seed here, not from the UI: the document and the
-                        // Viewing state are both already set, so the sweep can
-                        // never hit updateSearchQuery's "nothing open" early
-                        // return, and the debounce is skipped so the hits and
-                        // the "N of M" count are on screen without any wait.
-                        startSearch(app.getString(R.string.screenshot_search_term), debounceMs = 0L)
-                    }
-                    if (state == "text") {
-                        // The Add text dialog, open on a typed name with the size
-                        // and face pickers showing (#43). Armed here rather than
-                        // through onPageTapped because the tap point is chosen,
-                        // not synthesised: just under the signature rule, where a
-                        // printed name belongs on this agreement.
-                        pendingTextTap = PendingTextTap(
-                            0, SCREENSHOT_TEXT_X, SCREENSHOT_TEXT_Y,
-                            initialText = app.getString(R.string.screenshot_text))
-                    }
-                    if (state == "text-edit") {
-                        // The body-text editor open on the agreement's heading, mid-correction (#114).
-                        val page = doc.openPage(0)
-                        try {
-                            page.textLines().firstOrNull()?.let {
-                                pendingBodyEdit = PendingBodyEdit(
-                                    0, it, initialText = app.getString(R.string.screenshot_edited_heading))
-                            }
-                        } finally {
+                    try {
+                        val bytes = withContext(Dispatchers.IO) {
+                            app.assets.open(app.getString(R.string.screenshot_demo_asset)).use { it.readBytes() }
+                        }
+                        val doc = engine.open(bytes)
+                        val count = doc.pageCount()
+                        val sizes = ArrayList<PageSize>(count)
+                        for (i in 0 until count) {
+                            val page = doc.openPage(i)
+                            sizes += PageSize(page.widthPoints, page.heightPoints)
                             page.close()
                         }
+                        val security = doc.security()
+                        closeCurrent()
+                        attach(doc, security)
+                        uiState = ViewerUiState.Viewing(app.getString(R.string.screenshot_document_name), sizes)
+                        if (state == "search") {
+                            // Seed here, not from the UI: the document and the
+                            // Viewing state are both already set, so the sweep can
+                            // never hit updateSearchQuery's "nothing open" early
+                            // return, and the debounce is skipped so the hits and
+                            // the "N of M" count are on screen without any wait.
+                            startSearch(app.getString(R.string.screenshot_search_term), debounceMs = 0L)
+                        }
+                        if (state == "text") {
+                            // The Add text dialog, open on a typed name with the size
+                            // and face pickers showing (#43). Armed here rather than
+                            // through onPageTapped because the tap point is chosen,
+                            // not synthesised: just under the signature rule, where a
+                            // printed name belongs on this agreement.
+                            pendingTextTap = PendingTextTap(
+                                0, SCREENSHOT_TEXT_X, SCREENSHOT_TEXT_Y,
+                                initialText = app.getString(R.string.screenshot_text))
+                        }
+                        if (state == "text-edit") {
+                            // The body-text editor open on the agreement's heading, mid-correction (#114).
+                            val page = doc.openPage(0)
+                            try {
+                                page.textLines().firstOrNull()?.let {
+                                    pendingBodyEdit = PendingBodyEdit(
+                                        0, it, initialText = app.getString(R.string.screenshot_edited_heading))
+                                }
+                            } finally {
+                                page.close()
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        statusMessage = str(R.string.open_failed)
                     }
                 }
             }
@@ -257,52 +298,63 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * The warning on screen before the first text-box change on a page PDFium's rewrite would
      * alter (#139). The screen answers it with [answerPageRewrite]: Continue or Cancel.
      */
-    var pageRewriteQuestion: CompletableDeferred<Boolean>? by mutableStateOf(null)
-        private set
-
-    private val rewriteWarnings = PageRewriteWarnings()
+    val pageRewriteQuestion: CompletableDeferred<Boolean>?
+        get() = pageChecks.question
 
     fun answerPageRewrite(proceed: Boolean) {
-        pageRewriteQuestion?.complete(proceed)
+        pageChecks.answer(proceed)
     }
 
     /**
      * True when [operation] may go ahead: it leaves the page's content alone, the page was
-     * already settled in this document, the page keeps its look when regenerated, or the person
-     * chose Continue. The verdict runs on the engine's thread; a page that cannot be judged is
-     * no reason to stand in the way. A restricted document is left to [perform] to refuse.
+     * already settled in this document, the page keeps its look when regenerated, its check
+     * ran over budget, or the person chose Continue (#139, #145). The check started early is
+     * reused; while it is awaited the spinner shows at [spot]. A restricted document is left to
+     * [perform] to refuse.
      */
-    private suspend fun confirmPageRewrite(operation: PdfEditOperation, doc: PdfDocument): Boolean {
+    private suspend fun confirmPageRewrite(
+        operation: PdfEditOperation, doc: PdfDocument, spot: BusySpot? = null,
+    ): Boolean {
         if (!PageRewriteWarnings.regeneratesUnjudged(operation) || !capabilities.allows(operation)) return true
         val pageIndex = operation.pageIndex
-        if (rewriteWarnings.isSettled(pageIndex)) return true
-        val verdict = try {
-            val page = doc.openPage(pageIndex)
+        val proceed = pageChecks.confirm(pageIndex, busy, spot ?: BusySpot(pageIndex))
+        // The document may have been closed while the check ran or the question was up.
+        return proceed && document === doc
+    }
+
+    /** Starts the page's check in the background, when the open document allows the changes it guards (#145). */
+    private fun preparePageCheck(pageIndex: Int) {
+        val state = uiState as? ViewerUiState.Viewing ?: return
+        if (document == null || pageIndex !in state.pageSizes.indices) return
+        if (!capabilities.canAddText) return
+        pageChecks.prepare(pageIndex)
+    }
+
+    /** The page list's current page changed: check it early (#145). */
+    fun onCurrentPageChanged(pageIndex: Int) {
+        currentPage = pageIndex
+        preparePageCheck(pageIndex)
+    }
+
+    /**
+     * Runs one edit (#145): ignored while another is still going in, the page check or its
+     * warning is deciding, or a save runs; any failure is reported as [failure] rather than
+     * crashing.
+     */
+    private fun launchEdit(failure: Int, block: suspend () -> Unit) {
+        if (editingBlocked) return
+        editsInFlight++
+        viewModelScope.launch {
             try {
-                page.pageRegenerationVerdict()
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                statusMessage = str(failure)
             } finally {
-                page.close()
+                editsInFlight--
             }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
         }
-        if (verdict == null || verdict.editable) {
-            rewriteWarnings.settle(pageIndex)
-            return true
-        }
-        val question = CompletableDeferred<Boolean>()
-        pageRewriteQuestion = question
-        val proceed = try {
-            question.await()
-        } finally {
-            if (pageRewriteQuestion === question) pageRewriteQuestion = null
-        }
-        // The document may have been closed while the question was up.
-        if (document !== doc) return false
-        if (proceed) rewriteWarnings.settle(pageIndex)
-        return proceed
     }
 
     var uiState: ViewerUiState by mutableStateOf(ViewerUiState.Home(recentsStore.load()))
@@ -315,9 +367,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private val renderedWidths = HashMap<Int, Int>()
     private var lastWindow: Triple<Int, Int, Int>? = null
 
+    /** Unsaved changes, and D3 of #145: a save marks saved only if nothing changed while it ran. */
+    private val dirty = DirtyTracker()
+
     /** True once the in-memory document differs from the file on disk. */
-    var isDirty: Boolean by mutableStateOf(false)
-        private set
+    val isDirty: Boolean get() = dirty.isDirty
 
     /** True while a save is streaming to the destination. */
     var isSaving: Boolean by mutableStateOf(false)
@@ -376,6 +430,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * engine thread and aggregate hits into one flat document-ordered list.
      * Case-insensitive literal substring — the cross-platform contract.
      * Screenshot mode passes a zero debounce for its one deliberate query.
+     * The sweep shows Searching… in the strip (#145) but never blocks editing.
      */
     private fun startSearch(query: String, debounceMs: Long) {
         searchQuery = query
@@ -390,8 +445,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
         isSearching = true
         searchJob = viewModelScope.launch {
+            var token: BusyToken? = null
             try {
                 if (debounceMs > 0) delay(debounceMs)
+                token = busy.beginDocument(BusyLabel.SEARCHING)
                 val hits = ArrayList<SearchHit>()
                 for (pageIndex in state.pageSizes.indices) {
                     val page = doc.openPage(pageIndex)
@@ -403,7 +460,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 searchHits = hits
                 currentHitIndex = if (hits.isEmpty()) -1 else 0
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                statusMessage = str(R.string.search_failed)
             } finally {
+                token?.end()
                 // A superseding query has already reset the flag for itself;
                 // only the query still on screen may clear it.
                 if (searchQuery == query) isSearching = false
@@ -434,7 +496,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openUri(uri: Uri, password: String? = null) {
         uiState = ViewerUiState.Loading
-        viewModelScope.launch { openAndShow(uri, password) }
+        // Opening… (#145); showing the document resets the busy state, so the end is only for a failure.
+        val token = busy.beginDocument(BusyLabel.OPENING)
+        viewModelScope.launch {
+            try {
+                openAndShow(uri, password)
+            } finally {
+                token.end()
+            }
+        }
     }
 
     /** [openUri]'s work, for a caller already in a coroutine: true once the document is on screen. */
@@ -442,6 +512,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val failed: ViewerUiState = try {
             show(readAndOpen(uri, password), uri)
             return true
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: PdfPasswordException) {
             ViewerUiState.PasswordNeeded(uri, wrongPassword = password != null)
         } catch (e: PdfLoadException) {
@@ -492,10 +564,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** Puts [opened] on screen in place of whatever was open. */
     private fun show(opened: OpenedDocument, uri: Uri) {
         closeCurrent()
-        document = opened.doc
+        attach(opened.doc, opened.security)
         currentUri = uri
-        isDirty = false
-        capabilities = DocumentCapabilities.fromSecurity(opened.security)
         val name = queryDisplayName(uri)
         persistReadPermission(uri)
         // The uri and name only: whatever password opened it stays with the open document.
@@ -505,6 +575,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         uiState = ViewerUiState.Viewing(name, opened.pageSizes)
         // ADR-004 decision 3: a restricted open says so; the menu offers the owner password.
         if (capabilities.isRestricted) showNotice(str(R.string.security_restricted_notice))
+    }
+
+    /** Makes [doc] the open document: its permissions, and its page checks (#145). */
+    private fun attach(doc: PdfDocument, security: PdfSecurity) {
+        document = doc
+        capabilities = DocumentCapabilities.fromSecurity(security)
+        // Each check runs off the engine's thread and stops when its coroutine is cancelled.
+        pageChecks.open { pageIndex ->
+            when (val result = doc.checkPageRegeneration(pageIndex)) {
+                is PageCheck.Judged -> result.verdict
+                else -> null
+            }
+        }
     }
 
     /**
@@ -539,15 +622,22 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val (width, height) = PdfEngine.renderSize(idealWidth * memoryScale, idealHeight * memoryScale)
                 if (renderedWidths[index] == width) continue
 
-                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-                val page = doc.openPage(index)
                 try {
-                    page.render(bitmap)
-                } finally {
-                    page.close()
+                    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                    val page = doc.openPage(index)
+                    try {
+                        page.render(bitmap)
+                    } finally {
+                        page.close()
+                    }
+                    pageBitmaps[index] = bitmap
+                    renderedWidths[index] = width
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A page that fails to render stays blank rather than taking the app down
+                    // (#145); the rest of the window still renders.
                 }
-                pageBitmaps[index] = bitmap
-                renderedWidths[index] = width
             }
         }
     }
@@ -557,11 +647,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * form fields win over page content; then existing check marks (tap to
      * remove); then drawn-square candidates (tap to place a mark).
      * Fractions are tap position / rendered page size, top-left origin.
+     * A tap while a change is still going in, or while a save runs, is ignored (#145).
      */
     fun onPageTapped(pageIndex: Int, xFraction: Float, yFraction: Float) {
         val state = uiState as? ViewerUiState.Viewing ?: return
         val doc = document ?: return
-        viewModelScope.launch {
+        launchEdit(R.string.edit_failed) {
             val size = state.pageSizes[pageIndex]
             val x = xFraction * size.widthPoints
             val y = (1 - yFraction) * size.heightPoints  // view top-left → PDF bottom-left
@@ -569,7 +660,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             pendingSignature?.let { entry ->
                 pendingSignature = null
                 placeSignature(doc, entry, pageIndex, size, x, y)
-                return@launch
+                return@launchEdit
             }
 
             if (isPlacingText) {
@@ -577,7 +668,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 statusMessage = null
                 pendingTextTap = PendingTextTap(
                     pageIndex, x, y, fontSize = lastFontSize, fontName = lastFontName)
-                return@launch
+                // The box goes on this page: check it while the text is typed (#145).
+                preparePageCheck(pageIndex)
+                return@launchEdit
             }
 
             // Whichever edit the tap lands on, it goes through the history so it
@@ -595,13 +688,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         selectedStamp = null
                         selectedTextBox = null
                         showRestricted()
-                        return@launch
+                        return@launchEdit
                     }
                     // Selection only — move/resize/remove happen via the overlay.
                     selectedStamp = SelectedStamp(
                         pageIndex, signature.annotIndex, signature.id, signature.rect)
                     selectedTextBox = null
-                    return@launch
+                    return@launchEdit
                 }
                 selectedStamp = null
 
@@ -617,7 +710,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     if (!capabilities.canAddText) {
                         selectedTextBox = null
                         showRestricted()
-                        return@launch
+                        return@launchEdit
                     }
                     if (box.id.startsWith(UNTAGGED_TEXT_PREFIX)) {
                         // A box written by MegaPDF for Windows 1.6.x, before boxes
@@ -628,21 +721,23 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         // it fall through and toggle whatever is underneath.
                         selectedTextBox = null
                         statusMessage = str(R.string.text_untagged)
-                        return@launch
+                        return@launchEdit
                     }
                     val selected = SelectedTextBox(
                         pageIndex, box.id, box.text, box.fontSize, box.fontName, box.rect)
+                    // A selected box is about to be moved, corrected or removed: check its page (#145).
+                    preparePageCheck(pageIndex)
                     if (selectedTextBox?.id == box.id) {
                         // A second tap on the selected box also opens the editor.
                         // The overlay's ✎ is the discoverable way in, because a
                         // *quick* second tap is claimed by double-tap-to-zoom —
                         // this path only fires after that disambiguation lapses.
                         selectedTextBox = selected
-                        editSelectedTextBox()
+                        openTextBoxEditor(selected)
                     } else {
                         selectedTextBox = selected
                     }
-                    return@launch
+                    return@launchEdit
                 }
                 selectedTextBox = null
 
@@ -679,13 +774,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         } else {
                             // #128: and say why — text elsewhere would move, or the page would look different.
                             // A run that is no longer text counts as refused, as it always has.
-                            val refusal = line.runs.firstNotNullOfOrNull { run ->
-                                val verdict = page.layoutVerdict(run.objectIndex)
-                                if (verdict == null) LayoutCause.REWRITE_FAILED
-                                else verdict.cause.takeIf { !verdict.editable }
+                            // #145: the check can take seconds on a heavy page, so the line shows a
+                            // spinner, and taps are ignored until it answers.
+                            val refusal = busy.pageWork(BusyLabel.CHECKING_PAGE, BusySpot(pageIndex, line.rect)) {
+                                line.runs.firstNotNullOfOrNull { run ->
+                                    val verdict = page.layoutVerdict(run.objectIndex)
+                                    if (verdict == null) LayoutCause.REWRITE_FAILED
+                                    else verdict.cause.takeIf { !verdict.editable }
+                                }
                             }
                             if (refusal == null) {
-                                pendingBodyEdit = PendingBodyEdit(pageIndex, line)
+                                if (document === doc) pendingBodyEdit = PendingBodyEdit(pageIndex, line)
                             } else {
                                 showNotice(layoutNotice(refusal))
                             }
@@ -712,24 +811,25 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun commitBodyEdit(text: String) {
         val pending = pendingBodyEdit ?: return
         val doc = document ?: return
+        // Blocked while another change is still going in (#145): the editor stays open.
+        if (editingBlocked) return
         pendingBodyEdit = null
         val trimmed = text.trim()
         if (trimmed == pending.line.text) return
-        viewModelScope.launch {
+        launchEdit(R.string.text_change_failed) {
             try {
                 if (trimmed.isEmpty()) {
-                    perform(BodyTextDeleteOperation(pending.pageIndex, pending.line), doc)
+                    perform(BodyTextDeleteOperation(pending.pageIndex, pending.line), doc,
+                        BusySpot(pending.pageIndex, pending.line.rect))
                 } else {
                     val operation = BodyTextEditOperation(pending.pageIndex, pending.line, trimmed)
-                    perform(operation, doc)
+                    perform(operation, doc, BusySpot(pending.pageIndex, pending.line.rect))
                     if (operation.lastOutcome == TextEditOutcome.SUBSTITUTED) {
                         showNotice(str(R.string.body_text_substituted))
                     }
                 }
             } catch (e: com.megapdf.engine.TextLayoutException) {
                 showNotice(layoutNotice(e.verdict?.cause))
-            } catch (e: Exception) {
-                statusMessage = str(R.string.text_change_failed)
             }
         }
     }
@@ -765,6 +865,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Arms the next tap to place text. Tapping the page opens the text field. */
     fun startTextPlacement() {
+        if (editingBlocked) return
         if (!capabilities.canAddText) {
             showRestricted()
             return
@@ -774,6 +875,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         selectedTextBox = null
         isPlacingText = true
         statusMessage = str(R.string.tap_to_place_text)
+        // The tool regenerates the page it lands on: check the current one early (#145).
+        preparePageCheck(currentPage)
     }
 
     fun cancelTextPlacement() {
@@ -790,35 +893,36 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun commitText(text: String, fontSize: Double, fontName: String) {
         val pending = pendingTextTap ?: return
         val doc = document ?: return
+        // Blocked while another change is still going in (#145): the dialog keeps what was typed.
+        if (editingBlocked) return
         pendingTextTap = null
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
         lastFontSize = fontSize
         lastFontName = fontName
         val style = TextBoxStyle(trimmed, fontSize, fontName)
-        viewModelScope.launch {
-            try {
-                if (pending.editingId != null) {
-                    val before = TextBoxStyle(
-                        pending.initialText, pending.fontSize, pending.fontName)
-                    if (before == style) return@launch
-                    val edit = EditTextBoxOperation(
-                        pending.pageIndex, pending.editingId, before, style,
-                        pending.x, pending.y)
-                    if (!confirmPageRewrite(edit, doc)) return@launch
-                    perform(edit, doc)
-                    reselectTextBox(doc, pending.pageIndex, pending.editingId)
-                } else {
-                    val add = TextBoxOperation(
-                        pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
-                        trimmed, fontSize, pending.x, pending.y, adding = true,
-                        fontName = fontName)
-                    if (!confirmPageRewrite(add, doc)) return@launch
-                    perform(add, doc)
-                }
-            } catch (e: Exception) {
-                statusMessage =
-                    str(if (pending.editingId != null) R.string.text_change_failed else R.string.text_add_failed)
+        val spot = BusySpot(
+            pending.pageIndex,
+            com.megapdf.engine.PdfRect(pending.x, pending.y, pending.x, pending.y + fontSize),
+        )
+        launchEdit(if (pending.editingId != null) R.string.text_change_failed else R.string.text_add_failed) {
+            if (pending.editingId != null) {
+                val before = TextBoxStyle(
+                    pending.initialText, pending.fontSize, pending.fontName)
+                if (before == style) return@launchEdit
+                val edit = EditTextBoxOperation(
+                    pending.pageIndex, pending.editingId, before, style,
+                    pending.x, pending.y)
+                if (!confirmPageRewrite(edit, doc, spot)) return@launchEdit
+                perform(edit, doc, spot)
+                reselectTextBox(doc, pending.pageIndex, pending.editingId)
+            } else {
+                val add = TextBoxOperation(
+                    pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
+                    trimmed, fontSize, pending.x, pending.y, adding = true,
+                    fontName = fontName)
+                if (!confirmPageRewrite(add, doc, spot)) return@launchEdit
+                perform(add, doc, spot)
             }
         }
     }
@@ -834,28 +938,31 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val sel = selectedTextBox ?: return
         val state = uiState as? ViewerUiState.Viewing ?: return
         val doc = document ?: return
-        viewModelScope.launch {
+        if (editingBlocked) {
+            // #145: another change is still going in. The box never moved; dropping the selection
+            // drops the dragged overlay with it.
+            selectedTextBox = null
+            return
+        }
+        launchEdit(R.string.text_move_failed) {
             val rect = clampToPage(newRect, state.pageSizes[sel.pageIndex])
             // A tap that slipped into a drag can land a sub-point move; don't put
             // a no-op on the undo stack for it.
             if (kotlin.math.abs(rect.left - sel.rect.left) < 0.01 &&
-                kotlin.math.abs(rect.bottom - sel.rect.bottom) < 0.01) return@launch
-            try {
-                val move = MoveTextBoxOperation(
-                    sel.pageIndex, sel.id,
-                    fromX = sel.rect.left, fromY = sel.rect.bottom,
-                    toX = rect.left, toY = rect.bottom)
-                if (!confirmPageRewrite(move, doc)) {
-                    // Cancel: the box never moved. Dropping the selection drops the dragged
-                    // overlay with it, so nothing on screen claims otherwise (#139).
-                    selectedTextBox = null
-                    return@launch
-                }
-                perform(move, doc)
-                reselectTextBox(doc, sel.pageIndex, sel.id)
-            } catch (e: Exception) {
-                statusMessage = str(R.string.text_move_failed)
+                kotlin.math.abs(rect.bottom - sel.rect.bottom) < 0.01) return@launchEdit
+            val move = MoveTextBoxOperation(
+                sel.pageIndex, sel.id,
+                fromX = sel.rect.left, fromY = sel.rect.bottom,
+                toX = rect.left, toY = rect.bottom)
+            val spot = BusySpot(sel.pageIndex, rect)
+            if (!confirmPageRewrite(move, doc, spot)) {
+                // Cancel: the box never moved. Dropping the selection drops the dragged
+                // overlay with it, so nothing on screen claims otherwise (#139).
+                selectedTextBox = null
+                return@launchEdit
             }
+            perform(move, doc, spot)
+            reselectTextBox(doc, sel.pageIndex, sel.id)
         }
     }
 
@@ -865,6 +972,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun editSelectedTextBox() {
         val sel = selectedTextBox ?: return
+        if (editingBlocked) return
+        openTextBoxEditor(sel)
+    }
+
+    private fun openTextBoxEditor(sel: SelectedTextBox) {
         selectedTextBox = null
         if (!capabilities.canAddText) {
             showRestricted()
@@ -879,19 +991,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun removeSelectedTextBox() {
         val sel = selectedTextBox ?: return
         val doc = document ?: return
-        viewModelScope.launch {
-            try {
-                // boundsAnchored: the coordinates are the box's reported rect, so
-                // an undo must re-add against bounds, not the baseline.
-                val remove = TextBoxOperation(
-                    sel.pageIndex, sel.id, sel.text, sel.fontSize,
-                    sel.rect.left, sel.rect.bottom, adding = false,
-                    boundsAnchored = true, fontName = sel.fontName)
-                if (!confirmPageRewrite(remove, doc)) return@launch
-                perform(remove, doc)
-            } catch (e: Exception) {
-                statusMessage = str(R.string.text_remove_failed)
-            }
+        launchEdit(R.string.text_remove_failed) {
+            // boundsAnchored: the coordinates are the box's reported rect, so
+            // an undo must re-add against bounds, not the baseline.
+            val remove = TextBoxOperation(
+                sel.pageIndex, sel.id, sel.text, sel.fontSize,
+                sel.rect.left, sel.rect.bottom, adding = false,
+                boundsAnchored = true, fontName = sel.fontName)
+            val spot = BusySpot(sel.pageIndex, sel.rect)
+            if (!confirmPageRewrite(remove, doc, spot)) return@launchEdit
+            perform(remove, doc, spot)
         }
     }
 
@@ -915,37 +1024,36 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun undo() {
         val doc = document ?: return
-        viewModelScope.launch {
-            try {
-                history.undo(doc)?.let { afterHistoryChange(it) }
-            } catch (e: Exception) {
-                statusMessage = str(R.string.undo_failed)
-            }
+        launchEdit(R.string.undo_failed) {
+            busy.pageWork(BusyLabel.APPLYING, null) { history.undo(doc) }?.let { afterHistoryChange(it) }
         }
     }
 
     fun redo() {
         val doc = document ?: return
-        viewModelScope.launch {
-            try {
-                history.redo(doc)?.let { afterHistoryChange(it) }
-            } catch (e: Exception) {
-                statusMessage = str(R.string.redo_failed)
-            }
+        launchEdit(R.string.redo_failed) {
+            busy.pageWork(BusyLabel.APPLYING, null) { history.redo(doc) }?.let { afterHistoryChange(it) }
         }
     }
 
     /**
      * The single funnel for every reversible change. It asks the document's permissions
      * first (#131, ADR-004 decision 2): the entry points ask too, so this is the backstop
-     * for any path they miss — form fields and check marks rely on it.
+     * for any path they miss — form fields and check marks rely on it. While the change goes
+     * in, the page shows Applying… at [spot] once it takes long enough (#145).
      */
-    private suspend fun perform(operation: PdfEditOperation, doc: PdfDocument) {
+    private suspend fun perform(operation: PdfEditOperation, doc: PdfDocument, spot: BusySpot? = null) {
         if (!capabilities.allows(operation)) {
             showRestricted()
             return
         }
-        history.perform(operation, doc)
+        busy.pageWork(BusyLabel.APPLYING, spot ?: BusySpot(operation.pageIndex)) {
+            history.perform(operation, doc)
+        }
+        if (operation is BodyTextEditOperation || operation is BodyTextDeleteOperation) {
+            // A change that regenerated the page already went in without a warning (#139, #145).
+            pageChecks.settle(operation.pageIndex)
+        }
         afterHistoryChange(operation.pageIndex)
     }
 
@@ -998,6 +1106,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 signatures.add(entry)
                 statusMessage = str(R.string.signature_added)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 statusMessage = str(R.string.signature_import_failed)
             }
@@ -1020,6 +1130,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 signatures.add(entry)
                 statusMessage = str(R.string.signature_added)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 statusMessage = str(R.string.signature_save_failed)
             }
@@ -1027,7 +1139,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteSignature(id: String) {
-        viewModelScope.launch(Dispatchers.IO) { signatureStore.delete(id) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                signatureStore.delete(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // The card is already gone from the sheet; a file left behind is reloaded next launch.
+            }
+        }
         signatures.removeAll { it.id == id }
     }
 
@@ -1035,7 +1155,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun renameSignature(id: String, displayName: String) {
         val name = displayName.trim()
         if (name.isEmpty()) return
-        viewModelScope.launch(Dispatchers.IO) { signatureStore.rename(id, name) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                signatureStore.rename(id, name)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) { statusMessage = str(R.string.signature_save_failed) }
+            }
+        }
         val index = signatures.indexOfFirst { it.id == id }
         if (index >= 0) signatures[index] = signatures[index].copy(displayName = name)
     }
@@ -1047,6 +1175,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
 
     fun startPlacement(entry: SignatureEntry) {
+        if (editingBlocked) return
         if (!capabilities.canSign) {
             showRestricted()
             return
@@ -1087,7 +1216,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         perform(
             StampOperation(pageIndex, id, pixels, bitmap.width, bitmap.height,
                            rect, adding = true),
-            doc)
+            doc, BusySpot(pageIndex, rect))
         // Keep it selected so the handles appear straight away.
         val page = doc.openPage(pageIndex)
         try {
@@ -1110,7 +1239,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val sel = selectedStamp ?: return
         val state = uiState as? ViewerUiState.Viewing ?: return
         val doc = document ?: return
-        viewModelScope.launch {
+        if (editingBlocked) {
+            // #145: another change is still going in; drop the dragged overlay, the stamp never moved.
+            selectedStamp = null
+            return
+        }
+        launchEdit(R.string.signature_move_failed) {
             val rect = clampToPage(newRect, state.pageSizes[sel.pageIndex])
             var page = doc.openPage(sel.pageIndex)
             val packed = try {
@@ -1120,13 +1254,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (packed == null) {
                 statusMessage = str(R.string.signature_image_unreadable)
-                return@launch
+                return@launchEdit
             }
             perform(
                 MoveStampOperation(
                     sel.pageIndex, sel.id, packed.copyOfRange(2, packed.size),
                     packed[0], packed[1], from = sel.rect, to = rect),
-                doc)
+                doc, BusySpot(sel.pageIndex, rect))
             page = doc.openPage(sel.pageIndex)
             try {
                 val placed = page.stamps().firstOrNull { it.id == sel.id }
@@ -1142,7 +1276,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun removeSelectedStamp() {
         val sel = selectedStamp ?: return
         val doc = document ?: return
-        viewModelScope.launch {
+        launchEdit(R.string.signature_remove_failed) {
             // Read the image back first: without it, undo could not put the same
             // signature back.
             val page = doc.openPage(sel.pageIndex)
@@ -1153,12 +1287,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (packed == null) {
                 statusMessage = str(R.string.signature_remove_failed)
-                return@launch
+                return@launchEdit
             }
             perform(
                 StampOperation(sel.pageIndex, sel.id, packed.copyOfRange(2, packed.size),
                                packed[0], packed[1], sel.rect, adding = false),
-                doc)
+                doc, BusySpot(sel.pageIndex, sel.rect))
         }
     }
 
@@ -1177,7 +1311,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun markEditedAndRerender(pageIndex: Int) {
-        isDirty = true
+        dirty.markEdited()
         renderedWidths.remove(pageIndex)
         lastWindow?.let { (first, last, width) -> updateRenderWindow(first, last, width) }
     }
@@ -1187,25 +1321,39 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * so (desktop `AtomicFileWriter` analog, per #18): serialize into an
      * app-cache temp file first — a PDFium failure never touches the user's
      * file — verify the result reopens in the engine, then stream it to the
-     * destination with truncation and fsync. Only then is the document clean.
+     * destination with truncation and fsync. Only then is the document clean,
+     * and only if nothing changed while it ran (D3 of #145).
      */
     fun save() {
         val uri = currentUri ?: return
         writeTo(uri, isSaveAs = false)
     }
 
+    /** Save from the unsaved-changes prompt: the document closes once it is saved and still clean. */
+    fun saveAndClose() {
+        val uri = currentUri ?: return
+        val doc = document ?: return
+        writeTo(uri, isSaveAs = false) {
+            if (document === doc && !isDirty) closeDocument()
+        }
+    }
+
     /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT. */
     fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
 
-    private fun writeTo(uri: Uri, isSaveAs: Boolean) {
+    private fun writeTo(uri: Uri, isSaveAs: Boolean, afterSaved: (() -> Unit)? = null) {
         val doc = document ?: return
-        if (isSaving) return
+        if (isSaving || busy.locksDocument) return
         isSaving = true
+        // #145: Saving… in the strip; editing, Close and the file commands wait until it ends.
+        val token = busy.beginDocument(BusyLabel.SAVING, locks = true)
+        val mark = dirty.beginSave()
         viewModelScope.launch {
+            var saved = false
             try {
                 // Verified opened like the document: a protected document's copy is still
                 // protected (#132).
-                writeVerified(uri, { doc.save(it) }, { engine.openLike(doc, it).close() })
+                writeVerified(uri, token, { doc.save(it) }, { engine.openLike(doc, it).close() })
 
                 if (isSaveAs) {
                     currentUri = uri
@@ -1216,15 +1364,22 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         uiState = it.copy(displayName = name)
                     }
                 }
-                isDirty = false
+                // D3 (#145): a change that went in while the bytes were written keeps the
+                // document dirty, so a later close still asks.
+                dirty.markSaved(mark)
                 statusMessage = str(R.string.saved)
+                saved = true
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: SecurityException) {
                 statusMessage = str(R.string.save_no_permission)
             } catch (_: Exception) {
                 statusMessage = str(R.string.save_failed)
             } finally {
                 isSaving = false
+                token.end()
             }
+            if (saved) afterSaved?.invoke()
         }
     }
 
@@ -1233,10 +1388,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * file, so a PDFium failure never touches the user's file; [verify] the bytes by opening
      * them, which throws when they don't; only then stream them to [uri] with truncation and
      * fsync. Throws on any failure, for the caller to report. Bytes that did not verify
-     * never reach the destination.
+     * never reach the destination. [token] follows the steps: Saving…, Checking the saved
+     * file…, Saving… (#145).
      */
     private suspend fun writeVerified(
         uri: Uri,
+        token: BusyToken?,
         serialize: suspend (java.io.OutputStream) -> Unit,
         verify: suspend (ByteArray) -> Unit,
     ) {
@@ -1253,7 +1410,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
             val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
             check(bytes.isNotEmpty()) { "engine produced an empty document" }
+            token?.relabel(BusyLabel.VERIFYING_SAVE)
             verify(bytes)
+            token?.relabel(BusyLabel.SAVING)
 
             withContext(Dispatchers.IO) {
                 // "wt" guarantees truncation; plain "w" can leave a stale tail
@@ -1276,7 +1435,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Opens the owner-password dialog for a restricted document (ADR-004 decision 3). */
     fun startUnlock() {
-        if (!capabilities.isRestricted || currentUri == null) return
+        if (!capabilities.isRestricted || currentUri == null || busy.locksDocument) return
         passwordPrompt = null
         unlockPrompt = UnlockPrompt()
     }
@@ -1294,36 +1453,49 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun unlock(ownerPassword: String) {
         val prompt = unlockPrompt ?: return
         val uri = currentUri ?: return
-        if (prompt.isChecking) return
+        if (prompt.isChecking || busy.locksDocument) return
         unlockPrompt = prompt.copy(isChecking = true)
+        // Opening… (#145): the document is about to be replaced, so nothing else may change it.
+        val token = busy.beginDocument(BusyLabel.OPENING, locks = true)
         viewModelScope.launch {
-            val opened = try {
-                readAndOpen(uri, ownerPassword)
-            } catch (_: PdfPasswordException) {
-                null
+            try {
+                val opened = try {
+                    readAndOpen(uri, ownerPassword)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: PdfPasswordException) {
+                    null
+                } catch (_: Exception) {
+                    unlockPrompt = null
+                    statusMessage = str(R.string.open_failed)
+                    return@launch
+                }
+                if (unlockPrompt == null || currentUri != uri) {
+                    // Cancelled, or the document closed, while the password was tried.
+                    opened?.doc?.close()
+                    return@launch
+                }
+                if (opened == null || !opened.security.hasFullAccess) {
+                    opened?.doc?.close()
+                    unlockPrompt = UnlockPrompt(attempt = prompt.attempt + 1, wrongPassword = true)
+                    return@launch
+                }
+                unlockPrompt = null
+                show(opened, uri)
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 unlockPrompt = null
                 statusMessage = str(R.string.open_failed)
-                return@launch
+            } finally {
+                token.end()
             }
-            if (unlockPrompt == null || currentUri != uri) {
-                // Cancelled, or the document closed, while the password was tried.
-                opened?.doc?.close()
-                return@launch
-            }
-            if (opened == null || !opened.security.hasFullAccess) {
-                opened?.doc?.close()
-                unlockPrompt = UnlockPrompt(attempt = prompt.attempt + 1, wrongPassword = true)
-                return@launch
-            }
-            unlockPrompt = null
-            show(opened, uri)
         }
     }
 
     /** The Password command; its dialog follows from the document's security (ADR-004 decision 5). */
     fun startPasswordCommand() {
-        if (document == null || currentUri == null || isSaving) return
+        if (document == null || currentUri == null || isSaving || editingBlocked) return
         unlockPrompt = null
         passwordPrompt = PasswordCommandMode.of(capabilities)
     }
@@ -1344,10 +1516,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * so the open document, its credentials and its permissions match what is on disk.
      */
     private fun saveSecurity(newPassword: String?) {
+        // The reopen below replaces the document, so a change still going in must finish first
+        // (#145); the dialog stays up until then.
+        if (isSaving || editingBlocked) return
         passwordPrompt = null
         val doc = document ?: return
         val uri = currentUri ?: return
-        if (isSaving) return
         if (!capabilities.canChangeSecurity) {
             // The dialog never offers this without full access, and the core refuses it too.
             showRestricted()
@@ -1359,36 +1533,60 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             else -> R.string.security_password_set
         }
         isSaving = true
+        // #145: Saving…, then Opening… as the file is reopened; the document is locked throughout.
+        val token = busy.beginDocument(BusyLabel.SAVING, locks = true)
+        val mark = dirty.beginSave()
         viewModelScope.launch {
             try {
-                if (newPassword == null) {
-                    writeVerified(uri, { doc.saveWithoutSecurity(it) }, { engine.open(it).close() })
-                } else {
-                    writeVerified(
-                        uri,
-                        { doc.saveWithSecurity(it, newPassword, null, PdfPermissions.ALL) },
-                        { engine.open(it, newPassword).close() },
-                    )
+                val written = try {
+                    if (newPassword == null) {
+                        writeVerified(uri, token, { doc.saveWithoutSecurity(it) }, { engine.open(it).close() })
+                    } else {
+                        writeVerified(
+                            uri,
+                            token,
+                            { doc.saveWithSecurity(it, newPassword, null, PdfPermissions.ALL) },
+                            { engine.open(it, newPassword).close() },
+                        )
+                    }
+                    true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: SecurityException) {
+                    statusMessage = str(R.string.save_no_permission)
+                    false
+                } catch (_: Exception) {
+                    // PdfRestrictedException and a copy that didn't verify land here: the file
+                    // was not written.
+                    statusMessage = str(R.string.save_failed)
+                    false
+                } finally {
+                    isSaving = false
                 }
-                isDirty = false
-            } catch (_: SecurityException) {
-                statusMessage = str(R.string.save_no_permission)
-                return@launch
+                if (!written) return@launch
+                // D3 (#145): editing is locked while this runs, so nothing should have changed. If
+                // something did, reopening would throw it away: keep the document, still dirty.
+                if (!dirty.markSaved(mark)) {
+                    showNotice(str(done))
+                    return@launch
+                }
+                token.relabel(BusyLabel.OPENING)
+                if (openAndShow(uri, newPassword)) showNotice(str(done))
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
-                // PdfRestrictedException and a copy that didn't verify land here: the file
-                // was not written.
-                statusMessage = str(R.string.save_failed)
-                return@launch
+                statusMessage = str(R.string.open_failed)
             } finally {
-                isSaving = false
+                token.end()
             }
-            if (openAndShow(uri, newPassword)) showNotice(str(done))
         }
     }
 
     fun openRecent(entry: RecentEntry) = openUri(Uri.parse(entry.uri))
 
     fun closeDocument() {
+        // #145: never out of a document while its save or password change is still writing it.
+        if (busy.locksDocument) return
         closeCurrent()
         uiState = ViewerUiState.Home(recentsStore.load())
     }
@@ -1400,17 +1598,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         renderedWidths.clear()
         lastWindow = null
         currentUri = null
-        isDirty = false
+        dirty.reset()
         pendingSignature = null
         selectedStamp = null
         selectedTextBox = null
         // History belongs to the open document — never offer to undo an edit made
         // to a file that is no longer on screen.
         history.clear()
-        // So do the pages already warned about or checked (#139).
-        rewriteWarnings.reset()
-        pageRewriteQuestion?.complete(false)
-        pageRewriteQuestion = null
+        // So do the page checks and the pages already settled (#139, #145): every running
+        // check is stopped, and a question still up is answered Cancel.
+        pageChecks.reset()
+        // And its busy state (#145).
+        busy.reset()
+        currentPage = 0
         canUndo = false
         canRedo = false
         isPlacingText = false
@@ -1422,7 +1622,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         passwordPrompt = null
         val doc = document ?: return
         document = null
-        viewModelScope.launch { doc.close() }
+        viewModelScope.launch {
+            try {
+                doc.close()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Nothing to tell anyone: the document is already off screen.
+            }
+        }
     }
 
     /** A user-facing string in the app's current locale, for toasts and statuses. */
@@ -1466,8 +1674,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // running, the wait was as long as that render took.
         //
         // PdfEngine.teardownScope outlives every ViewModel, so the document is
-        // still closed exactly once and nothing is leaked.
+        // still closed exactly once and nothing is leaked. Its close stops any page
+        // check still running before it closes the document (#145).
         renderJob?.cancel()
+        pageChecks.reset()
         val doc = document
         document = null
         if (doc != null) {

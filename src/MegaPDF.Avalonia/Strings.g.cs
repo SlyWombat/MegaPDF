@@ -652,4 +652,43 @@ public static partial class Strings
 
     /// <summary>Tools</summary>
     public static string MenuTools => Get("MenuTools");
+
+    /// <summary>Opening…</summary>
+    public static string BusyOpening => Get("BusyOpening");
+
+    /// <summary>Saving…</summary>
+    public static string BusySaving => Get("BusySaving");
+
+    /// <summary>Checking the saved file…</summary>
+    public static string BusyCheckingSavedFile => Get("BusyCheckingSavedFile");
+
+    /// <summary>Checking this page…</summary>
+    public static string BusyCheckingPage => Get("BusyCheckingPage");
+
+    /// <summary>Applying…</summary>
+    public static string BusyApplying => Get("BusyApplying");
+
+    /// <summary>Searching…</summary>
+    public static string BusySearching => Get("BusySearching");
+
+    /// <summary>Making a smaller copy…</summary>
+    public static string BusyShrinking => Get("BusyShrinking");
+
+    /// <summary>Preparing to print…</summary>
+    public static string BusyPrinting => Get("BusyPrinting");
+
+    /// <summary>Restoring your edits…</summary>
+    public static string BusyRestoring => Get("BusyRestoring");
+
+    /// <summary>The change could not be made.</summary>
+    public static string ChangeFailed => Get("ChangeFailed");
+
+    /// <summary>Do you want to save the changes made to the document “{0}”?</summary>
+    public static string UnsavedChangesPrompt(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("UnsavedChangesPrompt"), arg0);
+
+    /// <summary>Your changes will be lost if you don't save them.</summary>
+    public static string UnsavedChangesDetail => Get("UnsavedChangesDetail");
+
+    /// <summary>Don't Save</summary>
+    public static string DontSave => Get("DontSave");
 }

@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using MegaPDF.Avalonia.ViewModels;
@@ -134,6 +135,64 @@ public partial class App : Application
                 }, TimeSpan.FromSeconds(1));
                 return true;
 
+            // The busy strip under the toolbar (#145), as it shows 0.5 s into a slow save's
+            // read-back. The operation is held for the life of the capture run.
+            case "busy":
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state busy needs a document to be busy with.");
+                    return false;
+                }
+                ScreenshotBusy = viewModel.Busy.Begin(Strings.BusyCheckingSavedFile);
+                return true;
+
+            // The page-level spinner (#145): a change waiting on its page's #139 check.
+            case "busy-page":
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state busy-page needs a document.");
+                    return false;
+                }
+                ScreenshotBusy = viewModel.Busy.Begin(Strings.BusyCheckingPage, scope: MegaPDF.Core.Services.BusyScope.Page, pageIndex: 0);
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (window?.GetVisualDescendants().OfType<Border>().FirstOrDefault(b => b.Name == "PageBusyBadge") is { } badge)
+                        Console.WriteLine($"busy-page badge: visible={badge.IsEffectivelyVisible} bounds={badge.Bounds} "
+                                          + $"in window at {badge.TranslatePoint(new Point(0, 0), window)} desired={badge.DesiredSize} "
+                                          + $"parent={badge.GetVisualParent()?.GetType().Name} parentBounds={(badge.GetVisualParent() as Visual)?.Bounds}");
+                    else
+                        Console.Error.WriteLine("::error::--screenshot-state busy-page: no page badge in the visual tree.");
+                }, TimeSpan.FromSeconds(1));
+                return true;
+
+            // The spinner under a line (#145): the text-edit check before the editor opens.
+            case "busy-line":
+                if (!viewModel.IsDocumentOpen || viewModel.LinesOn(0).FirstOrDefault() is not { } line)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state busy-line needs a document with a line of text.");
+                    return false;
+                }
+                ScreenshotBusy = viewModel.Busy.Begin(Strings.BusyCheckingPage, scope: MegaPDF.Core.Services.BusyScope.Page,
+                                                      pageIndex: 0, area: line.Bounds);
+                return true;
+
+            // The unsaved-changes question (#145, D1), after a tick on the demo agreement's
+            // first box. Rendered beside the window to <out>-dialog.png.
+            case "unsaved":
+                if (window is null || !viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state unsaved needs a window and a document.");
+                    return false;
+                }
+                viewModel.HandlePageClick(0, new PdfPoint(78.5, 201.5));
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (!viewModel.IsDirty)
+                        Console.Error.WriteLine("::error::--screenshot-state unsaved: the tick did not make the document dirty.");
+                    ScreenshotDialog = window.ShowUnsavedChangesForScreenshot();
+                }, TimeSpan.FromSeconds(1));
+                return true;
+
             // The mode banner — the largest area of brand accent in the app, and
             // the only place BrandAccentOn is used.
             case "mode":
@@ -172,6 +231,12 @@ public partial class App : Application
     /// a PNG, and exits. The delay is a wait for real work — page rasterisation is
     /// asynchronous with respect to layout — not a guess at a frame rate.
     /// </summary>
+    /// <summary>The busy operation a `busy` capture holds open (#145).</summary>
+    private static IDisposable? ScreenshotBusy;
+
+    /// <summary>A dialog a capture state opened beside the window, rendered to its own file.</summary>
+    private static Window? ScreenshotDialog;
+
     private static void CaptureAndExit(IClassicDesktopStyleApplicationLifetime desktop, string outPath, double seconds)
     {
         DispatcherTimer.RunOnce(() =>
@@ -186,6 +251,13 @@ public partial class App : Application
                 }
                 RenderWindow(window, outPath);
             }
+            if (ScreenshotDialog is { } dialog)
+                RenderWindow(dialog, Path.Combine(Path.GetDirectoryName(outPath) ?? ".",
+                                                  Path.GetFileNameWithoutExtension(outPath) + "-dialog.png"));
+            // A capture run quits whatever it changed; nobody is there to answer a question.
+            if (desktop.MainWindow is MainWindow closing)
+                closing.SkipCloseConfirmation();
+            ScreenshotBusy?.Dispose();
             desktop.Shutdown();
         }, TimeSpan.FromSeconds(seconds));
     }
@@ -455,9 +527,19 @@ public partial class App : Application
                 desktop.MainWindow.Height = height;
             }
 
-            // The engine holds a native document handle and a pinned byte[]; let
-            // it go on the way out rather than at finalisation.
-            desktop.ShutdownRequested += (_, _) => viewModel.Dispose();
+            // Cmd+Q with unsaved changes asks Save, Don't Save or Cancel first (D1, #145): it used
+            // to quit at once and delete the recovery journal with the edits. Otherwise the
+            // engine's native handles go on the way out rather than at finalisation.
+            desktop.ShutdownRequested += (_, e) =>
+            {
+                if (window.NeedsConfirmationBeforeClose)
+                {
+                    e.Cancel = true;
+                    _ = window.ConfirmThenQuitAsync(desktop);
+                    return;
+                }
+                viewModel.Dispose();
+            };
 
             // A PDF passed on the command line (the Windows file association, the
             // capture scripts, `open --args`) opens as soon as the window does. Finder

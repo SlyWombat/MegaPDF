@@ -495,6 +495,30 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_page_regeneration_verdict(IntPtr page, out megapdf_layout_verdict verdict);
 
+    /// <summary>MEGAPDF_ERR_CANCELLED: a page check stopped early (#145).</summary>
+    public const int ErrCancelled = -7;
+
+    /// <summary>MEGAPDF_ERR_NOT_JUDGED: no cached page verdict yet (#145).</summary>
+    public const int ErrNotJudged = -8;
+
+    /// <summary>The page check with a cancel flag; lets other calls run between its stages (#145).</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_regeneration_verdict_cancellable(IntPtr page, IntPtr cancel, out megapdf_layout_verdict verdict);
+
+    /// <summary>The cached page verdict: 1, 0, or MEGAPDF_ERR_NOT_JUDGED (#145).</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_regeneration_verdict_cached(IntPtr page, out megapdf_layout_verdict verdict);
+
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_cancel_new();
+
+    /// <summary>Safe from any thread, at any time before the flag is freed.</summary>
+    [DllImport(Dll)]
+    public static extern void megapdf_cancel_raise(IntPtr cancel);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_cancel_free(IntPtr cancel);
+
     [DllImport(Dll)]
     public static extern int megapdf_is_subset_font_name([MarshalAs(UnmanagedType.LPUTF8Str)] string baseName);
 

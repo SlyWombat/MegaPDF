@@ -92,7 +92,43 @@ internal sealed class PdfiumDocument : IPdfDocument
     private readonly IntPtr _core;
     private bool _disposed;
 
+    /// <summary>Set once megapdf_close has run, under <see cref="PdfiumLibrary.Lock"/>: its pages are gone with it.</summary>
+    internal bool IsClosed { get; private set; }
+
+    /// <summary>Cancelled when the document is disposed, so a page check in the background stops (#145).</summary>
+    private readonly CancellationTokenSource _closing = new();
+
+    /// <summary>Page checks that have begun a native call; Dispose waits for them (#145). Guarded by <see cref="PdfiumLibrary.Lock"/>.</summary>
+    private int _checksInFlight;
+
     internal PdfiumDocument(IntPtr core) => _core = core;
+
+    internal CancellationToken Closing => _closing.Token;
+
+    /// <summary>
+    /// Registers a background page check about to call the core. False when the document is
+    /// already disposed. Dispose raises every check's flag and waits for <see cref="EndCheck"/>
+    /// before megapdf_close, so a check never reaches the core with a freed page (#145).
+    /// </summary>
+    internal bool TryBeginCheck()
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            if (_disposed)
+                return false;
+            _checksInFlight++;
+            return true;
+        }
+    }
+
+    internal void EndCheck()
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            _checksInFlight--;
+            Monitor.PulseAll(PdfiumLibrary.Lock);
+        }
+    }
 
     /// <summary>The core handle, for opening a saved copy like this document (#132).</summary>
     internal IntPtr Core
@@ -115,13 +151,15 @@ internal sealed class PdfiumDocument : IPdfDocument
 
     public IPdfPage GetPage(int pageIndex)
     {
-        ThrowIfDisposed();
         lock (PdfiumLibrary.Lock)
         {
+            // Inside the lock: Dispose closes the document under it, so a page is never
+            // loaded from a document a background thread saw open a moment ago.
+            ThrowIfDisposed();
             var page = CoreNative.megapdf_load_page(_core, pageIndex);
             if (page == IntPtr.Zero)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page {pageIndex} could not be loaded.");
-            return new PdfiumPage(page, pageIndex);
+            return new PdfiumPage(this, page, pageIndex);
         }
     }
 
@@ -260,14 +298,24 @@ internal sealed class PdfiumDocument : IPdfDocument
 
     public void Dispose()
     {
-        if (_disposed)
-            return;
-        _disposed = true;
         lock (PdfiumLibrary.Lock)
         {
+            if (_disposed)
+                return;
+            _disposed = true;
+        }
+        // A page check in the background stops at its next stage; the core would also stop it,
+        // but only once the check has reached the core.
+        _closing.Cancel();
+        lock (PdfiumLibrary.Lock)
+        {
+            while (_checksInFlight > 0)
+                Monitor.Wait(PdfiumLibrary.Lock);
             // Tears down the form environment and any page still open, then the document.
             CoreNative.megapdf_close(_core);
+            IsClosed = true;
         }
+        _closing.Dispose();
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
@@ -277,10 +325,12 @@ internal sealed class PdfiumPage : IPdfPage
 {
     /// <summary>The core's page handle; the form-fill hooks were applied on load.</summary>
     private readonly IntPtr _core;
+    private readonly PdfiumDocument _owner;
     private bool _disposed;
 
-    internal PdfiumPage(IntPtr core, int index)
+    internal PdfiumPage(PdfiumDocument owner, IntPtr core, int index)
     {
+        _owner = owner;
         _core = core;
         Index = index;
         Width = CoreNative.megapdf_page_width(core);
@@ -712,6 +762,44 @@ internal sealed class PdfiumPage : IPdfPage
         return ToVerdict(verdict);
     }
 
+    public LayoutVerdict GetPageRegenerationVerdict(CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!_owner.TryBeginCheck())
+            throw new OperationCanceledException("The document was closed.");
+        var cancel = CoreNative.megapdf_cancel_new();
+        try
+        {
+            if (cancel == IntPtr.Zero)
+                throw new OutOfMemoryException();
+            int status;
+            CoreNative.megapdf_layout_verdict verdict;
+            // Disposed before the flag is freed: a registration's Dispose waits for a callback
+            // already running, so the flag is never raised after it is gone.
+            using (cancellationToken.Register(static state => CoreNative.megapdf_cancel_raise((IntPtr)state!), cancel))
+            using (_owner.Closing.Register(static state => CoreNative.megapdf_cancel_raise((IntPtr)state!), cancel))
+                status = CoreNative.megapdf_page_regeneration_verdict_cancellable(_core, cancel, out verdict);
+            if (status == CoreNative.ErrCancelled)
+                throw new OperationCanceledException(cancellationToken.IsCancellationRequested ? cancellationToken : CancellationToken.None);
+            if (status < 0)
+                throw new InvalidOperationException("The page could not be judged.");
+            return ToVerdict(verdict);
+        }
+        finally
+        {
+            CoreNative.megapdf_cancel_free(cancel);
+            _owner.EndCheck();
+        }
+    }
+
+    public LayoutVerdict? GetCachedPageRegenerationVerdict()
+    {
+        ThrowIfDisposed();
+        var status = CoreNative.megapdf_page_regeneration_verdict_cached(_core, out var verdict);
+        return status is 0 or 1 ? ToVerdict(verdict) : null;
+    }
+
     private static LayoutVerdict ToVerdict(CoreNative.megapdf_layout_verdict v) =>
         new(v.editable != 0, (LayoutCause)v.cause, (LayoutArea)v.where, v.changed_pixels, v.total_pixels, v.max_shift_pt);
 
@@ -977,6 +1065,10 @@ internal sealed class PdfiumPage : IPdfPage
         _disposed = true;
         lock (PdfiumLibrary.Lock)
         {
+            // A page still open when its document closed went with it: megapdf_close freed the
+            // handle, and closing it again would be a use after free (#145).
+            if (_owner.IsClosed)
+                return;
             // FORM_OnBeforeClosePage + FPDF_ClosePage, in the core.
             CoreNative.megapdf_close_page(_core);
         }
