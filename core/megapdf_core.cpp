@@ -6,6 +6,7 @@
 // three bindings.
 
 #include "megapdf_core.h"
+#include "megapdf_core_testing.h"
 
 #include <algorithm>
 #include <atomic>
@@ -106,6 +107,10 @@ std::condition_variable_any& ChecksDone() {
     static std::condition_variable_any done;
     return done;
 }
+
+// megapdf_testing_set_page_check_hook(): the core tests park a page check at a stage (#145).
+std::atomic<megapdf_page_check_stage_hook> g_page_check_hook{nullptr};
+std::atomic<void*> g_page_check_hook_context{nullptr};
 
 thread_local unsigned int g_last_error = 0;
 thread_local std::string g_last_message;
@@ -1835,10 +1840,12 @@ MEGAPDF_API int megapdf_page_regeneration_verdict_cancellable(const megapdf_page
     // in tens of milliseconds, and a hand-over costs a scheduler tick on some systems. A
     // raised flag or a closing document stops the run at any stage.
     auto stage_started = std::chrono::steady_clock::now();
+    const megapdf_page_check_stage_hook hook = g_page_check_hook.load();
     const std::function<bool()> between = [&]() {
-        if (std::chrono::steady_clock::now() - stage_started >= std::chrono::milliseconds(20)) {
+        if (hook != nullptr || std::chrono::steady_clock::now() - stage_started >= std::chrono::milliseconds(20)) {
             lock.unlock();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (hook != nullptr) hook(g_page_check_hook_context.load());   // core tests only
+            else std::this_thread::sleep_for(std::chrono::milliseconds(1));
             lock.lock();
             stage_started = std::chrono::steady_clock::now();
         }
@@ -1864,6 +1871,11 @@ MEGAPDF_API int megapdf_page_regeneration_verdict_cached(const megapdf_page* p, 
     if (cached == p->owner->rewrite_keeps_page.end()) return MEGAPDF_ERR_NOT_JUDGED;
     *out = cached->second;
     return out->editable ? 1 : 0;
+}
+
+MEGAPDF_API void megapdf_testing_set_page_check_hook(megapdf_page_check_stage_hook hook, void* context) {
+    g_page_check_hook_context.store(context);
+    g_page_check_hook.store(hook);
 }
 
 MEGAPDF_API megapdf_cancel* megapdf_cancel_new(void) {

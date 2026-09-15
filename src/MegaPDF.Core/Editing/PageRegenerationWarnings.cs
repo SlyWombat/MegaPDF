@@ -39,6 +39,35 @@ public sealed class PageRegenerationWarnings
     private readonly Dictionary<int, RunningCheck> _running = [];
     private readonly object _gate = new();
 
+    /// <summary>Runs one page's check: the core's dry run, unless a test stands in for it.</summary>
+    private readonly Func<IPdfDocument, int, CancellationToken, LayoutVerdict> _judge;
+
+    /// <summary>Completes when a change's budget has run out: a real delay, unless a test stands in for it.</summary>
+    private readonly Func<TimeSpan, Task> _waitBudget;
+
+    public PageRegenerationWarnings()
+        : this(judge: null, waitBudget: null)
+    {
+    }
+
+    /// <summary>
+    /// For tests (#145): <paramref name="judge"/> replaces the core's dry run and
+    /// <paramref name="waitBudget"/> the budget's timer, so which of the two finishes first is
+    /// decided by the test, not by how fast the machine runs.
+    /// </summary>
+    internal PageRegenerationWarnings(Func<IPdfDocument, int, CancellationToken, LayoutVerdict>? judge,
+                                      Func<TimeSpan, Task>? waitBudget)
+    {
+        _judge = judge ?? JudgeWithCore;
+        _waitBudget = waitBudget ?? (budget => Task.Delay(budget));
+    }
+
+    private static LayoutVerdict JudgeWithCore(IPdfDocument document, int pageIndex, CancellationToken cancellationToken)
+    {
+        using var page = document.GetPage(pageIndex);
+        return page.GetPageRegenerationVerdict(cancellationToken);
+    }
+
     /// <summary>Bumped by <see cref="Reset"/>, so a check for the previous document settles nothing in the next.</summary>
     private int _generation;
 
@@ -109,7 +138,9 @@ public sealed class PageRegenerationWarnings
             return PageCheckAnswer.KeepsLook;
 
         var check = Start(document, pageIndex);
-        if (await Task.WhenAny(check, Task.Delay(budget)).ConfigureAwait(false) != check)
+        // A check that has answered by the time the budget runs out wins: WhenAny prefers the
+        // first task in its list when both are done.
+        if (await Task.WhenAny(check, _waitBudget(budget)).ConfigureAwait(false) != check)
         {
             Cancel(pageIndex);
             // The change regenerates the page now: a warning about it afterwards would be too late.
@@ -197,8 +228,7 @@ public sealed class PageRegenerationWarnings
     {
         try
         {
-            using var page = document.GetPage(pageIndex);
-            var verdict = page.GetPageRegenerationVerdict(cancellationToken);
+            var verdict = _judge(document, pageIndex, cancellationToken);
             if (verdict.Editable)
             {
                 lock (_gate)

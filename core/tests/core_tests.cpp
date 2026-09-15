@@ -16,6 +16,9 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <mutex>
 #include <thread>
 #include <cmath>
 #include <cstdio>
@@ -31,6 +34,7 @@
 #include <tuple>
 
 #include "megapdf_core.h"
+#include "megapdf_core_testing.h"
 
 // How many MegaPDF patches the linked PDFium carries (core/CMakeLists.txt reads VERSION).
 #ifndef MEGAPDF_PDFIUM_PATCHES
@@ -3331,85 +3335,147 @@ void test_page_check_cancel_and_concurrency() {
         megapdf_cancel_free(late);
     }
 
-    // Raised while it runs, from another thread: it stops at a stage and caches nothing.
+    // From here the check is parked at a stage by megapdf_testing_set_page_check_hook(), so what
+    // happens "while it runs" is decided by the test, not raced against the machine (#145). A
+    // fast macOS runner judged the heavy page in stages under the 20 ms hand-over threshold, and
+    // the timing version of these checks failed there.
+    struct Park {
+        std::mutex m;
+        std::condition_variable cv;
+        int calls = 0;
+        bool parked = false;
+        bool go = false;
+        std::function<void()> on_first;   // runs on the check's thread, lock let go, before parking
+        bool park = true;
+    };
+    auto hook = [](void* context) {
+        auto* park = static_cast<Park*>(context);
+        std::unique_lock<std::mutex> lock(park->m);
+        if (park->calls++ > 0) return;
+        if (park->on_first) {
+            lock.unlock();
+            park->on_first();
+            lock.lock();
+        }
+        if (!park->park) return;
+        park->parked = true;
+        park->cv.notify_all();
+        park->cv.wait(lock, [park] { return park->go; });
+    };
+    auto wait_parked = [](Park& park) {
+        std::unique_lock<std::mutex> lock(park.m);
+        return park.cv.wait_for(lock, std::chrono::seconds(120), [&park] { return park.parked; });
+    };
+    auto release = [](Park& park) {
+        std::lock_guard<std::mutex> lock(park.m);
+        park.go = true;
+        park.cv.notify_all();
+    };
+    const auto light = one_page_pdf("BT /F1 18 Tf 72 700 Td (Parked page) Tj ET 0 0 1 rg 72 500 200 40 re f", helvetica);
+
+    // Raised while it runs: it stops at the stage and caches nothing.
     {
-        OpenDoc d(bytes);
+        OpenDoc d(light);
         Page p(d.doc, 0);
         megapdf_cancel* cancel = megapdf_cancel_new();
-        std::atomic<int> result{999};
-        const auto started = clock::now();
-        std::thread check_thread([&] {
-            megapdf_layout_verdict v{};
-            result = megapdf_page_regeneration_verdict_cancellable(p.page, cancel, &v);
-        });
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        megapdf_cancel_raise(cancel);
-        check_thread.join();
+        Park park;
+        park.park = false;
+        park.on_first = [cancel] { megapdf_cancel_raise(cancel); };
+        megapdf_testing_set_page_check_hook(hook, &park);
+        megapdf_layout_verdict v{};
+        const int result = megapdf_page_regeneration_verdict_cancellable(p.page, cancel, &v);
+        megapdf_testing_set_page_check_hook(nullptr, nullptr);
         megapdf_layout_verdict cached{};
-        check(result == MEGAPDF_ERR_CANCELLED && megapdf_page_regeneration_verdict_cached(p.page, &cached) == MEGAPDF_ERR_NOT_JUDGED,
-              "page check: a flag raised mid-run stops it and caches nothing", std::to_string(result.load()) + " after " + ms_since(started));
+        check(park.calls > 0 && result == MEGAPDF_ERR_CANCELLED &&
+                  megapdf_page_regeneration_verdict_cached(p.page, &cached) == MEGAPDF_ERR_NOT_JUDGED,
+              "page check: a flag raised mid-run stops it and caches nothing", std::to_string(result));
         megapdf_cancel_free(cancel);
     }
 
-    // Other calls run between its stages: a render-sized stream of calls on another document
-    // keeps completing while the check runs, rather than all waiting for its end.
+    // Other calls run between its stages: parked with the lock let go, a call on another document
+    // completes. With the lock held for the whole run it could not return until the check did.
     {
-        OpenDoc d(bytes);
+        OpenDoc d(light);
         OpenDoc other(one_page_pdf("BT /F1 12 Tf 72 700 Td (Other) Tj ET", helvetica));
         Page p(d.doc, 0);
         Page q(other.doc, 0);
-        std::atomic<bool> done{false};
+        Park park;
+        megapdf_testing_set_page_check_hook(hook, &park);
+        std::atomic<int> result{999};
         std::thread check_thread([&] {
             megapdf_layout_verdict v{};
-            megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &v);
-            done = true;
+            result = megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &v);
         });
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        int interleaved = 0;
-        const auto started = clock::now();
-        while (!done) {
+        const bool parked = wait_parked(park);
+        std::atomic<bool> call_done{false};
+        std::thread call_thread([&] {
             megapdf_page_width(q.page);
-            if (!done) interleaved++;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            call_done = true;
+        });
+        bool completed = false;
+        for (int i = 0; i < 1200 && parked && !(completed = call_done.load()); i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
+        {
+            std::lock_guard<std::mutex> lock(park.m);
+            check(!park.go, "page check: it stays parked until released");
+        }
+        release(park);
+        call_thread.join();
         check_thread.join();
-        std::printf("page check: %d calls on another document completed while it ran (%s)\n", interleaved, ms_since(started).c_str());
-        check(interleaved >= 2, "page check: other calls complete between its stages",
-              std::to_string(interleaved) + " calls in " + ms_since(started));
+        megapdf_testing_set_page_check_hook(nullptr, nullptr);
+        check(parked && completed, "page check: another call completes while it is parked between stages");
+        check(result == 1, "page check: released, it finishes with its answer", std::to_string(result.load()));
     }
 
-    // Its document closed while it runs: close waits for the check to stop, and nothing is used after it is freed.
+    // Its document closed while it runs: close waits for the parked check, which then stops,
+    // and nothing is used after it is freed (ASan on Linux).
     {
-        std::vector<unsigned char> copy = bytes;
+        std::vector<unsigned char> copy = light;
         megapdf_document* doc = megapdf_open(copy.data(), copy.size(), nullptr);
         megapdf_page* page = megapdf_load_page(doc, 0);
+        Park park;
+        megapdf_testing_set_page_check_hook(hook, &park);
         std::atomic<int> result{999};
         std::thread check_thread([&] {
             megapdf_layout_verdict v{};
             result = megapdf_page_regeneration_verdict_cancellable(page, nullptr, &v);
         });
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
-        megapdf_close(doc);   // closes the page handle too
+        const bool parked = wait_parked(park);
+        std::atomic<bool> closed{false};
+        std::thread close_thread([&] {
+            megapdf_close(doc);   // closes the page handle too
+            closed = true;
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        check(parked && !closed, "page check: closing its document waits while the check is parked");
+        release(park);
+        close_thread.join();
         check_thread.join();
-        check(result == MEGAPDF_ERR_CANCELLED || result == 0 || result == 1, "page check: closing its document mid-run stops it cleanly",
+        megapdf_testing_set_page_check_hook(nullptr, nullptr);
+        check(closed && (result == MEGAPDF_ERR_CANCELLED || result == 1), "page check: closing its document mid-run stops it cleanly",
               std::to_string(result.load()));
     }
 
     // The page changes while it runs: the answer describes the page as it was and is not kept.
     {
-        OpenDoc d(bytes);
+        OpenDoc d(light);
         Page p(d.doc, 0);
         Page same(d.doc, 0);
-        std::thread check_thread([&] {
-            megapdf_layout_verdict v{};
-            megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &v);
-        });
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        const megapdf_rect box{500, 20, 560, 60};
-        int index = -1;
-        check(megapdf_add_whiteout(same.page, &box, &index) == MEGAPDF_OK, "page check: an edit applies while the check runs");
-        check_thread.join();
+        Park park;
+        park.park = false;
+        int edit = MEGAPDF_ERR_ARGUMENT;
+        park.on_first = [&] {
+            const megapdf_rect box{500, 20, 560, 60};
+            int index = -1;
+            edit = megapdf_add_whiteout(same.page, &box, &index);
+        };
+        megapdf_testing_set_page_check_hook(hook, &park);
+        megapdf_layout_verdict v{};
+        const int result = megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &v);
+        megapdf_testing_set_page_check_hook(nullptr, nullptr);
         megapdf_layout_verdict cached{};
+        check(edit == MEGAPDF_OK && (result == 1 || result == 0), "page check: an edit applies while the check runs, and the check still answers");
         check(megapdf_page_regeneration_verdict_cached(p.page, &cached) == MEGAPDF_ERR_NOT_JUDGED,
               "page check: a page edited while it was judged keeps no answer");
     }

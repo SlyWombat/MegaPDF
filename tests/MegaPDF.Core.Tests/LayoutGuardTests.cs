@@ -151,16 +151,58 @@ public sealed class LayoutGuardTests : IDisposable
     [Fact]
     public async Task ACheckOverItsBudget_IsCancelled_AndTheChangeAppliesWithoutAWarning()
     {
-        using var heavy = Open(Pdf(HeavyContent()), "budget-heavy.pdf");
-        var warnings = new PageRegenerationWarnings();
-        Assert.Equal(PageCheckAnswer.OverBudget, await warnings.AskAsync(heavy, 0, TimeSpan.FromMilliseconds(1)));
-        Assert.True(warnings.IsSettled(0));
-        Assert.False(warnings.IsChecking(0));
+        // Deterministic (#145): the check never answers until it is cancelled, and the budget has
+        // already run out, so nothing depends on how fast the machine judges a page. A 1 ms real
+        // budget raced a real check on a busy macOS runner and lost.
+        using var doc = Open(Pdf(ClippedByText), "budget.pdf");
+        var cancelledCheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var warnings = new PageRegenerationWarnings(
+            judge: (_, _, token) =>
+            {
+                token.WaitHandle.WaitOne();
+                cancelledCheck.SetResult();
+                throw new OperationCanceledException(token);
+            },
+            waitBudget: _ => Task.CompletedTask);
 
-        // Nothing is ever refused: the whiteout applies.
-        new UndoStack().Do(new AddWhiteoutOperation(heavy, 0, new PdfRect(500, 20, 40, 30)));
-        using var page = heavy.GetPage(0);
+        Assert.Equal(PageCheckAnswer.OverBudget, await warnings.AskAsync(doc, 0, PageRegenerationWarnings.Budget));
+        await cancelledCheck.Task.WaitAsync(TimeSpan.FromSeconds(30)); // the check was told to stop
+        Assert.True(warnings.IsSettled(0));  // no warning comes later for a page already changed
+        Assert.False(warnings.IsChecking(0));
+        Assert.Equal(PageCheckAnswer.KeepsLook, await warnings.AskAsync(doc, 0, PageRegenerationWarnings.Budget));
+
+        // Nothing is ever refused: the whiteout applies, even on a page that would change.
+        new UndoStack().Do(new AddWhiteoutOperation(doc, 0, new PdfRect(500, 20, 40, 30)));
+        using var page = doc.GetPage(0);
         Assert.Single(page.GetWhiteouts());
+    }
+
+    [Fact]
+    public async Task ACheckThatAnswersWithinItsBudget_IsTheAnswer()
+    {
+        using var doc = Open(Pdf(ClippedByText), "within-budget.pdf");
+        var never = new TaskCompletionSource();
+        var judged = new LayoutVerdict(false, LayoutCause.Render, LayoutArea.NonText, 100, 1000, 0);
+        var warnings = new PageRegenerationWarnings(judge: (_, _, _) => judged, waitBudget: _ => never.Task);
+        Assert.Equal(PageCheckAnswer.WouldChange, await warnings.AskAsync(doc, 0, PageRegenerationWarnings.Budget));
+        Assert.False(warnings.IsSettled(0));
+
+        // Both done by the time the change asks: the answer wins over the spent budget.
+        var both = new PageRegenerationWarnings(judge: (_, _, _) => judged, waitBudget: _ => Task.CompletedTask);
+        both.Prepare(doc, 0);
+        await WaitUntil(() => !both.IsChecking(0));
+        Assert.Equal(PageCheckAnswer.WouldChange, await both.AskAsync(doc, 0, PageRegenerationWarnings.Budget));
+    }
+
+    private static async Task WaitUntil(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+                Assert.Fail("timed out");
+            await Task.Delay(5);
+        }
     }
 
     [Fact]
