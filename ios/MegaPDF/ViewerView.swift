@@ -440,13 +440,9 @@ struct ToolbarLabelStyle: LabelStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         if showsTitle {
-            HStack(spacing: 6) {
-                configuration.icon
-                configuration.title
-            }
+            Label(configuration).labelStyle(.titleAndIcon)
         } else {
-            configuration.icon
-                .accessibilityLabel(configuration.title)
+            Label(configuration).labelStyle(.iconOnly)
         }
     }
 }
