@@ -457,7 +457,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
         // changes parts the person never touched. Never refused; the first such change on a
         // page asks the core first, off the UI thread, and warns when the page would change.
-        if (_document is { } document && PageRegenerationWarnings.RegeneratesUnjudged(operation)
+        // With nobody to ask (no window: the self-test, --render-check), the answer can only be
+        // Continue, so the edit applies at once and on this thread, as it always did.
+        if (_document is { } document && PageRewriteConfirmationRequested is not null
+            && PageRegenerationWarnings.RegeneratesUnjudged(operation)
             && !_pageWarnings.IsSettled(operation.PageIndex))
         {
             ApplyAfterPageCheck(document, operation, doneMessage, cancelled);
