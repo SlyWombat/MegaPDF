@@ -70,31 +70,16 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material.icons.materialIcon
-import androidx.compose.material.icons.materialPath
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-
-/**
- * The undo arrow. `material-icons-core` does not carry it and one glyph is not
- * worth pulling in `material-icons-extended` (SDD §4.5 keeps the footprint
- * small), so it is drawn here from the standard 24dp Material path.
- */
-private val UndoIcon: ImageVector = materialIcon(name = "Filled.Undo") {
-    materialPath {
-        moveTo(12.5f, 8.0f)
-        curveToRelative(-2.65f, 0.0f, -5.05f, 0.99f, -6.9f, 2.6f)
-        lineTo(2.0f, 7.0f)
-        verticalLineToRelative(9.0f)
-        horizontalLineToRelative(9.0f)
-        lineToRelative(-3.62f, -3.62f)
-        curveToRelative(1.39f, -1.16f, 3.16f, -1.88f, 5.12f, -1.88f)
-        curveToRelative(3.54f, 0.0f, 6.55f, 2.31f, 7.6f, 5.5f)
-        lineToRelative(2.37f, -0.78f)
-        curveTo(21.08f, 11.03f, 17.15f, 8.0f, 12.5f, 8.0f)
-        close()
-    }
-}
 
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
@@ -175,6 +160,8 @@ fun ViewerScreen(
     // Hoisted so search navigation can reach a hit that is off to the side when zoomed.
     val hScroll = rememberScrollState()
     var menuOpen by remember { mutableStateOf(false) }
+    var aboutOpen by remember { mutableStateOf(false) }
+    var noticesOpen by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var signDialogOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
@@ -288,9 +275,14 @@ fun ViewerScreen(
     if (notice != null) {
         // A one-line notice over the page that goes away on its own — for things the
         // user should know but need not act on, like a substituted font (#114).
+        // Lifted clear of the bottom toolbar (#144): the bar's 80dp, the navigation bar
+        // under it, and a little air.
+        val density = LocalDensity.current
+        val navigationBar = androidx.compose.foundation.layout.WindowInsets.navigationBars.getBottom(density)
+        val lift = with(density) { 96.dp.roundToPx() } + navigationBar
         androidx.compose.ui.window.Popup(
             alignment = androidx.compose.ui.Alignment.BottomCenter,
-            offset = androidx.compose.ui.unit.IntOffset(0, -160),
+            offset = androidx.compose.ui.unit.IntOffset(0, -lift),
         ) {
             androidx.compose.material3.Surface(
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
@@ -361,6 +353,13 @@ fun ViewerScreen(
         )
     }
 
+    if (aboutOpen) {
+        AboutDialog(
+            onDismiss = { aboutOpen = false },
+            onShowNotices = { aboutOpen = false; noticesOpen = true },
+        )
+    }
+
     if (confirmDiscard) {
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
@@ -397,20 +396,10 @@ fun ViewerScreen(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close_document))
                         }
                     },
+                    // #144: the top bar keeps the document's own commands — Save, and the
+                    // overflow for everything done to the file as a whole. The editing tools
+                    // live in the bottom bar, so the title keeps its width.
                     actions = {
-                        IconButton(onClick = onUndo, enabled = canUndo) {
-                            Icon(UndoIcon, contentDescription = stringResource(R.string.undo))
-                        }
-                        IconButton(onClick = { searchOpen = true }) {
-                            Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.search))
-                        }
-                        // A restricted document disables what its owner did not allow (#131).
-                        TextButton(onClick = { signDialogOpen = true }, enabled = capabilities.canSign) {
-                            Text(stringResource(R.string.sign))
-                        }
-                        TextButton(onClick = onStartTextPlacement, enabled = capabilities.canAddText) {
-                            Text(stringResource(R.string.text))
-                        }
                         TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
                             Text(stringResource(if (isSaving) R.string.saving else R.string.save))
                         }
@@ -435,15 +424,54 @@ fun ViewerScreen(
                                     onClick = { menuOpen = false; onStartUnlock() },
                                 )
                             }
+                            HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.redo)) },
-                                enabled = canRedo,
-                                onClick = { menuOpen = false; onRedo() },
+                                text = { Text(stringResource(R.string.about_megapdf)) },
+                                onClick = { menuOpen = false; aboutOpen = true },
                             )
                         }
                     },
                 )
             }
+        },
+        // #144: the everyday tools, one row at the bottom where a thumb reaches them
+        // (Material 3 bottom app bar). Creating things on the left, history on the right.
+        bottomBar = {
+            BottomAppBar(
+                actions = {
+                    // A restricted document disables what its owner did not allow (#131).
+                    ToolbarAction(
+                        icon = ToolbarIcons.Sign,
+                        label = stringResource(R.string.sign),
+                        enabled = capabilities.canSign,
+                        onClick = { signDialogOpen = true },
+                    )
+                    ToolbarAction(
+                        icon = ToolbarIcons.AddText,
+                        label = stringResource(R.string.add_text),
+                        enabled = capabilities.canAddText,
+                        onClick = onStartTextPlacement,
+                    )
+                    ToolbarAction(
+                        icon = Icons.Filled.Search,
+                        label = stringResource(R.string.search),
+                        onClick = { if (searchOpen) closeSearch() else searchOpen = true },
+                    )
+                    Spacer(Modifier.weight(1f))
+                    ToolbarAction(
+                        icon = ToolbarIcons.Undo,
+                        label = stringResource(R.string.undo),
+                        enabled = canUndo,
+                        onClick = onUndo,
+                    )
+                    ToolbarAction(
+                        icon = ToolbarIcons.Redo,
+                        label = stringResource(R.string.redo),
+                        enabled = canRedo,
+                        onClick = onRedo,
+                    )
+                },
+            )
         },
     ) { padding ->
         BoxWithConstraints(
@@ -613,6 +641,35 @@ fun ViewerScreen(
                     }
                 }
             }
+        }
+    }
+
+    // A full-screen overlay with its own Scaffold, drawn over the viewer (as on Home).
+    if (noticesOpen) {
+        ThirdPartyNoticesScreen(onClose = { noticesOpen = false })
+    }
+}
+
+/**
+ * One bottom-bar tool (#144): an icon button whose label is its content description
+ * for TalkBack and, on a long press, a plain tooltip for everyone else — a phone's
+ * bar has no room for text under five icons.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolbarAction(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick, enabled = enabled) {
+            Icon(icon, contentDescription = label)
         }
     }
 }

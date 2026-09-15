@@ -47,7 +47,6 @@
     <!-- Viewer toolbar -->
     <string name="close_document">Fermer le document</string>
     <string name="sign">Signer</string>
-    <string name="text">Texte</string>
     <string name="page_n">Page %1$d</string>
 
     <!-- Search -->
