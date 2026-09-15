@@ -1,0 +1,31 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -1464,10 +1464,26 @@
+ // TJ sets the actual text, <####...> is used when specifying charcodes.
+ void CPDF_PageContentGenerator::ProcessText(fxcrt::ostringstream* buf,
+                                             CPDF_TextObject* pTextObj) {
+-  ProcessGraphics(buf, pTextObj);
++  // Stroked text is outlined in the space of the CTM it was drawn under: PDFium
++  // folds that CTM into the text matrix, and keeps its linear part apart for the
++  // stroke (CPDF_TextState::GetCTM(), stored as a, c, b, d). Written as a text
++  // matrix alone, the line width and dashes were applied in page space, so text
++  // stroked under a scaled CTM came back with an outline many times thicker.
++  // Write that CTM as "cm" and the text matrix relative to it.
++  CFX_Matrix matrix = pTextObj->GetTextMatrix();
++  CFX_Matrix stroke_ctm;
++  if (TextRenderingModeIsStrokeMode(pTextObj->GetTextRenderMode())) {
++    pdfium::span<const float, 4> ctm = pTextObj->text_state().GetCTM();
++    const CFX_Matrix candidate(ctm[0], ctm[2], ctm[1], ctm[3], 0, 0);
++    if (!candidate.IsIdentity() &&
++        candidate.a * candidate.d - candidate.b * candidate.c != 0) {
++      stroke_ctm = candidate;
++      matrix = matrix * stroke_ctm.GetInverse();
++    }
++  }
++  ProcessGraphics(buf, pTextObj, stroke_ctm);
+   *buf << "BT ";
+ 
+-  const CFX_Matrix& matrix = pTextObj->GetTextMatrix();
+   if (!matrix.IsIdentity()) {
+     WriteMatrix(*buf, matrix) << " Tm ";
+   }
