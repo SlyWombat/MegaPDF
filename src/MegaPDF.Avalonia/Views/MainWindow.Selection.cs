@@ -238,7 +238,9 @@ public partial class MainWindow
             {
                 if (string.IsNullOrWhiteSpace(text))
                     vm.DeleteSelection();
-                else
+                // Closed with nothing changed, the box is left alone rather than rewritten
+                // as itself, which marked a clean document dirty (#144).
+                else if (text != box.Text || vm.TextFont != face || Math.Abs(vm.TextSize - box.FontSize) > 0.01)
                     vm.RestyleTextBox(pageIndex, box, text, vm.TextFont, vm.TextSize);
             });
         if (_inlineEditor is not null)

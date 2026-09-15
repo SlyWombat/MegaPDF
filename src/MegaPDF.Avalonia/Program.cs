@@ -933,6 +933,15 @@ internal static class Program
             check($"{keys} zooms in (100% -> {vm.Zoom * 100:F0}%)", vm.Zoom > 1.001);
         }
 
+        // Cmd+S with nothing changed does nothing (#144). The window's key binding used to
+        // run Save regardless of whether it could, and rewrote the file while Save sat
+        // greyed out. This window has no file to write to, so a save would say so.
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.S, command, PhysicalKey.S, "s");
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.S, command, PhysicalKey.S, "s");
+        Pump();
+        check($"Cmd+S with nothing changed does not save (status: {vm.Status})",
+              !vm.IsDirty && vm.Status != Strings.NowhereToSave);
+
         // Accessibility (#144): what VoiceOver is handed for the pickers, the two mode
         // toggles and the page's scroll bars.
         check("each face in the font picker is named by its label, not the record",
