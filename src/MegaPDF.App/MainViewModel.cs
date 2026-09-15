@@ -98,6 +98,102 @@ public partial class MainViewModel(Window window) : ObservableObject
     private readonly RecentFiles _recentFiles = new();
     private readonly AppSettings _settings = new();
 
+    // --- Busy state (#145) ---
+
+    /// <summary>
+    /// The document's busy state: editing and file commands wait at once, the strip under the
+    /// toolbar (or a spinner on the page) shows after 0.5 s. Created with the window, on the UI thread.
+    /// </summary>
+    public BusyState Busy { get; } = new();
+
+    /// <summary>Nothing blocking is running.</summary>
+    public bool IsIdle => !Busy.IsBusy;
+
+    /// <summary>Counts edits, undos and redos: a save marks the document saved only if none ran meanwhile (D3, #145).</summary>
+    private int _editCount;
+
+    /// <summary>Called once by the window: commands and flags follow the busy state.</summary>
+    public void WatchBusyState() => Busy.PropertyChanged += (_, e) =>
+    {
+        if (e.PropertyName != nameof(BusyState.IsBusy))
+            return;
+        OnPropertyChanged(nameof(IsIdle));
+        OnPropertyChanged(nameof(IsEditingAllowed));
+        OnPropertyChanged(nameof(IsSigningAllowed));
+        OnPropertyChanged(nameof(IsTextBoxAllowed));
+        OnPropertyChanged(nameof(IsPrintAllowed));
+        OpenCommand.NotifyCanExecuteChanged();
+        SaveCommand.NotifyCanExecuteChanged();
+        SaveAsCommand.NotifyCanExecuteChanged();
+        SecurityCommand.NotifyCanExecuteChanged();
+        ShrinkForEmailCommand.NotifyCanExecuteChanged();
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+    };
+
+    private static string SaveStageLabel(VerifiedSave.SaveStage stage) =>
+        stage == VerifiedSave.SaveStage.Verifying ? Strings.BusyCheckingSavedFile : Strings.BusySaving;
+
+    /// <summary>
+    /// Starts the #139 check for a page in the background (#145): when it is first shown, when
+    /// Add text or Whiteout is armed on it, and when an added box or cover is selected on it, so
+    /// the answer is usually ready by the change.
+    /// </summary>
+    public void PreparePageCheck(int pageIndex)
+    {
+        if (_document is not { } document || pageIndex < 0 || pageIndex >= Pages.Count)
+            return;
+        if (!Capabilities.CanEditContent && !Capabilities.CanAddText)
+            return;
+        _pageWarnings.Prepare(document, pageIndex);
+    }
+
+    partial void OnCurrentPageChanged(int value) => PreparePageCheck(value - 1);
+
+    /// <summary>
+    /// Save, Don't save or Cancel when the open document has unsaved changes — before closing
+    /// and, since #145 (D5), before another document replaces it. True when the caller may go
+    /// on: nothing unsaved, saved, or Don't save. Waits for a save still running first.
+    /// </summary>
+    public async Task<bool> ConfirmSaveChangesAsync()
+    {
+        await Busy.WhenIdleAsync();
+        if (_document is null || !HasUnsavedChanges || window.Content?.XamlRoot is not { } xamlRoot)
+            return true;
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.SaveChangesTitle(OpenDocumentName),
+            Content = Strings.SaveChangesBody,
+            PrimaryButtonText = Strings.Save,
+            SecondaryButtonText = Strings.DontSave,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        switch (await dialog.ShowAsync())
+        {
+            case ContentDialogResult.Primary:
+                await SaveCommand.ExecuteAsync(null);
+                return !HasUnsavedChanges;
+            case ContentDialogResult.Secondary:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// The text-edit check before the line editor opens (#118): a dry run of the rewrite, about
+    /// three seconds on a heavy page. Off the UI thread, under a spinner on the line, while
+    /// clicks are ignored (#145). Null when every run of the line can be changed.
+    /// </summary>
+    public async Task<LayoutVerdict?> CheckLineAsync(int pageIndex, PdfTextLine line)
+    {
+        using (Busy.Begin(Strings.BusyCheckingPage, scope: BusyScope.Page, pageIndex: pageIndex, area: line.Bounds))
+            return await Task.Run(() => LineLayoutRefusal(pageIndex, line));
+    }
+
     // --- Settings (SDD §2.2 flyout; deliberately tiny) ---
 
     public CheckMarkStyle MarkStyle
@@ -216,16 +312,18 @@ public partial class MainViewModel(Window window) : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(ShrinkForEmailCommand))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
+    // Each also waits while blocking work runs (#145): a save, an open, a change on its way.
+
     /// <summary>Editing the document's own text and whiteout (modify).</summary>
-    public bool IsEditingAllowed => IsDocumentOpen && Capabilities.CanEditContent;
+    public bool IsEditingAllowed => IsDocumentOpen && Capabilities.CanEditContent && !Busy.IsBusy;
 
     /// <summary>Signatures and check marks (fill forms or annotate).</summary>
-    public bool IsSigningAllowed => IsDocumentOpen && Capabilities.CanSign;
+    public bool IsSigningAllowed => IsDocumentOpen && Capabilities.CanSign && !Busy.IsBusy;
 
     /// <summary>Adding and changing text boxes (modify, fill forms or annotate).</summary>
-    public bool IsTextBoxAllowed => IsDocumentOpen && Capabilities.CanAddText;
+    public bool IsTextBoxAllowed => IsDocumentOpen && Capabilities.CanAddText && !Busy.IsBusy;
 
-    public bool IsPrintAllowed => IsDocumentOpen && Capabilities.CanPrint;
+    public bool IsPrintAllowed => IsDocumentOpen && Capabilities.CanPrint && !Busy.IsBusy;
 
     /// <summary>The owner restricted this document; the notice offers the owner password.</summary>
     [ObservableProperty]
@@ -272,7 +370,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     public Visibility EmptyStateVisibility => IsDocumentOpen ? Visibility.Collapsed : Visibility.Visible;
     public Visibility DocumentVisibility => IsDocumentOpen ? Visibility.Visible : Visibility.Collapsed;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(IsIdle))]
     private async Task OpenAsync()
     {
         var picker = new FileOpenPicker();
@@ -292,6 +390,12 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// </param>
     public async Task OpenDocumentAsync(string path, string? initialPassword = null)
     {
+        if (Busy.IsBusy)
+            return;
+        // D5 (#145): another document replaces this one, so its unsaved changes are asked about first.
+        if (!await ConfirmSaveChangesAsync())
+            return;
+
         SaveViewState(); // remember where we left the previous document
         var generation = ++_openGeneration;
 
@@ -302,7 +406,8 @@ public partial class MainViewModel(Window window) : ObservableObject
             try
             {
                 var attempt = password;
-                doc = await Task.Run(() => Engine.Open(path, attempt));
+                using (Busy.Begin(Strings.BusyOpening))
+                    doc = await Task.Run(() => Engine.Open(path, attempt));
                 break;
             }
             catch (PdfLoadException ex) when (ex.IsPasswordError)
@@ -369,21 +474,26 @@ public partial class MainViewModel(Window window) : ObservableObject
         CurrentPage = 1;
 
         // Fast size-only pass: geometry for every page, no rendering (SDD §4.2).
-        var sizes = await Task.Run(() =>
+        List<(double W, double H)> sizes;
+        using (Busy.Begin(Strings.BusyOpening))
         {
-            var list = new List<(double W, double H)>(doc.PageCount);
-            for (var i = 0; i < doc.PageCount; i++)
+            sizes = await Task.Run(() =>
             {
-                using var page = doc.GetPage(i);
-                list.Add((page.Width, page.Height));
-            }
-            return list;
-        });
+                var list = new List<(double W, double H)>(doc.PageCount);
+                for (var i = 0; i < doc.PageCount; i++)
+                {
+                    using var page = doc.GetPage(i);
+                    list.Add((page.Width, page.Height));
+                }
+                return list;
+            });
+        }
         if (generation != _openGeneration)
             return;
 
         for (var i = 0; i < sizes.Count; i++)
             Pages.Add(Placeholder(i, sizes[i].W, sizes[i].H));
+        PreparePageCheck(0); // the first page is shown: its #139 check starts now (#145)
 
         await UpdateViewportAsync(0, Math.Min(2, PageCount - 1));
 
@@ -731,19 +841,36 @@ public partial class MainViewModel(Window window) : ObservableObject
 
         // Page by page off the UI thread, abandoning as soon as a newer search
         // (or document) supersedes this one — same idea as viewport rendering.
-        var found = await Task.Run(() =>
+        // "Searching…" shows on a long document; typing on is never blocked (#145).
+        List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>? found;
+        try
         {
-            var list = new List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>();
-            for (var i = 0; i < doc.PageCount; i++)
+            using (Busy.Begin(Strings.BusySearching, blocksEditing: false))
             {
-                if (generation != _searchGeneration || openGeneration != _openGeneration)
-                    return null;
-                using var page = doc.GetPage(i);
-                foreach (var match in page.FindText(term))
-                    list.Add((i, match.Rects));
+                found = await Task.Run(() =>
+                {
+                    var list = new List<(int PageIndex, IReadOnlyList<PdfRect> Rects)>();
+                    for (var i = 0; i < doc.PageCount; i++)
+                    {
+                        if (generation != _searchGeneration || openGeneration != _openGeneration)
+                            return null;
+                        using var page = doc.GetPage(i);
+                        foreach (var match in page.FindText(term))
+                            list.Add((i, match.Rects));
+                    }
+                    return list;
+                });
             }
-            return list;
-        });
+        }
+        catch (Exception ex)
+        {
+            // A document closed under the search, or a page the engine could not read: no
+            // matches rather than an unhandled exception from the find bar's timer (#145).
+            System.Diagnostics.Debug.WriteLine($"search failed: {ex}");
+            if (generation == _searchGeneration)
+                ResetSearchState();
+            return;
+        }
 
         if (found is null || generation != _searchGeneration || openGeneration != _openGeneration)
             return;
@@ -924,6 +1051,8 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public void StartWhiteoutMode()
     {
+        if (Busy.IsBusy)
+            return;
         if (!Capabilities.CanEditContent)
         {
             IsRestrictedNoticeOpen = true; // #131: the owner does not allow changes
@@ -931,10 +1060,13 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         CancelPlacementModes();
         IsWhiteoutMode = true;
+        PreparePageCheck(CurrentPage - 1); // a tool armed: its page's #139 check starts now (#145)
     }
 
     public void StartTextBoxMode()
     {
+        if (Busy.IsBusy)
+            return;
         if (!Capabilities.CanAddText)
         {
             IsRestrictedNoticeOpen = true;
@@ -942,6 +1074,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
         CancelPlacementModes();
         IsTextBoxMode = true;
+        PreparePageCheck(CurrentPage - 1);
     }
 
     public void CancelPlacementModes()
@@ -1137,6 +1270,12 @@ public partial class MainViewModel(Window window) : ObservableObject
     }
 
     /// <summary>Applies an edit through the undo stack; false when it was not applied (restricted, or Cancel on the #139 warning).</summary>
+    /// <remarks>
+    /// One change at a time (#145): while a change waits on its page check or its warning is
+    /// on screen, a second is refused rather than queued, so a second ContentDialog — which
+    /// WinUI throws on — is never asked for. A failure other than the text guard's refusal is
+    /// reported here rather than escaping an async handler.
+    /// </remarks>
     private async Task<bool> DoEditAsync(IPageEditOperation op)
     {
         // The central gate (#131): every entry point above checks first so no editor
@@ -1146,17 +1285,47 @@ public partial class MainViewModel(Window window) : ObservableObject
             IsRestrictedNoticeOpen = true;
             return false;
         }
-        // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
-        // changes parts the person never touched. Never refused; asked once per page. The
-        // core's dry run is slow on a heavy page, so it runs off the UI thread.
-        if (_document is { } document && await Task.Run(() => _pageWarnings.ShouldWarn(document, op)))
+        if (Busy.IsBusy || _document is not { } document)
+            return false;
+
+        using (var busy = Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: op.PageIndex))
         {
-            if (!await ConfirmPageRewriteAsync())
+            try
+            {
+                // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few
+                // pages changes parts the person never touched. Never refused; asked once per
+                // page. The page's check started when it was shown; the change waits for it at
+                // most 1.5 s and then applies without a warning (#145).
+                if (PageRegenerationWarnings.RegeneratesUnjudged(op) && !_pageWarnings.IsSettled(op.PageIndex))
+                {
+                    busy.SetLabel(Strings.BusyCheckingPage);
+                    var answer = await _pageWarnings.AskAsync(document, op);
+                    if (!ReferenceEquals(document, _document))
+                        return false;
+                    if (answer == PageCheckAnswer.WouldChange)
+                    {
+                        if (!await ConfirmPageRewriteAsync() || !ReferenceEquals(document, _document))
+                            return false;
+                        _pageWarnings.Settle(op.PageIndex);
+                    }
+                    busy.SetLabel(Strings.BusyApplying);
+                }
+                await Task.Run(() => _undoStack.Do(op));
+            }
+            catch (TextEditException)
+            {
+                throw; // the text guard's refusal: the caller words it
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(Strings.CouldNotEditTitle, UserFacing.Describe(ex));
                 return false;
-            _pageWarnings.Settle(op.PageIndex);
+            }
         }
-        await Task.Run(() => _undoStack.Do(op));
+        if (!ReferenceEquals(document, _document))
+            return false;
         _journal.Record(op.ToJournalEntry(inverse: false));
+        _editCount++;
         HasUnsavedChanges = true;
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
@@ -1250,23 +1419,34 @@ public partial class MainViewModel(Window window) : ObservableObject
     [ObservableProperty]
     private bool _isScannedHintOpen;
 
-    private bool CanSave() => IsDocumentOpen;
+    private bool CanSave() => IsDocumentOpen && !Busy.IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAsync()
     {
-        if (_document is null || DocumentPath is null)
+        if (_document is null || DocumentPath is null || Busy.IsBusy)
             return;
 
         var document = _document;
         var path = DocumentPath;
+        var editsBefore = _editCount;
         try
         {
-            var flattened = await FlattenIfConfiguredAsync(document);
-            // Atomic save protocol (SDD §3.4): temp file in place, flush, swap.
-            await Task.Run(() => VerifiedSave.ToPath(Engine, document, path));
-            HasUnsavedChanges = false;
-            _journal.MarkSaved(path);
+            bool flattened;
+            // "Saving…", then "Checking the saved file…", with editing and file commands waiting (#145).
+            using (var busy = Busy.Begin(Strings.BusySaving))
+            {
+                flattened = await FlattenIfConfiguredAsync(document);
+                // Atomic save protocol (SDD §3.4): temp file in place, flush, swap.
+                await Task.Run(() => VerifiedSave.ToPath(Engine, document, path, stage => busy.SetLabel(SaveStageLabel(stage))));
+            }
+            // D3 (#145): an edit made while the save ran is not in the file, so the document
+            // stays unsaved and its journal keeps it.
+            if (_editCount == editsBefore)
+            {
+                HasUnsavedChanges = false;
+                _journal.MarkSaved(path);
+            }
             if (flattened)
                 await OnDocumentFlattenedAsync();
         }
@@ -1316,14 +1496,24 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
 
         var document = _document;
+        if (Busy.IsBusy || !ReferenceEquals(document, _document))
+            return;
+        var editsBefore = _editCount;
         try
         {
-            var flattened = await FlattenIfConfiguredAsync(document);
-            await Task.Run(() => VerifiedSave.ToPath(Engine, document, file.Path));
+            bool flattened;
+            using (var busy = Busy.Begin(Strings.BusySaving))
+            {
+                flattened = await FlattenIfConfiguredAsync(document);
+                await Task.Run(() => VerifiedSave.ToPath(Engine, document, file.Path, stage => busy.SetLabel(SaveStageLabel(stage))));
+            }
             // The newly saved file becomes the active document (SDD §3.4).
             DocumentPath = file.Path;
-            HasUnsavedChanges = false;
-            _journal.MarkSaved(file.Path);
+            if (_editCount == editsBefore) // D3 (#145)
+            {
+                HasUnsavedChanges = false;
+                _journal.MarkSaved(file.Path);
+            }
             if (flattened)
                 await OnDocumentFlattenedAsync();
         }
@@ -1339,12 +1529,12 @@ public partial class MainViewModel(Window window) : ObservableObject
     private const double JpegQuality = 0.75;
 
     /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
-    private bool CanShrink() => IsDocumentOpen && Capabilities.CanShrink;
+    private bool CanShrink() => IsDocumentOpen && Capabilities.CanShrink && !Busy.IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanShrink))]
     private async Task ShrinkForEmailAsync()
     {
-        if (DocumentPath is null)
+        if (DocumentPath is null || Busy.IsBusy)
             return;
         if (HasUnsavedChanges)
         {
@@ -1363,7 +1553,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         IPdfDocument copy;
         try
         {
-            copy = await Task.Run(() => Engine.OpenLike(original, sourcePath));
+            using (Busy.Begin(Strings.BusyShrinking))
+                copy = await Task.Run(() => Engine.OpenLike(original, sourcePath));
         }
         catch (Exception ex)
         {
@@ -1374,25 +1565,29 @@ public partial class MainViewModel(Window window) : ObservableObject
         try
         {
             var replaced = 0;
-            foreach (var image in await Task.Run(copy.GetImages))
+            // "Making a smaller copy…", with editing and file commands waiting (#145).
+            using (Busy.Begin(Strings.BusyShrinking))
             {
-                var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * EmailTargetDpi);
-                var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * EmailTargetDpi);
-                var oversized = image.PixelWidth > targetWidth * 1.2;
-                if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
-                    continue;
-                targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
-                targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
+                foreach (var image in await Task.Run(copy.GetImages))
+                {
+                    var targetWidth = (int)Math.Round(image.DisplayWidthPoints / 72 * EmailTargetDpi);
+                    var targetHeight = (int)Math.Round(image.DisplayHeightPoints / 72 * EmailTargetDpi);
+                    var oversized = image.PixelWidth > targetWidth * 1.2;
+                    if ((!oversized && image.StoredByteLength < 100_000) || image.StoredByteLength < 8_000)
+                        continue;
+                    targetWidth = Math.Clamp(targetWidth, 8, image.PixelWidth);
+                    targetHeight = Math.Clamp(targetHeight, 8, image.PixelHeight);
 
-                var img = image;
-                var pixels = await Task.Run(() => copy.RenderImageAt(img, targetWidth, targetHeight));
-                var jpeg = await SignatureImageProcessor.EncodeJpegAsync(
-                    new SignatureImage(pixels.Bgra, pixels.PixelWidth, pixels.PixelHeight), JpegQuality);
-                if (jpeg.Length >= image.StoredByteLength * 0.9)
-                    continue; // not worth it
+                    var img = image;
+                    var pixels = await Task.Run(() => copy.RenderImageAt(img, targetWidth, targetHeight));
+                    var jpeg = await SignatureImageProcessor.EncodeJpegAsync(
+                        new SignatureImage(pixels.Bgra, pixels.PixelWidth, pixels.PixelHeight), JpegQuality);
+                    if (jpeg.Length >= image.StoredByteLength * 0.9)
+                        continue; // not worth it
 
-                await Task.Run(() => copy.ReplaceImageWithJpeg(img, jpeg));
-                replaced++;
+                    await Task.Run(() => copy.ReplaceImageWithJpeg(img, jpeg));
+                    replaced++;
+                }
             }
 
             if (replaced == 0)
@@ -1411,7 +1606,8 @@ public partial class MainViewModel(Window window) : ObservableObject
 
             try
             {
-                await Task.Run(() => VerifiedSave.ToPath(Engine, copy, file.Path));
+                using (var busy = Busy.Begin(Strings.BusySaving))
+                    await Task.Run(() => VerifiedSave.ToPath(Engine, copy, file.Path, stage => busy.SetLabel(SaveStageLabel(stage))));
             }
             catch (Exception ex)
             {
@@ -1435,14 +1631,28 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
     }
 
-    private bool CanUndo() => _undoStack.CanUndo;
-    private bool CanRedo() => _undoStack.CanRedo;
+    private bool CanUndo() => _undoStack.CanUndo && !Busy.IsBusy;
+    private bool CanRedo() => _undoStack.CanRedo && !Busy.IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private async Task UndoAsync()
     {
+        if (Busy.IsBusy || !_undoStack.CanUndo)
+            return;
         var op = _undoStack.PeekUndo;
-        await Task.Run(() => _undoStack.Undo());
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: (op as IPageEditOperation)?.PageIndex ?? -1))
+        {
+            try
+            {
+                await Task.Run(() => _undoStack.Undo());
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(Strings.CouldNotEditTitle, UserFacing.Describe(ex));
+                return;
+            }
+        }
+        _editCount++;
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         HasUnsavedChanges = true;
@@ -1456,8 +1666,22 @@ public partial class MainViewModel(Window window) : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRedo))]
     private async Task RedoAsync()
     {
+        if (Busy.IsBusy || !_undoStack.CanRedo)
+            return;
         var op = _undoStack.PeekRedo;
-        await Task.Run(() => _undoStack.Redo());
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: (op as IPageEditOperation)?.PageIndex ?? -1))
+        {
+            try
+            {
+                await Task.Run(() => _undoStack.Redo());
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(Strings.CouldNotEditTitle, UserFacing.Describe(ex));
+                return;
+            }
+        }
+        _editCount++;
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         HasUnsavedChanges = true;
@@ -1477,19 +1701,43 @@ public partial class MainViewModel(Window window) : ObservableObject
     public async Task RestoreSessionAsync(RecoverableSession session)
     {
         // Load before OpenDocumentAsync — BeginSession truncates this same file.
-        var entries = RecoveryJournal.LoadEntries(session.JournalPath);
+        IReadOnlyList<JournalEntry> entries;
+        try
+        {
+            entries = RecoveryJournal.LoadEntries(session.JournalPath);
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync(Strings.CouldNotRestoreTitle, UserFacing.Describe(ex));
+            return;
+        }
 
         await OpenDocumentAsync(session.DocumentPath);
-        if (_document is null || entries.Count == 0)
+        if (_document is null || DocumentPath != session.DocumentPath || entries.Count == 0)
             return;
 
         var doc = _document;
-        var applied = await Task.Run(() => JournalReplayer.Replay(doc, entries));
-
-        // Re-journal the restored edits so a second crash before save is still covered.
+        // Re-journalled before the replay, not after (#145): the open truncated the journal
+        // they came from, so a replay that fails part way must not lose them a second time.
         foreach (var entry in entries)
             _journal.Record(entry);
 
+        int applied;
+        try
+        {
+            using (Busy.Begin(Strings.BusyRestoring))
+                applied = await Task.Run(() => JournalReplayer.Replay(doc, entries));
+        }
+        catch (Exception ex)
+        {
+            // This used to escape as an unhandled exception and end the app (#145).
+            applied = entries.Count;
+            await ShowErrorAsync(Strings.CouldNotRestoreTitle, UserFacing.Describe(ex));
+        }
+        if (!ReferenceEquals(doc, _document))
+            return;
+
+        _editCount++;
         HasUnsavedChanges = applied > 0;
         _keyboardMaps.Clear(); // the replay changed what is on the pages (#2)
         // Drop any already-rendered bitmaps (they predate the replay) and re-render the viewport.
@@ -1513,7 +1761,10 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// </summary>
     public async Task UnlockAsync()
     {
-        if (_document is null || DocumentPath is null)
+        if (_document is null || DocumentPath is null || Busy.IsBusy)
+            return;
+        // Unlocking reopens the document from its file: unsaved changes would stay behind (#145).
+        if (!await ConfirmSaveChangesAsync())
             return;
 
         var path = DocumentPath;
@@ -1529,7 +1780,8 @@ public partial class MainViewModel(Window window) : ObservableObject
             IPdfDocument doc;
             try
             {
-                doc = await Task.Run(() => Engine.Open(path, ownerPassword));
+                using (Busy.Begin(Strings.BusyOpening))
+                    doc = await Task.Run(() => Engine.Open(path, ownerPassword));
             }
             catch (PdfLoadException ex) when (ex.IsPasswordError)
             {
@@ -1609,7 +1861,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <param name="newPassword">The new password, or null to remove security.</param>
     private async Task ApplySecurityAsync(string? newPassword, string doneMessage)
     {
-        if (_document is null || DocumentPath is null)
+        if (_document is null || DocumentPath is null || Busy.IsBusy)
             return;
 
         var document = _document;
@@ -1617,13 +1869,16 @@ public partial class MainViewModel(Window window) : ObservableObject
         var flattened = false;
         try
         {
+            // A save like any other (#145): "Saving…", "Checking the saved file…", editing and file commands waiting.
+            using var busy = Busy.Begin(Strings.BusySaving);
             flattened = await FlattenIfConfiguredAsync(document);
             await Task.Run(() =>
             {
                 if (newPassword is null)
-                    VerifiedSave.ToPathWithoutSecurity(Engine, document, path);
+                    VerifiedSave.ToPathWithoutSecurity(Engine, document, path, stage => busy.SetLabel(SaveStageLabel(stage)));
                 else
-                    VerifiedSave.ToPathWithSecurity(Engine, document, path, newPassword, ownerPassword: null, PdfPermissions.All);
+                    VerifiedSave.ToPathWithSecurity(Engine, document, path, newPassword, ownerPassword: null, PdfPermissions.All,
+                        stage => busy.SetLabel(SaveStageLabel(stage)));
             });
         }
         catch (Exception ex)
@@ -1743,7 +1998,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             : null;
     }
 
-    private async Task ShowErrorAsync(string title, string message)
+    internal async Task ShowErrorAsync(string title, string message)
     {
         if (window.Content?.XamlRoot is not { } xamlRoot)
             return;
