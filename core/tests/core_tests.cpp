@@ -1839,6 +1839,12 @@ void test_rewrite_fidelity() {
          "/ColorSpace << /CS1 [/Pattern /DeviceRGB] >> /Pattern << /P1 6 0 R >>", "",
          {"<< /Type /Pattern /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 /Resources << >> "
           "/Length 14 >>\nstream\n0 0 10 10 re f\nendstream"}},
+        // Glyphs as a clip (7 Tr) over what is drawn after them (#125). The writer wrote only path
+        // clips, and the clipping text as its own object inside q ... Q, so the clip ended there and
+        // the box drawn through the word filled its whole rectangle.
+        {"box drawn through a glyph clip",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q BT /F1 96 Tf 7 Tr 72 560 Td (MASK) Tj ET 0 0 1 rg 72 540 400 140 re f Q "
+         "BT /F1 12 Tf 72 500 Td (Body under a clipped box) Tj ET", 18},
         // The miter limit (patch 6 writes "M") is not a case here: PDFium's rasteriser draws a
         // stroked corner identically whatever the limit or join, so the render-based guard
         // cannot see it lost. Its survival belongs to an operator-level check (#126).
