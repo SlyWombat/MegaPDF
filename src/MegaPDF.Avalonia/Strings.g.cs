@@ -691,4 +691,28 @@ public static partial class Strings
 
     /// <summary>Don't Save</summary>
     public static string DontSave => Get("DontSave");
+
+    /// <summary>Scroll up</summary>
+    public static string ScrollBarLineUp => Get("ScrollBarLineUp");
+
+    /// <summary>Scroll down</summary>
+    public static string ScrollBarLineDown => Get("ScrollBarLineDown");
+
+    /// <summary>Scroll left</summary>
+    public static string ScrollBarLineLeft => Get("ScrollBarLineLeft");
+
+    /// <summary>Scroll right</summary>
+    public static string ScrollBarLineRight => Get("ScrollBarLineRight");
+
+    /// <summary>Page up</summary>
+    public static string ScrollBarPageUp => Get("ScrollBarPageUp");
+
+    /// <summary>Page down</summary>
+    public static string ScrollBarPageDown => Get("ScrollBarPageDown");
+
+    /// <summary>Page left</summary>
+    public static string ScrollBarPageLeft => Get("ScrollBarPageLeft");
+
+    /// <summary>Page right</summary>
+    public static string ScrollBarPageRight => Get("ScrollBarPageRight");
 }

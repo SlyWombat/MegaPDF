@@ -1038,6 +1038,32 @@ internal static class Program
         check($"Cmd+S with nothing changed does not save (status: {vm.Status})",
               !vm.IsDirty && vm.Status != Strings.NowhereToSave);
 
+        // Space on the page must not also press the toolbar button that still has keyboard
+        // focus (#144). Tab moves the page's focus ring, not keyboard focus, so a toolbar
+        // button used from the keyboard keeps it. Seen once on a real Mac, after moving
+        // through the More menu with the arrow keys: Space opened the line editor and the
+        // More menu together. Not reproduced on a fresh launch, nor here; kept as a guard.
+        vm.ClearPageFocus();
+        window.MoreButton.Focus();
+        Pump();
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Pump();
+        var spaceRegion = vm.PageFocus?.Kind;
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+        Pump();
+        check($"Space on a page region ({spaceRegion}) does not also press the focused More button",
+              spaceRegion is not null && window.ToolbarMenuOf(window.MoreButton) is not { IsOpen: true });
+        window.ToolbarMenuOf(window.MoreButton)?.Hide();
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Pump();
+        while (vm.CanUndo)
+            vm.UndoCommand.Execute(null);
+        vm.ClearPageFocus();
+        Pump();
+
         // Accessibility (#144): what VoiceOver is handed for the pickers, the two mode
         // toggles and the page's scroll bars.
         check("each face in the font picker is named by its label, not the record",
@@ -1053,17 +1079,34 @@ internal static class Program
         Pump();
         var scrollButtons = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.PageScroller)
             .OfType<global::Avalonia.Controls.RepeatButton>().ToList();
-        check($"the page's scroll bar buttons are hidden from accessibility ({scrollButtons.Count} found)",
-              scrollButtons.Count > 0 && scrollButtons.All(b =>
-                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(b).IsControlElement()));
+        // Named rather than hidden: the Mac lists every child whatever its AccessibilityView.
+        var scrollNames = scrollButtons
+            .Select(b => global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(b).GetName())
+            .ToList();
+        check($"the page's scroll bar buttons are named for what they do ({string.Join(", ", scrollNames.Distinct())})",
+              scrollButtons.Count > 0 && scrollNames.All(n =>
+                  !string.IsNullOrWhiteSpace(n) && !n.StartsWith("Avalonia.", StringComparison.Ordinal)));
 
         vm.ToggleAddTextCommand.Execute(null);
         Pump();
-        var glyphs = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.FontBox)
-            .OfType<global::Avalonia.Controls.PathIcon>().ToList();
-        check($"the font picker's chevron is hidden from accessibility ({glyphs.Count} found)",
-              glyphs.Count > 0 && glyphs.All(g =>
-                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(g).IsControlElement()));
+        foreach (var picker in new global::Avalonia.Controls.ComboBox[] { window.FontBox, window.SizeBox })
+        {
+            var children = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(picker).GetChildren();
+            var described = children.Select(c =>
+                $"{c.GetType().Name} for {(c as global::Avalonia.Automation.Peers.ControlAutomationPeer)?.Owner.GetType().Name}"
+                + $"#{(c as global::Avalonia.Automation.Peers.ControlAutomationPeer)?.Owner.Name}"
+                + $"/{c.GetAutomationControlType()}/'{c.GetName()}'").ToList();
+            var pickerName = global::Avalonia.Automation.AutomationProperties.GetName(picker);
+            check($"{pickerName}'s accessible children are all named ({string.Join("; ", described)})",
+                  children.All(c => !string.IsNullOrWhiteSpace(c.GetName())));
+        }
+        // Hiding the Popup element from the peer must not stop the list opening.
+        window.FontBox.IsDropDownOpen = true;
+        Pump();
+        check($"the font picker still opens its list of {window.FontBox.ItemCount} faces",
+              window.FontBox.ContainerFromIndex(0) is { IsEffectivelyVisible: true, Bounds.Height: > 0 });
+        window.FontBox.IsDropDownOpen = false;
+        Pump();
         vm.ToggleAddTextCommand.Execute(null);
         Pump();
 

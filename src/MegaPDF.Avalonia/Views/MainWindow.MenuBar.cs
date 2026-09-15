@@ -27,8 +27,11 @@ public partial class MainWindow
     private readonly List<(NativeMenuItem Item, Func<bool> Enabled)> _menuBarEnabled = [];
     private readonly List<(NativeMenuItem Item, Func<bool> Checked)> _menuBarChecked = [];
 
-    /// <summary>Items with a submenu, which show it only while they are enabled; see RefreshMenuBar.</summary>
-    private readonly List<(NativeMenuItem Item, NativeMenu Menu, Func<bool> Enabled)> _menuBarSubmenus = [];
+    /// <summary>
+    /// Items with a submenu, each with a plain stand-in under the same id that takes its
+    /// place in the menu while it is disabled; see RefreshMenuBar.
+    /// </summary>
+    private readonly List<(string Id, NativeMenuItem Item, NativeMenuItem StandIn, Func<bool> Enabled)> _menuBarSubmenus = [];
 
     /// <summary>The commands that live in More rather than on the row.</summary>
     internal static readonly string[] MoreMenuCommands = ["SaveAs", "Password", "Print", "Shrink", "Options"];
@@ -172,14 +175,21 @@ public partial class MainWindow
 
         // On the Mac an item with a submenu is enabled whatever IsEnabled says: Avalonia's
         // native menu item validates YES for any item that has one. So Tools > Text font
-        // and Text size stayed enabled outside Add text (#144). Out of context the
-        // submenu comes off, and the item greys out like any other; it goes back on
-        // when the context returns.
-        foreach (var (item, menu, enabled) in _menuBarSubmenus)
+        // and Text size stayed enabled outside Add text (#144). Out of context the item is
+        // swapped for a plain stand-in with the same title, which greys out like any
+        // other, and swapped back when the context returns. Swapped in the menu's item
+        // list: the native menu follows changes to the list, but not a submenu taken off
+        // an item that stays in it.
+        foreach (var (id, item, standIn, enabled) in _menuBarSubmenus)
         {
-            var wanted = enabled() ? menu : null;
-            if (!ReferenceEquals(item.Menu, wanted))
-                item.Menu = wanted;
+            var (wanted, other) = enabled() ? (item, standIn) : (standIn, item);
+            if (other.Parent is not NativeMenu parent)
+                continue;
+            var index = parent.Items.IndexOf(other);
+            if (index < 0)
+                continue;
+            parent.Items[index] = wanted;
+            _menuBarItems[id] = wanted;
         }
     }
 
@@ -226,7 +236,7 @@ public partial class MainWindow
 
         var item = new NativeMenuItem(header) { Menu = menu };
         _menuBarEnabled.Add((item, enabled));
-        _menuBarSubmenus.Add((item, menu, enabled));
+        _menuBarSubmenus.Add((id, item, new NativeMenuItem(header) { IsEnabled = false }, enabled));
         _menuBarItems[id] = item;
         return item;
     }
