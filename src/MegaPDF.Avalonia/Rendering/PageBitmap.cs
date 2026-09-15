@@ -28,13 +28,21 @@ internal static class PageBitmap
     /// (non-premultiplied) alpha. A rendered page is opaque so the distinction
     /// cannot change what you see here, but getting it wrong would quietly
     /// misrepresent any future transparent overlay.
+    ///
+    /// Always 96 DPI, whatever the display scale. The page Image is Stretch=Fill
+    /// inside a surface sized in DIPs, so the bitmap's own DPI buys nothing — and a
+    /// raster tagged 96 × dpiScale was drawn wrong: its source rectangle is taken in
+    /// DIPs (816×1056 for a Letter page) but applied to the pixel grid (1632×2112 at
+    /// 2×), so only the top-left quarter of the page was stretched over the whole
+    /// sheet. Invisible at 1×, which is every machine it had been checked on; it is
+    /// what App Review saw on a Retina MacBook Air ("the file content is not fully
+    /// displayed", Guideline 2.1(a), Mac 1.7.0).
     /// </summary>
-    internal static WriteableBitmap FromRenderedPage(RenderedPage page, double dpiScale = 1.0)
+    internal static WriteableBitmap FromRenderedPage(RenderedPage page)
     {
-        var dpi = 96.0 * dpiScale;
         var bitmap = new WriteableBitmap(
             new PixelSize(page.PixelWidth, page.PixelHeight),
-            new Vector(dpi, dpi),
+            new Vector(96, 96),
             PixelFormat.Bgra8888,
             AlphaFormat.Unpremul);
 
@@ -61,6 +69,6 @@ internal static class PageBitmap
         var scale = PointsToPixels * zoom * dpiScale;
         var pixelWidth = Math.Max(1, (int)Math.Round(page.Width * scale));
         var pixelHeight = Math.Max(1, (int)Math.Round(page.Height * scale));
-        return FromRenderedPage(page.Render(pixelWidth, pixelHeight), dpiScale);
+        return FromRenderedPage(page.Render(pixelWidth, pixelHeight));
     }
 }
