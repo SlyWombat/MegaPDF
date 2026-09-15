@@ -159,6 +159,16 @@
     <string name="signature_image_unreadable">Couldn\'t read this signature\'s image</string>
     <string name="signature_remove_failed">Couldn\'t remove this signature</string>
 
+    <!-- Busy feedback (#145): the strip under the top bar and the spinner on a page. "Saving…" is saving above. -->
+    <string name="busy_opening">Opening…</string>
+    <string name="busy_verifying_save">Checking the saved file…</string>
+    <string name="busy_searching">Searching…</string>
+    <string name="busy_checking_page">Checking this page…</string>
+    <string name="busy_applying">Applying…</string>
+    <string name="search_failed">Couldn\'t search this document.</string>
+    <string name="edit_failed">Couldn\'t make that change.</string>
+    <string name="signature_move_failed">Couldn\'t move this signature</string>
+
     <!-- Screenshot mode (the "screenshot <state>" launch extra): marketing content that
          follows the app language, so a French run shows a French agreement (#91).
          The asset names a bundled PDF; the recents are file names on the home

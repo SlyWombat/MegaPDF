@@ -26,15 +26,19 @@ import kotlin.math.roundToInt
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -65,9 +69,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.Spacer
@@ -154,6 +163,15 @@ fun ViewerScreen(
     pageRewriteQuestion: Boolean = false,
     onAnswerPageRewrite: (proceed: Boolean) -> Unit = {},
     onClose: () -> Unit,
+    // Busy feedback (#145): the strip and the page spinner, and what they disable.
+    busy: BusyState? = null,
+    /** A change is still going in or a save runs: commits wait, drags are off. */
+    editingBlocked: Boolean = false,
+    /** The editing tools show disabled: a save runs, or page work has shown its spinner. */
+    toolsDisabled: Boolean = false,
+    onCurrentPageChange: (pageIndex: Int) -> Unit = {},
+    /** Save from the unsaved-changes prompt, closing once saved. */
+    onSaveAndClose: () -> Unit = onSave,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     val listState = rememberLazyListState()
@@ -165,9 +183,15 @@ fun ViewerScreen(
     var confirmDiscard by remember { mutableStateOf(false) }
     var signDialogOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
+    // #145: while a save or password change runs, the document can't be closed and its file
+    // commands wait.
+    val documentLocked = busy?.locksDocument == true
     val closeSearch = { searchOpen = false; onCloseSearch() }
     val requestClose = { if (isDirty) confirmDiscard = true else onClose() }
-    androidx.activity.compose.BackHandler { if (searchOpen) closeSearch() else requestClose() }
+    // Back stays handled while locked, so the system can't finish the activity under a save.
+    androidx.activity.compose.BackHandler {
+        if (searchOpen) closeSearch() else if (!documentLocked) requestClose()
+    }
 
     var drawDialogOpen by remember { mutableStateOf(false) }
     var typeDialogOpen by remember { mutableStateOf(false) }
@@ -235,7 +259,8 @@ fun ViewerScreen(
             confirmButton = {
                 TextButton(
                     onClick = { onCommitText(typed, size, face) },
-                    enabled = typed.isNotBlank(),
+                    // Waits, keeping what was typed, while another change is still going in (#145).
+                    enabled = typed.isNotBlank() && !editingBlocked,
                 ) {
                     Text(stringResource(if (editing) R.string.save else R.string.add))
                 }
@@ -264,7 +289,9 @@ fun ViewerScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { onCommitBodyEdit(typed) }) { Text(stringResource(R.string.save)) }
+                TextButton(onClick = { onCommitBodyEdit(typed) }, enabled = !editingBlocked) {
+                    Text(stringResource(R.string.save))
+                }
             },
             dismissButton = {
                 TextButton(onClick = onCancelBodyEdit) { Text(stringResource(R.string.cancel)) }
@@ -361,77 +388,86 @@ fun ViewerScreen(
     }
 
     if (confirmDiscard) {
+        // Save, Discard or Cancel (#145): Save closes once the document is saved; Cancel
+        // keeps the document open with every change.
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
             title = { Text(stringResource(R.string.unsaved_changes)) },
             text = { Text(stringResource(R.string.unsaved_changes_body)) },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; onSave() }) { Text(stringResource(R.string.save)) }
+                TextButton(onClick = { confirmDiscard = false; onSaveAndClose() }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmDiscard = false; onClose() }) { Text(stringResource(R.string.discard)) }
+                Row {
+                    TextButton(onClick = { confirmDiscard = false }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = { confirmDiscard = false; onClose() }) { Text(stringResource(R.string.discard)) }
+                }
             },
         )
     }
 
     Scaffold(
         topBar = {
-            if (searchOpen) {
-                SearchTopBar(
-                    query = searchQuery,
-                    hitCount = searchHits.size,
-                    currentHitIndex = currentHitIndex,
-                    isSearching = isSearching,
-                    onQueryChange = onSearchQueryChange,
-                    onPrevious = onSearchPrevious,
-                    onNext = onSearchNext,
-                    onClose = closeSearch,
-                    screenshotMode = screenshotSheet == "search",
-                )
-            } else {
-                TopAppBar(
-                    title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
-                    navigationIcon = {
-                        IconButton(onClick = requestClose) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close_document))
-                        }
-                    },
-                    // #144: the top bar keeps the document's own commands — Save, and the
-                    // overflow for everything done to the file as a whole. The editing tools
-                    // live in the bottom bar, so the title keeps its width.
-                    actions = {
-                        TextButton(onClick = onSave, enabled = isDirty && !isSaving) {
-                            Text(stringResource(if (isSaving) R.string.saving else R.string.save))
-                        }
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.save_a_copy)) },
-                                enabled = !isSaving,
-                                onClick = { menuOpen = false; onSaveAs() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.security_password_menu)) },
-                                enabled = hasDocumentFile && !isSaving,
-                                onClick = { menuOpen = false; onStartPasswordCommand() },
-                            )
-                            if (capabilities.isRestricted) {
+            Column {
+                if (searchOpen) {
+                    SearchTopBar(
+                        query = searchQuery,
+                        hitCount = searchHits.size,
+                        currentHitIndex = currentHitIndex,
+                        isSearching = isSearching,
+                        onQueryChange = onSearchQueryChange,
+                        onPrevious = onSearchPrevious,
+                        onNext = onSearchNext,
+                        onClose = closeSearch,
+                        screenshotMode = screenshotSheet == "search",
+                    )
+                } else {
+                    TopAppBar(
+                        title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
+                        navigationIcon = {
+                            IconButton(onClick = requestClose, enabled = !documentLocked) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close_document))
+                            }
+                        },
+                        // #144: the top bar keeps the document's own commands — Save, and the
+                        // overflow for everything done to the file as a whole. The editing tools
+                        // live in the bottom bar, so the title keeps its width.
+                        actions = {
+                            TextButton(onClick = onSave, enabled = isDirty && !isSaving && !documentLocked) {
+                                Text(stringResource(if (isSaving) R.string.saving else R.string.save))
+                            }
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.more_options))
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                 DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.security_unlock_menu)) },
-                                    enabled = hasDocumentFile && !isSaving,
-                                    onClick = { menuOpen = false; onStartUnlock() },
+                                    text = { Text(stringResource(R.string.save_a_copy)) },
+                                    enabled = !isSaving && !documentLocked,
+                                    onClick = { menuOpen = false; onSaveAs() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.security_password_menu)) },
+                                    enabled = hasDocumentFile && !isSaving && !documentLocked,
+                                    onClick = { menuOpen = false; onStartPasswordCommand() },
+                                )
+                                if (capabilities.isRestricted) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.security_unlock_menu)) },
+                                        enabled = hasDocumentFile && !isSaving && !documentLocked,
+                                        onClick = { menuOpen = false; onStartUnlock() },
+                                    )
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.about_megapdf)) },
+                                    onClick = { menuOpen = false; aboutOpen = true },
                                 )
                             }
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.about_megapdf)) },
-                                onClick = { menuOpen = false; aboutOpen = true },
-                            )
-                        }
-                    },
-                )
+                        },
+                    )
+                }
+                // #145: document-level work (opening, saving, searching) directly under the bar.
+                if (busy != null) BusyStrip(busy.document)
             }
         },
         // #144: the everyday tools, one row at the bottom where a thumb reaches them
@@ -439,17 +475,18 @@ fun ViewerScreen(
         bottomBar = {
             BottomAppBar(
                 actions = {
-                    // A restricted document disables what its owner did not allow (#131).
+                    // A restricted document disables what its owner did not allow (#131),
+                    // and a save or a slow change disables every editing tool (#145).
                     ToolbarAction(
                         icon = ToolbarIcons.Sign,
                         label = stringResource(R.string.sign),
-                        enabled = capabilities.canSign,
+                        enabled = capabilities.canSign && !toolsDisabled,
                         onClick = { signDialogOpen = true },
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.AddText,
                         label = stringResource(R.string.add_text),
-                        enabled = capabilities.canAddText,
+                        enabled = capabilities.canAddText && !toolsDisabled,
                         onClick = onStartTextPlacement,
                     )
                     ToolbarAction(
@@ -461,13 +498,13 @@ fun ViewerScreen(
                     ToolbarAction(
                         icon = ToolbarIcons.Undo,
                         label = stringResource(R.string.undo),
-                        enabled = canUndo,
+                        enabled = canUndo && !toolsDisabled,
                         onClick = onUndo,
                     )
                     ToolbarAction(
                         icon = ToolbarIcons.Redo,
                         label = stringResource(R.string.redo),
-                        enabled = canRedo,
+                        enabled = canRedo && !toolsDisabled,
                         onClick = onRedo,
                     )
                 },
@@ -518,6 +555,21 @@ fun ViewerScreen(
                     .collect { (first, last, widthPx) ->
                         onRenderWindowChange(first, last, widthPx)
                     }
+            }
+
+            // The current page — the one across the middle of the viewport — once scrolling
+            // settles, so its page check can start before the first change on it (#145).
+            LaunchedEffect(pageSizes) {
+                snapshotFlow {
+                    val info = listState.layoutInfo
+                    val middle = (info.viewportStartOffset + info.viewportEndOffset) / 2
+                    info.visibleItemsInfo.firstOrNull { it.offset <= middle && it.offset + it.size > middle }?.index
+                        ?: info.visibleItemsInfo.firstOrNull()?.index
+                }
+                    .filterNotNull()
+                    .distinctUntilChanged()
+                    .debounce(300)
+                    .collect { onCurrentPageChange(it) }
             }
 
             // Bring the current hit itself into view, not merely its page (#28).
@@ -623,6 +675,7 @@ fun ViewerScreen(
                                 pageSize = size,
                                 onCommit = onCommitStampRect,
                                 onRemove = onRemoveStamp,
+                                enabled = !editingBlocked,
                             )
                         }
                         if (selectedTextBox != null && selectedTextBox.pageIndex == index) {
@@ -636,7 +689,13 @@ fun ViewerScreen(
                                 onCommit = onCommitTextBoxRect,
                                 onRemove = onRemoveTextBox,
                                 onEdit = onEditTextBox,
+                                enabled = !editingBlocked,
                             )
+                        }
+                        val pageBusy = busy?.page
+                        val spot = pageBusy?.spot
+                        if (pageBusy != null && pageBusy.isVisible && spot != null && spot.pageIndex == index) {
+                            PageBusySpinner(spot = spot, label = pageBusy.label, pageSize = size)
                         }
                     }
                 }
@@ -647,6 +706,70 @@ fun ViewerScreen(
     // A full-screen overlay with its own Scaffold, drawn over the viewer (as on Home).
     if (noticesOpen) {
         ThirdPartyNoticesScreen(onClose = { noticesOpen = false })
+    }
+}
+
+/**
+ * The document-level busy strip (#145): an indeterminate bar and what is happening, directly
+ * under the top app bar. It appears only after half a second, and its label is a polite live
+ * region so TalkBack reads it without taking focus.
+ */
+@Composable
+private fun BusyStrip(indicator: BusyIndicator) {
+    val label = indicator.label
+    if (!indicator.isVisible || label == null) return
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface),
+    ) {
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+        Text(
+            stringResource(label.stringId),
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+    }
+}
+
+/**
+ * The page-level busy spinner (#145): just past the end of the line or box being worked on, or
+ * mid-page when the work has no place of its own. Page points are bottom-left origin, flipped
+ * the same way as [SelectionOverlay].
+ */
+@Composable
+private fun PageBusySpinner(spot: BusySpot, label: BusyLabel?, pageSize: PageSize) {
+    val description = label?.let { stringResource(it.stringId) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val widthPx = constraints.maxWidth.toFloat()
+        val heightPx = constraints.maxHeight.toFloat()
+        val sx = widthPx / pageSize.widthPoints.toFloat()
+        val sy = heightPx / pageSize.heightPoints.toFloat()
+        val sizePx = with(density) { 32.dp.toPx() }
+        val gapPx = with(density) { 8.dp.toPx() }
+        val rect = spot.rect
+        val centreX = if (rect == null) widthPx / 2 else rect.right.toFloat() * sx + gapPx + sizePx / 2
+        val centreY = if (rect == null) heightPx / 2
+        else (pageSize.heightPoints - (rect.top + rect.bottom) / 2).toFloat() * sy
+        val left = (centreX - sizePx / 2).coerceIn(0f, (widthPx - sizePx).coerceAtLeast(0f))
+        val top = (centreY - sizePx / 2).coerceIn(0f, (heightPx - sizePx).coerceAtLeast(0f))
+        Surface(
+            shape = CircleShape,
+            shadowElevation = 2.dp,
+            modifier = Modifier
+                .offset { androidx.compose.ui.unit.IntOffset(left.roundToInt(), top.roundToInt()) }
+                .size(32.dp)
+                .semantics {
+                    if (description != null) contentDescription = description
+                    liveRegion = LiveRegionMode.Polite
+                },
+        ) {
+            // 2.dp is a stroke width, not layout spacing (docs/design-tokens.md §3).
+            CircularProgressIndicator(Modifier.padding(8.dp), strokeWidth = 2.dp)
+        }
     }
 }
 
@@ -817,7 +940,8 @@ private fun <T> ChipRow(
  * Signatures and text boxes share it (#36) rather than growing a second
  * interaction model — [resizable] and [onEdit] are the only differences between
  * them. [key] is whatever identifies the current selection; the in-progress drag
- * resets whenever it changes.
+ * resets whenever it changes. While [enabled] is false (a change is still going in,
+ * #145) it neither drags nor takes taps, and a finished drag stays where it was dropped.
  */
 @Composable
 private fun SelectionOverlay(
@@ -828,6 +952,7 @@ private fun SelectionOverlay(
     onRemove: () -> Unit,
     resizable: Boolean = true,
     onEdit: (() -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -873,7 +998,8 @@ private fun SelectionOverlay(
                 // its glyph — neither is layout spacing, so docs/design-tokens.md
                 // §3's grid does not apply to them.
                 .border(2.dp, Brand.Accent)
-                .pointerInput(key) {
+                .pointerInput(key, enabled) {
+                    if (!enabled) return@pointerInput
                     detectDragGestures(
                         onDrag = { change, delta -> change.consume(); drag += delta },
                         onDragEnd = { commit() },
@@ -887,7 +1013,7 @@ private fun SelectionOverlay(
                     .align(Alignment.TopEnd)
                     .background(Brand.Danger)
                     .padding(horizontal = 6.dp, vertical = 2.dp)
-                    .clickable { onRemove() },
+                    .clickable(enabled = enabled) { onRemove() },
             )
             if (onEdit != null) {
                 Text(
@@ -897,7 +1023,7 @@ private fun SelectionOverlay(
                         .align(Alignment.TopStart)
                         .background(Brand.Accent)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
-                        .clickable { onEdit() },
+                        .clickable(enabled = enabled) { onEdit() },
                 )
             }
             if (resizable) {
@@ -909,7 +1035,8 @@ private fun SelectionOverlay(
                         // shrink an already-small touch target.
                         .size(18.dp)
                         .background(Brand.Accent)
-                        .pointerInput(key) {
+                        .pointerInput(key, enabled) {
+                            if (!enabled) return@pointerInput
                             detectDragGestures(
                                 onDrag = { change, delta ->
                                     change.consume(); widthDelta += delta.x

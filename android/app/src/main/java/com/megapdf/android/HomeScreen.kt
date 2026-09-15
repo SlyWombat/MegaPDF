@@ -35,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import java.text.DateFormat
 import java.util.Date
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 
 @Composable
 fun HomeScreen(
@@ -146,9 +149,26 @@ private fun HomeContent(
 }
 
 @Composable
-fun LoadingScreen() {
+fun LoadingScreen(indicator: BusyIndicator? = null) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
+        if (indicator == null) {
+            CircularProgressIndicator()
+        } else if (indicator.isVisible) {
+            // #145: nothing for the first half second, then the spinner with what it is doing,
+            // read out by TalkBack without taking focus.
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                CircularProgressIndicator()
+                indicator.label?.let {
+                    Text(
+                        stringResource(it.stringId),
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+            }
+        }
     }
 }
 

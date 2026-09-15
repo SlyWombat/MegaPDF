@@ -94,6 +94,19 @@ internal object PdfiumNative {
     external fun nativeLastLayoutVerdict(): DoubleArray
     external fun nativePageRegenerationVerdict(handle: Long): DoubleArray
 
+    // The page check started early and run off the engine thread (#145). These are the only
+    // calls made from another thread: the core serialises them, and PdfDocument keeps the
+    // document open until the check has returned. Status [0] may be ERR_CANCELLED or ERR_NOT_JUDGED.
+    external fun nativeCancelNew(): Long
+    external fun nativeCancelRaise(cancel: Long)
+    external fun nativeCancelFree(cancel: Long)
+    external fun nativePageRegenerationVerdictCancellable(handle: Long, cancel: Long): DoubleArray
+    external fun nativePageRegenerationVerdictCached(handle: Long): DoubleArray
+
+    // megapdf_status codes (megapdf_core.h) the page check returns (#145).
+    const val STATUS_CANCELLED = -7
+    const val STATUS_NOT_JUDGED = -8
+
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4
     /** FPDF_ERR_SECURITY: a security handler PDFium does not support (#131). */

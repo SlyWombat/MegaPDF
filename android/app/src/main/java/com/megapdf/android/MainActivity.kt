@@ -77,7 +77,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
             onRecentClick = viewModel::openRecent,
         )
 
-        is ViewerUiState.Loading -> LoadingScreen()
+        is ViewerUiState.Loading -> LoadingScreen(viewModel.busy.document)
 
         is ViewerUiState.PasswordNeeded -> PasswordDialog(
             wrongPassword = state.wrongPassword,
@@ -151,6 +151,12 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 pageRewriteQuestion = viewModel.pageRewriteQuestion != null,
                 onAnswerPageRewrite = viewModel::answerPageRewrite,
                 onClose = viewModel::closeDocument,
+                // Busy feedback (#145).
+                busy = viewModel.busy,
+                editingBlocked = viewModel.editingBlocked,
+                toolsDisabled = viewModel.toolsDisabled,
+                onCurrentPageChange = viewModel::onCurrentPageChanged,
+                onSaveAndClose = viewModel::saveAndClose,
             )
         }
     }
