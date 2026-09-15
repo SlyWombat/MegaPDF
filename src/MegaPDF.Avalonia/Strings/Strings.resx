@@ -752,4 +752,16 @@
   <data name="PasswordRemovedStatus" xml:space="preserve">
     <value>Password removed.</value>
   </data>
+  <data name="PageRewriteWarningTitle" xml:space="preserve">
+    <value>Change this page?</value>
+    <comment>Page regeneration warning (#139)</comment>
+  </data>
+  <data name="PageRewriteWarning" xml:space="preserve">
+    <value>Changing this page may slightly alter parts of it you haven't touched.</value>
+    <comment>Page regeneration warning (#139)</comment>
+  </data>
+  <data name="Continue" xml:space="preserve">
+    <value>Continue</value>
+    <comment>Page regeneration warning (#139)</comment>
+  </data>
 </root>

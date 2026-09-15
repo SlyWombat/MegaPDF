@@ -726,4 +726,13 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <value>Avec Tab, allez à l'endroit où placer la signature, puis appuyez sur Entrée.</value>
     <comment>Announced by Narrator after a signature is picked from the library</comment>
   </data>
+  <data name="PageRewriteWarningTitle" xml:space="preserve">
+    <value>Modifier cette page?</value>
+  </data>
+  <data name="PageRewriteWarning" xml:space="preserve">
+    <value>Modifier cette page pourrait légèrement changer des parties que vous n'avez pas touchées.</value>
+  </data>
+  <data name="Continue" xml:space="preserve">
+    <value>Continuer</value>
+  </data>
 </root>

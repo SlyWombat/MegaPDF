@@ -19,6 +19,13 @@ struct SelectedStamp: Equatable {
     let rect: PdfRect
 }
 
+/// A change waiting on "Change this page?" (#139): Continue or Cancel before a text box
+/// regenerates a page PDFium's rewrite would alter.
+struct PageRewriteWarning: Identifiable, Equatable {
+    let id = UUID()
+    let pageIndex: Int
+}
+
 /// A text box currently selected for drag/correct/remove (#36).
 struct SelectedTextBox: Equatable {
     let pageIndex: Int
@@ -95,6 +102,8 @@ final class ViewerModel: ObservableObject {
     @Published var bodyDraft = ""
     /// A one-line notice over the page that clears itself — not an alert.
     @Published private(set) var notice: String?
+    /// #139: a text-box change waiting for Continue or Cancel, on a page PDFium's rewrite would alter.
+    @Published private(set) var pageRewriteWarning: PageRewriteWarning?
     private var noticeTask: Task<Void, Never>?
     /// The scanned-page hint is shown once per document, not on every stray tap.
     private var scannedHintShown = false
@@ -128,6 +137,10 @@ final class ViewerModel: ObservableObject {
     private let signatureStore = SignatureStore()
     private let history = EditHistory()
     private var document: PdfDocument?
+    /// Pages of the open document that need no warning before a text-box change (#139): they keep
+    /// their look when regenerated, or the person already chose Continue for them.
+    private var settledPages: Set<Int> = []
+    private var pageRewriteContinuation: CheckedContinuation<Bool, Never>?
     private var sourceURL: URL?
     private var renderedWidths: [Int: Int] = [:]
     private var renderTask: Task<Void, Never>?
@@ -572,6 +585,10 @@ final class ViewerModel: ObservableObject {
                                               fontSize: pending.fontSize,
                                               fontName: pending.fontName)
                     guard before != style else { return }
+                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex) else {
+                        await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
+                        return
+                    }
                     try await perform(
                         EditTextBoxOperation(pageIndex: pending.pageIndex, id: editingId,
                                              from: before, to: style,
@@ -579,6 +596,7 @@ final class ViewerModel: ObservableObject {
                         doc: doc)
                     await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
                 } else {
+                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex) else { return }
                     try await perform(
                         TextBoxOperation(pageIndex: pending.pageIndex,
                                          id: "text:\(UUID().uuidString)",
@@ -613,6 +631,12 @@ final class ViewerModel: ObservableObject {
                 || abs(rect.bottom - sel.rect.bottom) >= 0.01 else { return }
         Task {
             do {
+                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex) else {
+                    // Cancelled: the box stays where it was; republishing the selection
+                    // puts the overlay back on it.
+                    if selectedTextBox?.id == sel.id { selectedTextBox = sel }
+                    return
+                }
                 try await perform(
                     MoveTextBoxOperation(pageIndex: sel.pageIndex, id: sel.id,
                                          from: (x: sel.rect.left, y: sel.rect.bottom),
@@ -645,6 +669,7 @@ final class ViewerModel: ObservableObject {
         guard permits(capabilities.canAddText) else { return }
         Task {
             do {
+                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex) else { return }
                 // boundsAnchored: the coordinates are the box's reported rect, so
                 // an undo must re-add against bounds, not the baseline.
                 try await perform(
@@ -658,6 +683,40 @@ final class ViewerModel: ObservableObject {
                 statusMessage = String(localized: "Couldn't remove that text.")
             }
         }
+    }
+
+    /// Before the first text-box change on a page (#139): a text box makes PDFium regenerate the
+    /// page's content, which on some pages changes parts the person never touched. Such a change
+    /// is never refused; the core's dry run says whether this page is one, and then the person is
+    /// asked once. True to go ahead. A page that keeps its look, or cannot be judged, is settled
+    /// without a prompt; Continue settles it too, Cancel leaves it to ask again next time.
+    private func confirmPageRewrite(_ doc: PdfDocument, pageIndex: Int) async -> Bool {
+        guard !settledPages.contains(pageIndex) else { return true }
+        let verdict = try? await PdfEngine.shared.pageRegenerationVerdict(doc, pageIndex: pageIndex)
+        // The document may have been closed or replaced while the dry run ran.
+        guard document === doc else { return false }
+        guard let verdict, !verdict.editable else {
+            settledPages.insert(pageIndex)
+            return true
+        }
+        guard !settledPages.contains(pageIndex) else { return true }
+        // Only one warning at a time: an older one still waiting counts as cancelled.
+        answerPageRewriteWarning(false)
+        let proceed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            pageRewriteContinuation = continuation
+            pageRewriteWarning = PageRewriteWarning(pageIndex: pageIndex)
+        }
+        guard proceed, document === doc else { return false }
+        settledPages.insert(pageIndex)
+        return true
+    }
+
+    /// The warning's buttons: Continue (true) or Cancel (false). Safe to call with none showing.
+    func answerPageRewriteWarning(_ proceed: Bool) {
+        pageRewriteWarning = nil
+        let continuation = pageRewriteContinuation
+        pageRewriteContinuation = nil
+        continuation?.resume(returning: proceed)
     }
 
     /// Re-reads the box after an edit and keeps it selected, so the handles stay
@@ -1203,6 +1262,9 @@ final class ViewerModel: ObservableObject {
         history.clear()
         canUndo = false
         canRedo = false
+        // The warning memory is the open document's too (#139); a warning still up is a Cancel.
+        answerPageRewriteWarning(false)
+        settledPages = []
         isPlacingText = false
         pendingText = nil
         draftText = ""

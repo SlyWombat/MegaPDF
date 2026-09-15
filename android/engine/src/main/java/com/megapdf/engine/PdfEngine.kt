@@ -452,6 +452,18 @@ class PdfPage internal constructor(
         LayoutVerdict.fromPacked(PdfiumNative.nativeTextEditableReason(handle, objectIndex))
     }
 
+    /**
+     * Whether regenerating this page's content, with nothing changed, would change how it looks
+     * (#139). Whiteouts, text boxes, signatures and removals regenerate the page too and are never
+     * refused; ask before the first such change on a page and warn when [LayoutVerdict.editable] is
+     * false. The same dry run and budgets as [layoutVerdict], cached per page until the page changes.
+     * Null when the page cannot be judged.
+     */
+    suspend fun pageRegenerationVerdict(): LayoutVerdict? = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        LayoutVerdict.fromPacked(PdfiumNative.nativePageRegenerationVerdict(handle))
+    }
+
     /** Why the core's last call on this thread was refused; call it straight after, with no suspension between. */
     private fun lastLayoutVerdict(): LayoutVerdict? = LayoutVerdict.fromPacked(PdfiumNative.nativeLastLayoutVerdict())
 

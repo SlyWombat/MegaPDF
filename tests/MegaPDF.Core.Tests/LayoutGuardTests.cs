@@ -61,6 +61,69 @@ public sealed class LayoutGuardTests : IDisposable
     }
 
     [Fact]
+    public void APageClippedByText_WarnsOnceBeforeAWhiteout_WhichStillAppliesAndUndoes()
+    {
+        using var doc = Open(Pdf(ClippedByText), "clipped-whiteout.pdf");
+        var warnings = new PageRegenerationWarnings();
+
+        // #139: regenerating the page alone changes it, for the render, off text.
+        using (var page = doc.GetPage(0))
+        {
+            var verdict = page.GetPageRegenerationVerdict();
+            Assert.False(verdict.Editable);
+            Assert.Equal(LayoutCause.Render, verdict.Cause);
+            Assert.True(verdict.Where.HasFlag(LayoutArea.NonText));
+            Assert.False(verdict.Where.HasFlag(LayoutArea.EditedText));
+        }
+
+        var whiteout = new AddWhiteoutOperation(doc, 0, new PdfRect(500, 20, 40, 30));
+        Assert.True(warnings.ShouldWarn(doc, whiteout));
+        Assert.True(warnings.ShouldWarn(doc, whiteout)); // Cancel settles nothing: asked again, it warns again
+
+        // Body-text edits have their own guard, and annotations never regenerate the page.
+        var line = GetFirstLine(doc);
+        Assert.False(warnings.ShouldWarn(doc, new LineEditOperation(doc, 0, line, "Annual report")));
+        Assert.False(PageRegenerationWarnings.RegeneratesUnjudged(new AddMarkOperation(doc, 0, new PdfRect(100, 100, 12, 12))));
+
+        // Continue: the change applies, and the page is not asked about again.
+        warnings.Settle(0);
+        var stack = new UndoStack();
+        stack.Do(whiteout);
+        using (var page = doc.GetPage(0))
+            Assert.Single(page.GetWhiteouts());
+        Assert.False(warnings.ShouldWarn(doc, new AddTextBoxOperation(doc, 0, "Note", 12, new PdfPoint(300, 300))));
+
+        stack.Undo();
+        using (var page = doc.GetPage(0))
+            Assert.Empty(page.GetWhiteouts());
+
+        // Another document starts again.
+        warnings.Reset();
+        using var fresh = Open(Pdf(ClippedByText), "clipped-whiteout-again.pdf");
+        Assert.True(warnings.ShouldWarn(fresh, new AddWhiteoutOperation(fresh, 0, new PdfRect(500, 20, 40, 30))));
+    }
+
+    [Fact]
+    public void APlainPage_KeepsItsLookWhenRegenerated_AndNeedsNoWarning()
+    {
+        using var doc = Open(Pdf("BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0 0 1 rg 72 500 200 40 re f"), "plain-whiteout.pdf");
+        using (var page = doc.GetPage(0))
+        {
+            var verdict = page.GetPageRegenerationVerdict();
+            Assert.True(verdict.Editable);
+            Assert.Equal(LayoutCause.Ok, verdict.Cause);
+            Assert.Equal(0, verdict.ChangedPixels);
+        }
+        Assert.False(new PageRegenerationWarnings().ShouldWarn(doc, new AddWhiteoutOperation(doc, 0, new PdfRect(500, 20, 40, 30))));
+    }
+
+    private static PdfTextLine GetFirstLine(IPdfDocument doc)
+    {
+        using var page = doc.GetPage(0);
+        return page.GetTextLines()[0];
+    }
+
+    [Fact]
     public void DeletingTextOnAPageClippedByText_IsRefusedToo()
     {
         using var doc = Open(Pdf(ClippedByText), "clipped-delete.pdf");

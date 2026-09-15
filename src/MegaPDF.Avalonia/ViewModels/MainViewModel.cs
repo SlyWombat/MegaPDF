@@ -62,6 +62,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private readonly IPdfEngine _engine = new PdfiumEngine();
     private readonly UndoStack _undoStack = new();
+
+    /// <summary>Pages already asked about in this document (#139): the warning comes once per page.</summary>
+    private readonly PageRegenerationWarnings _pageWarnings = new();
+
+    /// <summary>
+    /// The #139 warning before the first whiteout or text box change on a page PDFium's rewrite
+    /// would alter: the view asks, true for Continue. With nobody listening the change applies.
+    /// </summary>
+    public event Func<Task<bool>>? PageRewriteConfirmationRequested;
     private readonly ISignatureLibrary _signatures;
     private readonly RecentFiles _recents;
     private readonly AppSettings _settings;
@@ -436,7 +445,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void Apply(IPageEditOperation operation, string doneMessage)
+    private void Apply(IPageEditOperation operation, string doneMessage, Action? cancelled = null)
     {
         // The central gate (#131): the entry points check first so no editor opens, and
         // this is what holds if one is ever missed.
@@ -445,6 +454,40 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Status = Strings.ActionRestricted;
             return;
         }
+        // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
+        // changes parts the person never touched. Never refused; the first such change on a
+        // page asks the core first, off the UI thread, and warns when the page would change.
+        if (_document is { } document && PageRegenerationWarnings.RegeneratesUnjudged(operation)
+            && !_pageWarnings.IsSettled(operation.PageIndex))
+        {
+            ApplyAfterPageCheck(document, operation, doneMessage, cancelled);
+            return;
+        }
+        ApplyNow(operation, doneMessage);
+    }
+
+    // async void on purpose: an exception from the edit reaches the UI thread's handler, as it
+    // did when Apply ran the edit synchronously.
+    private async void ApplyAfterPageCheck(IPdfDocument document, IPageEditOperation operation, string doneMessage, Action? cancelled)
+    {
+        var warn = await Task.Run(() => _pageWarnings.ShouldWarn(document, operation));
+        if (!ReferenceEquals(document, _document))
+            return; // closed or replaced while the page was being judged
+        if (warn)
+        {
+            var confirmed = PageRewriteConfirmationRequested is not { } ask || await ask();
+            if (!confirmed || !ReferenceEquals(document, _document))
+            {
+                cancelled?.Invoke();
+                return;
+            }
+            _pageWarnings.Settle(operation.PageIndex);
+        }
+        ApplyNow(operation, doneMessage);
+    }
+
+    private void ApplyNow(IPageEditOperation operation, string doneMessage)
+    {
         _undoStack.Do(operation);
         // Journalled after Apply, because an operation's entry can only be written
         // once it knows what it did — a placed stamp's id, for instance.
@@ -869,7 +912,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 MoveSignature(sel.PageIndex, sel.AnnotationId!, sel.Bounds, newBounds);
                 break;
             case SelectionKind.TextBox:
-                MoveTextBox(sel.PageIndex, sel.Run!, newBounds);
+                // Cancel on the #139 warning leaves the box where it was: so does the selection.
+                MoveTextBox(sel.PageIndex, sel.Run!, newBounds, cancelled: () =>
+                {
+                    if (Selection is { } now && now.PageIndex == sel.PageIndex && now.Kind == sel.Kind)
+                        Selection = sel;
+                });
                 break;
             default:
                 return;
@@ -1177,13 +1225,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Moves an added text box (SDD §3.3 drag/nudge).</summary>
-    public void MoveTextBox(int pageIndex, PdfTextRun box, PdfRect newBounds)
+    public void MoveTextBox(int pageIndex, PdfTextRun box, PdfRect newBounds, Action? cancelled = null)
     {
         if (_document is null || newBounds == box.Bounds)
             return;
 
         Apply(new MoveTextBoxOperation(_document, pageIndex, box.ObjectIndex, box.Bounds, newBounds),
-              Strings.TextMoved);
+              Strings.TextMoved, cancelled);
     }
 
     /// <summary>Moves or resizes a placed signature (SDD §3.3).</summary>
@@ -1820,6 +1868,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Pages.Clear();
 
         _undoStack.Clear();
+        _pageWarnings.Reset();
         Selection = null;
         RaiseUndoRedo();
 

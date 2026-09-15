@@ -226,6 +226,16 @@ struct ViewerView: View {
         } message: {
             Text("This document has unsaved changes.")
         }
+        // #139: once per page, before a text-box change on a page PDFium's rewrite would alter.
+        // The buttons answer; the binding's setter does nothing, so SwiftUI dismissing the alert
+        // around a button tap can never answer Cancel ahead of Continue.
+        .alert("Change this page?",
+               isPresented: Binding(get: { model.pageRewriteWarning != nil }, set: { _ in })) {
+            Button("Continue") { model.answerPageRewriteWarning(true) }
+            Button("Cancel", role: .cancel) { model.answerPageRewriteWarning(false) }
+        } message: {
+            Text("Changing this page may slightly alter parts of it you haven't touched.")
+        }
     }
 
     // MARK: - search (#26)

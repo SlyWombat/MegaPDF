@@ -96,6 +96,7 @@ public partial class MainWindow : Window
             vm.EditFieldRequested += ShowFieldEditor;
             vm.RenameSignatureRequested += OnRenameSignatureRequested;
             vm.DeleteSignatureRequested += OnDeleteSignatureRequested;
+            vm.PageRewriteConfirmationRequested += ConfirmPageRewriteAsync;
             vm.PropertyChanged += (_, args) =>
             {
                 // A card was clicked: placement is armed, so the library closes and
@@ -678,6 +679,14 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
         if (dialog.Confirmed)
             vm.RemoveSignature(item.Entry.Id);
+    }
+
+    /// <summary>The #139 warning, once per page: true for Continue.</summary>
+    private async Task<bool> ConfirmPageRewriteAsync()
+    {
+        var dialog = new ConfirmPageRewriteWindow();
+        await dialog.ShowDialog(this);
+        return dialog.Confirmed;
     }
 
     /// <summary>

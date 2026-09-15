@@ -92,6 +92,7 @@ internal object PdfiumNative {
     // The layout guard's reason (#128): [status, editable, cause, where, changedPixels, totalPixels, maxShiftPt].
     external fun nativeTextEditableReason(handle: Long, objectIndex: Int): DoubleArray
     external fun nativeLastLayoutVerdict(): DoubleArray
+    external fun nativePageRegenerationVerdict(handle: Long): DoubleArray
 
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4

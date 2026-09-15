@@ -19,6 +19,8 @@ import com.megapdf.engine.PdfLoadException
 import com.megapdf.engine.PdfPasswordException
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfSecurity
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -250,6 +252,58 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** The text box currently selected for drag/correct/remove (#36). */
     var selectedTextBox: SelectedTextBox? by mutableStateOf(null)
         private set
+
+    /**
+     * The warning on screen before the first text-box change on a page PDFium's rewrite would
+     * alter (#139). The screen answers it with [answerPageRewrite]: Continue or Cancel.
+     */
+    var pageRewriteQuestion: CompletableDeferred<Boolean>? by mutableStateOf(null)
+        private set
+
+    private val rewriteWarnings = PageRewriteWarnings()
+
+    fun answerPageRewrite(proceed: Boolean) {
+        pageRewriteQuestion?.complete(proceed)
+    }
+
+    /**
+     * True when [operation] may go ahead: it leaves the page's content alone, the page was
+     * already settled in this document, the page keeps its look when regenerated, or the person
+     * chose Continue. The verdict runs on the engine's thread; a page that cannot be judged is
+     * no reason to stand in the way. A restricted document is left to [perform] to refuse.
+     */
+    private suspend fun confirmPageRewrite(operation: PdfEditOperation, doc: PdfDocument): Boolean {
+        if (!PageRewriteWarnings.regeneratesUnjudged(operation) || !capabilities.allows(operation)) return true
+        val pageIndex = operation.pageIndex
+        if (rewriteWarnings.isSettled(pageIndex)) return true
+        val verdict = try {
+            val page = doc.openPage(pageIndex)
+            try {
+                page.pageRegenerationVerdict()
+            } finally {
+                page.close()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (verdict == null || verdict.editable) {
+            rewriteWarnings.settle(pageIndex)
+            return true
+        }
+        val question = CompletableDeferred<Boolean>()
+        pageRewriteQuestion = question
+        val proceed = try {
+            question.await()
+        } finally {
+            if (pageRewriteQuestion === question) pageRewriteQuestion = null
+        }
+        // The document may have been closed while the question was up.
+        if (document !== doc) return false
+        if (proceed) rewriteWarnings.settle(pageIndex)
+        return proceed
+    }
 
     var uiState: ViewerUiState by mutableStateOf(ViewerUiState.Home(recentsStore.load()))
         private set
@@ -748,19 +802,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     val before = TextBoxStyle(
                         pending.initialText, pending.fontSize, pending.fontName)
                     if (before == style) return@launch
-                    perform(
-                        EditTextBoxOperation(
-                            pending.pageIndex, pending.editingId, before, style,
-                            pending.x, pending.y),
-                        doc)
+                    val edit = EditTextBoxOperation(
+                        pending.pageIndex, pending.editingId, before, style,
+                        pending.x, pending.y)
+                    if (!confirmPageRewrite(edit, doc)) return@launch
+                    perform(edit, doc)
                     reselectTextBox(doc, pending.pageIndex, pending.editingId)
                 } else {
-                    perform(
-                        TextBoxOperation(
-                            pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
-                            trimmed, fontSize, pending.x, pending.y, adding = true,
-                            fontName = fontName),
-                        doc)
+                    val add = TextBoxOperation(
+                        pending.pageIndex, "text:${java.util.UUID.randomUUID()}",
+                        trimmed, fontSize, pending.x, pending.y, adding = true,
+                        fontName = fontName)
+                    if (!confirmPageRewrite(add, doc)) return@launch
+                    perform(add, doc)
                 }
             } catch (e: Exception) {
                 statusMessage =
@@ -787,12 +841,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             if (kotlin.math.abs(rect.left - sel.rect.left) < 0.01 &&
                 kotlin.math.abs(rect.bottom - sel.rect.bottom) < 0.01) return@launch
             try {
-                perform(
-                    MoveTextBoxOperation(
-                        sel.pageIndex, sel.id,
-                        fromX = sel.rect.left, fromY = sel.rect.bottom,
-                        toX = rect.left, toY = rect.bottom),
-                    doc)
+                val move = MoveTextBoxOperation(
+                    sel.pageIndex, sel.id,
+                    fromX = sel.rect.left, fromY = sel.rect.bottom,
+                    toX = rect.left, toY = rect.bottom)
+                if (!confirmPageRewrite(move, doc)) {
+                    // Cancel: the box never moved. Dropping the selection drops the dragged
+                    // overlay with it, so nothing on screen claims otherwise (#139).
+                    selectedTextBox = null
+                    return@launch
+                }
+                perform(move, doc)
                 reselectTextBox(doc, sel.pageIndex, sel.id)
             } catch (e: Exception) {
                 statusMessage = str(R.string.text_move_failed)
@@ -824,12 +883,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 // boundsAnchored: the coordinates are the box's reported rect, so
                 // an undo must re-add against bounds, not the baseline.
-                perform(
-                    TextBoxOperation(
-                        sel.pageIndex, sel.id, sel.text, sel.fontSize,
-                        sel.rect.left, sel.rect.bottom, adding = false,
-                        boundsAnchored = true, fontName = sel.fontName),
-                    doc)
+                val remove = TextBoxOperation(
+                    sel.pageIndex, sel.id, sel.text, sel.fontSize,
+                    sel.rect.left, sel.rect.bottom, adding = false,
+                    boundsAnchored = true, fontName = sel.fontName)
+                if (!confirmPageRewrite(remove, doc)) return@launch
+                perform(remove, doc)
             } catch (e: Exception) {
                 statusMessage = str(R.string.text_remove_failed)
             }
@@ -1348,6 +1407,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // History belongs to the open document — never offer to undo an edit made
         // to a file that is no longer on screen.
         history.clear()
+        // So do the pages already warned about or checked (#139).
+        rewriteWarnings.reset()
+        pageRewriteQuestion?.complete(false)
+        pageRewriteQuestion = null
         canUndo = false
         canRedo = false
         isPlacingText = false

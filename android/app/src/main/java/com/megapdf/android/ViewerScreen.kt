@@ -165,6 +165,9 @@ fun ViewerScreen(
     onSetPassword: (String) -> Unit = {},
     onRemovePassword: () -> Unit = {},
     onCancelPasswordCommand: () -> Unit = {},
+    // The warning before the first text-box change on a page that regenerating would alter (#139).
+    pageRewriteQuestion: Boolean = false,
+    onAnswerPageRewrite: (proceed: Boolean) -> Unit = {},
     onClose: () -> Unit,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
@@ -341,6 +344,20 @@ fun ViewerScreen(
             onRemove = onRemovePassword,
             onUnlock = onStartUnlock,
             onDismiss = onCancelPasswordCommand,
+        )
+    }
+
+    if (pageRewriteQuestion) {
+        AlertDialog(
+            onDismissRequest = { onAnswerPageRewrite(false) },
+            title = { Text(stringResource(R.string.page_rewrite_warning_title)) },
+            text = { Text(stringResource(R.string.page_rewrite_warning)) },
+            confirmButton = {
+                TextButton(onClick = { onAnswerPageRewrite(true) }) { Text(stringResource(R.string.action_continue)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { onAnswerPageRewrite(false) }) { Text(stringResource(R.string.cancel)) }
+            },
         )
     }
 

@@ -148,6 +148,8 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onSetPassword = viewModel::setPassword,
                 onRemovePassword = viewModel::removePassword,
                 onCancelPasswordCommand = viewModel::cancelPasswordCommand,
+                pageRewriteQuestion = viewModel.pageRewriteQuestion != null,
+                onAnswerPageRewrite = viewModel::answerPageRewrite,
                 onClose = viewModel::closeDocument,
             )
         }

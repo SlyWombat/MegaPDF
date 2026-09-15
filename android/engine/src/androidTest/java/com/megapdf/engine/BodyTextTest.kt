@@ -88,6 +88,23 @@ class BodyTextTest {
     }
 
     @Test
+    fun aPageRegeneratingWouldAlterIsFlaggedAndATextBoxStillApplies() = onFirstPage(helveticaPdf(CLIPPED_BY_TEXT)) { page ->
+        val verdict = page.pageRegenerationVerdict()
+        assertEquals("regenerating the page changes it (#139)", false, verdict?.editable)
+        assertEquals("for the render", LayoutCause.RENDER, verdict?.cause)
+        page.addTextBox("Note", 12.0, 300.0, 300.0, "text:139")
+        assertTrue("the text box is never refused", page.textBoxes().any { it.id == "text:139" })
+    }
+
+    @Test
+    fun aPlainPageKeepsItsLookWhenRegenerated() =
+        onFirstPage(helveticaPdf("BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET")) { page ->
+            val verdict = page.pageRegenerationVerdict()
+            assertEquals("no warning on a plain page (#139)", true, verdict?.editable)
+            assertEquals(LayoutCause.OK, verdict?.cause)
+        }
+
+    @Test
     fun textUnderCharacterSpacingIsEditableNowThatTheWriterKeepsIt() =
         onFirstPage(helveticaPdf("BT /F1 24 Tf 4 Tc 72 700 Td (Spaced report) Tj ET")) { page ->
             val run = page.textLines().single().runs.single()

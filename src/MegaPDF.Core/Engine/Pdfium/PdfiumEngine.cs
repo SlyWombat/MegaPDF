@@ -704,6 +704,14 @@ internal sealed class PdfiumPage : IPdfPage
         return CoreNative.megapdf_text_editable_reason(_core, objectIndex, out var verdict) < 0 ? null : ToVerdict(verdict);
     }
 
+    public LayoutVerdict GetPageRegenerationVerdict()
+    {
+        ThrowIfDisposed();
+        if (CoreNative.megapdf_page_regeneration_verdict(_core, out var verdict) < 0)
+            throw new InvalidOperationException("The page could not be judged.");
+        return ToVerdict(verdict);
+    }
+
     private static LayoutVerdict ToVerdict(CoreNative.megapdf_layout_verdict v) =>
         new(v.editable != 0, (LayoutCause)v.cause, (LayoutArea)v.where, v.changed_pixels, v.total_pixels, v.max_shift_pt);
 

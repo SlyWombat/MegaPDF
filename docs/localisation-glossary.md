@@ -30,6 +30,7 @@ Conventions (OQLF, Canadian French):
 | Undo | Annuler | |
 | Redo | Rétablir | |
 | Cancel | Annuler | same word as Undo; standard on every French OS |
+| Continue | Continuer | |
 | OK | OK | |
 | Close | Fermer | |
 | Done | Terminé | |
@@ -110,6 +111,8 @@ Conventions (OQLF, Canadian French):
 | Set password | Définir un mot de passe | #131 |
 | Remove password | Retirer le mot de passe | #131; *Retirer*, as for Remove |
 | crash recovery | récupération après une fermeture inattendue | #131, desktops |
+| Change this page? | Modifier cette page? | #139, title of the warning below |
+| Changing this page may slightly alter parts of it you haven't touched. | Modifier cette page pourrait légèrement changer des parties que vous n'avez pas touchées. | #139, once per page before a whiteout, text box or removal on a page PDFium's rewrite would alter; *changer*, not *altérer* |
 | Unsaved changes | Modifications non enregistrées | |
 | Save changes to {0}? | Enregistrer les modifications de {0}? | |
 | Your changes will be lost if you don't save them. | Vos modifications seront perdues si vous ne les enregistrez pas. | |

@@ -852,6 +852,15 @@ Java_com_megapdf_engine_PdfiumNative_nativeTextEditableReason(JNIEnv* env, jobje
     return PackLayoutVerdict(env, status, v);
 }
 
+// Whether regenerating the page changes how it looks (#139). Status 1, 0 or MEGAPDF_ERR_ARGUMENT.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageRegenerationVerdict(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_layout_verdict v{};
+    const int status = megapdf_page_regeneration_verdict(p->core, &v);
+    return PackLayoutVerdict(env, status, v);
+}
+
 // The verdict behind this thread's latest layout refusal: call straight after the refused call.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeLastLayoutVerdict(JNIEnv* env, jobject) {
