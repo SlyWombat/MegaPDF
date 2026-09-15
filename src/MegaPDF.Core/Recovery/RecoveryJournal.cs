@@ -208,16 +208,23 @@ public sealed class RecoveryJournal : IDisposable
         _writer = null;
     }
 
+    /// <summary>
+    /// Deletes a journal only while holding its exclusive lock, so a journal another instance
+    /// is writing is never deleted (#145). File.Delete was enough on Windows, where the writer's
+    /// share mode refuses it; on macOS and Linux the lock is advisory, and an unlink goes ahead
+    /// under it, so a discard could remove a live instance's journal and leave its edits
+    /// unrecoverable. DeleteOnClose removes the file before the lock is let go, on every platform.
+    /// </summary>
     private static void TryDelete(string path)
     {
         try
         {
-            if (File.Exists(path))
-                File.Delete(path);
+            using var held = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None,
+                                            bufferSize: 1, FileOptions.DeleteOnClose);
         }
         catch (IOException)
         {
-            // Another instance holds it.
+            // Gone already, or another instance holds it.
         }
         catch (UnauthorizedAccessException)
         {
