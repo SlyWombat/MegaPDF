@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.ConfirmPageRewriteWindow"
+        Title="{x:Static loc:Strings.PageRewriteWarningTitle}"
+        Width="400" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Text="{x:Static loc:Strings.PageRewriteWarning}" TextWrapping="Wrap" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="{DynamicResource SpaceS}">
+      <Button Name="CancelButton" Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <!-- The change is what the person asked for; Enter continues, Escape cancels. -->
+      <Button Name="ContinueButton" Content="{x:Static loc:Strings.Continue}" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

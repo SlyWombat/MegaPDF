@@ -616,4 +616,13 @@ public static partial class Strings
 
     /// <summary>Password removed.</summary>
     public static string PasswordRemovedStatus => Get("PasswordRemovedStatus");
+
+    /// <summary>Change this page?</summary>
+    public static string PageRewriteWarningTitle => Get("PageRewriteWarningTitle");
+
+    /// <summary>Changing this page may slightly alter parts of it you haven't touched.</summary>
+    public static string PageRewriteWarning => Get("PageRewriteWarning");
+
+    /// <summary>Continue</summary>
+    public static string Continue => Get("Continue");
 }

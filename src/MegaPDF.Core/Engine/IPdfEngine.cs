@@ -162,6 +162,15 @@ public interface IPdfPage : IDisposable
     LayoutVerdict? GetLayoutVerdict(int objectIndex);
 
     /// <summary>
+    /// Whether regenerating this page's content, with nothing changed, would change how it
+    /// looks (#139). Whiteouts, text boxes and removing objects regenerate the page too and are
+    /// never refused; ask before the first such change to warn when <see cref="LayoutVerdict.Editable"/>
+    /// is false. The same dry run and budgets as <see cref="GetLayoutVerdict"/>, cached per page
+    /// until the page next changes. Slow on a heavy page the first time: call it off the UI thread.
+    /// </summary>
+    LayoutVerdict GetPageRegenerationVerdict();
+
+    /// <summary>
     /// Removes a text run from the page, keeping the native object alive so
     /// <see cref="RestoreTextRun"/> can put it back byte-identical (undo).
     /// </summary>

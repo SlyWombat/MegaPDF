@@ -114,6 +114,9 @@
     <string name="body_text_layout">Le texte de cette page ne peut pas être modifié sans déranger sa mise en page.</string>
     <string name="body_text_layout_render">Cette ligne ne peut pas être modifiée sans changer l\'apparence d\'autres parties de la page.</string>
     <string name="body_text_layout_text_moves">Cette ligne ne peut pas être modifiée sans déplacer du texte ailleurs sur la page.</string>
+    <string name="page_rewrite_warning_title">Modifier cette page ?</string>
+    <string name="page_rewrite_warning">Modifier cette page pourrait légèrement changer des parties que vous n\'avez pas touchées.</string>
+    <string name="action_continue">Continuer</string>
     <string name="text_move_failed">Impossible de déplacer ce texte</string>
     <string name="text_remove_failed">Impossible de retirer ce texte</string>
     <string name="undo_failed">Impossible d\'annuler</string>

@@ -753,4 +753,13 @@ Saved as {2} — ready to email.</value>
     <value>Tab to where the signature goes on the page, then press Enter.</value>
     <comment>Announced by Narrator after a signature is picked from the library</comment>
   </data>
+  <data name="PageRewriteWarningTitle" xml:space="preserve">
+    <value>Change this page?</value>
+  </data>
+  <data name="PageRewriteWarning" xml:space="preserve">
+    <value>Changing this page may slightly alter parts of it you haven't touched.</value>
+  </data>
+  <data name="Continue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
 </root>

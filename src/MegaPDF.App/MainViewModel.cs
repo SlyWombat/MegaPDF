@@ -91,6 +91,9 @@ public partial class MainViewModel(Window window) : ObservableObject
     private static readonly IPdfEngine Engine = new PdfiumEngine();
 
     private readonly UndoStack _undoStack = new();
+
+    /// <summary>Pages already asked about in this document (#139): the warning comes once per page.</summary>
+    private readonly PageRegenerationWarnings _pageWarnings = new();
     private readonly RecoveryJournal _journal = new();
     private readonly RecentFiles _recentFiles = new();
     private readonly AppSettings _settings = new();
@@ -350,6 +353,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         DocumentPath = path;
         HasUnsavedChanges = false;
         _undoStack.Clear();
+        _pageWarnings.Reset();
         ClearSearch(); // matches belong to the previous document
         // Not journaled when opened with a password: its text must not reach disk
         // unencrypted (#135). The notice above says so (ADR-004 §7).
@@ -975,12 +979,12 @@ public partial class MainViewModel(Window window) : ObservableObject
             _document, pageIndex, run.ObjectIndex, run, trimmed, fontName, fontSize));
     }
 
-    /// <summary>Repositions an added text box (drag/nudge, SDD §3.3).</summary>
-    public async Task MoveTextBoxAsync(int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds)
+    /// <summary>Repositions an added text box (drag/nudge, SDD §3.3). False when nothing moved (#139: Cancel).</summary>
+    public async Task<bool> MoveTextBoxAsync(int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds)
     {
         if (_document is null || oldBounds == newBounds)
-            return;
-        await DoEditAsync(new MoveTextBoxOperation(_document, pageIndex, objectIndex, oldBounds, newBounds));
+            return false;
+        return await DoEditAsync(new MoveTextBoxOperation(_document, pageIndex, objectIndex, oldBounds, newBounds));
     }
 
     /// <summary>Removes an added text box (✕/Delete on the selection).</summary>
@@ -1101,14 +1105,24 @@ public partial class MainViewModel(Window window) : ObservableObject
         }
     }
 
-    private async Task DoEditAsync(IPageEditOperation op)
+    /// <summary>Applies an edit through the undo stack; false when it was not applied (restricted, or Cancel on the #139 warning).</summary>
+    private async Task<bool> DoEditAsync(IPageEditOperation op)
     {
         // The central gate (#131): every entry point above checks first so no editor
         // opens, and this is what holds if one is ever missed.
         if (!Capabilities.Allows(op))
         {
             IsRestrictedNoticeOpen = true;
-            return;
+            return false;
+        }
+        // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
+        // changes parts the person never touched. Never refused; asked once per page. The
+        // core's dry run is slow on a heavy page, so it runs off the UI thread.
+        if (_document is { } document && await Task.Run(() => _pageWarnings.ShouldWarn(document, op)))
+        {
+            if (!await ConfirmPageRewriteAsync())
+                return false;
+            _pageWarnings.Settle(op.PageIndex);
         }
         await Task.Run(() => _undoStack.Do(op));
         _journal.Record(op.ToJournalEntry(inverse: false));
@@ -1116,6 +1130,24 @@ public partial class MainViewModel(Window window) : ObservableObject
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
         await RefreshPageAsync(op.PageIndex);
+        return true;
+    }
+
+    /// <summary>The #139 warning: Continue applies the change, Cancel leaves the page as it is.</summary>
+    private async Task<bool> ConfirmPageRewriteAsync()
+    {
+        if (window.Content?.XamlRoot is not { } xamlRoot)
+            return true;
+        var dialog = new ContentDialog
+        {
+            Title = Strings.PageRewriteWarningTitle,
+            Content = Strings.PageRewriteWarning,
+            PrimaryButtonText = Strings.Continue,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
     public async Task ApplyLineEditAsync(int pageIndex, PdfTextLine line, string newText)

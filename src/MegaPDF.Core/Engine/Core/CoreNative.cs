@@ -491,6 +491,10 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_last_layout_verdict(out megapdf_layout_verdict verdict);
 
+    /// <summary>Whether regenerating the page changes how it looks (#139): 1 no, 0 yes, or MEGAPDF_ERR_ARGUMENT (-1).</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_page_regeneration_verdict(IntPtr page, out megapdf_layout_verdict verdict);
+
     [DllImport(Dll)]
     public static extern int megapdf_is_subset_font_name([MarshalAs(UnmanagedType.LPUTF8Str)] string baseName);
 

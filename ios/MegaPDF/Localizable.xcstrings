@@ -177,6 +177,38 @@
         }
       }
     },
+    "Change this page?" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier cette page ?"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier cette page?"
+          }
+        }
+      }
+    },
+    "Changing this page may slightly alter parts of it you haven't touched." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier cette page pourrait légèrement changer des parties que vous n'avez pas touchées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modifier cette page pourrait légèrement changer des parties que vous n'avez pas touchées."
+          }
+        }
+      }
+    },
     "Clear" : {
       "localizations" : {
         "fr" : {
@@ -221,6 +253,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Confirmer le mot de passe"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continuer"
           }
         }
       }

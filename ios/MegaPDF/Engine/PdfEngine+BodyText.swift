@@ -198,6 +198,19 @@ extension PdfEngine {
         }
     }
 
+    /// Whether regenerating the page's content, with nothing changed, would change how it looks
+    /// (#139). Whiteouts, text boxes, signatures and removals regenerate the page too and are never
+    /// refused; ask before the first such change on a page and warn when `editable` is false.
+    /// The same dry run and budgets as `layoutVerdict`, cached per page until the page changes.
+    /// nil when the page cannot be judged.
+    func pageRegenerationVerdict(_ document: PdfDocument, pageIndex: Int) throws -> PdfLayoutVerdict? {
+        try withCorePage(document, index: pageIndex) { page in
+            var verdict = megapdf_layout_verdict()
+            guard megapdf_page_regeneration_verdict(page, &verdict) >= 0 else { return nil }
+            return PdfLayoutVerdict(verdict)
+        }
+    }
+
     /// Why the core's last call on this thread was refused by the layout guard. Read straight
     /// after the refused call, inside the same `withCorePage`.
     private static func lastLayoutVerdict() -> PdfLayoutVerdict {

@@ -180,6 +180,21 @@ internal sealed class SaveResult
 internal sealed class EditsResult
 {
     [JsonPropertyName("items")] public List<EditItem> Items { get; set; } = new();
+    /// <summary>Each sampled page's regeneration verdict (#139): would a whiteout or text box alone change the page?</summary>
+    [JsonPropertyName("regen_pages")] public List<RegenPage> RegenPages { get; set; } = new();
+    [JsonPropertyName("error")] public string? Error { get; set; }
+}
+
+/// <summary>megapdf_page_regeneration_verdict on one sampled page (#139), numbers only.</summary>
+internal sealed class RegenPage
+{
+    [JsonPropertyName("page")] public string PagePosition { get; set; } = "";
+    [JsonPropertyName("editable")] public bool? Editable { get; set; }
+    [JsonPropertyName("cause")] public string? Cause { get; set; }
+    [JsonPropertyName("where")] public string? Where { get; set; }
+    [JsonPropertyName("px")] public int? Pixels { get; set; }
+    [JsonPropertyName("total_px")] public int? TotalPixels { get; set; }
+    [JsonPropertyName("ms")] public double? Ms { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
 }
 
@@ -682,6 +697,8 @@ internal static class Worker
                 using (var probe = engine.Open(pristine))
                 using (var page = probe.GetPage(pageIndex))
                     lineCount = page.GetTextLines().Count(l => !string.IsNullOrWhiteSpace(l.Text));
+                // Every sampled page, with text or not: whiteouts and text boxes go on any page (#139).
+                result.RegenPages.Add(RegenVerdict(engine, pristine, pageIndex, pagePosition));
                 if (lineCount == 0)
                     continue;
                 foreach (var (linePosition, lineIndex) in new[] { ("first", 0), ("middle", lineCount / 2), ("last", lineCount - 1) }.DistinctBy(l => l.Item2))
@@ -706,6 +723,30 @@ internal static class Worker
             try { File.Delete(edited); } catch { /* best effort */ }
         }
         return result;
+    }
+
+    /// <summary>The page's regeneration verdict (#139) from a fresh open, as the apps would ask it before a first whiteout.</summary>
+    private static RegenPage RegenVerdict(PdfiumEngine engine, string pristine, int pageIndex, string pagePosition)
+    {
+        var item = new RegenPage { PagePosition = pagePosition };
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            using var probe = engine.Open(pristine);
+            using var page = probe.GetPage(pageIndex);
+            var verdict = page.GetPageRegenerationVerdict();
+            item.Editable = verdict.Editable;
+            item.Cause = verdict.Cause.ToString();
+            item.Where = verdict.Where.ToString();
+            item.Pixels = verdict.ChangedPixels;
+            item.TotalPixels = verdict.TotalPixels;
+        }
+        catch (Exception ex)
+        {
+            item.Error = Describe(ex);
+        }
+        item.Ms = sw.Elapsed.TotalMilliseconds;
+        return item;
     }
 
     private static EditItem OneEdit(PdfiumEngine engine, string pristine, string edited, int pageIndex,
