@@ -328,6 +328,11 @@ public partial class MainWindow : Window
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
         var editor = new TextBox
         {
+            // Off while the starting text goes in, on once the editor is up (#144): the
+            // text a line or field already had is where editing starts, not an edit, so
+            // Cmd+Z straight away must not empty the box. Turning undo off clears its
+            // history; turning it back on after load leaves nothing to undo until typing.
+            IsUndoEnabled = false,
             MinWidth = Math.Max(140, minWidth),
             Text = initialText,
             FontSize = fontSizePoints * dip,
@@ -368,6 +373,10 @@ public partial class MainWindow : Window
             if (_inlineEditor == editor && !IsInTextPicker(FocusManager?.GetFocusedElement()))
                 Commit();
         };
+
+        // After its template and first layout, so nothing the editor does to show its
+        // starting text lands in the history that Cmd+Z walks.
+        editor.Loaded += (_, _) => editor.IsUndoEnabled = true;
 
         if (OverlayOf(presenter) is { } overlay)
         {
