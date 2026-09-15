@@ -121,30 +121,39 @@ public sealed class LayoutGuardTests : IDisposable
     }
 
     /// <summary>
-    /// #128: a font written straight into the page's resources with its own widths loses them
-    /// when PDFium rewrites the page, so its runs would move. The refusal says text would move.
+    /// #141: a font written straight into the page's resources with its own widths. Before
+    /// PDFium patch 0014 the writer rebuilt it without /Widths, so its runs moved and the edit
+    /// was refused as text moving (#128). The patched writer keeps the dictionary, so the page
+    /// is editable and the line under the edit stays where it was.
     /// </summary>
     [Fact]
-    public void TextInADirectFontWithItsOwnWidths_IsRefusedBecauseTextWouldMove()
+    public void TextInADirectFontWithItsOwnWidths_IsEditable_AndOtherTextStaysPut()
     {
         var widths = string.Join(' ', Enumerable.Repeat("1000", 95));
         var font = $"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [{widths}] >>";
         using var doc = Open(Pdf("BT /F1 18 Tf 72 700 Td (Heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line here) Tj ET", font), "direct-font.pdf");
 
         PdfTextLine line;
+        PdfTextRun bodyBefore;
         using (var page = doc.GetPage(0))
         {
-            line = page.GetTextLines()[0];
+            var lines = page.GetTextLines();
+            line = lines[0];
+            bodyBefore = lines[1].Runs[0];
             var verdict = page.GetLayoutVerdict(line.Runs[0].ObjectIndex);
             Assert.NotNull(verdict);
-            Assert.Equal(LayoutCause.TextMoved, verdict.Cause);
-            Assert.True(verdict.TextWouldMove);
-            Assert.True(verdict.MaxShiftPoints > 0.5);
+            Assert.True(verdict.Editable);
+            Assert.Equal(LayoutCause.Ok, verdict.Cause);
         }
 
-        var refusal = Assert.Throws<TextEditException>(new LineEditOperation(doc, 0, line, "Annual report").Apply);
-        Assert.Equal(TextEditFailure.LayoutWouldChange, refusal.Reason);
-        Assert.Equal(LayoutCause.TextMoved, refusal.Layout?.Cause);
+        new LineEditOperation(doc, 0, line, "Annual report").Apply();
+
+        using var after = doc.GetPage(0);
+        var body = after.GetTextRuns().Single(r => r.Text.TrimEnd() == "Body line here");
+        // Unpatched, the body came back at Helvetica's advances, tens of points narrower.
+        Assert.Equal(bodyBefore.Bounds.X, body.Bounds.X, 0.01);
+        Assert.Equal(bodyBefore.Bounds.Y, body.Bounds.Y, 0.01);
+        Assert.Equal(bodyBefore.Bounds.Width, body.Bounds.Width, 0.01);
     }
 
     private IPdfDocument Open(byte[] bytes, string name)
