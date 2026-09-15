@@ -94,6 +94,18 @@ public partial class MainWindow
         if (ViewModel is not { IsDocumentOpen: true } vm)
             return false;
 
+        // Zoom in answers Cmd+Shift+= as well as Cmd+= (#144). The plus sign is on the
+        // = key, so "Cmd+Plus" is Cmd+Shift+= to the keyboard, and people who read
+        // the + on the key and press Shift got nothing: the gesture bound for the menu
+        // (Cmd+=) does not match with Shift held, on the Mac menu or the window.
+        if (e.Key is Key.OemPlus or Key.Add
+            && e.KeyModifiers == (CommandModifier | KeyModifiers.Shift))
+        {
+            if (vm.ZoomInCommand.CanExecute(null))
+                vm.ZoomInCommand.Execute(null);
+            return true;
+        }
+
         // While an editor is open the keys belong to it.
         if (_inlineEditor is not null || FindBox.IsFocused)
             return false;

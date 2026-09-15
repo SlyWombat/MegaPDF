@@ -28,6 +28,10 @@
     <PackageReference Include="Avalonia" Version="11.2.*" />
     <PackageReference Include="Avalonia.Desktop" Version="11.2.*" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.*" />
+    <!-- For the self-test only (#144): the toolbar menus are opened in a real window on
+         the headless platform, because a menu that pops up empty is invisible to every
+         check that drives the view model alone. Nothing else starts this platform. -->
+    <PackageReference Include="Avalonia.Headless" Version="11.2.*" />
     <!-- Same MVVM library the WinUI app uses, so MainViewModel's [ObservableProperty]
          and [RelayCommand] attributes mean the same thing on both sides when the
          extraction in ADR-002 happens. -->

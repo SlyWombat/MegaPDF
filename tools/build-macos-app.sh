@@ -97,10 +97,14 @@ cp "$ICON" "$APP/Contents/Resources/MegaPDF.icns"
 mkdir -p "$APP/Contents/Resources/en.lproj" "$APP/Contents/Resources/fr.lproj" "$APP/Contents/Resources/fr-CA.lproj"
 cat > "$APP/Contents/Resources/en.lproj/InfoPlist.strings" << 'STRINGS'
 CFBundleTypeName = "PDF document";
+NSLocalNetworkUsageDescription = "MegaPDF looks for printers on your network when you print.";
 STRINGS
+# France and Canada read the same here: the sentence has none of the punctuation
+# (? ! ; :) the two spell differently (docs/localisation-glossary.md).
 for lproj in fr fr-CA; do
 cat > "$APP/Contents/Resources/$lproj.lproj/InfoPlist.strings" << 'STRINGS'
 CFBundleTypeName = "Document PDF";
+NSLocalNetworkUsageDescription = "MegaPDF recherche les imprimantes de votre réseau lorsque vous imprimez.";
 STRINGS
 done
 
@@ -138,6 +142,12 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>ITSAppUsesNonExemptEncryption</key><false/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSHumanReadableCopyright</key><string>Electric RV</string>
+    <!-- File > Print opens the system print panel, and since macOS 15 the panel's
+         search for network printers runs as MegaPDF and raises the Local Network
+         prompt the first time (#143). MegaPDF makes no network connection of its
+         own; this is the sentence that prompt shows, so it says why. Translated in
+         the InfoPlist.strings above. -->
+    <key>NSLocalNetworkUsageDescription</key><string>MegaPDF looks for printers on your network when you print.</string>
     <!-- Opening a PDF from Finder is the whole point of the app; without this the
          Open With menu never lists it. Viewer, not Editor: MegaPDF does not claim
          to own .pdf, it offers to open one. -->

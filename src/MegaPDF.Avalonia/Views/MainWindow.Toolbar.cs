@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -106,10 +107,15 @@ public partial class MainWindow
         AutomationProperties.SetName(MoreButton, Strings.ToolbarMore);
         ToolTip.SetTip(MoreButton, Strings.ToolbarMore);
 
-        if (MoreButton.Flyout is MenuFlyout more)
-            more.Opening += (_, _) => FillMoreMenu(more);
-        if (ZoomMenuButton.Flyout is MenuFlyout zoom)
-            zoom.Opening += (_, _) => FillItems(zoom.Items, ZoomMenuEntries());
+        // Add text and Cover stay pressed while their mode is on. A toggle button's peer
+        // is a plain button carrying a true/false value, which VoiceOver reads as neither;
+        // as checkboxes they announce on or off (#144).
+        AutomationProperties.SetControlTypeOverride(AddTextButton, AutomationControlType.CheckBox);
+        AutomationProperties.SetControlTypeOverride(WhiteoutButton, AutomationControlType.CheckBox);
+
+        // Built afresh and filled before they show, on every click: see OpenToolbarMenu.
+        MoreButton.Click += (_, _) => OpenToolbarMenu(MoreButton, PlacementMode.BottomEdgeAlignedRight, MoreMenuEntries());
+        ZoomMenuButton.Click += (_, _) => OpenToolbarMenu(ZoomMenuButton, PlacementMode.BottomEdgeAlignedLeft, ZoomMenuEntries());
 
         // Back to typing once a picker has been used over an open editor.
         FontBox.DropDownClosed += (_, _) => _inlineEditor?.Focus();
@@ -268,12 +274,39 @@ public partial class MainWindow
 
     // --- The More menu ---
 
+    /// <summary>The menu each of More and the zoom level last opened, for the self-test to read.</summary>
+    private readonly Dictionary<Button, MenuFlyout> _toolbarMenus = [];
+
     /// <summary>
-    /// Rebuilds the More menu as it opens: whatever has overflowed, in toolbar order,
-    /// then the commands that always live here. Each entry does exactly what its button
-    /// does: the same command, the same click handler, or the same flyout.
+    /// Opens a toolbar button's menu with its entries already in it (#144).
+    ///
+    /// These menus used to be a MenuFlyout on the button, emptied and refilled in its
+    /// Opening event. On the Mac both opened as an empty 2×32 sliver, every time and at
+    /// every width: Avalonia 11.2 creates the flyout's presenter before it raises
+    /// Opening, and entries added to a presenter that already exists were held but
+    /// never presented. A new flyout, filled and then shown, is the same as a menu
+    /// written out in XAML, which presents. The self-test opens both menus in a window
+    /// and fails on the sliver.
     /// </summary>
-    private void FillMoreMenu(MenuFlyout menu)
+    internal MenuFlyout OpenToolbarMenu(Button owner, PlacementMode placement, IEnumerable<object> entries)
+    {
+        var menu = new MenuFlyout { Placement = placement };
+        foreach (var entry in entries)
+            menu.Items.Add(entry);
+        _toolbarMenus[owner] = menu;
+        menu.ShowAt(owner);
+        return menu;
+    }
+
+    /// <summary>The menu <paramref name="owner"/> last opened, if any.</summary>
+    internal MenuFlyout? ToolbarMenuOf(Button owner) => _toolbarMenus.GetValueOrDefault(owner);
+
+    /// <summary>
+    /// The More menu's entries, built as it opens: whatever has overflowed, in toolbar
+    /// order, then the commands that always live here. Each entry does exactly what its
+    /// button does: the same command, the same click handler, or the same flyout.
+    /// </summary>
+    private List<object> MoreMenuEntries()
     {
         var entries = new List<object>();
         var absent = TextStyleContextShown ? [] : ContextualItems;
@@ -296,15 +329,7 @@ public partial class MainWindow
             vm?.CanShrink == true, () => _ = ShrinkForEmailAsync()));
         entries.Add(new Separator());
         entries.Add(CommandEntry(Strings.Options, "IconOptions", OptionsGesture, true, ShowOptions));
-
-        FillItems(menu.Items, entries);
-    }
-
-    private static void FillItems(ItemCollection items, IEnumerable<object> entries)
-    {
-        items.Clear();
-        foreach (var entry in entries)
-            items.Add(entry);
+        return entries;
     }
 
     /// <summary>
@@ -354,10 +379,8 @@ public partial class MainWindow
     /// </summary>
     internal void ShowMoreMenuForScreenshot()
     {
-        if (MoreButton.Flyout is not MenuFlyout flyout)
-            return;
+        var flyout = OpenToolbarMenu(MoreButton, PlacementMode.BottomEdgeAlignedRight, MoreMenuEntries());
         flyout.Closing += (_, e) => e.Cancel = true;
-        flyout.ShowAt(MoreButton);
     }
 
     private MenuItem CommandEntry(string header, string? iconKey, KeyGesture? gesture, bool enabled, Action invoke)

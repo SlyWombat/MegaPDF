@@ -1,5 +1,8 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.LogicalTree;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Imaging;
@@ -933,7 +936,257 @@ internal static class Program
             }
         }
 
+        // --- The toolbar menus, opened in a window (#144) ---
+        //
+        // Every check above drives the view model; none of them could see that More
+        // and the zoom level's menu popped up as an empty sliver on a real Mac, with
+        // every command still perfectly executable. This one clicks the buttons in a
+        // real window on the headless platform and asks the menu that appeared what
+        // it is showing, and how big it is. Last, because it starts that platform.
+        Console.WriteLine("toolbar menus, opened in a window (#144):");
+        try
+        {
+            CheckToolbarMenus(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::toolbar menus: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Opens More and the zoom menu by clicking them, at a width where commands overflow
+    /// and one where they do not, and checks what was presented rather than what was
+    /// filled in: a menu can hold its items and still show none of them.
+    /// </summary>
+    private static void CheckToolbarMenus(string dir, string state, Action<string, bool> check)
+    {
+        AppBuilder.Configure<App>()
+            .UseSkia()
+            .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .SetupWithoutStarting();
+
+        using var vm = new MainViewModel(state);
+        vm.Open(Path.Combine(dir, "fixture.pdf"));
+        var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+        window.Show();
+        Pump();
+
+        // 480 is the window's minimum, where commands are sure to have overflowed into More.
+        foreach (var width in new[] { 1280.0, 480.0 })
+        {
+            window.Width = width;
+            Pump();
+
+            var more = MenuProbe.Open(window, window.MoreButton);
+            check($"at {width} DIP, clicking More opens a menu ({window.DescribeToolbar()})", more.IsOpen);
+            check($"  which presents its entries ({more.Detail})",
+                  more.Headers.Contains(Strings.SaveAs) && more.Headers.Contains(Strings.Print)
+                  && more.Headers.Contains(Strings.Options));
+            check($"  at a size that shows them ({more.Size.Width:F0}x{more.Size.Height:F0} DIP)",
+                  more.Size.Width >= 100 && more.Size.Height >= 5 * 20);
+            if (width < 1000)
+                check("  led by the commands that overflowed", more.Headers.Contains(Strings.Redo));
+            more.Close();
+        }
+
+        // The zoom control is on the row at full width.
+        window.Width = 1280;
+        Pump();
+        vm.SetZoomCommand.Execute(2.0);
+        Pump();
+        var zoom = MenuProbe.Open(window, window.ZoomMenuButton);
+        check("clicking the zoom level opens its menu", zoom.IsOpen);
+        check($"  which presents the fits and the presets (presented {zoom.Headers.Count})",
+              zoom.Headers.Contains(Strings.ActualSize) && zoom.Headers.Contains(Strings.FitPage)
+              && zoom.Headers.Contains(Strings.ZoomPercent(100)));
+        check($"  at a size that shows them ({zoom.Size.Width:F0}x{zoom.Size.Height:F0} DIP)",
+              zoom.Size.Height >= 8 * 20);
+        zoom.Click(Strings.ActualSize);
+        check("  and choosing Actual size from it applies", Math.Abs(vm.Zoom - 1.0) < 0.001);
+
+        // The same menu opened a second time still shows its entries.
+        var again = MenuProbe.Open(window, window.ZoomMenuButton);
+        check("opened again, it still presents its entries", again.Headers.Contains(Strings.FitWidth));
+        again.Close();
+
+        // Zoom in from the keyboard: Cmd+= as the menu shows it, and Cmd+Shift+=, which is
+        // Cmd++ to anyone reading the key cap. Ctrl on Windows and Linux.
+        var command = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        foreach (var (keys, modifiers) in new[] { ("Cmd+=", command), ("Cmd+Shift+=", command | RawInputModifiers.Shift) })
+        {
+            vm.SetZoomCommand.Execute(1.0);
+            Pump();
+            global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, global::Avalonia.Input.Key.OemPlus, modifiers,
+                global::Avalonia.Input.PhysicalKey.Equal, modifiers.HasFlag(RawInputModifiers.Shift) ? "+" : "=");
+            global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, global::Avalonia.Input.Key.OemPlus, modifiers,
+                global::Avalonia.Input.PhysicalKey.Equal, modifiers.HasFlag(RawInputModifiers.Shift) ? "+" : "=");
+            Pump();
+            check($"{keys} zooms in (100% -> {vm.Zoom * 100:F0}%)", vm.Zoom > 1.001);
+        }
+
+        // Cmd+S with nothing changed does nothing (#144). The window's key binding used to
+        // run Save regardless of whether it could, and rewrote the file while Save sat
+        // greyed out. This window has no file to write to, so a save would say so.
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.S, command, PhysicalKey.S, "s");
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.S, command, PhysicalKey.S, "s");
+        Pump();
+        check($"Cmd+S with nothing changed does not save (status: {vm.Status})",
+              !vm.IsDirty && vm.Status != Strings.NowhereToSave);
+
+        // Accessibility (#144): what VoiceOver is handed for the pickers, the two mode
+        // toggles and the page's scroll bars.
+        check("each face in the font picker is named by its label, not the record",
+              vm.TextFontChoices.All(f => f.ToString() == f.Label));
+        foreach (var toggle in new global::Avalonia.Controls.Button[] { window.AddTextButton, window.WhiteoutButton })
+        {
+            var peer = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(toggle);
+            check($"{peer.GetName()} is exposed as a checkbox ({peer.GetAutomationControlType()})",
+                  peer.GetAutomationControlType() == global::Avalonia.Automation.Peers.AutomationControlType.CheckBox);
+        }
+
+        vm.SetZoomCommand.Execute(1.0);
+        Pump();
+        var scrollButtons = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.PageScroller)
+            .OfType<global::Avalonia.Controls.RepeatButton>().ToList();
+        check($"the page's scroll bar buttons are hidden from accessibility ({scrollButtons.Count} found)",
+              scrollButtons.Count > 0 && scrollButtons.All(b =>
+                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(b).IsControlElement()));
+
+        vm.ToggleAddTextCommand.Execute(null);
+        Pump();
+        var glyphs = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.FontBox)
+            .OfType<global::Avalonia.Controls.PathIcon>().ToList();
+        check($"the font picker's chevron is hidden from accessibility ({glyphs.Count} found)",
+              glyphs.Count > 0 && glyphs.All(g =>
+                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(g).IsControlElement()));
+        vm.ToggleAddTextCommand.Execute(null);
+        Pump();
+
+        // Tools > Text font and Text size follow the pickers' context (#144). On the Mac an
+        // item with a submenu is enabled whatever it is told, so out of context the
+        // submenu has to come off for the item to grey out.
+        foreach (var inContext in new[] { false, true })
+        {
+            if (inContext)
+                vm.ToggleAddTextCommand.Execute(null);
+            Pump();
+            foreach (var id in new[] { "FontBox", "SizeBox" })
+            {
+                var item = window.MenuBarItem(id);
+                check(inContext
+                          ? $"Tools > {item?.Header} is on, with its choices, while adding text"
+                          : $"Tools > {item?.Header} is off, with no submenu to open, outside Add text",
+                      inContext
+                          ? item is { IsEnabled: true, Menu.Items.Count: > 0 }
+                          : item is { IsEnabled: false, Menu: null });
+            }
+        }
+        vm.ToggleAddTextCommand.Execute(null);
+        Pump();
+
+        window.Close();
+        Pump();
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// What a toolbar button's menu actually put on screen when it was clicked: whether
+    /// it is open, the headers of the entries that were laid out with a real size, and
+    /// the size of the popup showing them. Read from the presented controls, not from
+    /// the flyout's item list, which is exactly what was full while the screen was empty.
+    /// </summary>
+    private sealed class MenuProbe
+    {
+        private readonly Views.MainWindow _window;
+        private readonly global::Avalonia.Controls.Button _owner;
+        private readonly List<(string Header, global::Avalonia.Controls.MenuItem Item)> _entries;
+
+        public bool IsOpen { get; }
+        public IReadOnlyList<string> Headers => _entries.Select(e => e.Header).ToList();
+        public Size Size { get; }
+
+        private MenuProbe(Views.MainWindow window, global::Avalonia.Controls.Button owner, bool isOpen,
+                          List<(string, global::Avalonia.Controls.MenuItem)> entries, Size size, string detail)
+        {
+            _window = window;
+            _owner = owner;
+            IsOpen = isOpen;
+            _entries = entries;
+            Size = size;
+            Detail = detail;
+        }
+
+        internal static void Pump()
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            global::Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+
+        /// <summary>Clicks the button's centre, as a pointer would, and reads what opened.</summary>
+        internal static MenuProbe Open(Views.MainWindow window, global::Avalonia.Controls.Button button)
+        {
+            var centre = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)
+                         ?? throw new InvalidOperationException($"{button.Name} is not in the window");
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseDown(window, centre, global::Avalonia.Input.MouseButton.Left);
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseUp(window, centre, global::Avalonia.Input.MouseButton.Left);
+            Pump();
+
+            if (window.ToolbarMenuOf(button) is not { IsOpen: true } flyout)
+                return new MenuProbe(window, button, false, [], default,
+                    $"not open: clicked {centre.X:F0},{centre.Y:F0} in a {window.ClientSize.Width:F0}x{window.ClientSize.Height:F0} window, "
+                    + $"{button.Name} visible={button.IsEffectivelyVisible} bounds={button.Bounds}, "
+                    + $"menu {(window.ToolbarMenuOf(button) is null ? "never built" : "built but closed")}");
+
+            // The presenter is found through whatever the menu holds, in the visual tree:
+            // an entry that was never presented has no visual ancestor at all.
+            var presenter = flyout.Items.OfType<global::Avalonia.Controls.MenuItem>()
+                .Select(i => global::Avalonia.VisualTree.VisualExtensions.FindAncestorOfType<global::Avalonia.Controls.MenuFlyoutPresenter>(i))
+                .FirstOrDefault(p => p is not null);
+            if (presenter is null)
+                return new MenuProbe(window, button, true, [], default, $"{flyout.Items.Count} item(s) held, none presented");
+
+            var entries = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(presenter)
+                .OfType<global::Avalonia.Controls.MenuItem>()
+                .Where(i => i.IsEffectivelyVisible && i.Bounds.Height > 0)
+                .Select(i => (i.Header?.ToString() ?? "", i))
+                .ToList();
+            // The presenter's own size: the headless platform draws popups inside the
+            // window, so the root is the window and its size says nothing about the menu.
+            var root = global::Avalonia.VisualTree.VisualExtensions.GetVisualRoot(presenter) as global::Avalonia.Controls.TopLevel;
+            return new MenuProbe(window, button, true, entries, presenter.Bounds.Size,
+                                 $"{flyout.Items.Count} held, {entries.Count} presented in {root?.GetType().Name ?? "no root"}");
+        }
+
+        /// <summary>What the probe saw, for the check's line when it fails.</summary>
+        public string Detail { get; }
+
+        /// <summary>Clicks the presented entry with this header, in the popup it is shown in.</summary>
+        internal void Click(string header)
+        {
+            var (_, item) = _entries.FirstOrDefault(e => e.Header == header);
+            if (item is null || global::Avalonia.VisualTree.VisualExtensions.GetVisualRoot(item) is not global::Avalonia.Controls.TopLevel root)
+                throw new InvalidOperationException($"no presented entry \"{header}\"");
+            var centre = item.TranslatePoint(new Point(item.Bounds.Width / 2, item.Bounds.Height / 2), root)!.Value;
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseDown(root, centre, global::Avalonia.Input.MouseButton.Left);
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseUp(root, centre, global::Avalonia.Input.MouseButton.Left);
+            Pump();
+        }
+
+        /// <summary>
+        /// Closes the menu the button opened. It must really close: a menu left open
+        /// light-dismisses on the next click anywhere, which swallows that click.
+        /// </summary>
+        internal void Close()
+        {
+            _window.ToolbarMenuOf(_owner)?.Hide();
+            Pump();
+        }
     }
 }

@@ -288,9 +288,7 @@
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
           </StackPanel>
-          <Button.Flyout>
-            <MenuFlyout Placement="BottomEdgeAlignedLeft" />
-          </Button.Flyout>
+          <!-- Its menu is built and opened on click: MainWindow.Toolbar.cs, OpenToolbarMenu. -->
         </Button>
         <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}">
           <Path Data="{StaticResource IconZoomIn}" Width="18" Height="18"
@@ -298,14 +296,12 @@
                 StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
         </Button>
 
-        <!-- More (#143, #144): always here. Its menu is filled as it opens — whatever
-             has overflowed, then Save As, Password…, Print, Shrink and Options. -->
+        <!-- More (#143, #144): always here. Its menu is built as it opens — whatever
+             has overflowed, then Save As, Password…, Print, Shrink and Options — and
+             opened on click (MainWindow.Toolbar.cs, OpenToolbarMenu). -->
         <Button Name="MoreButton">
           <Path Data="{StaticResource IconMore}" Width="18" Height="18"
                 Fill="{Binding $parent[Button].Foreground}" Stretch="Uniform" />
-          <Button.Flyout>
-            <MenuFlyout Placement="BottomEdgeAlignedRight" />
-          </Button.Flyout>
         </Button>
       </StackPanel>
     </Border>
