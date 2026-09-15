@@ -277,7 +277,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
                 return;
             }
             var (rendered, regions) = task.Result;
-            Apply(PageBitmap.FromRenderedPage(rendered, dpiScale), regions, zoom, dpiScale, generation, capped);
+            Apply(PageBitmap.FromRenderedPage(rendered), regions, zoom, dpiScale, generation, capped);
         }), TaskScheduler.Default);
     }
 
@@ -288,7 +288,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             return;
         // Not recorded as rendered: EnsureRendered keeps treating the page as pending
         // until the full raster arrives through Apply.
-        Image = PageBitmap.FromRenderedPage(small, dpiScale);
+        Image = PageBitmap.FromRenderedPage(small);
     }
 
     /// <summary>UI thread: shows a raster, then chases the zoom if it moved while rendering.</summary>
