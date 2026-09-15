@@ -739,6 +739,24 @@ MEGAPDF_API int megapdf_text_editable_reason(const megapdf_page* page, int objec
  */
 MEGAPDF_API int megapdf_last_layout_verdict(megapdf_layout_verdict* out);
 
+/**
+ * Whether regenerating the page's content would change how the page looks (#139): 1 no
+ * (the page keeps its look), 0 yes, MEGAPDF_ERR_ARGUMENT for a bad page or a NULL `out`.
+ * `out` is filled in when the return is 1 or 0.
+ *
+ * Every change that is not a body-text edit also makes PDFium rewrite the page's content:
+ * adding, moving or removing a whiteout or a text box, megapdf_detach_object() on anything
+ * but body text, megapdf_restore_object(), megapdf_replace_image_jpeg(), flattening. Those
+ * changes are never refused; this lets the apps warn first. The answer is the
+ * megapdf_text_editable() dry run with no text object changed: mark one object dirty on a
+ * copy of the page, rewrite it, save, reopen, and compare the render and every text object
+ * with a reopened copy of the page as it was, by the same budgets. `cause` and `where` are
+ * as megapdf_layout_verdict describes; `where` never has MEGAPDF_LAYOUT_WHERE_OBJECT. A page
+ * with no objects has nothing to rewrite and keeps its look. Cached per page until the page
+ * next changes (#137).
+ */
+MEGAPDF_API int megapdf_page_regeneration_verdict(const megapdf_page* page, megapdf_layout_verdict* out);
+
 /** 1 when `base_name` is a subset-embedded font's name: six capitals, a plus sign, the name. */
 MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name);
 

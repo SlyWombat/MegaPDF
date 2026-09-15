@@ -1571,28 +1571,37 @@ void ForgetVerdicts(megapdf_document* d, int page_index) {
     while (it != verdicts.end() && it->first.first == page_index) it = verdicts.erase(it);
 }
 
-// The dry run behind megapdf_text_editable(). Rewrites the streams holding the objects and
-// their hidden copies (#136) on a copy of the page — take them off and put them straight
-// back, which is what any edit forces — then saves, reopens and compares with the copy
-// before the rewrite. One dry run judges a whole line; the verdict is cached per object.
-// The answer is the first refused run's verdict, or an editable one (#128).
-megapdf_layout_verdict JudgeRewriteUnlocked(megapdf_document* d, int page_index, const std::vector<int>& runs) {
-    bool all_judged = true;
-    megapdf_layout_verdict judged = EditableVerdict();
-    bool judged_set = false;
-    for (int i : runs) {
-        const auto cached = d->rewrite_keeps_page.find(std::make_pair(page_index, i));
-        if (cached == d->rewrite_keeps_page.end()) all_judged = false;
-        else if (!cached->second.editable) return cached->second;
-        else if (!judged_set) { judged = cached->second; judged_set = true; }
+// Marks one object on a scratch page dirty without changing it and regenerates the page: what
+// any change forces, with nothing changed (#139). PDFium regenerates every stream of the page
+// (patch 5), so which object does not matter. False when the page has no object to mark or
+// PDFium refuses.
+bool RewritePageUnlocked(FPDF_PAGE page) {
+    const int count = FPDFPage_CountObjects(page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        FS_MATRIX m{};
+        if (obj != nullptr && FPDFPageObj_GetMatrix(obj, &m) && FPDFPageObj_SetMatrix(obj, &m)) return FPDFPage_GenerateContent(page);
     }
-    if (all_judged) return judged;
+    // No object takes its own matrix back: take the last one off and put it straight back.
+    return count > 0 && RewriteObjectsUnlocked(page, std::vector<int>{count - 1});
+}
 
+// The #118 dry run on a copy of the page. With `runs`, rewrites the streams holding those
+// objects and their hidden copies (#136) — take them off and put them straight back, which is
+// what any edit forces; with NULL, regenerates the page with nothing changed (#139). Then saves,
+// reopens and compares with a reopened copy of the page before the rewrite.
+megapdf_layout_verdict DryRunUnlocked(megapdf_document* d, int page_index, const std::vector<int>* runs) {
     megapdf_layout_verdict verdict{0, MEGAPDF_LAYOUT_REWRITE_FAILED, 0, 0, 0, 0.0};
     FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
     if (scratch != nullptr) {
         const int indices[1] = {page_index};
         FPDF_PAGE page = FPDF_ImportPagesByIndex(scratch, d->doc, indices, 1, 0) ? FPDF_LoadPage(scratch, 0) : nullptr;
+        if (page != nullptr && runs == nullptr && FPDFPage_CountObjects(page) == 0) {
+            // Nothing to rewrite: a whiteout on a blank page adds a stream and touches no other.
+            FPDF_ClosePage(page);
+            FPDF_CloseDocument(scratch);
+            return EditableVerdict();
+        }
         if (page != nullptr) {
             // Compare like with like (#128). PDFium resolves a non-embedded font once per
             // document, against a process-wide face cache: the first document to ask can get
@@ -1606,9 +1615,15 @@ megapdf_layout_verdict JudgeRewriteUnlocked(megapdf_document* d, int page_index,
             unchanged.fw.version = 1;
             unchanged.fw.WriteBlock = ScratchWriteBlock;
             const bool saved_unchanged = FPDF_SaveAsCopy(scratch, &unchanged.fw, 0);
-            const std::vector<int> judged_objects = WithHiddenCopies(page, runs);
-            const std::vector<PageBox> edited = BoundsOf(page, judged_objects);
-            const bool rewritten = RewriteObjectsUnlocked(page, judged_objects);
+            std::vector<PageBox> edited;
+            bool rewritten = false;
+            if (runs != nullptr) {
+                const std::vector<int> judged_objects = WithHiddenCopies(page, *runs);
+                edited = BoundsOf(page, judged_objects);
+                rewritten = RewriteObjectsUnlocked(page, judged_objects);
+            } else {
+                rewritten = RewritePageUnlocked(page);
+            }
             FPDF_ClosePage(page);
             ScratchWriter writer{};
             writer.fw.version = 1;
@@ -1627,6 +1642,40 @@ megapdf_layout_verdict JudgeRewriteUnlocked(megapdf_document* d, int page_index,
         }
         FPDF_CloseDocument(scratch);
     }
+    return verdict;
+}
+
+// The page's own verdict (#139) sits in the same cache under this object index, so a change
+// to the page clears it with the objects' verdicts (#137).
+constexpr int kPageVerdictKey = -1;
+
+megapdf_layout_verdict JudgePageUnlocked(megapdf_document* d, int page_index) {
+    const auto key = std::make_pair(page_index, kPageVerdictKey);
+    const auto cached = d->rewrite_keeps_page.find(key);
+    if (cached != d->rewrite_keeps_page.end()) return cached->second;
+    const megapdf_layout_verdict verdict = DryRunUnlocked(d, page_index, nullptr);
+    d->rewrite_keeps_page[key] = verdict;
+    return verdict;
+}
+
+// The dry run behind megapdf_text_editable(). Rewrites the streams holding the objects and
+// their hidden copies (#136) on a copy of the page — take them off and put them straight
+// back, which is what any edit forces — then saves, reopens and compares with the copy
+// before the rewrite. One dry run judges a whole line; the verdict is cached per object.
+// The answer is the first refused run's verdict, or an editable one (#128).
+megapdf_layout_verdict JudgeRewriteUnlocked(megapdf_document* d, int page_index, const std::vector<int>& runs) {
+    bool all_judged = true;
+    megapdf_layout_verdict judged = EditableVerdict();
+    bool judged_set = false;
+    for (int i : runs) {
+        const auto cached = d->rewrite_keeps_page.find(std::make_pair(page_index, i));
+        if (cached == d->rewrite_keeps_page.end()) all_judged = false;
+        else if (!cached->second.editable) return cached->second;
+        else if (!judged_set) { judged = cached->second; judged_set = true; }
+    }
+    if (all_judged) return judged;
+
+    const megapdf_layout_verdict verdict = DryRunUnlocked(d, page_index, &runs);
     if (verdict.editable || runs.size() == 1) {
         for (int i : runs) d->rewrite_keeps_page[std::make_pair(page_index, i)] = verdict;
         return verdict;
@@ -1665,6 +1714,13 @@ MEGAPDF_API int megapdf_last_layout_verdict(megapdf_layout_verdict* out) {
     if (out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     *out = g_last_layout;
     return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_page_regeneration_verdict(const megapdf_page* p, megapdf_layout_verdict* out) {
+    if (p == nullptr || p->owner == nullptr || p->page == nullptr || p->index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    *out = JudgePageUnlocked(p->owner, p->index);
+    return out->editable ? 1 : 0;
 }
 
 }  // extern "C"

@@ -3130,6 +3130,112 @@ void test_layout_verdicts() {
     }
 }
 
+// #139: changes the text guard never judges (whiteouts, text boxes, removing a path) regenerate
+// the page as well. megapdf_page_regeneration_verdict() says whether that alone changes the page,
+// so the apps can warn; the change itself is never refused.
+void test_page_regeneration_verdict() {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    auto describe = [](const megapdf_layout_verdict& v) {
+        return "editable " + std::to_string(v.editable) + ", cause " + std::to_string(v.cause) + ", where " + std::to_string(v.where) + ", " +
+               std::to_string(v.changed_pixels) + "/" + std::to_string(v.total_pixels) + " px, shift " + std::to_string(v.max_shift_pt) + " pt";
+    };
+    // Pixels that differ past the guard's threshold, outside a box in page space (612 x 792 at 1 px per pt).
+    auto changed_outside = [](const std::vector<unsigned char>& a, const std::vector<unsigned char>& b, const std::vector<megapdf_rect>& boxes) {
+        int changed = 0;
+        for (int y = 0; y < 792; y++) {
+            for (int x = 0; x < 612; x++) {
+                const double px = x + 0.5, py = 792 - (y + 0.5);
+                bool inside = false;
+                for (const megapdf_rect& box : boxes) {
+                    if (px >= box.left - 2 && px <= box.right + 2 && py >= box.bottom - 2 && py <= box.top + 2) inside = true;
+                }
+                if (inside) continue;
+                const size_t i = (static_cast<size_t>(y) * 612 + static_cast<size_t>(x)) * 4;
+                if (std::abs(a[i] - b[i]) + std::abs(a[i + 1] - b[i + 1]) + std::abs(a[i + 2] - b[i + 2]) > 60) changed++;
+            }
+        }
+        return changed;
+    };
+    const megapdf_rect corner{500, 20, 560, 60};
+
+    // A plain page keeps its look: no warning, and a whiteout changes nothing but its own box.
+    {
+        const auto bytes = one_page_pdf("BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0 0 1 rg 72 500 200 40 re f", helvetica);
+        OpenDoc d(bytes);
+        {
+            Page p(d.doc, 0);
+            megapdf_layout_verdict v{};
+            check(megapdf_page_regeneration_verdict(p.page, &v) == 1 && v.editable == 1 && v.cause == MEGAPDF_LAYOUT_OK && v.changed_pixels == 0 &&
+                      v.where == 0 && v.total_pixels == 612 * 792,
+                  "page verdict: a plain page keeps its look", describe(v));
+            megapdf_layout_verdict unused{};
+            check(megapdf_page_regeneration_verdict(nullptr, &unused) == MEGAPDF_ERR_ARGUMENT &&
+                      megapdf_page_regeneration_verdict(p.page, nullptr) == MEGAPDF_ERR_ARGUMENT,
+                  "page verdict: a NULL page or out pointer is an argument error");
+            int index = -1;
+            check(megapdf_add_whiteout(p.page, &corner, &index) == MEGAPDF_OK, "page verdict: a whiteout on a plain page applies");
+        }
+        OpenDoc was(bytes);
+        OpenDoc saved(save_bytes(d.doc, "page-verdict"));
+        Page a(was.doc, 0), b(saved.doc, 0);
+        const int changed = changed_outside(render_page(a.page), render_page(b.page), {corner});
+        check(changed == 0, "page verdict: on a plain page the whiteout changes nothing outside itself", std::to_string(changed) + " px");
+    }
+
+    // A page with no objects has nothing to rewrite.
+    {
+        OpenDoc d(one_page_pdf("", helvetica));
+        Page p(d.doc, 0);
+        megapdf_layout_verdict v{};
+        check(megapdf_page_regeneration_verdict(p.page, &v) == 1 && v.cause == MEGAPDF_LAYOUT_OK, "page verdict: an empty page keeps its look", describe(v));
+    }
+
+    // The text-clip page every platform's layout-guard test uses: the text guard refuses it, the
+    // page verdict says a regeneration changes it, and a whiteout and a text box still apply.
+    {
+        const auto bytes = one_page_pdf("BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q",
+                                        helvetica);
+        OpenDoc d(bytes);
+        megapdf_rect box_bounds{};
+        {
+            Page p(d.doc, 0);
+            megapdf_layout_verdict v{};
+            check(megapdf_page_regeneration_verdict(p.page, &v) == 0 && v.editable == 0 && v.cause == MEGAPDF_LAYOUT_RENDER,
+                  "page verdict: the text-clip page changes when regenerated", describe(v));
+            check(v.changed_pixels * 2000 > v.total_pixels && (v.where & MEGAPDF_LAYOUT_WHERE_OTHER) != 0 && (v.where & MEGAPDF_LAYOUT_WHERE_OBJECT) == 0,
+                  "page verdict: over the budget, off text, and never on a judged object", describe(v));
+            megapdf_layout_verdict again{};
+            check(megapdf_page_regeneration_verdict(p.page, &again) == 0 && again.changed_pixels == v.changed_pixels && again.where == v.where,
+                  "page verdict: asked again, the cached verdict is the same", describe(again));
+            check(megapdf_text_editable(p.page, 0) == 0, "page verdict: the text guard refuses the same page");
+
+            int index = -1;
+            check(megapdf_add_whiteout(p.page, &corner, &index) == MEGAPDF_OK && whiteouts_of(p.page).size() == 1,
+                  "page verdict: a whiteout still applies on a page that changes");
+            // Judged afresh, not from the cache: the whiteout already had PDFium write the page, so its
+            // streams are PDFium's own now and writing them again changes nothing. The first change
+            // is the one that alters the page, which is why the apps ask before it.
+            megapdf_layout_verdict after{};
+            const int after_result = megapdf_page_regeneration_verdict(p.page, &after);
+            check(after_result == 1 && after.cause == MEGAPDF_LAYOUT_OK,
+                  "page verdict: judged afresh after the whiteout, the rewritten page keeps its new look", std::to_string(after_result) + ": " + describe(after));
+            const auto text = utf16("Note");
+            const auto id = utf16("text:139");
+            check(megapdf_add_text_box(p.page, -1, text.data(), "Helvetica", 12, 300, 300, id.data(), &index) == MEGAPDF_OK &&
+                      megapdf_find_text_box(p.page, id.data()) == index,
+                  "page verdict: a text box still applies on a page that changes");
+            megapdf_object_bounds(p.page, index, &box_bounds);
+        }
+        // Why the apps warn: the regeneration the whiteout forced changed the page outside it.
+        OpenDoc was(bytes);
+        OpenDoc saved(save_bytes(d.doc, "page-verdict"));
+        Page a(was.doc, 0), b(saved.doc, 0);
+        const int changed = changed_outside(render_page(a.page), render_page(b.page), {corner, box_bounds});
+        check(box_bounds.right > box_bounds.left && changed > 0,
+              "page verdict: on the text-clip page the change reaches outside the whiteout and the text box", std::to_string(changed) + " px");
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -3162,6 +3268,7 @@ int main(int argc, char** argv) {
     test_far_hidden_copies(argv[1]);
     test_verdicts_follow_changes();
     test_layout_verdicts();
+    test_page_regeneration_verdict();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
