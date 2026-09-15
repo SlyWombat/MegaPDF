@@ -85,7 +85,7 @@ Private by design
 MegaPDF requests zero permissions and makes zero network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
 
 Works with everything
-Open PDFs from Mail, Files, iCloud Drive, Google Drive, or any app that shares files. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows and Android — same engine, same result, on every platform.
+Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app.
 
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
@@ -156,7 +156,7 @@ Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et Android : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
@@ -227,7 +227,7 @@ Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et Android : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
@@ -351,9 +351,9 @@ use the French agreement and search for "location".
 > 6. Tap Text, tap a blank line, and type — try a different size and font
 >    before adding it. Then tap the text you placed: drag it, use the pencil to
 >    fix a typo or change its size, and undo the lot.
-> 7. If you also use MegaPDF on Windows or Android: sign there, open here —
->    the signature should be movable on both, and text added on one should
->    keep its size and face on the others.
+> 7. If you use MegaPDF on more than one device: sign on one, open on the
+>    other — the signature should be movable on both, and text added on one
+>    should keep its size and face on the other.
 
 ---
 
