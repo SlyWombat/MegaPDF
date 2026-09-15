@@ -25,23 +25,26 @@ public static class VerifiedSave
     public sealed class UnreadableOutputException(Exception inner)
         : Exception("The saved document could not be read back, so the original was left untouched.", inner);
 
+    /// <summary>Where a save is, for the busy label (#145): "Saving…", then "Checking the saved file…".</summary>
+    public enum SaveStage { Writing, Verifying }
+
     /// <summary>
     /// Writes to a path with <see cref="AtomicFileWriter"/>'s swap, after verifying.
     /// </summary>
-    public static void ToPath(IPdfEngine engine, IPdfDocument document, string path)
+    public static void ToPath(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.Save, OpenLike(engine, document),
-            staged => AtomicFileWriter.Write(path, CopyFrom(staged)));
+            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage);
     }
 
     /// <summary>
     /// Writes through a stream the host already holds open — the macOS sandbox
     /// path — after verifying.
     /// </summary>
-    public static void ToStream(IPdfEngine engine, IPdfDocument document, Stream destination)
+    public static void ToStream(IPdfEngine engine, IPdfDocument document, Stream destination, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.Save, OpenLike(engine, document),
-            staged => StagedStreamWriter.Write(destination, CopyFrom(staged)));
+            staged => StagedStreamWriter.Write(destination, CopyFrom(staged)), onStage);
     }
 
     /// <summary>
@@ -50,35 +53,35 @@ public static class VerifiedSave
     /// unless the document's open has full access.
     /// </summary>
     public static void ToPathWithSecurity(IPdfEngine engine, IPdfDocument document, string path,
-        string userPassword, string? ownerPassword, PdfPermissions permissions)
+        string userPassword, string? ownerPassword, PdfPermissions permissions, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, target => document.SaveWithSecurity(target, userPassword, ownerPassword, permissions),
-            OpenWith(engine, userPassword), staged => AtomicFileWriter.Write(path, CopyFrom(staged)));
+            OpenWith(engine, userPassword), staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage);
     }
 
     /// <inheritdoc cref="ToPathWithSecurity"/>
     public static void ToStreamWithSecurity(IPdfEngine engine, IPdfDocument document, Stream destination,
-        string userPassword, string? ownerPassword, PdfPermissions permissions)
+        string userPassword, string? ownerPassword, PdfPermissions permissions, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, target => document.SaveWithSecurity(target, userPassword, ownerPassword, permissions),
-            OpenWith(engine, userPassword), staged => StagedStreamWriter.Write(destination, CopyFrom(staged)));
+            OpenWith(engine, userPassword), staged => StagedStreamWriter.Write(destination, CopyFrom(staged)), onStage);
     }
 
     /// <summary>
     /// A copy with no security (#131), verified by opening it without a password. Throws
     /// <see cref="DocumentRestrictedException"/> unless the document's open has full access.
     /// </summary>
-    public static void ToPathWithoutSecurity(IPdfEngine engine, IPdfDocument document, string path)
+    public static void ToPathWithoutSecurity(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.SaveWithoutSecurity, OpenWith(engine, null),
-            staged => AtomicFileWriter.Write(path, CopyFrom(staged)));
+            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage);
     }
 
     /// <inheritdoc cref="ToPathWithoutSecurity"/>
-    public static void ToStreamWithoutSecurity(IPdfEngine engine, IPdfDocument document, Stream destination)
+    public static void ToStreamWithoutSecurity(IPdfEngine engine, IPdfDocument document, Stream destination, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.SaveWithoutSecurity, OpenWith(engine, null),
-            staged => StagedStreamWriter.Write(destination, CopyFrom(staged)));
+            staged => StagedStreamWriter.Write(destination, CopyFrom(staged)), onStage);
     }
 
     private static Action<Stream> CopyFrom(string stagedPath) => target =>
@@ -97,7 +100,7 @@ public static class VerifiedSave
         stagedPath => engine.Open(stagedPath, string.IsNullOrEmpty(userPassword) ? null : userPassword);
 
     private static void Stage(IPdfEngine engine, IPdfDocument document, Action<Stream> save,
-        Func<string, IPdfDocument> reopen, Action<string> write)
+        Func<string, IPdfDocument> reopen, Action<string> write, Action<SaveStage>? onStage)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(document);
@@ -107,6 +110,7 @@ public static class VerifiedSave
         {
             // A refusal (DocumentRestrictedException) or a failed write propagates as
             // itself: nothing was produced to verify.
+            onStage?.Invoke(SaveStage.Writing);
             using (var staging = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 save(staging);
@@ -116,6 +120,7 @@ public static class VerifiedSave
             if (new FileInfo(stagingPath).Length == 0)
                 throw new UnreadableOutputException(new InvalidDataException("the engine produced an empty document"));
 
+            onStage?.Invoke(SaveStage.Verifying);
             try
             {
                 // Reopened with the engine, not merely length-checked: "parses" is
