@@ -1,0 +1,97 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -29,6 +29,10 @@
+ #include "core/fpdfapi/edit/cpdf_stringarchivestream.h"
+ #include "core/fpdfapi/font/cpdf_truetypefont.h"
+ #include "core/fpdfapi/font/cpdf_type1font.h"
++#include "core/fpdfapi/font/cpdf_font.h"
++#include "core/fxge/cfx_font.h"
++#include "core/fxge/cfx_path.h"
++#include "core/fxge/text_char_pos.h"
+ #include "core/fpdfapi/page/cpdf_contentmarks.h"
+ #include "core/fpdfapi/page/cpdf_docpagedata.h"
+ #include "core/fpdfapi/page/cpdf_form.h"
+@@ -125,6 +129,40 @@
+   return count == wanted->size() - (wanted->KeyExist("Type") ? 1 : 0);
+ }
+ 
++// Appends the outlines of `text`'s glyphs, in page space, to `out`: what PDFium's
++// renderer accumulates for text used as a clip (CPDF_TextRenderer::DrawTextPath
++// with a clipping path). False for a font whose glyphs are not outlines here.
++bool AppendGlyphOutlines(CPDF_TextObject* text, CPDF_Path* out) {
++  RetainPtr<CPDF_Font> font = text->GetFont();
++  if (!font || font->IsType3Font()) {
++    return false;
++  }
++  const float font_size = text->GetFontSize();
++  CFX_Matrix text_matrix = text->GetTextMatrix();
++  std::vector<TextCharPos> positions = font->GetCharPosList(
++      text->GetCharCodes(), text->GetCharPositions(), font_size);
++  for (const TextCharPos& charpos : positions) {
++    CFX_Font* glyph_font = charpos.fallback_font_position_ == -1
++                               ? font->GetFont()
++                               : font->GetFontFallback(
++                                     charpos.fallback_font_position_);
++    if (!glyph_font) {
++      continue;
++    }
++    const CFX_Path* glyph = glyph_font->LoadGlyphPath(
++        charpos.glyph_index_, charpos.font_char_width_);
++    if (!glyph) {
++      continue;
++    }
++    CFX_Matrix matrix(font_size, 0, 0, font_size, charpos.origin_.x,
++                      charpos.origin_.y);
++    matrix = charpos.GetEffectiveMatrix(matrix);
++    matrix.Concat(text_matrix);
++    out->Append(*glyph, &matrix);
++  }
++  return true;
++}
++
+ // Balances the "q" operator ProcessGraphics() emitted.
+ void EndProcessGraphics(fxcrt::ostringstream& buf) {
+   buf << " Q\n";
+@@ -1231,6 +1269,42 @@
+     // causing any marks to be placed on the page.
+     *buf << "n ";
+   }
++
++  // Text clips (#125). Glyphs shown in a clipping mode (4-7 Tr) clip everything
++  // drawn after their "ET" in the same saved state, and PDFium keeps each
++  // BT ... ET group's glyphs with the clip of the objects after it. Only path
++  // clips were written, and the clipping text is written as its own object inside
++  // q ... Q, so its clip ended there: an image drawn through a word covered the
++  // page. Each group is written as the path PDFium's renderer clips to, the union
++  // of its glyph outlines filled with the nonzero rule; written as text it would
++  // come back as more text objects every time the page is parsed. A group in a
++  // font whose glyphs are not outlines here is left out, which clips less.
++  const size_t text_count = clip_path.GetTextCount();
++  size_t i = 0;
++  while (i < text_count) {
++    CPDF_Path group;
++    bool outlined = true;
++    size_t glyph_objects = 0;
++    for (; i < text_count; ++i) {
++      CPDF_TextObject* text = clip_path.GetText(i);
++      if (!text) {
++        ++i;
++        break;
++      }
++      ++glyph_objects;
++      outlined = AppendGlyphOutlines(text, &group) && outlined;
++    }
++    if (glyph_objects == 0 || !outlined) {
++      continue;
++    }
++    if (!group.HasRef() || group.GetPoints().empty()) {
++      // Clipping text with no outline (spaces) leaves nothing visible.
++      *buf << "0 0 0 0 re W n ";
++      continue;
++    }
++    ProcessPathPoints(buf, &group);
++    *buf << " W n ";
++  }
+ }
+ 
+ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,

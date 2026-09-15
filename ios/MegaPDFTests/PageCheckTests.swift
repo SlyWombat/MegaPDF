@@ -45,8 +45,9 @@ final class PageCheckTests: XCTestCase {
         return try Data(contentsOf: url)
     }
 
-    /// One Letter page with `content` as its content stream and Helvetica as /F1.
-    private func onePagePdf(_ content: String) -> Data {
+    /// One Letter page with `content` as its content stream and Helvetica as /F1; `resources` adds
+    /// entries to the page's resources and `extraObject` becomes object 6.
+    private func onePagePdf(_ content: String, resources: String = "", extraObject: String? = nil) -> Data {
         var pdf = "%PDF-1.4\n"
         var offsets: [Int] = []
         func add(_ body: String) {
@@ -55,9 +56,10 @@ final class PageCheckTests: XCTestCase {
         }
         add("<< /Type /Catalog /Pages 2 0 R >>")
         add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>")
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> \(resources) >> /Contents 5 0 R >>")
         add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
         add("<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream")
+        if let extraObject = extraObject { add(extraObject) }
         let xref = pdf.utf8.count
         pdf += "xref\n0 \(offsets.count + 1)\n0000000000 65535 f \n"
         for offset in offsets { pdf += String(format: "%010d 00000 n \n", offset) }
@@ -66,7 +68,13 @@ final class PageCheckTests: XCTestCase {
     }
 
     private let plainPage = "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET 0 0 1 rg 72 500 200 40 re f"
-    private let clippedPage = "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q"
+    /// A page a regeneration changes: a form whose text inherits the font set before it, which the
+    /// writer never writes (text used as a clip was this page until PDFium patch 0018).
+    private func changingPagePdf() -> Data {
+        onePagePdf("BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q /F1 72 Tf 0 0 1 rg /Fm1 Do Q",
+                   resources: "/XObject << /Fm1 6 0 R >>",
+                   extraObject: "<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Length 24 >>\nstream\nBT 72 480 Td (FORM) Tj ET\nendstream")
+    }
 
     /// A model with `bytes` open from a writable temporary file.
     private func openModel(_ bytes: Data, check: @escaping @MainActor (PdfDocument, Int) async -> PageCheckAnswer,
@@ -171,7 +179,7 @@ final class PageCheckTests: XCTestCase {
 
     func testTheEngineCheckAnswersOffTheActor() async throws {
         let engine = PdfEngine.shared
-        let clipped = try await engine.open(onePagePdf(clippedPage))
+        let clipped = try await engine.open(changingPagePdf())
         let plain = try await engine.open(onePagePdf(plainPage))
         let wouldChange = await engine.pageCheck(clipped, pageIndex: 0)
         let keepsLook = await engine.pageCheck(plain, pageIndex: 0)
@@ -187,7 +195,7 @@ final class PageCheckTests: XCTestCase {
 
     func testACancelledTaskStopsTheEngineCheck() async throws {
         let engine = PdfEngine.shared
-        let doc = try await engine.open(onePagePdf(clippedPage))
+        let doc = try await engine.open(changingPagePdf())
         let task = Task { await engine.pageCheck(doc, pageIndex: 0) }
         task.cancel()
         let answer = await task.value
@@ -278,7 +286,7 @@ final class PageCheckTests: XCTestCase {
     }
 
     func testTheRealCheckWarnsOnAPageThatWouldChange() async throws {
-        let (model, url) = try await openModel(onePagePdf(clippedPage), check: { doc, page in
+        let (model, url) = try await openModel(changingPagePdf(), check: { doc, page in
             await PdfEngine.shared.pageCheck(doc, pageIndex: page)
         }, budget: 30)
         defer { try? FileManager.default.removeItem(at: url) }

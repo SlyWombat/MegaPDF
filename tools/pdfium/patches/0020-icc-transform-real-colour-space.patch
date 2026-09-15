@@ -1,0 +1,20 @@
+--- a/core/fxcodec/icc/icc_transform.cpp
++++ b/core/fxcodec/icc/icc_transform.cpp
+@@ -81,8 +81,16 @@
+         COLORSPACE_SH(PT_Lab) | CHANNELS_SH(nSrcComponents) | BYTES_SH(0);
+     bLab = true;
+   } else {
++    // The profile's own colour space where lcms has a pixel type for it. With
++    // PT_ANY, lcms cannot optimise the transform (OptimizeByResampling needs to
++    // know the input colour space), so every pixel ran the whole profile
++    // pipeline: CMYK images rendered about seven times slower (#152).
++    int pixel_type = _cmsLCMScolorSpace(srcCS);
++    if (pixel_type <= 0) {
++      pixel_type = PT_ANY;
++    }
+     srcFormat =
+-        COLORSPACE_SH(PT_ANY) | CHANNELS_SH(nSrcComponents) | BYTES_SH(1);
++        COLORSPACE_SH(pixel_type) | CHANNELS_SH(nSrcComponents) | BYTES_SH(1);
+     // TODO(thestig): Check to see if lcms2 supports more colorspaces that can
+     // be considered normal.
+     bNormal = srcCS == cmsSigGrayData || srcCS == cmsSigRgbData ||
