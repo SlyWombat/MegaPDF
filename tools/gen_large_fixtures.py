@@ -99,7 +99,7 @@ class PdfWriter:
 
     def content(self, data, num=None):
         """A page or form content stream; counts the search canary before compressing."""
-        self.canary += data.count(CANARY)
+        self.canary += data.lower().count(CANARY)  # search is case-insensitive
         return self.stream(b"", data, num)
 
     def open_stream(self, extra, num=None, level=1):
