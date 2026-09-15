@@ -17,7 +17,9 @@ struct ViewerView: View {
     @State private var searchOpen = false
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
+    @State private var aboutOpen = false
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
 
@@ -94,33 +96,17 @@ struct ViewerView: View {
         }
         .navigationTitle((model.isDirty ? "• " : "") + displayName)
         .navigationBarTitleDisplayMode(.inline)
+        // #144: the navigation bar holds what is done to the file as a whole — Close,
+        // Save, and a More menu — and the bottom toolbar holds the everyday tools, as
+        // the HIG lays out an iPhone document viewer. Everything else stays in More,
+        // so the page keeps the screen.
         .toolbar {
-            ToolbarItemGroup(placement: .navigationBarLeading) {
+            ToolbarItem(placement: .navigationBarLeading) {
                 Button("Close") {
                     if model.isDirty { confirmDiscard = true } else { onClose() }
                 }
-                Button {
-                    model.undo()
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .accessibilityLabel("Undo")
-                .disabled(!model.canUndo)
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    if searchOpen { closeSearch() } else { searchOpen = true }
-                } label: {
-                    Image(systemName: "magnifyingglass")
-                }
-                .accessibilityLabel("Find in document")
-                // A restricted open can't use the tools its owner withheld (#131);
-                // the notice shown when it opened says why.
-                Button("Sign") { signaturesOpen = true }
-                    .disabled(!model.capabilities.canSign)
-                Button("Text") { model.startTextPlacement() }
-                    .accessibilityLabel("Add text")
-                    .disabled(!model.capabilities.canAddText)
                 Button(saveLabel) { model.save() }
                     .disabled(!model.isDirty || model.isSaving)
                 Menu {
@@ -132,12 +118,43 @@ struct ViewerView: View {
                         Button("Unlock with owner password…", action: model.showUnlock)
                             .disabled(model.isUnlocking)
                     }
-                    Button("Redo", action: model.redo)
-                        .disabled(!model.canRedo)
+                    Divider()
+                    Button("About MegaPDF") { aboutOpen = true }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Label("More", systemImage: "ellipsis.circle")
                 }
+                .accessibilityIdentifier("viewerMore")
             }
+            ToolbarItemGroup(placement: .bottomBar) {
+                // A restricted open can't use the tools its owner withheld (#131);
+                // the notice shown when it opened says why.
+                Button { signaturesOpen = true } label: {
+                    toolLabel("Sign", systemImage: "signature")
+                }
+                .disabled(!model.capabilities.canSign)
+                Button { model.startTextPlacement() } label: {
+                    toolLabel("Add text", systemImage: "character.textbox")
+                }
+                .disabled(!model.capabilities.canAddText)
+                Button {
+                    if searchOpen { closeSearch() } else { searchOpen = true }
+                } label: {
+                    toolLabel("Search", systemImage: "magnifyingglass")
+                }
+                .accessibilityLabel("Find in document")
+                Spacer()
+                Button(action: model.undo) {
+                    toolLabel("Undo", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(!model.canUndo)
+                Button(action: model.redo) {
+                    toolLabel("Redo", systemImage: "arrow.uturn.forward")
+                }
+                .disabled(!model.canRedo)
+            }
+        }
+        .sheet(isPresented: $aboutOpen) {
+            AboutView()
         }
         .sheet(isPresented: $signaturesOpen) {
             SignaturesSheet(
@@ -236,6 +253,14 @@ struct ViewerView: View {
         } message: {
             Text("Changing this page may slightly alter parts of it you haven't touched.")
         }
+    }
+
+    /// A bottom-toolbar label (#144): icons alone on an iPhone; a regular-width window
+    /// (iPad) has the room to name them. Styled here rather than on the whole view so
+    /// the sheets the viewer presents keep their own label layout.
+    private func toolLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(ToolbarLabelStyle(showsTitle: horizontalSizeClass == .regular))
     }
 
     // MARK: - search (#26)
@@ -404,5 +429,24 @@ struct ViewerView: View {
         guard let first = visible.min(), let last = visible.max() else { return }
         let widthPx = Int(containerWidth * effectiveZoom * displayScale)
         model.updateRenderWindow(first: first, last: last, widthPx: widthPx)
+    }
+}
+
+/// The viewer toolbar's labels (#144): the icon alone where space is tight, icon and
+/// title side by side where it is not. Either way the title stays the button's
+/// accessibility label, so VoiceOver reads "Sign", never "signature".
+struct ToolbarLabelStyle: LabelStyle {
+    let showsTitle: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if showsTitle {
+            HStack(spacing: 6) {
+                configuration.icon
+                configuration.title
+            }
+        } else {
+            configuration.icon
+                .accessibilityLabel(configuration.title)
+        }
     }
 }
