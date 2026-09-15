@@ -962,6 +962,28 @@ internal static class Program
         vm.ToggleAddTextCommand.Execute(null);
         Pump();
 
+        // Tools > Text font and Text size follow the pickers' context (#144). On the Mac an
+        // item with a submenu is enabled whatever it is told, so out of context the
+        // submenu has to come off for the item to grey out.
+        foreach (var inContext in new[] { false, true })
+        {
+            if (inContext)
+                vm.ToggleAddTextCommand.Execute(null);
+            Pump();
+            foreach (var id in new[] { "FontBox", "SizeBox" })
+            {
+                var item = window.MenuBarItem(id);
+                check(inContext
+                          ? $"Tools > {item?.Header} is on, with its choices, while adding text"
+                          : $"Tools > {item?.Header} is off, with no submenu to open, outside Add text",
+                      inContext
+                          ? item is { IsEnabled: true, Menu.Items.Count: > 0 }
+                          : item is { IsEnabled: false, Menu: null });
+            }
+        }
+        vm.ToggleAddTextCommand.Execute(null);
+        Pump();
+
         window.Close();
         Pump();
 
