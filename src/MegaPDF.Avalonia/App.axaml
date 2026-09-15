@@ -16,5 +16,21 @@
 
   <Application.Styles>
     <FluentTheme />
+
+    <!-- Accessibility (#144). Parts of Fluent's templates that are drawing, not controls,
+         and that VoiceOver otherwise found as unnamed or type-named elements:
+
+         - A scroll bar's arrow and page buttons. The arrows' only content is a PathIcon,
+           so they were announced as "Avalonia.Controls.PathIcon"; the page buttons had
+           no name at all. A Mac scroll bar exposes no buttons either: VoiceOver scrolls
+           the scroll area and reads the bar's value.
+         - A ComboBox's drop-down chevron and its placeholder text, an unnamed element
+           beside each picker. The ComboBox itself carries the name and the value. -->
+    <Style Selector="ScrollBar /template/ RepeatButton">
+      <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
+    <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph, ComboBox /template/ TextBlock#PlaceholderTextBlock">
+      <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    </Style>
   </Application.Styles>
 </Application>

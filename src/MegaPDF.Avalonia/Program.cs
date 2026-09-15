@@ -933,6 +933,35 @@ internal static class Program
             check($"{keys} zooms in (100% -> {vm.Zoom * 100:F0}%)", vm.Zoom > 1.001);
         }
 
+        // Accessibility (#144): what VoiceOver is handed for the pickers, the two mode
+        // toggles and the page's scroll bars.
+        check("each face in the font picker is named by its label, not the record",
+              vm.TextFontChoices.All(f => f.ToString() == f.Label));
+        foreach (var toggle in new global::Avalonia.Controls.Button[] { window.AddTextButton, window.WhiteoutButton })
+        {
+            var peer = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(toggle);
+            check($"{peer.GetName()} is exposed as a checkbox ({peer.GetAutomationControlType()})",
+                  peer.GetAutomationControlType() == global::Avalonia.Automation.Peers.AutomationControlType.CheckBox);
+        }
+
+        vm.SetZoomCommand.Execute(1.0);
+        Pump();
+        var scrollButtons = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.PageScroller)
+            .OfType<global::Avalonia.Controls.RepeatButton>().ToList();
+        check($"the page's scroll bar buttons are hidden from accessibility ({scrollButtons.Count} found)",
+              scrollButtons.Count > 0 && scrollButtons.All(b =>
+                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(b).IsControlElement()));
+
+        vm.ToggleAddTextCommand.Execute(null);
+        Pump();
+        var glyphs = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.FontBox)
+            .OfType<global::Avalonia.Controls.PathIcon>().ToList();
+        check($"the font picker's chevron is hidden from accessibility ({glyphs.Count} found)",
+              glyphs.Count > 0 && glyphs.All(g =>
+                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(g).IsControlElement()));
+        vm.ToggleAddTextCommand.Execute(null);
+        Pump();
+
         window.Close();
         Pump();
 

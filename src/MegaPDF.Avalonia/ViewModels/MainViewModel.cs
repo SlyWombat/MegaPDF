@@ -41,7 +41,15 @@ public sealed record MarkStyleChoice(CheckMarkStyle Style, string Label);
 /// the cross-platform contract with the engine; the label ("Times") is what the
 /// toolbar shows. Brand names, so the label is the same in every language.
 /// </summary>
-public sealed record FontChoice(string PostScriptName, string Label);
+public sealed record FontChoice(string PostScriptName, string Label)
+{
+    /// <summary>
+    /// The label, because a list item's accessible name falls back to its item's text:
+    /// VoiceOver read the record's own "FontChoice { PostScriptName = … }" for every
+    /// face in the picker and for the one chosen (#144).
+    /// </summary>
+    public override string ToString() => Label;
+}
 
 /// <summary>
 /// The document shell: open, view, check, save.

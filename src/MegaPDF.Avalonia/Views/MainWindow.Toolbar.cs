@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -105,6 +106,12 @@ public partial class MainWindow
         ToolTip.SetTip(SizeBox, Strings.TextSizeName);
         AutomationProperties.SetName(MoreButton, Strings.ToolbarMore);
         ToolTip.SetTip(MoreButton, Strings.ToolbarMore);
+
+        // Add text and Cover stay pressed while their mode is on. A toggle button's peer
+        // is a plain button carrying a true/false value, which VoiceOver reads as neither;
+        // as checkboxes they announce on or off (#144).
+        AutomationProperties.SetControlTypeOverride(AddTextButton, AutomationControlType.CheckBox);
+        AutomationProperties.SetControlTypeOverride(WhiteoutButton, AutomationControlType.CheckBox);
 
         // Built afresh and filled before they show, on every click: see OpenToolbarMenu.
         MoreButton.Click += (_, _) => OpenToolbarMenu(MoreButton, PlacementMode.BottomEdgeAlignedRight, MoreMenuEntries());
