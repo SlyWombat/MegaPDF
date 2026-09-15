@@ -23,38 +23,43 @@ public sealed class PdfLoadException(string path, uint errorCode) : Exception(Me
     /// </summary>
     public bool IsSecurityError => ErrorCode == PdfiumNative.FPDF_ERR_SECURITY;
 
+    /// <summary>
+    /// True when the file is larger than this platform can read through PDFium — 4 GiB
+    /// on Windows, where PDFium's file access states offsets in a 32-bit
+    /// <c>unsigned long</c>; no limit on macOS (#147).
+    /// </summary>
+    public bool IsTooLargeError => ErrorCode == CoreNative.OpenErrTooLarge;
+
     private static string MessageFor(string path, uint code) => code switch
     {
         PdfiumNative.FPDF_ERR_FILE => $"The file could not be read: {path}",
         PdfiumNative.FPDF_ERR_FORMAT => $"The file is not a valid PDF: {path}",
         PdfiumNative.FPDF_ERR_PASSWORD => $"The PDF is password-protected: {path}",
         PdfiumNative.FPDF_ERR_SECURITY => $"The PDF uses an unsupported security handler: {path}",
+        CoreNative.OpenErrTooLarge => $"The file is too large to open: {path}",
         _ => $"The PDF could not be opened (error {code}): {path}",
     };
 }
 
 /// <summary>
-/// PDFium-backed engine (SDD §4.3). Documents are loaded fully into memory so the
-/// original file is never held open — Save can atomically replace it (SDD §3.4),
-/// and cloud-synced files are never locked. The bytes, the PDFium document and its
-/// form-fill environment are owned by the shared core (ADR-003, #105); this class
-/// adapts the core's handles to <see cref="IPdfEngine"/> and still binds the
-/// not-yet-migrated contracts to PDFium directly through the core's raw handles.
+/// PDFium-backed engine (SDD §4.3). A document is read from its file on demand by the
+/// shared core (ADR-003, #105): nothing holds a copy of it, so opening costs what
+/// PDFium's parser caches rather than twice the file's size, and a file bigger than a
+/// .NET byte[] opens like any other (#147, #148). The core opens the file shared, so
+/// Save can still atomically replace it (SDD §3.4) and a cloud-synced file is never
+/// locked; a document already open goes on reading the bytes it was opened on, which
+/// is what the in-memory copy did. This class adapts the core's handles to
+/// <see cref="IPdfEngine"/>.
 /// </summary>
 public sealed class PdfiumEngine : IPdfEngine
 {
     public IPdfDocument Open(string filePath, string? password = null)
     {
-        // The core initialises PDFium on its first open.
-        var bytes = File.ReadAllBytes(filePath);
+        // The core initialises PDFium on its first open, and reports a file it cannot
+        // open or read as FPDF_ERR_FILE rather than throwing an IOException of its own.
         lock (PdfiumLibrary.Lock)
         {
-            IntPtr core;
-            unsafe
-            {
-                fixed (byte* p = bytes)
-                    core = CoreNative.megapdf_open(p, (nuint)bytes.Length, password);
-            }
+            var core = CoreNative.megapdf_open_file(filePath, password);
             if (core == IntPtr.Zero)
                 throw new PdfLoadException(filePath, CoreNative.megapdf_last_error());
             return new PdfiumDocument(core);
@@ -65,15 +70,11 @@ public sealed class PdfiumEngine : IPdfEngine
     {
         if (like is not PdfiumDocument source)
             throw new ArgumentException("The document was not opened by this engine.", nameof(like));
-        var bytes = File.ReadAllBytes(filePath);
+        // The verified-save check reopens the staged copy the same way, so verifying a
+        // save costs no copy of it either (#148).
         lock (PdfiumLibrary.Lock)
         {
-            IntPtr core;
-            unsafe
-            {
-                fixed (byte* p = bytes)
-                    core = CoreNative.megapdf_open_like(source.Core, p, (nuint)bytes.Length);
-            }
+            var core = CoreNative.megapdf_open_file_like(source.Core, filePath);
             if (core == IntPtr.Zero)
                 throw new PdfLoadException(filePath, CoreNative.megapdf_last_error());
             return new PdfiumDocument(core);

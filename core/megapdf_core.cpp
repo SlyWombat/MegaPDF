@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -22,6 +23,15 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+// Reading a document from its file rather than from a copy of it (#147, #148).
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <fcntl.h>
+#  include <sys/stat.h>
+#  include <unistd.h>
+#endif
 
 #include "fpdf_annot.h"
 #include "fpdf_edit.h"
@@ -45,8 +55,29 @@ struct megapdf_cancel {
     std::atomic<int> raised{0};
 };
 
+// An open file PDFium reads a document out of as it parses (#147, #148).
+//
+// FPDF_LoadMemDocument64 needs the whole file in memory, so the binding had to read
+// it there first: two copies of every document, and on Windows no copy at all past
+// the 2 GB a .NET byte[] can hold. FPDF_LoadCustomDocument reads through this
+// instead, which costs what PDFium's parser caches and nothing more.
+//
+// Data only, so megapdf_document can hold one by value; the operations on it are
+// free functions in the anonymous namespace below.
+struct FileSource {
+    FPDF_FILEACCESS access{};      // handed to PDFium; must outlive the document
+#if defined(_WIN32)
+    void* handle = nullptr;        // a HANDLE; NULL when closed
+#else
+    int fd = -1;
+#endif
+    unsigned long long length = 0;
+    bool open = false;
+};
+
 struct megapdf_document {
     std::vector<unsigned char> bytes;   // FPDF_LoadMemDocument64 needs the buffer alive for the document's life.
+    FileSource source;                  // ...or the file it is read from, for a megapdf_open_file() document.
     FPDF_DOCUMENT doc = nullptr;
     FPDF_FORMHANDLE form = nullptr;
     FPDF_FORMFILLINFO ffi{};
@@ -200,6 +231,214 @@ megapdf_rect OutRect(const megapdf_page* p, double l, double b, double r, double
     return megapdf_rect{OutX(p, l), OutY(p, b), OutX(p, r), OutY(p, t)};
 }
 
+// --------------------------------------------------------------------------
+// Reading a document from its file (#147, #148)
+// --------------------------------------------------------------------------
+
+// The largest file FPDF_FILEACCESS can describe: it states a length and takes read
+// offsets as `unsigned long`, 32 bits on Windows and 64 bits everywhere else.
+const unsigned long long kMaxFileSourceBytes = static_cast<unsigned long long>(static_cast<unsigned long>(-1));
+
+void FileSourceClose(FileSource* s) {
+#if defined(_WIN32)
+    if (s->handle != nullptr) CloseHandle(reinterpret_cast<HANDLE>(s->handle));
+    s->handle = nullptr;
+#else
+    if (s->fd >= 0) ::close(s->fd);
+    s->fd = -1;
+#endif
+    s->open = false;
+}
+
+// A positional read that never touches a shared file pointer, so it stays correct
+// whatever else is reading the same descriptor.
+bool FileSourceRead(FileSource* s, unsigned long long pos, unsigned char* buf, size_t size) {
+    size_t done = 0;
+    while (done < size) {
+#if defined(_WIN32)
+        const unsigned long long at = pos + done;
+        OVERLAPPED ov{};
+        ov.Offset = static_cast<DWORD>(at & 0xFFFFFFFFull);
+        ov.OffsetHigh = static_cast<DWORD>(at >> 32);
+        DWORD got = 0;
+        const size_t want = size - done;
+        if (!ReadFile(reinterpret_cast<HANDLE>(s->handle), buf + done,
+                      static_cast<DWORD>(want > 0x10000000u ? 0x10000000u : want), &got, &ov) || got == 0) {
+            return false;
+        }
+        done += got;
+#else
+        const ssize_t got = ::pread(s->fd, buf + done, size - done, static_cast<off_t>(pos + done));
+        if (got < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (got == 0) return false;   // short of what PDFium asked for: the file shrank
+        done += static_cast<size_t>(got);
+#endif
+    }
+    return true;
+}
+
+int FileSourceGetBlock(void* param, unsigned long position, unsigned char* buf, unsigned long size) {
+    auto* s = static_cast<FileSource*>(param);
+    if (s == nullptr || !s->open || buf == nullptr || size == 0) return 0;
+    return FileSourceRead(s, position, buf, static_cast<size_t>(size)) ? 1 : 0;
+}
+
+// Fills in the length and wires up the callback once the handle is open. False, with
+// the error set, when the file is empty or past what FPDF_FILEACCESS can address.
+bool FileSourceFinish(FileSource* s, unsigned long long length) {
+    if (length == 0) {
+        FileSourceClose(s);
+        SetError(FPDF_ERR_FILE, "the file is empty");
+        return false;
+    }
+    if (length > kMaxFileSourceBytes) {
+        FileSourceClose(s);
+        SetError(MEGAPDF_OPEN_ERR_TOO_LARGE, "the file is too large to open on this platform");
+        return false;
+    }
+    s->length = length;
+    s->open = true;
+    s->access.m_FileLen = static_cast<unsigned long>(length);
+    s->access.m_GetBlock = FileSourceGetBlock;
+    s->access.m_Param = s;
+    return true;
+}
+
+// Opens `path_utf8` for reading, shared: the file may still be renamed, written or
+// deleted while the document is open. That is what the atomic-replace save needs —
+// on Windows FILE_SHARE_DELETE lets ReplaceFile swap the file out from under us, and
+// on POSIX an unlinked inode stays alive for an open descriptor — and it is why a
+// cloud-synced file is never locked by being open in MegaPDF.
+bool FileSourceOpenPath(FileSource* s, const char* path_utf8) {
+#if defined(_WIN32)
+    const int wide_len = MultiByteToWideChar(CP_UTF8, 0, path_utf8, -1, nullptr, 0);
+    if (wide_len <= 0) {
+        SetError(FPDF_ERR_FILE, "the file name could not be read");
+        return false;
+    }
+    std::wstring wide(static_cast<size_t>(wide_len), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, path_utf8, -1, wide.data(), wide_len);
+    HANDLE h = CreateFileW(wide.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_RANDOM_ACCESS, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        SetError(FPDF_ERR_FILE, "the file could not be opened");
+        return false;
+    }
+    s->handle = h;
+    LARGE_INTEGER size{};
+    if (!GetFileSizeEx(h, &size) || size.QuadPart < 0) {
+        FileSourceClose(s);
+        SetError(FPDF_ERR_FILE, "the file's size could not be read");
+        return false;
+    }
+    return FileSourceFinish(s, static_cast<unsigned long long>(size.QuadPart));
+#else
+    const int fd = ::open(path_utf8, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        SetError(FPDF_ERR_FILE, "the file could not be opened");
+        return false;
+    }
+    s->fd = fd;
+    struct stat st{};
+    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        FileSourceClose(s);
+        SetError(FPDF_ERR_FILE, "the file's size could not be read");
+        return false;
+    }
+    return FileSourceFinish(s, static_cast<unsigned long long>(st.st_size));
+#endif
+}
+
+// Takes ownership of an already-open descriptor (Android's content URIs).
+bool FileSourceAdoptFd(FileSource* s, int fd) {
+#if defined(_WIN32)
+    (void)s;
+    (void)fd;
+    SetError(FPDF_ERR_FILE, "opening by descriptor is not supported on this platform");
+    return false;
+#else
+    if (fd < 0) {
+        SetError(FPDF_ERR_FILE, "not a readable descriptor");
+        return false;
+    }
+    s->fd = fd;
+    struct stat st{};
+    if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        FileSourceClose(s);
+        SetError(FPDF_ERR_FILE, "the descriptor is not a readable file");
+        return false;
+    }
+    return FileSourceFinish(s, static_cast<unsigned long long>(st.st_size));
+#endif
+}
+
+// The tail every open shares. PDFium has either produced the document or it has not;
+// the failure message, the password kept for megapdf_open_like() (#132) and the
+// form-fill environment are the same however the bytes arrived. Takes ownership of
+// `d`: on failure it is freed, along with any file it was reading.
+megapdf_document* FinishOpenUnlocked(megapdf_document* d, const char* password_utf8) {
+    if (d->doc == nullptr) {
+        const unsigned long code = FPDF_GetLastError();
+        FileSourceClose(&d->source);
+        delete d;
+        SetError(code, code == FPDF_ERR_PASSWORD ? "the document needs a password, or the password is wrong"
+                     : code == FPDF_ERR_FORMAT   ? "the file is not a valid PDF"
+                     : code == FPDF_ERR_SECURITY ? "the document's security handler is not supported"
+                                                  : "PDFium could not load the document");
+        return nullptr;
+    }
+    if (password_utf8 != nullptr) {
+        try {
+            d->unlock.assign(password_utf8);
+            d->has_unlock = true;
+        } catch (...) {
+            // Only megapdf_open_like() is affected; the document itself is open.
+        }
+    }
+    InitFormFillInfo(&d->ffi);
+    d->form = FPDFDOC_InitFormFillEnvironment(d->doc, &d->ffi);
+    // A missing form environment is survivable (no AcroForm interaction); every
+    // platform has treated it that way.
+    SetError(0, "");
+    return d;
+}
+
+// Hands PDFium the file `d` has just opened, and finishes the open (#147).
+megapdf_document* OpenSourceUnlocked(megapdf_document* d, const char* password_utf8) {
+    d->doc = FPDF_LoadCustomDocument(&d->source.access, password_utf8);
+    return FinishOpenUnlocked(d, password_utf8);
+}
+
+// The "…_like" opens (#132): read the credentials `like` was opened with, then run
+// `load` with them. The copy is wiped before returning, so the password does not
+// outlive the call on the stack.
+template <typename Loader>
+megapdf_document* OpenLike(const megapdf_document* like, Loader load) {
+    std::string unlock;
+    bool has_unlock = false;
+    {
+        Guard guard(CoreLock());
+        if (like == nullptr) {
+            SetError(FPDF_ERR_UNKNOWN, "no document to open like");
+            return nullptr;
+        }
+        try {
+            unlock = like->unlock;
+        } catch (...) {
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return nullptr;
+        }
+        has_unlock = like->has_unlock;
+    }
+    megapdf_document* d = load(has_unlock ? unlock.c_str() : nullptr);
+    std::fill(unlock.begin(), unlock.end(), '\0');
+    return d;
+}
+
 void ClosePageUnlocked(megapdf_page* p) {
     if (p->owner != nullptr && p->owner->form != nullptr) FORM_OnBeforeClosePage(p->page, p->owner->form);
     FPDF_ClosePage(p->page);
@@ -242,51 +481,65 @@ MEGAPDF_API megapdf_document* megapdf_open(const void* bytes, size_t length, con
         return nullptr;
     }
     d->doc = FPDF_LoadMemDocument64(d->bytes.data(), d->bytes.size(), password_utf8);
-    if (d->doc == nullptr) {
-        const unsigned long code = FPDF_GetLastError();
-        delete d;
-        SetError(code, code == FPDF_ERR_PASSWORD ? "the document needs a password, or the password is wrong"
-                     : code == FPDF_ERR_FORMAT   ? "the file is not a valid PDF"
-                     : code == FPDF_ERR_SECURITY ? "the document's security handler is not supported"
-                                                  : "PDFium could not load the document");
+    return FinishOpenUnlocked(d, password_utf8);
+}
+
+MEGAPDF_API megapdf_document* megapdf_open_file(const char* path_utf8, const char* password_utf8) {
+    Guard guard(CoreLock());
+    EnsureLibrary();
+    if (path_utf8 == nullptr || path_utf8[0] == '\0') {
+        SetError(FPDF_ERR_FILE, "no file to open");
         return nullptr;
     }
-    if (password_utf8 != nullptr) {
-        try {
-            d->unlock.assign(password_utf8);
-            d->has_unlock = true;
-        } catch (...) {
-            // Only megapdf_open_like() is affected; the document itself is open.
-        }
+    auto* d = new (std::nothrow) megapdf_document();
+    if (d == nullptr) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return nullptr;
     }
-    InitFormFillInfo(&d->ffi);
-    d->form = FPDFDOC_InitFormFillEnvironment(d->doc, &d->ffi);
-    // A missing form environment is survivable (no AcroForm interaction); every
-    // platform has treated it that way.
-    SetError(0, "");
-    return d;
+    if (!FileSourceOpenPath(&d->source, path_utf8)) {   // sets the error
+        delete d;
+        return nullptr;
+    }
+    return OpenSourceUnlocked(d, password_utf8);
+}
+
+MEGAPDF_API megapdf_document* megapdf_open_fd(int fd, const char* password_utf8) {
+    Guard guard(CoreLock());
+    EnsureLibrary();
+    auto* d = new (std::nothrow) megapdf_document();
+    if (d == nullptr) {
+#if !defined(_WIN32)
+        if (fd >= 0) ::close(fd);   // ownership passed to the core with the call
+#endif
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return nullptr;
+    }
+    if (!FileSourceAdoptFd(&d->source, fd)) {   // sets the error, and closes `fd` if it took it
+        delete d;
+        return nullptr;
+    }
+    return OpenSourceUnlocked(d, password_utf8);
 }
 
 MEGAPDF_API megapdf_document* megapdf_open_like(const megapdf_document* like, const void* bytes, size_t length) {
-    std::string unlock;
-    bool has_unlock = false;
-    {
-        Guard guard(CoreLock());
-        if (like == nullptr) {
-            SetError(FPDF_ERR_UNKNOWN, "no document to open like");
-            return nullptr;
-        }
-        try {
-            unlock = like->unlock;
-        } catch (...) {
-            SetError(FPDF_ERR_UNKNOWN, "out of memory");
-            return nullptr;
-        }
-        has_unlock = like->has_unlock;
+    return OpenLike(like, [&](const char* pw) { return megapdf_open(bytes, length, pw); });
+}
+
+MEGAPDF_API megapdf_document* megapdf_open_file_like(const megapdf_document* like, const char* path_utf8) {
+    return OpenLike(like, [&](const char* pw) { return megapdf_open_file(path_utf8, pw); });
+}
+
+MEGAPDF_API megapdf_document* megapdf_open_fd_like(const megapdf_document* like, int fd) {
+    if (like == nullptr) {
+        // Checked here as well as in OpenLike, so the descriptor the caller handed
+        // over is closed rather than leaked.
+#if !defined(_WIN32)
+        if (fd >= 0) ::close(fd);
+#endif
+        SetError(FPDF_ERR_UNKNOWN, "no document to open like");
+        return nullptr;
     }
-    megapdf_document* d = megapdf_open(bytes, length, has_unlock ? unlock.c_str() : nullptr);
-    std::fill(unlock.begin(), unlock.end(), '\0');
-    return d;
+    return OpenLike(like, [&](const char* pw) { return megapdf_open_fd(fd, pw); });
 }
 
 MEGAPDF_API void megapdf_close(megapdf_document* d) {
@@ -310,6 +563,8 @@ MEGAPDF_API void megapdf_close(megapdf_document* d) {
     d->detached.clear();
     if (d->form != nullptr) FPDFDOC_ExitFormFillEnvironment(d->form);
     if (d->doc != nullptr) FPDF_CloseDocument(d->doc);
+    // After the document: PDFium reads through the file until it is closed (#147).
+    FileSourceClose(&d->source);
     std::fill(d->unlock.begin(), d->unlock.end(), '\0');
     delete d;
 }

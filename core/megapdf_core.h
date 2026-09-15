@@ -99,13 +99,57 @@ MEGAPDF_API const char* megapdf_last_error_message(void);
  * ----------------------------------------------------------------------- */
 
 /**
+ * megapdf_last_error() after a failed open. PDFium's own codes are 0–6
+ * (FPDF_ERR_*); MegaPDF's start above them so a binding can tell them apart.
+ *
+ * TOO_LARGE is the file-backed open's only hard size limit, and it bites on
+ * Windows alone: FPDF_FILEACCESS describes a file's length and its read offsets
+ * as `unsigned long`, which is 32 bits there and 64 bits everywhere else, so a
+ * file of 4 GiB or more cannot be addressed through it on Windows (#147).
+ */
+#define MEGAPDF_OPEN_ERR_TOO_LARGE 100u
+
+/**
  * Opens a document from memory. The bytes are copied; the caller may free them
  * on return. `password_utf8` may be NULL. Returns NULL on failure, with
  * megapdf_last_error() carrying PDFium's code (FPDF_ERR_PASSWORD when one is
  * required or wrong). The form-fill environment is initialised here, so form
  * fields render and toggle without any binding-side setup.
+ *
+ * This costs the file's size in memory twice over — once in the caller's buffer,
+ * once in the copy — so it is for documents that are genuinely in memory (built
+ * there, or handed over by a platform that gives no file). A document that has a
+ * file should be opened with megapdf_open_file() (#148).
  */
 MEGAPDF_API megapdf_document* megapdf_open(const void* bytes, size_t length, const char* password_utf8);
+
+/**
+ * Opens a document from its file, read on demand (#147, #148).
+ *
+ * The core keeps the file open and PDFium reads the parts it needs through it, so
+ * opening costs what PDFium's parser caches rather than the size of the file, and
+ * a document larger than the address space (or than a .NET byte[]) opens like any
+ * other. `path_utf8` is UTF-8 on every platform, including Windows, where the core
+ * widens it itself.
+ *
+ * The file is opened so that it may still be renamed, written or deleted while the
+ * document is open, which the atomic-replace save (SDD §3.4) and a cloud sync both
+ * need. A save that replaces the file under an open document leaves that document
+ * reading the bytes it was opened on, exactly as the in-memory copy did.
+ *
+ * Returns NULL on failure with megapdf_last_error() set: FPDF_ERR_FILE when the
+ * file cannot be opened or read, MEGAPDF_OPEN_ERR_TOO_LARGE past the limit above,
+ * and PDFium's own codes otherwise.
+ */
+MEGAPDF_API megapdf_document* megapdf_open_file(const char* path_utf8, const char* password_utf8);
+
+/**
+ * megapdf_open_file() for a file the caller has already opened for reading: the
+ * core takes ownership of `fd` and closes it with the document, whether or not the
+ * open succeeds. For Android, whose documents arrive as content URIs that have a
+ * descriptor but no path. POSIX only — on Windows it fails with FPDF_ERR_FILE.
+ */
+MEGAPDF_API megapdf_document* megapdf_open_fd(int fd, const char* password_utf8);
 
 /**
  * Opens `bytes` with the credentials `like` was opened with (#132). A save of a
@@ -116,6 +160,12 @@ MEGAPDF_API megapdf_document* megapdf_open(const void* bytes, size_t length, con
  * is NULL or the bytes do not open.
  */
 MEGAPDF_API megapdf_document* megapdf_open_like(const megapdf_document* like, const void* bytes, size_t length);
+
+/** megapdf_open_file() with the credentials `like` was opened with (#132, #148). */
+MEGAPDF_API megapdf_document* megapdf_open_file_like(const megapdf_document* like, const char* path_utf8);
+
+/** megapdf_open_fd() with the credentials `like` was opened with (#132, #148). */
+MEGAPDF_API megapdf_document* megapdf_open_fd_like(const megapdf_document* like, int fd);
 
 /** Closes every page still open on it, tears down the form environment, frees it. NULL is fine. */
 MEGAPDF_API void megapdf_close(megapdf_document* document);
