@@ -1,0 +1,571 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
+@@ -14,11 +14,14 @@
+ #include <vector>
+ 
+ #include "core/fxcrt/bytestring.h"
++#include "core/fxcrt/fx_coordinates.h"
+ #include "core/fxcrt/fx_string_wrappers.h"
++#include "core/fxcrt/retain_ptr.h"
+ #include "core/fxcrt/unowned_ptr.h"
+ 
+ class CPDF_Color;
+ class CPDF_ContentMarks;
++class CPDF_Dictionary;
+ class CPDF_Document;
+ class CPDF_FormObject;
+ class CPDF_ImageObject;
+@@ -47,7 +50,23 @@
+   void ProcessForm(fxcrt::ostringstream* buf, CPDF_FormObject* pFormObj);
+   void ProcessShading(fxcrt::ostringstream* buf, CPDF_ShadingObject* shading_obj);
+   void ProcessImage(fxcrt::ostringstream* buf, CPDF_ImageObject* pImageObj);
+-  void ProcessGraphics(fxcrt::ostringstream* buf, CPDF_PageObject* pPageObj);
++  // Writes "q", the object's graphics state and clip, and `matrix` as "cm" when it
++  // is not the identity: the matrix its path, image, form or shading is drawn in.
++  void ProcessGraphics(fxcrt::ostringstream* buf,
++                       CPDF_PageObject* pPageObj,
++                       const CFX_Matrix& matrix = CFX_Matrix());
++  void WriteClipPath(fxcrt::ostringstream* buf, CPDF_PageObject* pPageObj);
++  // The ExtGState dictionary named `name` in the page's resources. A name retired
++  // from them while its object was off the page is put back first.
++  RetainPtr<const CPDF_Dictionary> GetExtGState(const ByteString& name);
++  // The name of an ExtGState in the page's resources, or retired from them (then
++  // put back), that sets exactly what `wanted` does; empty if there is none.
++  ByteString FindEquivalentExtGState(const CPDF_Dictionary* wanted) const;
++  // A copy of `ext_gstate` whose soft mask draws in `matrix`'s space from the
++  // identity CTM, made once per page for each dictionary and matrix.
++  RetainPtr<CPDF_Dictionary> GetSoftMaskCopy(
++      RetainPtr<const CPDF_Dictionary> ext_gstate,
++      const CFX_Matrix& matrix);
+   void ProcessDefaultGraphics(fxcrt::ostringstream* buf);
+   void ProcessText(fxcrt::ostringstream* buf, CPDF_TextObject* pTextObj);
+   ByteString GetOrCreateDefaultGraphics() const;
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -7,6 +7,7 @@
+ #include "core/fpdfapi/edit/cpdf_pagecontentgenerator.h"
+ 
+ #include <algorithm>
++#include <array>
+ 
+ #include "core/fpdfapi/page/cpdf_color.h"
+ #include "core/fpdfapi/page/cpdf_colorspace.h"
+@@ -85,6 +86,45 @@
+   return true;
+ }
+ 
++// Whether two ExtGState values are the same number, name or boolean.
++bool SameSimpleValue(const CPDF_Object* a, const CPDF_Object* b) {
++  if (!a || !b || a->GetType() != b->GetType()) {
++    return false;
++  }
++  if (a->IsNumber()) {
++    return a->GetNumber() == b->GetNumber();
++  }
++  if (a->IsName()) {
++    return a->GetString() == b->GetString();
++  }
++  if (a->IsBoolean()) {
++    return a->GetInteger() == b->GetInteger();
++  }
++  return false;
++}
++
++// Whether `candidate` sets exactly the entries `wanted` does, each a number, name or
++// boolean of the same value. /Type is ignored.
++bool SameGraphicsStateDict(const CPDF_Dictionary* wanted,
++                           const CPDF_Dictionary* candidate) {
++  size_t count = 0;
++  {
++    CPDF_DictionaryLocker locker(candidate);
++    for (const auto& entry : locker) {
++      if (entry.first == "Type") {
++        continue;
++      }
++      ++count;
++      RetainPtr<const CPDF_Object> want =
++          wanted->GetDirectObjectFor(entry.first.AsStringView());
++      if (!want || !SameSimpleValue(want.Get(), entry.second->GetDirect().Get())) {
++        return false;
++      }
++    }
++  }
++  return count == wanted->size() - (wanted->KeyExist("Type") ? 1 : 0);
++}
++
+ // Balances the "q" operator ProcessGraphics() emitted.
+ void EndProcessGraphics(fxcrt::ostringstream& buf) {
+   buf << " Q\n";
+@@ -760,11 +800,7 @@
+     return;
+   }
+ 
+-  ProcessGraphics(buf, pImageObj);
+-
+-  if (!matrix.IsIdentity()) {
+-    WriteMatrix(*buf, matrix) << " cm ";
+-  }
++  ProcessGraphics(buf, pImageObj, matrix);
+ 
+   bool bWasInline = pStream->IsInline();
+   if (bWasInline) {
+@@ -805,11 +841,7 @@
+       RealizeResource(pStream.Get(), "XObject", pFormObj->GetResourceName());
+   pFormObj->SetResourceName(name);
+ 
+-  ProcessGraphics(buf, pFormObj);
+-
+-  if (!matrix.IsIdentity()) {
+-    WriteMatrix(*buf, matrix) << " cm ";
+-  }
++  ProcessGraphics(buf, pFormObj, matrix);
+ 
+   *buf << "/" << PDF_NameEncode(name) << " Do";
+   EndProcessGraphics(*buf);
+@@ -881,11 +913,7 @@
+   if (!shading) {
+     return;
+   }
+-  ProcessGraphics(buf, shading_obj);
+-  const CFX_Matrix& matrix = shading_obj->matrix();
+-  if (!matrix.IsIdentity()) {
+-    WriteMatrix(*buf, matrix) << " cm ";
+-  }
++  ProcessGraphics(buf, shading_obj, shading_obj->matrix());
+   const ByteString name = RealizeResourceOnce(shading.Get(), "Shading");
+   *buf << "/" << PDF_NameEncode(name) << " sh";
+   EndProcessGraphics(*buf);
+@@ -893,12 +921,7 @@
+ 
+ void CPDF_PageContentGenerator::ProcessPath(fxcrt::ostringstream* buf,
+                                             CPDF_PathObject* pPathObj) {
+-  ProcessGraphics(buf, pPathObj);
+-
+-  const CFX_Matrix& matrix = pPathObj->matrix();
+-  if (!matrix.IsIdentity()) {
+-    WriteMatrix(*buf, matrix) << " cm ";
+-  }
++  ProcessGraphics(buf, pPathObj, pPathObj->matrix());
+ 
+   ProcessPathPoints(buf, &pPathObj->path());
+ 
+@@ -1006,21 +1029,273 @@
+   *buf << (stroke ? "SCN " : "scn ");
+ }
+ 
++RetainPtr<const CPDF_Dictionary> CPDF_PageContentGenerator::GetExtGState(
++    const ByteString& name) {
++  RetainPtr<CPDF_Dictionary> resources = obj_holder_->GetMutableResources();
++  if (!resources) {
++    return nullptr;
++  }
++  RetainPtr<CPDF_Dictionary> ext_gstates =
++      resources->GetMutableDictFor("ExtGState");
++  if (ext_gstates && ext_gstates->KeyExist(name.AsStringView())) {
++    return ext_gstates->GetDictFor(name.AsStringView());
++  }
++  // An object put back after the regeneration that retired its ExtGState (an
++  // undone delete) was written without it, and the entry only came back once the
++  // stream was written.
++  auto& all_removed = obj_holder_->all_removed_resources_map();
++  auto removed_type = all_removed.find("ExtGState");
++  if (removed_type == all_removed.end()) {
++    return nullptr;
++  }
++  auto removed = removed_type->second.find(name);
++  if (removed == removed_type->second.end() || !removed->second) {
++    return nullptr;
++  }
++  RetainPtr<const CPDF_Dictionary> dict =
++      ToDictionary(removed->second->GetDirect());
++  if (!dict) {
++    return nullptr;
++  }
++  if (!ext_gstates) {
++    ext_gstates = resources->SetNewFor<CPDF_Dictionary>("ExtGState");
++  }
++  ext_gstates->SetFor(name, std::move(removed->second));
++  removed_type->second.erase(removed);
++  return dict;
++}
++
++ByteString CPDF_PageContentGenerator::FindEquivalentExtGState(
++    const CPDF_Dictionary* wanted) const {
++  RetainPtr<CPDF_Dictionary> resources = obj_holder_->GetMutableResources();
++  if (!resources) {
++    return ByteString();
++  }
++  RetainPtr<CPDF_Dictionary> ext_gstates =
++      resources->GetMutableDictFor("ExtGState");
++  if (ext_gstates) {
++    CPDF_DictionaryLocker locker(ext_gstates);
++    for (const auto& entry : locker) {
++      RetainPtr<const CPDF_Dictionary> dict =
++          ToDictionary(entry.second->GetDirect());
++      if (dict && SameGraphicsStateDict(wanted, dict.Get())) {
++        return entry.first;
++      }
++    }
++  }
++  auto& all_removed = obj_holder_->all_removed_resources_map();
++  auto removed_type = all_removed.find("ExtGState");
++  if (removed_type == all_removed.end()) {
++    return ByteString();
++  }
++  for (auto it = removed_type->second.begin(); it != removed_type->second.end();
++       ++it) {
++    RetainPtr<const CPDF_Dictionary> dict =
++        it->second ? ToDictionary(it->second->GetDirect()) : nullptr;
++    if (!dict || !SameGraphicsStateDict(wanted, dict.Get())) {
++      continue;
++    }
++    ByteString name = it->first;
++    if (!ext_gstates) {
++      ext_gstates = resources->SetNewFor<CPDF_Dictionary>("ExtGState");
++    }
++    ext_gstates->SetFor(name, std::move(it->second));
++    removed_type->second.erase(it);
++    return name;
++  }
++  return ByteString();
++}
++
++RetainPtr<CPDF_Dictionary> CPDF_PageContentGenerator::GetSoftMaskCopy(
++    RetainPtr<const CPDF_Dictionary> ext_gstate,
++    const CFX_Matrix& matrix) {
++  const auto key = std::make_pair(
++      static_cast<const CPDF_Object*>(ext_gstate.Get()),
++      std::array<float, 6>{matrix.a, matrix.b, matrix.c, matrix.d, matrix.e,
++                           matrix.f});
++  CPDF_PageObjectHolder::SoftMaskCopyMap& copies =
++      obj_holder_->soft_mask_copies();
++  auto it = copies.find(key);
++  if (it != copies.end() &&
++      document_->GetIndirectObject(it->second.copy->GetObjNum()) ==
++          it->second.copy) {
++    return it->second.copy;
++  }
++  RetainPtr<const CPDF_Dictionary> soft_mask = ext_gstate->GetDictFor("SMask");
++  RetainPtr<const CPDF_Stream> group =
++      soft_mask ? soft_mask->GetStreamFor("G") : nullptr;
++  if (!group) {
++    return nullptr;
++  }
++  // The group is drawn through its own /Matrix and then the mask's matrix, so the
++  // product in /Matrix draws it the same from the identity.
++  RetainPtr<CPDF_Stream> group_copy = ToStream(group->Clone());
++  RetainPtr<CPDF_Dictionary> mask_copy = ToDictionary(soft_mask->Clone());
++  RetainPtr<CPDF_Dictionary> ext_gstate_copy = ToDictionary(ext_gstate->Clone());
++  if (!group_copy || !mask_copy || !ext_gstate_copy) {
++    return nullptr;
++  }
++  group_copy->GetMutableDict()->SetMatrixFor(
++      "Matrix", group->GetDict()->GetMatrixFor("Matrix") * matrix);
++  document_->AddIndirectObject(group_copy);
++  mask_copy->SetNewFor<CPDF_Reference>("G", document_, group_copy->GetObjNum());
++  ext_gstate_copy->SetFor("SMask", mask_copy);
++  document_->AddIndirectObject(ext_gstate_copy);
++  copies[key] = {ext_gstate, ext_gstate_copy};
++  return ext_gstate_copy;
++}
++
++void CPDF_PageContentGenerator::WriteClipPath(fxcrt::ostringstream* buf,
++                                              CPDF_PageObject* pPageObj) {
++  const CPDF_ClipPath& clip_path = pPageObj->clip_path();
++  if (!clip_path.HasRef()) {
++    return;
++  }
++  for (size_t i = 0; i < clip_path.GetPathCount(); ++i) {
++    CPDF_Path path = clip_path.GetPath(i);
++    ProcessPathPoints(buf, &path);
++    switch (clip_path.GetClipType(i)) {
++      case CFX_FillRenderOptions::FillType::kWinding:
++        *buf << " W ";
++        break;
++      case CFX_FillRenderOptions::FillType::kEvenOdd:
++        *buf << " W* ";
++        break;
++      case CFX_FillRenderOptions::FillType::kNoFill:
++        NOTREACHED();
++    }
++
++    // Use a no-op path-painting operator to terminate the path without
++    // causing any marks to be placed on the page.
++    *buf << "n ";
++  }
++}
++
+ void CPDF_PageContentGenerator::ProcessGraphics(fxcrt::ostringstream* buf,
+-                                                CPDF_PageObject* pPageObj) {
++                                                CPDF_PageObject* pPageObj,
++                                                const CFX_Matrix& matrix) {
+   *buf << "q ";
+   // Replay the ExtGState dictionaries the object was parsed under, before the
+   // explicit state below, which still wins where both set a value. This writer
+   // only knows alpha and blend mode; soft masks, overprint, transfer functions
+   // and the rest of an ExtGState were otherwise lost.
+-  RetainPtr<const CPDF_Dictionary> resources = obj_holder_->GetResources();
+-  RetainPtr<const CPDF_Dictionary> ext_gstates =
+-      resources ? resources->GetDictFor("ExtGState") : nullptr;
+-  for (const ByteString& gs_name :
+-       pPageObj->general_state().GetGraphicsResourceNames()) {
+-    if (ext_gstates && ext_gstates->KeyExist(gs_name.AsStringView())) {
+-      *buf << "/" << PDF_NameEncode(gs_name) << " gs ";
++  std::vector<ByteString> gs_names;
++  {
++    pdfium::span<const ByteString> parsed =
++        pPageObj->general_state().GetGraphicsResourceNames();
++    gs_names.assign(parsed.begin(), parsed.end());
++  }
++  std::vector<RetainPtr<const CPDF_Dictionary>> gs_dicts;
++  for (const ByteString& gs_name : gs_names) {
++    gs_dicts.push_back(GetExtGState(gs_name));
++  }
++
++  // A soft mask draws in the CTM in force at its "gs" (#140). The state below is
++  // written from the stream's identity CTM, so a mask set under any other CTM was
++  // mapped into the wrong space once the stream was parsed again.
++  // - When the mask's matrix is the one this object is drawn in, the state is
++  //   written after the object's "cm" (the clip stays before it). Nothing else in
++  //   the state depends on the CTM, so this is exact and adds no objects.
++  // - Otherwise (text, which has no "cm", or a mask set before a further "cm"), the
++  //   ExtGState is replaced by a copy with the mask's matrix folded into its group's
++  //   /Matrix. That is exact too; wrapping the "gs" in "M cm ... M^-1 cm" leaves the
++  //   CTM a float inverse away from the identity.
++  bool state_after_matrix = false;
++  RetainPtr<const CPDF_Dictionary> soft_mask =
++      pPageObj->general_state().GetSoftMask();
++  const CFX_Matrix* smask_matrix = pPageObj->general_state().GetSMaskMatrix();
++  if (soft_mask && smask_matrix && !smask_matrix->IsIdentity()) {
++    // The ExtGState that set the mask: the last one with an /SMask entry.
++    size_t mask_index = gs_names.size();
++    for (size_t i = gs_names.size(); i-- > 0;) {
++      if (gs_dicts[i] && gs_dicts[i]->KeyExist("SMask")) {
++        if (gs_dicts[i]->GetDictFor("SMask") == soft_mask) {
++          mask_index = i;
++        }
++        break;
++      }
++    }
++    if (mask_index < gs_names.size()) {
++      if (*smask_matrix == matrix) {
++        state_after_matrix = true;
++      } else if (RetainPtr<CPDF_Dictionary> copy =
++                     GetSoftMaskCopy(gs_dicts[mask_index], *smask_matrix)) {
++        gs_names[mask_index] = RealizeResource(copy.Get(), "ExtGState");
++        gs_dicts[mask_index] = copy;
++        // The object now says what was written, so the next regeneration writes
++        // the copy as it is instead of folding the matrix in again.
++        CPDF_GeneralState& general_state = pPageObj->mutable_general_state();
++        general_state.SetGraphicsResourceNames(gs_names);
++        general_state.SetSoftMask(copy->GetMutableDictFor("SMask"));
++        general_state.SetSMaskMatrix(CFX_Matrix());
++      }
++    }
++  }
++  // The writer's own alpha and blend mode state, written after the rest.
++  ByteString alpha_name;
++  GraphicsData graphD;
++  graphD.fillAlpha = pPageObj->general_state().GetFillAlpha();
++  graphD.strokeAlpha = pPageObj->general_state().GetStrokeAlpha();
++  graphD.blendType = pPageObj->general_state().GetBlendType();
++  if (graphD.fillAlpha != 1.0f || graphD.strokeAlpha != 1.0f ||
++      graphD.blendType != BlendMode::kNormal) {
++    ByteString& name = alpha_name;
++    std::optional<ByteString> maybe_name =
++        obj_holder_->GraphicsMapSearch(graphD);
++    if (maybe_name.has_value()) {
++      name = std::move(maybe_name.value());
++    } else {
++      auto gsDict = document_->New<CPDF_Dictionary>();
++      if (graphD.fillAlpha != 1.0f) {
++        gsDict->SetNewFor<CPDF_Number>("ca", graphD.fillAlpha);
++      }
++
++      if (graphD.strokeAlpha != 1.0f) {
++        gsDict->SetNewFor<CPDF_Number>("CA", graphD.strokeAlpha);
++      }
++
++      if (graphD.blendType != BlendMode::kNormal) {
++        gsDict->SetNewFor<CPDF_Name>("BM",
++                                     pPageObj->general_state().GetBlendMode());
++      }
++      // Reuse the dictionary an earlier regeneration wrote, once the page has been
++      // parsed again from it; a new one on every reload added one per round (#140).
++      name = FindEquivalentExtGState(gsDict.Get());
++      if (name.IsEmpty()) {
++        document_->AddIndirectObject(gsDict);
++        name = RealizeResource(std::move(gsDict), "ExtGState");
++      }
++      // Add to the names the object was parsed under rather than replace them, or
++      // the next rewrite would no longer know about them.
++      pdfium::span<const ByteString> parsed =
++          pPageObj->general_state().GetGraphicsResourceNames();
++      std::vector<ByteString> names(parsed.begin(), parsed.end());
++      if (std::find(names.begin(), names.end(), name) == names.end()) {
++        names.push_back(name);
++      }
++      pPageObj->mutable_general_state().SetGraphicsResourceNames(
++          std::move(names));
++      obj_holder_->GraphicsMapInsert(graphD, name);
++    }
++  }
++
++  if (state_after_matrix) {
++    WriteClipPath(buf, pPageObj);
++    WriteMatrix(*buf, matrix) << " cm ";
++  }
++
++  // Each name once, at its last place (and the alpha state only at the end): an
++  // ExtGState applied again overrides everything it set before, so an earlier
++  // occurrence changes nothing. Once a regenerated stream is parsed again, the
++  // alpha state's name is also among the parsed names, and without this every
++  // regeneration wrote each object's names once more.
++  for (size_t i = 0; i < gs_names.size(); ++i) {
++    if (!gs_dicts[i] || gs_names[i] == alpha_name ||
++        std::find(gs_names.begin() + i + 1, gs_names.end(), gs_names[i]) !=
++            gs_names.end()) {
++      continue;
+     }
++    *buf << "/" << PDF_NameEncode(gs_names[i]) << " gs ";
+   }
+   WriteColor(buf, pPageObj->color_state().GetFillColor(), /*stroke=*/false);
+   WriteColor(buf, pPageObj->color_state().GetStrokeColor(), /*stroke=*/true);
+@@ -1057,69 +1332,17 @@
+     WriteFloat(*buf, flatness) << " i ";
+   }
+ 
+-  const CPDF_ClipPath& clip_path = pPageObj->clip_path();
+-  if (clip_path.HasRef()) {
+-    for (size_t i = 0; i < clip_path.GetPathCount(); ++i) {
+-      CPDF_Path path = clip_path.GetPath(i);
+-      ProcessPathPoints(buf, &path);
+-      switch (clip_path.GetClipType(i)) {
+-        case CFX_FillRenderOptions::FillType::kWinding:
+-          *buf << " W ";
+-          break;
+-        case CFX_FillRenderOptions::FillType::kEvenOdd:
+-          *buf << " W* ";
+-          break;
+-        case CFX_FillRenderOptions::FillType::kNoFill:
+-          NOTREACHED();
+-      }
+-
+-      // Use a no-op path-painting operator to terminate the path without
+-      // causing any marks to be placed on the page.
+-      *buf << "n ";
+-    }
++  if (!state_after_matrix) {
++    WriteClipPath(buf, pPageObj);
+   }
+ 
+-  GraphicsData graphD;
+-  graphD.fillAlpha = pPageObj->general_state().GetFillAlpha();
+-  graphD.strokeAlpha = pPageObj->general_state().GetStrokeAlpha();
+-  graphD.blendType = pPageObj->general_state().GetBlendType();
+-  if (graphD.fillAlpha == 1.0f && graphD.strokeAlpha == 1.0f &&
+-      graphD.blendType == BlendMode::kNormal) {
+-    return;
++  if (!alpha_name.IsEmpty()) {
++    *buf << "/" << PDF_NameEncode(alpha_name) << " gs ";
+   }
+ 
+-  ByteString name;
+-  std::optional<ByteString> maybe_name = obj_holder_->GraphicsMapSearch(graphD);
+-  if (maybe_name.has_value()) {
+-    name = std::move(maybe_name.value());
+-  } else {
+-    auto gsDict = document_->New<CPDF_Dictionary>();
+-    if (graphD.fillAlpha != 1.0f) {
+-      gsDict->SetNewFor<CPDF_Number>("ca", graphD.fillAlpha);
+-    }
+-
+-    if (graphD.strokeAlpha != 1.0f) {
+-      gsDict->SetNewFor<CPDF_Number>("CA", graphD.strokeAlpha);
+-    }
+-
+-    if (graphD.blendType != BlendMode::kNormal) {
+-      gsDict->SetNewFor<CPDF_Name>("BM",
+-                                   pPageObj->general_state().GetBlendMode());
+-    }
+-    document_->AddIndirectObject(gsDict);
+-    name = RealizeResource(std::move(gsDict), "ExtGState");
+-    // Add to the names the object was parsed under rather than replace them, or
+-    // the next rewrite would no longer know about them.
+-    pdfium::span<const ByteString> parsed =
+-        pPageObj->general_state().GetGraphicsResourceNames();
+-    std::vector<ByteString> names(parsed.begin(), parsed.end());
+-    if (std::find(names.begin(), names.end(), name) == names.end()) {
+-      names.push_back(name);
+-    }
+-    pPageObj->mutable_general_state().SetGraphicsResourceNames(std::move(names));
+-    obj_holder_->GraphicsMapInsert(graphD, name);
++  if (!state_after_matrix && !matrix.IsIdentity()) {
++    WriteMatrix(*buf, matrix) << " cm ";
+   }
+-  *buf << "/" << PDF_NameEncode(name) << " gs ";
+ }
+ 
+ void CPDF_PageContentGenerator::ProcessDefaultGraphics(
+@@ -1147,8 +1370,11 @@
+   gsDict->SetNewFor<CPDF_Number>("ca", defaultGraphics.fillAlpha);
+   gsDict->SetNewFor<CPDF_Number>("CA", defaultGraphics.strokeAlpha);
+   gsDict->SetNewFor<CPDF_Name>("BM", "Normal");
+-  document_->AddIndirectObject(gsDict);
+-  ByteString name = RealizeResource(std::move(gsDict), "ExtGState");
++  ByteString name = FindEquivalentExtGState(gsDict.Get());
++  if (name.IsEmpty()) {
++    document_->AddIndirectObject(gsDict);
++    name = RealizeResource(std::move(gsDict), "ExtGState");
++  }
+   obj_holder_->GraphicsMapInsert(defaultGraphics, name);
+   return name;
+ }
+--- a/core/fpdfapi/page/cpdf_pageobjectholder.h
++++ b/core/fpdfapi/page/cpdf_pageobjectholder.h
+@@ -10,6 +10,7 @@
+ #include <stddef.h>
+ #include <stdint.h>
+ 
++#include <array>
+ #include <deque>
+ #include <functional>
+ #include <map>
+@@ -80,6 +81,18 @@
+   using RealizedCopyMap =
+       std::map<std::pair<ByteString, const CPDF_Object*>, RealizedCopy>;
+ 
++  // A copy the content generator wrote of an ExtGState whose soft mask it moved
++  // into another space: the mask group's /Matrix has the mask's matrix folded in
++  // (#140). `source` is held so its address, part of the key, cannot be reused.
++  struct SoftMaskCopy {
++    RetainPtr<const CPDF_Object> source;
++    RetainPtr<CPDF_Dictionary> copy;
++  };
++  // Key: The source ExtGState dictionary and the matrix folded into its mask.
++  using SoftMaskCopyMap =
++      std::map<std::pair<const CPDF_Object*, std::array<float, 6>>,
++               SoftMaskCopy>;
++
+   using iterator = std::deque<std::unique_ptr<CPDF_PageObject>>::iterator;
+   using const_iterator =
+       std::deque<std::unique_ptr<CPDF_PageObject>>::const_iterator;
+@@ -162,6 +175,8 @@
+ 
+   RealizedCopyMap& realized_copies() { return realized_copies_; }
+ 
++  SoftMaskCopyMap& soft_mask_copies() { return soft_mask_copies_; }
++
+  protected:
+   void LoadTransparencyInfo();
+ 
+@@ -194,6 +209,9 @@
+   // for every regeneration, and a copy made per generator was written again each
+   // time, leaving the last one unreferenced in the file (#138).
+   RealizedCopyMap realized_copies_;
++
++  // Like `realized_copies_`, so a regeneration after an undo reuses the copy.
++  SoftMaskCopyMap soft_mask_copies_;
+ };
+ 
+ #endif  // CORE_FPDFAPI_PAGE_CPDF_PAGEOBJECTHOLDER_H_

@@ -1651,6 +1651,11 @@ void test_rewrite_fidelity() {
                pixels + "\nendstream";
     }();
     const std::string type3_glyph = "<< /Length 38 >>\nstream\n1000 0 0 0 750 750 d1 0 0 750 750 re f\nendstream";
+    const std::string monospaced_widths = [] {
+        std::string widths;
+        for (int i = 32; i <= 126; i++) widths += " 600";
+        return widths;
+    }();
     const std::vector<Case> cases = {
         {"plain text", "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET", 0},
         {"kerned TJ", "BT /F1 18 Tf 72 700 Td [(Ke) -120 (rned) 250 (heading)] TJ ET BT /F1 12 Tf 72 660 Td [(Body) -300 (kerned)] TJ ET", 0},
@@ -1762,6 +1767,27 @@ void test_rewrite_fidelity() {
          "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q /GS1 gs 0 0 1 rg 72 560 200 60 re f Q BT /F1 12 Tf 72 520 Td (Body under a masked box) Tj ET", 6,
          "/ExtGState << /GS1 << /SMask << /S /Luminosity /G 6 0 R >> >> >>", "",
          {"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Group << /S /Transparency /CS /DeviceGray >> /Length 22 >>\nstream\n1 g 72 560 100 60 re f\nendstream"}},
+        // Soft masks set under a flipped, scaled CTM (#140). PDFium fixes a mask's matrix to the CTM
+        // at its "gs"; the writer replayed the ExtGState before the object's "cm", at the identity,
+        // so once the page was parsed again the mask covered another part of it. The mask lets
+        // through only x < 200 pt; replayed at the identity it let through the whole box or line.
+        {"soft mask over a box under a flipped, scaled CTM",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 0.5 0 0 -0.5 0 792 cm /GS1 gs 0 0 1 rg 144 344 400 120 re f Q "
+         "BT /F1 12 Tf 72 520 Td (Body under a masked box) Tj ET", 13,
+         "/ExtGState << /GS1 << /SMask << /S /Luminosity /G 6 0 R >> >> >>", "",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 1224 1584] /Group << /S /Transparency /CS /DeviceGray >> /Length 21 >>\nstream\n1 g 0 0 400 1584 re f\nendstream"}},
+        {"soft mask over text under a flipped, scaled CTM",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 0.5 0 0 -0.5 0 792 cm /GS1 gs "
+         "BT /F1 48 Tf 1 0 0 -1 144 464 Tm (Masked body words here) Tj ET Q BT /F1 12 Tf 72 500 Td (Body after it) Tj ET", 13,
+         "/ExtGState << /GS1 << /SMask << /S /Luminosity /G 6 0 R >> >> >>", "",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 1224 1584] /Group << /S /Transparency /CS /DeviceGray >> /Length 21 >>\nstream\n1 g 0 0 400 1584 re f\nendstream"}},
+        // A font written straight into the page's resources with its own /Widths (#141). The writer
+        // rebuilt a direct font dictionary from its base font and encoding alone, so every run in it
+        // came back at the standard font's advances.
+        {"font dictionary written directly in the resources, with its own widths",
+         "BT /F2 18 Tf 72 700 Td (Plain heading) Tj ET BT /F2 12 Tf 72 660 Td (Body in the same direct font) Tj ET", 14,
+         "", "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [" +
+                 monospaced_widths + " ] >>"},
         // The miter limit (patch 6 writes "M") is not a case here: PDFium's rasteriser draws a
         // stroked corner identically whatever the limit or join, so the render-based guard
         // cannot see it lost. Its survival belongs to an operator-level check (#126).
@@ -3043,9 +3069,21 @@ void test_layout_verdicts() {
     }
 
     // Refused because text would move: a font written straight into the page's resources with its
-    // own /Widths. The writer re-creates a direct font dictionary from its base font, without the
-    // widths, so every run in it comes back at Helvetica's own advance.
-    {
+    // own /Widths. Below patch 14 the writer re-creates a direct font dictionary from its base font,
+    // without the widths, so every run in it comes back at Helvetica's own advance (#141). No other
+    // way of moving text on a rewrite is known (the corpus battery has never refused an edit as
+    // TEXT_MOVED), so from patch 14 this page pins the fix instead: the same verdict is editable.
+    if (MEGAPDF_PDFIUM_PATCHES >= 14) {
+        std::string widths;
+        for (int i = 32; i <= 126; i++) widths += " 1000";
+        const std::string direct_font =
+            "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [" + widths + " ] >>";
+        OpenDoc d(one_page_pdf("BT /F2 18 Tf 72 700 Td (Heading) Tj ET BT /F2 12 Tf 72 660 Td (Body line here) Tj ET", helvetica, "", direct_font));
+        Page p(d.doc, 0);
+        megapdf_layout_verdict v{};
+        check(megapdf_text_editable_reason(p.page, 0, &v) == 1 && v.editable == 1 && v.cause == MEGAPDF_LAYOUT_OK,
+              "layout verdict: a direct font keeps its widths from patch 14, so its page is editable (#141)", describe(v));
+    } else {
         std::string widths;
         for (int i = 32; i <= 126; i++) widths += " 1000";
         const std::string direct_font =

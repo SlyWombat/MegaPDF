@@ -1,0 +1,95 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.h
+@@ -69,6 +69,11 @@
+       const CFX_Matrix& matrix);
+   void ProcessDefaultGraphics(fxcrt::ostringstream* buf);
+   void ProcessText(fxcrt::ostringstream* buf, CPDF_TextObject* pTextObj);
++  // The name a font dictionary written directly in the page's /Resources /Font is
++  // under (`current_name` first), found by identity; a name retired from them while
++  // its text was off the page is put back. Empty if it is not there.
++  ByteString FindDirectFont(const CPDF_Object* font_dict,
++                            const ByteString& current_name);
+   ByteString GetOrCreateDefaultGraphics() const;
+   // Returns a name in the `type` resource dictionary for `pResource`: a name that
+   // already refers to it (`current_name` first), or a new one.
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -1379,6 +1379,47 @@
+   return name;
+ }
+ 
++ByteString CPDF_PageContentGenerator::FindDirectFont(
++    const CPDF_Object* font_dict,
++    const ByteString& current_name) {
++  RetainPtr<CPDF_Dictionary> resources = obj_holder_->GetMutableResources();
++  if (!resources) {
++    return ByteString();
++  }
++  RetainPtr<CPDF_Dictionary> fonts = resources->GetMutableDictFor("Font");
++  if (fonts) {
++    if (!current_name.IsEmpty() &&
++        fonts->GetObjectFor(current_name.AsStringView()).Get() == font_dict) {
++      return current_name;
++    }
++    CPDF_DictionaryLocker locker(fonts);
++    for (const auto& entry : locker) {
++      if (entry.second.Get() == font_dict) {
++        return entry.first;
++      }
++    }
++  }
++  auto& all_removed = obj_holder_->all_removed_resources_map();
++  auto removed_type = all_removed.find("Font");
++  if (removed_type == all_removed.end()) {
++    return ByteString();
++  }
++  for (auto it = removed_type->second.begin(); it != removed_type->second.end();
++       ++it) {
++    if (it->second.Get() != font_dict) {
++      continue;
++    }
++    ByteString name = it->first;
++    if (!fonts) {
++      fonts = resources->SetNewFor<CPDF_Dictionary>("Font");
++    }
++    fonts->SetFor(name, std::move(it->second));
++    removed_type->second.erase(it);
++    return name;
++  }
++  return ByteString();
++}
++
+ // This method adds text to the buffer, BT begins the text object, ET ends it.
+ // Tm sets the text matrix (allows positioning and transforming text).
+ // Tf sets the font name (from Font in Resources) and font size.
+@@ -1421,8 +1462,28 @@
+   data.dict_objnum = font->GetFontDict()->GetObjNum();
+ 
+   ByteString dict_name;
+-  std::optional<ByteString> maybe_name = obj_holder_->FontsMapSearch(data);
+-  if (maybe_name.has_value()) {
++  RetainPtr<const CPDF_Dictionary> font_dict = font->GetFontDict();
++  if (font_dict->IsInline()) {
++    // A font dictionary written directly in the page's /Resources /Font keeps its
++    // name, and with it /Widths, /FontDescriptor and every other entry (#141).
++    // Below, any direct dictionary was taken for a standard font and rebuilt from
++    // its base font and encoding alone: text in a font with its own widths moved,
++    // and direct fonts sharing a base font were merged under one name.
++    dict_name = FindDirectFont(font_dict.Get(), pTextObj->GetResourceName());
++    if (dict_name.IsEmpty() && !font->IsType3Font() &&
++        (font_dict->KeyExist("Widths") || font_dict->KeyExist("FontDescriptor") ||
++         font_dict->KeyExist("DescendantFonts") ||
++         font_dict->KeyExist("ToUnicode"))) {
++      // No longer in the resources (the page was given its own copy of a shared
++      // /Font dictionary): one indirect copy for the page, in full.
++      dict_name = RealizeResourceOnce(font_dict.Get(), "Font");
++    }
++  }
++  std::optional<ByteString> maybe_name =
++      dict_name.IsEmpty() ? obj_holder_->FontsMapSearch(data) : std::nullopt;
++  if (!dict_name.IsEmpty()) {
++    // Named above, by the dictionary itself.
++  } else if (maybe_name.has_value()) {
+     dict_name = std::move(maybe_name.value());
+   } else {
+     RetainPtr<const CPDF_Object> pIndirectFont = font->GetFontDict();

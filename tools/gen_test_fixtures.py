@@ -25,6 +25,8 @@ Writes:
                 line) whose second copy PDFium's text layer hides (#136).
   doubled-far.pdf - a line whose copies are drawn before it and far after it,
                 hidden character by character rather than object by object (#136).
+  softmask.pdf - paths, an image, a form and text under luminosity and alpha soft
+                masks beneath a scaled, flipped page CTM (#140).
 
 Deterministic output; both platforms' engine tests assert against these.
 """
@@ -428,6 +430,57 @@ def gen_doubled_far():
     return build(objs)
 
 
+def gen_softmask():
+    """Objects drawn under soft masks beneath a scaled, flipped page CTM (#140).
+
+    PDFium fixes a soft mask's matrix to the CTM in force at its "gs"; a writer that
+    replays the ExtGState anywhere else maps the mask in the wrong space. The page's
+    content starts with "0.5 0 0 -0.5 0 792 cm", so every coordinate below is in half
+    points with y running down. In content order:
+      0  a blue box under a luminosity mask (white stripe x 0-400)
+      1  a red box under /ca 0.5 and an alpha mask (a 250 x 300 rectangle)
+      2  a checker image under a luminosity mask whose group has its own /Matrix
+      3  a green form XObject under an alpha mask whose group has its own /Matrix
+      4  text under the luminosity mask of 0
+      5  a purple box under the mask of 2, set before a further "0.8 0 0 0.8 0 0 cm"
+         (the mask's matrix is not the box's)
+      6  "Plain line", the object a regeneration marks dirty
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    group = b"/Type /XObject /Subtype /Form /BBox [0 0 1224 1584] /Group << /S /Transparency /CS /DeviceGray >>"
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    lum = add(stream(group, b"1 g 0 0 400 1584 re f"))
+    alpha = add(stream(group, b"0 g 100 500 250 300 re f"))
+    lum_moved = add(stream(group + b" /Matrix [1 0 0 1 60 40]", b"1 g 600 0 300 1584 re f 1 g 560 900 300 300 re f"))
+    alpha_scaled = add(stream(group + b" /Matrix [0.5 0 0 0.5 300 250]", b"0 g 700 500 300 300 re f"))
+    pixels = bytes(255 if ((x // 4 + y // 4) & 1) else 0 for y in range(16) for x in range(16))
+    image = add(stream(b"/Type /XObject /Subtype /Image /Width 16 /Height 16 /ColorSpace /DeviceGray /BitsPerComponent 8",
+                       pixels))
+    form = add(stream(b"/Type /XObject /Subtype /Form /BBox [0 0 400 300]", b"0 0.6 0 rg 0 0 400 300 re f"))
+    content = add(stream(b"", b"0.5 0 0 -0.5 0 792 cm\n"
+                              b"q /GL gs 0 0 1 rg 100 100 500 300 re f Q\n"
+                              b"q /GC gs /GA gs 1 0 0 rg 100 500 500 300 re f Q\n"
+                              b"q /GI gs 300 0 0 300 650 100 cm /Im1 Do Q\n"
+                              b"q /GF gs 1 0 0 1 650 500 cm /Fm1 Do Q\n"
+                              b"q /GL gs 0 0.5 0 rg BT /F1 96 Tf 1 0 0 -1 100 1000 Tm (Masked text) Tj ET Q\n"
+                              b"q /GI gs 0.8 0 0 0.8 0 0 cm 0.5 0 0.5 rg 700 1000 400 300 re f Q\n"
+                              b"BT /F1 24 Tf 1 0 0 -1 100 1450 Tm (Plain line) Tj ET\n"))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 %d 0 R >> "
+               b"/XObject << /Im1 %d 0 R /Fm1 %d 0 R >> "
+               b"/ExtGState << /GL << /SMask << /S /Luminosity /G %d 0 R >> >> "
+               b"/GA << /SMask << /S /Alpha /G %d 0 R >> >> "
+               b"/GI << /SMask << /S /Luminosity /G %d 0 R >> >> "
+               b"/GF << /SMask << /S /Alpha /G %d 0 R >> >> "
+               b"/GC << /ca 0.5 >> >> >> /Contents %d 0 R >>"
+               % (pages_num, font, image, form, lum, alpha, lum_moved, alpha_scaled, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def gen_textbox():
     """A page carrying a MegaPDF *text box* written the way the engines write it
     (#34): a text object wrapped in a marked-content section named
@@ -559,6 +612,7 @@ def main():
                        ("textbox.pdf", gen_textbox()),
                        ("doubled.pdf", gen_doubled()),
                        ("doubled-far.pdf", gen_doubled_far()),
+                       ("softmask.pdf", gen_softmask()),
                        ("encrypted.pdf", gen_encrypted())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
