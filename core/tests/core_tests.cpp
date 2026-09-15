@@ -1788,6 +1788,19 @@ void test_rewrite_fidelity() {
          "BT /F2 18 Tf 72 700 Td (Plain heading) Tj ET BT /F2 12 Tf 72 660 Td (Body in the same direct font) Tj ET", 14,
          "", "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [" +
                  monospaced_widths + " ] >>"},
+        // A form XObject with no /Resources of its own draws with the page's (#125). The writer kept
+        // only the resources the page's own objects name, so the image or font that only the form's
+        // content names was removed, and the form drew nothing, or its text in a substitute font.
+        {"form XObject without resources, drawing an image named by the page",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q /Fm1 Do Q BT /F1 12 Tf 72 540 Td (Body under a form) Tj ET", 15,
+         "/XObject << /Fm1 6 0 R /Im1 7 0 R >>", "",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Length 33 >>\nstream\nq 200 0 0 100 72 580 cm /Im1 Do Q\nendstream",
+          checker_image}},
+        {"form XObject without resources, drawing text in a font named by the page",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q /Fm1 Do Q BT /F1 12 Tf 72 540 Td (Body under a form) Tj ET", 15,
+         "/XObject << /Fm1 6 0 R >>", "/F2 7 0 R",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Length 40 >>\nstream\nBT /F2 20 Tf 72 600 Td (MMMM WWWW) Tj ET\nendstream",
+          "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>"}},
         // The miter limit (patch 6 writes "M") is not a case here: PDFium's rasteriser draws a
         // stroked corner identically whatever the limit or join, so the render-based guard
         // cannot see it lost. Its survival belongs to an operator-level check (#126).
