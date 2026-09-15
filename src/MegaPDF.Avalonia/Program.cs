@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.LogicalTree;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
@@ -916,6 +917,21 @@ internal static class Program
         var again = MenuProbe.Open(window, window.ZoomMenuButton);
         check("opened again, it still presents its entries", again.Headers.Contains(Strings.FitWidth));
         again.Close();
+
+        // Zoom in from the keyboard: Cmd+= as the menu shows it, and Cmd+Shift+=, which is
+        // Cmd++ to anyone reading the key cap. Ctrl on Windows and Linux.
+        var command = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
+        foreach (var (keys, modifiers) in new[] { ("Cmd+=", command), ("Cmd+Shift+=", command | RawInputModifiers.Shift) })
+        {
+            vm.SetZoomCommand.Execute(1.0);
+            Pump();
+            global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, global::Avalonia.Input.Key.OemPlus, modifiers,
+                global::Avalonia.Input.PhysicalKey.Equal, modifiers.HasFlag(RawInputModifiers.Shift) ? "+" : "=");
+            global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, global::Avalonia.Input.Key.OemPlus, modifiers,
+                global::Avalonia.Input.PhysicalKey.Equal, modifiers.HasFlag(RawInputModifiers.Shift) ? "+" : "=");
+            Pump();
+            check($"{keys} zooms in (100% -> {vm.Zoom * 100:F0}%)", vm.Zoom > 1.001);
+        }
 
         window.Close();
         Pump();
