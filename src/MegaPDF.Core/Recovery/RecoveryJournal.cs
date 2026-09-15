@@ -13,9 +13,18 @@ public sealed record RecoverableSession(string JournalPath, string DocumentPath,
 /// one JSON line and flushes, so a crash at any point loses at most the in-flight
 /// entry. MarkSaved truncates the log; EndSession removes it. A journal file that
 /// still exists with entries at scan time is a crashed session.
+///
+/// A live journal is held exclusively (#145). Two app instances with the same document
+/// open used to share one journal file: the second truncated the first's entries, and
+/// the first crashed on close when its delete met the second's handle. Now a journal
+/// another instance holds is skipped — the session writes to the next free name beside
+/// it — and a scan never offers a journal that is still being written.
 /// </summary>
 public sealed class RecoveryJournal : IDisposable
 {
+    /// <summary>How many sibling names a session tries before it gives up journaling.</summary>
+    private const int MaxSiblings = 16;
+
     private readonly string _directory;
     private string? _journalPath;
     private StreamWriter? _writer;
@@ -30,28 +39,57 @@ public sealed class RecoveryJournal : IDisposable
         Directory.CreateDirectory(_directory);
     }
 
+    /// <summary>Where this session's entries go; null while nothing is journaled.</summary>
+    public string? JournalPath => _journalPath;
+
     /// <summary>
     /// Starts journaling edits to <paramref name="documentPath"/>, truncating any earlier
-    /// journal for it. A document whose content is protected — opened with a password — is
-    /// not journaled at all: entries carry document text, which would otherwise sit on disk
-    /// unencrypted beside a file its owner encrypted (#135). A journal an earlier version
-    /// left for such a document is deleted; a restore has already read its entries.
+    /// journal for it that no other instance holds. A document whose content is protected —
+    /// opened with a password — is not journaled at all: entries carry document text, which
+    /// would otherwise sit on disk unencrypted beside a file its owner encrypted (#135). A
+    /// journal an earlier version left for such a document is deleted; a restore has already
+    /// read its entries.
     /// </summary>
     public void BeginSession(string documentPath, bool contentIsProtected = false)
     {
         EndSession();
         _contentIsProtected = contentIsProtected;
-        var journalPath = Path.Combine(_directory, $"{HashPath(documentPath)}.journal");
+        var baseName = HashPath(documentPath);
         if (contentIsProtected)
         {
-            if (File.Exists(journalPath))
-                File.Delete(journalPath);
+            TryDelete(Path.Combine(_directory, $"{baseName}.journal"));
             return;
         }
-        _journalPath = journalPath;
-        _writer = new StreamWriter(new FileStream(_journalPath, FileMode.Create, FileAccess.Write, FileShare.Read));
-        _writer.WriteLine(JsonSerializer.Serialize(new Header(documentPath)));
-        _writer.Flush();
+
+        for (var sibling = 1; sibling <= MaxSiblings; sibling++)
+        {
+            var candidate = Path.Combine(_directory, sibling == 1 ? $"{baseName}.journal" : $"{baseName}-{sibling}.journal");
+            FileStream stream;
+            try
+            {
+                // OpenOrCreate and then truncate, not Create: on macOS and Linux Create
+                // truncates before the lock is tried, which would wipe another instance's
+                // entries even though the open then fails.
+                stream = new FileStream(candidate, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
+            }
+            catch (IOException)
+            {
+                continue; // another instance holds this one
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            stream.SetLength(0);
+            _journalPath = candidate;
+            _writer = new StreamWriter(stream);
+            _writer.WriteLine(JsonSerializer.Serialize(new Header(documentPath)));
+            _writer.Flush();
+            return;
+        }
+        // Every name is held: the document is open in that many other instances. Its edits
+        // go unjournaled rather than the open failing.
     }
 
     public void Record(JournalEntry entry)
@@ -65,13 +103,24 @@ public sealed class RecoveryJournal : IDisposable
     /// <summary>The document was saved — recorded edits are now durable, so restart the log.</summary>
     public void MarkSaved(string documentPath) => BeginSession(documentPath, _contentIsProtected);
 
-    /// <summary>Clean close (or the user discarded changes): nothing to recover.</summary>
+    /// <summary>
+    /// Clean close (or the user discarded changes): nothing to recover. Never throws: a
+    /// journal that cannot be deleted is left behind, and a scan offers it only if it holds
+    /// entries.
+    /// </summary>
     public void EndSession()
     {
-        _writer?.Dispose();
+        try
+        {
+            _writer?.Dispose();
+        }
+        catch (IOException)
+        {
+            // The final flush failed; the file is being removed anyway.
+        }
         _writer = null;
-        if (_journalPath is not null && File.Exists(_journalPath))
-            File.Delete(_journalPath);
+        if (_journalPath is not null)
+            TryDelete(_journalPath);
         _journalPath = null;
     }
 
@@ -80,6 +129,9 @@ public sealed class RecoveryJournal : IDisposable
         var sessions = new List<RecoverableSession>();
         foreach (var file in Directory.GetFiles(_directory, "*.journal"))
         {
+            // This process's own live journal is not a crashed session either.
+            if (string.Equals(file, _journalPath, StringComparison.OrdinalIgnoreCase))
+                continue;
             try
             {
                 var lines = ReadAllLinesShared(file);
@@ -97,13 +149,19 @@ public sealed class RecoveryJournal : IDisposable
             }
             catch (IOException)
             {
-                // Locked by a live session — not ours to recover.
+                // Held by a live session in another instance — not ours to recover.
+            }
+            catch (UnauthorizedAccessException)
+            {
             }
         }
         return sessions.OrderByDescending(s => s.LastWriteUtc).ToList();
     }
 
-    /// <summary>Reads a journal even while a writer holds it open (writers use FileShare.Read).</summary>
+    /// <summary>
+    /// Reads a journal nobody is writing. A live writer holds its file exclusively, so this
+    /// throws <see cref="IOException"/> for one.
+    /// </summary>
     private static string[] ReadAllLinesShared(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -134,16 +192,36 @@ public sealed class RecoveryJournal : IDisposable
         return entries;
     }
 
-    public static void Discard(string journalPath)
-    {
-        if (File.Exists(journalPath))
-            File.Delete(journalPath);
-    }
+    /// <summary>Deletes a crashed session's journal; one that is in use elsewhere is left alone.</summary>
+    public static void Discard(string journalPath) => TryDelete(journalPath);
 
+    /// <summary>Lets go of the file without deleting it: an unconsented exit keeps its edits recoverable (#145).</summary>
     public void Dispose()
     {
-        _writer?.Dispose();
+        try
+        {
+            _writer?.Dispose();
+        }
+        catch (IOException)
+        {
+        }
         _writer = null;
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Another instance holds it.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     private static string HashPath(string path) =>

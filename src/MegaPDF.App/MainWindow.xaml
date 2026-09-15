@@ -49,8 +49,30 @@
              working for a command that has overflowed (MainWindow.Toolbar.cs). -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
+
+        <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
+             preparation, restoring and searching. Shown only 0.5 s into the work and kept at
+             least 0.3 s (BusyState in MegaPDF.Core), so quick work never flickers it. -->
+        <Grid
+            x:Name="BusyStrip"
+            Grid.Row="1"
+            Visibility="{x:Bind ViewModel.Busy.ShowsStrip, Mode=OneWay}"
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,6,16,4">
+            <StackPanel Spacing="{ThemeResource SpaceXs}">
+                <TextBlock
+                    x:Name="BusyLabel"
+                    Text="{x:Bind ViewModel.Busy.Label, Mode=OneWay}"
+                    FontSize="{ThemeResource TypeCaption}"
+                    AutomationProperties.LiveSetting="Polite" />
+                <ProgressBar IsIndeterminate="True" AutomationProperties.Name="{x:Bind ViewModel.Busy.Label, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
 
         <CommandBar
             x:Name="Toolbar"
@@ -268,7 +290,7 @@
 
         <!-- Document area: empty-state drop zone until a document is open (SDD §2.2) -->
         <Grid
-            Grid.Row="1"
+            Grid.Row="2"
             AllowDrop="True"
             DragOver="OnDocumentAreaDragOver"
             Drop="OnDocumentAreaDrop">

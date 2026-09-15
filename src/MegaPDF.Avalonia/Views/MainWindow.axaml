@@ -69,7 +69,7 @@
           </Style>
         </StackPanel.Styles>
 
-        <Button Name="OpenButton">
+        <Button Name="OpenButton" IsEnabled="{Binding IsIdle}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -310,6 +310,21 @@
       </StackPanel>
     </Border>
 
+    <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
+         preparation, restoring and searching. Shown only 0.5 s into the work and kept at least
+         0.3 s (BusyState), so quick work never flickers it. -->
+    <Border Name="BusyStrip" DockPanel.Dock="Top" Padding="8,6,8,0" IsVisible="{Binding Busy.ShowsStrip}"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            Background="{DynamicResource BrandAccentSubtle}">
+      <StackPanel Spacing="{DynamicResource SpaceXs}">
+        <TextBlock Name="BusyLabel" Text="{Binding Busy.Label}" FontSize="{DynamicResource TypeBody}"
+                   AutomationProperties.LiveSetting="Polite" />
+        <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" Margin="0,0,0,4"
+                     AutomationProperties.Name="{Binding Busy.Label}" />
+      </StackPanel>
+    </Border>
+
     <!-- What the next click will do, and how to get out of it. -->
     <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsModeActive}"
             Background="{DynamicResource BrandAccent}">
@@ -321,7 +336,7 @@
     <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsRestricted}"
             Background="{DynamicResource BrandAccentSubtle}">
       <DockPanel>
-        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0"
+        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0" IsEnabled="{Binding IsIdle}"
                 Content="{x:Static loc:Strings.UnlockEllipsis}" />
         <TextBlock Text="{x:Static loc:Strings.RestrictedBanner}" VerticalAlignment="Center"
                    TextWrapping="Wrap" />
@@ -425,6 +440,25 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <!-- Page-level work (#145): the #139 check before a change, and the change. -->
+                <Border Name="PageBusyBadge" IsVisible="{Binding ShowsBusyOnPage}" IsHitTestVisible="False"
+                        HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0"
+                        Padding="12,8" CornerRadius="8"
+                        Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                        BoxShadow="{DynamicResource BrandCardShadow}">
+                  <StackPanel Spacing="{DynamicResource SpaceXs}">
+                    <TextBlock Text="{Binding BusyLabel}" FontSize="{DynamicResource TypeCaption}"
+                               HorizontalAlignment="Center" />
+                    <ProgressBar IsIndeterminate="True" Width="160" Height="3" MinHeight="3"
+                                 AutomationProperties.Name="{Binding BusyLabel}" />
+                  </StackPanel>
+                </Border>
+                <!-- The text-edit check runs under the line it is about. -->
+                <ProgressBar IsVisible="{Binding ShowsBusyOnLine}" IsHitTestVisible="False" IsIndeterminate="True"
+                             HorizontalAlignment="Left" VerticalAlignment="Top"
+                             Margin="{Binding BusyMargin}" Width="{Binding BusyWidth}" Height="3" MinHeight="3"
+                             AutomationProperties.Name="{Binding BusyLabel}" />
               </Panel>
             </Border>
           </DataTemplate>

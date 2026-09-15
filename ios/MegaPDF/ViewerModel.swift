@@ -136,10 +136,38 @@ final class ViewerModel: ObservableObject {
     private let recents = RecentsStore()
     private let signatureStore = SignatureStore()
     private let history = EditHistory()
-    private var document: PdfDocument?
-    /// Pages of the open document that need no warning before a text-box change (#139): they keep
-    /// their look when regenerated, or the person already chose Continue for them.
-    private var settledPages: Set<Int> = []
+    private(set) var document: PdfDocument?
+
+    /// Feedback while the app works (#145): what is running, and the indicators for it. Views
+    /// observe it directly. Page-level work ends with the document; document-level work (an open,
+    /// a save) belongs to whoever started it.
+    let busy = BusyState()
+
+    /// The #139 page check, one shared check per page of the open document, started early (#145).
+    /// Settled pages need no warning before a text-box change: they keep their look, the person
+    /// already chose Continue, or a change went on without one.
+    private(set) lazy var pageChecks = PageCheckCoordinator { [weak self] page in
+        guard let self, let doc = self.document else { return .cancelled }
+        return await self.pageCheck(doc, page)
+    }
+
+    /// How a page is checked. Tests substitute their own answers.
+    var pageCheck: @MainActor (PdfDocument, Int) async -> PageCheckAnswer = { doc, page in
+        await PdfEngine.shared.pageCheck(doc, pageIndex: page)
+    }
+
+    /// The page at the top of the view, which gets a background page check once it has settled there.
+    private var currentPage: Int?
+    private var pageShownTask: Task<Void, Never>?
+    private static let pageShownDelayNanos: UInt64 = 400_000_000
+
+    /// Bumped by every change to the document (D3, #145): a save marks the document saved only
+    /// if nothing changed while it ran.
+    private(set) var editCount = 0
+    /// `editCount` when the bytes for Save a copy were made.
+    private var exportEditCount: Int?
+
+    private var searchToken: BusyToken?
     private var pageRewriteContinuation: CheckedContinuation<Bool, Never>?
     private var sourceURL: URL?
     private var renderedWidths: [Int: Int] = [:]
@@ -165,8 +193,12 @@ final class ViewerModel: ObservableObject {
     private func applyUITestDocumentIfNeeded() {
         #if DEBUG
         guard let base64 = ProcessInfo.processInfo.environment["MEGAPDF_UITEST_PDF_BASE64"],
-              let bytes = Data(base64Encoded: base64) else { return }
-        Task { await open(bytes: bytes, password: nil, displayName: "UITest.pdf", sourceURL: nil) }
+              let bytes = Data(base64Encoded: base64),
+              let token = busy.begin(.opening, scope: .document, blocksFileCommands: true) else { return }
+        Task {
+            defer { busy.end(token) }
+            await open(bytes: bytes, password: nil, displayName: "UITest.pdf", sourceURL: nil)
+        }
         #endif
     }
 
@@ -218,11 +250,19 @@ final class ViewerModel: ObservableObject {
     // MARK: - opening
 
     func openPicked(url: URL) {
+        // The home screen is the only way in, so no document is open here; a second tap waits.
+        guard let token = busy.begin(.opening, scope: .document, blocksFileCommands: true) else { return }
         state = .loading
         Task {
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            guard let bytes = try? Data(contentsOf: url) else {
+            defer { busy.end(token) }
+            // Read off the main actor: a large file, or one still downloading from a file
+            // provider, must not freeze the screen.
+            let bytes: Data? = await Task.detached(priority: .userInitiated) {
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                return try? Data(contentsOf: url)
+            }.value
+            guard let bytes else {
                 toHome(String(localized: "Couldn't read that file."))
                 return
             }
@@ -232,6 +272,7 @@ final class ViewerModel: ObservableObject {
     }
 
     func openRecent(_ entry: RecentEntry) {
+        guard !busy.isBlocked else { return }
         state = .loading
         Task {
             guard let bookmark = entry.bookmarkData else {
@@ -253,10 +294,14 @@ final class ViewerModel: ObservableObject {
     }
 
     func submitPassword(_ password: String) {
-        guard case let .passwordNeeded(bytes, displayName, url, _) = state else { return }
+        guard case let .passwordNeeded(bytes, displayName, url, _) = state,
+              let token = busy.begin(.opening, scope: .document, blocksFileCommands: true) else { return }
         state = .loading
-        Task { await open(bytes: bytes, password: password,
-                          displayName: displayName, sourceURL: url) }
+        Task {
+            defer { busy.end(token) }
+            await open(bytes: bytes, password: password,
+                       displayName: displayName, sourceURL: url)
+        }
     }
 
     private func open(bytes: Data, password: String?,
@@ -303,6 +348,7 @@ final class ViewerModel: ObservableObject {
     func updateRenderWindow(first: Int, last: Int, widthPx: Int) {
         guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
         lastWindow = (first, last, widthPx)
+        pageShown(first)
         let window = max(0, first - Self.renderMargin)...min(pageSizes.count - 1, last + Self.renderMargin)
 
         for index in pageImages.keys where !window.contains(index) {
@@ -332,6 +378,40 @@ final class ViewerModel: ObservableObject {
         }
     }
 
+    // MARK: - page checks (#139, #145)
+
+    /// A page came to the top of the view. Its check starts once it has stayed there briefly, so
+    /// scrolling past pages doesn't start and cancel a check for each one.
+    private func pageShown(_ page: Int) {
+        guard currentPage != page else { return }
+        currentPage = page
+        pageShownTask?.cancel()
+        pageShownTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.pageShownDelayNanos)
+            guard !Task.isCancelled, let self, self.currentPage == page else { return }
+            self.startPageCheck(page)
+        }
+    }
+
+    /// Starts the page's check in the background, when this open may make changes that regenerate
+    /// the page (today: text boxes). Cancels an unfinished check for any other page.
+    private func startPageCheck(_ page: Int) {
+        guard document != nil, capabilities.canAddText else { return }
+        pageChecks.start(page)
+    }
+
+    /// Page-level blocking work for a change to `pageIndex`: taps, tools and other edits wait
+    /// until it ends. Nil when other work is already running.
+    private func beginPageChange(_ pageIndex: Int, near rect: PdfRect?) -> BusyToken? {
+        busy.begin(.applying, scope: .page(pageIndex, rect), showsIndicator: false)
+    }
+
+    /// Close and Discard wait while a save or password change runs, or a change is being applied.
+    var closeBlocked: Bool { busy.blocksFileCommands || busy.works.contains { $0.label == .applying && $0.showsIndicator } }
+
+    /// Save, Save a copy, Password and Unlock wait while any blocking work runs.
+    var fileCommandsBlocked: Bool { busy.blocksFileCommands }
+
     // MARK: - editing
 
     /// Tap dispatch — same ordering as desktop and Android: form fields win
@@ -340,6 +420,8 @@ final class ViewerModel: ObservableObject {
     /// top-left origin.
     func onPageTapped(index: Int, xFraction: Double, yFraction: Double) {
         guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
+        // Taps are ignored while other work runs (#145): never two changes or two questions at once.
+        guard !busy.isBlocked else { return }
         let size = pageSizes[index]
         let x = xFraction * size.width
         let y = (1 - yFraction) * size.height  // view top-left → PDF bottom-left
@@ -359,6 +441,8 @@ final class ViewerModel: ObservableObject {
             isPlacingText = false
             statusMessage = nil
             guard permits(caps.canAddText) else { return }
+            // The page the text goes on is known now: check it while the text is typed.
+            startPageCheck(index)
             draftText = ""
             draftSize = lastFontSize
             draftFont = lastFontName
@@ -367,7 +451,10 @@ final class ViewerModel: ObservableObject {
             return
         }
 
+        guard let token = beginPageChange(index, near: nil) else { return }
         Task {
+            defer { busy.end(token) }
+            var applying = false
             do {
                 let engine = PdfEngine.shared
 
@@ -408,18 +495,22 @@ final class ViewerModel: ObservableObject {
                         selectedTextBox = nil
                         return
                     }
+                    guard document === doc else { return }
                     let wasSelected = selectedTextBox?.id == box.id
-                    selectedTextBox = SelectedTextBox(pageIndex: index, id: box.id,
-                                                      text: box.text,
-                                                      fontSize: box.fontSize,
-                                                      fontName: box.fontName,
-                                                      rect: box.rect)
+                    let selection = SelectedTextBox(pageIndex: index, id: box.id,
+                                                    text: box.text,
+                                                    fontSize: box.fontSize,
+                                                    fontName: box.fontName,
+                                                    rect: box.rect)
+                    selectedTextBox = selection
+                    // A selected box is a change about to happen: have the page's answer ready (#145).
+                    startPageCheck(index)
                     if wasSelected {
                         // A second tap on the selected box also opens the editor.
                         // The overlay's pencil is the discoverable way in, because
                         // a *quick* second tap is claimed by double-tap-to-zoom —
                         // this path only fires after that disambiguation lapses.
-                        editSelectedTextBox()
+                        openTextEditor(on: selection)
                     }
                     return
                 }
@@ -449,6 +540,9 @@ final class ViewerModel: ObservableObject {
                 if let operation {
                     // Form fields need fill-forms, marks need annotate (#131).
                     guard permits(caps.allows(operation)) else { return }
+                    guard document === doc else { return }
+                    applying = true
+                    busy.update(token, label: .applying, showsIndicator: true)
                     try await perform(operation, doc: doc)
                     return
                 }
@@ -463,6 +557,8 @@ final class ViewerModel: ObservableObject {
                     // #118: on pages PDFium cannot rewrite faithfully, say so now rather
                     // than after the user has typed.
                     // #128: and say why — text elsewhere would move, or the page would look different.
+                    // #145: a spinner on the line while the check runs; taps wait for it.
+                    busy.update(token, label: .checkingPage, scope: .page(index, line.rect), showsIndicator: true)
                     var refusal: PdfLayoutCause?
                     for run in line.runs {
                         let verdict = try await engine.layoutVerdict(doc, pageIndex: index, objectIndex: run.objectIndex)
@@ -471,6 +567,8 @@ final class ViewerModel: ObservableObject {
                             break
                         }
                     }
+                    // The document may have been closed while the check ran.
+                    guard document === doc else { return }
                     if let refusal {
                         showNotice(refusal.notice)
                     } else {
@@ -483,7 +581,11 @@ final class ViewerModel: ObservableObject {
                     showNotice(String(localized: "This page is a scanned image, so its text can't be edited."))
                 }
             } catch {
-                // Edits are tap-driven; a failure just leaves the page unchanged.
+                // Reading what was tapped can fail harmlessly and leaves the page unchanged;
+                // a change that failed says so.
+                if applying, document === doc {
+                    statusMessage = String(localized: "Couldn't change the document.")
+                }
             }
         }
     }
@@ -494,11 +596,15 @@ final class ViewerModel: ObservableObject {
     /// the line. Either way it is one undoable edit.
     func commitBodyEdit(_ text: String) {
         guard let pending = pendingBodyEdit, let doc = document else { return }
+        // Other work still running keeps the editor open rather than dropping what was typed.
+        guard !busy.isBlocked else { return }
         pendingBodyEdit = nil
         guard permits(capabilities.canEditContent) else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed != pending.line.text else { return }
+        guard let token = busy.begin(.applying, scope: .page(pending.pageIndex, pending.line.rect)) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 if trimmed.isEmpty {
                     try await perform(BodyTextDeleteOperation(pageIndex: pending.pageIndex, line: pending.line), doc: doc)
@@ -550,11 +656,14 @@ final class ViewerModel: ObservableObject {
 
     /// Arms the next tap to place text. Tapping the page opens the text field.
     func startTextPlacement() {
+        guard !busy.isBlocked else { return }
         guard permits(capabilities.canAddText) else { return }
         cancelPlacement()
         selectedStamp = nil
         selectedTextBox = nil
         isPlacingText = true
+        // Add text is armed: check the page in view now, so the answer is ready when the text is (#145).
+        if let currentPage { startPageCheck(currentPage) }
         statusMessage = String(localized: "Tap the page where the text should go")
     }
 
@@ -570,6 +679,8 @@ final class ViewerModel: ObservableObject {
     /// restyling and correcting a typo are the same single undoable edit.
     func commitText(_ text: String, fontSize: Double, fontName: String) {
         guard let pending = pendingText, let doc = document else { return }
+        // Other work still running keeps the sheet open rather than dropping what was typed.
+        guard !busy.isBlocked else { return }
         pendingText = nil
         draftText = ""
         guard permits(capabilities.canAddText) else { return }
@@ -578,14 +689,17 @@ final class ViewerModel: ObservableObject {
         lastFontSize = fontSize
         lastFontName = fontName
         let style = TextBoxStyle(text: trimmed, fontSize: fontSize, fontName: fontName)
+        let spot = PdfRect(left: pending.x, bottom: pending.y, right: pending.x, top: pending.y)
+        guard let token = beginPageChange(pending.pageIndex, near: spot) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 if let editingId = pending.editingId {
                     let before = TextBoxStyle(text: pending.initialText,
                                               fontSize: pending.fontSize,
                                               fontName: pending.fontName)
                     guard before != style else { return }
-                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex) else {
+                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex, token: token) else {
                         await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
                         return
                     }
@@ -596,7 +710,7 @@ final class ViewerModel: ObservableObject {
                         doc: doc)
                     await reselectTextBox(doc, pageIndex: pending.pageIndex, id: editingId)
                 } else {
-                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex) else { return }
+                    guard await confirmPageRewrite(doc, pageIndex: pending.pageIndex, token: token) else { return }
                     try await perform(
                         TextBoxOperation(pageIndex: pending.pageIndex,
                                          id: "text:\(UUID().uuidString)",
@@ -623,15 +737,19 @@ final class ViewerModel: ObservableObject {
     func commitTextBoxRect(_ newRect: PdfRect) {
         guard let sel = selectedTextBox, let doc = document,
               case let .viewing(_, pageSizes) = state else { return }
+        // A drag while other work runs springs back: the overlay has already let go of it.
+        guard !busy.isBlocked else { return }
         guard permits(capabilities.canAddText) else { return }
         let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
         // A tap that slipped into a drag can land a sub-point move; don't put a
         // no-op on the undo stack for it.
         guard abs(rect.left - sel.rect.left) >= 0.01
                 || abs(rect.bottom - sel.rect.bottom) >= 0.01 else { return }
+        guard let token = beginPageChange(sel.pageIndex, near: sel.rect) else { return }
         Task {
+            defer { busy.end(token) }
             do {
-                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex) else {
+                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex, token: token) else {
                     // Cancelled: the box stays where it was; republishing the selection
                     // puts the overlay back on it.
                     if selectedTextBox?.id == sel.id { selectedTextBox = sel }
@@ -652,7 +770,11 @@ final class ViewerModel: ObservableObject {
     /// Opens the text field on the selected box so a typo can be corrected. The
     /// anchor handed to the edit is the box's bounds lower-left, not a tap point.
     func editSelectedTextBox() {
-        guard let sel = selectedTextBox else { return }
+        guard let sel = selectedTextBox, !busy.isBlocked else { return }
+        openTextEditor(on: sel)
+    }
+
+    private func openTextEditor(on sel: SelectedTextBox) {
         selectedTextBox = nil
         guard permits(capabilities.canAddText) else { return }
         draftText = sel.text
@@ -665,11 +787,13 @@ final class ViewerModel: ObservableObject {
     }
 
     func removeSelectedTextBox() {
-        guard let sel = selectedTextBox, let doc = document else { return }
+        guard let sel = selectedTextBox, let doc = document, !busy.isBlocked else { return }
         guard permits(capabilities.canAddText) else { return }
+        guard let token = beginPageChange(sel.pageIndex, near: sel.rect) else { return }
         Task {
+            defer { busy.end(token) }
             do {
-                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex) else { return }
+                guard await confirmPageRewrite(doc, pageIndex: sel.pageIndex, token: token) else { return }
                 // boundsAnchored: the coordinates are the box's reported rect, so
                 // an undo must re-add against bounds, not the baseline.
                 try await perform(
@@ -688,26 +812,38 @@ final class ViewerModel: ObservableObject {
     /// Before the first text-box change on a page (#139): a text box makes PDFium regenerate the
     /// page's content, which on some pages changes parts the person never touched. Such a change
     /// is never refused; the core's dry run says whether this page is one, and then the person is
-    /// asked once. True to go ahead. A page that keeps its look, or cannot be judged, is settled
-    /// without a prompt; Continue settles it too, Cancel leaves it to ask again next time.
-    private func confirmPageRewrite(_ doc: PdfDocument, pageIndex: Int) async -> Bool {
-        guard !settledPages.contains(pageIndex) else { return true }
-        let verdict = try? await PdfEngine.shared.pageRegenerationVerdict(doc, pageIndex: pageIndex)
-        // The document may have been closed or replaced while the dry run ran.
+    /// asked once. True to go ahead.
+    ///
+    /// #145: the check usually started earlier, in the background. The change reuses it (or starts
+    /// one) and waits at most the budget, 1.5 s, with "Checking this page…" on the page. A page that
+    /// keeps its look, can't be judged, or whose check ran past the budget is settled and the change
+    /// applies without a prompt; Continue settles it too, Cancel applies nothing and leaves it to ask
+    /// again next time. `token` is the change's busy work, which keeps every other edit waiting
+    /// throughout, so there is never a second question.
+    private func confirmPageRewrite(_ doc: PdfDocument, pageIndex: Int, token: BusyToken) async -> Bool {
+        if !pageChecks.isSettled(pageIndex) {
+            busy.update(token, label: .checkingPage, showsIndicator: true)
+            switch await pageChecks.outcome(for: pageIndex) {
+            case .abandoned:
+                return false
+            case .apply:
+                break
+            case .warn:
+                // The document may have been closed or replaced while the check ran.
+                guard document === doc else { return false }
+                busy.update(token, showsIndicator: false)
+                // Only one warning at a time: an older one still waiting counts as cancelled.
+                answerPageRewriteWarning(false)
+                let proceed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                    pageRewriteContinuation = continuation
+                    pageRewriteWarning = PageRewriteWarning(pageIndex: pageIndex)
+                }
+                guard proceed, document === doc else { return false }
+                pageChecks.settle(pageIndex)
+            }
+        }
         guard document === doc else { return false }
-        guard let verdict, !verdict.editable else {
-            settledPages.insert(pageIndex)
-            return true
-        }
-        guard !settledPages.contains(pageIndex) else { return true }
-        // Only one warning at a time: an older one still waiting counts as cancelled.
-        answerPageRewriteWarning(false)
-        let proceed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
-            pageRewriteContinuation = continuation
-            pageRewriteWarning = PageRewriteWarning(pageIndex: pageIndex)
-        }
-        guard proceed, document === doc else { return false }
-        settledPages.insert(pageIndex)
+        busy.update(token, label: .applying, showsIndicator: true)
         return true
     }
 
@@ -733,8 +869,10 @@ final class ViewerModel: ObservableObject {
     // MARK: - undo / redo (#34)
 
     func undo() {
-        guard let doc = document else { return }
+        guard let doc = document,
+              let token = busy.begin(.applying, scope: .document, showsIndicator: false) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 if let page = try await history.undo(PdfEngine.shared, doc) {
                     afterHistoryChange(page)
@@ -746,8 +884,10 @@ final class ViewerModel: ObservableObject {
     }
 
     func redo() {
-        guard let doc = document else { return }
+        guard let doc = document,
+              let token = busy.begin(.applying, scope: .document, showsIndicator: false) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 if let page = try await history.redo(PdfEngine.shared, doc) {
                     afterHistoryChange(page)
@@ -771,12 +911,19 @@ final class ViewerModel: ObservableObject {
     private func afterHistoryChange(_ pageIndex: Int) {
         // Deliberately conservative: any history movement leaves the document
         // possibly different from the bytes on disk, so it stays dirty.
-        isDirty = true
+        noteDocumentChanged()
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = nil
         selectedTextBox = nil
         invalidatePage(pageIndex)
+    }
+
+    /// Every change to the document goes through here: it is unsaved, and a save already running
+    /// must not mark it saved (D3, #145).
+    func noteDocumentChanged() {
+        editCount += 1
+        isDirty = true
     }
 
     func invalidatePage(_ index: Int) {
@@ -792,6 +939,7 @@ final class ViewerModel: ObservableObject {
     /// the `-screenshot search` seeding, which supplies the whole term at once.
     func search(term: String, debounce: Bool = true) {
         searchTask?.cancel()
+        endSearchBusy()
         searchMatches = []
         currentMatchIndex = nil
         guard !term.isEmpty, case let .viewing(_, pageSizes) = state,
@@ -805,6 +953,10 @@ final class ViewerModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 250_000_000)
                 if Task.isCancelled { return }
             }
+            // "Searching…" in the strip, which doesn't block editing (#145).
+            let token = busy.begin(.searching, scope: .document, blocking: false)
+            searchToken = token
+            defer { if let token, searchToken == token { endSearchBusy() } }
             var matches: [SearchMatch] = []
             for index in 0..<pageSizes.count {
                 if Task.isCancelled { return }
@@ -834,9 +986,15 @@ final class ViewerModel: ObservableObject {
     /// Search bar dismissed: drop highlights and any in-flight scan.
     func clearSearch() {
         searchTask?.cancel()
+        endSearchBusy()
         searchMatches = []
         currentMatchIndex = nil
         isSearching = false
+    }
+
+    private func endSearchBusy() {
+        if let searchToken { busy.end(searchToken) }
+        searchToken = nil
     }
 
     // MARK: - signatures (#22)
@@ -881,6 +1039,7 @@ final class ViewerModel: ObservableObject {
     }
 
     func startPlacement(_ entry: SignatureEntry) {
+        guard !busy.isBlocked else { return }
         guard permits(capabilities.canSign) else { return }
         selectedTextBox = nil
         pendingSignature = entry
@@ -894,9 +1053,12 @@ final class ViewerModel: ObservableObject {
     func commitStampRect(_ newRect: PdfRect) {
         guard let sel = selectedStamp, let doc = document,
               case let .viewing(_, pageSizes) = state else { return }
+        guard !busy.isBlocked else { return }
         guard permits(capabilities.canSign) else { return }
         let rect = clampToPage(newRect, pageSize: pageSizes[sel.pageIndex])
+        guard let token = busy.begin(.applying, scope: .page(sel.pageIndex, sel.rect)) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 let engine = PdfEngine.shared
                 guard let image = try await engine.stampImage(
@@ -924,9 +1086,11 @@ final class ViewerModel: ObservableObject {
     }
 
     func removeSelectedStamp() {
-        guard let sel = selectedStamp, let doc = document else { return }
+        guard let sel = selectedStamp, let doc = document, !busy.isBlocked else { return }
         guard permits(capabilities.canSign) else { return }
+        guard let token = busy.begin(.applying, scope: .page(sel.pageIndex, sel.rect)) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 let engine = PdfEngine.shared
                 // Read the image back first: without it, undo could not put the
@@ -972,7 +1136,9 @@ final class ViewerModel: ObservableObject {
                     right: x + wPt / 2, top: y + hPt / 2),
             pageSize: pageSize)
         let id = "sig:\(UUID().uuidString)"
+        guard let token = busy.begin(.applying, scope: .page(pageIndex, rect)) else { return }
         Task {
+            defer { busy.end(token) }
             do {
                 let engine = PdfEngine.shared
                 try await perform(
@@ -1035,20 +1201,39 @@ final class ViewerModel: ObservableObject {
     /// Save = write back to the opened document's URL. Same guarantees as the
     /// other platforms: serialize first, verify the output reopens in the
     /// engine, only then touch the destination (coordinated, atomic).
-    func save() {
-        guard let doc = document, let url = sourceURL, !isSaving else { return }
+    ///
+    /// #145: "Saving…", then "Checking the saved file…" in the strip; editing, Close and the file
+    /// commands wait. The document is marked saved only if nothing changed while the save ran (D3).
+    /// `thenClose` is the unsaved-changes prompt's Save: the document closes once it is saved.
+    func save(thenClose: Bool = false) {
+        guard let doc = document, let url = sourceURL, !isSaving,
+              let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return }
         isSaving = true
+        let editsAtStart = editCount
         Task {
-            defer { isSaving = false }
+            defer {
+                isSaving = false
+                busy.end(token)
+            }
             do {
                 let engine = PdfEngine.shared
                 let data = try await engine.save(doc)
+                busy.update(token, label: .checkingSavedFile)
                 let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
                 await engine.close(verify)
 
-                try write(data, to: url)
-                isDirty = false
-                statusMessage = String(localized: "Saved")
+                busy.update(token, label: .saving)
+                try await Self.write(data, to: url)
+                guard document === doc else { return }
+                let unchanged = editCount == editsAtStart
+                if unchanged { isDirty = false }
+                if thenClose && unchanged {
+                    busy.end(token)
+                    isSaving = false
+                    close()
+                } else {
+                    statusMessage = String(localized: "Saved")
+                }
             } catch {
                 showSaveFailed(error)
             }
@@ -1058,19 +1243,22 @@ final class ViewerModel: ObservableObject {
     /// Writes already-verified bytes over the opened file: security-scoped access,
     /// coordinated with any other writer, atomic. Save and the Password command share
     /// it; both verify `data` before calling, so nothing unchecked reaches the file.
-    private func write(_ data: Data, to url: URL) throws {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        var coordError: NSError?
-        var writeError: Error?
-        NSFileCoordinator().coordinate(
-            writingItemAt: url, options: .forReplacing, error: &coordError
-        ) { target in
-            do { try data.write(to: target, options: .atomic) }
-            catch { writeError = error }
-        }
-        if let error = coordError { throw error }
-        if let error = writeError { throw error }
+    /// Off the main actor, so a slow file provider doesn't freeze the screen.
+    private nonisolated static func write(_ data: Data, to url: URL) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            var coordError: NSError?
+            var writeError: Error?
+            NSFileCoordinator().coordinate(
+                writingItemAt: url, options: .forReplacing, error: &coordError
+            ) { target in
+                do { try data.write(to: target, options: .atomic) }
+                catch { writeError = error }
+            }
+            if let error = coordError { throw error }
+            if let error = writeError { throw error }
+        }.value
     }
 
     private func showSaveFailed(_ error: Error) {
@@ -1080,14 +1268,21 @@ final class ViewerModel: ObservableObject {
             + " " + error.localizedDescription
     }
 
-    /// Serialized (and engine-verified) bytes for the Save-a-copy exporter.
+    /// Serialized (and engine-verified) bytes for the Save-a-copy exporter, with the same busy
+    /// state as Save (#145). Nil when it failed, or when other work is still running.
     func exportData() async -> Data? {
-        guard let doc = document else { return nil }
+        guard let doc = document,
+              let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return nil }
+        defer { busy.end(token) }
+        let editsAtStart = editCount
         do {
             let engine = PdfEngine.shared
             let data = try await engine.save(doc)
+            busy.update(token, label: .checkingSavedFile)
             let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
             await engine.close(verify)
+            guard document === doc else { return nil }
+            exportEditCount = editsAtStart
             return data
         } catch {
             statusMessage = String(localized: "Couldn't prepare the copy.")
@@ -1095,15 +1290,17 @@ final class ViewerModel: ObservableObject {
         }
     }
 
+    /// The exporter wrote the copy. Marked saved only if nothing changed since its bytes were made (D3).
     func markSavedCopy() {
-        isDirty = false
+        if exportEditCount == editCount { isDirty = false }
+        exportEditCount = nil
         statusMessage = String(localized: "Saved")
     }
 
     // MARK: - password command (#131)
 
     /// The Password command saves, so it needs a file to save to and nothing else in flight.
-    var canUsePasswordCommand: Bool { sourceURL != nil && !isSaving && !isUnlocking }
+    var canUsePasswordCommand: Bool { sourceURL != nil && !isSaving && !isUnlocking && !busy.isBlocked }
 
     /// Opens the Password sheet in the mode this open's security calls for: without full
     /// access it can only explain and offer the owner password (ADR-004 §3).
@@ -1134,11 +1331,15 @@ final class ViewerModel: ObservableObject {
     /// and says so; nothing about the open document changes until the password is right.
     func unlock(_ ownerPassword: String) {
         guard let doc = document, !isUnlocking, !isSaving,
-              case let .viewing(displayName, _) = state else { return }
+              case let .viewing(displayName, _) = state,
+              let token = busy.begin(.opening, scope: .document, blocksFileCommands: true) else { return }
         securityError = nil
         isUnlocking = true
         Task {
-            defer { isUnlocking = false }
+            defer {
+                isUnlocking = false
+                busy.end(token)
+            }
             let engine = PdfEngine.shared
             let wrong = String(localized: "That password didn't work. Try again.")
             do {
@@ -1197,25 +1398,35 @@ final class ViewerModel: ObservableObject {
             showRestrictedNotice()
             return
         }
+        // Editing, Close and the file commands wait while it runs (#145).
+        guard let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return }
         let wasEncrypted = security.isEncrypted
         isSaving = true
         Task {
-            defer { isSaving = false }
+            defer {
+                isSaving = false
+                busy.end(token)
+            }
             let engine = PdfEngine.shared
             do {
                 let data: Data
                 if let newPassword {
                     data = try await engine.save(doc, userPassword: newPassword, ownerPassword: nil,
                                                  permissions: .all)
+                    busy.update(token, label: .checkingSavedFile)
                     let verify = try await engine.open(data, password: newPassword)
                     await engine.close(verify)
                 } else {
                     data = try await engine.saveWithoutSecurity(doc)
+                    busy.update(token, label: .checkingSavedFile)
                     let verify = try await engine.open(data)
                     await engine.close(verify)
                 }
-                try write(data, to: url)
+                busy.update(token, label: .saving)
+                try await Self.write(data, to: url)
+                guard document === doc else { return }
                 securitySheet = nil
+                busy.update(token, label: .opening)
                 await open(bytes: data, password: newPassword, displayName: displayName, sourceURL: url)
                 guard case .viewing = state else { return }
                 if newPassword == nil {
@@ -1236,6 +1447,8 @@ final class ViewerModel: ObservableObject {
     // MARK: - closing
 
     func close() {
+        // Not while a save, a password change or a change being applied still needs the document.
+        guard !closeBlocked else { return }
         closeCurrent()
         state = .home(recents: recents.load(), error: nil)
     }
@@ -1264,7 +1477,13 @@ final class ViewerModel: ObservableObject {
         canRedo = false
         // The warning memory is the open document's too (#139); a warning still up is a Cancel.
         answerPageRewriteWarning(false)
-        settledPages = []
+        // Every page check stops with the document, and nothing about its pages is remembered (#145).
+        pageChecks.reset()
+        pageShownTask?.cancel()
+        pageShownTask = nil
+        currentPage = nil
+        exportEditCount = nil
+        busy.endPageWork()
         isPlacingText = false
         pendingText = nil
         draftText = ""

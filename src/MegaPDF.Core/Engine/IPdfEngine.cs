@@ -171,6 +171,18 @@ public interface IPdfPage : IDisposable
     LayoutVerdict GetPageRegenerationVerdict();
 
     /// <summary>
+    /// <see cref="GetPageRegenerationVerdict()"/> for a check started early, in the background
+    /// (#145). The core lets other calls run between the dry run's stages, so rendering and edits
+    /// wait one stage rather than the whole run. Throws <see cref="OperationCanceledException"/>
+    /// when <paramref name="cancellationToken"/> is cancelled, or the document is disposed, before
+    /// the check has answered.
+    /// </summary>
+    LayoutVerdict GetPageRegenerationVerdict(CancellationToken cancellationToken);
+
+    /// <summary>The page's cached verdict, without running anything; null when it has not been judged since it last changed (#145).</summary>
+    LayoutVerdict? GetCachedPageRegenerationVerdict();
+
+    /// <summary>
     /// Removes a text run from the page, keeping the native object alive so
     /// <see cref="RestoreTextRun"/> can put it back byte-identical (undo).
     /// </summary>

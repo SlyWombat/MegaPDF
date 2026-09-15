@@ -95,6 +95,7 @@ actor PdfEngine {
     /// Opens `bytes` with the credentials `like` was opened with (#132): a saved copy of a
     /// protected document is still protected, so reading it back needs the same password.
     func open(_ bytes: Data, like: PdfDocument) throws -> PdfDocument {
+        guard !like.isDestroyed else { throw PdfError.load(code: 0) }
         let core: OpaquePointer? = bytes.withUnsafeBytes { raw in
             megapdf_open_like(like.core, raw.baseAddress, raw.count)
         }
@@ -107,12 +108,17 @@ actor PdfEngine {
         return PdfDocument(core: core)
     }
 
-    func close(_ document: PdfDocument) {
+    /// Closes the document. Page checks running off the actor (#145) are told to stop first, and
+    /// the close waits until they have, so none of them can touch the document once it is freed.
+    func close(_ document: PdfDocument) async {
+        guard !document.isDestroyed else { return }
+        await document.stopChecks()
         document.destroy()
     }
 
     func pageCount(_ document: PdfDocument) -> Int {
-        Int(megapdf_page_count(document.core))
+        guard !document.isDestroyed else { return 0 }
+        return Int(megapdf_page_count(document.core))
     }
 
     /// The CropBox size, which is what a viewer shows.
@@ -158,11 +164,13 @@ actor PdfEngine {
     /// any in-progress form edit first. Atomicity is the caller's job, as on the
     /// other platforms.
     func save(_ document: PdfDocument) throws -> Data {
-        try serialize { write, context in megapdf_save(document.core, write, context) }
+        guard !document.isDestroyed else { throw PdfError.saveFailed }
+        return try serialize { write, context in megapdf_save(document.core, write, context) }
     }
 
     /// Whether the document is encrypted and what this open may do (#131).
     func security(_ document: PdfDocument) -> PdfSecurity {
+        guard !document.isDestroyed else { return .unprotected }
         var s = megapdf_security()
         _ = megapdf_security_info(document.core, &s)
         return PdfSecurity(isEncrypted: s.encrypted != 0, revision: Int(s.revision),
@@ -176,7 +184,8 @@ actor PdfEngine {
     /// with the new password. Throws `PdfError.restricted` without full access.
     func save(_ document: PdfDocument, userPassword: String, ownerPassword: String?,
               permissions: PdfPermissions) throws -> Data {
-        try userPassword.withCString { user in
+        guard !document.isDestroyed else { throw PdfError.saveFailed }
+        return try userPassword.withCString { user in
             try (ownerPassword ?? "").withCString { owner in
                 try serialize { write, context in
                     megapdf_save_with_security(document.core, user, owner, permissions.rawValue, write, context)
@@ -187,7 +196,8 @@ actor PdfEngine {
 
     /// A copy with no security (#131). Throws `PdfError.restricted` without full access.
     func saveWithoutSecurity(_ document: PdfDocument) throws -> Data {
-        try serialize { write, context in megapdf_save_without_security(document.core, write, context) }
+        guard !document.isDestroyed else { throw PdfError.saveFailed }
+        return try serialize { write, context in megapdf_save_without_security(document.core, write, context) }
     }
 
     /// Runs one of the core's saves, collecting its blocks.
@@ -235,7 +245,9 @@ actor PdfEngine {
     /// closes it — the access pattern for the migrated contracts.
     func withCorePage<T>(_ document: PdfDocument, index: Int,
                          _ body: (OpaquePointer) throws -> T) throws -> T {
-        guard let page = megapdf_load_page(document.core, Int32(index)) else {
+        // A call queued behind a close must not reach a freed document.
+        guard !document.isDestroyed,
+              let page = megapdf_load_page(document.core, Int32(index)) else {
             throw PdfError.pageLoad(index: index)
         }
         defer { megapdf_close_page(page) }
@@ -246,18 +258,65 @@ actor PdfEngine {
 /// Opaque handle over the core's document, which owns the bytes, the PDFium
 /// document and the form-fill environment. Create via `PdfEngine.open`;
 /// destroy via `close`.
-final class PdfDocument {
+final class PdfDocument: @unchecked Sendable {
     /// The core's handle.
     let core: OpaquePointer
-    private var destroyed = false
+    /// Only read and written on the engine actor.
+    private(set) var isDestroyed = false
+
+    /// Page checks running off the actor (#145), guarded by `lock`: `close` raises their flags
+    /// and waits for them before megapdf_close(), and no check may begin once closing started.
+    private let lock = NSLock()
+    private var closing = false
+    private var checks: [ObjectIdentifier: PageCheckFlag] = [:]
+    private var drained: [CheckedContinuation<Void, Never>] = []
 
     fileprivate init(core: OpaquePointer) {
         self.core = core
     }
 
     fileprivate func destroy() {
-        guard !destroyed else { return }
-        destroyed = true
+        guard !isDestroyed else { return }
+        isDestroyed = true
         megapdf_close(core)   // form environment, any page still open, then the document
+    }
+
+    /// Registers a check before its first core call. False once the document is closing.
+    func beginCheck(_ flag: PageCheckFlag) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !closing else { return false }
+        checks[ObjectIdentifier(flag)] = flag
+        return true
+    }
+
+    /// The check's last core call has returned (its page handle closed too).
+    func endCheck(_ flag: PageCheckFlag) {
+        lock.lock()
+        checks[ObjectIdentifier(flag)] = nil
+        var waiting: [CheckedContinuation<Void, Never>] = []
+        if checks.isEmpty {
+            waiting = drained
+            drained = []
+        }
+        lock.unlock()
+        waiting.forEach { $0.resume() }
+    }
+
+    /// Stops new checks, raises every running check's flag, and returns once they have all ended.
+    fileprivate func stopChecks() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            lock.lock()
+            closing = true
+            let running = Array(checks.values)
+            if running.isEmpty {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            drained.append(continuation)
+            lock.unlock()
+            running.forEach { $0.raise() }
+        }
     }
 }

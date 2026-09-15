@@ -117,6 +117,101 @@ public sealed class LayoutGuardTests : IDisposable
         Assert.False(new PageRegenerationWarnings().ShouldWarn(doc, new AddWhiteoutOperation(doc, 0, new PdfRect(500, 20, 40, 30))));
     }
 
+    /// <summary>Thousands of small filled squares: every stage of the page check takes a while.</summary>
+    private static string HeavyContent()
+    {
+        var content = new StringBuilder("BT /F1 18 Tf 72 740 Td (Heavy page) Tj ET 0 0 1 rg ");
+        for (var i = 0; i < 20000; i++)
+            content.Append($"{20 + (i % 560)} {20 + ((i / 560) % 700)} 0.8 0.8 re f ");
+        return content.ToString();
+    }
+
+    [Fact]
+    public async Task ThePageCheck_StartedEarly_AnswersAtTheChange()
+    {
+        // #145: started when the page is shown, asked at the change.
+        using var clipped = Open(Pdf(ClippedByText), "early-clipped.pdf");
+        var warnings = new PageRegenerationWarnings();
+        warnings.Prepare(clipped, 0);
+        Assert.Equal(PageCheckAnswer.WouldChange, await warnings.AskAsync(clipped, 0, TimeSpan.FromSeconds(30)));
+        Assert.False(warnings.IsSettled(0)); // Cancel settles nothing
+        Assert.Equal(PageCheckAnswer.WouldChange, await warnings.AskAsync(clipped, 0, TimeSpan.FromSeconds(30)));
+        warnings.Settle(0); // Continue
+        Assert.Equal(PageCheckAnswer.KeepsLook, await warnings.AskAsync(clipped, 0, TimeSpan.FromSeconds(30)));
+
+        using var plain = Open(Pdf("BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET"), "early-plain.pdf");
+        var plainWarnings = new PageRegenerationWarnings();
+        Assert.Equal(PageCheckAnswer.KeepsLook,
+            await plainWarnings.AskAsync(plain, new AddWhiteoutOperation(plain, 0, new PdfRect(500, 20, 40, 30)), TimeSpan.FromSeconds(30)));
+        Assert.True(plainWarnings.IsSettled(0));
+        Assert.Equal(PageCheckAnswer.KeepsLook,
+            await plainWarnings.AskAsync(plain, new AddMarkOperation(plain, 0, new PdfRect(100, 100, 12, 12))));
+    }
+
+    [Fact]
+    public async Task ACheckOverItsBudget_IsCancelled_AndTheChangeAppliesWithoutAWarning()
+    {
+        using var heavy = Open(Pdf(HeavyContent()), "budget-heavy.pdf");
+        var warnings = new PageRegenerationWarnings();
+        Assert.Equal(PageCheckAnswer.OverBudget, await warnings.AskAsync(heavy, 0, TimeSpan.FromMilliseconds(1)));
+        Assert.True(warnings.IsSettled(0));
+        Assert.False(warnings.IsChecking(0));
+
+        // Nothing is ever refused: the whiteout applies.
+        new UndoStack().Do(new AddWhiteoutOperation(heavy, 0, new PdfRect(500, 20, 40, 30)));
+        using var page = heavy.GetPage(0);
+        Assert.Single(page.GetWhiteouts());
+    }
+
+    [Fact]
+    public void APageCheck_CanBeCancelled_AndCachesWhatItAnswers()
+    {
+        using var doc = Open(Pdf(ClippedByText), "cancel-check.pdf");
+        using var page = doc.GetPage(0);
+        Assert.Null(page.GetCachedPageRegenerationVerdict());
+
+        using (var cancelled = new CancellationTokenSource())
+        {
+            cancelled.Cancel();
+            Assert.ThrowsAny<OperationCanceledException>(() => page.GetPageRegenerationVerdict(cancelled.Token));
+        }
+        Assert.Null(page.GetCachedPageRegenerationVerdict());
+
+        var verdict = page.GetPageRegenerationVerdict(CancellationToken.None);
+        Assert.False(verdict.Editable);
+        Assert.Equal(verdict, page.GetCachedPageRegenerationVerdict());
+    }
+
+    [Fact]
+    public async Task ClosingADocument_WhileItsPageIsChecked_StopsTheCheckCleanly()
+    {
+        var heavy = Open(Pdf(HeavyContent()), "close-while-checking.pdf");
+        var started = new TaskCompletionSource();
+        var check = Task.Run(() =>
+        {
+            using var page = heavy.GetPage(0);
+            started.SetResult();
+            return page.GetPageRegenerationVerdict(CancellationToken.None);
+        });
+        await started.Task;
+        await Task.Delay(20);
+        heavy.Dispose(); // waits for the check, which stops at its next stage
+
+        try
+        {
+            await check;
+        }
+        catch (OperationCanceledException)
+        {
+            // The expected outcome, unless the check finished first.
+        }
+        Assert.Throws<ObjectDisposedException>(() => heavy.GetPage(0));
+
+        // A scheduler whose document went away answers without a warning.
+        var warnings = new PageRegenerationWarnings();
+        Assert.Equal(PageCheckAnswer.KeepsLook, await warnings.AskAsync(heavy, 0, TimeSpan.FromSeconds(5)));
+    }
+
     private static PdfTextLine GetFirstLine(IPdfDocument doc)
     {
         using var page = doc.GetPage(0);

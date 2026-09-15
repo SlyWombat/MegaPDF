@@ -798,4 +798,56 @@
     <value>Outils</value>
     <comment>macOS menu bar: the Tools menu (#144)</comment>
   </data>
+  <data name="BusyOpening" xml:space="preserve">
+    <value>Ouverture…</value>
+    <comment>Busy strip while a document opens (#145)</comment>
+  </data>
+  <data name="BusySaving" xml:space="preserve">
+    <value>Enregistrement…</value>
+    <comment>Busy strip while a document is saved (#145)</comment>
+  </data>
+  <data name="BusyCheckingSavedFile" xml:space="preserve">
+    <value>Vérification du fichier enregistré…</value>
+    <comment>Busy strip while the saved bytes are read back (#145)</comment>
+  </data>
+  <data name="BusyCheckingPage" xml:space="preserve">
+    <value>Vérification de cette page…</value>
+    <comment>Page spinner while the page check runs before a change (#139, #145)</comment>
+  </data>
+  <data name="BusyApplying" xml:space="preserve">
+    <value>Application de la modification…</value>
+    <comment>Page spinner while a change is applied (#145)</comment>
+  </data>
+  <data name="BusySearching" xml:space="preserve">
+    <value>Recherche…</value>
+    <comment>Busy strip while the document is searched (#145)</comment>
+  </data>
+  <data name="BusyShrinking" xml:space="preserve">
+    <value>Création d'une copie réduite…</value>
+    <comment>Busy strip while images are re-encoded for email (#145)</comment>
+  </data>
+  <data name="BusyPrinting" xml:space="preserve">
+    <value>Préparation de l'impression…</value>
+    <comment>Busy strip before the print dialog (#145)</comment>
+  </data>
+  <data name="BusyRestoring" xml:space="preserve">
+    <value>Restauration de vos modifications…</value>
+    <comment>Busy strip while unsaved edits are replayed after a crash (#145)</comment>
+  </data>
+  <data name="ChangeFailed" xml:space="preserve">
+    <value>La modification n'a pas pu être effectuée.</value>
+    <comment>Status line when an edit throws (#145)</comment>
+  </data>
+  <data name="UnsavedChangesPrompt" xml:space="preserve">
+    <value>Voulez-vous enregistrer les modifications apportées au document « {0} »?</value>
+    <comment>The macOS unsaved-changes sheet's question; {0} is the document name (#145)</comment>
+  </data>
+  <data name="UnsavedChangesDetail" xml:space="preserve">
+    <value>Vos modifications seront perdues si vous ne les enregistrez pas.</value>
+    <comment>The macOS unsaved-changes sheet's detail (#145)</comment>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>Ne pas enregistrer</value>
+    <comment>Unsaved-changes button; title case as on every Mac (#145)</comment>
+  </data>
 </root>

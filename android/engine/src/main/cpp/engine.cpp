@@ -861,6 +861,45 @@ Java_com_megapdf_engine_PdfiumNative_nativePageRegenerationVerdict(JNIEnv* env, 
     return PackLayoutVerdict(env, status, v);
 }
 
+// A cancel flag for a page check started early (#145). Raise may come from any thread.
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeCancelNew(JNIEnv*, jobject) {
+    return reinterpret_cast<jlong>(megapdf_cancel_new());
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeCancelRaise(JNIEnv*, jobject, jlong cancel) {
+    megapdf_cancel_raise(reinterpret_cast<megapdf_cancel*>(cancel));
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeCancelFree(JNIEnv*, jobject, jlong cancel) {
+    megapdf_cancel_free(reinterpret_cast<megapdf_cancel*>(cancel));
+}
+
+// The page check run off the engine thread (#145): the core lets go of its lock between the
+// dry run's stages. Status 1, 0, MEGAPDF_ERR_CANCELLED or MEGAPDF_ERR_ARGUMENT. The Kotlin side
+// keeps the document open until this returns.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageRegenerationVerdictCancellable(JNIEnv* env, jobject, jlong handle,
+                                                                             jlong cancel) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_layout_verdict v{};
+    const int status =
+        megapdf_page_regeneration_verdict_cancellable(p->core, reinterpret_cast<const megapdf_cancel*>(cancel), &v);
+    return PackLayoutVerdict(env, status, v);
+}
+
+// The cached page verdict without running anything (#145). Status 1, 0, MEGAPDF_ERR_NOT_JUDGED
+// or MEGAPDF_ERR_ARGUMENT.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativePageRegenerationVerdictCached(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_layout_verdict v{};
+    const int status = megapdf_page_regeneration_verdict_cached(p->core, &v);
+    return PackLayoutVerdict(env, status, v);
+}
+
 // The verdict behind this thread's latest layout refusal: call straight after the refused call.
 JNIEXPORT jdoubleArray JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeLastLayoutVerdict(JNIEnv* env, jobject) {
