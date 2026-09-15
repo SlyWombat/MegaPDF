@@ -1286,32 +1286,44 @@ bool SameRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b
 // #136: the hidden copy of a line drawn twice
 // --------------------------------------------------------------------------
 //
-// Producers draw text twice for fake bold, an outline or a shadow. PDFium's text layer
-// (CPDF_TextPage::IsSameAsPreTextObject) gives the characters of a text object that repeats
-// one of the few text objects before it (same character codes and font size, overlapping,
-// offset by less than a character) to the earlier one. The later copy extracts as empty
-// text, so it is never a run, and a delete or an edit that touches only the run leaves the
-// copy drawn: the line stays, or the old text shows under the new.
+// Producers draw text twice for fake bold, an outline or a shadow. PDFium's text layer hides
+// the second copy in two ways, and the copy then extracts as empty text, so it is never a
+// run, and a delete or an edit that touches only the run leaves the copy drawn: the line
+// stays, or the old text shows under the new.
+//   1. Object level (CPDF_TextPage::IsSameAsPreTextObject): a text object that repeats one
+//      of the five text objects before it (same character codes and font size, overlapping,
+//      offset by less than a character) is skipped.
+//   2. Character level (CPDF_TextPage::ProcessTextObjectItems), #136 reopened: PDFium sorts a
+//      line's text objects left to right before reading them, so a copy drawn anywhere on
+//      the line, before its run or many objects after it, lands next to it; each character
+//      with the same code in the same font object as one of the seven before it, whose
+//      origin is within 0.07 of the font size (scaled by the matrix) in x and y, is dropped.
+//      Seen in the corpus: whole lines repeated 18 and 22 text objects later, and copies
+//      drawn before their run, all offset 0-0.022 em.
 //
 // The API cannot read character codes, so a copy is recognised by what the same codes in
-// the same font imply. A text object is a hidden copy of a run when it:
-//   - is not a text box, and its extracted text is empty or whitespace (never a run's text);
-//   - comes after the run in content order, with fewer than five other text objects in
-//     between (PDFium looks back over five; copies already taken do not count, as matches
-//     do not count in PDFium);
-//   - has the same font (object, or base name), the same font size and the same matrix
-//     scale, skew and rotation;
-//   - has bounds of the same size within 10% of the em (one character more or less changes
-//     the width by far more; a stroked copy grows by its line width, a few tenths of a
-//     point), placed within a quarter of the em. Fake bold is offset 0.2-0.5 pt and a shadow
-//     about 1 pt at body sizes of 8-14 pt, and PDFium itself allows most of a character's
-//     width. The em is the font size scaled by the object's matrix, so the tolerance follows
-//     the text's drawn size rather than its bounds, which are short for text like "...".
+// the same font imply. A text object is a hidden copy of a run when it is not a text box,
+// its extracted text is empty or whitespace (never a run's text), it has the same font size
+// and the same matrix scale, skew and rotation, bounds of the same size within 10% of the
+// em (one character more or less changes the width by far more; a stroked copy grows by its
+// line width, a few tenths of a point), and either:
+//   1. it comes after the run in content order, with fewer than five other text objects in
+//      between (copies already taken do not count, as matches do not count in PDFium), has
+//      the same font (object, or base name), and is placed within a quarter of the em. Fake
+//      bold is offset 0.2-0.5 pt and a shadow about 1 pt at body sizes of 8-14 pt, and PDFium
+//      itself allows most of a character's width. The em is the font size scaled by the
+//      object's matrix, so the tolerance follows the text's drawn size rather than its
+//      bounds, which are short for text like "...".
+//   2. or, anywhere else on the page, it has the same font object and is placed within
+//      PDFium's own character threshold, 0.07 of the font size scaled by the matrix's x
+//      axis. Only what PDFium itself would have hidden character by character is taken: an
+//      empty object of the same font and size, the same width, drawn where the run is.
 // A copy drawn in different pieces from its run (split, or spanning two runs) is not taken.
 
 constexpr int kCopyReach = 5;
 constexpr float kCopyOffset = 0.25f;
 constexpr float kCopySize = 0.10f;
+constexpr float kCharCopyOffset = 0.07f;   // PDFium's kTextCharRatioGapDelta
 
 std::string ReadFontNameUtf8(FPDF_FONT font, bool base_name);
 
@@ -1339,8 +1351,8 @@ bool SameValue(float a, float b) {
     return std::fabs(a - b) <= 0.001f * scale;
 }
 
-bool LooksLikeCopy(const TextShape& run, const TextShape& other) {
-    const float offset = kCopyOffset * run.em;
+// `offset` is in points.
+bool LooksLikeCopy(const TextShape& run, const TextShape& other, float offset) {
     const float size = kCopySize * run.em;
     return SameValue(other.size, run.size) && SameValue(other.m.a, run.m.a) && SameValue(other.m.b, run.m.b) &&
            SameValue(other.m.c, run.m.c) && SameValue(other.m.d, run.m.d) &&
@@ -1357,37 +1369,63 @@ std::vector<std::pair<int, int>> HiddenCopies(FPDF_PAGE page, FPDF_TEXTPAGE text
     std::vector<char> taken(static_cast<size_t>(count), 0);
     for (int i : runs) if (i >= 0 && i < count) taken[static_cast<size_t>(i)] = 1;
     std::sort(runs.begin(), runs.end());
+    // Each object's shape is read once: the character-level pass looks at the whole page.
+    std::vector<TextShape> shapes(static_cast<size_t>(count));
+    std::vector<signed char> state(static_cast<size_t>(count), 0);   // 0 unread, 1 a body text shape, -1 neither
+    auto shape_of = [&](int j) -> const TextShape* {
+        signed char& s = state[static_cast<size_t>(j)];
+        if (s == 0) {
+            FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, j);
+            s = ReadShape(obj, &shapes[static_cast<size_t>(j)]) && !HasMark(obj, kTextBoxMark) ? 1 : -1;
+        }
+        return s == 1 ? &shapes[static_cast<size_t>(j)] : nullptr;
+    };
+    auto extracts_empty = [&](int j) {
+        const U16 text = ReadObjectText(FPDFPage_GetObject(page, j), text_page);
+        return text.empty() || AllWhiteSpace(text);
+    };
+    auto take = [&](int j, int i) {
+        taken[static_cast<size_t>(j)] = 1;
+        copies.emplace_back(j, i);
+    };
+
+    // 1. PDFium's object-level check: shortly after the run.
     for (int i : runs) {
         if (i < 0 || i >= count) continue;
-        FPDF_PAGEOBJECT run = FPDFPage_GetObject(page, i);
-        TextShape shape;
-        if (!ReadShape(run, &shape) || HasMark(run, kTextBoxMark)) continue;
+        const TextShape* shape = shape_of(i);
+        if (shape == nullptr) continue;
         std::string run_base;
         bool run_base_read = false;
         int passed = 0;
         for (int j = i + 1; j < count && passed < kCopyReach; j++) {
             FPDF_PAGEOBJECT other = FPDFPage_GetObject(page, j);
             if (other == nullptr || FPDFPageObj_GetType(other) != FPDF_PAGEOBJ_TEXT) continue;
-            TextShape o;
-            bool copy = taken[static_cast<size_t>(j)] == 0 && ReadShape(other, &o) && LooksLikeCopy(shape, o) &&
-                        !HasMark(other, kTextBoxMark);
-            if (copy && o.font != shape.font) {
+            const TextShape* o = taken[static_cast<size_t>(j)] == 0 ? shape_of(j) : nullptr;
+            bool copy = o != nullptr && LooksLikeCopy(*shape, *o, kCopyOffset * shape->em);
+            if (copy && o->font != shape->font) {
                 if (!run_base_read) {
-                    run_base = shape.font != nullptr ? ReadFontNameUtf8(shape.font, true) : "";
+                    run_base = shape->font != nullptr ? ReadFontNameUtf8(shape->font, true) : "";
                     run_base_read = true;
                 }
-                copy = !run_base.empty() && o.font != nullptr && ReadFontNameUtf8(o.font, true) == run_base;
+                copy = !run_base.empty() && o->font != nullptr && ReadFontNameUtf8(o->font, true) == run_base;
             }
-            if (copy) {
-                const U16 text = ReadObjectText(other, text_page);
-                copy = text.empty() || AllWhiteSpace(text);
-            }
-            if (copy) {
-                taken[static_cast<size_t>(j)] = 1;
-                copies.emplace_back(j, i);
-            } else {
-                passed++;
-            }
+            if (copy) copy = extracts_empty(j);
+            if (copy) take(j, i);
+            else passed++;
+        }
+    }
+
+    // 2. PDFium's character-level check (#136 reopened): anywhere on the page, in the run's
+    // own font object, within PDFium's character threshold.
+    for (int i : runs) {
+        if (i < 0 || i >= count) continue;
+        const TextShape* shape = shape_of(i);
+        if (shape == nullptr || shape->font == nullptr) continue;
+        const float offset = kCharCopyOffset * std::fabs(shape->size) * std::hypot(shape->m.a, shape->m.b);
+        for (int j = 0; j < count; j++) {
+            if (taken[static_cast<size_t>(j)] != 0) continue;
+            const TextShape* o = shape_of(j);
+            if (o != nullptr && o->font == shape->font && LooksLikeCopy(*shape, *o, offset) && extracts_empty(j)) take(j, i);
         }
     }
     std::sort(copies.begin(), copies.end());

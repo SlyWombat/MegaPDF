@@ -23,6 +23,8 @@ Writes:
                 so every platform can prove it reads boxes written elsewhere.
   doubled.pdf - lines drawn twice (fake bold, fill + stroke, shadow, a two-run
                 line) whose second copy PDFium's text layer hides (#136).
+  doubled-far.pdf - a line whose copies are drawn before it and far after it,
+                hidden character by character rather than object by object (#136).
 
 Deterministic output; both platforms' engine tests assert against these.
 """
@@ -389,6 +391,43 @@ def gen_doubled():
     return build(objs)
 
 
+def gen_doubled_far():
+    """A line whose copies PDFium hides character by character, not object by object (#136).
+
+    PDFium's object-level check only looks five text objects back, so these copies are
+    all out of its reach; its text layer still reads them as empty, because it sorts a
+    line's objects left to right and drops each character that repeats one in the same
+    font within 0.07 of the font size (0.98 pt at 14 pt). The corpus shapes: a copy
+    drawn before its run, and whole lines repeated many objects later. One line of seven
+    words, each word its own BT..ET (Helvetica 14 pt), in content order:
+      0-6    the words 0.7 pt right and 0.7 pt up    (copies drawn before the line)
+      7-13   the words                                (the runs)
+      14-20  the words 0.7 pt right                   (copies 7 objects after their run)
+      21-27  the words 0.7 pt up                      (copies 14 objects after their run)
+      28     "The closing line"                       a normal line after them
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    words = [(72, b"One"), (112, b"two"), (152, b"red"), (192, b"fox"), (232, b"ran"), (272, b"far"), (312, b"off")]
+    text = lambda x, y, s: b"BT /F1 14 Tf %s %s Td (%s) Tj ET\n" % (x, y, s)
+    fmt = lambda v: (b"%.1f" % v).rstrip(b"0").rstrip(b".")
+    body = b""
+    for dx, dy in ((0.7, 0.7), (0, 0), (0.7, 0), (0, 0.7)):
+        for x, w in words:
+            body += text(fmt(x + dx), fmt(700 + dy), w)
+    body += text(b"72", b"660", b"The closing line")
+    content = add(stream(b"", body))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+               % (pages_num, font, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def gen_textbox():
     """A page carrying a MegaPDF *text box* written the way the engines write it
     (#34): a text object wrapped in a marked-content section named
@@ -519,6 +558,7 @@ def main():
                               ("cropped.pdf", gen_cropped()),
                        ("textbox.pdf", gen_textbox()),
                        ("doubled.pdf", gen_doubled()),
+                       ("doubled-far.pdf", gen_doubled_far()),
                        ("encrypted.pdf", gen_encrypted())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:

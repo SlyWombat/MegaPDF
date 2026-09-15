@@ -2835,6 +2835,105 @@ void test_hidden_copies(const std::string& fixtures) {
     }
 }
 
+// #136 reopened: copies PDFium hides character by character, out of reach of its five-object
+// check. doubled-far.pdf, in content order: 0-6 a copy of each word of a seven-word line drawn
+// before it (0.7 pt right and up); 7-13 the line's runs; 14-20 and 21-27 copies drawn 7 and 14
+// objects after their runs (0.7 pt right; 0.7 pt up); 28 a closing line.
+void test_far_hidden_copies(const std::string& fixtures) {
+    const auto bytes = read_file(fixtures + "/doubled-far.pdf");
+    const std::vector<int> runs = {13, 7, 10, 8, 9, 12, 11};   // as a caller passes them, in any order
+    std::string taken;
+    for (int i = 0; i < 28; i++) {
+        const int copy_of = i < 7 ? i + 7 : i < 14 ? -1 : 7 + (i - 14) % 7;
+        taken += "[" + std::to_string(i) + " of " + std::to_string(copy_of) + "]";
+    }
+    const megapdf_rect line_box{60, 690, 340, 720}, closing_box{60, 650, 240, 675};
+    const U16 retyped = u16("Retyped");
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        check(p.page != nullptr && objects_on(p.page) == 29 && run_shots(p.page).size() == 8,
+              "doubled-far.pdf: PDFium reads one copy of the line", p.page ? std::to_string(run_shots(p.page).size()) + " runs" : "no page");
+        if (p.page == nullptr) return;
+    }
+    // Delete, then undo.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        const auto px = render_page(p.page);
+        const auto shots = run_shots(p.page);
+        megapdf_detached* x = megapdf_detach_text_runs(p.page, runs.data(), runs.size());
+        check(x != nullptr && parts_of(x) == taken, "far copies: the delete takes the runs and the copies drawn before and far after them", parts_of(x));
+        check(objects_on(p.page) == 1 && text_objects_over(p.page, line_box) == 0 && text_objects_over(p.page, closing_box) == 1,
+              "far copies: nothing of the line is left drawn, and the closing line stays", std::to_string(text_objects_over(p.page, line_box)));
+        check(megapdf_restore_detached(p.page, x) == MEGAPDF_OK && objects_on(p.page) == 29 && same_runs(shots, run_shots(p.page), 0.01) &&
+                  render_page(p.page) == px,
+              "far copies: undoing the delete puts every copy back where it was");
+    }
+    // Delete, save, reopen.
+    {
+        OpenDoc d(bytes);
+        {
+            Page p(d.doc, 0);
+            megapdf_discard_detached(megapdf_detach_text_runs(p.page, runs.data(), runs.size()));
+        }
+        OpenDoc again(save_bytes(d.doc, "far-copies"));
+        Page q(again.doc, 0);
+        check(q.page != nullptr && text_objects_over(q.page, line_box) == 0 && run_shots(q.page).size() == 1 &&
+                  text_objects_over(q.page, closing_box) == 1,
+              "far copies: after saving and reopening, the line is gone and nothing surfaces in its place");
+    }
+    // Edit, undo, edit again, save, reopen.
+    {
+        OpenDoc d(bytes);
+        {
+            Page p(d.doc, 0);
+            const auto px = render_page(p.page);
+            const auto shots = run_shots(p.page);
+            int outcome = -1;
+            megapdf_detached* x = nullptr;
+            check(megapdf_set_line_text(p.page, runs.data(), runs.size(), retyped.data(), 0, &outcome, &x) == MEGAPDF_OK &&
+                      outcome == MEGAPDF_EDIT_IN_PLACE,
+                  "far copies: the edit lands in the run's own font");
+            check(parts_of(x) == taken, "far copies: the edit hands back the runs and every copy", parts_of(x));
+            check(text_objects_over(p.page, line_box) == 1 && objects_on(p.page) == 2,
+                  "far copies: only the new text is drawn where the line was", std::to_string(text_objects_over(p.page, line_box)));
+            check(megapdf_restore_detached(p.page, x) == MEGAPDF_OK && objects_on(p.page) == 29 && same_runs(shots, run_shots(p.page), 0.01) &&
+                      render_page(p.page) == px,
+                  "far copies: undoing the edit puts every copy back where it was");
+            x = nullptr;
+            check(megapdf_set_line_text(p.page, runs.data(), runs.size(), retyped.data(), 0, &outcome, &x) == MEGAPDF_OK,
+                  "far copies: and it edits again");
+            megapdf_discard_detached(x);
+        }
+        OpenDoc again(save_bytes(d.doc, "far-copies"));
+        Page q(again.doc, 0);
+        int over = 0;
+        bool reads = false;
+        for (const RunShot& r : run_shots(q.page)) {
+            if (r.bounds.left < line_box.right && r.bounds.right > line_box.left && r.bounds.bottom < line_box.top && r.bounds.top > line_box.bottom) {
+                over++;
+                reads = r.text == without_nul(retyped);
+            }
+        }
+        check(over == 1 && reads && text_objects_over(q.page, line_box) == 1,
+              "far copies: after reopening, one run where the line was, reading as the edit, and nothing under it", std::to_string(over));
+    }
+    // One word retyped: megapdf_set_text takes its three copies, and undo puts them back.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        const auto px = render_page(p.page);
+        int outcome = -1;
+        megapdf_detached* x = nullptr;
+        check(megapdf_set_text(p.page, 10, retyped.data(), 0, &outcome, &x) == MEGAPDF_OK &&
+                  parts_of(x) == "[3 of 10][10 of -1][17 of 10][24 of 10]" && objects_on(p.page) == 26,
+              "far copies: megapdf_set_text on one word takes its copies before and after it", parts_of(x));
+        check(megapdf_restore_detached(p.page, x) == MEGAPDF_OK && objects_on(p.page) == 29 && render_page(p.page) == px,
+              "far copies: undoing the one-word edit restores the page");
+    }
+}
+
 // #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves
 // object indices and rewrites the page's streams. After a change every answer must be what a
 // fresh open of the saved page gives. PDFium regenerates every stream of a page (patch 5), so one
@@ -2889,6 +2988,7 @@ int main(int argc, char** argv) {
     test_edit_beside_fields_and_annotations();
     test_form_xobject_text();
     test_hidden_copies(argv[1]);
+    test_far_hidden_copies(argv[1]);
     test_verdicts_follow_changes();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
