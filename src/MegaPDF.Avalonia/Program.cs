@@ -1038,6 +1038,32 @@ internal static class Program
         check($"Cmd+S with nothing changed does not save (status: {vm.Status})",
               !vm.IsDirty && vm.Status != Strings.NowhereToSave);
 
+        // Space on the page must not also press the toolbar button that still has keyboard
+        // focus (#144). Tab moves the page's focus ring, not keyboard focus, so a toolbar
+        // button used from the keyboard keeps it. Seen once on a real Mac, after moving
+        // through the More menu with the arrow keys: Space opened the line editor and the
+        // More menu together. Not reproduced on a fresh launch, nor here; kept as a guard.
+        vm.ClearPageFocus();
+        window.MoreButton.Focus();
+        Pump();
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Tab, RawInputModifiers.None, PhysicalKey.Tab, null);
+        Pump();
+        var spaceRegion = vm.PageFocus?.Kind;
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Space, RawInputModifiers.None, PhysicalKey.Space, " ");
+        Pump();
+        check($"Space on a page region ({spaceRegion}) does not also press the focused More button",
+              spaceRegion is not null && window.ToolbarMenuOf(window.MoreButton) is not { IsOpen: true });
+        window.ToolbarMenuOf(window.MoreButton)?.Hide();
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Pump();
+        while (vm.CanUndo)
+            vm.UndoCommand.Execute(null);
+        vm.ClearPageFocus();
+        Pump();
+
         // Accessibility (#144): what VoiceOver is handed for the pickers, the two mode
         // toggles and the page's scroll bars.
         check("each face in the font picker is named by its label, not the record",
