@@ -89,7 +89,8 @@ final class DemoFlowUITests: XCTestCase {
 
         // 2. Sign: pick the library signature, then tap the signature line.
         app.buttons[labels.sign].firstMatch.tap()
-        let signature = app.buttons[labels.signatureName].firstMatch
+        // The library card's label is "<name>, signature" since the cards redesign (#100).
+        let signature = app.buttons["\(labels.signatureName), signature"].firstMatch
         XCTAssertTrue(signature.waitForExistence(timeout: 5), "the seeded signature is not in the library")
         pause(1.5)
         signature.tap()
