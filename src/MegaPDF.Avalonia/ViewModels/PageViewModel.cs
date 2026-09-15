@@ -73,7 +73,52 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     // Highlights are positioned in the same space as the page surface rather than
     // baked into the raster, so a zoom change repositions them without forcing a
     // re-render — and searching never invalidates a single bitmap.
-    partial void OnZoomChanged(double value) => RebuildHighlights();
+    partial void OnZoomChanged(double value)
+    {
+        RebuildHighlights();
+        PlaceBusy();
+    }
+
+    // --- Page-level busy work (#145): the #139 check, the text-edit check, applying a change ---
+
+    private PdfRect? _busyArea;
+
+    /// <summary>A spinner on this page, with no particular line: at the top of the page.</summary>
+    [ObservableProperty]
+    private bool _showsBusyOnPage;
+
+    /// <summary>A spinner under one line: the text-edit check, or the edit it gates.</summary>
+    [ObservableProperty]
+    private bool _showsBusyOnLine;
+
+    [ObservableProperty]
+    private string _busyLabel = "";
+
+    [ObservableProperty]
+    private global::Avalonia.Thickness _busyMargin;
+
+    [ObservableProperty]
+    private double _busyWidth = 48;
+
+    /// <summary>Set by the main view model from its busy state.</summary>
+    internal void ShowBusy(bool show, PdfRect? area, string label)
+    {
+        _busyArea = area;
+        BusyLabel = label;
+        ShowsBusyOnLine = show && area is not null;
+        ShowsBusyOnPage = show && area is null;
+        PlaceBusy();
+    }
+
+    /// <summary>Under the line, in the page surface's device-independent pixels.</summary>
+    private void PlaceBusy()
+    {
+        if (_busyArea is not { } area)
+            return;
+        var scale = PageBitmap.PointsToPixels * Zoom;
+        BusyMargin = new global::Avalonia.Thickness(area.X * scale, (area.Y + area.Height) * scale + 2, 0, 0);
+        BusyWidth = Math.Max(48, area.Width * scale);
+    }
 
     /// <summary>Search hits on this page, in device-independent pixels.</summary>
     public ObservableCollection<Highlight> Highlights { get; } = [];

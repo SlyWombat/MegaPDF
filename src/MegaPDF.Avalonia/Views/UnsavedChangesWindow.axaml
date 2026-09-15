@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.UnsavedChangesWindow"
+        Title="{x:Static loc:Strings.UnsavedChanges}"
+        Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <!-- The standard macOS unsaved-changes sheet (#145, D1): the question, what happens
+       otherwise, and Don't Save apart on the left, Cancel and Save on the right. -->
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Name="PromptText" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <TextBlock Text="{x:Static loc:Strings.UnsavedChangesDetail}" TextWrapping="Wrap" Opacity="0.8" />
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8,0,0">
+      <Button Name="DontSaveButton" Grid.Column="0" Content="{x:Static loc:Strings.DontSave}" />
+      <Button Name="CancelButton" Grid.Column="2" Margin="0,0,8,0"
+              Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="SaveButton" Grid.Column="3" Classes="accent"
+              Content="{x:Static loc:Strings.Save}" IsDefault="True" />
+    </Grid>
+  </StackPanel>
+</Window>

@@ -837,6 +837,102 @@ internal static class Program
             if (File.Exists(kbPath)) File.Delete(kbPath);
         }
 
+        // --- Saving, busy state and closing (#145) ---
+        //
+        // D2: Save under the sandbox opened (and so truncated) the file before the verified
+        // save ran, so a failed flatten or read-back left it empty. D1: closing with unsaved
+        // changes deleted their journal. And a window's view model now does its engine work
+        // off the UI thread, which is checked here on the thread pool.
+        Console.WriteLine("saving, busy state and closing (#145):");
+        var busyState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-busy-{Guid.NewGuid():N}");
+        var original = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-d2-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            File.Copy(Path.Combine(dir, "fixture.pdf"), original);
+            var before = File.ReadAllBytes(original);
+            var box = new PdfPoint(78, 186);
+
+            using (var vm = new MainViewModel(busyState))
+            {
+                vm.Open(original);
+                vm.HandlePageClick(0, box);
+                Check("a tick makes the document dirty", vm.IsDirty);
+
+                vm.FailSaveForTest = () => throw new InvalidOperationException("flattening failed (self-test)");
+                var opened = false;
+                var saved = vm.SaveThroughAsync(() =>
+                {
+                    opened = true;
+                    return Task.FromResult<Stream>(new FileStream(original, FileMode.Create));
+                }).GetAwaiter().GetResult();
+                Check("a save that fails while making the bytes reports it",
+                      !saved && vm.Status == Strings.WithDetail(Strings.CouldNotSave, "flattening failed (self-test)"));
+                Check("and never opens the file for writing (D2)", !opened);
+                Check("so the original is untouched", File.ReadAllBytes(original).AsSpan().SequenceEqual(before));
+                Check("and the document is still unsaved", vm.IsDirty);
+
+                vm.FailSaveForTest = null;
+                saved = vm.SaveThroughAsync(() => Task.FromResult<Stream>(new FileStream(original, FileMode.Create)))
+                          .GetAwaiter().GetResult();
+                Check("the same save then writes the file", saved && !vm.IsDirty
+                      && !File.ReadAllBytes(original).AsSpan().SequenceEqual(before));
+                using (var engine = new PdfiumEngine())
+                using (var reopened = engine.Open(original))
+                using (var page = reopened.GetPage(0))
+                    Check("and what it wrote reads back with the tick", page.GetStamps().Any(st => st.Id.StartsWith("mark:", StringComparison.Ordinal)));
+
+                vm.HandlePageClick(0, box); // untick: dirty again
+                var kindBefore = vm.HitTest(0, box).Kind;
+                using (vm.Busy.Begin(Strings.BusySaving))
+                {
+                    Check("while a save runs, Save, editing and file commands are disabled at once",
+                          vm.Busy.IsBusy && !vm.SaveCommand.CanExecute(null) && !vm.CanEditContent && !vm.CanSign && !vm.IsIdle);
+                    vm.HandlePageClick(0, box);
+                    Check("and a click on the page is ignored", vm.HitTest(0, box).Kind == kindBefore);
+                }
+                Check("afterwards they are back", vm.SaveCommand.CanExecute(null) && vm.CanEditContent && vm.IsIdle);
+                vm.DiscardChanges();
+            }
+
+            using (var vm = new MainViewModel(busyState) { RunsInBackground = true })
+            {
+                vm.OpenAsync(original).GetAwaiter().GetResult();
+                Check("with a window, a document opens off the UI thread", vm.IsDocumentOpen && vm.Pages.Count > 0);
+                vm.SearchAsync("checkbox").GetAwaiter().GetResult();
+                Check("and is searched off it", vm.MatchCount > 0);
+                vm.HandlePageClick(0, box);
+                vm.Busy.WhenIdleAsync().GetAwaiter().GetResult();
+                Check("and a click applies its change off it", vm.IsDirty && vm.CanUndo);
+            } // closed with that change unsaved, and nobody agreed to lose it
+
+            using (var vm = new MainViewModel(busyState))
+            {
+                Check("closing with unsaved changes keeps their journal (D1)", vm.FindRecoverableSessions().Count == 1);
+                vm.Open(original);
+                vm.HandlePageClick(0, box);
+                vm.DiscardChanges();
+            } // Don't Save
+            using (var vm = new MainViewModel(busyState))
+                Check("Don't Save lets the journal go", vm.FindRecoverableSessions().Count == 0);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::saving and busy state: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(original)) File.Delete(original);
+            try
+            {
+                if (Directory.Exists(busyState))
+                    Directory.Delete(busyState, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }
