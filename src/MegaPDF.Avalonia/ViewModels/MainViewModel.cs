@@ -85,6 +85,120 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private readonly RecoveryJournal _journal;
     private IPdfDocument? _document;
 
+    // --- Busy state and engine work off the UI thread (#145) ---
+
+    /// <summary>
+    /// The document's busy state: disables editing and file commands at once, shows the strip
+    /// (or a spinner on the page) after 0.5 s. Created on the UI thread with the view model.
+    /// </summary>
+    public BusyState Busy { get; } = new();
+
+    /// <summary>Nothing blocking is running: what the Open button and the menu bar's file commands bind.</summary>
+    public bool IsIdle => !Busy.IsBusy;
+
+    /// <summary>
+    /// Set by the window: engine work then runs off the UI thread, so the window stays
+    /// responsive while a document opens, saves or is searched (#145). Without a window — the
+    /// self-test, --render-check — it runs inline, as it always did, and every public method
+    /// has finished its work when it returns.
+    /// </summary>
+    public bool RunsInBackground { get; set; }
+
+    /// <summary>Held by the sync wrappers the self-test calls: the work runs inline even with a window.</summary>
+    private int _inlineDepth;
+
+    private bool Inline => !RunsInBackground || _inlineDepth > 0;
+
+    /// <summary>Counts edits, undos and redos: a save marks the document saved only if none ran meanwhile (D3, #145).</summary>
+    private int _editCount;
+
+    /// <summary>The person chose Don't Save: the journal goes with the document on close.</summary>
+    private bool _changesDiscarded;
+
+    private bool _disposed;
+
+    /// <summary>Runs engine work off the UI thread when there is a window, inline otherwise.</summary>
+    private Task<T> OffUiThread<T>(Func<T> work) => Inline ? Task.FromResult(work()) : Task.Run(work);
+
+    /// <inheritdoc cref="OffUiThread{T}"/>
+    private Task OffUiThread(Action work)
+    {
+        if (!Inline)
+            return Task.Run(work);
+        work();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// For the synchronous methods the self-test and the capture runs call: the work runs inline
+    /// and has finished when this returns. No synchronization context, so nothing it awaits waits
+    /// for the UI thread this may be blocking.
+    /// </summary>
+    private void RunSynchronously(Func<Task> work)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(null);
+        _inlineDepth++;
+        try
+        {
+            work().GetAwaiter().GetResult();
+        }
+        finally
+        {
+            _inlineDepth--;
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+    }
+
+    private void OnBusyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(BusyState.IsBusy))
+        {
+            OnPropertyChanged(nameof(IsIdle));
+            OnPropertyChanged(nameof(CanEditContent));
+            OnPropertyChanged(nameof(CanAddText));
+            OnPropertyChanged(nameof(CanSign));
+            OnPropertyChanged(nameof(CanPrint));
+            OnPropertyChanged(nameof(CanShrink));
+            SaveCommand.NotifyCanExecuteChanged();
+            PrintCommand.NotifyCanExecuteChanged();
+            ToggleAddTextCommand.NotifyCanExecuteChanged();
+            ToggleWhiteoutCommand.NotifyCanExecuteChanged();
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+        }
+        if (e.PropertyName is nameof(BusyState.IsIndicatorVisible) or nameof(BusyState.Scope)
+            or nameof(BusyState.PageIndex) or nameof(BusyState.Area) or nameof(BusyState.Label))
+            UpdatePageSpinners();
+    }
+
+    /// <summary>Puts the page-level spinner on the page (or line) the busy work is about, and takes it off the rest.</summary>
+    private void UpdatePageSpinners()
+    {
+        foreach (var page in Pages)
+        {
+            var mine = Busy.ShowsPageSpinner && Busy.PageIndex == page.Index;
+            page.ShowBusy(mine, mine ? Busy.Area : null, Busy.Label);
+        }
+    }
+
+    /// <summary>
+    /// Starts the #139 check for a page in the background (#145): when it is first shown, when
+    /// Add text or Cover is armed on it, and when something regenerating is selected on it, so
+    /// the answer is usually ready by the change. Only with a window: the self-test and the
+    /// capture runs judge at the change, as they always did.
+    /// </summary>
+    private void PreparePageCheck(int pageIndex)
+    {
+        if (!RunsInBackground || _document is not { } document || pageIndex < 0 || pageIndex >= Pages.Count)
+            return;
+        if (!Capabilities.CanEditContent && !Capabilities.CanAddText)
+            return;
+        _pageWarnings.Prepare(document, pageIndex);
+    }
+
+    partial void OnCurrentPageChanged(int value) => PreparePageCheck(value - 1);
+
     /// <param name="stateDirectory">
     /// Where settings, recents, signatures and the recovery journal live. Null means
     /// the real per-user locations, which is what the app uses.
@@ -111,6 +225,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             _signatures = new SignatureLibrary(Path.Combine(stateDirectory, "Signatures"));
             _journal = new RecoveryJournal(Path.Combine(stateDirectory, "Recovery"));
         }
+        Busy.PropertyChanged += OnBusyChanged;
     }
 
     public ObservableCollection<PageViewModel> Pages { get; } = [];
@@ -174,16 +289,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
+    // Each also waits while blocking work runs (#145): a save, an open, a change on its way.
+
     /// <summary>Editing the document's own text and covers (modify).</summary>
-    public bool CanEditContent => IsDocumentOpen && Capabilities.CanEditContent;
+    public bool CanEditContent => IsDocumentOpen && Capabilities.CanEditContent && !Busy.IsBusy;
 
     /// <summary>Adding and changing text boxes, and their font and size (modify, fill forms or annotate).</summary>
-    public bool CanAddText => IsDocumentOpen && Capabilities.CanAddText;
+    public bool CanAddText => IsDocumentOpen && Capabilities.CanAddText && !Busy.IsBusy;
 
     /// <summary>Signatures and check marks (fill forms or annotate).</summary>
-    public bool CanSign => IsDocumentOpen && Capabilities.CanSign;
+    public bool CanSign => IsDocumentOpen && Capabilities.CanSign && !Busy.IsBusy;
 
-    public bool CanPrint => IsDocumentOpen && Capabilities.CanPrint;
+    public bool CanPrint => IsDocumentOpen && Capabilities.CanPrint && !Busy.IsBusy;
 
     /// <summary>The owner restricted this document; the banner offers the owner password.</summary>
     public bool IsRestricted => IsDocumentOpen && Capabilities.IsRestricted;
@@ -233,20 +350,31 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Raised when a document needs a password before it can be opened.</summary>
     public event Func<string, Task<string?>>? PasswordRequested;
 
+    /// <summary>Opens a document and returns once it is open: for the self-test and window-less checks.</summary>
     public void Open(string path) => Open(path, password: null);
 
-    public void Open(string path, string? password)
-    {
-        CloseDocument();
+    /// <inheritdoc cref="Open(string)"/>
+    public void Open(string path, string? password) => RunSynchronously(() => OpenAsync(path, password));
 
-        IPdfDocument document;
-        try
+    /// <summary>
+    /// Opens a document, off the UI thread with "Opening…" (#145): every page is read for its
+    /// size, which on a long document takes a while. The document on screen stays until the
+    /// new one has loaded, so one that fails to open leaves it as it was. The window asks
+    /// about unsaved changes first.
+    /// </summary>
+    public async Task OpenAsync(string path, string? password = null)
+    {
+        if (Busy.IsBusy)
+            return;
+
+        (IPdfDocument Document, IReadOnlyList<(double Width, double Height)> Sizes) loaded;
+        using (Busy.Begin(Strings.BusyOpening))
         {
-            document = _engine.Open(path, password);
-        }
-        catch (PdfLoadException ex)
-        {
-            if (ex.IsPasswordError && PasswordRequested is { } ask)
+            try
+            {
+                loaded = await OffUiThread(() => LoadDocument(path, password));
+            }
+            catch (PdfLoadException ex) when (ex.IsPasswordError && PasswordRequested is { } ask)
             {
                 // Ask, then retry. Deliberately not a loop here — the view keeps
                 // asking, so a wrong password re-prompts with the reason showing
@@ -258,20 +386,59 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 _ = RetryWithPasswordAsync(path, ask);
                 return;
             }
-
-            // The engine's message is English and carries the path; the person
-            // holding the document gets the reason in their own words (#91).
-            Status = DescribeLoadFailure(ex);
-            return;
+            catch (PdfLoadException ex)
+            {
+                // The engine's message is English and carries the path; the person
+                // holding the document gets the reason in their own words (#91).
+                Status = DescribeLoadFailure(ex);
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Moved, locked, or the grant lapsed while it was being read.
+                Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+                return;
+            }
         }
 
-        Adopt(document, path, openedWithPassword: password is not null);
+        CloseDocument();
+        Adopt(loaded.Document, path, openedWithPassword: password is not null, loaded.Sizes);
+
+        // A restore that had to wait for the password replays now that it is open (#133).
+        if (_pendingRestore is { } restore && restore.DocumentPath == path)
+        {
+            _pendingRestore = null;
+            await ReplayRecoveredAsync(restore.Entries);
+        }
+    }
+
+    /// <summary>Off the UI thread: the document and every page's size, which is what opening costs.</summary>
+    private (IPdfDocument Document, IReadOnlyList<(double Width, double Height)> Sizes) LoadDocument(string path, string? password)
+    {
+        var document = _engine.Open(path, password);
+        try
+        {
+            var sizes = new List<(double Width, double Height)>(document.PageCount);
+            for (var i = 0; i < document.PageCount; i++)
+            {
+                using var page = document.GetPage(i);
+                sizes.Add((page.Width, page.Height));
+            }
+            return (document, sizes);
+        }
+        catch
+        {
+            document.Dispose();
+            throw;
+        }
     }
 
     /// <summary>Makes a loaded document the open one. The caller has closed the previous one.</summary>
-    private void Adopt(IPdfDocument document, string path, bool openedWithPassword)
+    private void Adopt(IPdfDocument document, string path, bool openedWithPassword,
+                       IReadOnlyList<(double Width, double Height)> sizes)
     {
         _document = document;
+        _changesDiscarded = false;
         // Permissions before IsDocumentOpen, so no tool is enabled for a moment it should
         // not be (#131).
         Capabilities = DocumentCapabilities.From(document.Security);
@@ -279,11 +446,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         MatchCount = 0;
         CurrentMatchIndex = -1;
         LoadSignatures();
-        for (var i = 0; i < document.PageCount; i++)
-        {
-            using var page = document.GetPage(i);
-            Pages.Add(new PageViewModel(document, i, page.Width, page.Height) { Zoom = Zoom });
-        }
+        for (var i = 0; i < sizes.Count; i++)
+            Pages.Add(new PageViewModel(document, i, sizes[i].Width, sizes[i].Height) { Zoom = Zoom });
 
         // Opens fitted to the window, not at whatever the last document was zoomed
         // to (#143). Before any page is realised, so nothing renders twice.
@@ -309,13 +473,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // document is journaled, and the person should know before they start (ADR-004 §7).
         if (openedWithPassword)
             Status = Strings.RecoveryOffForProtected;
-
-        // A restore that had to wait for the password replays now that it is open (#133).
-        if (_pendingRestore is { } restore && restore.DocumentPath == path)
-        {
-            _pendingRestore = null;
-            ReplayRecovered(restore.Entries);
-        }
     }
 
     /// <summary>
@@ -350,7 +507,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
-        Open(path, password);
+        await OpenAsync(path, password);
     }
 
     /// <summary>MegaPDF-added text boxes on a page — what restyle and move address.</summary>
@@ -391,11 +548,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return;
 
+        // A click while work runs — a change on its way, its page check, a save — is ignored
+        // rather than queued (#145): repeat clicks must not stack up edits or questions.
+        if (Busy.IsBusy)
+            return;
+
         // Placement modes win over everything: the click is choosing a spot, not
         // asking what is under it.
         if (PendingSignature is { } pending)
         {
-            PlacePendingSignature(pageIndex, point, pending);
+            Start(() => PlacePendingSignatureAsync(pageIndex, point, pending));
             return;
         }
 
@@ -447,9 +609,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             case PageHitKind.TextRun when hit.TextLine is { } line:
                 // The view opens an editor over the line; the commit comes back
                 // through EditLine. Pages PDFium cannot rewrite faithfully say so
-                // instead (#118).
-                if (TryBeginLineEdit(pageIndex, line))
-                    EditLineRequested?.Invoke(pageIndex, line);
+                // instead (#118), after a check that runs off the UI thread (#145).
+                Start(() => BeginLineEditAsync(pageIndex, line));
                 break;
 
             case PageHitKind.TextBox when hit.TextRun is { } run:
@@ -463,7 +624,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void Apply(IPageEditOperation operation, string doneMessage, Action? cancelled = null, Action? applied = null)
+    /// <summary>
+    /// Starts async work from a synchronous entry point. With a window it runs on (its engine
+    /// work off the UI thread) and this returns at once; without one it has finished when this
+    /// returns, as every entry point did before #145.
+    /// </summary>
+    private void Start(Func<Task> work)
+    {
+        if (Inline)
+            RunSynchronously(work);
+        else
+            _ = work();
+    }
+
+    private void Apply(IPageEditOperation operation, string doneMessage, Action? cancelled = null, Action? applied = null) =>
+        Start(() => ApplyAsync(operation, doneMessage, cancelled, applied));
+
+    /// <summary>
+    /// Applies one change: its #139 page check if it needs one, then the edit, off the UI thread,
+    /// under the page's busy state. Every failure lands in the status line; nothing escapes.
+    /// </summary>
+    private async Task ApplyAsync(IPageEditOperation operation, string doneMessage, Action? cancelled, Action? applied)
     {
         // The central gate (#131): the entry points check first so no editor opens, and
         // this is what holds if one is ever missed.
@@ -472,66 +653,99 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Status = Strings.ActionRestricted;
             return;
         }
-        // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
-        // changes parts the person never touched. Never refused; the first such change on a
-        // page asks the core first, off the UI thread, and warns when the page would change.
-        // With nobody to ask (no window: the self-test, --render-check), the answer can only be
-        // Continue, so the edit applies at once and on this thread, as it always did.
-        if (_document is { } document && PageRewriteConfirmationRequested is not null
-            && PageRegenerationWarnings.RegeneratesUnjudged(operation)
-            && !_pageWarnings.IsSettled(operation.PageIndex))
+        // One change at a time (#145): a change waiting on its page check, or with the warning
+        // on screen, is never joined by a second, so there is never a second question.
+        if (Busy.IsBusy || _document is not { } document)
         {
-            ApplyAfterPageCheck(document, operation, doneMessage, cancelled, applied);
+            cancelled?.Invoke();
             return;
         }
-        ApplyNow(operation, doneMessage, applied);
-    }
 
-    // async void on purpose: an exception from the edit reaches the UI thread's handler, as it
-    // did when Apply ran the edit synchronously.
-    private async void ApplyAfterPageCheck(IPdfDocument document, IPageEditOperation operation, string doneMessage, Action? cancelled, Action? applied)
-    {
-        var warn = await Task.Run(() => _pageWarnings.ShouldWarn(document, operation));
-        if (!ReferenceEquals(document, _document))
-            return; // closed or replaced while the page was being judged
-        if (warn)
+        using var busy = Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: operation.PageIndex);
+        try
         {
-            var confirmed = PageRewriteConfirmationRequested is not { } ask || await ask();
-            if (!confirmed || !ReferenceEquals(document, _document))
+            // #139: whiteouts and text boxes make PDFium rewrite the page, which on a few pages
+            // changes parts the person never touched. Never refused: the first such change on a
+            // page waits for the page's check — started when the page was shown — at most
+            // 1.5 s, and warns when the page would change. A check still running by then is
+            // cancelled and the change applies without a warning (#145). With nobody to ask
+            // (no window: the self-test, --render-check), the answer can only be Continue, so
+            // the edit applies at once, as it always did.
+            if (PageRewriteConfirmationRequested is { } ask
+                && PageRegenerationWarnings.RegeneratesUnjudged(operation)
+                && !_pageWarnings.IsSettled(operation.PageIndex))
             {
-                cancelled?.Invoke();
-                return;
+                busy.SetLabel(Strings.BusyCheckingPage);
+                var answer = await _pageWarnings.AskAsync(document, operation);
+                if (!ReferenceEquals(document, _document))
+                    return; // closed or replaced while the page was being judged
+                if (answer == PageCheckAnswer.WouldChange)
+                {
+                    if (!await ask() || !ReferenceEquals(document, _document))
+                    {
+                        cancelled?.Invoke();
+                        return;
+                    }
+                    _pageWarnings.Settle(operation.PageIndex);
+                }
+                busy.SetLabel(Strings.BusyApplying);
             }
-            _pageWarnings.Settle(operation.PageIndex);
-        }
-        ApplyNow(operation, doneMessage, applied);
-    }
 
-    private void ApplyNow(IPageEditOperation operation, string doneMessage, Action? applied = null)
-    {
-        _undoStack.Do(operation);
-        // Journalled after Apply, because an operation's entry can only be written
-        // once it knows what it did — a placed stamp's id, for instance.
-        _journal.Record(operation.ToJournalEntry(inverse: false));
-        AfterEdit(operation.PageIndex, doneMessage);
-        applied?.Invoke();
+            await OffUiThread(() => _undoStack.Do(operation));
+            if (!ReferenceEquals(document, _document))
+                return;
+            // Journalled after Apply, because an operation's entry can only be written
+            // once it knows what it did — a placed stamp's id, for instance.
+            _journal.Record(operation.ToJournalEntry(inverse: false));
+            AfterEdit(operation.PageIndex, doneMessage);
+            applied?.Invoke();
+        }
+        catch (TextEditException ex) when (ex.Reason == TextEditFailure.LayoutWouldChange)
+        {
+            Status = LayoutRefusalText(ex.Layout);
+            cancelled?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+            cancelled?.Invoke();
+        }
     }
 
     private void AfterEdit(int pageIndex, string message)
     {
+        _editCount++;
         IsDirty = true;
         Status = message;
         RerenderPage(pageIndex);
         RaiseUndoRedo();
     }
 
-    [RelayCommand]
-    private void Undo()
+    private bool CanUndoNow() => _undoStack.CanUndo && !Busy.IsBusy;
+
+    private bool CanRedoNow() => _undoStack.CanRedo && !Busy.IsBusy;
+
+    [RelayCommand(CanExecute = nameof(CanUndoNow))]
+    private async Task UndoAsync()
     {
-        if (!_undoStack.CanUndo)
+        if (!_undoStack.CanUndo || Busy.IsBusy || _document is not { } document)
             return;
         var op = _undoStack.PeekUndo as IPageEditOperation;
-        _undoStack.Undo();
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: op?.PageIndex ?? -1))
+        {
+            try
+            {
+                await OffUiThread(_undoStack.Undo);
+            }
+            catch (Exception ex)
+            {
+                Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+                RaiseUndoRedo();
+                return;
+            }
+        }
+        if (!ReferenceEquals(document, _document))
+            return;
         // An undo is journalled as its own inverse entry: replaying the journal
         // after a crash must reproduce what was on screen, not what was ever done.
         if (op is not null)
@@ -539,13 +753,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         AfterEdit(op?.PageIndex ?? 0, Strings.Undone);
     }
 
-    [RelayCommand]
-    private void Redo()
+    [RelayCommand(CanExecute = nameof(CanRedoNow))]
+    private async Task RedoAsync()
     {
-        if (!_undoStack.CanRedo)
+        if (!_undoStack.CanRedo || Busy.IsBusy || _document is not { } document)
             return;
         var op = _undoStack.PeekRedo as IPageEditOperation;
-        _undoStack.Redo();
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: op?.PageIndex ?? -1))
+        {
+            try
+            {
+                await OffUiThread(_undoStack.Redo);
+            }
+            catch (Exception ex)
+            {
+                Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+                RaiseUndoRedo();
+                return;
+            }
+        }
+        if (!ReferenceEquals(document, _document))
+            return;
         if (op is not null)
             _journal.Record(op.ToJournalEntry(inverse: false));
         AfterEdit(op?.PageIndex ?? 0, Strings.Redone);
@@ -572,9 +800,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// returns.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanPrint))]
-    private void Print()
+    private async Task PrintAsync()
     {
-        if (_document is null)
+        if (_document is not { } document || Busy.IsBusy)
             return;
 
         if (!OperatingSystem.IsMacOS())
@@ -589,9 +817,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var temp = Path.Combine(Path.GetTempPath(), $"megapdf-print-{Guid.NewGuid():N}.pdf");
         try
         {
-            using (var file = File.Create(temp))
-                _document.Save(file);
+            // Serialising the document is the slow part, and it runs off the UI thread (#145).
+            using (Busy.Begin(Strings.BusyPrinting))
+            {
+                await OffUiThread(() =>
+                {
+                    using var file = File.Create(temp);
+                    document.Save(file);
+                });
+            }
 
+            // NSPrintOperation drives AppKit, so the print panel runs on the UI thread.
             var outcome = Platform.MacPrinter.Print(temp);
             Status = outcome.Message;
         }
@@ -601,8 +837,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         finally
         {
-            if (File.Exists(temp))
-                File.Delete(temp);
+            try
+            {
+                if (File.Exists(temp))
+                    File.Delete(temp);
+            }
+            catch (IOException)
+            {
+            }
         }
     }
 
@@ -623,7 +865,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public (ImageShrinker.Result Result, byte[]? Bytes) PrepareShrunkCopy()
     {
-        if (DocumentPath is null)
+        (ImageShrinker.Result Result, byte[]? Bytes) prepared = (new ImageShrinker.Result(0), null);
+        RunSynchronously(async () => prepared = await PrepareShrunkCopyAsync());
+        return prepared;
+    }
+
+    /// <inheritdoc cref="PrepareShrunkCopy"/>
+    /// <remarks>Off the UI thread, with "Making a smaller copy…" (#145).</remarks>
+    public async Task<(ImageShrinker.Result Result, byte[]? Bytes)> PrepareShrunkCopyAsync()
+    {
+        if (DocumentPath is not { } path)
         {
             // Not the same as "nothing to shrink": we have no file to read. Saying
             // so beats reporting that the pictures are already small (#68).
@@ -631,22 +882,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return (new ImageShrinker.Result(0), null);
         }
 
-        // Opened like the document, so a protected one opens with its own password; the
-        // copy then saves and verifies protected like any other (#134).
-        if (_document is null)
+        if (_document is not { } document || Busy.IsBusy)
             return (new ImageShrinker.Result(0), null);
-        using var copy = _engine.OpenLike(_document, DocumentPath);
-        var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
-        if (result.ImagesReplaced == 0)
-            return (result, null);
 
-        using var buffer = new MemoryStream();
-        VerifiedSave.ToStream(_engine, copy, buffer);
-        return (result, buffer.ToArray());
+        using var busy = Busy.Begin(Strings.BusyShrinking);
+        return await OffUiThread(() =>
+        {
+            // Opened like the document, so a protected one opens with its own password; the
+            // copy then saves and verifies protected like any other (#134).
+            using var copy = _engine.OpenLike(document, path);
+            var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
+            if (result.ImagesReplaced == 0)
+                return (result, (byte[]?)null);
+
+            using var buffer = new MemoryStream();
+            VerifiedSave.ToStream(_engine, copy, buffer);
+            return (result, buffer.ToArray());
+        });
     }
 
     /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
-    public bool CanShrink => IsDocumentOpen && !IsDirty && Capabilities.CanShrink;
+    public bool CanShrink => IsDocumentOpen && !IsDirty && Capabilities.CanShrink && !Busy.IsBusy;
 
     // --- Recent documents (SDD §2.2 empty state) ---
 
@@ -689,15 +945,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// that truncates this very journal — a detail the Windows implementation calls
     /// out too, and one that silently loses the recovery if it is got wrong.
     /// </summary>
-    public void RestoreSession(RecoverableSession session)
+    public async Task RestoreSessionAsync(RecoverableSession session)
     {
-        var entries = RecoveryJournal.LoadEntries(session.JournalPath);
+        IReadOnlyList<JournalEntry> entries;
+        try
+        {
+            entries = RecoveryJournal.LoadEntries(session.JournalPath);
+        }
+        catch (Exception ex)
+        {
+            // Held by another instance, or gone: nothing is lost, and nothing is opened.
+            Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+            return;
+        }
 
-        // For a protected document Open() only starts the password prompt and returns.
+        // For a protected document OpenAsync only starts the password prompt and returns.
         // The entries wait here and replay when the retry opens it; checking only after
         // Open() returned lost them, and the retry's new session truncated the journal (#133).
         _pendingRestore = (session.DocumentPath, entries);
-        Open(session.DocumentPath);
+        await OpenAsync(session.DocumentPath);
         if (PendingPasswordPath is null)
             _pendingRestore = null;   // opened and replayed, or failed outright
     }
@@ -705,18 +971,43 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>A restore waiting on its document's password prompt (#133).</summary>
     private (string DocumentPath, IReadOnlyList<JournalEntry> Entries)? _pendingRestore;
 
-    private void ReplayRecovered(IReadOnlyList<JournalEntry> entries)
+    private async Task ReplayRecoveredAsync(IReadOnlyList<JournalEntry> entries)
     {
-        if (_document is null || entries.Count == 0)
+        if (_document is not { } document || entries.Count == 0)
             return;
 
-        var applied = JournalReplayer.Replay(_document, entries);
-
-        // Re-journal the restored edits, so a second crash before the first save is
-        // still covered.
+        // Re-journalled before the replay, not after: opening started a new session over the
+        // journal they came from, so if the replay fails part way the edits must already be
+        // back on disk for a second crash, or a quit without saving, to offer again (#145).
         foreach (var entry in entries)
             _journal.Record(entry);
 
+        int applied;
+        using (Busy.Begin(Strings.BusyRestoring))
+        {
+            try
+            {
+                applied = await OffUiThread(() => JournalReplayer.Replay(document, entries));
+            }
+            catch (Exception ex)
+            {
+                // It used to vanish here, with the journal already truncated.
+                if (ReferenceEquals(document, _document))
+                {
+                    _editCount++;
+                    IsDirty = true;
+                    foreach (var page in Pages)
+                        if (page.IsRealised)
+                            page.Rerender(DpiScale);
+                    Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+                }
+                return;
+            }
+        }
+        if (!ReferenceEquals(document, _document))
+            return;
+
+        _editCount++;
         IsDirty = applied > 0;
         // Every rendered page predates the replay.
         foreach (var page in Pages)
@@ -986,6 +1277,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void Select(PageSelection selection)
     {
         Selection = selection;
+        // A text box or cover selected is about to be moved, restyled or removed: its page's
+        // #139 check starts now, so the answer is usually ready by the change (#145).
+        if (selection.Kind is SelectionKind.TextBox or SelectionKind.Whiteout)
+            PreparePageCheck(selection.PageIndex);
         Status = selection.Kind switch
         {
             SelectionKind.Signature => Strings.SignatureSelectedHint,
@@ -1204,6 +1499,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsModeActive));
         if (mode == PageMode.Select)
             Status = Strings.Ready;
+        else
+            PreparePageCheck(CurrentPage - 1); // a tool armed: its page's #139 check starts now (#145)
     }
 
     public void CancelModes()
@@ -1218,34 +1515,50 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// render the new text, a similar standard font where it cannot, and scanned
     /// text is refused outright rather than silently mangled.
     /// </summary>
-    public void EditLine(int pageIndex, PdfTextLine line, string newText)
+    public void EditLine(int pageIndex, PdfTextLine line, string newText) =>
+        Start(() => EditLineAsync(pageIndex, line, newText));
+
+    private async Task EditLineAsync(int pageIndex, PdfTextLine line, string newText)
     {
-        if (_document is null || newText == line.Text)
+        if (_document is not { } document || newText == line.Text)
             return;
 
-        var operation = new LineEditOperation(_document, pageIndex, line, newText);
+        var operation = new LineEditOperation(document, pageIndex, line, newText);
         // Not routed through Apply, so gated here as well (#131).
         if (!Capabilities.Allows(operation))
         {
             Status = Strings.ActionRestricted;
             return;
         }
-        try
-        {
-            _undoStack.Do(operation);
-        }
-        catch (TextEditException ex)
-        {
-            // These are the two honest refusals, and the wording matters more than
-            // the exception: the person is holding a form, not a stack trace.
-            Status = ex.Reason switch
-            {
-                TextEditFailure.NotExtractable => Strings.TextIsScanned,
-                TextEditFailure.LayoutWouldChange => LayoutRefusalText(ex.Layout),
-                _ => Strings.TextFontCannotWrite,
-            };
+        if (Busy.IsBusy)
             return;
+
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: pageIndex, area: line.Bounds))
+        {
+            try
+            {
+                await OffUiThread(() => _undoStack.Do(operation));
+            }
+            catch (TextEditException ex)
+            {
+                // These are the two honest refusals, and the wording matters more than
+                // the exception: the person is holding a form, not a stack trace.
+                Status = ex.Reason switch
+                {
+                    TextEditFailure.NotExtractable => Strings.TextIsScanned,
+                    TextEditFailure.LayoutWouldChange => LayoutRefusalText(ex.Layout),
+                    _ => Strings.TextFontCannotWrite,
+                };
+                return;
+            }
+            catch (Exception ex)
+            {
+                Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+                return;
+            }
         }
+        if (!ReferenceEquals(document, _document))
+            return;
 
         // Journalled here rather than via Apply, which EditLine does not route
         // through because it needs its own try/catch — but the recovery journal
@@ -1295,11 +1608,42 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// disturbing the rest of the page (#118). Asked before the editor opens; when it
     /// cannot, the status says why and no editor appears.
     /// </summary>
-    public bool TryBeginLineEdit(int pageIndex, PdfTextLine line)
+    /// <remarks>
+    /// The check is a dry run of the rewrite, about three seconds on a heavy page, so it runs off
+    /// the UI thread under a spinner on the line, and clicks while it runs are ignored (#145).
+    /// </remarks>
+    private async Task BeginLineEditAsync(int pageIndex, PdfTextLine line)
     {
-        if (_document is null)
-            return false;
-        using var page = _document.GetPage(pageIndex);
+        if (_document is not { } document || Busy.IsBusy)
+            return;
+
+        (bool Editable, LayoutVerdict? Refusal) judged;
+        using (Busy.Begin(Strings.BusyCheckingPage, scope: BusyScope.Page, pageIndex: pageIndex, area: line.Bounds))
+        {
+            try
+            {
+                judged = await OffUiThread(() => JudgeLine(document, pageIndex, line));
+            }
+            catch (Exception ex)
+            {
+                Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+                return;
+            }
+        }
+        if (!ReferenceEquals(document, _document))
+            return;
+        if (!judged.Editable)
+        {
+            Status = LayoutRefusalText(judged.Refusal);
+            return;
+        }
+        EditLineRequested?.Invoke(pageIndex, line);
+    }
+
+    /// <summary>Off the UI thread: whether every run of the line can be rewritten, and the first refusal.</summary>
+    private static (bool Editable, LayoutVerdict? Refusal) JudgeLine(IPdfDocument document, int pageIndex, PdfTextLine line)
+    {
+        using var page = document.GetPage(pageIndex);
         foreach (var run in line.Runs)
         {
             if (run.TextBoxId is not null)
@@ -1308,10 +1652,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             var verdict = page.GetLayoutVerdict(run.ObjectIndex);
             if (verdict is { Editable: true })
                 continue;
-            Status = LayoutRefusalText(verdict);
-            return false;
+            return (false, verdict);
         }
-        return true;
+        return (true, null);
     }
 
     /// <summary>The status for a line the layout guard refused (#118), by its cause (#128).</summary>
@@ -1432,22 +1775,53 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Raised when the view should bring a page rectangle into view.</summary>
     public event Action<int, PdfRect>? ScrollToRequested;
 
-    public void Search(string term)
+    /// <summary>Searches and returns once the matches are in: for the self-test and the capture runs.</summary>
+    public void Search(string term) => RunSynchronously(() => SearchAsync(term));
+
+    /// <summary>A newer search, a closed find bar or another document supersedes a search still running.</summary>
+    private int _searchGeneration;
+
+    /// <summary>
+    /// Search walks every page, which on a long document takes seconds: off the UI thread, with
+    /// "Searching…" (#145). It disables nothing — typing on supersedes it.
+    /// </summary>
+    public async Task SearchAsync(string term)
     {
         SearchTerm = term;
-        _matches.Clear();
-        CurrentMatchIndex = -1;
+        var generation = ++_searchGeneration;
+        var found = new List<Match>();
 
-        if (_document is not null && !string.IsNullOrWhiteSpace(term))
+        if (_document is { } document && !string.IsNullOrWhiteSpace(term))
         {
-            for (var i = 0; i < Pages.Count; i++)
+            var pageCount = Pages.Count;
+            using (Busy.Begin(Strings.BusySearching, blocksEditing: false))
             {
-                using var page = _document.GetPage(i);
-                foreach (var hit in page.FindText(term))
-                    _matches.Add(new Match(i, hit.Rects));
+                try
+                {
+                    found = await OffUiThread(() =>
+                    {
+                        var hits = new List<Match>();
+                        for (var i = 0; i < pageCount && generation == _searchGeneration; i++)
+                        {
+                            using var page = document.GetPage(i);
+                            foreach (var hit in page.FindText(term))
+                                hits.Add(new Match(i, hit.Rects));
+                        }
+                        return hits;
+                    });
+                }
+                catch (Exception) when (!ReferenceEquals(document, _document) || generation != _searchGeneration)
+                {
+                    return; // closed or superseded under it
+                }
             }
+            if (generation != _searchGeneration || !ReferenceEquals(document, _document))
+                return;
         }
 
+        _matches.Clear();
+        _matches.AddRange(found);
+        CurrentMatchIndex = -1;
         MatchCount = _matches.Count;
         ApplyHighlights();
 
@@ -1473,6 +1847,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void CloseFind()
     {
+        _searchGeneration++;
         IsFindOpen = false;
         SearchTerm = "";
         _matches.Clear();
@@ -1631,14 +2006,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// ratio preserved and clamped inside the page — the same geometry the WinUI app
     /// uses, so a document signed on one desktop looks the same on the other.
     /// </summary>
-    private void PlacePendingSignature(int pageIndex, PdfPoint point, SignatureEntry pending)
+    private async Task PlacePendingSignatureAsync(int pageIndex, PdfPoint point, SignatureEntry pending)
     {
         PendingSignature = null;
 
         SignatureBitmap image;
         try
         {
-            image = Rendering.SignatureImages.LoadBgra(pending.PngPath);
+            // Decoding the PNG is the slow half of placing; the stamp itself goes through Apply (#145).
+            image = await OffUiThread(() => Rendering.SignatureImages.LoadBgra(pending.PngPath));
         }
         catch (Exception ex)
         {
@@ -1684,23 +2060,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// against a temp file, and the user's bytes are only touched once it has
     /// succeeded.
     /// </summary>
-    public void SaveTo(Stream destination)
-    {
-        if (_document is null)
-            return;
+    public void SaveTo(Stream destination) =>
+        RunSynchronously(() => SaveThroughAsync(() => Task.FromResult(destination), ownsDestination: false));
 
-        if (FlattenOnSave)
-            FlattenOpenDocument();
-
-        // Verified rather than merely staged (#56): the bytes are reopened with the
-        // engine before the user's file is touched, so a save that produced an
-        // unreadable document leaves the original alone.
-        VerifiedSave.ToStream(_engine, _document, destination);
-        if (DocumentPath is { } saved)
-            _journal.MarkSaved(saved);
-        IsDirty = false;
-        Status = Strings.SavedFile(DocumentName);
-    }
+    /// <summary>
+    /// Save under the sandbox, where the destination is a stream the host opens (D2, #145).
+    /// Opening the person's file for writing truncates it, so <paramref name="openDestination"/>
+    /// is called only once the bytes have been built and verified in memory: a failed flatten,
+    /// serialise or read-back leaves the original untouched. False when nothing was written.
+    /// </summary>
+    public Task<bool> SaveThroughAsync(Func<Task<Stream>> openDestination, bool ownsDestination = true) =>
+        SaveCoreAsync(openDestination, ownsDestination, atomicPath: null, unchanged =>
+        {
+            if (unchanged && DocumentPath is { } saved)
+                _journal.MarkSaved(saved);
+            Status = Strings.SavedFile(DocumentName);
+        });
 
     /// <summary>
     /// Writes to a real path, which Windows can do with the stronger guarantee:
@@ -1708,20 +2083,88 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// (SDD §3.4). Used when the host has a usable local path and no sandbox in the
     /// way.
     /// </summary>
-    public void SaveToPath(string path)
+    public void SaveToPath(string path) => RunSynchronously(() => SaveToPathAsync(path));
+
+    /// <inheritdoc cref="SaveToPath"/>
+    public Task<bool> SaveToPathAsync(string path) =>
+        SaveCoreAsync(openDestination: null, ownsDestination: false, atomicPath: path, unchanged =>
+        {
+            if (unchanged)
+                _journal.MarkSaved(path);
+            DocumentPath = path;
+            DocumentName = Path.GetFileName(path);
+            Status = Strings.SavedFile(DocumentName);
+        });
+
+    /// <summary>For the self-test (D2): throws inside the save, where a failed flatten or read-back would.</summary>
+    internal Action? FailSaveForTest { get; set; }
+
+    /// <summary>
+    /// Every save: off the UI thread, "Saving…" then "Checking the saved file…", with editing,
+    /// Close and file commands waiting (#145). The document is marked saved only if nothing
+    /// changed while the save ran (D3). Failures land in the status line.
+    /// </summary>
+    private async Task<bool> SaveCoreAsync(Func<Task<Stream>>? openDestination, bool ownsDestination, string? atomicPath,
+                                           Action<bool> saved)
     {
-        if (_document is null)
-            return;
+        if (_document is not { } document || Busy.IsBusy)
+            return false;
 
-        if (FlattenOnSave)
-            FlattenOpenDocument();
+        using var busy = Busy.Begin(Strings.BusySaving);
+        var editsBefore = _editCount;
+        void Stage(VerifiedSave.SaveStage stage) =>
+            busy.SetLabel(stage == VerifiedSave.SaveStage.Verifying ? Strings.BusyCheckingSavedFile : Strings.BusySaving);
+        try
+        {
+            if (FlattenOnSave)
+                await FlattenOpenDocumentAsync(document);
 
-        VerifiedSave.ToPath(_engine, _document, path);
-        _journal.MarkSaved(path);
-        DocumentPath = path;
-        DocumentName = Path.GetFileName(path);
-        IsDirty = false;
-        Status = Strings.SavedFile(DocumentName);
+            if (atomicPath is not null)
+            {
+                // Verified rather than merely staged (#56): the bytes are reopened with the
+                // engine before the user's file is touched.
+                await OffUiThread(() =>
+                {
+                    FailSaveForTest?.Invoke();
+                    VerifiedSave.ToPath(_engine, document, atomicPath, Stage);
+                });
+            }
+            else
+            {
+                var bytes = await OffUiThread(() =>
+                {
+                    FailSaveForTest?.Invoke();
+                    using var buffer = new MemoryStream();
+                    VerifiedSave.ToStream(_engine, document, buffer, Stage);
+                    return buffer.ToArray();
+                });
+                busy.SetLabel(Strings.BusySaving);
+                // Only now is the person's file opened, and so truncated.
+                var destination = await openDestination!();
+                try
+                {
+                    await OffUiThread(() => StagedStreamWriter.Write(destination, target => target.Write(bytes)));
+                }
+                finally
+                {
+                    if (ownsDestination)
+                        await destination.DisposeAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ReportSaveFailure(ex);
+            return false;
+        }
+
+        if (!ReferenceEquals(document, _document))
+            return true;
+        var unchanged = _editCount == editsBefore;
+        saved(unchanged);
+        if (unchanged)
+            IsDirty = false;
+        return true;
     }
 
     /// <summary>
@@ -1740,12 +2183,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// realised page is re-rastered. The WinUI app's OnDocumentFlattenedAsync does
     /// the same thing for the same reason.
     /// </summary>
-    private void FlattenOpenDocument()
+    private async Task FlattenOpenDocumentAsync(IPdfDocument document)
     {
-        if (_document is null)
+        await OffUiThread(document.FlattenAllPages);
+        if (!ReferenceEquals(document, _document))
             return;
-
-        _document.FlattenAllPages();
 
         _undoStack.Clear();
         Selection = null;
@@ -1756,7 +2198,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 page.Rerender(DpiScale);
     }
 
-    private bool CanSave() => IsDocumentOpen && IsDirty;
+    private bool CanSave() => IsDocumentOpen && IsDirty && !Busy.IsBusy;
 
     /// <summary>Raised when the view should perform a save; the view owns the file handle.</summary>
     public event Action? SaveRequested;
@@ -1779,26 +2221,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// path. Null is recorded as null rather than left stale: a Shrink that refuses
     /// is better than one that silently reads the wrong document.
     /// </param>
-    public void SaveAsTo(Stream destination, string? newPath, string fileName)
-    {
-        if (_document is null)
-            return;
+    public void SaveAsTo(Stream destination, string? newPath, string fileName) =>
+        RunSynchronously(() => SaveAsThroughAsync(() => Task.FromResult(destination), newPath, fileName, ownsDestination: false));
 
-        if (FlattenOnSave)
-            FlattenOpenDocument();
-
-        VerifiedSave.ToStream(_engine, _document, destination);
-
-        DocumentPath = newPath;
-        DocumentName = fileName;
-        if (newPath is not null)
-            _journal.MarkSaved(newPath);
-
-        IsDirty = false;
-        Status = newPath is null
-            ? Strings.SavedCannotShrink(fileName)
-            : Strings.SavedFile(fileName);
-    }
+    /// <inheritdoc cref="SaveAsTo"/>
+    /// <remarks>The destination is opened only once the verified bytes exist (D2, #145).</remarks>
+    public Task<bool> SaveAsThroughAsync(Func<Task<Stream>> openDestination, string? newPath, string fileName,
+                                         bool ownsDestination = true) =>
+        SaveCoreAsync(openDestination, ownsDestination, atomicPath: null, unchanged =>
+        {
+            DocumentPath = newPath;
+            DocumentName = fileName;
+            if (unchanged && newPath is not null)
+                _journal.MarkSaved(newPath);
+            Status = newPath is null
+                ? Strings.SavedCannotShrink(fileName)
+                : Strings.SavedFile(fileName);
+        });
 
     /// <summary>
     /// A save that failed, in words. The one typed failure — the engine could not
@@ -1822,40 +2261,44 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// document stays open until the password is proven: a password that opens it but
     /// not as its owner (the user password) is as wrong as one that does not open it.
     /// </summary>
-    public UnlockOutcome Unlock(string ownerPassword)
+    public async Task<UnlockOutcome> UnlockAsync(string ownerPassword)
     {
-        if (_document is null || DocumentPath is not { } path)
+        if (_document is null || DocumentPath is not { } path || Busy.IsBusy)
             return UnlockOutcome.Failed;
 
-        IPdfDocument unlocked;
-        try
+        (IPdfDocument Document, IReadOnlyList<(double Width, double Height)> Sizes) loaded;
+        using (Busy.Begin(Strings.BusyOpening))
         {
-            unlocked = _engine.Open(path, ownerPassword);
-        }
-        catch (PdfLoadException ex) when (ex.IsPasswordError)
-        {
-            return UnlockOutcome.WrongPassword;
-        }
-        catch (PdfLoadException ex)
-        {
-            Status = DescribeLoadFailure(ex);
-            return UnlockOutcome.Failed;
-        }
-        catch (Exception ex)
-        {
-            // Moved, locked, or the grant lapsed: the restricted document stays open.
-            Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
-            return UnlockOutcome.Failed;
+            try
+            {
+                loaded = await OffUiThread(() => LoadDocument(path, ownerPassword));
+            }
+            catch (PdfLoadException ex) when (ex.IsPasswordError)
+            {
+                return UnlockOutcome.WrongPassword;
+            }
+            catch (PdfLoadException ex)
+            {
+                Status = DescribeLoadFailure(ex);
+                return UnlockOutcome.Failed;
+            }
+            catch (Exception ex)
+            {
+                // Moved, locked, or the grant lapsed: the restricted document stays open.
+                Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+                return UnlockOutcome.Failed;
+            }
         }
 
-        if (!unlocked.Security.HasFullAccess)
+        if (!loaded.Document.Security.HasFullAccess || DocumentPath != path)
         {
-            unlocked.Dispose();
-            return UnlockOutcome.WrongPassword;
+            var wrong = !loaded.Document.Security.HasFullAccess;
+            loaded.Document.Dispose();
+            return wrong ? UnlockOutcome.WrongPassword : UnlockOutcome.Failed;
         }
 
         CloseDocument();
-        Adopt(unlocked, path, openedWithPassword: true);
+        Adopt(loaded.Document, path, openedWithPassword: true, loaded.Sizes);
         Status = Strings.WithDetail(Strings.DocumentUnlocked, Strings.RecoveryOffForProtected);
         return UnlockOutcome.Unlocked;
     }
@@ -1868,36 +2311,56 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// must throw here, while the file is still untouched.
     /// </summary>
     /// <param name="newPassword">The one password (ADR-004 §5), or null to remove security.</param>
-    public byte[] PrepareSecuredCopy(string? newPassword)
+    /// <remarks>
+    /// Off the UI thread, "Saving…" then "Checking the saved file…", with editing, Close and file
+    /// commands waiting (#145). <paramref name="writeBytes"/> writes the verified bytes over the
+    /// document's own file; only then is it reopened with the new password, so the open
+    /// document, its credentials and its permissions match what is on disk (ADR-004 §6). False
+    /// when nothing was written; the status line says why.
+    /// </remarks>
+    public async Task<bool> ChangeSecurityAsync(string path, string? newPassword, string doneMessage, Func<byte[], Task> writeBytes)
     {
-        if (_document is null)
-            throw new InvalidOperationException("No document is open.");
+        if (_document is not { } document || Busy.IsBusy)
+            return false;
 
-        if (FlattenOnSave)
-            FlattenOpenDocument();
+        using (var busy = Busy.Begin(Strings.BusySaving))
+        {
+            void Stage(VerifiedSave.SaveStage stage) =>
+                busy.SetLabel(stage == VerifiedSave.SaveStage.Verifying ? Strings.BusyCheckingSavedFile : Strings.BusySaving);
+            try
+            {
+                if (FlattenOnSave)
+                    await FlattenOpenDocumentAsync(document);
 
-        using var buffer = new MemoryStream();
-        if (newPassword is null)
-            VerifiedSave.ToStreamWithoutSecurity(_engine, _document, buffer);
-        else
-            VerifiedSave.ToStreamWithSecurity(_engine, _document, buffer, newPassword, ownerPassword: null, PdfPermissions.All);
-        return buffer.ToArray();
-    }
+                var bytes = await OffUiThread(() =>
+                {
+                    using var buffer = new MemoryStream();
+                    if (newPassword is null)
+                        VerifiedSave.ToStreamWithoutSecurity(_engine, document, buffer, Stage);
+                    else
+                        VerifiedSave.ToStreamWithSecurity(_engine, document, buffer, newPassword, ownerPassword: null, PdfPermissions.All, Stage);
+                    return buffer.ToArray();
+                });
+                busy.SetLabel(Strings.BusySaving);
+                await writeBytes(bytes);
+            }
+            catch (Exception ex)
+            {
+                ReportSaveFailure(ex);
+                return false;
+            }
+        }
 
-    /// <summary>
-    /// After the secured copy was written over the document's own file: reopen that file
-    /// with the new password, so the open document, its credentials and its permissions
-    /// match what is on disk (ADR-004 §6).
-    /// </summary>
-    public void AdoptSecuredFile(string path, string? newPassword, string doneMessage)
-    {
+        if (!ReferenceEquals(document, _document))
+            return true;
         _journal.MarkSaved(path);
         IsDirty = false;
-        Open(path, newPassword);
+        await OpenAsync(path, newPassword);
         if (IsDocumentOpen)
             Status = newPassword is null
                 ? doneMessage
                 : Strings.WithDetail(doneMessage, Strings.RecoveryOffForProtected);
+        return true;
     }
 
     // --- Zoom ---
@@ -2033,6 +2496,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         _undoStack.Clear();
         _pageWarnings.Reset();
+        _searchGeneration++;
         Selection = null;
         RaiseUndoRedo();
 
@@ -2046,11 +2510,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ShowEmptyState));
     }
 
+    /// <summary>The person chose Don't Save: closing now ends the session and removes the journal.</summary>
+    public void DiscardChanges() => _changesDiscarded = true;
+
     public void Dispose()
     {
-        // A clean exit ends the session, so the next launch does not offer to
-        // recover a document the user deliberately finished with.
-        _journal.EndSession();
+        if (_disposed)
+            return;
+        _disposed = true;
+        // A clean exit ends the session, so the next launch does not offer to recover a
+        // document the user deliberately finished with. Only a clean one (D1, #145): with
+        // unsaved edits nobody agreed to lose, the journal stays for the next launch to offer.
+        if (!IsDirty || _changesDiscarded)
+            _journal.EndSession();
         _journal.Dispose();
         CloseDocument();
         _engine.Dispose();

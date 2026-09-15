@@ -25,9 +25,14 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         ViewModel = new MainViewModel(this);
+        ViewModel.WatchBusyState();
         InitializeComponent();
-        _printer = new PdfPrinter(this, () => ViewModel.CurrentDocument, () => ViewModel.OpenDocumentName);
+        _printer = new PdfPrinter(this, () => ViewModel.CurrentDocument, () => ViewModel.OpenDocumentName,
+                                  ViewModel.Busy, ViewModel.ShowErrorAsync);
         _printer.Register();
+        // The page-level spinner (#145): on the line the text-edit check is about, or at the
+        // top of the page a change waits on.
+        ViewModel.Busy.PropertyChanged += (_, _) => UpdatePageBusyIndicator();
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "megapdf.ico"));
         ViewModel.LoadSignatures();
         ViewModel.LoadRecentDocuments();
@@ -153,6 +158,11 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private async Task RoutePageActivationAsync(Grid pageGrid, PageView pageView, PdfPoint pagePoint)
     {
+        // Taps while work runs — a change on its way, its page check, the text-edit check, a
+        // save — are ignored rather than queued (#145).
+        if (ViewModel.Busy.IsBusy)
+            return;
+
         // A tap outside an open editor commits it. The page canvas isn't focusable,
         // so LostFocus alone would never fire for clicks on empty page space.
         if (_activeEditorCommit is { } pendingCommit)
@@ -250,8 +260,18 @@ public sealed partial class MainWindow : Window
                 // Lines, not fragments: the editor covers the whole visual line (1.1).
                 var line = hit.TextLine!;
                 // #118: on pages PDFium cannot rewrite faithfully, say so before typing.
-                // #128: and say why.
-                if (await Task.Run(() => ViewModel.LineLayoutRefusal(pageView.Index, line)) is { } refusal)
+                // #128: and say why. #145: under a spinner on the line, taps ignored meanwhile.
+                LayoutVerdict? refusal;
+                try
+                {
+                    refusal = await ViewModel.CheckLineAsync(pageView.Index, line);
+                }
+                catch (Exception ex)
+                {
+                    await ViewModel.ShowErrorAsync(Strings.CannotEditTextTitle, UserFacing.Describe(ex));
+                    break;
+                }
+                if (refusal is not null)
                 {
                     await ViewModel.ShowLayoutRefusalAsync(refusal);
                     break;
@@ -444,7 +464,8 @@ public sealed partial class MainWindow : Window
     // --- Signature selection chrome (SDD §3.3: drag to move, handle to resize, ✕/Delete to remove) ---
 
     /// <summary><paramref name="Run"/> is set for an added text box: what the toolbar's pickers restyle (#144).</summary>
-    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable, PdfTextRun? Run = null);
+    /// <param name="Pad">DIPs the chrome stands off the item on every side; taken back out when a move is committed.</param>
+    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable, PdfTextRun? Run = null, double Pad = 0);
 
     private StampSelection? _selection;
     private Grid? _selectionChrome;
@@ -454,19 +475,24 @@ public sealed partial class MainWindow : Window
         Deselect();
         if (pageGrid is not PageCanvas canvas)
             return;
-        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable, run);
-
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
+        // An added text box's bounds are its glyphs' tight box: chrome drawn exactly on them put
+        // the border across the letters and the × chip over the last one. It stands off the
+        // text instead, and the chip sits outside it.
+        var isTextBox = annotationId.StartsWith("textbox:", StringComparison.Ordinal);
+        var pad = isTextBox ? 4 : 0;
+        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable, run, pad);
+
         var accent = Brand.Brush("BrandAccentBrush");
         var aspect = bounds.Height / bounds.Width;
 
         var chrome = new Grid
         {
-            Width = bounds.Width * toDip,
-            Height = bounds.Height * toDip,
+            Width = (bounds.Width * toDip) + (2 * pad),
+            Height = (bounds.Height * toDip) + (2 * pad),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(bounds.X * toDip, bounds.Y * toDip, 0, 0),
+            Margin = new Thickness((bounds.X * toDip) - pad, (bounds.Y * toDip) - pad, 0, 0),
             Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
         };
         if (movable)
@@ -502,7 +528,8 @@ public sealed partial class MainWindow : Window
             Padding = new Thickness(0),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, -11, -11, 0),
+            // On a text box the chip sits beside the box, clear of the text.
+            Margin = isTextBox ? new Thickness(0, -11, -26, 0) : new Thickness(0, -11, -11, 0),
         };
         chrome.Children.Add(remove);
 
@@ -547,6 +574,11 @@ public sealed partial class MainWindow : Window
 
         canvas.Children.Add(chrome);
         _selectionChrome = chrome;
+
+        // An added box or a cover selected is about to be moved, restyled or removed: its
+        // page's #139 check starts now, so the answer is usually ready by the change (#145).
+        if (annotationId.StartsWith("textbox:", StringComparison.Ordinal) || annotationId.StartsWith("whiteout:", StringComparison.Ordinal))
+            ViewModel.PreparePageCheck(pageView.Index);
 
         // An added text box brings the toolbar's pickers, showing its own face and size (#144).
         if (run is not null)
@@ -602,10 +634,11 @@ public sealed partial class MainWindow : Window
         var chrome = _selectionChrome;
 
         var toPoint = 72.0 / 96 / ViewModel.ZoomFactor;
-        var width = chrome.Width * toPoint;
-        var height = chrome.Height * toPoint;
-        var x = Math.Clamp(chrome.Margin.Left * toPoint, 0, Math.Max(0, selection.Page.PointsWidth - width));
-        var y = Math.Clamp(chrome.Margin.Top * toPoint, 0, Math.Max(0, selection.Page.PointsHeight - height));
+        var pad = selection.Pad;
+        var width = (chrome.Width - (2 * pad)) * toPoint;
+        var height = (chrome.Height - (2 * pad)) * toPoint;
+        var x = Math.Clamp((chrome.Margin.Left + pad) * toPoint, 0, Math.Max(0, selection.Page.PointsWidth - width));
+        var y = Math.Clamp((chrome.Margin.Top + pad) * toPoint, 0, Math.Max(0, selection.Page.PointsHeight - height));
         var newBounds = new PdfRect(x, y, width, height);
 
         Deselect();
@@ -673,7 +706,7 @@ public sealed partial class MainWindow : Window
 
     private void OnPagePointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (!ViewModel.IsWhiteoutMode || sender is not PageCanvas canvas)
+        if (!ViewModel.IsWhiteoutMode || ViewModel.Busy.IsBusy || sender is not PageCanvas canvas)
             return;
         _whiteoutCanvas = canvas;
         _whiteoutStart = e.GetCurrentPoint(canvas).Position;
@@ -1033,7 +1066,7 @@ public sealed partial class MainWindow : Window
     private void OnAppWindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
         ViewModel.SaveViewState();
-        if (_allowClose || !ViewModel.HasUnsavedChanges)
+        if (_allowClose || (!ViewModel.HasUnsavedChanges && !ViewModel.Busy.IsWorking))
         {
             // Consented close — nothing left to recover (SDD §3.4).
             ViewModel.EndJournalSession();
@@ -1043,34 +1076,99 @@ public sealed partial class MainWindow : Window
         _ = ConfirmCloseAsync();
     }
 
+    private bool _confirmingClose;
+
+    /// <summary>
+    /// Waits for work still running — a save, a change — and then asks about unsaved changes
+    /// (#145: Close waits while a save runs). The question is the view model's, so opening
+    /// another document asks it the same way (D5).
+    /// </summary>
     private async Task ConfirmCloseAsync()
     {
-        var dialog = new ContentDialog
+        if (_confirmingClose)
+            return;
+        _confirmingClose = true;
+        try
         {
-            Title = Strings.SaveChangesTitle(ViewModel.OpenDocumentName),
-            Content = Strings.SaveChangesBody,
-            PrimaryButtonText = Strings.Save,
-            SecondaryButtonText = Strings.DontSave,
-            CloseButtonText = Strings.Cancel,
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = Content.XamlRoot,
-        };
-
-        switch (await dialog.ShowAsync())
-        {
-            case ContentDialogResult.Primary:
-                await ViewModel.SaveCommand.ExecuteAsync(null);
-                if (!ViewModel.HasUnsavedChanges) // save succeeded
-                {
-                    _allowClose = true;
-                    Close();
-                }
-                break;
-            case ContentDialogResult.Secondary:
+            await ViewModel.Busy.WhenIdleAsync();
+            if (await ViewModel.ConfirmSaveChangesAsync())
+            {
                 _allowClose = true;
                 Close();
-                break;
+            }
         }
+        catch (Exception ex)
+        {
+            await ViewModel.ShowErrorAsync(Strings.CouldNotSaveTitle, UserFacing.Describe(ex));
+        }
+        finally
+        {
+            _confirmingClose = false;
+        }
+    }
+
+    // --- The page-level busy spinner (#145) ---
+
+    private FrameworkElement? _pageBusyIndicator;
+    private PageCanvas? _pageBusyCanvas;
+
+    /// <summary>
+    /// A small ProgressRing beside the line the text-edit check is about, or a labelled one at
+    /// the top of the page a change waits on. Shown and hidden with BusyState's timing.
+    /// </summary>
+    private void UpdatePageBusyIndicator()
+    {
+        if (_pageBusyIndicator is not null)
+        {
+            _pageBusyCanvas?.Children.Remove(_pageBusyIndicator);
+            _pageBusyIndicator = null;
+            _pageBusyCanvas = null;
+        }
+
+        var busy = ViewModel.Busy;
+        if (!busy.ShowsPageSpinner || busy.PageIndex < 0 || FindPageCanvas(busy.PageIndex) is not { } canvas)
+            return;
+
+        var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
+        FrameworkElement indicator;
+        if (busy.Area is { } line)
+        {
+            const double ring = 16;
+            indicator = new ProgressRing
+            {
+                IsActive = true,
+                Width = ring,
+                Height = ring,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness((line.X + line.Width) * toDip + 8,
+                                       line.Y * toDip + Math.Max(0, ((line.Height * toDip) - ring) / 2), 0, 0),
+                IsHitTestVisible = false,
+            };
+        }
+        else
+        {
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            content.Children.Add(new ProgressRing { IsActive = true, Width = 16, Height = 16 });
+            content.Children.Add(new TextBlock { Text = busy.Label, VerticalAlignment = VerticalAlignment.Center });
+            indicator = new Border
+            {
+                Child = content,
+                Padding = new Thickness(12, 6, 12, 6),
+                CornerRadius = new CornerRadius(6),
+                Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"],
+                BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 12, 0, 0),
+                IsHitTestVisible = false,
+            };
+        }
+        AutomationProperties.SetName(indicator, busy.Label);
+        canvas.Children.Add(indicator);
+        _pageBusyIndicator = indicator;
+        _pageBusyCanvas = canvas;
     }
 
     private async void OnRecentDocumentClicked(object sender, RoutedEventArgs e)

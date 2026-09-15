@@ -8,11 +8,16 @@
 #include "megapdf_core.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -20,6 +25,7 @@
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
 #include "fpdf_ppo.h"   // FPDF_ImportPagesByIndex: the #118 dry run works on a copy of the page
+#include "fpdf_progressive.h"  // the page check renders in slices it can stop between (#145)
 #include "fpdf_flatten.h"
 #include "fpdf_save.h"
 #include "fpdf_text.h"
@@ -32,6 +38,11 @@
 
 struct megapdf_detached;
 
+// A flag the caller raises from any thread to stop a page check at its next stage (#145).
+struct megapdf_cancel {
+    std::atomic<int> raised{0};
+};
+
 struct megapdf_document {
     std::vector<unsigned char> bytes;   // FPDF_LoadMemDocument64 needs the buffer alive for the document's life.
     FPDF_DOCUMENT doc = nullptr;
@@ -40,6 +51,12 @@ struct megapdf_document {
     std::vector<megapdf_page*> open_pages;  // closed for the caller if still open at megapdf_close()
     std::vector<megapdf_detached*> detached;  // freed at megapdf_close() if never restored or discarded
     std::map<std::pair<int, int>, megapdf_layout_verdict> rewrite_keeps_page;  // #118/#128 verdicts by (page index, object index)
+    // How many times each page's content has been regenerated: a page check that let go of
+    // the lock between its stages caches its answer only if the page did not change (#145).
+    std::map<int, unsigned long long> page_changes;
+    // Page checks running between stages without the lock; megapdf_close() waits for them (#145).
+    int active_checks = 0;
+    bool closing = false;
     // What the document was opened with, so megapdf_open_like() can read back a saved
     // copy that is still protected (#132). Memory only; megapdf_close() wipes it.
     std::string unlock;
@@ -83,6 +100,12 @@ std::recursive_mutex& CoreLock() {
     return lock;
 }
 using Guard = std::lock_guard<std::recursive_mutex>;
+
+// Signalled when a page check that runs between stages without the lock finishes (#145).
+std::condition_variable_any& ChecksDone() {
+    static std::condition_variable_any done;
+    return done;
+}
 
 thread_local unsigned int g_last_error = 0;
 thread_local std::string g_last_message;
@@ -250,7 +273,11 @@ MEGAPDF_API megapdf_document* megapdf_open_like(const megapdf_document* like, co
 
 MEGAPDF_API void megapdf_close(megapdf_document* d) {
     if (d == nullptr) return;
-    Guard guard(CoreLock());
+    std::unique_lock<std::recursive_mutex> guard(CoreLock());
+    // A page check between its stages holds the document without the lock (#145): tell it
+    // to stop at its next stage, and wait until it has.
+    d->closing = true;
+    ChecksDone().wait(guard, [d] { return d->active_checks == 0; });
     for (megapdf_page* p : d->open_pages) {
         p->owner = nullptr;   // the document is going; do not call back into its form handle
         if (d->form != nullptr) FORM_OnBeforeClosePage(p->page, d->form);
@@ -1221,7 +1248,22 @@ struct ScratchShot {
     std::vector<unsigned char> px;
 };
 
-ScratchShot RenderScratchPage(FPDF_PAGE page) {
+// Asks PDFium to pause a progressive render once a slice has run this long (#145).
+struct ScratchPause {
+    std::chrono::steady_clock::time_point slice_started;
+};
+
+FPDF_BOOL ScratchNeedToPause(IFSDK_PAUSE* pause) {
+    const auto* state = static_cast<const ScratchPause*>(pause->user);
+    return std::chrono::steady_clock::now() - state->slice_started >= std::chrono::milliseconds(20) ? 1 : 0;
+}
+
+// With `go_on`, the render runs in slices and `go_on` is asked between them (#145): it may let
+// go of the core lock, and when it says stop the render ends there and `*stopped` is set. A
+// single page with a huge CMYK photo takes over ten seconds to render in PDFium, so a stop
+// asked only between whole renders could still wait that long. Between slices no PDFium call
+// is in progress, so other threads may use the library. The pixels are the same either way.
+ScratchShot RenderScratchPage(FPDF_PAGE page, const std::function<bool()>* go_on = nullptr, bool* stopped = nullptr) {
     const double pw = FPDF_GetPageWidthF(page), ph = FPDF_GetPageHeightF(page);
     double scale = 1.0;
     while (pw * ph * scale * scale > 1.0e6 && scale > 1e-3) scale /= 2;
@@ -1232,7 +1274,25 @@ ScratchShot RenderScratchPage(FPDF_PAGE page) {
     FPDF_BITMAP bmp = FPDFBitmap_CreateEx(shot.w, shot.h, FPDFBitmap_BGRA, shot.px.data(), shot.w * 4);
     if (bmp == nullptr) return ScratchShot{};
     FPDFBitmap_FillRect(bmp, 0, 0, shot.w, shot.h, 0xFFFFFFFF);
-    FPDF_RenderPageBitmap(bmp, page, 0, 0, shot.w, shot.h, 0, FPDF_ANNOT);
+    if (go_on == nullptr) {
+        FPDF_RenderPageBitmap(bmp, page, 0, 0, shot.w, shot.h, 0, FPDF_ANNOT);
+    } else {
+        ScratchPause state{std::chrono::steady_clock::now()};
+        IFSDK_PAUSE pause{};
+        pause.version = 1;
+        pause.NeedToPauseNow = ScratchNeedToPause;
+        pause.user = &state;
+        int status = FPDF_RenderPageBitmap_Start(bmp, page, 0, 0, shot.w, shot.h, 0, FPDF_ANNOT, &pause);
+        while (status == FPDF_RENDER_TOBECONTINUED) {
+            if (!(*go_on)()) {
+                if (stopped != nullptr) *stopped = true;
+                break;
+            }
+            state.slice_started = std::chrono::steady_clock::now();
+            status = FPDF_RenderPage_Continue(page, &pause);
+        }
+        FPDF_RenderPage_Close(page);
+    }
     FPDFBitmap_Destroy(bmp);
     return shot;
 }
@@ -1361,12 +1421,18 @@ void CompareRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>
 }
 
 // Judges a reopened rewrite against the reopened page as it was.
-megapdf_layout_verdict CompareRewrite(FPDF_PAGE was_page, FPDF_PAGE reopened, const std::vector<PageBox>& edited) {
+// `go_on`, when given, is asked between the two renders, the heavy half of the compare
+// (#145); when it says stop, the verdict returned means nothing.
+megapdf_layout_verdict CompareRewrite(FPDF_PAGE was_page, FPDF_PAGE reopened, const std::vector<PageBox>& edited,
+                                      const std::function<bool()>* go_on = nullptr) {
     megapdf_layout_verdict v{};
     v.cause = MEGAPDF_LAYOUT_REWRITE_FAILED;
     // Rendered before the text layer is read, as the guard always has.
-    const ScratchShot shot_was = RenderScratchPage(was_page);
-    const ScratchShot shot_now = RenderScratchPage(reopened);
+    bool stopped = false;
+    const ScratchShot shot_was = RenderScratchPage(was_page, go_on, &stopped);
+    if (stopped || (go_on != nullptr && !(*go_on)())) return v;
+    const ScratchShot shot_now = RenderScratchPage(reopened, go_on, &stopped);
+    if (stopped) return v;
     const std::vector<ScratchRun> runs_was = ScratchRuns(was_page);
     const std::vector<ScratchRun> runs_now = ScratchRuns(reopened);
     if (!CompareShots(was_page, shot_was, shot_now, edited, runs_was, &v)) {
@@ -1566,6 +1632,7 @@ bool RewriteObjectsUnlocked(FPDF_PAGE page, const std::vector<int>& indices) {
 
 // A change to the page moves object indices, so every verdict for it is stale (#137).
 void ForgetVerdicts(megapdf_document* d, int page_index) {
+    d->page_changes[page_index]++;
     auto& verdicts = d->rewrite_keeps_page;
     auto it = verdicts.lower_bound(std::make_pair(page_index, -2147483647 - 1));
     while (it != verdicts.end() && it->first.first == page_index) it = verdicts.erase(it);
@@ -1590,8 +1657,20 @@ bool RewritePageUnlocked(FPDF_PAGE page) {
 // objects and their hidden copies (#136) — take them off and put them straight back, which is
 // what any edit forces; with NULL, regenerates the page with nothing changed (#139). Then saves,
 // reopens and compares with a reopened copy of the page before the rewrite.
-megapdf_layout_verdict DryRunUnlocked(megapdf_document* d, int page_index, const std::vector<int>* runs) {
+//
+// `between`, when given, is called between the run's stages: after the copy is made and
+// rendered, after each save, and after the rewrite. It may let go of the core lock and take it
+// back (#145), which is safe because nothing but this run can reach the scratch documents; it
+// returns false to stop, and then `*aborted` is set and the verdict means nothing. Only a call
+// that holds the core lock once, at the top of an ABI entry point, may let go of it.
+megapdf_layout_verdict DryRunUnlocked(megapdf_document* d, int page_index, const std::vector<int>* runs,
+                                      const std::function<bool()>* between = nullptr, bool* aborted = nullptr) {
     megapdf_layout_verdict verdict{0, MEGAPDF_LAYOUT_REWRITE_FAILED, 0, 0, 0, 0.0};
+    const std::function<bool()> go_on = [&]() {
+        if (between == nullptr || (*between)()) return true;
+        if (aborted != nullptr) *aborted = true;
+        return false;
+    };
     FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
     if (scratch != nullptr) {
         const int indices[1] = {page_index};
@@ -1610,30 +1689,40 @@ megapdf_layout_verdict DryRunUnlocked(megapdf_document* d, int page_index, const
             // document's warm one, and refused edits that changed nothing. Resolve the
             // page's fonts here first, then judge a reopened copy of the page as it was
             // against a reopened copy of the rewrite.
-            RenderScratchPage(page);
+            bool stopped = false;
+            RenderScratchPage(page, between != nullptr ? &go_on : nullptr, &stopped);
+            if (stopped || !go_on()) {
+                FPDF_ClosePage(page);
+                FPDF_CloseDocument(scratch);
+                return verdict;
+            }
             ScratchWriter unchanged{};
             unchanged.fw.version = 1;
             unchanged.fw.WriteBlock = ScratchWriteBlock;
             const bool saved_unchanged = FPDF_SaveAsCopy(scratch, &unchanged.fw, 0);
             std::vector<PageBox> edited;
             bool rewritten = false;
-            if (runs != nullptr) {
-                const std::vector<int> judged_objects = WithHiddenCopies(page, *runs);
-                edited = BoundsOf(page, judged_objects);
-                rewritten = RewriteObjectsUnlocked(page, judged_objects);
-            } else {
-                rewritten = RewritePageUnlocked(page);
+            if (saved_unchanged && go_on()) {
+                if (runs != nullptr) {
+                    const std::vector<int> judged_objects = WithHiddenCopies(page, *runs);
+                    edited = BoundsOf(page, judged_objects);
+                    rewritten = RewriteObjectsUnlocked(page, judged_objects);
+                } else {
+                    rewritten = RewritePageUnlocked(page);
+                }
             }
             FPDF_ClosePage(page);
             ScratchWriter writer{};
             writer.fw.version = 1;
             writer.fw.WriteBlock = ScratchWriteBlock;
-            if (saved_unchanged && rewritten && FPDF_SaveAsCopy(scratch, &writer.fw, 0)) {
+            if (saved_unchanged && rewritten && go_on() && FPDF_SaveAsCopy(scratch, &writer.fw, 0) && go_on()) {
                 FPDF_DOCUMENT was = FPDF_LoadMemDocument64(unchanged.out.data(), unchanged.out.size(), nullptr);
                 FPDF_DOCUMENT again = FPDF_LoadMemDocument64(writer.out.data(), writer.out.size(), nullptr);
                 FPDF_PAGE was_page = was ? FPDF_LoadPage(was, 0) : nullptr;
                 FPDF_PAGE reopened = again ? FPDF_LoadPage(again, 0) : nullptr;
-                if (was_page != nullptr && reopened != nullptr) verdict = CompareRewrite(was_page, reopened, edited);
+                // Only the page check renders in slices; the text guard renders as it always has (#118).
+                if (was_page != nullptr && reopened != nullptr && go_on())
+                    verdict = CompareRewrite(was_page, reopened, edited, between != nullptr ? &go_on : nullptr);
                 if (reopened != nullptr) FPDF_ClosePage(reopened);
                 if (was_page != nullptr) FPDF_ClosePage(was_page);
                 if (again != nullptr) FPDF_CloseDocument(again);
@@ -1717,10 +1806,76 @@ MEGAPDF_API int megapdf_last_layout_verdict(megapdf_layout_verdict* out) {
 }
 
 MEGAPDF_API int megapdf_page_regeneration_verdict(const megapdf_page* p, megapdf_layout_verdict* out) {
+    return megapdf_page_regeneration_verdict_cancellable(p, nullptr, out);
+}
+
+MEGAPDF_API int megapdf_page_regeneration_verdict_cancellable(const megapdf_page* p, const megapdf_cancel* cancel,
+                                                             megapdf_layout_verdict* out) {
     if (p == nullptr || p->owner == nullptr || p->page == nullptr || p->index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    std::unique_lock<std::recursive_mutex> lock(CoreLock());
+    // The page handle may be closed while the run has let go of the lock: from here on only
+    // the document (which megapdf_close() keeps alive until the run ends) and the index are used.
+    megapdf_document* d = p->owner;
+    const int index = p->index;
+    const auto key = std::make_pair(index, kPageVerdictKey);
+    const auto cached = d->rewrite_keeps_page.find(key);
+    if (cached != d->rewrite_keeps_page.end()) {
+        *out = cached->second;
+        return out->editable ? 1 : 0;
+    }
+    auto raised = [cancel] { return cancel != nullptr && cancel->raised.load(std::memory_order_relaxed) != 0; };
+    if (raised() || d->closing) return MEGAPDF_ERR_CANCELLED;
+
+    const unsigned long long changes = d->page_changes[index];
+    d->active_checks++;
+    // After a stage that took a while the lock is let go, so rendering, edits and saves on any
+    // document go on while a slow page is judged: they wait one stage, not the whole run. A
+    // short sleep rather than a yield, because a mutex is not fair and the waiting thread
+    // would otherwise rarely win it back. Quick stages keep the lock: a typical page is judged
+    // in tens of milliseconds, and a hand-over costs a scheduler tick on some systems. A
+    // raised flag or a closing document stops the run at any stage.
+    auto stage_started = std::chrono::steady_clock::now();
+    const std::function<bool()> between = [&]() {
+        if (std::chrono::steady_clock::now() - stage_started >= std::chrono::milliseconds(20)) {
+            lock.unlock();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            lock.lock();
+            stage_started = std::chrono::steady_clock::now();
+        }
+        return !raised() && !d->closing;
+    };
+    bool aborted = false;
+    const megapdf_layout_verdict verdict = DryRunUnlocked(d, index, nullptr, &between, &aborted);
+    d->active_checks--;
+    // megapdf_close() may be waiting; it cannot run until this call lets go of the lock.
+    ChecksDone().notify_all();
+    if (aborted) return MEGAPDF_ERR_CANCELLED;
+    // A page that changed while the run had let go of the lock was judged as it was: the
+    // answer is given, but not kept for the page as it is now.
+    if (!d->closing && d->page_changes[index] == changes) d->rewrite_keeps_page[key] = verdict;
+    *out = verdict;
+    return verdict.editable ? 1 : 0;
+}
+
+MEGAPDF_API int megapdf_page_regeneration_verdict_cached(const megapdf_page* p, megapdf_layout_verdict* out) {
+    if (p == nullptr || p->owner == nullptr || p->index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
-    *out = JudgePageUnlocked(p->owner, p->index);
+    const auto cached = p->owner->rewrite_keeps_page.find(std::make_pair(p->index, kPageVerdictKey));
+    if (cached == p->owner->rewrite_keeps_page.end()) return MEGAPDF_ERR_NOT_JUDGED;
+    *out = cached->second;
     return out->editable ? 1 : 0;
+}
+
+MEGAPDF_API megapdf_cancel* megapdf_cancel_new(void) {
+    return new (std::nothrow) megapdf_cancel();
+}
+
+MEGAPDF_API void megapdf_cancel_raise(megapdf_cancel* cancel) {
+    if (cancel != nullptr) cancel->raised.store(1, std::memory_order_relaxed);
+}
+
+MEGAPDF_API void megapdf_cancel_free(megapdf_cancel* cancel) {
+    delete cancel;
 }
 
 }  // extern "C"

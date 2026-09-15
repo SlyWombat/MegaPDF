@@ -133,6 +133,22 @@ Conventions (OQLF, Canadian French):
 | Smaller copy saved | Copie réduite enregistrée | |
 | Saved | Enregistré | |
 | Saving… | Enregistrement… | |
+| Opening… | Ouverture… | busy strip (#145) |
+| Checking the saved file… | Vérification du fichier enregistré… | busy strip, while a save is read back (#145) |
+| Checking this page… | Vérification de cette page… | page spinner, the #139 check and the text-edit check (#145) |
+| Applying… | Application de la modification… | page spinner while a change is made (#145) |
+| Searching… | Recherche… | busy strip (#145) |
+| Making a smaller copy… | Création d'une copie réduite… | busy strip, shrink for email (#145) |
+| Preparing to print… | Préparation de l'impression… | busy strip (#145) |
+| Restoring your edits… | Restauration de vos modifications… | busy strip, crash recovery (#145) |
+| Do you want to save the changes made to the document “{0}”? | Voulez-vous enregistrer les modifications apportées au document « {0} »? | macOS unsaved-changes sheet (#145); Windows keeps "Save changes to {0}?" |
+| Don't Save | Ne pas enregistrer | macOS button, title case (#145) |
+| Couldn't print | Impossible d'imprimer | (#145) |
+| Couldn't make that change | Impossible d'effectuer cette modification | (#145) |
+| The change could not be made. | La modification n'a pas pu être effectuée. | macOS status line (#145) |
+| Couldn't restore your edits | Impossible de restaurer vos modifications | (#145) |
+| Couldn't search this document. | Impossible de rechercher dans ce document. | Android (#145) |
+| Couldn't move this signature | Impossible de déplacer cette signature | Android (#145) |
 | PDF document | Document PDF | file-type name |
 | {name} - edited | {name} - modifié | suggested file name |
 | {name} - smaller | {name} - réduit | suggested file name |

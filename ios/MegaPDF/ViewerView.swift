@@ -4,6 +4,9 @@ import SwiftUI
 /// signature placement chrome, search bar, and save/sign toolbar.
 struct ViewerView: View {
     @ObservedObject var model: ViewerModel
+    /// The model's busy state (#145), observed here so the strip, the page spinner and the
+    /// disabled controls follow it.
+    @ObservedObject var busy: BusyState
     let displayName: String
     let pageSizes: [CGSize]
     let onSaveCopy: () -> Void
@@ -68,7 +71,14 @@ struct ViewerView: View {
                         }
                 )
                 .safeAreaInset(edge: .top, spacing: 0) {
-                    if searchOpen { searchBar }
+                    VStack(spacing: 0) {
+                        if searchOpen { searchBar }
+                        // Document-level work (#145): a strip under the top chrome.
+                        if let work = busy.strip {
+                            BusyStrip(label: work.label.text)
+                                .transition(.opacity)
+                        }
+                    }
                 }
                 .onChange(of: searchText) { term in
                     model.search(term: term)
@@ -101,22 +111,26 @@ struct ViewerView: View {
         // the HIG lays out an iPhone document viewer. Everything else stays in More,
         // so the page keeps the screen.
         .toolbar {
+            // #145: while a save, a password change or an open runs, Close and the file commands
+            // are disabled; the model ignores them too while a change is being applied.
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Close") {
+                    guard !model.closeBlocked else { return }
                     if model.isDirty { confirmDiscard = true } else { onClose() }
                 }
+                .disabled(model.fileCommandsBlocked)
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button(saveLabel) { model.save() }
-                    .disabled(!model.isDirty || model.isSaving)
+                    .disabled(!model.isDirty || model.isSaving || model.fileCommandsBlocked)
                 Menu {
                     Button("Save a copy", action: onSaveCopy)
-                        .disabled(model.isSaving)
+                        .disabled(model.isSaving || model.fileCommandsBlocked)
                     Button("Password…", action: model.showPasswordCommand)
-                        .disabled(!model.canUsePasswordCommand)
+                        .disabled(!model.canUsePasswordCommand || model.fileCommandsBlocked)
                     if model.capabilities.isRestricted {
                         Button("Unlock with owner password…", action: model.showUnlock)
-                            .disabled(model.isUnlocking)
+                            .disabled(model.isUnlocking || model.fileCommandsBlocked)
                     }
                     Divider()
                     Button("About MegaPDF") { aboutOpen = true }
@@ -131,11 +145,11 @@ struct ViewerView: View {
                 Button { signaturesOpen = true } label: {
                     toolLabel("Sign", systemImage: "signature")
                 }
-                .disabled(!model.capabilities.canSign)
+                .disabled(!model.capabilities.canSign || model.fileCommandsBlocked)
                 Button { model.startTextPlacement() } label: {
                     toolLabel("Add text", systemImage: "character.textbox")
                 }
-                .disabled(!model.capabilities.canAddText)
+                .disabled(!model.capabilities.canAddText || model.fileCommandsBlocked)
                 Button {
                     if searchOpen { closeSearch() } else { searchOpen = true }
                 } label: {
@@ -146,11 +160,11 @@ struct ViewerView: View {
                 Button(action: model.undo) {
                     toolLabel("Undo", systemImage: "arrow.uturn.backward")
                 }
-                .disabled(!model.canUndo)
+                .disabled(!model.canUndo || model.fileCommandsBlocked)
                 Button(action: model.redo) {
                     toolLabel("Redo", systemImage: "arrow.uturn.forward")
                 }
-                .disabled(!model.canRedo)
+                .disabled(!model.canRedo || model.fileCommandsBlocked)
             }
         }
         .sheet(isPresented: $aboutOpen) {
@@ -237,7 +251,8 @@ struct ViewerView: View {
             )
         }
         .alert("Unsaved changes", isPresented: $confirmDiscard) {
-            Button("Save") { model.save() }
+            // Saves, then closes once the document is saved (#145).
+            Button("Save") { model.save(thenClose: true) }
             Button("Discard", role: .destructive, action: onClose)
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -403,6 +418,15 @@ struct ViewerView: View {
                     onEdit: model.editSelectedTextBox
                 )
             }
+            // Page-level work (#145): a small spinner on the line or box it is about, else mid-page.
+            if let work = busy.pageIndicator, case let .page(page, rect) = work.scope, page == index {
+                let scaleX = width / size.width
+                let scaleY = height / size.height
+                PageBusyIndicator(label: work.label.text)
+                    .position(
+                        x: rect.map { CGFloat(($0.left + $0.right) / 2) * scaleX } ?? width / 2,
+                        y: rect.map { (size.height - CGFloat(($0.bottom + $0.top) / 2)) * scaleY } ?? height / 2)
+            }
         }
         .frame(width: width, height: height)
         .clipped()
@@ -429,6 +453,62 @@ struct ViewerView: View {
         guard let first = visible.min(), let last = visible.max() else { return }
         let widthPx = Int(containerWidth * effectiveZoom * displayScale)
         model.updateRenderWindow(first: first, last: last, widthPx: widthPx)
+    }
+}
+
+/// Document-level work in progress (#145): a label over an indeterminate bar, under the
+/// navigation bar. VoiceOver reads the label; the model announces it when the strip appears.
+struct BusyStrip: View {
+    let label: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.footnote)
+                .foregroundColor(.secondary)
+            ProgressView()
+                .progressViewStyle(.linear)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("busyStrip")
+    }
+}
+
+/// Page-level work in progress (#145): a small spinner on the page, named for VoiceOver.
+struct PageBusyIndicator: View {
+    let label: String
+
+    var body: some View {
+        ProgressView()
+            .padding(8)
+            .background(.regularMaterial, in: Circle())
+            .shadow(radius: 2, y: 1)
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityIdentifier("pageBusy")
+    }
+}
+
+/// A launch or reopen in progress with no document on screen yet (#145): "Opening…" once it
+/// has taken half a second, nothing before.
+struct OpeningView: View {
+    @ObservedObject var busy: BusyState
+
+    var body: some View {
+        ZStack {
+            if let work = busy.strip {
+                ProgressView(work.label.text)
+                    .accessibilityIdentifier("busyOpening")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

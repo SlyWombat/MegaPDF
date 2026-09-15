@@ -1,0 +1,58 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -154,6 +154,26 @@
+   }
+ }
+ 
++// Whether `page_object` draws with resources it does not name: a form XObject
++// with no /Resources of its own, or text in a Type3 font without them, uses the
++// page's (CPDF_Form::ChooseResourcesDict, CPDF_Type3Font::LoadChar). The images,
++// fonts and graphics states its content names never appear on the page's own
++// objects, so pruning by those objects removed them, and the form or glyph drew
++// without them once the page was parsed again.
++bool DrawsWithPageResources(const CPDF_PageObject* page_object) {
++  if (const CPDF_FormObject* form_object = page_object->AsForm()) {
++    RetainPtr<const CPDF_Dictionary> form_dict =
++        form_object->form() ? form_object->form()->GetDict() : nullptr;
++    return form_dict && !form_dict->GetDictFor("Resources");
++  }
++  if (const CPDF_TextObject* text_object = page_object->AsText()) {
++    RetainPtr<CPDF_Font> font = text_object->GetFont();
++    return font && font->IsType3Font() && font->GetFontDict() &&
++           !font->GetFontDict()->GetDictFor("Resources");
++  }
++  return false;
++}
++
+ CPDF_PageObjectHolder::RemovedResourceMap RemoveUnusedResources(
+     CPDF_Dictionary* resource_dict,
+     const std::vector<ByteString>& keys,
+@@ -581,11 +601,28 @@
+   CloneResourcesDictEntries(document_, resources);
+ 
+   ResourcesMap seen_resources;
++  bool draws_with_page_resources = false;
+   for (auto& page_object : page_objects_) {
+     if (!page_object->IsActive()) {
+       continue;
+     }
+     RecordPageObjectResourceUsage(page_object, seen_resources);
++    draws_with_page_resources =
++        draws_with_page_resources || DrawsWithPageResources(page_object);
++  }
++  if (draws_with_page_resources) {
++    // Something on the page names resources only inside its own content: keep
++    // every entry the page has.
++    for (const char* resource_key : kResourceKeys) {
++      RetainPtr<const CPDF_Dictionary> dict =
++          resources->GetDictFor(resource_key);
++      if (!dict) {
++        continue;
++      }
++      for (const ByteString& key : dict->GetKeys()) {
++        seen_resources[resource_key].insert(key);
++      }
++    }
+   }
+   if (!default_graphics_name_.IsEmpty()) {
+     seen_resources["ExtGState"].insert(default_graphics_name_);

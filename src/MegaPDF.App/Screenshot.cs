@@ -20,6 +20,9 @@ namespace MegaPDF.App;
 /// </summary>
 internal static class Screenshot
 {
+    /// <summary>The busy operation a `busy` capture holds open until the process exits (#145).</summary>
+    private static IDisposable? _heldBusy;
+
     /// <summary>The value after <paramref name="flag"/> on the command line.</summary>
     public static string? ArgumentAfter(string flag)
     {
@@ -91,6 +94,21 @@ internal static class Screenshot
 
             case "sign":
                 return await OpenSignatureLibraryAsync(window);
+
+            // #145: the busy strip under the toolbar, and the page-level spinner, each held
+            // open for the capture as they show 0.5 s into slow work.
+            case "busy":
+            case "busy-page":
+                if (!vm.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine($"--screenshot-state {state} needs a document to be busy with.");
+                    return false;
+                }
+                _heldBusy = state == "busy"
+                    ? vm.Busy.Begin(Strings.BusyCheckingSavedFile)
+                    : vm.Busy.Begin(Strings.BusyCheckingPage, scope: MegaPDF.Core.Services.BusyScope.Page, pageIndex: 0);
+                await Task.Delay(900);
+                return state == "busy" ? vm.Busy.ShowsStrip : vm.Busy.ShowsPageSpinner;
 
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");

@@ -3,7 +3,10 @@ package com.megapdf.engine
 import android.graphics.Bitmap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -194,15 +197,156 @@ class PdfDocument internal constructor(
         out.flush()
     }
 
+    // ---- The page check started early (#145) -----------------------------------------
+
+    /** Guards [checksInFlight], [closing] and [runningFlags]; checks run on other threads. */
+    private val checkLock = Object()
+    private var checksInFlight = 0
+    private var closing = false
+    private val runningFlags = HashSet<NativeCancel>()
+
+    /**
+     * Whether regenerating page [pageIndex], with nothing changed, would change how it looks
+     * (#139), for a check started early (#145). Unlike [PdfPage.pageRegenerationVerdict] it does
+     * not run on the engine's one thread: the core lets go of its lock between the dry run's
+     * stages, so renders and edits wait at most one stage while a slow page is judged.
+     *
+     * Cancelling the calling coroutine raises the check's flag and returns at once; the native
+     * run stops at its next stage. [close] raises every flag and waits for running checks to
+     * stop before it closes the document, so the document is never closed under a check.
+     *
+     * @return [PageCheck.Judged] with the verdict, [PageCheck.Cancelled] when the document is
+     *   closing, or [PageCheck.Failed] when the page could not be judged.
+     */
+    suspend fun checkPageRegeneration(pageIndex: Int): PageCheck = suspendCancellableCoroutine { cont ->
+        val cancel = NativeCancel()
+        val admitted = synchronized(checkLock) {
+            if (closing || closed) {
+                false
+            } else {
+                checksInFlight++
+                runningFlags += cancel
+                true
+            }
+        }
+        if (!admitted) {
+            cancel.free()
+            cont.resume(PageCheck.Cancelled)
+            return@suspendCancellableCoroutine
+        }
+        cont.invokeOnCancellation { cancel.raise() }
+        pageCheckExecutor.execute {
+            val result = try {
+                runCheck(pageIndex, cancel)
+            } catch (t: Throwable) {
+                PageCheck.Failed
+            } finally {
+                synchronized(checkLock) {
+                    runningFlags -= cancel
+                    checksInFlight--
+                    checkLock.notifyAll()
+                }
+                cancel.free()
+            }
+            // Ignored when the caller was cancelled meanwhile.
+            if (cont.isActive) cont.resume(result)
+        }
+    }
+
+    /** On a check thread, while this document is held open by [checkPageRegeneration]. */
+    private fun runCheck(pageIndex: Int, cancel: NativeCancel): PageCheck {
+        if (cancel.isRaised) return PageCheck.Cancelled
+        // A page handle of the check's own, opened and closed on this thread before the
+        // document may close: megapdf_close() frees pages still open, so it must not outlive it.
+        val page = PdfiumNative.nativeOpenPage(handle, pageIndex)
+        if (page == 0L) return PageCheck.Failed
+        try {
+            val packed = PdfiumNative.nativePageRegenerationVerdictCancellable(page, cancel.pointer)
+            if (packed.isNotEmpty() && packed[0].toInt() == PdfiumNative.STATUS_CANCELLED) return PageCheck.Cancelled
+            return LayoutVerdict.fromPacked(packed)?.let { PageCheck.Judged(it) } ?: PageCheck.Failed
+        } finally {
+            PdfiumNative.nativeClosePage(page)
+        }
+    }
+
     // NonCancellable: close must run even from a cancelled caller, or the native
     // document leaks.
-    suspend fun close(): Unit = withContext(engine.dispatcher + NonCancellable) {
-        if (!closed) {
-            closed = true
-            PdfiumNative.nativeCloseDocument(handle)
+    suspend fun close(): Unit = withContext(NonCancellable) {
+        // Stop page checks first (#145): no new one starts, running ones stop at their next
+        // stage, and the document closes only once none holds it.
+        val flags = synchronized(checkLock) {
+            closing = true
+            runningFlags.toList()
+        }
+        flags.forEach { it.raise() }
+        if (flags.isNotEmpty() || synchronized(checkLock) { checksInFlight > 0 }) {
+            withContext(Dispatchers.IO) {
+                synchronized(checkLock) {
+                    while (checksInFlight > 0) checkLock.wait()
+                }
+            }
+        }
+        withContext(engine.dispatcher) {
+            if (!closed) {
+                synchronized(checkLock) { closed = true }
+                PdfiumNative.nativeCloseDocument(handle)
+            }
         }
     }
 }
+
+/** How a page check started with [PdfDocument.checkPageRegeneration] ended (#145). */
+sealed interface PageCheck {
+    /** The page was judged: [LayoutVerdict.editable] false means regenerating it changes its look. */
+    data class Judged(val verdict: LayoutVerdict) : PageCheck
+
+    /** The document is closing (or closed) and the check stopped. */
+    data object Cancelled : PageCheck
+
+    /** The page could not be judged. */
+    data object Failed : PageCheck
+}
+
+/**
+ * A core cancel flag (#145). Raising is safe from any thread at any time, also after the check
+ * returned: [free] and [raise] share one monitor, so a raise never reaches a freed flag.
+ */
+internal class NativeCancel {
+    private var handle: Long = PdfiumNative.nativeCancelNew()
+    @Volatile
+    var isRaised: Boolean = false
+        private set
+
+    /** The flag for the native call; 0 (no flag) when the core was out of memory. */
+    val pointer: Long @Synchronized get() = handle
+
+    @Synchronized
+    fun raise() {
+        isRaised = true
+        if (handle != 0L) PdfiumNative.nativeCancelRaise(handle)
+    }
+
+    @Synchronized
+    fun free() {
+        if (handle != 0L) {
+            PdfiumNative.nativeCancelFree(handle)
+            handle = 0L
+        }
+    }
+}
+
+/**
+ * The threads page checks run on (#145): never the engine's one thread, which would hold every
+ * render and edit behind a check for its whole run. Daemon threads, so they never hold the
+ * process open; idle ones go after a minute.
+ */
+private val pageCheckExecutor: java.util.concurrent.ExecutorService =
+    java.util.concurrent.ThreadPoolExecutor(
+        2, 2, 60L, java.util.concurrent.TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue(),
+    ) { r -> Thread(r, "megapdf-page-check").apply { isDaemon = true } }.apply {
+        // Two, so a stopped check still finishing its stage never holds up the next page's.
+        allowCoreThreadTimeOut(true)
+    }
 
 class PdfPage internal constructor(
     private val engine: PdfEngine,
@@ -462,6 +606,16 @@ class PdfPage internal constructor(
     suspend fun pageRegenerationVerdict(): LayoutVerdict? = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }
         LayoutVerdict.fromPacked(PdfiumNative.nativePageRegenerationVerdict(handle))
+    }
+
+    /**
+     * The page verdict already known (#145): what [pageRegenerationVerdict] or a check started
+     * with [PdfDocument.checkPageRegeneration] found, without running anything. Null when the
+     * page has not been judged since it last changed, or cannot be judged.
+     */
+    suspend fun cachedPageRegenerationVerdict(): LayoutVerdict? = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        LayoutVerdict.fromPacked(PdfiumNative.nativePageRegenerationVerdictCached(handle))
     }
 
     /** Why the core's last call on this thread was refused; call it straight after, with no suspension between. */

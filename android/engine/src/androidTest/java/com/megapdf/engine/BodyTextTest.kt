@@ -2,6 +2,10 @@ package com.megapdf.engine
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -103,6 +107,48 @@ class BodyTextTest {
             assertEquals("no warning on a plain page (#139)", true, verdict?.editable)
             assertEquals(LayoutCause.OK, verdict?.cause)
         }
+
+    @Test
+    fun theEarlyPageCheckAgreesWithTheVerdictAndIsCached() = runBlocking {
+        val doc = engine.open(helveticaPdf(CLIPPED_BY_TEXT))
+        try {
+            val page = doc.openPage(0)
+            try {
+                assertEquals("nothing judged yet (#145)", null, page.cachedPageRegenerationVerdict())
+                val result = doc.checkPageRegeneration(0)
+                assertTrue("judged off the engine thread", result is PageCheck.Judged)
+                assertEquals(false, (result as PageCheck.Judged).verdict.editable)
+                assertEquals("and cached for the page", false, page.cachedPageRegenerationVerdict()?.editable)
+            } finally {
+                page.close()
+            }
+        } finally {
+            doc.close()
+        }
+    }
+
+    @Test
+    fun closingTheDocumentStopsARunningPageCheck() = runBlocking {
+        val doc = engine.open(helveticaPdf(CLIPPED_BY_TEXT))
+        val check = async(Dispatchers.Default) { doc.checkPageRegeneration(0) }
+        doc.close()
+        val result = check.await()
+        assertTrue("stopped or finished, never run on a closed document", result is PageCheck.Cancelled || result is PageCheck.Judged)
+        assertEquals("no check starts once the document is closed", PageCheck.Cancelled, doc.checkPageRegeneration(0))
+    }
+
+    @Test
+    fun cancellingTheCallerStopsThePageCheck() = runBlocking {
+        val doc = engine.open(helveticaPdf(CLIPPED_BY_TEXT))
+        try {
+            val job = launch(Dispatchers.Default) { doc.checkPageRegeneration(0) }
+            job.cancelAndJoin()
+            // The document still works, and a later check still answers.
+            assertTrue(doc.checkPageRegeneration(0) is PageCheck.Judged)
+        } finally {
+            doc.close()
+        }
+    }
 
     @Test
     fun textUnderCharacterSpacingIsEditableNowThatTheWriterKeepsIt() =

@@ -800,4 +800,56 @@
     <value>Tools</value>
     <comment>macOS menu bar: the Tools menu (#144)</comment>
   </data>
+  <data name="BusyOpening" xml:space="preserve">
+    <value>Opening…</value>
+    <comment>Busy strip while a document opens (#145)</comment>
+  </data>
+  <data name="BusySaving" xml:space="preserve">
+    <value>Saving…</value>
+    <comment>Busy strip while a document is saved (#145)</comment>
+  </data>
+  <data name="BusyCheckingSavedFile" xml:space="preserve">
+    <value>Checking the saved file…</value>
+    <comment>Busy strip while the saved bytes are read back (#145)</comment>
+  </data>
+  <data name="BusyCheckingPage" xml:space="preserve">
+    <value>Checking this page…</value>
+    <comment>Page spinner while the page check runs before a change (#139, #145)</comment>
+  </data>
+  <data name="BusyApplying" xml:space="preserve">
+    <value>Applying…</value>
+    <comment>Page spinner while a change is applied (#145)</comment>
+  </data>
+  <data name="BusySearching" xml:space="preserve">
+    <value>Searching…</value>
+    <comment>Busy strip while the document is searched (#145)</comment>
+  </data>
+  <data name="BusyShrinking" xml:space="preserve">
+    <value>Making a smaller copy…</value>
+    <comment>Busy strip while images are re-encoded for email (#145)</comment>
+  </data>
+  <data name="BusyPrinting" xml:space="preserve">
+    <value>Preparing to print…</value>
+    <comment>Busy strip before the print dialog (#145)</comment>
+  </data>
+  <data name="BusyRestoring" xml:space="preserve">
+    <value>Restoring your edits…</value>
+    <comment>Busy strip while unsaved edits are replayed after a crash (#145)</comment>
+  </data>
+  <data name="ChangeFailed" xml:space="preserve">
+    <value>The change could not be made.</value>
+    <comment>Status line when an edit throws (#145)</comment>
+  </data>
+  <data name="UnsavedChangesPrompt" xml:space="preserve">
+    <value>Do you want to save the changes made to the document “{0}”?</value>
+    <comment>The macOS unsaved-changes sheet's question; {0} is the document name (#145)</comment>
+  </data>
+  <data name="UnsavedChangesDetail" xml:space="preserve">
+    <value>Your changes will be lost if you don't save them.</value>
+    <comment>The macOS unsaved-changes sheet's detail (#145)</comment>
+  </data>
+  <data name="DontSave" xml:space="preserve">
+    <value>Don't Save</value>
+    <comment>Unsaved-changes button; title case as on every Mac (#145)</comment>
+  </data>
 </root>

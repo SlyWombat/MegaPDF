@@ -720,4 +720,52 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>{0} %</value>
     <comment>Windows toolbar (#144): zoom level on the zoom menu button and its presets</comment>
   </data>
+  <data name="BusyOpening" xml:space="preserve">
+    <value>Ouverture…</value>
+    <comment>Busy strip while a document opens (#145)</comment>
+  </data>
+  <data name="BusySaving" xml:space="preserve">
+    <value>Enregistrement…</value>
+    <comment>Busy strip while a document is saved (#145)</comment>
+  </data>
+  <data name="BusyCheckingSavedFile" xml:space="preserve">
+    <value>Vérification du fichier enregistré…</value>
+    <comment>Busy strip while the saved bytes are read back (#145)</comment>
+  </data>
+  <data name="BusyCheckingPage" xml:space="preserve">
+    <value>Vérification de cette page…</value>
+    <comment>Page spinner while the page check runs before a change (#139, #145)</comment>
+  </data>
+  <data name="BusyApplying" xml:space="preserve">
+    <value>Application de la modification…</value>
+    <comment>Page spinner while a change is applied (#145)</comment>
+  </data>
+  <data name="BusySearching" xml:space="preserve">
+    <value>Recherche…</value>
+    <comment>Busy strip while the document is searched (#145)</comment>
+  </data>
+  <data name="BusyShrinking" xml:space="preserve">
+    <value>Création d'une copie réduite…</value>
+    <comment>Busy strip while images are re-encoded for email (#145)</comment>
+  </data>
+  <data name="BusyPrinting" xml:space="preserve">
+    <value>Préparation de l'impression…</value>
+    <comment>Busy strip while pages are rendered for the printer (#145)</comment>
+  </data>
+  <data name="BusyRestoring" xml:space="preserve">
+    <value>Restauration de vos modifications…</value>
+    <comment>Busy strip while unsaved edits are replayed after a crash (#145)</comment>
+  </data>
+  <data name="CouldNotPrintTitle" xml:space="preserve">
+    <value>Impossible d'imprimer</value>
+    <comment>Error dialog title when printing fails (#145)</comment>
+  </data>
+  <data name="CouldNotEditTitle" xml:space="preserve">
+    <value>Impossible d'effectuer cette modification</value>
+    <comment>Error dialog title when an edit fails (#145)</comment>
+  </data>
+  <data name="CouldNotRestoreTitle" xml:space="preserve">
+    <value>Impossible de restaurer vos modifications</value>
+    <comment>Error dialog title when a crash-recovery replay fails (#145)</comment>
+  </data>
 </root>

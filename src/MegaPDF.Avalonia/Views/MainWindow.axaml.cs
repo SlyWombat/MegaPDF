@@ -34,16 +34,16 @@ public partial class MainWindow : Window
         // is async. Keeping it in the view is what lets the view model stay UI-free.
         // Save As, Password…, Shrink and Options are entries in the More menu and the
         // menu bar now (#144), wired where those are built.
-        OpenButton.Click += async (_, _) => await OpenDocumentAsync();
-        EmptyOpenButton.Click += async (_, _) => await OpenDocumentAsync();
-        UnlockButton.Click += async (_, _) => await UnlockAsync();
+        OpenButton.Click += async (_, _) => await GuardedAsync(OpenDocumentAsync);
+        EmptyOpenButton.Click += async (_, _) => await GuardedAsync(OpenDocumentAsync);
+        UnlockButton.Click += async (_, _) => await GuardedAsync(UnlockAsync);
 
         RecentList.SelectionChanged += async (_, _) =>
         {
             if (RecentList.SelectedItem is not RecentEntry entry)
                 return;
             RecentList.SelectedItem = null;
-            await OpenRecentAsync(entry);
+            await GuardedAsync(() => OpenRecentAsync(entry));
         };
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
@@ -82,11 +82,57 @@ public partial class MainWindow : Window
 
     private MainViewModel? ViewModel => DataContext as MainViewModel;
 
+    /// <summary>
+    /// Runs an async handler and puts any failure in the status line (#145): an exception
+    /// escaping an async event handler would take the app down.
+    /// </summary>
+    private async Task GuardedAsync(Func<Task> work)
+    {
+        try
+        {
+            await work();
+        }
+        catch (Exception ex)
+        {
+            if (ViewModel is { } vm)
+                vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+        }
+    }
+
+    /// <summary>A file the person chose, waiting for its document to finish opening before Save writes through it.</summary>
+    private IStorageFile? _pendingFile;
+
+    /// <summary>
+    /// The storage file follows the open document (#145). Opening is async now, and a document
+    /// that fails to open leaves the previous one on screen, so the file handle is adopted only
+    /// once its document is the one open — or Save would write the old document into the new file.
+    /// </summary>
+    private void FollowDocumentPath(string documentPath)
+    {
+        if (_pendingFile is { } pending && SamePath(pending.TryGetLocalPath(), documentPath))
+        {
+            _openedFile = pending;
+            _pendingFile = null;
+        }
+        else if (_openedFile is { } current && !SamePath(current.TryGetLocalPath(), documentPath))
+        {
+            // A document opened by path alone has no handle to write through: Save says so.
+            _openedFile = null;
+        }
+    }
+
+    private static bool SamePath(string? a, string? b) =>
+        a is not null && b is not null
+        && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
         if (ViewModel is { } vm)
         {
+            // A window: engine work runs off the UI thread from here on (#145).
+            vm.RunsInBackground = true;
+            vm.Busy.PropertyChanged += (_, _) => RefreshMenuBar();
             // The menu bar (#144) lists the view model's font and size choices.
             BuildMenuBar();
             vm.SaveRequested += () => _ = SaveAsync();
@@ -118,6 +164,8 @@ public partial class MainWindow : Window
                 // An editor writing new text shows the face and size it will be written in.
                 if (args.PropertyName is nameof(MainViewModel.TextFont) or nameof(MainViewModel.TextSize))
                     FollowPickersInEditor();
+                if (args.PropertyName is nameof(MainViewModel.DocumentPath) && vm.DocumentPath is { } documentPath)
+                    FollowDocumentPath(documentPath);
                 RefreshMenuBar();
             };
             RefreshMenuBar();
@@ -252,8 +300,8 @@ public partial class MainWindow : Window
         // Save would have nothing to write through.
         if (await StorageProvider.TryGetFileFromPathAsync(path) is { } file)
             await OpenStorageFileAsync(file);
-        else
-            ViewModel?.Open(path);
+        else if (ViewModel is { } vm && await ConfirmUnsavedChangesAsync())
+            await vm.OpenAsync(path);
     });
 
     private void OpenWhenReady(Func<Task> open)
@@ -299,6 +347,112 @@ public partial class MainWindow : Window
     {
         base.OnClosed(e);
         ViewModel?.Dispose();
+    }
+
+    // --- Unsaved changes: closing, quitting, opening another (#145, D1) ---
+
+    /// <summary>The person has answered for this close or quit; the next Closing goes ahead.</summary>
+    private bool _closeConfirmed;
+    private bool _confirmingClose;
+
+    /// <summary>For capture runs, which quit whatever they changed with nobody there to answer.</summary>
+    internal void SkipCloseConfirmation()
+    {
+        _closeConfirmed = true;
+        // What a capture changed is not the person's: no journal is left behind for it.
+        ViewModel?.DiscardChanges();
+    }
+
+    /// <summary>Whether closing or quitting must ask first: unsaved changes, or work still running.</summary>
+    internal bool NeedsConfirmationBeforeClose =>
+        !_closeConfirmed && ViewModel is { } vm && (vm.Busy.IsWorking || (vm.IsDocumentOpen && vm.IsDirty));
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        // Closing the window used to drop unsaved changes and delete their journal, silently.
+        if (NeedsConfirmationBeforeClose)
+        {
+            e.Cancel = true;
+            _ = CloseAfterConfirmingAsync();
+        }
+        base.OnClosing(e);
+    }
+
+    private async Task CloseAfterConfirmingAsync()
+    {
+        if (await ConfirmCloseAsync())
+            Close();
+    }
+
+    /// <summary>Cmd+Q (App's ShutdownRequested): asks as closing does, then quits.</summary>
+    internal async Task ConfirmThenQuitAsync(global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        if (await ConfirmCloseAsync())
+            desktop.Shutdown();
+    }
+
+    /// <summary>Waits for a save in progress, then asks about unsaved changes. True when closing may go ahead.</summary>
+    private async Task<bool> ConfirmCloseAsync()
+    {
+        if (_confirmingClose)
+            return false;
+        _confirmingClose = true;
+        try
+        {
+            if (ViewModel is { } vm)
+                await vm.Busy.WhenIdleAsync();
+            if (!await ConfirmUnsavedChangesAsync())
+                return false;
+            _closeConfirmed = true;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            if (ViewModel is { } vm)
+                vm.Status = Strings.WithDetail(Strings.CouldNotSave, ex.Message);
+            return false;
+        }
+        finally
+        {
+            _confirmingClose = false;
+        }
+    }
+
+    /// <summary>
+    /// Save, Don't Save or Cancel, when the open document has unsaved changes — the standard
+    /// macOS question. True when the caller may go on: nothing unsaved, saved, or Don't Save.
+    /// Cancel changes nothing, the recovery journal included.
+    /// </summary>
+    private async Task<bool> ConfirmUnsavedChangesAsync()
+    {
+        if (ViewModel is not { IsDocumentOpen: true } vm)
+            return true;
+        await vm.Busy.WhenIdleAsync();
+        if (!vm.IsDirty)
+            return true;
+
+        var dialog = new UnsavedChangesWindow();
+        dialog.SetDocument(vm.DocumentName ?? "");
+        await dialog.ShowDialog(this);
+        switch (dialog.Choice)
+        {
+            case UnsavedChangesWindow.Decision.Save:
+                return await SaveAsync() && !vm.IsDirty;
+            case UnsavedChangesWindow.Decision.DontSave:
+                vm.DiscardChanges();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>For the `unsaved` screenshot state: the question, shown beside the window rather than modal.</summary>
+    internal Window ShowUnsavedChangesForScreenshot()
+    {
+        var dialog = new UnsavedChangesWindow();
+        dialog.SetDocument(ViewModel?.DocumentName ?? "");
+        dialog.Show(this);
+        return dialog;
     }
 
     // --- Text boxes and whiteout on the page (SDD §3.1, §3.3) ---
@@ -572,7 +726,7 @@ public partial class MainWindow : Window
         switch (dialog.Choice)
         {
             case RecoveryWindow.Decision.Restore:
-                vm.RestoreSession(session);
+                await vm.RestoreSessionAsync(session);
                 break;
             case RecoveryWindow.Decision.Discard:
                 vm.DiscardSession(session);
@@ -590,6 +744,14 @@ public partial class MainWindow : Window
             return;
         if (!e.GetCurrentPoint(container).Properties.IsLeftButtonPressed)
             return;
+
+        // Clicks while work runs are ignored, not queued (#145): a second change must not
+        // follow a first still on its way, nor a second question a first.
+        if (vm.Busy.IsBusy)
+        {
+            e.Handled = true;
+            return;
+        }
 
         // The page surface is laid out at exactly LayoutWidth/Height, so a position
         // inside it converts straight back to page points. Same conversion the WinUI
@@ -916,7 +1078,7 @@ public partial class MainWindow : Window
         _findDebounce.Tick += (_, _) =>
         {
             _findDebounce!.Stop();
-            ViewModel?.Search(FindBox.Text ?? "");
+            _ = RunSearchAsync(FindBox.Text ?? "");
         };
 
         FindBox.TextChanged += (_, _) =>
@@ -928,26 +1090,42 @@ public partial class MainWindow : Window
         };
 
         // Enter advances, Shift+Enter goes back — the convention every find bar uses.
-        FindBox.KeyDown += (_, e) =>
+        FindBox.KeyDown += async (_, e) =>
         {
             if (e.Key != Key.Enter)
                 return;
+            e.Handled = true;
+            var backwards = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
 
             // Enter means "now" — run any pending search before advancing, or the
             // first Enter after typing would cycle stale matches.
             if (_findDebounce is { IsEnabled: true })
             {
                 _findDebounce.Stop();
-                ViewModel?.Search(FindBox.Text ?? "");
+                await RunSearchAsync(FindBox.Text ?? "");
             }
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            if (backwards)
                 ViewModel?.FindPreviousCommand.Execute(null);
             else
                 ViewModel?.FindNextCommand.Execute(null);
-            e.Handled = true;
         };
 
         CloseFindButton.Click += (_, _) => CloseFind();
+    }
+
+    /// <summary>Search off the UI thread (#145); a failure lands in the status line.</summary>
+    private async Task RunSearchAsync(string term)
+    {
+        if (ViewModel is not { } vm)
+            return;
+        try
+        {
+            await vm.SearchAsync(term);
+        }
+        catch (Exception ex)
+        {
+            vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+        }
     }
 
     private void OpenFind()
@@ -1088,7 +1266,7 @@ public partial class MainWindow : Window
 
     private async Task OpenDocumentAsync()
     {
-        if (ViewModel is not { } vm)
+        if (ViewModel is not { IsIdle: true })
             return;
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -1120,8 +1298,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        _openedFile = file;
-        vm.Open(path);
+        // Opening another document drops this one: unsaved changes are asked about first (D1).
+        if (!await ConfirmUnsavedChangesAsync())
+            return;
+        _pendingFile = file;
+        await vm.OpenAsync(path);
         await RememberAsync(vm, file, path);
     }
 
@@ -1135,29 +1316,31 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task OpenRecentAsync(RecentEntry entry)
     {
-        if (ViewModel is not { } vm)
+        if (ViewModel is not { IsIdle: true } vm)
             return;
 
         if (entry.Bookmark is { } bookmark)
         {
+            IStorageFile? file = null;
+            string? bookmarked = null;
             try
             {
-                if (await StorageProvider.OpenFileBookmarkAsync(bookmark) is { } file)
-                {
-                    var bookmarked = file.TryGetLocalPath();
-                    if (bookmarked is not null)
-                    {
-                        _openedFile = file;
-                        vm.Open(bookmarked);
-                        await RememberAsync(vm, file, bookmarked);
-                        return;
-                    }
-                }
+                file = await StorageProvider.OpenFileBookmarkAsync(bookmark);
+                bookmarked = file?.TryGetLocalPath();
             }
             catch (Exception)
             {
                 // A stale bookmark is an ordinary outcome — the file moved, or the
                 // grant expired. Fall through and try the path.
+            }
+            if (file is not null && bookmarked is not null)
+            {
+                if (!await ConfirmUnsavedChangesAsync())
+                    return;
+                _pendingFile = file;
+                await vm.OpenAsync(bookmarked);
+                await RememberAsync(vm, file, bookmarked);
+                return;
             }
         }
 
@@ -1178,8 +1361,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        _openedFile = fromPath;
-        vm.Open(entry.Path);
+        if (!await ConfirmUnsavedChangesAsync())
+            return;
+        _pendingFile = fromPath;
+        await vm.OpenAsync(entry.Path);
         await RememberAsync(vm, fromPath, entry.Path);
     }
 
@@ -1212,34 +1397,37 @@ public partial class MainWindow : Window
     /// already-open stream instead and accepts the weaker guarantee that
     /// StagedStreamWriter documents.
     /// </summary>
-    private async Task SaveAsync()
+    /// <remarks>
+    /// The sandboxed path used to open the file for writing — which truncates it — before the
+    /// verified save ran, so a failed flatten or read-back left the file empty (D2, #145). The
+    /// view model now builds and verifies the bytes first and opens the file only then. True
+    /// when the document was saved.
+    /// </remarks>
+    private async Task<bool> SaveAsync()
     {
         if (ViewModel is not { } vm)
-            return;
+            return false;
 
-        if (_openedFile is null)
+        if (_openedFile is not { } file)
         {
             // Should not happen — but a Save that does nothing at all is the worst
             // possible outcome, so it says something and offers the way out.
             vm.Status = Strings.NowhereToSave;
-            return;
+            return false;
         }
 
         try
         {
-            var path = _openedFile.TryGetLocalPath();
+            var path = file.TryGetLocalPath();
             if (path is not null && !OperatingSystem.IsMacOS())
-            {
-                vm.SaveToPath(path);
-                return;
-            }
+                return await vm.SaveToPathAsync(path);
 
-            await using var stream = await _openedFile.OpenWriteAsync();
-            vm.SaveTo(stream);
+            return await vm.SaveThroughAsync(async () => await file.OpenWriteAsync());
         }
         catch (Exception ex)
         {
             vm.ReportSaveFailure(ex);
+            return false;
         }
     }
 
@@ -1251,7 +1439,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task SaveAsAsync()
     {
-        if (ViewModel is not { } vm)
+        if (ViewModel is not { IsIdle: true } vm)
             return;
 
         var suggested = vm.DocumentName is { } name
@@ -1273,11 +1461,13 @@ public partial class MainWindow : Window
         try
         {
             // One call, so the journal is marked against the file the bytes went to
-            // and DocumentPath follows the copy (#68).
-            await using (var stream = await file.OpenWriteAsync())
-                vm.SaveAsTo(stream, file.TryGetLocalPath(), file.Name);
-
-            _openedFile = file;
+            // and DocumentPath follows the copy (#68). The file is opened — and so
+            // truncated — only once the verified bytes exist (#145).
+            if (await vm.SaveAsThroughAsync(async () => await file.OpenWriteAsync(), file.TryGetLocalPath(), file.Name))
+            {
+                _openedFile = file;
+                _pendingFile = null;
+            }
         }
         catch (Exception ex)
         {
@@ -1293,7 +1483,11 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task UnlockAsync()
     {
-        if (ViewModel is not { IsDocumentOpen: true } vm)
+        if (ViewModel is not { IsDocumentOpen: true, IsIdle: true } vm)
+            return;
+
+        // Unlocking reopens the document from its file: unsaved changes would stay behind (D1).
+        if (!await ConfirmUnsavedChangesAsync())
             return;
 
         var retry = false;
@@ -1304,7 +1498,7 @@ public partial class MainWindow : Window
             await dialog.ShowDialog(this);
             if (string.IsNullOrEmpty(dialog.Password))
                 return;
-            if (vm.Unlock(dialog.Password) != MainViewModel.UnlockOutcome.WrongPassword)
+            if (await vm.UnlockAsync(dialog.Password) != MainViewModel.UnlockOutcome.WrongPassword)
                 return;
             retry = true;
         }
@@ -1320,7 +1514,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task ChangeSecurityAsync()
     {
-        if (ViewModel is not { IsDocumentOpen: true } vm)
+        if (ViewModel is not { IsDocumentOpen: true, IsIdle: true } vm)
             return;
 
         if (!vm.Capabilities.CanChangeSecurity)
@@ -1358,22 +1552,24 @@ public partial class MainWindow : Window
             _ => Strings.PasswordRemovedStatus,
         };
 
+        var file = _openedFile;
+        var local = file.TryGetLocalPath();
         try
         {
-            var bytes = vm.PrepareSecuredCopy(newPassword);
-
-            var local = _openedFile.TryGetLocalPath();
-            if (local is not null && !OperatingSystem.IsMacOS())
+            // The view model produces the verified bytes first, off the UI thread; the file is
+            // written — and, under the sandbox, truncated — only then, and reopened after.
+            await vm.ChangeSecurityAsync(path, newPassword, done, async bytes =>
             {
-                AtomicFileWriter.Write(local, target => target.Write(bytes));
-            }
-            else
-            {
-                await using var stream = await _openedFile.OpenWriteAsync();
-                await stream.WriteAsync(bytes);
-            }
-
-            vm.AdoptSecuredFile(path, newPassword, done);
+                if (local is not null && !OperatingSystem.IsMacOS())
+                {
+                    await Task.Run(() => AtomicFileWriter.Write(local, target => target.Write(bytes)));
+                }
+                else
+                {
+                    await using var stream = await file.OpenWriteAsync();
+                    await stream.WriteAsync(bytes);
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -1413,7 +1609,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task ShrinkForEmailAsync()
     {
-        if (ViewModel is not { } vm)
+        if (ViewModel is not { IsIdle: true } vm)
             return;
 
         if (vm.IsDirty)
@@ -1429,7 +1625,7 @@ public partial class MainWindow : Window
             // is there, so asking first meant a document with nothing to shrink
             // left a 0-byte file behind — or destroyed the file the user picked to
             // overwrite — while reporting that nothing had happened (#59).
-            var (result, bytes) = vm.PrepareShrunkCopy();
+            var (result, bytes) = await vm.PrepareShrunkCopyAsync();
             if (bytes is null)
             {
                 vm.Status = Strings.NothingToShrink;
