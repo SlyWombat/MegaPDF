@@ -27,6 +27,8 @@ Conventions (OQLF, Canadian French):
 | Shrink | Réduire | toolbar label |
 | Shrink for email | Réduire pour courriel | UIA name |
 | Print | Imprimer | |
+| printer | imprimante | |
+| network | réseau | macOS Local Network prompt (Info.plist) |
 | Undo | Annuler | |
 | Redo | Rétablir | |
 | Cancel | Annuler | same word as Undo; standard on every French OS |
