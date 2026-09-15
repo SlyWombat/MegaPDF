@@ -14,6 +14,9 @@
 //                  that contract into the core (`MegaPDF.Stress dump-text`)
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <thread>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -3236,6 +3239,145 @@ void test_page_regeneration_verdict() {
     }
 }
 
+// #145: the page check started early, in the background. It can be cancelled, lets other calls
+// run between its stages, survives its document being closed, and does not cache an answer for
+// a page that changed while it ran.
+void test_page_check_cancel_and_concurrency() {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    // Heavy enough that each stage of the dry run takes a while: thousands of small filled squares.
+    std::string heavy = "BT /F1 18 Tf 72 740 Td (Heavy page) Tj ET 0 0 1 rg ";
+    for (int i = 0; i < 20000; i++) {
+        heavy += std::to_string(20 + (i % 560)) + " " + std::to_string(20 + (i / 560) % 700) + " 0.8 0.8 re f ";
+    }
+    const auto bytes = one_page_pdf(heavy, helvetica);
+    using clock = std::chrono::steady_clock;
+    auto ms_since = [](clock::time_point t) {
+        return std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t).count()) + " ms";
+    };
+
+    // Raised before it starts: stops at once, leaves `out` alone, and caches nothing.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        check(cancel != nullptr, "page check: a cancel flag is created");
+        megapdf_cancel_raise(cancel);
+        megapdf_layout_verdict v{};
+        v.cause = 12345;
+        check(megapdf_page_regeneration_verdict_cancellable(p.page, cancel, &v) == MEGAPDF_ERR_CANCELLED && v.cause == 12345,
+              "page check: a flag raised before the check stops it, out untouched");
+        megapdf_layout_verdict cached{};
+        check(megapdf_page_regeneration_verdict_cached(p.page, &cached) == MEGAPDF_ERR_NOT_JUDGED, "page check: a cancelled check caches nothing");
+        megapdf_cancel_free(cancel);
+
+        check(megapdf_page_regeneration_verdict_cached(nullptr, &cached) == MEGAPDF_ERR_ARGUMENT &&
+                  megapdf_page_regeneration_verdict_cached(p.page, nullptr) == MEGAPDF_ERR_ARGUMENT &&
+                  megapdf_page_regeneration_verdict_cancellable(nullptr, nullptr, &cached) == MEGAPDF_ERR_ARGUMENT &&
+                  megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "page check: NULL arguments are argument errors");
+        megapdf_cancel_raise(nullptr);
+        megapdf_cancel_free(nullptr);
+
+        const auto started = clock::now();
+        megapdf_layout_verdict answer{};
+        const int result = megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &answer);
+        const std::string took = ms_since(started);
+        std::printf("page check: the heavy page is judged in %s\n", took.c_str());
+        megapdf_layout_verdict kept{};
+        check((result == 1 || result == 0) && megapdf_page_regeneration_verdict_cached(p.page, &kept) == result &&
+                  kept.changed_pixels == answer.changed_pixels && kept.cause == answer.cause,
+              "page check: without a flag it answers, and the cached answer is the same", took);
+        megapdf_cancel* late = megapdf_cancel_new();
+        megapdf_cancel_raise(late);
+        check(megapdf_page_regeneration_verdict_cancellable(p.page, late, &kept) == result,
+              "page check: a page already judged answers from the cache, whatever the flag");
+        megapdf_cancel_free(late);
+    }
+
+    // Raised while it runs, from another thread: it stops at a stage and caches nothing.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        std::atomic<int> result{999};
+        const auto started = clock::now();
+        std::thread check_thread([&] {
+            megapdf_layout_verdict v{};
+            result = megapdf_page_regeneration_verdict_cancellable(p.page, cancel, &v);
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        megapdf_cancel_raise(cancel);
+        check_thread.join();
+        megapdf_layout_verdict cached{};
+        check(result == MEGAPDF_ERR_CANCELLED && megapdf_page_regeneration_verdict_cached(p.page, &cached) == MEGAPDF_ERR_NOT_JUDGED,
+              "page check: a flag raised mid-run stops it and caches nothing", std::to_string(result.load()) + " after " + ms_since(started));
+        megapdf_cancel_free(cancel);
+    }
+
+    // Other calls run between its stages: a render-sized stream of calls on another document
+    // keeps completing while the check runs, rather than all waiting for its end.
+    {
+        OpenDoc d(bytes);
+        OpenDoc other(one_page_pdf("BT /F1 12 Tf 72 700 Td (Other) Tj ET", helvetica));
+        Page p(d.doc, 0);
+        Page q(other.doc, 0);
+        std::atomic<bool> done{false};
+        std::thread check_thread([&] {
+            megapdf_layout_verdict v{};
+            megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &v);
+            done = true;
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        int interleaved = 0;
+        const auto started = clock::now();
+        while (!done) {
+            megapdf_page_width(q.page);
+            if (!done) interleaved++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        check_thread.join();
+        std::printf("page check: %d calls on another document completed while it ran (%s)\n", interleaved, ms_since(started).c_str());
+        check(interleaved >= 2, "page check: other calls complete between its stages",
+              std::to_string(interleaved) + " calls in " + ms_since(started));
+    }
+
+    // Its document closed while it runs: close waits for the check to stop, and nothing is used after it is freed.
+    {
+        std::vector<unsigned char> copy = bytes;
+        megapdf_document* doc = megapdf_open(copy.data(), copy.size(), nullptr);
+        megapdf_page* page = megapdf_load_page(doc, 0);
+        std::atomic<int> result{999};
+        std::thread check_thread([&] {
+            megapdf_layout_verdict v{};
+            result = megapdf_page_regeneration_verdict_cancellable(page, nullptr, &v);
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        megapdf_close(doc);   // closes the page handle too
+        check_thread.join();
+        check(result == MEGAPDF_ERR_CANCELLED || result == 0 || result == 1, "page check: closing its document mid-run stops it cleanly",
+              std::to_string(result.load()));
+    }
+
+    // The page changes while it runs: the answer describes the page as it was and is not kept.
+    {
+        OpenDoc d(bytes);
+        Page p(d.doc, 0);
+        Page same(d.doc, 0);
+        std::thread check_thread([&] {
+            megapdf_layout_verdict v{};
+            megapdf_page_regeneration_verdict_cancellable(p.page, nullptr, &v);
+        });
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        const megapdf_rect box{500, 20, 560, 60};
+        int index = -1;
+        check(megapdf_add_whiteout(same.page, &box, &index) == MEGAPDF_OK, "page check: an edit applies while the check runs");
+        check_thread.join();
+        megapdf_layout_verdict cached{};
+        check(megapdf_page_regeneration_verdict_cached(p.page, &cached) == MEGAPDF_ERR_NOT_JUDGED,
+              "page check: a page edited while it was judged keeps no answer");
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -3269,6 +3411,7 @@ int main(int argc, char** argv) {
     test_verdicts_follow_changes();
     test_layout_verdicts();
     test_page_regeneration_verdict();
+    test_page_check_cancel_and_concurrency();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
