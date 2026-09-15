@@ -62,6 +62,7 @@ Conventions (OQLF, Canadian French):
 | Font | Police | |
 | Find | Rechercher | |
 | Search | Rechercher | |
+| More | Plus | phones' overflow menu (#144); *Plus d'options* where the label is "More options" |
 | Find in document | Rechercher dans le document | |
 | No results | Aucun résultat | |
 | Not found | Introuvable | |
