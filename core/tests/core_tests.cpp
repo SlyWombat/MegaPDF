@@ -1845,6 +1845,13 @@ void test_rewrite_fidelity() {
         {"box drawn through a glyph clip",
          "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q BT /F1 96 Tf 7 Tr 72 560 Td (MASK) Tj ET 0 0 1 rg 72 540 400 140 re f Q "
          "BT /F1 12 Tf 72 500 Td (Body under a clipped box) Tj ET", 18},
+        // A gray colour set before a form that sets its own colour by one component (#125). The writer
+        // wrote DeviceGray as RGB, so the colour space the form inherits changed with it, and the
+        // form's "0.5 SC" was read in RGB: its gray line came back black.
+        {"gray stroke colour before a form that sets a colour by its component alone",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 0 G /Fm1 Do Q BT /F1 12 Tf 72 520 Td (Body under a form) Tj ET", 19,
+         "/XObject << /Fm1 6 0 R >>", "",
+         {"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Length 31 >>\nstream\n6 w 0.5 SC 72 560 m 400 560 l S\nendstream"}},
         // The miter limit (patch 6 writes "M") is not a case here: PDFium's rasteriser draws a
         // stroked corner identically whatever the limit or join, so the render-based guard
         // cannot see it lost. Its survival belongs to an operator-level check (#126).

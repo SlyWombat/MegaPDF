@@ -1,0 +1,30 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -1055,7 +1055,17 @@
+   if (!color || color->IsNull()) {
+     return;
+   }
+-  // DeviceRGB and DeviceGray keep the form this writer has always used.
++  // DeviceGray stays "g"/"G". Written as RGB, the current colour space changed with it,
++  // and a form drawn after the object that sets a colour by its components alone
++  // ("0.742 SC") read them in RGB (#125): its strokes changed colour.
++  if (color->IsColorSpaceGray()) {
++    pdfium::span<const float> gray = color->GetNonPatternValues();
++    if (!gray.empty()) {
++      WriteFloat(*buf, gray[0]) << (stroke ? " G " : " g ");
++      return;
++    }
++  }
++  // DeviceRGB keeps the form this writer has always used.
+   if (WriteColorToStream(*buf, color)) {
+     *buf << (stroke ? " RG " : " rg ");
+     return;
+@@ -1483,7 +1493,7 @@
+ 
+ void CPDF_PageContentGenerator::ProcessDefaultGraphics(
+     fxcrt::ostringstream* buf) {
+-  *buf << "0 0 0 RG 0 0 0 rg 1 w "
++  *buf << "0 G 0 g 1 w "
+        << static_cast<int>(CFX_GraphStateData::LineCap::kButt) << " J "
+        << static_cast<int>(CFX_GraphStateData::LineJoin::kMiter) << " j\n";
+   default_graphics_name_ = GetOrCreateDefaultGraphics();
