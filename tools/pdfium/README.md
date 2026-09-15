@@ -29,10 +29,57 @@ through that writer, so the apps ship a PDFium built from this patch series.
 | `0019-content-generator-gray-colour` | #125 | DeviceGray colours stay `g`/`G`, and a regenerated page starts from `0 G 0 g`: upstream wrote gray as RGB, which changed the current colour space too, so a form drawn after the object that sets a colour by its components alone (`0.742 SC`) read them in RGB and its strokes changed colour |
 | `0020-icc-transform-real-colour-space` | #152 | render speed of CMYK and other ICC-profiled images: the transform to sRGB is built with the profile's own colour space instead of `PT_ANY`, so lcms precomputes it (with `PT_ANY` it cannot optimise, and every pixel ran the whole profile pipeline, several times slower); colours can move by a CLUT interpolation step |
 | `0021-dct-decode-at-reduced-size` | #152 | render speed of large JPEG images: when the render needs at most a quarter of the image's size, a `DCTDecode` image is decoded at 1/2, 1/4 or 1/8 with libjpeg's scaled IDCT, one level fewer than JPX already skips, so the stretch still starts from at least twice the pixels it needs (upstream always decoded, converted and stretched every source row); image masks, `FPDFImageObj_GetBitmap` and thumbnails keep full size |
+| `0022-dct-decode-full-size-fallback` | #152 | JPEGs libjpeg will not scale still draw: the decoder asks libjpeg for the reduced size before reporting it, and decodes at full size when libjpeg cannot give it (0021 failed the decode instead, so a lossless JPEG drawn at a quarter of its size or less did not load) |
 
 The #118 layout guard stays in the core regardless: every body-text edit is rehearsed on
 a copy of the page and refused if anything else would change. The patches make that
 refusal rare; they do not replace it.
+
+## Known limits
+
+What a regenerated page can still differ in, measured on the 4,337-document corpus at patch 21
+(first-line guard scan: 3,085 of 3,085 edits editable; no-op regeneration of the first, middle
+and last page of every document: 7,988 pages, none the guard would refuse). Each is deliberate
+or harmless, with the evidence for it (#125, #128).
+
+- **Clips PDFium merges when it parses the page again.** A clip rectangle that contains the next
+  clip set on it is dropped by PDFium's parser (`CPDF_ClipPath::AppendPathWithAutoMerge`), so an
+  object can come back with fewer clip paths than it was written with. The drawn area does not
+  change. On the one corpus page this affects, 1,047 of the 1,048 objects lie inside the clips
+  they lose; 8 pixels change by at most 45 of 765 (sum of channel differences), under the
+  guard's per-pixel threshold of 60, and nothing visible changes.
+- **Anti-aliasing noise.** Five corpus pages differ after a regeneration by at most 3 of 765 on a
+  few pixels (glyph and path edges rasterised from the rewritten, rounded coordinates). Invisible;
+  the guard already accepts them.
+- **Text state a form XObject inherits.** A form whose content shows text without setting its own
+  font, size, spacing or colour draws with the state set before its `Do`. The writer writes each
+  object's own state, never the text state a form inherits, so on a regenerated page that text is
+  lost or drawn in the default state. The guard refuses edits on such a page (it is the refusal
+  page every platform's layout-guard test uses). No corpus page has it; it can be fixed by writing
+  the form object's inherited text state before `Do`.
+- **Size of glyph clips (0018).** Text used as a clip is written as the path PDFium clips to, the
+  union of the glyph outlines, uncompressed, on every object the clip applies to. The two corpus
+  pages with glyph clips grow by 7% and 12% when saved; a clip of 733 glyphs over one box grows a
+  page from 1 KB to 381 KB. Over the corpus the regenerated pages are 0.007% smaller in total (0019
+  writes gray shorter). A text clip over many objects multiplies its outline per object; a shared
+  clip scope would avoid that.
+- **Type3 glyph clips (0018).** Text in a Type3 font used as a clip is left out of the written
+  clip, because its glyphs are content streams, not outlines. The objects after it are then clipped
+  less than they were, never more. No corpus page has it.
+- **Image decode at a reduced size (0021, 0022).** A JPEG drawn at a quarter of its size or less is
+  decoded at 1/2, 1/4 or 1/8 of it, one level fewer than JPX. Renders at that size differ from a
+  full-size decode on at most 0.31% of a corpus page (1.35% of a synthetic page of one-pixel
+  hairlines and a checkerboard) by more than 60 of 765. A regeneration is judged against a render
+  from the same build, so guard verdicts do not change. As for JPX upstream, the decode is sized
+  against the whole render bitmap, not the image's drawn size: MegaPDF always renders whole pages,
+  but a caller that renders a zoomed tile with `FPDF_RenderPageBitmapWithMatrix` gets a softer
+  image (at 8x zoom, up to 1.7% of a synthetic tile and 0.5% of a corpus tile differ by more than
+  60). A JPEG libjpeg will not scale, such as a lossless one, is decoded at full size (0022).
+
+**Guard tolerances (#128).** No change is needed. Every difference that remains on the corpus
+already sits under the per-pixel threshold (60 of 765) or the page budget (0.05% of pixels), and
+the run check (text and bounds within 0.5 pt) has never refused an edit on its own. Loosening
+either would only admit changes the patches now fix.
 
 ## Building
 

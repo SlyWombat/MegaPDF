@@ -3032,6 +3032,38 @@ void test_far_hidden_copies(const std::string& fixtures) {
     }
 }
 
+// #152: a render much smaller than a JPEG decodes it at a reduced size (PDFium patch 0021; PDFium
+// sizes the decode against the whole render). A JPEG libjpeg will not scale (a lossless one) must still
+// draw, at full size (0022): at patch 21 it failed to load and its page stayed blank. Each page is
+// filled by one 661 x 855 image of mid gray with a dark bar, rendered at 80 x 103 px (a 1/4 decode).
+void test_scaled_jpeg_render() {
+    const auto bytes = read_file(std::string(MEGAPDF_REPO_FIXTURES) + "/scaled-jpeg.pdf");
+    megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+    check(d != nullptr, "scaled-jpeg.pdf opens");
+    if (!d) return;
+    const int patches = MEGAPDF_PDFIUM_PATCHES;
+    const char* const names[3] = {"the progressive CMYK JPEG of odd size", "the baseline RGB JPEG of odd size", "the lossless JPEG"};
+    for (int page_index = 0; page_index < 3; page_index++) {
+        Page p(d, page_index);
+        const int w = 80, h = 103;
+        std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4, 0);
+        check(megapdf_render(p.page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK,
+              std::string("scaled-jpeg: page ") + std::to_string(page_index + 1) + " renders small");
+        int drawn = 0;
+        for (size_t i = 0; i < px.size(); i += 4) {
+            const int sum = px[i] + px[i + 1] + px[i + 2];
+            if (sum < 700 && sum > 30) drawn++;
+        }
+        const double share = static_cast<double>(drawn) / (w * h);
+        if (page_index == 2 && patches == 21) {
+            check(share < 0.05, "scaled-jpeg: at patch 21 the lossless JPEG fails to load (fixed by 0022)", std::to_string(share));
+        } else {
+            check(share > 0.5, std::string("scaled-jpeg: ") + names[page_index] + " draws at a reduced size", std::to_string(share));
+        }
+    }
+    megapdf_close(d);
+}
+
 // #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves
 // object indices and rewrites the page's streams. After a change every answer must be what a
 // fresh open of the saved page gives. PDFium regenerates every stream of a page (patch 5), so one
@@ -3535,6 +3567,7 @@ int main(int argc, char** argv) {
     test_form_xobject_text();
     test_hidden_copies(argv[1]);
     test_far_hidden_copies(argv[1]);
+    test_scaled_jpeg_render();
     test_verdicts_follow_changes();
     test_layout_verdicts();
     test_page_regeneration_verdict();

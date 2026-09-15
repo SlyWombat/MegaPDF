@@ -1,0 +1,53 @@
+--- a/core/fxcodec/jpeg/jpegmodule.cpp
++++ b/core/fxcodec/jpeg/jpegmodule.cpp
+@@ -243,6 +243,22 @@
+   if (scale_denom == 2 || scale_denom == 4 || scale_denom == 8) {
+     scale_denom_ = scale_denom;
+     SetScaledOutputSize();
++    // Ask libjpeg for the size it will really decode at before reporting it:
++    // it does not scale every JPEG (a lossless one always decodes at full size),
++    // and the caller sizes the image by what is reported here. When libjpeg
++    // cannot give the scaled size, decode at full size rather than fail later.
++    common_.cinfo.scale_num = 1;
++    common_.cinfo.scale_denom = scale_denom_;
++    const bool calculated = jpeg_common_calc_output_dimensions(&common_);
++    if (!calculated ||
++        static_cast<int>(common_.cinfo.output_width) != output_width_ ||
++        static_cast<int>(common_.cinfo.output_height) != output_height_) {
++      scale_denom_ = 1;
++      output_width_ = orig_width_;
++      output_height_ = orig_height_;
++    }
++    common_.cinfo.scale_num = 1;
++    common_.cinfo.scale_denom = default_scale_denom_;
+   }
+   CalcPitch();
+   scanline_buf_ = DataVector<uint8_t>(pitch_);
+--- a/core/fxcodec/jpeg/jpeg_common.c
++++ b/core/fxcodec/jpeg/jpeg_common.c
+@@ -29,6 +29,14 @@
+   return jpeg_start_decompress(&jpeg_common->cinfo);
+ }
+ 
++boolean jpeg_common_calc_output_dimensions(JpegCommon* jpeg_common) {
++  if (setjmp(jpeg_common->jmpbuf) == -1) {
++    return FALSE;
++  }
++  jpeg_calc_output_dimensions(&jpeg_common->cinfo);
++  return TRUE;
++}
++
+ int jpeg_common_read_header(JpegCommon* jpeg_common, boolean flag) {
+   if (setjmp(jpeg_common->jmpbuf) == -1) {
+     return -1;
+--- a/core/fxcodec/jpeg/jpeg_common.h
++++ b/core/fxcodec/jpeg/jpeg_common.h
+@@ -45,6 +45,8 @@
+ boolean jpeg_common_create_decompress(JpegCommon* jpeg_common);
+ void jpeg_common_destroy_decompress(JpegCommon* jpeg_common);
+ boolean jpeg_common_start_decompress(JpegCommon* jpeg_common);
++// jpeg_calc_output_dimensions(); FALSE when libjpeg reports an error.
++boolean jpeg_common_calc_output_dimensions(JpegCommon* jpeg_common);
+ int jpeg_common_read_header(JpegCommon* jpeg_common, boolean flag);
+ int jpeg_common_read_scanlines(JpegCommon* jpeg_common,
+                                void* buf,
