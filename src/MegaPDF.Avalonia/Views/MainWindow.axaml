@@ -6,7 +6,11 @@
         x:DataType="vm:MainViewModel"
         Title="{Binding WindowTitle}"
         Width="1000" Height="800"
-        MinWidth="480" MinHeight="360">
+        MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterScreen">
+
+  <!-- Width and Height above are only the fallback: the window is sized to the
+       screen's working area in code-behind (#143). -->
 
   <DockPanel>
 
@@ -17,10 +21,18 @@
 
          No HotKey= either: the shortcut modifier differs per platform (Cmd on
          macOS, Ctrl elsewhere), so the gestures and these tooltips are both built
-         in code-behind. A Mac app with Ctrl+O is a Windows app with round corners. -->
-    <Border DockPanel.Dock="Top" Padding="8,8" BorderThickness="0,0,0,1"
+         in code-behind. A Mac app with Ctrl+O is a Windows app with round corners.
+
+         One row at every width (#143). It used to clip whatever did not fit, so at
+         the old 1000-wide default Fit width, Fit page and Options could not be
+         reached at all. Now, as the window narrows, the labels go first (icon only,
+         the way NSToolbar's display mode does), then the least-used commands move
+         into the More menu at the end. The thresholds are measured from the items
+         themselves, in the running language: MainWindow.Toolbar.cs. -->
+    <Border Name="ToolbarHost" DockPanel.Dock="Top" Padding="8,8" BorderThickness="0,0,0,1"
+            ClipToBounds="True"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+      <StackPanel Name="ToolbarItems" Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
         <Button Name="OpenButton" >
           <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
@@ -333,6 +345,16 @@
             </Flyout>
           </Button.Flyout>
         </Button>
+
+        <!-- The overflow (#143). Shown only while commands have left the row; its menu
+             is filled as it opens, from whichever commands are hidden then. -->
+        <Button Name="MoreButton" IsVisible="False">
+          <Path Data="{StaticResource IconMore}" Width="18" Height="18"
+                Fill="{Binding $parent[Button].Foreground}" Stretch="Uniform" />
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight" />
+          </Button.Flyout>
+        </Button>
       </StackPanel>
     </Border>
 
@@ -383,9 +405,13 @@
     <!-- Empty state (SDD §2.2): an app with nothing open should offer the two
          things you might want, not an empty grey rectangle. -->
     <Panel>
+      <!-- AllowAutoHide off (#143): the auto-hiding bars stayed invisible until you
+           scrolled, so a page taller than the window gave no sign there was more
+           of it. The bars still only appear when the content overflows. -->
       <ScrollViewer Name="PageScroller"
                   HorizontalScrollBarVisibility="Auto"
                   VerticalScrollBarVisibility="Auto"
+                  AllowAutoHide="False"
                   Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
       <ItemsControl Name="PageList" ItemsSource="{Binding Pages}" Margin="0,16">
         <ItemsControl.ItemsPanel>

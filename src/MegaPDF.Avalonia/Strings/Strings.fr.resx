@@ -760,4 +760,16 @@
     <value>Continuer</value>
     <comment>Page regeneration warning (#139)</comment>
   </data>
+  <data name="ToolbarMore" xml:space="preserve">
+    <value>Plus</value>
+    <comment>Toolbar overflow button: tooltip and accessible name (#143)</comment>
+  </data>
+  <data name="TextFontName" xml:space="preserve">
+    <value>Police du texte</value>
+    <comment>Font picker: accessible name, and its submenu in the toolbar overflow (#143)</comment>
+  </data>
+  <data name="TextSizeName" xml:space="preserve">
+    <value>Taille du texte</value>
+    <comment>Size picker: accessible name, and its submenu in the toolbar overflow (#143)</comment>
+  </data>
 </root>

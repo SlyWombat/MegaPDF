@@ -625,4 +625,13 @@ public static partial class Strings
 
     /// <summary>Continue</summary>
     public static string Continue => Get("Continue");
+
+    /// <summary>More</summary>
+    public static string ToolbarMore => Get("ToolbarMore");
+
+    /// <summary>Text font</summary>
+    public static string TextFontName => Get("TextFontName");
+
+    /// <summary>Text size</summary>
+    public static string TextSizeName => Get("TextSizeName");
 }
