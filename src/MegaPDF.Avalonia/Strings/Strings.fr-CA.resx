@@ -774,4 +774,28 @@
     <value>Taille du texte</value>
     <comment>Size picker: accessible name, and its submenu in the toolbar overflow (#143)</comment>
   </data>
+  <data name="ZoomPercent" xml:space="preserve">
+    <value>{0} %</value>
+    <comment>Toolbar zoom menu button and its presets: a zoom level (#144)</comment>
+  </data>
+  <data name="ZoomMenuName" xml:space="preserve">
+    <value>Niveau de zoom</value>
+    <comment>Toolbar zoom menu button: tooltip and accessible name, and its submenu in the overflow (#144)</comment>
+  </data>
+  <data name="MenuFile" xml:space="preserve">
+    <value>Fichier</value>
+    <comment>macOS menu bar: the File menu (#144)</comment>
+  </data>
+  <data name="MenuEdit" xml:space="preserve">
+    <value>Édition</value>
+    <comment>macOS menu bar: the Edit menu (#144)</comment>
+  </data>
+  <data name="MenuView" xml:space="preserve">
+    <value>Présentation</value>
+    <comment>macOS menu bar: the View menu (#144)</comment>
+  </data>
+  <data name="MenuTools" xml:space="preserve">
+    <value>Outils</value>
+    <comment>macOS menu bar: the Tools menu (#144)</comment>
+  </data>
 </root>

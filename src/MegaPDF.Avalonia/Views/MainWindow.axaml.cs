@@ -32,11 +32,10 @@ public partial class MainWindow : Window
         // reshape rather than a rename: WinUI's FileOpenPicker is a type you
         // construct, Avalonia's IStorageProvider is reached through the TopLevel and
         // is async. Keeping it in the view is what lets the view model stay UI-free.
+        // Save As, Password…, Shrink and Options are entries in the More menu and the
+        // menu bar now (#144), wired where those are built.
         OpenButton.Click += async (_, _) => await OpenDocumentAsync();
-        SaveAsButton.Click += async (_, _) => await SaveAsAsync();
         EmptyOpenButton.Click += async (_, _) => await OpenDocumentAsync();
-        ShrinkButton.Click += async (_, _) => await ShrinkForEmailAsync();
-        SecurityButton.Click += async (_, _) => await ChangeSecurityAsync();
         UnlockButton.Click += async (_, _) => await UnlockAsync();
 
         RecentList.SelectionChanged += async (_, _) =>
@@ -88,6 +87,8 @@ public partial class MainWindow : Window
         base.OnDataContextChanged(e);
         if (ViewModel is { } vm)
         {
+            // The menu bar (#144) lists the view model's font and size choices.
+            BuildMenuBar();
             vm.SaveRequested += () => _ = SaveAsync();
             vm.ScrollToRequested += ScrollToMatch;
             // The focused region is brought into view by the same rules a search hit
@@ -111,7 +112,15 @@ public partial class MainWindow : Window
                     OnSelectionChanged();
                 if (args.PropertyName is nameof(MainViewModel.PageFocus) or nameof(MainViewModel.Zoom))
                     OnPageFocusChanged();
+                // The pickers join and leave the row with their context (#144).
+                if (args.PropertyName is nameof(MainViewModel.IsTextStyleContext))
+                    ApplyToolbarLayout();
+                // An editor writing new text shows the face and size it will be written in.
+                if (args.PropertyName is nameof(MainViewModel.TextFont) or nameof(MainViewModel.TextSize))
+                    FollowPickersInEditor();
+                RefreshMenuBar();
             };
+            RefreshMenuBar();
         }
     }
 
@@ -351,8 +360,14 @@ public partial class MainWindow : Window
             }
         };
         // Clicking away commits rather than discarding: losing typing to a stray
-        // click is the more annoying failure.
-        editor.LostFocus += (_, _) => { if (_inlineEditor == editor) Commit(); };
+        // click is the more annoying failure. Except into the font and size pickers
+        // on the toolbar (#144): choosing a face for the text being typed is part of
+        // typing it, and the picker hands focus back when it closes.
+        editor.LostFocus += (_, _) =>
+        {
+            if (_inlineEditor == editor && !IsInTextPicker(FocusManager?.GetFocusedElement()))
+                Commit();
+        };
 
         if (OverlayOf(presenter) is { } overlay)
         {
@@ -380,6 +395,19 @@ public partial class MainWindow : Window
                 else
                     vm.CancelModes();
             });
+        _editorFollowsPickers = _inlineEditor is not null;
+    }
+
+    /// <summary>Whether the open editor is writing added text, whose face and size the pickers choose.</summary>
+    private bool _editorFollowsPickers;
+
+    /// <summary>A picker changed while added text is being typed: the editor shows the new face and size.</summary>
+    private void FollowPickersInEditor()
+    {
+        if (!_editorFollowsPickers || _inlineEditor is not { } editor || ViewModel is not { } vm)
+            return;
+        editor.FontFamily = new FontFamily(FamilyFor(vm.TextFont));
+        editor.FontSize = vm.TextSize * PageBitmap.PointsToPixels * vm.Zoom;
     }
 
     /// <summary>
@@ -442,8 +470,13 @@ public partial class MainWindow : Window
     {
         if (_inlineEditor is null)
             return;
-        (_inlineEditor.Parent as Panel)?.Children.Remove(_inlineEditor);
+        // Cleared first: removing a focused editor raises LostFocus, which must find it gone.
+        var editor = _inlineEditor;
         _inlineEditor = null;
+        _editorFollowsPickers = false;
+        (editor.Parent as Panel)?.Children.Remove(editor);
+        if (ViewModel is { } vm)
+            vm.IsEditingTextBox = false;
     }
 
     /// <summary>Maps the three permitted base-14 names to fonts the OS actually has.</summary>
@@ -992,38 +1025,35 @@ public partial class MainWindow : Window
 
     private void BindShortcuts()
     {
-        Bind(OpenButton, Key.O, KeyModifiers.None, Strings.OpenAPdf, () => _ = OpenDocumentAsync());
-        Bind(SaveButton, Key.S, KeyModifiers.None, Strings.Save, () => ViewModel?.SaveCommand.Execute(null));
-        Bind(PrintButton, Key.P, KeyModifiers.None, Strings.Print, () => ViewModel?.PrintCommand.Execute(null));
-        Bind(UndoButton, Key.Z, KeyModifiers.None, Strings.Undo, () => ViewModel?.UndoCommand.Execute(null));
-        // Redo is Shift+Cmd+Z on macOS and Ctrl+Y on Windows — genuinely different
-        // conventions, not just a different modifier.
-        if (OperatingSystem.IsMacOS())
-            Bind(RedoButton, Key.Z, KeyModifiers.Shift, Strings.Redo, () => ViewModel?.RedoCommand.Execute(null));
-        else
-            Bind(RedoButton, Key.Y, KeyModifiers.None, Strings.Redo, () => ViewModel?.RedoCommand.Execute(null));
-        Bind(ZoomOutButton, Key.OemMinus, KeyModifiers.None, Strings.ZoomOut, () => ViewModel?.ZoomOutCommand.Execute(null));
-        Bind(ZoomInButton, Key.OemPlus, KeyModifiers.None, Strings.ZoomIn, () => ViewModel?.ZoomInCommand.Execute(null));
-        Bind(ZoomResetButton, Key.D0, KeyModifiers.None, Strings.ActualSize, () => ViewModel?.ZoomResetCommand.Execute(null));
+        // The gestures themselves are defined once, in MainWindow.MenuBar.cs, so the
+        // key binding, the tooltip, the More menu and the menu bar cannot disagree.
+        Bind(OpenButton, OpenGesture, Strings.OpenAPdf, () => _ = OpenDocumentAsync());
+        Bind(SaveButton, SaveGesture, Strings.Save, () => ViewModel?.SaveCommand.Execute(null));
+        Bind(null, SaveAsGesture, Strings.SaveAs, () => { if (ViewModel?.IsDocumentOpen == true) _ = SaveAsAsync(); });
+        Bind(null, PrintGesture, Strings.Print, () => ViewModel?.PrintCommand.Execute(null));
+        Bind(UndoButton, UndoGesture, Strings.Undo, () => ViewModel?.UndoCommand.Execute(null));
+        Bind(RedoButton, RedoGesture, Strings.Redo, () => ViewModel?.RedoCommand.Execute(null));
+        Bind(ZoomOutButton, ZoomOutGesture, Strings.ZoomOut, () => ViewModel?.ZoomOutCommand.Execute(null));
+        Bind(ZoomInButton, ZoomInGesture, Strings.ZoomIn, () => ViewModel?.ZoomInCommand.Execute(null));
+        Bind(null, ActualSizeGesture, Strings.ActualSize, () => ViewModel?.ZoomResetCommand.Execute(null));
+        Bind(null, OptionsGesture, Strings.Options, ShowOptions);
 
         // Cmd/Ctrl+F has no toolbar button to hang a tooltip on — the find bar is
-        // its own affordance once open.
-        KeyBindings.Add(new KeyBinding
-        {
-            Gesture = new KeyGesture(Key.F, CommandModifier),
-            Command = new RelayCommand(OpenFind),
-        });
+        // its own affordance once open, and the menu bar lists it.
+        Bind(null, FindGesture, Strings.FindInDocument, OpenFind);
 
-        void Bind(Button button, Key key, KeyModifiers extra, string description, Action invoke)
+        void Bind(Button? button, KeyGesture gesture, string description, Action invoke)
         {
-            var modifiers = CommandModifier | extra;
             KeyBindings.Add(new KeyBinding
             {
-                Gesture = new KeyGesture(key, modifiers),
+                Gesture = gesture,
                 Command = new RelayCommand(invoke),
             });
-            var shiftLabel = extra.HasFlag(KeyModifiers.Shift) ? (OperatingSystem.IsMacOS() ? "⇧" : "Shift+") : "";
-            ToolTip.SetTip(button, $"{description} ({CommandSymbol}{shiftLabel}{KeyLabel(key)})");
+            if (button is null)
+                return;
+            _toolbarGestures[button] = gesture;
+            var shiftLabel = gesture.KeyModifiers.HasFlag(KeyModifiers.Shift) ? (OperatingSystem.IsMacOS() ? "⇧" : "Shift+") : "";
+            ToolTip.SetTip(button, $"{description} ({CommandSymbol}{shiftLabel}{KeyLabel(gesture.Key)})");
         }
     }
 
@@ -1031,6 +1061,7 @@ public partial class MainWindow : Window
     {
         Key.OemMinus => "-",
         Key.OemPlus => "+",
+        Key.OemComma => ",",
         Key.D0 => "0",
         _ => key.ToString(),
     };

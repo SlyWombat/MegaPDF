@@ -131,6 +131,11 @@ public partial class App : Application
         if (ok)
         {
             await Task.Delay(TimeSpan.FromSeconds(1));
+            Console.Error.WriteLine(mainWindow.DescribeToolbar());
+            // --hold <seconds>: stay up before capturing, so a popup the render cannot
+            // see (the `more` state) can be photographed from outside (#144).
+            if (int.TryParse(Screenshot.ArgumentAfter("--hold"), out var hold) && hold > 0)
+                await Task.Delay(TimeSpan.FromSeconds(hold));
             ok = await Screenshot.CaptureAsync(mainWindow, path);
         }
 

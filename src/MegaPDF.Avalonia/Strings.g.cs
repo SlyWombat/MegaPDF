@@ -634,4 +634,22 @@ public static partial class Strings
 
     /// <summary>Text size</summary>
     public static string TextSizeName => Get("TextSizeName");
+
+    /// <summary>{0}%</summary>
+    public static string ZoomPercent(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ZoomPercent"), arg0);
+
+    /// <summary>Zoom level</summary>
+    public static string ZoomMenuName => Get("ZoomMenuName");
+
+    /// <summary>File</summary>
+    public static string MenuFile => Get("MenuFile");
+
+    /// <summary>Edit</summary>
+    public static string MenuEdit => Get("MenuEdit");
+
+    /// <summary>View</summary>
+    public static string MenuView => Get("MenuView");
+
+    /// <summary>Tools</summary>
+    public static string MenuTools => Get("MenuTools");
 }

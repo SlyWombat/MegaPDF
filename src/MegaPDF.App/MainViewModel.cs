@@ -611,7 +611,38 @@ public partial class MainViewModel(Window window) : ObservableObject
     private int _zoomPercent = 100;
 
     public double ZoomFactor => ZoomPercent / 100.0;
-    public string ZoomLabel => $"{ZoomPercent}%";
+
+    /// <summary>"100%" — or "100 %" in French — on the toolbar's zoom menu button (#144).</summary>
+    public string ZoomLabel => Strings.ZoomPercent(ZoomPercent);
+
+    /// <summary>The fixed levels the zoom menu offers under Actual size and the fits (#144).</summary>
+    public static IReadOnlyList<int> ZoomPresets { get; } = [50, 75, 100, 125, 150, 200, 300];
+
+    /// <summary>A level from the zoom menu, or Actual size (100).</summary>
+    public Task SetZoomPercentAsync(int percent) => SetZoomAsync(percent);
+
+    /// <summary>
+    /// An added text box on a page, found again after an edit rewrote it (#144): by its
+    /// id where it has one, which survives a restyle, else by object index.
+    /// </summary>
+    public PdfTextRun? FindTextBox(int pageIndex, string? textBoxId, int objectIndex)
+    {
+        if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
+            return null;
+        using var page = _document.GetPage(pageIndex);
+        return page.GetTextBoxes().FirstOrDefault(b => textBoxId is not null
+            ? b.TextBoxId == textBoxId
+            : b.ObjectIndex == objectIndex);
+    }
+
+    /// <summary>The most recently added text box on a page, for the `textbox` screenshot state.</summary>
+    public PdfTextRun? LastTextBoxOn(int pageIndex)
+    {
+        if (_document is null || pageIndex < 0 || pageIndex >= Pages.Count)
+            return null;
+        using var page = _document.GetPage(pageIndex);
+        return page.GetTextBoxes().LastOrDefault();
+    }
 
     [RelayCommand(CanExecute = nameof(CanZoomIn))]
     private async Task ZoomInAsync() => await SetZoomAsync(ZoomPercent + ZoomStep);

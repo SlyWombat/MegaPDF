@@ -100,6 +100,40 @@ public partial class App : Application
                 }
                 return true;
 
+            // The More menu held open (#144): Save As, Password…, Print, Shrink and
+            // Options, under whatever the window's width has overflowed.
+            case "more":
+                if (window is null)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state more has no window to open the menu on.");
+                    return false;
+                }
+                window.ShowMoreMenuForScreenshot();
+                return true;
+
+            // An added text box, selected (#144): the font and size pickers join the
+            // toolbar row for it. The mode state shows them for Add text armed.
+            // With a window the add goes through the #139 page check first, off the UI
+            // thread, so the box is selected a moment later; the capture log's toolbar
+            // line says pickers=shown when it worked.
+            // Placed where --story prints the name: under the demo agreement's signature
+            // line (tools/gen_test_fixtures.py demo.pdf). On another document it may land on text.
+            case "textbox":
+                viewModel.AddTextBox(0, new PdfPoint(72, 405), "Jane Whitfield");
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (viewModel.BoxesOn(0).LastOrDefault() is not { } box)
+                    {
+                        Console.Error.WriteLine("::error::--screenshot-state textbox: the text box was not added.");
+                        return;
+                    }
+                    viewModel.HandlePageClick(0, new PdfPoint(box.Bounds.X + (box.Bounds.Width / 2),
+                                                              box.Bounds.Y + (box.Bounds.Height / 2)));
+                    if (!viewModel.IsTextStyleContext)
+                        Console.Error.WriteLine("::error::--screenshot-state textbox: selecting the box did not bring the pickers.");
+                }, TimeSpan.FromSeconds(1));
+                return true;
+
             // The mode banner — the largest area of brand accent in the app, and
             // the only place BrandAccentOn is used.
             case "mode":
@@ -138,25 +172,39 @@ public partial class App : Application
     /// a PNG, and exits. The delay is a wait for real work — page rasterisation is
     /// asynchronous with respect to layout — not a guess at a frame rate.
     /// </summary>
-    private static void CaptureAndExit(IClassicDesktopStyleApplicationLifetime desktop, string outPath)
+    private static void CaptureAndExit(IClassicDesktopStyleApplicationLifetime desktop, string outPath, double seconds)
     {
         DispatcherTimer.RunOnce(() =>
         {
             if (desktop.MainWindow is { } window)
+            {
+                // The toolbar's step and the menu bar audit (#144), for whoever reads the log.
+                if (window is MainWindow main)
+                {
+                    Console.WriteLine(main.DescribeToolbar());
+                    Console.WriteLine(main.DescribeMenuBar());
+                }
                 RenderWindow(window, outPath);
+            }
             desktop.Shutdown();
-        }, TimeSpan.FromSeconds(4));
+        }, TimeSpan.FromSeconds(seconds));
     }
 
+    /// <summary>
+    /// --scale 2: render at twice the window's DIP size (192 DPI), the way a Retina
+    /// screen draws it, for review shots (#144). One otherwise, as before.
+    /// </summary>
+    private static double RenderScale = 1;
+
     /// <summary>Renders the window as it stands to a PNG; never throws.</summary>
-    private static void RenderWindow(Window window, string outPath)
+    private static void RenderWindow(TopLevel window, string outPath)
     {
         try
         {
             var size = new PixelSize(
-                Math.Max(1, (int)window.Bounds.Width),
-                Math.Max(1, (int)window.Bounds.Height));
-            using var target = new RenderTargetBitmap(size, new Vector(96, 96));
+                Math.Max(1, (int)(window.Bounds.Width * RenderScale)),
+                Math.Max(1, (int)(window.Bounds.Height * RenderScale)));
+            using var target = new RenderTargetBitmap(size, new Vector(96 * RenderScale, 96 * RenderScale));
             target.Render(window);
             Directory.CreateDirectory(Path.GetDirectoryName(outPath) ?? ".");
             target.Save(outPath);
@@ -452,6 +500,9 @@ public partial class App : Application
                 if (ArgumentAfter(desktop.Args, "--theme") is "dark")
                     RequestedThemeVariant = ThemeVariant.Dark;
 
+                if (ArgumentAfter(desktop.Args, "--scale") is "2")
+                    RenderScale = 2;
+
                 // A state that silently does not fire is worse than no state at
                 // all: the workflow still writes 06-mode-banner.png, and the next
                 // person compares three innocuous screenshots and concludes the
@@ -466,7 +517,13 @@ public partial class App : Application
                             desktop.Shutdown(1);
                     }, TimeSpan.FromSeconds(2));
                 }
-                CaptureAndExit(desktop, shot);
+                // --hold <seconds>: stay up longer before rendering and exiting, so a
+                // screen capture of a popup the window cannot render (the `more` state's
+                // menu) can be taken from outside. Four seconds otherwise.
+                var hold = double.TryParse(ArgumentAfter(desktop.Args, "--hold"),
+                    System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+                    out var holdSeconds) && holdSeconds > 4 ? holdSeconds : 4;
+                CaptureAndExit(desktop, shot, hold);
             }
         }
 

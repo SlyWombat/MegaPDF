@@ -70,6 +70,25 @@ internal static class Screenshot
             case "find-zoomed":
                 return await FindOnAZoomedPageAsync(window);
 
+            // #144: an added text box selected, which brings the font and size pickers
+            // onto the toolbar row. The mode state shows them for Add text armed.
+            case "textbox":
+                if (!await window.SelectNewTextBoxForScreenshotAsync("Jane Whitfield"))
+                {
+                    Console.Error.WriteLine(
+                        "--screenshot-state textbox: no box was selected, or the pickers did not appear.");
+                    return false;
+                }
+                return true;
+
+            // #144: the toolbar's "…" open. RenderTargetBitmap renders neither the popup
+            // layer nor a popup's content on its own (both tried: the content throws
+            // ArgumentException), so the menu itself is for a screen capture taken
+            // during --hold; the rendered PNG shows the window behind it.
+            case "more":
+                window.OpenToolbarOverflow();
+                return true;
+
             case "sign":
                 return await OpenSignatureLibraryAsync(window);
 
@@ -228,11 +247,17 @@ internal static class Screenshot
             // itself RenderAsync came back 1358x559 for a window whose content
             // measured 687x439.5 at scale 2 — the width right and the height cut
             // to a third. Asking for the size removes the guess.
+            //
+            // --scale 2 (#144): twice the logical size in pixels whatever the display
+            // scale, so review shots match between machines at 150% and 200%.
             if (content is FrameworkElement element)
             {
                 element.UpdateLayout();
-                var w = (int)Math.Round(element.ActualWidth);
-                var h = (int)Math.Round(element.ActualHeight);
+                var factor = ArgumentAfter("--scale") is "2" && element.XamlRoot is { RasterizationScale: > 0 } root
+                    ? 2 / root.RasterizationScale
+                    : 1;
+                var w = (int)Math.Round(element.ActualWidth * factor);
+                var h = (int)Math.Round(element.ActualHeight * factor);
                 await bitmap.RenderAsync(content, w, h);
             }
             else

@@ -669,6 +669,68 @@ internal static class Program
             failures++;
         }
 
+        // --- The toolbar's contextual pickers and zoom menu (#144) ---
+        //
+        // The pickers are on the row only while there is text to style, and choosing a
+        // size with a box selected restyles that box. The view shows and hides them from
+        // IsTextStyleContext, so that flag and the restyle are what is checked here.
+        Console.WriteLine("toolbar pickers and zoom menu (#144):");
+        try
+        {
+            using var vm = new MainViewModel(state);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            Check("the pickers are away with nothing to style", !vm.IsTextStyleContext);
+
+            vm.ToggleAddTextCommand.Execute(null);
+            Check("arming Add text brings them", vm.IsTextStyleContext);
+
+            vm.TextFont = StandardTextBoxFonts.Sans;
+            vm.TextSize = 12;
+            vm.AddTextBox(0, new PdfPoint(100, 300), "picker");
+            Check("placing the text puts them away again", !vm.IsTextStyleContext);
+
+            var box = vm.BoxesOn(0).FirstOrDefault(b => b.Text.Contains("picker", StringComparison.Ordinal));
+            Check("the placed box is found", box is not null);
+            if (box is not null)
+            {
+                vm.HandlePageClick(0, new PdfPoint(box.Bounds.X + (box.Bounds.Width / 2),
+                                                   box.Bounds.Y + (box.Bounds.Height / 2)));
+                Check("selecting the box brings them back",
+                      vm.IsTextStyleContext && vm.Selection is { Kind: MainViewModel.SelectionKind.TextBox });
+
+                vm.TextSize = 18;
+                var restyled = vm.BoxesOn(0).FirstOrDefault(b => b.Text.Contains("picker", StringComparison.Ordinal));
+                Check("choosing a size restyles the selected box",
+                      restyled is not null && Math.Abs(restyled.FontSize - 18) < 0.5);
+                Check("and the box stays selected at its new size",
+                      vm.Selection is { Kind: MainViewModel.SelectionKind.TextBox, Run: { } run } && Math.Abs(run.FontSize - 18) < 0.5);
+
+                vm.TextFont = StandardTextBoxFonts.Mono;
+                Check("choosing a face restyles it too",
+                      vm.BoxesOn(0).Any(b => b.Text.Contains("picker", StringComparison.Ordinal)
+                                             && b.TextBoxFont == StandardTextBoxFonts.Mono));
+
+                vm.ClearSelection();
+                Check("deselecting puts the pickers away", !vm.IsTextStyleContext);
+
+                vm.UndoCommand.Execute(null);
+                vm.UndoCommand.Execute(null);
+                Check("undo takes the box back to its size and face",
+                      vm.BoxesOn(0).Any(b => b.Text.Contains("picker", StringComparison.Ordinal)
+                                             && Math.Abs(b.FontSize - 12) < 0.5
+                                             && (b.TextBoxFont ?? StandardTextBoxFonts.Default) == StandardTextBoxFonts.Sans));
+            }
+
+            vm.SetZoomCommand.Execute(1.5);
+            Check("a zoom preset applies", Math.Abs(vm.Zoom - 1.5) < 0.001);
+            Check("and the zoom button reads it", vm.ZoomPercentLabel == Strings.ZoomPercent(150));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::toolbar pickers: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Save As adopts the copy (#68) ---
         Console.WriteLine("save as:");
         var copyPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-copy-{Guid.NewGuid():N}.pdf");

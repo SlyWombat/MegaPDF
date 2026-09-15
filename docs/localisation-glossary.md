@@ -62,7 +62,7 @@ Conventions (OQLF, Canadian French):
 | Font | Police | |
 | Find | Rechercher | |
 | Search | Rechercher | |
-| More | Plus | phones' overflow menu (#144); *Plus d'options* where the label is "More options" |
+| More | Plus | overflow menu: phones and the desktop toolbars (#143, #144); *Plus d'options* where the label is "More options" |
 | Find in document | Rechercher dans le document | |
 | No results | Aucun résultat | |
 | Not found | Introuvable | |
@@ -76,6 +76,10 @@ Conventions (OQLF, Canadian French):
 | Fit page | Page entière | |
 | Actual size | Taille réelle | |
 | Zoom and fit | Zoom et ajustement | |
+| Zoom level | Niveau de zoom | #144, the toolbar's zoom menu button |
+| {0}% | {0} % | #144, a zoom level; non-breaking space (U+00A0) before % |
+| File, Edit, View, Tools | Fichier, Édition, Présentation, Outils | #144, macOS menu bar: the names macOS itself uses in French |
+| Ctrl+Plus, Ctrl+Minus | Ctrl+Plus, Ctrl+Moins | #144, Windows zoom shortcuts in tooltips; Shift is *Maj* |
 | Settings | Paramètres | Windows |
 | Options | Options | macOS |
 | Checkbox mark | Marque des cases à cocher | |

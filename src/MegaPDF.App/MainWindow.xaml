@@ -29,286 +29,242 @@
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindAccelerator" />
         </Grid.KeyboardAccelerators>
 
-        <!-- The toolbar is one row of fixed-size buttons, so on a narrow window the
-             ends used to be clipped: a 1366-wide display (the Store's own minimum)
-             could not show Find or the zoom controls at all. It now sheds detail in
-             two steps — labels first, then the zoom cluster folds into the View
-             flyout — driven by ApplyToolbarLayout in the code-behind, which is where
-             the breakpoints are documented. Every button keeps its tooltip and
-             AutomationProperties.Name, so the icon-only widths stay discoverable and
-             Narrator reads them exactly as before.
+        <!-- The toolbar (#144): one CommandBar row, the same height at every width.
 
-             Done in code rather than with VisualStates because neither mechanism works
-             here: AdaptiveTrigger measures a CoreWindow, which a WinUI 3 desktop window
-             does not have, and VisualStateManager.GoToState needs a Control, which this
-             root Grid is not. -->
+             Groups: File (Open, Save), Tools (Signatures, Add text, Whiteout, and the
+             font and size pickers while there is text to style), history (Undo, Redo)
+             and one zoom control (−, the level with its menu, +). Save As, Password…,
+             Print, Shrink, Find and Settings live in the overflow ("…"), which is
+             always there.
+
+             Wide, labels sit to the right of the icons. When the labelled row no longer
+             fits — a width measured from the items, in the running language, not a
+             constant; ApplyToolbarLayout in MainWindow.Toolbar.cs — the labels go and
+             every button keeps its tooltip and automation name. Narrower still, the
+             CommandBar's dynamic overflow moves commands into "…" lowest
+             DynamicOverflowOrder first: Redo, then zoom, then the pickers, Whiteout,
+             Undo, Add text, Signatures and Save. Open never leaves.
+
+             The shortcuts are on RootGrid rather than on the buttons, so they keep
+             working for a command that has overflowed (MainWindow.Toolbar.cs). -->
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Single slim toolbar — the app's entire command surface (SDD §2.2) -->
-        <Grid x:Name="Toolbar" Grid.Row="0" Padding="8,4" ColumnSpacing="{ThemeResource SpaceXs}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <CommandBar
+            x:Name="Toolbar"
+            Grid.Row="0"
+            HorizontalAlignment="Left"
+            Margin="4,0"
+            Background="Transparent"
+            DefaultLabelPosition="Right"
+            IsDynamicOverflowEnabled="True"
+            OverflowButtonVisibility="Visible"
+            AutomationProperties.AutomationId="Toolbar">
+            <AppBarButton x:Name="OpenButton" Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" KeyboardAcceleratorTextOverride="Ctrl+O" DynamicOverflowOrder="100" AutomationProperties.AutomationId="OpenButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE8E5;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <!-- The visible label carries the unsaved-changes dot; the UIA name
+                 stays plain "Save" so Narrator announces a stable control name. -->
+            <AppBarButton x:Name="SaveButton" Command="{x:Bind ViewModel.SaveCommand}" Label="{x:Bind ViewModel.SaveButtonLabel, Mode=OneWay}" AccessKey="S" KeyboardAcceleratorTextOverride="Ctrl+S" DynamicOverflowOrder="90" AutomationProperties.AutomationId="SaveButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE74E;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarSeparator DynamicOverflowOrder="80" />
 
-            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}">
-                <Button x:Name="OpenButton" Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" x:Uid="OpenButton" AutomationProperties.AutomationId="OpenButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE8E5;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelOpen" x:Uid="LabelOpen" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control" Key="O" />
-                    </Button.KeyboardAccelerators>
-                </Button>
+            <!-- The three editing tools follow the document's permissions (#131):
+                 annotate for signatures, modify for whiteout and added text. -->
+            <AppBarButton x:Name="SignaturesToolbarButton" Click="OnSignaturesClicked" IsEnabled="{x:Bind ViewModel.IsSigningAllowed, Mode=OneWay}" DynamicOverflowOrder="80" AutomationProperties.AutomationId="SignaturesButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xEE56;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="AddTextButton" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE8D2;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="WhiteoutButton" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <!-- Contextual (#144): shown while Add text is armed, or an added text box is
+                 selected or being edited. No formatting UI for the document's own text
+                 or form fields (SDD §3.1): their formatting is inherited. -->
+            <AppBarElementContainer x:Name="FontPickerItem" Visibility="Collapsed" DynamicOverflowOrder="30"
+                                    VerticalContentAlignment="Center" IsTabStop="False">
+                <ComboBox x:Name="FontPicker" MinWidth="116" Margin="4,0,2,0" VerticalAlignment="Center"
+                          AutomationProperties.AutomationId="FontPicker"
+                          SelectionChanged="OnTextPickerChanged" DropDownClosed="OnTextPickerClosed" />
+            </AppBarElementContainer>
+            <AppBarElementContainer x:Name="SizePickerItem" Visibility="Collapsed" DynamicOverflowOrder="30"
+                                    VerticalContentAlignment="Center" IsTabStop="False">
+                <ComboBox x:Name="SizePicker" MinWidth="72" Margin="2,0,4,0" VerticalAlignment="Center"
+                          AutomationProperties.AutomationId="SizePicker"
+                          SelectionChanged="OnTextPickerChanged" DropDownClosed="OnTextPickerClosed" />
+            </AppBarElementContainer>
+            <AppBarSeparator DynamicOverflowOrder="50" />
 
-                <!-- The visible label carries the unsaved-changes dot; the UIA name
-                     stays plain "Save" so Narrator announces a stable control name. -->
-                <Button Command="{x:Bind ViewModel.SaveCommand}" AccessKey="S" x:Uid="SaveButton" AutomationProperties.AutomationId="SaveButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE74E;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelSave" Text="{x:Bind ViewModel.SaveButtonLabel, Mode=OneWay}" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control" Key="S" />
-                    </Button.KeyboardAccelerators>
-                </Button>
+            <AppBarButton x:Name="UndoButton" Command="{x:Bind ViewModel.UndoCommand}" KeyboardAcceleratorTextOverride="Ctrl+Z" DynamicOverflowOrder="50" AutomationProperties.AutomationId="UndoButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE7A7;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarButton x:Name="RedoButton" Command="{x:Bind ViewModel.RedoCommand}" KeyboardAcceleratorTextOverride="Ctrl+Y" DynamicOverflowOrder="10" AutomationProperties.AutomationId="RedoButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE7A6;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarSeparator DynamicOverflowOrder="20" />
 
-                <Button Command="{x:Bind ViewModel.SaveAsCommand}" x:Uid="SaveAsButton" AutomationProperties.AutomationId="SaveAsButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE792;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelSaveAs" x:Uid="LabelSaveAs" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control,Shift" Key="S" />
-                    </Button.KeyboardAccelerators>
-                </Button>
-
-                <!-- Set, change or remove the document's password; on a restricted
-                     document, offers the owner password instead (#131, ADR-004). -->
-                <Button Command="{x:Bind ViewModel.SecurityCommand}" x:Uid="SecurityButton" AutomationProperties.AutomationId="SecurityButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE72E;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelSecurity" x:Uid="LabelSecurity" />
-                    </StackPanel>
-                </Button>
-
-                <Button Command="{x:Bind ViewModel.ShrinkForEmailCommand}" x:Uid="ShrinkButton" AutomationProperties.AutomationId="ShrinkButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE715;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelShrink" x:Uid="LabelShrink" />
-                    </StackPanel>
-                </Button>
-
-                <Button Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsPrintAllowed, Mode=OneWay}" x:Uid="PrintButton" AutomationProperties.AutomationId="PrintButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE749;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelPrint" x:Uid="LabelPrint" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control" Key="P" />
-                    </Button.KeyboardAccelerators>
-                </Button>
-
-                <AppBarSeparator />
-
-                <Button Command="{x:Bind ViewModel.UndoCommand}" x:Uid="UndoButton" AutomationProperties.AutomationId="UndoButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE7A7;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelUndo" x:Uid="LabelUndo" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control" Key="Z" />
-                    </Button.KeyboardAccelerators>
-                </Button>
-
-                <Button Command="{x:Bind ViewModel.RedoCommand}" x:Uid="RedoButton" AutomationProperties.AutomationId="RedoButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE7A6;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelRedo" x:Uid="LabelRedo" />
-                    </StackPanel>
-                    <Button.KeyboardAccelerators>
-                        <KeyboardAccelerator Modifiers="Control" Key="Y" />
-                    </Button.KeyboardAccelerators>
-                </Button>
-
-                <AppBarSeparator />
-
-                <!-- The three editing tools follow the document's permissions (#131):
-                     annotate for signatures, modify for whiteout and added text. -->
-                <Button x:Name="SignaturesToolbarButton" IsEnabled="{x:Bind ViewModel.IsSigningAllowed, Mode=OneWay}" x:Uid="SignaturesButton" AutomationProperties.AutomationId="SignaturesButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelSignatures" x:Uid="LabelSignatures" />
-                    </StackPanel>
-                    <Button.Flyout>
-                        <Flyout x:Name="SignaturesFlyout" Placement="BottomEdgeAlignedLeft">
-                            <!-- The library itself lives in SignatureLibraryPanel (#100), shared
-                                 with the `sign` screenshot state's in-tree copy below. -->
-                            <local:SignatureLibraryPanel
-                                ViewModel="{x:Bind ViewModel}"
-                                Picked="OnSignaturePicked"
-                                RenameRequested="OnRenameSignatureRequested"
-                                DeleteRequested="OnDeleteSignatureRequested"
-                                DrawRequested="OnDrawSignatureClicked"
-                                TypeRequested="OnTypeSignatureClicked"
-                                PhotoRequested="OnAddSignatureFromImageClicked" />
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-
-                <Button Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" x:Uid="WhiteoutButton" AutomationProperties.AutomationId="WhiteoutButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE75C;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelWhiteout" x:Uid="LabelWhiteout" />
-                    </StackPanel>
-                </Button>
-
-                <Button Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsTextBoxAllowed, Mode=OneWay}" x:Uid="AddTextButton" AutomationProperties.AutomationId="AddTextButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE8D2;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelAddText" x:Uid="LabelAddText" />
-                    </StackPanel>
-                </Button>
-
-                <AppBarSeparator />
-
-                <Button Click="OnFindClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" x:Uid="FindButton" AutomationProperties.AutomationId="FindButton">
-                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                        <FontIcon Glyph="&#xE721;" FontSize="{ThemeResource TypeSubtitle}" />
-                        <TextBlock x:Name="LabelFind" x:Uid="LabelFind" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
-                <StackPanel x:Name="ViewControls" Orientation="Horizontal" Spacing="{ThemeResource SpaceXs}" VerticalAlignment="Center">
-                    <Button Command="{x:Bind ViewModel.ZoomOutCommand}" Content="&#xE738;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="ZoomOutButton" AutomationProperties.AutomationId="ZoomOutButton" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}"
-                        VerticalAlignment="Center"
-                        MinWidth="42"
-                        TextAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <Button Command="{x:Bind ViewModel.ZoomInCommand}" Content="&#xE710;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="ZoomInButton" AutomationProperties.AutomationId="ZoomInButton" />
-                    <Button Click="OnFitWidthClicked" Content="&#xE9A6;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FitWidthButton" AutomationProperties.AutomationId="FitWidthButton" />
-                    <Button Click="OnFitPageClicked" Content="&#xE740;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FitPageButton" AutomationProperties.AutomationId="FitPageButton" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
-                        VerticalAlignment="Center"
-                        Margin="8,0"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-
-                <!-- Narrowest state only: the whole zoom cluster behind one button, so
-                     the commands on the left keep their space instead of being clipped. -->
-                <!-- Reads as the live zoom level rather than an icon: a magnifier here
-                     would be the second one on the bar, next to Find. -->
-                <Button
-                    x:Name="ViewMenuButton"
-                    Visibility="Collapsed"
+            <!-- One zoom control (#144): −, the level with a menu of Actual size, the
+                 two fits and preset levels, and +. Icons only, even when the row is
+                 labelled: the level itself is the label. -->
+            <AppBarButton x:Name="ZoomOutButton" LabelPosition="Collapsed" Command="{x:Bind ViewModel.ZoomOutCommand}" KeyboardAcceleratorTextOverride="Ctrl+−" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomOutButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE738;" /></AppBarButton.Icon>
+            </AppBarButton>
+            <AppBarElementContainer x:Name="ZoomMenuItem" DynamicOverflowOrder="20"
+                                    VerticalContentAlignment="Center" IsTabStop="False">
+                <DropDownButton
+                    x:Name="ZoomMenuButton"
+                    MinWidth="80"
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    BorderThickness="0"
                     Content="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}"
-                    MinWidth="58"
-                    x:Uid="ViewMenuButton"
-                    AutomationProperties.AutomationId="ViewMenuButton">
-                    <Button.Flyout>
-                        <MenuFlyout Placement="BottomEdgeAlignedRight">
-                            <MenuFlyoutItem x:Uid="ZoomInItem" Command="{x:Bind ViewModel.ZoomInCommand}">
-                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE710;" /></MenuFlyoutItem.Icon>
+                    IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}"
+                    AutomationProperties.AutomationId="ZoomMenuButton">
+                    <DropDownButton.Flyout>
+                        <MenuFlyout x:Name="ZoomMenu" Placement="BottomEdgeAlignedLeft" Opening="OnZoomMenuOpening">
+                            <MenuFlyoutItem x:Name="ActualSizeItem" Click="OnActualSizeClicked" KeyboardAcceleratorTextOverride="Ctrl+0">
+                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE9A8;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="ZoomOutItem" Command="{x:Bind ViewModel.ZoomOutCommand}">
-                                <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE738;" /></MenuFlyoutItem.Icon>
-                            </MenuFlyoutItem>
-                            <MenuFlyoutSeparator />
-                            <MenuFlyoutItem x:Uid="FitWidthItem" Click="OnFitWidthClicked">
+                            <MenuFlyoutItem x:Name="FitWidthItem" Click="OnFitWidthClicked">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE9A6;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Uid="FitPageItem" Click="OnFitPageClicked">
+                            <MenuFlyoutItem x:Name="FitPageItem" Click="OnFitPageClicked">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE740;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+                            <MenuFlyoutSeparator x:Name="ZoomPresetsSeparator" />
                         </MenuFlyout>
-                    </Button.Flyout>
-                </Button>
+                    </DropDownButton.Flyout>
+                </DropDownButton>
+            </AppBarElementContainer>
+            <AppBarButton x:Name="ZoomInButton" LabelPosition="Collapsed" Command="{x:Bind ViewModel.ZoomInCommand}" KeyboardAcceleratorTextOverride="Ctrl+Plus" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomInButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE710;" /></AppBarButton.Icon>
+            </AppBarButton>
 
-                <Button Content="&#xE713;" FontFamily="{StaticResource SymbolThemeFontFamily}" x:Uid="SettingsButton" AutomationProperties.AutomationId="SettingsButton">
-                    <Button.Flyout>
-                        <Flyout Placement="BottomEdgeAlignedRight" Opening="OnSettingsOpening">
-                            <StackPanel Spacing="{ThemeResource SpaceL}" MinWidth="230">
-                                <StackPanel Spacing="{ThemeResource SpaceS}">
-                                    <TextBlock x:Uid="CheckboxMarkHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <RadioButtons x:Name="MarkStyleChoice" SelectionChanged="OnMarkStyleChanged">
-                                        <!-- TextBlocks rather than x:String items: a string cannot carry an x:Uid. -->
-                                        <TextBlock x:Uid="MarkCross" />
-                                        <TextBlock x:Uid="MarkCheck" />
-                                        <TextBlock x:Uid="MarkFilledSquare" />
-                                    </RadioButtons>
-                                </StackPanel>
-                                <StackPanel Spacing="{ThemeResource SpaceS}">
-                                    <TextBlock x:Uid="ThemeHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <RadioButtons x:Name="ThemeChoice" SelectionChanged="OnThemeChanged">
-                                        <TextBlock x:Uid="ThemeSystem" />
-                                        <TextBlock x:Uid="ThemeLight" />
-                                        <TextBlock x:Uid="ThemeDark" />
-                                    </RadioButtons>
-                                </StackPanel>
-                                <!-- App language (#91). Stored as a BCP-47 tag or "" for the Windows
-                                     display language; applied at startup, hence the note. -->
-                                <StackPanel Spacing="{ThemeResource SpaceS}">
-                                    <TextBlock x:Uid="LanguageHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                    <RadioButtons x:Name="LanguageChoice" SelectionChanged="OnLanguageChanged">
-                                        <TextBlock x:Uid="LanguageSystem" />
-                                        <TextBlock x:Uid="LanguageEnglish" />
-                                        <TextBlock x:Uid="LanguageFrench" />
-                                        <TextBlock x:Uid="LanguageFrenchFrance" />
-                                    </RadioButtons>
-                                    <TextBlock x:Uid="LanguageRestartNote" x:Name="LanguageRestartNote" Visibility="Collapsed" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
-                                </StackPanel>
-                                <ToggleSwitch
-                                    x:Name="ReopenToggle"
-                                    x:Uid="ReopenToggle"
-                                    Toggled="OnReopenToggled" />
-                                <ToggleSwitch
-                                    x:Name="FlattenToggle"
-                                    x:Uid="FlattenToggle"
-                                    Toggled="OnFlattenToggled" />
-                                <StackPanel x:Uid="AboutPanel" Spacing="{ThemeResource SpaceXs}" Margin="0,4,0,0" MaxWidth="260">
-                                    <TextBlock x:Uid="AboutHeading" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,4" />
-                                    <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                                    <TextBlock x:Uid="AboutLicense" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                                    <TextBlock
-                                        x:Uid="AboutCopyright"
-                                        TextWrapping="Wrap"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                                    <TextBlock
-                                        x:Uid="AboutThanks"
-                                        TextWrapping="Wrap"
-                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                                    <HyperlinkButton
-                                        NavigateUri="https://github.com/SlyWombat/MegaPDF"
-                                        Content="github.com/SlyWombat/MegaPDF"
-                                        ToolTipService.ToolTip="https://github.com/SlyWombat/MegaPDF"
-                                        x:Uid="GitHubLink"
-                                        FontSize="{ThemeResource TypeCaption}"
-                                        Padding="0,2"
-                                        Margin="0,2,0,0" />
-                                    <HyperlinkButton
-                                        x:Uid="NoticesLink"
-                                        Click="OnThirdPartyNoticesClicked"
-                                        FontSize="{ThemeResource TypeCaption}"
-                                        Padding="0,2" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
-            </StackPanel>
-        </Grid>
+            <CommandBar.SecondaryCommands>
+                <AppBarButton x:Name="SaveAsButton" Command="{x:Bind ViewModel.SaveAsCommand}" KeyboardAcceleratorTextOverride="Ctrl+Shift+S" AutomationProperties.AutomationId="SaveAsButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE792;" /></AppBarButton.Icon>
+                </AppBarButton>
+                <!-- Set, change or remove the document's password; on a restricted
+                     document, offers the owner password instead (#131, ADR-004). -->
+                <AppBarButton x:Name="SecurityButton" Command="{x:Bind ViewModel.SecurityCommand}" AutomationProperties.AutomationId="SecurityButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE72E;" /></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="PrintButton" Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsPrintAllowed, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+P" AutomationProperties.AutomationId="PrintButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE749;" /></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="ShrinkButton" Command="{x:Bind ViewModel.ShrinkForEmailCommand}" AutomationProperties.AutomationId="ShrinkButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE715;" /></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE721;" /></AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarSeparator />
+                <AppBarButton x:Name="SettingsButton" Click="OnSettingsClicked" AutomationProperties.AutomationId="SettingsButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE713;" /></AppBarButton.Icon>
+                </AppBarButton>
+            </CommandBar.SecondaryCommands>
+        </CommandBar>
+
+        <!-- Where the toolbar's two panels hang (#144). A flyout attached to an
+             AppBarButton cannot open once that button has moved into the overflow, so
+             these are shown from code at the button, or at the toolbar when it has. -->
+        <Border x:Name="SignaturesFlyoutAnchor" Grid.Row="0" Width="0" Height="0"
+                HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+            <FlyoutBase.AttachedFlyout>
+                <Flyout x:Name="SignaturesFlyout" Placement="BottomEdgeAlignedLeft">
+                    <!-- The library itself lives in SignatureLibraryPanel (#100), shared
+                         with the `sign` screenshot state's in-tree copy below. -->
+                    <local:SignatureLibraryPanel
+                        ViewModel="{x:Bind ViewModel}"
+                        Picked="OnSignaturePicked"
+                        RenameRequested="OnRenameSignatureRequested"
+                        DeleteRequested="OnDeleteSignatureRequested"
+                        DrawRequested="OnDrawSignatureClicked"
+                        TypeRequested="OnTypeSignatureClicked"
+                        PhotoRequested="OnAddSignatureFromImageClicked" />
+                </Flyout>
+            </FlyoutBase.AttachedFlyout>
+        </Border>
+        <Border x:Name="SettingsFlyoutAnchor" Grid.Row="0" Width="0" Height="0"
+                HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
+            <FlyoutBase.AttachedFlyout>
+                <Flyout x:Name="SettingsFlyout" Placement="BottomEdgeAlignedRight" Opening="OnSettingsOpening">
+                    <StackPanel Spacing="{ThemeResource SpaceL}" MinWidth="230">
+                        <StackPanel Spacing="{ThemeResource SpaceS}">
+                            <TextBlock x:Uid="CheckboxMarkHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <RadioButtons x:Name="MarkStyleChoice" SelectionChanged="OnMarkStyleChanged">
+                                <!-- TextBlocks rather than x:String items: a string cannot carry an x:Uid. -->
+                                <TextBlock x:Uid="MarkCross" />
+                                <TextBlock x:Uid="MarkCheck" />
+                                <TextBlock x:Uid="MarkFilledSquare" />
+                            </RadioButtons>
+                        </StackPanel>
+                        <StackPanel Spacing="{ThemeResource SpaceS}">
+                            <TextBlock x:Uid="ThemeHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <RadioButtons x:Name="ThemeChoice" SelectionChanged="OnThemeChanged">
+                                <TextBlock x:Uid="ThemeSystem" />
+                                <TextBlock x:Uid="ThemeLight" />
+                                <TextBlock x:Uid="ThemeDark" />
+                            </RadioButtons>
+                        </StackPanel>
+                        <!-- App language (#91). Stored as a BCP-47 tag or "" for the Windows
+                             display language; applied at startup, hence the note. -->
+                        <StackPanel Spacing="{ThemeResource SpaceS}">
+                            <TextBlock x:Uid="LanguageHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <RadioButtons x:Name="LanguageChoice" SelectionChanged="OnLanguageChanged">
+                                <TextBlock x:Uid="LanguageSystem" />
+                                <TextBlock x:Uid="LanguageEnglish" />
+                                <TextBlock x:Uid="LanguageFrench" />
+                                <TextBlock x:Uid="LanguageFrenchFrance" />
+                            </RadioButtons>
+                            <TextBlock x:Uid="LanguageRestartNote" x:Name="LanguageRestartNote" Visibility="Collapsed" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="ReopenToggle"
+                            x:Uid="ReopenToggle"
+                            Toggled="OnReopenToggled" />
+                        <ToggleSwitch
+                            x:Name="FlattenToggle"
+                            x:Uid="FlattenToggle"
+                            Toggled="OnFlattenToggled" />
+                        <StackPanel x:Uid="AboutPanel" Spacing="{ThemeResource SpaceXs}" Margin="0,4,0,0" MaxWidth="260">
+                            <TextBlock x:Uid="AboutHeading" Style="{StaticResource BodyStrongTextBlockStyle}" Margin="0,0,0,4" />
+                            <TextBlock x:Name="AboutVersion" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock x:Uid="AboutLicense" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                x:Uid="AboutCopyright"
+                                TextWrapping="Wrap"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <TextBlock
+                                x:Uid="AboutThanks"
+                                TextWrapping="Wrap"
+                                Style="{StaticResource CaptionTextBlockStyle}"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <HyperlinkButton
+                                NavigateUri="https://github.com/SlyWombat/MegaPDF"
+                                Content="github.com/SlyWombat/MegaPDF"
+                                ToolTipService.ToolTip="https://github.com/SlyWombat/MegaPDF"
+                                x:Uid="GitHubLink"
+                                FontSize="{ThemeResource TypeCaption}"
+                                Padding="0,2"
+                                Margin="0,2,0,0" />
+                            <HyperlinkButton
+                                x:Uid="NoticesLink"
+                                Click="OnThirdPartyNoticesClicked"
+                                FontSize="{ThemeResource TypeCaption}"
+                                Padding="0,2" />
+                        </StackPanel>
+                    </StackPanel>
+                </Flyout>
+            </FlyoutBase.AttachedFlyout>
+        </Border>
 
         <!-- Document area: empty-state drop zone until a document is open (SDD §2.2) -->
         <Grid
@@ -496,6 +452,27 @@
                     </InfoBar.ActionButton>
                 </InfoBar>
             </StackPanel>
+
+            <!-- Which page is in view (#144). It used to sit at the end of the toolbar
+                 row; the row now holds commands only, so it floats over the document's
+                 corner, clear of the scroll bar and of the notices centred below. -->
+            <Border
+                x:Name="PageIndicatorPill"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="0,0,28,14"
+                Padding="10,3"
+                CornerRadius="12"
+                IsHitTestVisible="False"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}">
+                <TextBlock
+                    Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Border>
 
             <!-- Ctrl+F find bar: compact Edge-style overlay (issue #26 simple search) -->
             <Border
