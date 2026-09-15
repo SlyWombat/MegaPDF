@@ -227,6 +227,8 @@ public partial class MainWindow
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
         var face = box.TextBoxFont ?? MegaPDF.Core.Engine.StandardTextBoxFonts.Default;
 
+        // The toolbar's pickers show this box's face and size while it is edited (#144),
+        // and whatever they hold when the edit is committed is what the box becomes.
         ShowInlineEditor(
             container,
             new Point(box.Bounds.X * dip, box.Bounds.Y * dip),
@@ -237,7 +239,12 @@ public partial class MainWindow
                 if (string.IsNullOrWhiteSpace(text))
                     vm.DeleteSelection();
                 else
-                    vm.RestyleTextBox(pageIndex, box, text, face, box.FontSize);
+                    vm.RestyleTextBox(pageIndex, box, text, vm.TextFont, vm.TextSize);
             });
+        if (_inlineEditor is not null)
+        {
+            vm.IsEditingTextBox = true;
+            _editorFollowsPickers = true;
+        }
     }
 }

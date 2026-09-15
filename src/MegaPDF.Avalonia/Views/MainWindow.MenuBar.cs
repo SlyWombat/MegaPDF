@@ -1,0 +1,263 @@
+using Avalonia.Controls;
+using Avalonia.Input;
+using MegaPDF.Avalonia.ViewModels;
+using Rectangle = Avalonia.Controls.Shapes.Rectangle;
+
+namespace MegaPDF.Avalonia.Views;
+
+/// <summary>
+/// The menu bar (#144). On the Mac every toolbar command is in a menu as well, with
+/// its shortcut, as Apple's guidelines ask: the toolbar is the quick way to a command,
+/// the menu bar is where people look for it and learn its key. It is also what keeps
+/// a command reachable once the toolbar has moved it into More.
+///
+/// Built with NativeMenu, which Avalonia exports to the macOS menu bar and ignores
+/// elsewhere. On the Mac a menu key equivalent answers before the window's key
+/// bindings, so a shortcut runs once whichever of the two holds it; the window's
+/// bindings stay because Windows and Linux have no native menu to carry them.
+///
+/// Each item is registered under the name of the toolbar control (or More entry) it
+/// mirrors, which is what <see cref="MissingFromMenuBar"/> checks against.
+/// </summary>
+public partial class MainWindow
+{
+    /// <summary>Menu bar items by the toolbar command they mirror.</summary>
+    private readonly Dictionary<string, NativeMenuItem> _menuBarItems = [];
+
+    private readonly List<(NativeMenuItem Item, Func<bool> Enabled)> _menuBarEnabled = [];
+    private readonly List<(NativeMenuItem Item, Func<bool> Checked)> _menuBarChecked = [];
+
+    /// <summary>The commands that live in More rather than on the row.</summary>
+    internal static readonly string[] MoreMenuCommands = ["SaveAs", "Password", "Print", "Shrink", "Options"];
+
+    /// <summary>The zoom control's menu entries, which the menu bar carries too.</summary>
+    internal static readonly string[] ZoomMenuCommands = ["ActualSize", "FitWidth", "FitPage", "ZoomPresets"];
+
+    private static KeyGesture Shortcut(Key key, KeyModifiers extra = KeyModifiers.None) => new(key, CommandModifier | extra);
+
+    private static KeyGesture OpenGesture => Shortcut(Key.O);
+    private static KeyGesture SaveGesture => Shortcut(Key.S);
+    private static KeyGesture SaveAsGesture => Shortcut(Key.S, KeyModifiers.Shift);
+    private static KeyGesture PrintGesture => Shortcut(Key.P);
+    private static KeyGesture UndoGesture => Shortcut(Key.Z);
+
+    /// <summary>Redo is Shift+Cmd+Z on macOS and Ctrl+Y on Windows — different conventions, not just modifiers.</summary>
+    private static KeyGesture RedoGesture => OperatingSystem.IsMacOS() ? Shortcut(Key.Z, KeyModifiers.Shift) : Shortcut(Key.Y);
+
+    private static KeyGesture FindGesture => Shortcut(Key.F);
+    private static KeyGesture ZoomInGesture => Shortcut(Key.OemPlus);
+    private static KeyGesture ZoomOutGesture => Shortcut(Key.OemMinus);
+    private static KeyGesture ActualSizeGesture => Shortcut(Key.D0);
+
+    /// <summary>Cmd+, is where every Mac app keeps its settings.</summary>
+    private static KeyGesture OptionsGesture => Shortcut(Key.OemComma);
+
+    /// <summary>
+    /// Called once the view model has arrived (OnDataContextChanged): the font and size
+    /// submenus list its choices.
+    /// </summary>
+    private void BuildMenuBar()
+    {
+        if (_menuBarItems.Count > 0 || ViewModel is null)
+            return;
+
+        var file = new NativeMenu();
+        file.Items.Add(Command("OpenButton", Strings.OpenAPdfEllipsis, OpenGesture, () => true,
+            () => _ = OpenDocumentAsync()));
+        file.Items.Add(Command("SaveButton", Strings.Save, SaveGesture,
+            () => ViewModel?.SaveCommand.CanExecute(null) == true, () => ViewModel?.SaveCommand.Execute(null)));
+        file.Items.Add(Command("SaveAs", Strings.SaveAs, SaveAsGesture,
+            () => ViewModel?.IsDocumentOpen == true, () => _ = SaveAsAsync()));
+        file.Items.Add(new NativeMenuItemSeparator());
+        file.Items.Add(Command("Password", Strings.SecurityToolbar, null,
+            () => ViewModel?.IsDocumentOpen == true, () => _ = ChangeSecurityAsync()));
+        file.Items.Add(Command("Shrink", Strings.SaveSmallerCopyForEmail, null,
+            () => ViewModel?.CanShrink == true, () => _ = ShrinkForEmailAsync()));
+        file.Items.Add(new NativeMenuItemSeparator());
+        file.Items.Add(Command("Print", Strings.Print, PrintGesture,
+            () => ViewModel?.PrintCommand.CanExecute(null) == true, () => ViewModel?.PrintCommand.Execute(null)));
+
+        var edit = new NativeMenu();
+        // With the in-place editor focused, Undo and Redo mean the typing, not the document.
+        edit.Items.Add(Command("UndoButton", Strings.Undo, UndoGesture, () => true, () =>
+        {
+            if (FocusManager?.GetFocusedElement() is TextBox box)
+                box.Undo();
+            else
+                ViewModel?.UndoCommand.Execute(null);
+        }));
+        edit.Items.Add(Command("RedoButton", Strings.Redo, RedoGesture, () => true, () =>
+        {
+            if (FocusManager?.GetFocusedElement() is TextBox box)
+                box.Redo();
+            else
+                ViewModel?.RedoCommand.Execute(null);
+        }));
+        edit.Items.Add(new NativeMenuItemSeparator());
+        edit.Items.Add(Command("Find", Strings.FindInDocument, FindGesture,
+            () => ViewModel?.IsDocumentOpen == true, OpenFind));
+
+        var tools = new NativeMenu();
+        tools.Items.Add(Command("SignButton", Strings.Sign, null, () => ViewModel?.CanSign == true, ShowSignFlyout));
+        tools.Items.Add(Toggle("AddTextButton", Strings.AddText,
+            () => ViewModel?.CanAddText == true, () => ViewModel?.IsAddingText == true,
+            () => ViewModel?.ToggleAddTextCommand.Execute(null)));
+        tools.Items.Add(Toggle("WhiteoutButton", Strings.Cover,
+            () => ViewModel?.CanEditContent == true, () => ViewModel?.IsWhiteoutMode == true,
+            () => ViewModel?.ToggleWhiteoutCommand.Execute(null)));
+        tools.Items.Add(new NativeMenuItemSeparator());
+        tools.Items.Add(Submenu("FontBox", Strings.TextFontName, TextPickerEnabled,
+            ViewModel?.TextFontChoices.Cast<object>().ToList() ?? [],
+            choice => ((FontChoice)choice).Label,
+            choice => ViewModel?.TextFont == ((FontChoice)choice).PostScriptName,
+            choice => { if (ViewModel is { } vm) vm.SelectedTextFont = (FontChoice)choice; }));
+        tools.Items.Add(Submenu("SizeBox", Strings.TextSizeName, TextPickerEnabled,
+            SizeChoices,
+            choice => ((double)choice).ToString(System.Globalization.CultureInfo.CurrentCulture),
+            choice => ViewModel is { } vm && Math.Abs(vm.TextSize - (double)choice) < 0.01,
+            choice => { if (ViewModel is { } vm) vm.TextSize = (double)choice; }));
+        tools.Items.Add(new NativeMenuItemSeparator());
+        tools.Items.Add(Command("Options", Strings.Options, OptionsGesture, () => true, ShowOptions));
+
+        var view = new NativeMenu();
+        view.Items.Add(Command("ZoomInButton", Strings.ZoomIn, ZoomInGesture,
+            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.ZoomInCommand.Execute(null)));
+        view.Items.Add(Command("ZoomOutButton", Strings.ZoomOut, ZoomOutGesture,
+            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.ZoomOutCommand.Execute(null)));
+        view.Items.Add(new NativeMenuItemSeparator());
+        view.Items.Add(Command("ActualSize", Strings.ActualSize, ActualSizeGesture,
+            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.ZoomResetCommand.Execute(null)));
+        view.Items.Add(Command("FitWidth", Strings.FitWidth, null,
+            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.FitWidthCommand.Execute(null)));
+        view.Items.Add(Command("FitPage", Strings.FitPage, null,
+            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.FitPageCommand.Execute(null)));
+        var presets = Submenu("ZoomMenuButton", Strings.ZoomMenuName, () => ViewModel?.IsDocumentOpen == true,
+            MainViewModel.ZoomPresets.Cast<object>().ToList(),
+            choice => Strings.ZoomPercent((int)Math.Round((double)choice * 100)),
+            choice => ViewModel is { } vm && Math.Abs(vm.Zoom - (double)choice) < 0.005,
+            choice => ViewModel?.SetZoomCommand.Execute((double)choice));
+        _menuBarItems["ZoomPresets"] = presets;
+        view.Items.Add(presets);
+
+        var bar = new NativeMenu();
+        bar.Items.Add(new NativeMenuItem(Strings.MenuFile) { Menu = file });
+        bar.Items.Add(new NativeMenuItem(Strings.MenuEdit) { Menu = edit });
+        bar.Items.Add(new NativeMenuItem(Strings.MenuView) { Menu = view });
+        bar.Items.Add(new NativeMenuItem(Strings.MenuTools) { Menu = tools });
+
+        foreach (var menu in new[] { file, edit, view, tools })
+        {
+            menu.NeedsUpdate += (_, _) => RefreshMenuBar();
+            menu.Opening += (_, _) => RefreshMenuBar();
+        }
+
+        NativeMenu.SetMenu(this, bar);
+        RefreshMenuBar();
+    }
+
+    private IReadOnlyList<object> SizeChoices => ViewModel?.TextSizes.Cast<object>().ToList() ?? [];
+
+    private bool TextPickerEnabled() => ViewModel is { IsTextStyleContext: true, CanAddText: true };
+
+    /// <summary>Brings every item's enabled and checked state up to date. Cheap; called on any view model change.</summary>
+    private void RefreshMenuBar()
+    {
+        foreach (var (item, enabled) in _menuBarEnabled)
+            item.IsEnabled = enabled();
+        foreach (var (item, isChecked) in _menuBarChecked)
+            item.IsChecked = isChecked();
+    }
+
+    private NativeMenuItem Command(string id, string header, KeyGesture? gesture, Func<bool> enabled, Action invoke)
+    {
+        var item = new NativeMenuItem(header) { Gesture = gesture };
+        item.Click += (_, _) =>
+        {
+            if (enabled())
+                invoke();
+        };
+        _menuBarEnabled.Add((item, enabled));
+        _menuBarItems[id] = item;
+        return item;
+    }
+
+    private NativeMenuItem Toggle(string id, string header, Func<bool> enabled, Func<bool> isChecked, Action invoke)
+    {
+        var item = Command(id, header, null, enabled, invoke);
+        item.ToggleType = NativeMenuItemToggleType.CheckBox;
+        _menuBarChecked.Add((item, isChecked));
+        return item;
+    }
+
+    /// <summary>A submenu of radio choices; the choice list is read when the menu is built.</summary>
+    private NativeMenuItem Submenu(string id, string header, Func<bool> enabled, IEnumerable<object> choices,
+                                   Func<object, string> label, Func<object, bool> isChosen, Action<object> choose)
+    {
+        var menu = new NativeMenu();
+        foreach (var choice in choices)
+        {
+            var option = new NativeMenuItem(label(choice)) { ToggleType = NativeMenuItemToggleType.Radio };
+            option.Click += (_, _) =>
+            {
+                if (enabled())
+                    choose(choice);
+            };
+            _menuBarEnabled.Add((option, enabled));
+            _menuBarChecked.Add((option, () => isChosen(choice)));
+            menu.Items.Add(option);
+        }
+        menu.NeedsUpdate += (_, _) => RefreshMenuBar();
+        menu.Opening += (_, _) => RefreshMenuBar();
+
+        var item = new NativeMenuItem(header) { Menu = menu };
+        _menuBarEnabled.Add((item, enabled));
+        _menuBarItems[id] = item;
+        return item;
+    }
+
+    /// <summary>The signature library, from the menu bar: under Sign when it is on the row, else under More.</summary>
+    private void ShowSignFlyout()
+    {
+        if (SignButton.Flyout is not { } flyout)
+            return;
+        global::Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            flyout.ShowAt(SignButton.IsVisible ? SignButton : MoreButton));
+    }
+
+    /// <summary>
+    /// The menu bar audit (#144): every command on the toolbar row, in More and in the
+    /// zoom menu that has no item in the menu bar. Empty is the pass.
+    /// </summary>
+    internal IReadOnlyList<string> MissingFromMenuBar()
+    {
+        var inBar = new HashSet<NativeMenuItem>();
+        void Walk(NativeMenu? menu)
+        {
+            foreach (var item in menu?.Items.OfType<NativeMenuItem>() ?? [])
+            {
+                inBar.Add(item);
+                Walk(item.Menu);
+            }
+        }
+        Walk(NativeMenu.GetMenu(this));
+
+        var required = ToolbarChildren
+            .Where(c => c is not Rectangle)
+            .Select(c => c.Name!)
+            .Concat(MoreMenuCommands)
+            .Concat(ZoomMenuCommands);
+        return required
+            .Where(id => !_menuBarItems.TryGetValue(id, out var item) || !inBar.Contains(item))
+            .ToList();
+    }
+
+    /// <summary>For --screenshot runs: the audit, one line, and how many commands it covered.</summary>
+    internal string DescribeMenuBar()
+    {
+        var missing = MissingFromMenuBar();
+        var covered = ToolbarChildren.Count(c => c is not Rectangle) + MoreMenuCommands.Length + ZoomMenuCommands.Length;
+        return missing.Count == 0
+            ? $"menu bar: PASS, all {covered} toolbar, More and zoom-menu commands are in the menu bar"
+            : $"::error::menu bar: missing {string.Join(", ", missing)}";
+    }
+}

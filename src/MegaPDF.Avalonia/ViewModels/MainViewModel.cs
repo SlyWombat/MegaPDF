@@ -132,6 +132,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(ZoomInCommand))]
     [NotifyCanExecuteChangedFor(nameof(ZoomOutCommand))]
     [NotifyCanExecuteChangedFor(nameof(ZoomResetCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SetZoomCommand))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyCanExecuteChangedFor(nameof(PrintCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleAddTextCommand))]
@@ -201,7 +202,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private double _dpiScale = 1.0;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ZoomPercentLabel))]
     private double _zoom = 1.0;
+
+    /// <summary>What the toolbar's zoom menu button reads, "100%" (#144).</summary>
+    public string ZoomPercentLabel => Strings.ZoomPercent((int)Math.Round(Zoom * 100));
 
     public bool CanUndo => _undoStack.CanUndo;
     public bool CanRedo => _undoStack.CanRedo;
@@ -450,7 +455,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void Apply(IPageEditOperation operation, string doneMessage, Action? cancelled = null)
+    private void Apply(IPageEditOperation operation, string doneMessage, Action? cancelled = null, Action? applied = null)
     {
         // The central gate (#131): the entry points check first so no editor opens, and
         // this is what holds if one is ever missed.
@@ -468,15 +473,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             && PageRegenerationWarnings.RegeneratesUnjudged(operation)
             && !_pageWarnings.IsSettled(operation.PageIndex))
         {
-            ApplyAfterPageCheck(document, operation, doneMessage, cancelled);
+            ApplyAfterPageCheck(document, operation, doneMessage, cancelled, applied);
             return;
         }
-        ApplyNow(operation, doneMessage);
+        ApplyNow(operation, doneMessage, applied);
     }
 
     // async void on purpose: an exception from the edit reaches the UI thread's handler, as it
     // did when Apply ran the edit synchronously.
-    private async void ApplyAfterPageCheck(IPdfDocument document, IPageEditOperation operation, string doneMessage, Action? cancelled)
+    private async void ApplyAfterPageCheck(IPdfDocument document, IPageEditOperation operation, string doneMessage, Action? cancelled, Action? applied)
     {
         var warn = await Task.Run(() => _pageWarnings.ShouldWarn(document, operation));
         if (!ReferenceEquals(document, _document))
@@ -491,16 +496,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
             _pageWarnings.Settle(operation.PageIndex);
         }
-        ApplyNow(operation, doneMessage);
+        ApplyNow(operation, doneMessage, applied);
     }
 
-    private void ApplyNow(IPageEditOperation operation, string doneMessage)
+    private void ApplyNow(IPageEditOperation operation, string doneMessage, Action? applied = null)
     {
         _undoStack.Do(operation);
         // Journalled after Apply, because an operation's entry can only be written
         // once it knows what it did — a placed stamp's id, for instance.
         _journal.Record(operation.ToJournalEntry(inverse: false));
         AfterEdit(operation.PageIndex, doneMessage);
+        applied?.Invoke();
     }
 
     private void AfterEdit(int pageIndex, string message)
@@ -869,7 +875,105 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTextStyleContext))]
     private PageSelection? _selection;
+
+    // --- The contextual font and size pickers (#144) ---
+
+    private bool _isEditingTextBox;
+
+    /// <summary>
+    /// Set by the view while its in-place editor is open over an added text box. The
+    /// pickers stay up, and a change to them waits for the edit to be committed rather
+    /// than rewriting the box under the editor.
+    /// </summary>
+    public bool IsEditingTextBox
+    {
+        get => _isEditingTextBox;
+        set
+        {
+            if (SetProperty(ref _isEditingTextBox, value))
+                OnPropertyChanged(nameof(IsTextStyleContext));
+        }
+    }
+
+    /// <summary>
+    /// Whether the font and size pickers belong on the toolbar: while Add text is armed,
+    /// while an added text box is selected, and while one is being edited. Anywhere else
+    /// they would be settings for nothing (#144).
+    /// </summary>
+    public bool IsTextStyleContext =>
+        IsAddingText || IsEditingTextBox || Selection is { Kind: SelectionKind.TextBox };
+
+    /// <summary>True while the pickers are being set from a selection, so that is not taken as a change.</summary>
+    private bool _syncingTextStyle;
+
+    partial void OnSelectionChanged(PageSelection? value)
+    {
+        if (value is { Kind: SelectionKind.TextBox, Run: { } run })
+            ShowTextStyleOf(run);
+    }
+
+    /// <summary>Points the pickers at a box's own face and size.</summary>
+    private void ShowTextStyleOf(PdfTextRun run)
+    {
+        _syncingTextStyle = true;
+        try
+        {
+            TextFont = run.TextBoxFont ?? StandardTextBoxFonts.Default;
+            TextSize = Math.Round(run.FontSize, 2);
+            OnPropertyChanged(nameof(SelectedTextFont));
+        }
+        finally
+        {
+            _syncingTextStyle = false;
+        }
+    }
+
+    partial void OnTextFontChanged(string value) => RestyleSelectedTextBox();
+
+    partial void OnTextSizeChanged(double value) => RestyleSelectedTextBox();
+
+    /// <summary>
+    /// A picker changed while an added box is selected: the box takes the new face or
+    /// size at once, as one undoable edit, and stays selected.
+    /// </summary>
+    private void RestyleSelectedTextBox()
+    {
+        if (_syncingTextStyle || IsEditingTextBox || _document is null
+            || Selection is not { Kind: SelectionKind.TextBox, Run: { } run } selection)
+            return;
+        var face = run.TextBoxFont ?? StandardTextBoxFonts.Default;
+        if (face == TextFont && Math.Abs(run.FontSize - TextSize) < 0.01)
+            return;
+        if (!StandardTextBoxFonts.IsSupported(TextFont))
+            return;
+
+        Apply(new RestyleTextBoxOperation(_document, selection.PageIndex, run.ObjectIndex, run,
+                                          run.Text, TextFont, TextSize),
+              Strings.TextUpdated,
+              cancelled: () =>
+              {
+                  // Cancelled at the #139 warning: the pickers go back to what the box still is.
+                  if (Selection is { Run: { } now } && ReferenceEquals(now, run))
+                      ShowTextStyleOf(run);
+              },
+              applied: () => ReselectTextBox(selection.PageIndex, run));
+    }
+
+    /// <summary>
+    /// After a restyle the selection points at the rewritten box: same id, new bounds,
+    /// and possibly a new object index.
+    /// </summary>
+    private void ReselectTextBox(int pageIndex, PdfTextRun previous)
+    {
+        if (Selection is not { Kind: SelectionKind.TextBox, Run: { } selected } || !ReferenceEquals(selected, previous))
+            return;
+        var box = BoxesOn(pageIndex).FirstOrDefault(b => previous.TextBoxId is { } id
+            ? b.TextBoxId == id
+            : b.ObjectIndex == previous.ObjectIndex);
+        Selection = box is null ? null : new PageSelection(pageIndex, SelectionKind.TextBox, box.Bounds, Run: box);
+    }
 
     private void Select(PageSelection selection)
     {
@@ -1011,6 +1115,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(IsWhiteoutMode))]
     [NotifyPropertyChangedFor(nameof(ModeHint))]
     [NotifyPropertyChangedFor(nameof(IsModeActive))]
+    [NotifyPropertyChangedFor(nameof(IsTextStyleContext))]
     private PageMode _mode = PageMode.Select;
 
     public bool IsAddingText => Mode == PageMode.AddText;
@@ -1229,7 +1334,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         Apply(new RestyleTextBoxOperation(_document, pageIndex, box.ObjectIndex, box,
                                           newText, fontName, fontSize),
-              Strings.TextUpdated);
+              Strings.TextUpdated,
+              applied: () => ReselectTextBox(pageIndex, box));
     }
 
     /// <summary>Moves an added text box (SDD §3.3 drag/nudge).</summary>
@@ -1796,6 +1902,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
     private void ZoomReset() => Zoom = 1.0;
+
+    /// <summary>The fixed levels the zoom menu offers under Actual size and the fits (#144).</summary>
+    public static IReadOnlyList<double> ZoomPresets { get; } = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
+
+    /// <summary>A preset from the zoom menu.</summary>
+    [RelayCommand(CanExecute = nameof(IsDocumentOpen))]
+    private void SetZoom(double zoom) => Zoom = Clamp(zoom);
 
     /// <summary>
     /// Viewport size in device-independent pixels, set by the view. Fit-to-width and

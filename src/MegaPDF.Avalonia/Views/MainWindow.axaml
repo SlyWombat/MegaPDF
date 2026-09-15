@@ -12,91 +12,90 @@
   <!-- Width and Height above are only the fallback: the window is sized to the
        screen's working area in code-behind (#143). -->
 
+  <Window.Resources>
+    <!-- Preferences that change what an edit does, kept out of the main flow
+         because most people never touch them (SDD §4.4). Opened from More and from
+         the menu bar (#144). -->
+      <Flyout x:Key="OptionsFlyout" Placement="BottomEdgeAlignedRight">
+        <StackPanel x:DataType="vm:MainViewModel" Width="260" Spacing="{DynamicResource SpaceM}">
+          <TextBlock Text="{x:Static loc:Strings.TickMarksLookLike}" FontWeight="SemiBold" />
+          <ComboBox HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding MarkStyleChoices}" SelectedItem="{Binding SelectedMarkStyle}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate DataType="vm:MarkStyleChoice">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <CheckBox IsChecked="{Binding FlattenOnSave}"
+                    Content="{x:Static loc:Strings.FlattenWhenSaving}" />
+          <TextBlock Text="{x:Static loc:Strings.FlattenExplanation}"
+                     TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
+        </StackPanel>
+      </Flyout>
+  </Window.Resources>
+
   <DockPanel>
 
-    <!-- Toolbar. Text labels, no icons yet: the WinUI app draws these with FontIcon
-         over Segoe MDL2 glyphs, a font that does not exist on macOS. New icon
-         sources are a tracked ADR-002 §7 work item; shipping empty boxes in the
-         meantime would be worse than words.
+    <!-- Toolbar (#143, #144). One row, one fixed height, at every width.
 
-         No HotKey= either: the shortcut modifier differs per platform (Cmd on
-         macOS, Ctrl elsewhere), so the gestures and these tooltips are both built
-         in code-behind. A Mac app with Ctrl+O is a Windows app with round corners.
+         Groups: File (Open, Save), Tools (Sign, Add text, Cover, and the font and
+         size pickers while there is text to style), history (Undo, Redo), one zoom
+         control (−, the level with its menu, +), and More at the end: Save As,
+         Password…, Print, Shrink and Options live there, with anything that has
+         overflowed. As the window narrows the labels go first (icon only, the way
+         NSToolbar's display mode does), then commands move into More, Redo and zoom
+         first; Open never leaves. The thresholds are measured from the items
+         themselves, in the running language: MainWindow.Toolbar.cs.
 
-         One row at every width (#143). It used to clip whatever did not fit, so at
-         the old 1000-wide default Fit width, Fit page and Options could not be
-         reached at all. Now, as the window narrows, the labels go first (icon only,
-         the way NSToolbar's display mode does), then the least-used commands move
-         into the More menu at the end. The thresholds are measured from the items
-         themselves, in the running language: MainWindow.Toolbar.cs. -->
-    <Border Name="ToolbarHost" DockPanel.Dock="Top" Padding="8,8" BorderThickness="0,0,0,1"
+         No HotKey= here: the shortcut modifier differs per platform (Cmd on macOS,
+         Ctrl elsewhere), so the gestures, these tooltips and the menu bar are built
+         in code-behind (MainWindow.MenuBar.cs). -->
+    <Border Name="ToolbarHost" DockPanel.Dock="Top" Height="49" Padding="8,0" BorderThickness="0,0,0,1"
             ClipToBounds="True"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-      <StackPanel Name="ToolbarItems" Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
-        <Button Name="OpenButton" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+      <StackPanel Name="ToolbarItems" Orientation="Horizontal" Spacing="{DynamicResource SpaceXs}"
+                  VerticalAlignment="Center">
+        <!-- Every button the same height, labelled or not, so the row never changes height. -->
+        <StackPanel.Styles>
+          <Style Selector="StackPanel#ToolbarItems > Button, StackPanel#ToolbarItems > ToggleButton">
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+          </Style>
+          <Style Selector="StackPanel#ToolbarItems > ComboBox">
+            <Setter Property="VerticalAlignment" Value="Center" />
+          </Style>
+        </StackPanel.Styles>
+
+        <Button Name="OpenButton">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Open}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.Open}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button Name="SaveButton" Command="{Binding SaveCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+        <Button Name="SaveButton" Command="{Binding SaveCommand}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconSave}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Save}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.Save}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button Name="SaveAsButton" IsEnabled="{Binding IsDocumentOpen}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconSaveAs}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.SaveAs}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <!-- Set, change or remove the password; on a restricted document it offers the
-             owner password instead (#131, ADR-004). -->
-        <Button Name="SecurityButton" IsEnabled="{Binding IsDocumentOpen}"
-                ToolTip.Tip="{x:Static loc:Strings.SecurityTooltip}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconLock}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.SecurityToolbar}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Button Name="PrintButton" Command="{Binding PrintCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconPrint}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Print}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Button Name="ShrinkButton" IsEnabled="{Binding CanShrink}"
-                ToolTip.Tip="{x:Static loc:Strings.SaveSmallerCopyForEmail}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconShrink}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Shrink}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
              placement, and the next click on the page puts it there. -->
         <Button Name="SignButton" IsEnabled="{Binding CanSign}">
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconSign}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Sign}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.Sign}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
-        
           <Button.Flyout>
             <!-- The signature library (#100). One card per signature: the ink on a white
                  sheet — white in dark mode too, because it is paper — with its name
@@ -220,17 +219,28 @@
             </Flyout>
           </Button.Flyout>
         </Button>
-
         <ToggleButton Name="AddTextButton"
                       IsChecked="{Binding IsAddingText, Mode=OneWay}"
-                      Command="{Binding ToggleAddTextCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+                      Command="{Binding ToggleAddTextCommand}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconText}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.AddText}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.AddText}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
+        <ToggleButton Name="WhiteoutButton"
+                      IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
+                      Command="{Binding ToggleWhiteoutCommand}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
+            <Path Data="{StaticResource IconCover}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.Cover}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
+        <!-- Contextual (#144): on the row only while Add text is armed or an added
+             text box is selected or being edited. -->
         <!-- Display names, not the raw PostScript names and enum values the
              engine speaks: "Times", not "Times-Roman"; "Croix", not "Cross". -->
         <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
@@ -243,112 +253,54 @@
         </ComboBox>
         <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
                   SelectedItem="{Binding TextSize}" IsEnabled="{Binding CanAddText}" />
-        <ToggleButton Name="WhiteoutButton"
-                      IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
-                      Command="{Binding ToggleWhiteoutCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconCover}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Cover}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </ToggleButton>
-
-        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-        <Button Name="UndoButton" Command="{Binding UndoCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+        <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+        <Button Name="UndoButton" Command="{Binding UndoCommand}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconUndo}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Undo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.Undo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button Name="RedoButton" Command="{Binding RedoCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+        <Button Name="RedoButton" Command="{Binding RedoCommand}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconRedo}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Redo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.Redo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-        <Button Name="ZoomOutButton" Command="{Binding ZoomOutCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconZoomOut}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.ZoomOut}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconZoomIn}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.ZoomIn}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Button Name="ZoomResetButton" Command="{Binding ZoomResetCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconActualSize}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.ActualSize}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Button Name="FitWidthButton" Command="{Binding FitWidthCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconFitWidth}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.FitWidth}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
-        <Button Name="FitPageButton" Command="{Binding FitPageCommand}" >
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconFitPage}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
-                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.FitPage}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
-          </StackPanel>
-        </Button>
+        <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
 
-        <Rectangle Width="1" Margin="4,2" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-
-        <!-- Preferences that change what an edit does, kept out of the main flow
-             because most people never touch them (SDD §4.4). -->
-        <Button Name="SettingsButton">
-          <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
-            <Path Data="{StaticResource IconOptions}" Width="18" Height="18"
-                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+        <!-- One zoom control (#144): −, the level with a menu of Actual size, the fits
+             and preset levels, and +. Fixed width, so its measured width holds at any level. -->
+        <Button Name="ZoomOutButton" Command="{Binding ZoomOutCommand}">
+          <Path Data="{StaticResource IconZoomOut}" Width="18" Height="18"
+                Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+        </Button>
+        <Button Name="ZoomMenuButton" Width="84" HorizontalContentAlignment="Center"
+                IsEnabled="{Binding IsDocumentOpen}">
+          <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceXs}">
+            <TextBlock Text="{Binding ZoomPercentLabel}" VerticalAlignment="Center"
+                       FontSize="{DynamicResource TypeBody}" />
+            <Path Data="{StaticResource IconChevronDown}" Width="10" Height="10" VerticalAlignment="Center"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-            <TextBlock Text="{x:Static loc:Strings.Options}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
-        
           <Button.Flyout>
-            <Flyout Placement="BottomEdgeAlignedLeft">
-              <StackPanel Width="260" Spacing="{DynamicResource SpaceM}">
-                <TextBlock Text="{x:Static loc:Strings.TickMarksLookLike}" FontWeight="SemiBold" />
-                <ComboBox Name="MarkStyleBox" HorizontalAlignment="Stretch"
-                          ItemsSource="{Binding MarkStyleChoices}" SelectedItem="{Binding SelectedMarkStyle}">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate DataType="vm:MarkStyleChoice">
-                      <TextBlock Text="{Binding Label}" />
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-                <CheckBox Name="FlattenBox" IsChecked="{Binding FlattenOnSave}"
-                          Content="{x:Static loc:Strings.FlattenWhenSaving}" />
-                <TextBlock Text="{x:Static loc:Strings.FlattenExplanation}"
-                           TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
-              </StackPanel>
-            </Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedLeft" />
           </Button.Flyout>
         </Button>
+        <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}">
+          <Path Data="{StaticResource IconZoomIn}" Width="18" Height="18"
+                Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+        </Button>
 
-        <!-- The overflow (#143). Shown only while commands have left the row; its menu
-             is filled as it opens, from whichever commands are hidden then. -->
-        <Button Name="MoreButton" IsVisible="False">
+        <!-- More (#143, #144): always here. Its menu is filled as it opens — whatever
+             has overflowed, then Save As, Password…, Print, Shrink and Options. -->
+        <Button Name="MoreButton">
           <Path Data="{StaticResource IconMore}" Width="18" Height="18"
                 Fill="{Binding $parent[Button].Foreground}" Stretch="Uniform" />
           <Button.Flyout>
