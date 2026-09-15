@@ -8,7 +8,7 @@ namespace MegaPDF.Core.Tests;
 
 /// <summary>
 /// When PDFium rewrites a page it can still lose things the patched writer does not
-/// write back (#118, #119) — text used as a clipping path (<c>7 Tr</c>) is one — so an
+/// write back (#118, #119) — a form XObject whose text inherits the font set before it is one — so an
 /// edit on such a page would quietly change what the person never touched. The engine
 /// must refuse and leave the page exactly as it was. Character spacing was the example
 /// here until patch 0001 taught the writer <c>Tc</c>/<c>Tw</c>; it is now editable.
@@ -18,9 +18,19 @@ public sealed class LayoutGuardTests : IDisposable
     private readonly string _dir = Directory.CreateTempSubdirectory("megapdf-layout-").FullName;
     private readonly PdfiumEngine _engine = new();
 
-    /// <summary>A plain heading above a box clipped by invisible text, which a rewrite drops.</summary>
-    private const string ClippedByText =
-        "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q";
+    /// <summary>
+    /// A plain heading above a form XObject whose text sets no font and draws in the one set before
+    /// it. The writer never writes the text state a form inherits, so a rewrite loses that text.
+    /// (Text used as a clip, <c>7 Tr</c>, was this page until PDFium patch 0018 taught the writer text clips.)
+    /// </summary>
+    private const string FormInheritingText =
+        "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q /F1 72 Tf 0 0 1 rg /Fm1 Do Q";
+
+    /// <summary>The form <see cref="FormInheritingText"/> draws, written as object 6.</summary>
+    private const string InheritingForm =
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Length 24 >>\nstream\nBT 72 480 Td (FORM) Tj ET\nendstream";
+
+    private static byte[] FormPdf() => Pdf(FormInheritingText, resources: "/XObject << /Fm1 6 0 R >>", extraObject: InheritingForm);
 
     public void Dispose()
     {
@@ -29,9 +39,9 @@ public sealed class LayoutGuardTests : IDisposable
     }
 
     [Fact]
-    public void TextOnAPageClippedByText_IsNotEditable_AndAnEditIsRefusedWithThePageUnchanged()
+    public void TextOnAPageWithAFormInheritingText_IsNotEditable_AndAnEditIsRefusedWithThePageUnchanged()
     {
-        using var doc = Open(Pdf(ClippedByText), "clipped.pdf");
+        using var doc = Open(FormPdf(), "clipped.pdf");
 
         PdfTextLine line;
         IReadOnlyList<PdfTextRun> before;
@@ -61,9 +71,9 @@ public sealed class LayoutGuardTests : IDisposable
     }
 
     [Fact]
-    public void APageClippedByText_WarnsOnceBeforeAWhiteout_WhichStillAppliesAndUndoes()
+    public void APageWithAFormInheritingText_WarnsOnceBeforeAWhiteout_WhichStillAppliesAndUndoes()
     {
-        using var doc = Open(Pdf(ClippedByText), "clipped-whiteout.pdf");
+        using var doc = Open(FormPdf(), "clipped-whiteout.pdf");
         var warnings = new PageRegenerationWarnings();
 
         // #139: regenerating the page alone changes it, for the render, off text.
@@ -99,7 +109,7 @@ public sealed class LayoutGuardTests : IDisposable
 
         // Another document starts again.
         warnings.Reset();
-        using var fresh = Open(Pdf(ClippedByText), "clipped-whiteout-again.pdf");
+        using var fresh = Open(FormPdf(), "clipped-whiteout-again.pdf");
         Assert.True(warnings.ShouldWarn(fresh, new AddWhiteoutOperation(fresh, 0, new PdfRect(500, 20, 40, 30))));
     }
 
@@ -130,7 +140,7 @@ public sealed class LayoutGuardTests : IDisposable
     public async Task ThePageCheck_StartedEarly_AnswersAtTheChange()
     {
         // #145: started when the page is shown, asked at the change.
-        using var clipped = Open(Pdf(ClippedByText), "early-clipped.pdf");
+        using var clipped = Open(FormPdf(), "early-clipped.pdf");
         var warnings = new PageRegenerationWarnings();
         warnings.Prepare(clipped, 0);
         Assert.Equal(PageCheckAnswer.WouldChange, await warnings.AskAsync(clipped, 0, TimeSpan.FromSeconds(30)));
@@ -166,7 +176,7 @@ public sealed class LayoutGuardTests : IDisposable
     [Fact]
     public void APageCheck_CanBeCancelled_AndCachesWhatItAnswers()
     {
-        using var doc = Open(Pdf(ClippedByText), "cancel-check.pdf");
+        using var doc = Open(FormPdf(), "cancel-check.pdf");
         using var page = doc.GetPage(0);
         Assert.Null(page.GetCachedPageRegenerationVerdict());
 
@@ -219,9 +229,9 @@ public sealed class LayoutGuardTests : IDisposable
     }
 
     [Fact]
-    public void DeletingTextOnAPageClippedByText_IsRefusedToo()
+    public void DeletingTextOnAPageWithAFormInheritingText_IsRefusedToo()
     {
-        using var doc = Open(Pdf(ClippedByText), "clipped-delete.pdf");
+        using var doc = Open(FormPdf(), "clipped-delete.pdf");
 
         PdfTextLine line;
         int runCount;
@@ -321,8 +331,12 @@ public sealed class LayoutGuardTests : IDisposable
         return _engine.Open(path);
     }
 
-    /// <summary>One page with a Helvetica /F1 (or <paramref name="font"/>, written into the page's resources) and the given content stream.</summary>
-    private static byte[] Pdf(string content, string font = "4 0 R")
+    /// <summary>
+    /// One page with a Helvetica /F1 (or <paramref name="font"/>, written into the page's resources) and the given
+    /// content stream; <paramref name="resources"/> adds entries to the page's resources and
+    /// <paramref name="extraObject"/> becomes object 6.
+    /// </summary>
+    private static byte[] Pdf(string content, string font = "4 0 R", string resources = "", string? extraObject = null)
     {
         var pdf = new StringBuilder("%PDF-1.4\n");
         var offsets = new List<int>();
@@ -333,9 +347,11 @@ public sealed class LayoutGuardTests : IDisposable
         }
         Add("<< /Type /Catalog /Pages 2 0 R >>");
         Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
-        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 " + font + " >> >> /Contents 5 0 R >>");
+        Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 " + font + " >> " + resources + " >> /Contents 5 0 R >>");
         Add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
         Add($"<< /Length {content.Length} >>\nstream\n{content}\nendstream");
+        if (extraObject is not null)
+            Add(extraObject);
         var xref = pdf.Length;
         pdf.Append($"xref\n0 {offsets.Count + 1}\n0000000000 65535 f \n");
         foreach (var offset in offsets)

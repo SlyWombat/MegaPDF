@@ -19,12 +19,14 @@ final class BodyTextTests: XCTestCase {
         onePagePdf("BT /F1 24 Tf 72 700 Td (abgd) Tj ET", font: "<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>")
     }
 
-    /// One page with a Helvetica /F1 and the given content stream.
-    private func helveticaPdf(_ content: String) -> Data {
-        onePagePdf(content, font: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+    /// One page with a Helvetica /F1 and the given content stream; `resources` adds entries to the
+    /// page's resources and `extraObject` becomes object 6.
+    private func helveticaPdf(_ content: String, resources: String = "", extraObject: String? = nil) -> Data {
+        onePagePdf(content, font: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+                   resources: resources, extraObject: extraObject)
     }
 
-    private func onePagePdf(_ content: String, font: String) -> Data {
+    private func onePagePdf(_ content: String, font: String, resources: String = "", extraObject: String? = nil) -> Data {
         var pdf = "%PDF-1.4\n"
         var offsets: [Int] = []
         func add(_ body: String) {
@@ -33,9 +35,10 @@ final class BodyTextTests: XCTestCase {
         }
         add("<< /Type /Catalog /Pages 2 0 R >>")
         add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>")
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> \(resources) >> /Contents 5 0 R >>")
         add(font)
         add("<< /Length \(content.utf8.count) >>\nstream\n\(content)\nendstream")
+        if let extraObject = extraObject { add(extraObject) }
         let xref = pdf.utf8.count
         pdf += "xref\n0 \(offsets.count + 1)\n0000000000 65535 f \n"
         for offset in offsets { pdf += String(format: "%010d 00000 n \n", offset) }
@@ -108,14 +111,17 @@ final class BodyTextTests: XCTestCase {
     /// #139: a page PDFium's rewrite would alter says so before a text box, and the text box
     /// still goes on: the app warns, it never refuses. The text-clip page every platform's
     /// layout-guard test uses.
-    func testAPageClippedByTextSaysItWouldChangeAndATextBoxStillApplies() async throws {
+    func testAPageWithAFormInheritingTextSaysItWouldChangeAndATextBoxStillApplies() async throws {
         let engine = PdfEngine.shared
+        // A form whose text inherits the font set before it: the writer never writes that state.
         let doc = try await engine.open(helveticaPdf(
-            "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q"))
+            "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q /F1 72 Tf 0 0 1 rg /Fm1 Do Q",
+            resources: "/XObject << /Fm1 6 0 R >>",
+            extraObject: "<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Length 24 >>\nstream\nBT 72 480 Td (FORM) Tj ET\nendstream"))
         defer { Task { await engine.close(doc) } }
 
         let verdict = try await engine.pageRegenerationVerdict(doc, pageIndex: 0)
-        XCTAssertEqual(verdict?.editable, false, "regenerating the page drops the text clip")
+        XCTAssertEqual(verdict?.editable, false, "regenerating the page loses the form's inherited text")
         XCTAssertEqual(verdict?.cause, .render)
 
         let id = try await engine.addTextBox(doc, pageIndex: 0, text: "Note", fontSize: 12, x: 300, y: 300)

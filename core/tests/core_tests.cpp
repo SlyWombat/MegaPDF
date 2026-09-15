@@ -1611,6 +1611,17 @@ std::vector<unsigned char> one_page_pdf(const std::string& content, const std::s
     return std::vector<unsigned char>(pdf.begin(), pdf.end());
 }
 
+// The page the layout-guard tests use for a refusal, on every platform (#118, #128): a form XObject
+// whose text sets no font, so it draws in the font, size and colour set before its "Do". PDFium's
+// writer writes each object's own state and never the text state a form inherits, so regenerating
+// the page loses the form's text. (Text used as a clip, 7 Tr, was this page until patch 0018.)
+const char* const kFormInheritingTextPage = "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q /F1 72 Tf 0 0 1 rg /Fm1 Do Q";
+const char* const kFormInheritingTextResources = "/XObject << /Fm1 6 0 R >>";
+std::string form_inheriting_text_object() {
+    return "<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Length 24 >>\n"
+           "stream\nBT 72 480 Td (FORM) Tj ET\nendstream";
+}
+
 struct RunShot {
     int object_index;
     megapdf_rect bounds;
@@ -3008,12 +3019,13 @@ void test_far_hidden_copies(const std::string& fixtures) {
 // object indices and rewrites the page's streams. After a change every answer must be what a
 // fresh open of the saved page gives. PDFium regenerates every stream of a page (patch 5), so one
 // page's verdicts agree with each other and the stale answer shows when a change alters whether
-// the page can be rewritten at all: here, text used as a clip (render mode 7) that the writer
+// the page can be rewritten at all: here, a form whose text inherits its font, which the writer
 // cannot keep. Removing the path before it, which the guard does not judge, moves both texts down.
 void test_verdicts_follow_changes() {
     const std::string content = "0 0 1 rg 72 500 50 50 re f BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET "
-                                "BT /F1 30 Tf 7 Tr 72 600 Td (CLIP) Tj ET 1 0 0 rg 72 590 200 40 re f";
-    OpenDoc d(one_page_pdf(content, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
+                                "BT /F1 12 Tf 72 660 Td (Body line) Tj ET q /F1 30 Tf 1 0 0 rg /Fm1 Do Q";
+    OpenDoc d(one_page_pdf(content, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+                           kFormInheritingTextResources, "", {form_inheriting_text_object()}));
     std::vector<int> after;
     {
         Page p(d.doc, 0);
@@ -3067,22 +3079,22 @@ void test_layout_verdicts() {
         megapdf_discard_detached(original);
     }
 
-    // Refused for the render: a box clipped by text (7 Tr) the writer cannot keep, the page every
-    // platform's layout-guard test uses. The heading itself is untouched; the box is what changes.
+    // Refused for the render: a form whose text inherits the font set before it, which the writer
+    // cannot keep, the page every platform's layout-guard test uses. The heading itself is
+    // untouched; the form's text is what changes.
     {
-        OpenDoc d(one_page_pdf("BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q",
-                               helvetica));
+        OpenDoc d(one_page_pdf(kFormInheritingTextPage, helvetica, kFormInheritingTextResources, "", {form_inheriting_text_object()}));
         Page p(d.doc, 0);
         megapdf_layout_verdict v{};
         check(megapdf_text_editable_reason(p.page, 0, &v) == 0 && v.editable == 0 && v.cause == MEGAPDF_LAYOUT_RENDER,
-              "layout verdict: text clipping is refused for the render", describe(v));
+              "layout verdict: a form's inherited text is refused for the render", describe(v));
         check(v.total_pixels == 612 * 792 && v.changed_pixels * 2000 > v.total_pixels && v.changed_pixels <= 400 * 100 && v.max_shift_pt <= 0.5,
-              "layout verdict: the render numbers are the box's: over the budget, no more than its area, no text moved", describe(v));
+              "layout verdict: the render numbers are the form text's: over the budget, within a 400 x 100 box, no text moved", describe(v));
         check((v.where & MEGAPDF_LAYOUT_WHERE_OTHER) != 0 && (v.where & MEGAPDF_LAYOUT_WHERE_OBJECT) == 0,
               "layout verdict: the change is off text and away from the heading", describe(v));
-        megapdf_layout_verdict clip{};
-        check(megapdf_text_editable_reason(p.page, 1, &clip) == 0 && clip.cause == MEGAPDF_LAYOUT_RENDER && (clip.where & MEGAPDF_LAYOUT_WHERE_OBJECT) != 0,
-              "layout verdict: judged on the clipping text itself, the change is on the object", describe(clip));
+        megapdf_layout_verdict form{};
+        check(megapdf_text_editable_reason(p.page, 1, &form) == MEGAPDF_ERR_ARGUMENT,
+              "layout verdict: the form itself is no text run, so it is not judged as one");
 
         megapdf_layout_verdict again{};
         check(megapdf_text_editable_reason(p.page, 0, &again) == 0 && same(again, v), "layout verdict: asked again, the cached verdict is the same", describe(again));
@@ -3093,8 +3105,8 @@ void test_layout_verdicts() {
         check(megapdf_set_text(p.page, 0, retyped.data(), 0, &outcome, &original) == MEGAPDF_ERR_LAYOUT && megapdf_last_layout_verdict(&last) == MEGAPDF_OK &&
                   same(last, v),
               "layout verdict: megapdf_set_text's refusal hands back the verdict", describe(last));
-        const int line[2] = {0, 1};
-        check(megapdf_set_line_text(p.page, line, 2, retyped.data(), 0, &outcome, &original) == MEGAPDF_ERR_LAYOUT &&
+        const int line[1] = {0};
+        check(megapdf_set_line_text(p.page, line, 1, retyped.data(), 0, &outcome, &original) == MEGAPDF_ERR_LAYOUT &&
                   megapdf_last_layout_verdict(&last) == MEGAPDF_OK && same(last, v),
               "layout verdict: megapdf_set_line_text's refusal hands back the first refused run's verdict", describe(last));
         const int bad[1] = {9999};
@@ -3146,8 +3158,8 @@ void test_layout_verdicts() {
     // and each index must then give what a fresh open of the saved page gives, in full.
     {
         OpenDoc d(one_page_pdf("0 0 1 rg 72 300 50 50 re f BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET "
-                               "q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q",
-                               helvetica));
+                               "BT /F1 12 Tf 72 660 Td (Body line) Tj ET q /F1 72 Tf 0 0 1 rg /Fm1 Do Q",
+                               helvetica, kFormInheritingTextResources, "", {form_inheriting_text_object()}));
         std::vector<megapdf_layout_verdict> after(2);
         {
             Page p(d.doc, 0);
@@ -3230,18 +3242,17 @@ void test_page_regeneration_verdict() {
         check(megapdf_page_regeneration_verdict(p.page, &v) == 1 && v.cause == MEGAPDF_LAYOUT_OK, "page verdict: an empty page keeps its look", describe(v));
     }
 
-    // The text-clip page every platform's layout-guard test uses: the text guard refuses it, the
-    // page verdict says a regeneration changes it, and a whiteout and a text box still apply.
+    // The inherited-text form page every platform's layout-guard test uses: the text guard refuses
+    // it, the page verdict says a regeneration changes it, and a whiteout and a text box still apply.
     {
-        const auto bytes = one_page_pdf("BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q",
-                                        helvetica);
+        const auto bytes = one_page_pdf(kFormInheritingTextPage, helvetica, kFormInheritingTextResources, "", {form_inheriting_text_object()});
         OpenDoc d(bytes);
         megapdf_rect box_bounds{};
         {
             Page p(d.doc, 0);
             megapdf_layout_verdict v{};
             check(megapdf_page_regeneration_verdict(p.page, &v) == 0 && v.editable == 0 && v.cause == MEGAPDF_LAYOUT_RENDER,
-                  "page verdict: the text-clip page changes when regenerated", describe(v));
+                  "page verdict: the inherited-text page changes when regenerated", describe(v));
             check(v.changed_pixels * 2000 > v.total_pixels && (v.where & MEGAPDF_LAYOUT_WHERE_OTHER) != 0 && (v.where & MEGAPDF_LAYOUT_WHERE_OBJECT) == 0,
                   "page verdict: over the budget, off text, and never on a judged object", describe(v));
             megapdf_layout_verdict again{};
@@ -3272,7 +3283,7 @@ void test_page_regeneration_verdict() {
         Page a(was.doc, 0), b(saved.doc, 0);
         const int changed = changed_outside(render_page(a.page), render_page(b.page), {corner, box_bounds});
         check(box_bounds.right > box_bounds.left && changed > 0,
-              "page verdict: on the text-clip page the change reaches outside the whiteout and the text box", std::to_string(changed) + " px");
+              "page verdict: on the inherited-text page the change reaches outside the whiteout and the text box", std::to_string(changed) + " px");
     }
 }
 

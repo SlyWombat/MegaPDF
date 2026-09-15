@@ -23,8 +23,13 @@ class BodyTextTest {
     private val engine = PdfEngine()
 
     private companion object {
-        const val CLIPPED_BY_TEXT =
-            "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q"
+        /** A heading above a form whose text inherits the font set before it, which a rewrite loses. */
+        const val FORM_INHERITING_TEXT =
+            "BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q /F1 72 Tf 0 0 1 rg /Fm1 Do Q"
+
+        /** The form [FORM_INHERITING_TEXT] draws, written as object 6. */
+        const val INHERITING_FORM =
+            "<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Length 24 >>\nstream\nBT 72 480 Td (FORM) Tj ET\nendstream"
     }
 
     private fun asset(name: String): ByteArray =
@@ -53,11 +58,13 @@ class BodyTextTest {
     }
 
     /**
-     * One Helvetica page. [CLIPPED_BY_TEXT] puts a box clipped by invisible text (7 Tr) under
-     * the heading, which PDFium's writer cannot write back even patched (#118, #119).
+     * One Helvetica page; [resources] adds entries to its resources and [extraObject] becomes object 6.
+     * [FORM_INHERITING_TEXT] puts a form whose text inherits the font set before it under the heading,
+     * which PDFium's writer cannot write back even patched (#118, #119); text used as a clip (7 Tr)
+     * was that example until patch 0018.
      * Character spacing alone was that example until patch 0001; it is now editable.
      */
-    private fun helveticaPdf(content: String): ByteArray {
+    private fun helveticaPdf(content: String, resources: String = "", extraObject: String? = null): ByteArray {
         val pdf = StringBuilder("%PDF-1.4\n")
         val offsets = ArrayList<Int>()
         fun add(body: String) {
@@ -66,9 +73,10 @@ class BodyTextTest {
         }
         add("<< /Type /Catalog /Pages 2 0 R >>")
         add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>")
-        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>")
+        add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> $resources >> /Contents 5 0 R >>")
         add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
         add("<< /Length ${content.length} >>\nstream\n$content\nendstream")
+        if (extraObject != null) add(extraObject)
         val xref = pdf.length
         pdf.append("xref\n0 ${offsets.size + 1}\n0000000000 65535 f \n")
         for (offset in offsets) pdf.append(String.format("%010d 00000 n \n", offset))
@@ -77,7 +85,7 @@ class BodyTextTest {
     }
 
     @Test
-    fun textPdfiumCannotRewriteFaithfullyIsRefusedAndLeftAlone() = onFirstPage(helveticaPdf(CLIPPED_BY_TEXT)) { page ->
+    fun textPdfiumCannotRewriteFaithfullyIsRefusedAndLeftAlone() = onFirstPage(formPdf()) { page ->
         val before = page.textLines()
         val run = before.first().runs.first()
         assertEquals("the tap-time check says no", false, page.textEditable(run.objectIndex))
@@ -92,7 +100,7 @@ class BodyTextTest {
     }
 
     @Test
-    fun aPageRegeneratingWouldAlterIsFlaggedAndATextBoxStillApplies() = onFirstPage(helveticaPdf(CLIPPED_BY_TEXT)) { page ->
+    fun aPageRegeneratingWouldAlterIsFlaggedAndATextBoxStillApplies() = onFirstPage(formPdf()) { page ->
         val verdict = page.pageRegenerationVerdict()
         assertEquals("regenerating the page changes it (#139)", false, verdict?.editable)
         assertEquals("for the render", LayoutCause.RENDER, verdict?.cause)
@@ -110,7 +118,7 @@ class BodyTextTest {
 
     @Test
     fun theEarlyPageCheckAgreesWithTheVerdictAndIsCached() = runBlocking {
-        val doc = engine.open(helveticaPdf(CLIPPED_BY_TEXT))
+        val doc = engine.open(formPdf())
         try {
             val page = doc.openPage(0)
             try {
@@ -129,7 +137,7 @@ class BodyTextTest {
 
     @Test
     fun closingTheDocumentStopsARunningPageCheck() = runBlocking {
-        val doc = engine.open(helveticaPdf(CLIPPED_BY_TEXT))
+        val doc = engine.open(formPdf())
         val check = async(Dispatchers.Default) { doc.checkPageRegeneration(0) }
         doc.close()
         val result = check.await()
@@ -139,7 +147,7 @@ class BodyTextTest {
 
     @Test
     fun cancellingTheCallerStopsThePageCheck() = runBlocking {
-        val doc = engine.open(helveticaPdf(CLIPPED_BY_TEXT))
+        val doc = engine.open(formPdf())
         try {
             val job = launch(Dispatchers.Default) { doc.checkPageRegeneration(0) }
             job.cancelAndJoin()
@@ -158,6 +166,8 @@ class BodyTextTest {
             page.setText(run.objectIndex, "Annual report")
             assertEquals("Annual report", page.textLines().single().text.trimEnd())
         }
+
+    private fun formPdf(): ByteArray = helveticaPdf(FORM_INHERITING_TEXT, "/XObject << /Fm1 6 0 R >>", INHERITING_FORM)
 
     private fun <T> onFirstPage(bytes: ByteArray, body: suspend (PdfPage) -> T): T = runBlocking {
         val doc = engine.open(bytes)
