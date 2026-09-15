@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:MegaPDF.Avalonia"
              x:Class="MegaPDF.Avalonia.App"
              Name="MegaPDF"
              RequestedThemeVariant="Default">
@@ -17,17 +18,39 @@
   <Application.Styles>
     <FluentTheme />
 
-    <!-- Accessibility (#144). Parts of Fluent's templates that are drawing, not controls,
-         and that VoiceOver otherwise found as unnamed or type-named elements:
+    <!-- Accessibility (#144). Parts of Fluent's templates that VoiceOver otherwise found
+         as unnamed or type-named elements:
 
          - A scroll bar's arrow and page buttons. The arrows' only content is a PathIcon,
            so they were announced as "Avalonia.Controls.PathIcon"; the page buttons had
-           no name at all. A Mac scroll bar exposes no buttons either: VoiceOver scrolls
-           the scroll area and reads the bar's value.
+           no name at all. Hiding them (AccessibilityView Raw) works for UI Automation
+           but not on the Mac, whose accessibility tree lists every child regardless, so
+           they are named for what they do.
          - A ComboBox's drop-down chevron and its placeholder text, an unnamed element
            beside each picker. The ComboBox itself carries the name and the value. -->
-    <Style Selector="ScrollBar /template/ RepeatButton">
-      <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_LineUpButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarLineUp}" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_LineDownButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarLineDown}" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_PageUpButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarPageUp}" />
+    </Style>
+    <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_PageDownButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarPageDown}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_LineUpButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarLineLeft}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_LineDownButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarLineRight}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_PageUpButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarPageLeft}" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_PageDownButton">
+      <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarPageRight}" />
     </Style>
     <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph, ComboBox /template/ TextBlock#PlaceholderTextBlock">
       <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />

@@ -1053,9 +1053,13 @@ internal static class Program
         Pump();
         var scrollButtons = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.PageScroller)
             .OfType<global::Avalonia.Controls.RepeatButton>().ToList();
-        check($"the page's scroll bar buttons are hidden from accessibility ({scrollButtons.Count} found)",
-              scrollButtons.Count > 0 && scrollButtons.All(b =>
-                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(b).IsControlElement()));
+        // Named rather than hidden: the Mac lists every child whatever its AccessibilityView.
+        var scrollNames = scrollButtons
+            .Select(b => global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(b).GetName())
+            .ToList();
+        check($"the page's scroll bar buttons are named for what they do ({string.Join(", ", scrollNames.Distinct())})",
+              scrollButtons.Count > 0 && scrollNames.All(n =>
+                  !string.IsNullOrWhiteSpace(n) && !n.StartsWith("Avalonia.", StringComparison.Ordinal)));
 
         vm.ToggleAddTextCommand.Execute(null);
         Pump();

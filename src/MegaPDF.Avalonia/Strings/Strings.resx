@@ -852,4 +852,36 @@
     <value>Don't Save</value>
     <comment>Unsaved-changes button; title case as on every Mac (#145)</comment>
   </data>
+  <data name="ScrollBarLineUp" xml:space="preserve">
+    <value>Scroll up</value>
+    <comment>Accessible name of a vertical scroll bar's top arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarLineDown" xml:space="preserve">
+    <value>Scroll down</value>
+    <comment>Accessible name of a vertical scroll bar's bottom arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarLineLeft" xml:space="preserve">
+    <value>Scroll left</value>
+    <comment>Accessible name of a horizontal scroll bar's left arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarLineRight" xml:space="preserve">
+    <value>Scroll right</value>
+    <comment>Accessible name of a horizontal scroll bar's right arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarPageUp" xml:space="preserve">
+    <value>Page up</value>
+    <comment>Accessible name of a vertical scroll bar's track above the thumb (#144)</comment>
+  </data>
+  <data name="ScrollBarPageDown" xml:space="preserve">
+    <value>Page down</value>
+    <comment>Accessible name of a vertical scroll bar's track below the thumb (#144)</comment>
+  </data>
+  <data name="ScrollBarPageLeft" xml:space="preserve">
+    <value>Page left</value>
+    <comment>Accessible name of a horizontal scroll bar's track left of the thumb (#144)</comment>
+  </data>
+  <data name="ScrollBarPageRight" xml:space="preserve">
+    <value>Page right</value>
+    <comment>Accessible name of a horizontal scroll bar's track right of the thumb (#144)</comment>
+  </data>
 </root>

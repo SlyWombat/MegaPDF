@@ -29,6 +29,8 @@ Conventions (OQLF, Canadian French):
 | Print | Imprimer | |
 | printer | imprimante | |
 | network | réseau | macOS Local Network prompt (Info.plist) |
+| Scroll up, down, left, right | Défiler vers le haut, le bas, la gauche, la droite | #144, accessible names of a scroll bar's arrow buttons |
+| Page up, down, left, right | Une page vers le haut, le bas, la gauche, la droite | #144, accessible names of a scroll bar's track either side of the thumb |
 | Undo | Annuler | |
 | Redo | Rétablir | |
 | Cancel | Annuler | same word as Undo; standard on every French OS |

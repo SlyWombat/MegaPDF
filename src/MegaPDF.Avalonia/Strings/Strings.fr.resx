@@ -848,4 +848,36 @@
     <value>Ne pas enregistrer</value>
     <comment>Unsaved-changes button; title case as on every Mac (#145)</comment>
   </data>
+  <data name="ScrollBarLineUp" xml:space="preserve">
+    <value>Défiler vers le haut</value>
+    <comment>Accessible name of a vertical scroll bar's top arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarLineDown" xml:space="preserve">
+    <value>Défiler vers le bas</value>
+    <comment>Accessible name of a vertical scroll bar's bottom arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarLineLeft" xml:space="preserve">
+    <value>Défiler vers la gauche</value>
+    <comment>Accessible name of a horizontal scroll bar's left arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarLineRight" xml:space="preserve">
+    <value>Défiler vers la droite</value>
+    <comment>Accessible name of a horizontal scroll bar's right arrow button (#144)</comment>
+  </data>
+  <data name="ScrollBarPageUp" xml:space="preserve">
+    <value>Une page vers le haut</value>
+    <comment>Accessible name of a vertical scroll bar's track above the thumb (#144)</comment>
+  </data>
+  <data name="ScrollBarPageDown" xml:space="preserve">
+    <value>Une page vers le bas</value>
+    <comment>Accessible name of a vertical scroll bar's track below the thumb (#144)</comment>
+  </data>
+  <data name="ScrollBarPageLeft" xml:space="preserve">
+    <value>Une page vers la gauche</value>
+    <comment>Accessible name of a horizontal scroll bar's track left of the thumb (#144)</comment>
+  </data>
+  <data name="ScrollBarPageRight" xml:space="preserve">
+    <value>Une page vers la droite</value>
+    <comment>Accessible name of a horizontal scroll bar's track right of the thumb (#144)</comment>
+  </data>
 </root>
