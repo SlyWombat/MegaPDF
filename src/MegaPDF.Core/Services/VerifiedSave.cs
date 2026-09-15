@@ -99,13 +99,20 @@ public static class VerifiedSave
     private static Func<string, IPdfDocument> OpenWith(IPdfEngine engine, string? userPassword) =>
         stagedPath => engine.Open(stagedPath, string.IsNullOrEmpty(userPassword) ? null : userPassword);
 
+    /// <summary>
+    /// Where this thread stages its copy, when a test needs its own folder: the shared temp
+    /// folder is also used by tests running in parallel, so counting files there races them.
+    /// </summary>
+    [ThreadStatic]
+    internal static string? StagingDirectoryForTests;
+
     private static void Stage(IPdfEngine engine, IPdfDocument document, Action<Stream> save,
         Func<string, IPdfDocument> reopen, Action<string> write, Action<SaveStage>? onStage)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(document);
 
-        var stagingPath = Path.Combine(Path.GetTempPath(), $"megapdf-verify-{Guid.NewGuid():N}.pdf");
+        var stagingPath = Path.Combine(StagingDirectoryForTests ?? Path.GetTempPath(), $"megapdf-verify-{Guid.NewGuid():N}.pdf");
         try
         {
             // A refusal (DocumentRestrictedException) or a failed write propagates as

@@ -95,12 +95,22 @@ public class VerifiedSaveTests : IDisposable
     [Fact]
     public void Staging_LeavesNoTemporaryFilesBehind()
     {
-        var before = Directory.GetFiles(Path.GetTempPath(), "megapdf-verify-*.pdf").Length;
-
+        // Its own staging folder: other test classes save in parallel through the shared temp
+        // folder, so a count there raced them (seen as a one-off failure while a battery ran).
+        var staging = Directory.CreateDirectory(Path.Combine(_dir, "staging")).FullName;
         var source = WriteSample();
         using var document = _engine.Open(source);
-        VerifiedSave.ToPath(_engine, document, Path.Combine(_dir, "tidy.pdf"));
+        VerifiedSave.StagingDirectoryForTests = staging;
+        try
+        {
+            VerifiedSave.ToPath(_engine, document, Path.Combine(_dir, "tidy.pdf"));
+        }
+        finally
+        {
+            VerifiedSave.StagingDirectoryForTests = null;
+        }
 
-        Assert.Equal(before, Directory.GetFiles(Path.GetTempPath(), "megapdf-verify-*.pdf").Length);
+        Assert.Empty(Directory.GetFiles(staging));
+        Assert.True(File.Exists(Path.Combine(_dir, "tidy.pdf")));
     }
 }
