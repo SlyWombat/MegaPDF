@@ -164,7 +164,7 @@ public sealed class LayoutGuardTests : IDisposable
         // Deterministic (#145): the check never answers until it is cancelled, and the budget has
         // already run out, so nothing depends on how fast the machine judges a page. A 1 ms real
         // budget raced a real check on a busy macOS runner and lost.
-        using var doc = Open(Pdf(ClippedByText), "budget.pdf");
+        using var doc = Open(FormPdf(), "budget.pdf");
         var cancelledCheck = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var warnings = new PageRegenerationWarnings(
             judge: (_, _, token) =>
@@ -190,7 +190,7 @@ public sealed class LayoutGuardTests : IDisposable
     [Fact]
     public async Task ACheckThatAnswersWithinItsBudget_IsTheAnswer()
     {
-        using var doc = Open(Pdf(ClippedByText), "within-budget.pdf");
+        using var doc = Open(FormPdf(), "within-budget.pdf");
         var never = new TaskCompletionSource();
         var judged = new LayoutVerdict(false, LayoutCause.Render, LayoutArea.NonText, 100, 1000, 0);
         var warnings = new PageRegenerationWarnings(judge: (_, _, _) => judged, waitBudget: _ => never.Task);
