@@ -1804,6 +1804,30 @@ void test_rewrite_fidelity() {
          "/XObject << /Fm1 6 0 R >>", "/F2 7 0 R",
          {"<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Length 40 >>\nstream\nBT /F2 20 Tf 72 600 Td (MMMM WWWW) Tj ET\nendstream",
           "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>"}},
+        // Text stroked under a scaled CTM (#125). PDFium folds the CTM into the text matrix and keeps
+        // it apart for the stroke; the writer wrote the text matrix alone, so the line width applied
+        // in page space and the outline came back ten or more times thicker.
+        {"outlined text under a scaled CTM",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 0.1 0 0 0.1 0 0 cm 2 Tr 12 w BT /F1 240 Tf 720 6000 Td (Outlined body) Tj ET Q "
+         "BT /F1 12 Tf 72 540 Td (Body after it) Tj ET", 16},
+        {"stroked text under a flipped, scaled CTM",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q 0.5 0 0 -0.5 0 792 cm 1 Tr 4 w "
+         "BT /F1 48 Tf 1 0 0 -1 144 400 Tm (Stroked flipped body) Tj ET Q BT /F1 12 Tf 72 500 Td (Body after it) Tj ET", 16},
+        // A tiling pattern set through a [/Pattern base] colour space (#125). The writer dropped any
+        // pattern whose space was an array, so what it filled painted solid black; an uncoloured
+        // pattern (PaintType 2) also needs its components written in the base space.
+        {"coloured tiling pattern through a [/Pattern /DeviceRGB] space",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q /CS1 cs /P1 scn 72 560 300 60 re f Q "
+         "BT /F1 12 Tf 72 520 Td (Body under a patterned box) Tj ET", 17,
+         "/ColorSpace << /CS1 [/Pattern /DeviceRGB] >> /Pattern << /P1 6 0 R >>", "",
+         {"<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 /Resources << >> "
+          "/Length 23 >>\nstream\n1 0 0 rg 0 0 10 10 re f\nendstream"}},
+        {"uncoloured tiling pattern with its colour in the base space",
+         "BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET q /CS1 cs 0 0.4 1 /P1 scn 72 560 300 60 re f Q "
+         "BT /F1 12 Tf 72 520 Td (Body under a patterned box) Tj ET", 17,
+         "/ColorSpace << /CS1 [/Pattern /DeviceRGB] >> /Pattern << /P1 6 0 R >>", "",
+         {"<< /Type /Pattern /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 20 20] /XStep 20 /YStep 20 /Resources << >> "
+          "/Length 14 >>\nstream\n0 0 10 10 re f\nendstream"}},
         // The miter limit (patch 6 writes "M") is not a case here: PDFium's rasteriser draws a
         // stroked corner identically whatever the limit or join, so the render-based guard
         // cannot see it lost. Its survival belongs to an operator-level check (#126).

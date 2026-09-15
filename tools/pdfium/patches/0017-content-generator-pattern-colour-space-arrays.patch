@@ -1,0 +1,79 @@
+--- a/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
++++ b/core/fpdfapi/edit/cpdf_pagecontentgenerator.cpp
+@@ -1027,17 +1027,42 @@
+     return;
+   }
+   if (color->IsPattern()) {
+-    // Coloured patterns only. An uncoloured one is set through a [/Pattern base]
+-    // space with components as well, which is not carried here yet.
+     RetainPtr<CPDF_Pattern> pattern = color->GetPattern();
+     RetainPtr<const CPDF_Object> pattern_obj =
+         pattern ? pattern->GetPatternObject() : nullptr;
+-    if (!pattern_obj || colorspace->GetArray()) {
++    RetainPtr<const CPDF_Dictionary> pattern_dict =
++        pattern_obj ? pattern_obj->GetDict() : nullptr;
++    if (!pattern_dict) {
++      return;
++    }
++    // A pattern set through a [/Pattern base] space was dropped, and whatever it
++    // filled painted in the previous colour, black on a fresh stream. A coloured
++    // tiling pattern or a shading pattern ignores the base space, so it is written
++    // through the plain Pattern space; an uncoloured tiling pattern (PaintType 2)
++    // takes its colour from the components, in the base space, so that space is
++    // written with them. /PaintType is read from the pattern dictionary: the
++    // parsed pattern only knows it once it has been drawn.
++    RetainPtr<const CPDF_Array> array = colorspace->GetArray();
++    const bool uncoloured = pattern_dict->GetIntegerFor("PatternType") == 1 &&
++                            pattern_dict->GetIntegerFor("PaintType") == 2;
++    const uint32_t space_count = colorspace->ComponentCount();
++    const size_t count = space_count > 1 ? space_count - 1 : 0;
++    pdfium::span<const float> comps = color->GetPatternComps();
++    if (uncoloured && (!array || count == 0 || comps.size() < count)) {
+       return;
+     }
+     const ByteString name = RealizeResourceOnce(pattern_obj.Get(), "Pattern");
+-    *buf << "/Pattern " << (stroke ? "CS" : "cs") << " /"
+-         << PDF_NameEncode(name) << " " << (stroke ? "SCN" : "scn") << " ";
++    if (uncoloured) {
++      const ByteString space = RealizeResourceOnce(array.Get(), "ColorSpace");
++      *buf << "/" << PDF_NameEncode(space) << " " << (stroke ? "CS " : "cs ");
++      for (size_t i = 0; i < count; ++i) {
++        WriteFloat(*buf, comps[i]) << " ";
++      }
++    } else {
++      *buf << "/Pattern " << (stroke ? "CS " : "cs ");
++    }
++    *buf << "/" << PDF_NameEncode(name) << " " << (stroke ? "SCN" : "scn")
++         << " ";
+     return;
+   }
+   pdfium::span<const float> values = color->GetNonPatternValues();
+--- a/core/fpdfapi/page/cpdf_color.cpp
++++ b/core/fpdfapi/page/cpdf_color.cpp
+@@ -141,6 +141,14 @@
+   return cs_;
+ }
+ 
++pdfium::span<const float> CPDF_Color::GetPatternComps() const {
++  if (const auto* value =
++          std::get_if<std::unique_ptr<PatternValue>>(&color_data_)) {
++    return (*value)->GetComps();
++  }
++  return {};
++}
++
+ pdfium::span<const float> CPDF_Color::GetNonPatternValues() const {
+   if (const auto* values = std::get_if<std::vector<float>>(&color_data_)) {
+     return *values;
+--- a/core/fpdfapi/page/cpdf_color.h
++++ b/core/fpdfapi/page/cpdf_color.h
+@@ -55,6 +55,9 @@
+   RetainPtr<CPDF_ColorSpace> GetColorSpace() const;
+   // Empty for a pattern or a null colour.
+   pdfium::span<const float> GetNonPatternValues() const;
++  // The components given with a pattern (an uncoloured pattern's colour in the
++  // base space of its [/Pattern base] colour space); empty when not a pattern.
++  pdfium::span<const float> GetPatternComps() const;
+ 
+  protected:
+   bool IsPatternInternal() const;
