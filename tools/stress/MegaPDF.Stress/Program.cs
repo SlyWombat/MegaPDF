@@ -679,14 +679,14 @@ internal static class Worker
                     continue;
                 foreach (var (linePosition, lineIndex) in new[] { ("first", 0), ("middle", lineCount / 2), ("last", lineCount - 1) }.DistinctBy(l => l.Item2))
                 {
-                    result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, lineIndex, EditKinds[kind % EditKinds.Length], pagePosition, linePosition));
+                    result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, EditKinds[kind % EditKinds.Length], pagePosition, linePosition));
                     kind++;
                 }
 
                 // Deleting a word (#127): one extra edit per page on its first line, outside
                 // the rotation, so every other edit keeps the kind it had in earlier runs and
                 // results stay comparable between builds.
-                result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, 0, "delete_word", pagePosition, "first"));
+                result.Items.Add(OneEdit(engine, pristine, edited, pageIndex, "delete_word", pagePosition, "first"));
             }
         }
         catch (Exception ex)
@@ -701,7 +701,7 @@ internal static class Worker
         return result;
     }
 
-    private static EditItem OneEdit(PdfiumEngine engine, string pristine, string edited, int pageIndex, int lineIndex,
+    private static EditItem OneEdit(PdfiumEngine engine, string pristine, string edited, int pageIndex,
                                     string kind, string pagePosition, string linePosition)
     {
         var item = new EditItem { Kind = kind, PagePosition = pagePosition, LinePosition = linePosition };
@@ -719,14 +719,18 @@ internal static class Worker
                 // page's text into lines differently from one open to the next, so the line
                 // may not be there any more.
                 var lines = page.GetTextLines().Where(l => !string.IsNullOrWhiteSpace(l.Text)).ToList();
-                if (lineIndex >= lines.Count)
+                // The line is found by its position in this open's own lines. PDFium can group a
+                // page's text differently from one open to the next (font lookups warm up across
+                // documents in a process), so an index counted on another open could point past
+                // the end or at a different line.
+                if (lines.Count == 0)
                 {
                     item.Result = "skipped";
-                    item.Error = "line grouping differed between opens";
+                    item.Error = "no text lines in this open";
                     item.Ms = sw.Elapsed.TotalMilliseconds;
                     return item;
                 }
-                line = lines[lineIndex];
+                line = lines[linePosition switch { "first" => 0, "middle" => lines.Count / 2, _ => lines.Count - 1 }];
                 before = page.GetTextRuns();
                 // The page as it was, for the render check after reopening (#127). Long side
                 // capped at 1,000 px: enough to see a moved line or a lost image, cheap per edit.
@@ -797,9 +801,11 @@ internal static class Worker
             var lineTop = line.Runs.Min(r => r.Bounds.Y);
             var lineRight = line.Runs.Max(r => r.Bounds.X + r.Bounds.Width);
             var lineBottom = line.Runs.Max(r => r.Bounds.Y + r.Bounds.Height);
+            // Inclusive edges: invisible OCR text can have zero height, and a zero-height run
+            // must still count as over its own line (a strict test read it as a new copy).
             bool WhereTheLineWas(PdfTextRun r) => !string.IsNullOrWhiteSpace(r.Text)
-                                                  && r.Bounds.X < lineRight && r.Bounds.X + r.Bounds.Width > lineLeft
-                                                  && r.Bounds.Y < lineBottom && r.Bounds.Y + r.Bounds.Height > lineTop;
+                                                  && r.Bounds.X <= lineRight && r.Bounds.X + r.Bounds.Width >= lineLeft
+                                                  && r.Bounds.Y <= lineBottom && r.Bounds.Y + r.Bounds.Height >= lineTop;
             item.LineOverlap = $"{before.Count(WhereTheLineWas)}->{after.Count(WhereTheLineWas)}";
 
             // Render fidelity of the rest of the page (#127): pixels that changed outside the
