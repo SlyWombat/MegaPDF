@@ -378,6 +378,14 @@
     <value>This page's text can't be changed without disturbing its layout. You can cover it and type over the top instead.</value>
     <comment>TextEditFailure.LayoutWouldChange (#118)</comment>
   </data>
+  <data name="TextLayoutRenderWouldChange" xml:space="preserve">
+    <value>This line can't be changed without making other parts of the page look different. You can cover it and type over the top instead.</value>
+    <comment>LayoutCause.Render (#128)</comment>
+  </data>
+  <data name="TextLayoutTextWouldMove" xml:space="preserve">
+    <value>This line can't be changed without moving text elsewhere on the page. You can cover it and type over the top instead.</value>
+    <comment>LayoutCause.TextMoved or TextChanged (#128)</comment>
+  </data>
   <data name="TextFontCannotWrite" xml:space="preserve">
     <value>That text uses a font that cannot write those characters, and no close substitute was available.</value>
     <comment>TextEditFailure.NoUsableFont</comment>

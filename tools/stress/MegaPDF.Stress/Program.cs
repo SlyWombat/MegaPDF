@@ -200,6 +200,13 @@ internal sealed class EditItem
     /// <summary>Pixels changed outside the edited line's row band after save and reopen, and the render's pixel total (#127).</summary>
     [JsonPropertyName("render_outside_px")] public int? RenderOutsidePx { get; set; }
     [JsonPropertyName("render_px")] public int? RenderPx { get; set; }
+    // The layout guard's verdict on a "layout" result (#128): render | text_moved | text_changed | rewrite_failed,
+    // where the changed pixels are (object, text, other joined by "+", or "none"), and its numbers.
+    [JsonPropertyName("guard_cause")] public string? GuardCause { get; set; }
+    [JsonPropertyName("guard_where")] public string? GuardWhere { get; set; }
+    [JsonPropertyName("guard_px")] public int? GuardPixels { get; set; }
+    [JsonPropertyName("guard_total_px")] public int? GuardTotalPixels { get; set; }
+    [JsonPropertyName("guard_shift_pt")] public double? GuardShiftPt { get; set; }
     [JsonPropertyName("untouched")] public int Untouched { get; set; }
     [JsonPropertyName("untouched_missing")] public int UntouchedMissing { get; set; }
     [JsonPropertyName("worst_shift_pt")] public double? WorstShiftPt { get; set; }
@@ -783,6 +790,8 @@ internal static class Worker
                     TextEditFailure.NotExtractable => "not_extractable",
                     _ => "refused",
                 };
+                if (ex.Layout is { } verdict)
+                    RecordGuardVerdict(item, verdict);
                 item.Ms = sw.Elapsed.TotalMilliseconds;
                 return item;
             }
@@ -897,6 +906,27 @@ internal static class Worker
         }
         item.Ms = sw.Elapsed.TotalMilliseconds;
         return item;
+    }
+
+    /// <summary>The core's reason for a layout refusal (#128), as counts only.</summary>
+    private static void RecordGuardVerdict(EditItem item, LayoutVerdict verdict)
+    {
+        item.GuardCause = verdict.Cause switch
+        {
+            LayoutCause.Render => "render",
+            LayoutCause.TextMoved => "text_moved",
+            LayoutCause.TextChanged => "text_changed",
+            LayoutCause.RewriteFailed => "rewrite_failed",
+            _ => "ok",
+        };
+        var areas = new List<string>();
+        if (verdict.Where.HasFlag(LayoutArea.EditedText)) areas.Add("object");
+        if (verdict.Where.HasFlag(LayoutArea.OtherText)) areas.Add("text");
+        if (verdict.Where.HasFlag(LayoutArea.NonText)) areas.Add("other");
+        item.GuardWhere = areas.Count == 0 ? "none" : string.Join('+', areas);
+        item.GuardPixels = verdict.ChangedPixels;
+        item.GuardTotalPixels = verdict.TotalPixels;
+        item.GuardShiftPt = Math.Round(verdict.MaxShiftPoints, 3);
     }
 
     private static EditResult RetypeFirstLine(PdfiumEngine engine, IPdfDocument doc, string savedPath)

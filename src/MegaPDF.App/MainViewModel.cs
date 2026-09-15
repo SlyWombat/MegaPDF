@@ -1154,20 +1154,31 @@ public partial class MainViewModel(Window window) : ObservableObject
     }
 
     /// <summary>
-    /// Whether every run of <paramref name="line"/> can be changed without PDFium
-    /// disturbing the rest of the page (#118). Asked before the editor opens, so the
-    /// person is told before they type rather than after.
+    /// The layout guard's refusal of the first run of <paramref name="line"/> that cannot be
+    /// changed without PDFium disturbing the rest of the page (#118), or null when every run
+    /// can. Asked before the editor opens, so the person is told why before they type (#128).
     /// </summary>
-    public bool IsLineEditable(int pageIndex, PdfTextLine line)
+    public LayoutVerdict? LineLayoutRefusal(int pageIndex, PdfTextLine line)
     {
         if (_document is null)
-            return false;
+            return NotJudged;
         using var page = _document.GetPage(pageIndex);
-        return line.Runs.All(run => run.TextBoxId is not null || page.IsTextEditable(run.ObjectIndex));
+        foreach (var run in line.Runs)
+        {
+            if (run.TextBoxId is not null)
+                continue;
+            // A run that is no longer text is refused, as IsTextEditable always has.
+            var verdict = page.GetLayoutVerdict(run.ObjectIndex) ?? NotJudged;
+            if (!verdict.Editable)
+                return verdict;
+        }
+        return null;
     }
 
-    public Task ShowLayoutRefusalAsync() =>
-        ShowErrorAsync(Strings.CannotEditTextTitle, Strings.ErrorLayoutWouldChange);
+    private static readonly LayoutVerdict NotJudged = new(false, LayoutCause.RewriteFailed, LayoutArea.None, 0, 0, 0);
+
+    public Task ShowLayoutRefusalAsync(LayoutVerdict refusal) =>
+        ShowErrorAsync(Strings.CannotEditTextTitle, UserFacing.DescribeLayout(refusal));
 
     [ObservableProperty]
     private bool _isFontNoticeOpen;

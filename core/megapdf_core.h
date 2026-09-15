@@ -678,9 +678,66 @@ MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* page, int object_ind
  * object's position and text. Cached per page and object until the page next changes
  * (#137). megapdf_set_text(), megapdf_set_line_text(), megapdf_detach_text_runs() and
  * megapdf_detach_object() (for body text) refuse what this refuses, so the apps can ask
- * first and say so when a line is tapped.
+ * first and say so when a line is tapped. megapdf_text_editable_reason() says why.
  */
 MEGAPDF_API int megapdf_text_editable(const megapdf_page* page, int object_index);
+
+/** Why megapdf_text_editable() answered as it did (#128): megapdf_layout_verdict.cause. */
+enum {
+    MEGAPDF_LAYOUT_OK = 0,              /* editable: the rewrite changed nothing past the budgets below */
+    MEGAPDF_LAYOUT_RENDER = 1,          /* more than 0.05% of the page's pixels would look different */
+    MEGAPDF_LAYOUT_TEXT_MOVED = 2,      /* a text object's bounds would move by more than 0.5 pt */
+    MEGAPDF_LAYOUT_TEXT_CHANGED = 3,    /* the page would have a different number of text objects, or different text */
+    MEGAPDF_LAYOUT_REWRITE_FAILED = 4   /* PDFium could not rewrite, save or reopen the copy of the page */
+};
+
+/** Where the changed pixels are: megapdf_layout_verdict.where, a bitmask. */
+enum {
+    MEGAPDF_LAYOUT_WHERE_OBJECT = 1,    /* on the judged object (with its hidden copies), padded by 2 pt */
+    MEGAPDF_LAYOUT_WHERE_TEXT = 2,      /* elsewhere, on another text object's bounds */
+    MEGAPDF_LAYOUT_WHERE_OTHER = 4      /* elsewhere, off every text object: images, paths, forms, shadings */
+};
+
+/**
+ * The dry run's verdict behind megapdf_text_editable(), with the numbers it saw.
+ *
+ * `cause` names the check that refused. When the text check and the render check both
+ * fail, the text cause is given: a moved or changed run explains the pixels. The pixel
+ * numbers are always filled in, also for an editable object (a change within the budget).
+ * `changed_pixels` counts pixels whose |dR|+|dG|+|dB| exceeds 60 in a render of the page at
+ * 72 dpi, halved until it has at most a million pixels; `total_pixels` is that render's size.
+ * `max_shift_pt` is the largest move of any text object's bounds, text objects paired in
+ * content order; 0 when their number changed. With MEGAPDF_LAYOUT_REWRITE_FAILED every
+ * number is 0.
+ */
+typedef struct megapdf_layout_verdict {
+    int editable;          /* 1 or 0, as megapdf_text_editable() */
+    int cause;             /* MEGAPDF_LAYOUT_* */
+    int where;             /* MEGAPDF_LAYOUT_WHERE_* bits; 0 when no pixel changed */
+    int changed_pixels;
+    int total_pixels;
+    double max_shift_pt;
+} megapdf_layout_verdict;
+
+/**
+ * megapdf_text_editable() with its reason: the same dry run, the same cache (#137), and
+ * the same return value (1, 0 or MEGAPDF_ERR_ARGUMENT, also for a NULL `out`). `out` is
+ * filled in when the return is 1 or 0. A line judged together in one dry run (by
+ * megapdf_set_line_text() or megapdf_detach_text_runs()) caches the line's verdict for each
+ * of its runs when it passes; when it is refused, each run is judged alone and keeps its own.
+ */
+MEGAPDF_API int megapdf_text_editable_reason(const megapdf_page* page, int object_index, megapdf_layout_verdict* out);
+
+/**
+ * The verdict behind this thread's most recent layout refusal (#128). megapdf_set_text(),
+ * megapdf_set_line_text(), megapdf_detach_text_runs() and megapdf_detach_object() reset it
+ * to editable (1, MEGAPDF_LAYOUT_OK, zeros) when called, and set it when the guard refuses
+ * them. So read it straight after one of them, on the same thread: after
+ * MEGAPDF_ERR_LAYOUT it holds the refused object's verdict (the first refused run of a
+ * line), and after a NULL detach `editable == 0` tells a layout refusal from any other
+ * failure. MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a NULL `out`.
+ */
+MEGAPDF_API int megapdf_last_layout_verdict(megapdf_layout_verdict* out);
 
 /** 1 when `base_name` is a subset-embedded font's name: six capitals, a plus sign, the name. */
 MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name);

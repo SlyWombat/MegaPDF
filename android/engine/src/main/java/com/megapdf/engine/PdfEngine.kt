@@ -426,7 +426,7 @@ class PdfPage internal constructor(
         check(!closed) { "page is closed" }
         require(text.isNotEmpty()) { "text must not be empty" }
         val result = PdfiumNative.nativeSetText(handle, objectIndex, text)
-        if (result.size == 3 && result[0] == -5L) throw TextLayoutException()
+        if (result.size == 3 && result[0] == -5L) throw TextLayoutException(lastLayoutVerdict())
         check(result.size == 3 && result[0] == 0L && result[2] != 0L) { "failed to change text" }
         TextEdit(
             if (result[1] == 1L) TextEditOutcome.SUBSTITUTED else TextEditOutcome.IN_PLACE,
@@ -442,6 +442,18 @@ class PdfPage internal constructor(
         check(!closed) { "page is closed" }
         PdfiumNative.nativeTextEditable(handle, objectIndex) == 1
     }
+
+    /**
+     * [textEditable] with its reason (#128): the same cached dry run. Null when the object is
+     * not text, which [textEditable] answers with false.
+     */
+    suspend fun layoutVerdict(objectIndex: Int): LayoutVerdict? = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        LayoutVerdict.fromPacked(PdfiumNative.nativeTextEditableReason(handle, objectIndex))
+    }
+
+    /** Why the core's last call on this thread was refused; call it straight after, with no suspension between. */
+    private fun lastLayoutVerdict(): LayoutVerdict? = LayoutVerdict.fromPacked(PdfiumNative.nativeLastLayoutVerdict())
 
     /** Undoes [setText]: takes the edited run at [objectIndex] off and puts [original] back. */
     suspend fun restoreOriginal(original: DetachedObject, objectIndex: Int): Unit =
@@ -484,7 +496,7 @@ class PdfPage internal constructor(
         require(objectIndices.isNotEmpty()) { "a line has at least one run" }
         require(text.isNotEmpty()) { "text must not be empty" }
         val result = PdfiumNative.nativeSetLineText(handle, objectIndices.toIntArray(), text)
-        if (result.size == 3 && result[0] == -5L) throw TextLayoutException()
+        if (result.size == 3 && result[0] == -5L) throw TextLayoutException(lastLayoutVerdict())
         check(result.size == 3 && result[0] == 0L && result[2] != 0L) { "failed to change text" }
         TextEdit(
             if (result[1] == 1L) TextEditOutcome.SUBSTITUTED else TextEditOutcome.IN_PLACE,
@@ -497,6 +509,11 @@ class PdfPage internal constructor(
         check(!closed) { "page is closed" }
         require(objectIndices.isNotEmpty()) { "a line has at least one run" }
         val detached = PdfiumNative.nativeDetachTextRuns(handle, objectIndices.toIntArray())
+        if (detached == 0L) {
+            // A layout refusal says so on this thread (#128); anything else is a failed removal.
+            val refusal = lastLayoutVerdict()
+            if (refusal != null && !refusal.editable) throw TextLayoutException(refusal)
+        }
         check(detached != 0L) { "failed to remove the text" }
         DetachedObject(detached)
     }
@@ -640,5 +657,63 @@ class PdfLoadException(val errorCode: Int) :
 
 class PdfSaveException : Exception("Failed to serialize document")
 
-/** PDFium would change the rest of the page if it rewrote this text (#118). */
-class TextLayoutException : Exception("rewriting this text would change the page's layout")
+/**
+ * PDFium would change the rest of the page if it rewrote this text (#118). [verdict] says why
+ * (#128); null only when the core gave no reason.
+ */
+class TextLayoutException(val verdict: LayoutVerdict? = null) :
+    Exception("rewriting this text would change the page's layout")
+
+/** Which check of the layout guard refused (#128). Mirrors MEGAPDF_LAYOUT_* in megapdf_core.h. */
+enum class LayoutCause {
+    /** Editable: the rewrite changed nothing past the guard's budgets. */
+    OK,
+    /** More than 0.05% of the page's pixels would look different. */
+    RENDER,
+    /** Some text object's bounds would move by more than 0.5 pt. */
+    TEXT_MOVED,
+    /** The page would have a different number of text objects, or different text. */
+    TEXT_CHANGED,
+    /** PDFium could not rewrite, save or reopen the copy of the page. */
+    REWRITE_FAILED;
+
+    /** Text elsewhere on the page would move or change, rather than only look different. */
+    val textWouldMove: Boolean get() = this == TEXT_MOVED || this == TEXT_CHANGED
+
+    companion object {
+        fun fromCore(value: Int): LayoutCause = values().getOrElse(value) { REWRITE_FAILED }
+    }
+}
+
+/**
+ * The layout guard's verdict on one text object (#118, #128), with the numbers its dry run saw:
+ * pixels changed in its render of the page, [where] they are (the WHERE_* bits), and the largest
+ * move of any text object's bounds in points.
+ */
+data class LayoutVerdict(
+    val editable: Boolean,
+    val cause: LayoutCause,
+    val where: Int,
+    val changedPixels: Int,
+    val totalPixels: Int,
+    val maxShiftPoints: Double,
+) {
+    companion object {
+        const val WHERE_OBJECT = 1
+        const val WHERE_TEXT = 2
+        const val WHERE_OTHER = 4
+
+        /** From the native [status, editable, cause, where, changedPixels, totalPixels, maxShiftPt]; null for a bad status. */
+        internal fun fromPacked(packed: DoubleArray): LayoutVerdict? {
+            if (packed.size != 7 || packed[0] < 0) return null
+            return LayoutVerdict(
+                editable = packed[1] != 0.0,
+                cause = LayoutCause.fromCore(packed[2].toInt()),
+                where = packed[3].toInt(),
+                changedPixels = packed[4].toInt(),
+                totalPixels = packed[5].toInt(),
+                maxShiftPoints = packed[6],
+            )
+        }
+    }
+}

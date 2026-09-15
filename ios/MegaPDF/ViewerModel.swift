@@ -449,18 +449,20 @@ final class ViewerModel: ObservableObject {
                     guard permits(caps.canEditContent) else { return }
                     // #118: on pages PDFium cannot rewrite faithfully, say so now rather
                     // than after the user has typed.
-                    var editable = true
+                    // #128: and say why — text elsewhere would move, or the page would look different.
+                    var refusal: PdfLayoutCause?
                     for run in line.runs {
-                        if try await engine.textEditable(doc, pageIndex: index, objectIndex: run.objectIndex) == false {
-                            editable = false
+                        let verdict = try await engine.layoutVerdict(doc, pageIndex: index, objectIndex: run.objectIndex)
+                        if verdict?.editable != true {
+                            refusal = verdict?.cause ?? .rewriteFailed
                             break
                         }
                     }
-                    if editable {
+                    if let refusal {
+                        showNotice(refusal.notice)
+                    } else {
                         bodyDraft = line.text
                         pendingBodyEdit = PendingBodyEdit(pageIndex: index, line: line)
-                    } else {
-                        showNotice(String(localized: "This page's text can't be changed without disturbing its layout."))
                     }
                 } else if lines.isEmpty, !scannedHintShown {
                     // Tier 3: a page with no text at all is a picture of a page.
@@ -494,8 +496,8 @@ final class ViewerModel: ObservableObject {
                         showNotice(String(localized: "The original font couldn't show this text, so a similar standard font was used."))
                     }
                 }
-            } catch PdfError.layoutWouldChange {
-                showNotice(String(localized: "This page's text can't be changed without disturbing its layout."))
+            } catch let PdfError.layoutWouldChange(cause) {
+                showNotice(cause.notice)
             } catch {
                 statusMessage = String(localized: "Couldn't change that text.")
             }

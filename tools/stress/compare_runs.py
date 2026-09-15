@@ -15,7 +15,9 @@ Prints, for each run and between them:
   line_overlap = runs overlapping the line "before->after"; a clean edit leaves the
   neighbours plus the new run (a delete, the neighbours alone)
 - render_outside_px distribution: pixels changed outside the edited line's rows
-- result transitions between the runs, most common first
+- layout guard refusals (#128), from guard_cause / guard_where / guard_px / guard_total_px:
+  the cause per edit kind, where the changed pixels are, and how many there are
+- result transitions between the runs, most common first, including guard cause changes
 """
 import collections
 import json
@@ -64,9 +66,19 @@ def summarise(name, rows):
     read_back = collections.Counter()
     copies = collections.Counter()
     render = collections.Counter()
+    guard_causes = collections.defaultdict(collections.Counter)
+    guard_where = collections.Counter()
+    guard_px = collections.Counter()
     for r in rows.values():
         for e in edits(r):
             results[e["kind"]][e["result"]] += 1
+            if e["result"] == "layout":
+                guard_causes[e["kind"]][e.get("guard_cause") or "not recorded"] += 1
+                if e.get("guard_where"):
+                    guard_where[e["guard_where"]] += 1
+                bucket = render_bucket(e.get("guard_px"), e.get("guard_total_px"))
+                if bucket:
+                    guard_px[bucket] += 1
             if e.get("read_back") is False:
                 read_back[e["kind"]] += 1
             if hidden_copy(e):
@@ -80,6 +92,15 @@ def summarise(name, rows):
     print("  hidden copies (#136):", dict(copies) or "none", f"({sum(copies.values())} edits)")
     order = ["0", "<=0.05%", "<=0.5%", "<=5%", ">5%"]
     print("  render outside the line:", {b: render[b] for b in order if render[b]} or "not recorded")
+    total = collections.Counter()
+    for kind in guard_causes:
+        total.update(guard_causes[kind])
+    print(f"  layout guard refusals (#128): {sum(total.values())}")
+    print("    causes:", dict(total.most_common()) or "none")
+    for kind in sorted(guard_causes):
+        print(f"    {kind:12}", dict(guard_causes[kind].most_common()))
+    print("    where:", dict(guard_where.most_common()) or "not recorded")
+    print("    changed pixels:", {b: guard_px[b] for b in order if guard_px[b]} or "not recorded")
 
 
 def compare(before, after):
@@ -100,6 +121,8 @@ def compare(before, after):
             old = was[key]
             if old["result"] != e["result"]:
                 changes[(e["kind"], old["result"], e["result"])] += 1
+            elif e["result"] == "layout" and old.get("guard_cause") and e.get("guard_cause") and old["guard_cause"] != e["guard_cause"]:
+                changes[(e["kind"], f"guard {old['guard_cause']}", f"guard {e['guard_cause']}")] += 1
             if old.get("read_back") is not False and e.get("read_back") is False:
                 changes[(e["kind"], "read back", "not read back")] += 1
             if old.get("read_back") is False and e.get("read_back") is True:

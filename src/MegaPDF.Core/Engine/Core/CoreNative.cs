@@ -471,6 +471,26 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_text_editable(IntPtr page, int objectIndex);
 
+    /// <summary>megapdf_layout_verdict (#128): why the layout guard answered as it did.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct megapdf_layout_verdict
+    {
+        public int editable;
+        public int cause;
+        public int where;
+        public int changed_pixels;
+        public int total_pixels;
+        public double max_shift_pt;
+    }
+
+    /// <summary>megapdf_text_editable with its reason: 1, 0, or MEGAPDF_ERR_ARGUMENT (-1).</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_text_editable_reason(IntPtr page, int objectIndex, out megapdf_layout_verdict verdict);
+
+    /// <summary>The verdict behind this thread's latest layout refusal; read straight after the refused call.</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_last_layout_verdict(out megapdf_layout_verdict verdict);
+
     [DllImport(Dll)]
     public static extern int megapdf_is_subset_font_name([MarshalAs(UnmanagedType.LPUTF8Str)] string baseName);
 

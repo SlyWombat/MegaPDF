@@ -281,6 +281,12 @@ public static partial class Strings
     /// <summary>This page's text can't be changed without disturbing its layout. You can cover it and type over the top instead.</summary>
     public static string TextLayoutWouldChange => Get("TextLayoutWouldChange");
 
+    /// <summary>This line can't be changed without making other parts of the page look different. You can cover it and type over the top instead.</summary>
+    public static string TextLayoutRenderWouldChange => Get("TextLayoutRenderWouldChange");
+
+    /// <summary>This line can't be changed without moving text elsewhere on the page. You can cover it and type over the top instead.</summary>
+    public static string TextLayoutTextWouldMove => Get("TextLayoutTextWouldMove");
+
     /// <summary>That text uses a font that cannot write those characters, and no close substitute was available.</summary>
     public static string TextFontCannotWrite => Get("TextFontCannotWrite");
 

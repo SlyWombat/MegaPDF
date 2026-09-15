@@ -625,6 +625,12 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
     <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page : le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
   </data>
+  <data name="ErrorLayoutRenderWouldChange" xml:space="preserve">
+    <value>Cette ligne ne peut pas être modifiée sans changer l'apparence d'autres parties de la page. Masquez-la avec du correcteur et ajoutez un nouveau texte.</value>
+  </data>
+  <data name="ErrorLayoutTextWouldMove" xml:space="preserve">
+    <value>Cette ligne ne peut pas être modifiée sans déplacer du texte ailleurs sur la page. Masquez-la avec du correcteur et ajoutez un nouveau texte.</value>
+  </data>
   <data name="ErrorUnsupportedSecurity" xml:space="preserve">
     <value>Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</value>
   </data>

@@ -155,6 +155,13 @@ public interface IPdfPage : IDisposable
     bool IsTextEditable(int objectIndex);
 
     /// <summary>
+    /// <see cref="IsTextEditable"/> with its reason (#128): which check refused, how many
+    /// pixels would change and where. The same cached dry run, so asking both costs one.
+    /// Null when the object is not text, which <see cref="IsTextEditable"/> answers with false.
+    /// </summary>
+    LayoutVerdict? GetLayoutVerdict(int objectIndex);
+
+    /// <summary>
     /// Removes a text run from the page, keeping the native object alive so
     /// <see cref="RestoreTextRun"/> can put it back byte-identical (undo).
     /// </summary>
@@ -372,9 +379,62 @@ public enum TextEditOutcome
 }
 
 /// <summary>Why a body-text edit could not be performed (SDD §3.1 tier rules).</summary>
-public sealed class TextEditException(TextEditFailure reason, string message) : Exception(message)
+public sealed class TextEditException(TextEditFailure reason, string message, LayoutVerdict? layout = null) : Exception(message)
 {
     public TextEditFailure Reason { get; } = reason;
+
+    /// <summary>
+    /// For <see cref="TextEditFailure.LayoutWouldChange"/>: the layout guard's verdict on the
+    /// refused run (#128). Null for the other failures.
+    /// </summary>
+    public LayoutVerdict? Layout { get; } = layout;
+}
+
+/// <summary>Which layout-guard check refused an edit (#128). Mirrors MEGAPDF_LAYOUT_* in megapdf_core.h.</summary>
+public enum LayoutCause
+{
+    /// <summary>Editable: the rewrite changed nothing past the guard's budgets.</summary>
+    Ok = 0,
+
+    /// <summary>More than 0.05% of the page's pixels would look different.</summary>
+    Render = 1,
+
+    /// <summary>Some text object's bounds would move by more than 0.5 pt.</summary>
+    TextMoved = 2,
+
+    /// <summary>The page would have a different number of text objects, or different text.</summary>
+    TextChanged = 3,
+
+    /// <summary>PDFium could not rewrite, save or reopen the copy of the page.</summary>
+    RewriteFailed = 4,
+}
+
+/// <summary>Where the changed pixels are (#128). Mirrors MEGAPDF_LAYOUT_WHERE_*.</summary>
+[Flags]
+public enum LayoutArea
+{
+    None = 0,
+
+    /// <summary>On the judged text (with its hidden copies), padded by 2 pt.</summary>
+    EditedText = 1,
+
+    /// <summary>Elsewhere, on another text object.</summary>
+    OtherText = 2,
+
+    /// <summary>Elsewhere, off every text object: images, paths, forms, shadings.</summary>
+    NonText = 4,
+}
+
+/// <summary>
+/// The layout guard's verdict on one text object (#118, #128). The pixel counts are from
+/// the guard's own render of the page, whose size is <see cref="TotalPixels"/>;
+/// <see cref="MaxShiftPoints"/> is the largest move of any text object's bounds.
+/// </summary>
+public sealed record LayoutVerdict(bool Editable, LayoutCause Cause, LayoutArea Where,
+    int ChangedPixels, int TotalPixels, double MaxShiftPoints)
+{
+    /// <summary>The cause as people should hear it: text moving elsewhere, or the rest of the page looking different.</summary>
+    public bool TextWouldMove => Cause is LayoutCause.TextMoved or LayoutCause.TextChanged;
 }
 
 public enum TextEditFailure

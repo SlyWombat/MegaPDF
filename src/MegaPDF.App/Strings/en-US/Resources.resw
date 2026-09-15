@@ -650,6 +650,12 @@ Saved as {2} — ready to email.</value>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
     <value>This page's text can't be changed without disturbing its layout: rewriting it would shift the spacing of other text. Cover it with whiteout and add new text instead.</value>
   </data>
+  <data name="ErrorLayoutRenderWouldChange" xml:space="preserve">
+    <value>This line can't be changed without making other parts of the page look different. Cover it with whiteout and add new text instead.</value>
+  </data>
+  <data name="ErrorLayoutTextWouldMove" xml:space="preserve">
+    <value>This line can't be changed without moving text elsewhere on the page. Cover it with whiteout and add new text instead.</value>
+  </data>
   <data name="ErrorUnsupportedSecurity" xml:space="preserve">
     <value>This PDF uses a kind of protection MegaPDF can't open.</value>
     <comment>#131: a security handler PDFium does not support</comment>

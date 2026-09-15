@@ -1793,6 +1793,10 @@ void test_rewrite_fidelity() {
             const int editable = megapdf_text_editable(p.page, target.object_index);
             check(editable == (expect_editable ? 1 : 0), name + ": editable with " + std::to_string(patches) + " patch(es)",
                   std::to_string(editable));
+            megapdf_layout_verdict why{};
+            const int reason = megapdf_text_editable_reason(p.page, target.object_index, &why);
+            check(reason == editable && why.editable == editable && (why.cause == MEGAPDF_LAYOUT_OK) == (editable == 1),
+                  name + ": the layout verdict agrees (#128)", "cause " + std::to_string(why.cause));
 
             int outcome = -1;
             const int status = megapdf_set_text(p.page, target.object_index, replacement.data(), 0, &outcome, nullptr);
@@ -2959,6 +2963,135 @@ void test_verdicts_follow_changes() {
           std::to_string(after[0]) + std::to_string(after[1]) + " vs " + std::to_string(expected[0]) + std::to_string(expected[1]));
 }
 
+// #128: megapdf_text_editable_reason() names the check that refused, with the numbers the dry run
+// saw, and megapdf_last_layout_verdict() hands the same verdict back after a refused edit.
+void test_layout_verdicts() {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    auto same = [](const megapdf_layout_verdict& a, const megapdf_layout_verdict& b) {
+        return a.editable == b.editable && a.cause == b.cause && a.where == b.where && a.changed_pixels == b.changed_pixels &&
+               a.total_pixels == b.total_pixels && a.max_shift_pt == b.max_shift_pt;
+    };
+    auto describe = [](const megapdf_layout_verdict& v) {
+        return "editable " + std::to_string(v.editable) + ", cause " + std::to_string(v.cause) + ", where " + std::to_string(v.where) + ", " +
+               std::to_string(v.changed_pixels) + "/" + std::to_string(v.total_pixels) + " px, shift " + std::to_string(v.max_shift_pt) + " pt";
+    };
+    const auto retyped = utf16("Annual report");
+
+    // An editable line: nothing changed at all.
+    {
+        OpenDoc d(one_page_pdf("BT /F1 18 Tf 72 700 Td (Plain heading) Tj ET BT /F1 12 Tf 72 660 Td (Body line under it) Tj ET", helvetica));
+        Page p(d.doc, 0);
+        megapdf_layout_verdict v{};
+        const int r = megapdf_text_editable_reason(p.page, 0, &v);
+        check(r == 1 && v.editable == 1 && v.cause == MEGAPDF_LAYOUT_OK && v.changed_pixels == 0 && v.total_pixels == 612 * 792 &&
+                  v.where == 0 && v.max_shift_pt <= 0.01,
+              "layout verdict: an editable line is OK, with nothing changed", describe(v));
+        check(megapdf_text_editable(p.page, 0) == 1, "layout verdict: megapdf_text_editable gives the same answer");
+        megapdf_layout_verdict unused{};
+        check(megapdf_text_editable_reason(nullptr, 0, &unused) == MEGAPDF_ERR_ARGUMENT &&
+                  megapdf_text_editable_reason(p.page, 0, nullptr) == MEGAPDF_ERR_ARGUMENT &&
+                  megapdf_text_editable_reason(p.page, 9999, &unused) == MEGAPDF_ERR_ARGUMENT && megapdf_last_layout_verdict(nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "layout verdict: a bad page, index or out pointer is an argument error");
+        megapdf_detached* original = nullptr;
+        int outcome = -1;
+        megapdf_layout_verdict last{};
+        check(megapdf_set_text(p.page, 0, retyped.data(), 0, &outcome, &original) == MEGAPDF_OK && megapdf_last_layout_verdict(&last) == MEGAPDF_OK &&
+                  last.editable == 1 && last.cause == MEGAPDF_LAYOUT_OK,
+              "layout verdict: an edit that goes through leaves no refusal behind", describe(last));
+        megapdf_discard_detached(original);
+    }
+
+    // Refused for the render: a box clipped by text (7 Tr) the writer cannot keep, the page every
+    // platform's layout-guard test uses. The heading itself is untouched; the box is what changes.
+    {
+        OpenDoc d(one_page_pdf("BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q",
+                               helvetica));
+        Page p(d.doc, 0);
+        megapdf_layout_verdict v{};
+        check(megapdf_text_editable_reason(p.page, 0, &v) == 0 && v.editable == 0 && v.cause == MEGAPDF_LAYOUT_RENDER,
+              "layout verdict: text clipping is refused for the render", describe(v));
+        check(v.total_pixels == 612 * 792 && v.changed_pixels * 2000 > v.total_pixels && v.changed_pixels <= 400 * 100 && v.max_shift_pt <= 0.5,
+              "layout verdict: the render numbers are the box's: over the budget, no more than its area, no text moved", describe(v));
+        check((v.where & MEGAPDF_LAYOUT_WHERE_OTHER) != 0 && (v.where & MEGAPDF_LAYOUT_WHERE_OBJECT) == 0,
+              "layout verdict: the change is off text and away from the heading", describe(v));
+        megapdf_layout_verdict clip{};
+        check(megapdf_text_editable_reason(p.page, 1, &clip) == 0 && clip.cause == MEGAPDF_LAYOUT_RENDER && (clip.where & MEGAPDF_LAYOUT_WHERE_OBJECT) != 0,
+              "layout verdict: judged on the clipping text itself, the change is on the object", describe(clip));
+
+        megapdf_layout_verdict again{};
+        check(megapdf_text_editable_reason(p.page, 0, &again) == 0 && same(again, v), "layout verdict: asked again, the cached verdict is the same", describe(again));
+
+        megapdf_layout_verdict last{};
+        int outcome = -1;
+        megapdf_detached* original = nullptr;
+        check(megapdf_set_text(p.page, 0, retyped.data(), 0, &outcome, &original) == MEGAPDF_ERR_LAYOUT && megapdf_last_layout_verdict(&last) == MEGAPDF_OK &&
+                  same(last, v),
+              "layout verdict: megapdf_set_text's refusal hands back the verdict", describe(last));
+        const int line[2] = {0, 1};
+        check(megapdf_set_line_text(p.page, line, 2, retyped.data(), 0, &outcome, &original) == MEGAPDF_ERR_LAYOUT &&
+                  megapdf_last_layout_verdict(&last) == MEGAPDF_OK && same(last, v),
+              "layout verdict: megapdf_set_line_text's refusal hands back the first refused run's verdict", describe(last));
+        const int bad[1] = {9999};
+        check(megapdf_detach_text_runs(p.page, bad, 1) == nullptr && megapdf_last_layout_verdict(&last) == MEGAPDF_OK && last.editable == 1 &&
+                  last.cause == MEGAPDF_LAYOUT_OK,
+              "layout verdict: a detach that fails for another reason resets it to editable", describe(last));
+        const int heading[1] = {0};
+        check(megapdf_detach_text_runs(p.page, heading, 1) == nullptr && megapdf_last_layout_verdict(&last) == MEGAPDF_OK && same(last, v),
+              "layout verdict: megapdf_detach_text_runs's refusal hands back the verdict", describe(last));
+        check(megapdf_detach_object(p.page, 0) == nullptr && megapdf_last_layout_verdict(&last) == MEGAPDF_OK && same(last, v),
+              "layout verdict: megapdf_detach_object's refusal hands back the verdict", describe(last));
+    }
+
+    // Refused because text would move: a font written straight into the page's resources with its
+    // own /Widths. The writer re-creates a direct font dictionary from its base font, without the
+    // widths, so every run in it comes back at Helvetica's own advance.
+    {
+        std::string widths;
+        for (int i = 32; i <= 126; i++) widths += " 1000";
+        const std::string direct_font =
+            "/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 126 /Widths [" + widths + " ] >>";
+        OpenDoc d(one_page_pdf("BT /F2 18 Tf 72 700 Td (Heading) Tj ET BT /F2 12 Tf 72 660 Td (Body line here) Tj ET", helvetica, "", direct_font));
+        Page p(d.doc, 0);
+        megapdf_layout_verdict v{};
+        check(megapdf_text_editable_reason(p.page, 0, &v) == 0 && v.editable == 0 && v.cause == MEGAPDF_LAYOUT_TEXT_MOVED,
+              "layout verdict: a direct font's lost widths are refused because text moves", describe(v));
+        check(v.max_shift_pt > 0.5 && v.changed_pixels > 0 && (v.where & (MEGAPDF_LAYOUT_WHERE_OBJECT | MEGAPDF_LAYOUT_WHERE_TEXT)) != 0,
+              "layout verdict: the moved runs' numbers: a shift past 0.5 pt, pixels on the text", describe(v));
+        megapdf_layout_verdict last{};
+        int outcome = -1;
+        check(megapdf_set_text(p.page, 1, retyped.data(), 0, &outcome, nullptr) == MEGAPDF_ERR_LAYOUT && megapdf_last_layout_verdict(&last) == MEGAPDF_OK &&
+                  last.cause == MEGAPDF_LAYOUT_TEXT_MOVED,
+              "layout verdict: the edit's refusal names the text move", describe(last));
+    }
+
+    // The cache follows changes (#137): removing the path before the texts moves both down one,
+    // and each index must then give what a fresh open of the saved page gives, in full.
+    {
+        OpenDoc d(one_page_pdf("0 0 1 rg 72 300 50 50 re f BT /F1 24 Tf 72 700 Td (Spaced report) Tj ET "
+                               "q BT 7 Tr /F1 72 Tf 72 480 Td (CLIP) Tj ET 0 0 1 rg 60 460 400 100 re f Q",
+                               helvetica));
+        std::vector<megapdf_layout_verdict> after(2);
+        {
+            Page p(d.doc, 0);
+            megapdf_layout_verdict before{};
+            check(megapdf_text_editable_reason(p.page, 1, &before) >= 0 && megapdf_text_editable_reason(p.page, 2, &before) >= 0,
+                  "layout verdict: both texts are judged before the change");
+            megapdf_discard_detached(megapdf_detach_object(p.page, 0));
+            check(megapdf_object_type(p.page, 0) == 1 && megapdf_object_type(p.page, 1) == 1, "layout verdict: the change moved both texts down one");
+            megapdf_text_editable_reason(p.page, 0, &after[0]);
+            megapdf_text_editable_reason(p.page, 1, &after[1]);
+        }
+        OpenDoc fresh(save_bytes(d.doc, "layout-verdicts"));
+        Page q(fresh.doc, 0);
+        for (int i = 0; i < 2; i++) {
+            megapdf_layout_verdict expected{};
+            megapdf_text_editable_reason(q.page, i, &expected);
+            check(same(after[static_cast<size_t>(i)], expected), "layout verdict: after a change, object " + std::to_string(i) + " is judged afresh",
+                  describe(after[static_cast<size_t>(i)]) + " vs " + describe(expected));
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -2990,6 +3123,7 @@ int main(int argc, char** argv) {
     test_hidden_copies(argv[1]);
     test_far_hidden_copies(argv[1]);
     test_verdicts_follow_changes();
+    test_layout_verdicts();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

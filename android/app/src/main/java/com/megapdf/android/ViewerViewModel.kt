@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.megapdf.engine.LayoutCause
 import com.megapdf.engine.PdfDocument
 import com.megapdf.engine.PdfEngine
 import com.megapdf.engine.PdfLoadException
@@ -621,10 +622,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                         // #131: and on a document whose owner did not allow changes, say that.
                         if (!capabilities.canEditContent) {
                             showRestricted()
-                        } else if (line.runs.all { page.textEditable(it.objectIndex) }) {
-                            pendingBodyEdit = PendingBodyEdit(pageIndex, line)
                         } else {
-                            showNotice(str(R.string.body_text_layout))
+                            // #128: and say why — text elsewhere would move, or the page would look different.
+                            // A run that is no longer text counts as refused, as it always has.
+                            val refusal = line.runs.firstNotNullOfOrNull { run ->
+                                val verdict = page.layoutVerdict(run.objectIndex)
+                                if (verdict == null) LayoutCause.REWRITE_FAILED
+                                else verdict.cause.takeIf { !verdict.editable }
+                            }
+                            if (refusal == null) {
+                                pendingBodyEdit = PendingBodyEdit(pageIndex, line)
+                            } else {
+                                showNotice(layoutNotice(refusal))
+                            }
                         }
                     } else if (lines.isEmpty() && !scannedHintShown) {
                         // A page with no text at all is a picture of a page.
@@ -663,7 +673,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
             } catch (e: com.megapdf.engine.TextLayoutException) {
-                showNotice(str(R.string.body_text_layout))
+                showNotice(layoutNotice(e.verdict?.cause))
             } catch (e: Exception) {
                 statusMessage = str(R.string.text_change_failed)
             }
@@ -683,6 +693,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             notice = null
         }
     }
+
+    /** The notice for a line the layout guard refused (#118), by its cause (#128). */
+    private fun layoutNotice(cause: LayoutCause?): String = str(
+        when {
+            cause == null -> R.string.body_text_layout
+            cause.textWouldMove -> R.string.body_text_layout_text_moves
+            cause == LayoutCause.RENDER -> R.string.body_text_layout_render
+            else -> R.string.body_text_layout
+        }
+    )
 
     /** The notice for an edit the document's owner did not allow (#131). */
     private fun showRestricted() = showNotice(str(R.string.security_restricted_edit))

@@ -833,4 +833,31 @@ Java_com_megapdf_engine_PdfiumNative_nativeTextEditable(JNIEnv*, jobject, jlong 
     return megapdf_text_editable(p->core, objectIndex);
 }
 
+// [status, editable, cause, where, changedPixels, totalPixels, maxShiftPt] (#128).
+static jdoubleArray PackLayoutVerdict(JNIEnv* env, int status, const megapdf_layout_verdict& v) {
+    const jdouble values[7] = {static_cast<jdouble>(status), static_cast<jdouble>(v.editable), static_cast<jdouble>(v.cause),
+                               static_cast<jdouble>(v.where), static_cast<jdouble>(v.changed_pixels),
+                               static_cast<jdouble>(v.total_pixels), v.max_shift_pt};
+    jdoubleArray out = env->NewDoubleArray(7);
+    if (out != nullptr) env->SetDoubleArrayRegion(out, 0, 7, values);
+    return out;
+}
+
+// nativeTextEditable with its reason: the same cached dry run. Status 1, 0 or MEGAPDF_ERR_ARGUMENT.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeTextEditableReason(JNIEnv* env, jobject, jlong handle, jint objectIndex) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_layout_verdict v{};
+    const int status = megapdf_text_editable_reason(p->core, objectIndex, &v);
+    return PackLayoutVerdict(env, status, v);
+}
+
+// The verdict behind this thread's latest layout refusal: call straight after the refused call.
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeLastLayoutVerdict(JNIEnv* env, jobject) {
+    megapdf_layout_verdict v{};
+    const int status = megapdf_last_layout_verdict(&v);
+    return PackLayoutVerdict(env, status, v);
+}
+
 }  // extern "C"

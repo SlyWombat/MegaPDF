@@ -654,15 +654,21 @@ internal sealed class PdfiumPage : IPdfPage
             if (CoreNative.megapdf_object_type(_core, run.ObjectIndex) != PdfiumNative.FPDF_PAGEOBJ_TEXT)
                 throw new InvalidOperationException($"Object {run.ObjectIndex} is no longer a text object.");
             // Deleting body text rewrites its stream just as editing does (#118).
-            if (run.TextBoxId is null && CoreNative.megapdf_text_editable(_core, run.ObjectIndex) == 0)
+            if (run.TextBoxId is null && CoreNative.megapdf_text_editable_reason(_core, run.ObjectIndex, out var verdict) == 0)
                 throw new TextEditException(TextEditFailure.LayoutWouldChange,
-                    "Removing this text would change how the rest of the page looks.");
+                    "Removing this text would change how the rest of the page looks.", ToVerdict(verdict));
         }
         var indices = runs.Select(r => r.ObjectIndex).ToArray();
         // The runs and the hidden copies drawn under them leave together (#136).
         var handle = CoreNative.megapdf_detach_text_runs(_core, indices, (nuint)indices.Length);
         if (handle == IntPtr.Zero)
+        {
+            // The line judged together can still be refused (#128): the core says so on this thread.
+            if (CoreNative.megapdf_last_layout_verdict(out var refused) == 0 && refused.editable == 0)
+                throw new TextEditException(TextEditFailure.LayoutWouldChange,
+                    "Removing this text would change how the rest of the page looks.", ToVerdict(refused));
             throw new InvalidOperationException("Could not remove the text.");
+        }
         return Wrap(handle);
     }
 
@@ -692,6 +698,15 @@ internal sealed class PdfiumPage : IPdfPage
         return CoreNative.megapdf_text_editable(_core, objectIndex) == 1;
     }
 
+    public LayoutVerdict? GetLayoutVerdict(int objectIndex)
+    {
+        ThrowIfDisposed();
+        return CoreNative.megapdf_text_editable_reason(_core, objectIndex, out var verdict) < 0 ? null : ToVerdict(verdict);
+    }
+
+    private static LayoutVerdict ToVerdict(CoreNative.megapdf_layout_verdict v) =>
+        new(v.editable != 0, (LayoutCause)v.cause, (LayoutArea)v.where, v.changed_pixels, v.total_pixels, v.max_shift_pt);
+
     private TextEditOutcome ApplyTextEdit(int objectIndex, string newText, bool forceSubstitute, out IntPtr replaced)
     {
         var status = CoreNative.megapdf_set_text(_core, objectIndex, newText,
@@ -703,7 +718,11 @@ internal sealed class PdfiumPage : IPdfPage
     private static void ThrowForEditStatus(int status, int objectIndex)
     {
         if (status == CoreNative.ErrLayout)
-            throw new TextEditException(TextEditFailure.LayoutWouldChange, CoreNative.LastErrorMessage());
+        {
+            // Read on this thread, straight after the refused call (#128).
+            CoreNative.megapdf_last_layout_verdict(out var verdict);
+            throw new TextEditException(TextEditFailure.LayoutWouldChange, CoreNative.LastErrorMessage(), ToVerdict(verdict));
+        }
         if (status == CoreNative.ErrNoFont)
             throw new TextEditException(TextEditFailure.NoUsableFont, CoreNative.LastErrorMessage());
         if (status != 0)

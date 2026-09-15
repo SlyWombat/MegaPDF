@@ -27,11 +27,22 @@ internal static class UserFacing
         DocumentRestrictedException => Strings.ErrorRestricted,
         TextEditException { Reason: TextEditFailure.NoUsableFont } => Strings.ErrorNoUsableFont,
         TextEditException { Reason: TextEditFailure.NotExtractable } => Strings.ErrorNotExtractable,
-        TextEditException { Reason: TextEditFailure.LayoutWouldChange } => Strings.ErrorLayoutWouldChange,
+        TextEditException { Reason: TextEditFailure.LayoutWouldChange } layout => DescribeLayout(layout.Layout),
         VerifiedSave.UnreadableOutputException => Strings.ErrorSavedCopyUnreadable,
         // Windows' own messages (file in use, access denied) are already in the
         // user's language and say what happened; keep them as the lead.
         IOException or UnauthorizedAccessException => ex.Message,
         _ => $"{Strings.ErrorGeneric}\n\n{ex.Message}",
+    };
+
+    /// <summary>
+    /// A layout-guard refusal (#118) by its cause (#128): text elsewhere would move, or other
+    /// parts of the page would look different. Without a cause, the general wording.
+    /// </summary>
+    public static string DescribeLayout(LayoutVerdict? verdict) => verdict switch
+    {
+        { TextWouldMove: true } => Strings.ErrorLayoutTextWouldMove,
+        { Cause: LayoutCause.Render } => Strings.ErrorLayoutRenderWouldChange,
+        _ => Strings.ErrorLayoutWouldChange,
     };
 }

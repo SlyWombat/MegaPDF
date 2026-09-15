@@ -77,10 +77,12 @@ class BodyTextTest {
         val before = page.textLines()
         val run = before.first().runs.first()
         assertEquals("the tap-time check says no", false, page.textEditable(run.objectIndex))
+        assertEquals("and says why: the render (#128)", LayoutCause.RENDER, page.layoutVerdict(run.objectIndex)?.cause)
         try {
             page.setText(run.objectIndex, "Annual report")
             throw AssertionError("an edit that would disturb the page must be refused")
         } catch (expected: TextLayoutException) {
+            assertEquals("the refusal carries the cause", LayoutCause.RENDER, expected.verdict?.cause)
         }
         assertEquals("the page is exactly as it was", before, page.textLines())
     }

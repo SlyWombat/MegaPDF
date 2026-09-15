@@ -1072,7 +1072,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Status = ex.Reason switch
             {
                 TextEditFailure.NotExtractable => Strings.TextIsScanned,
-                TextEditFailure.LayoutWouldChange => Strings.TextLayoutWouldChange,
+                TextEditFailure.LayoutWouldChange => LayoutRefusalText(ex.Layout),
                 _ => Strings.TextFontCannotWrite,
             };
             return;
@@ -1117,7 +1117,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         catch (TextEditException ex) when (ex.Reason == TextEditFailure.LayoutWouldChange)
         {
-            Status = Strings.TextLayoutWouldChange;
+            Status = LayoutRefusalText(ex.Layout);
         }
     }
 
@@ -1131,11 +1131,27 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
             return false;
         using var page = _document.GetPage(pageIndex);
-        if (line.Runs.All(run => run.TextBoxId is not null || page.IsTextEditable(run.ObjectIndex)))
-            return true;
-        Status = Strings.TextLayoutWouldChange;
-        return false;
+        foreach (var run in line.Runs)
+        {
+            if (run.TextBoxId is not null)
+                continue;
+            // A run that is no longer text is refused, as IsTextEditable always has.
+            var verdict = page.GetLayoutVerdict(run.ObjectIndex);
+            if (verdict is { Editable: true })
+                continue;
+            Status = LayoutRefusalText(verdict);
+            return false;
+        }
+        return true;
     }
+
+    /// <summary>The status for a line the layout guard refused (#118), by its cause (#128).</summary>
+    private static string LayoutRefusalText(LayoutVerdict? verdict) => verdict switch
+    {
+        { TextWouldMove: true } => Strings.TextLayoutTextWouldMove,
+        { Cause: LayoutCause.Render } => Strings.TextLayoutRenderWouldChange,
+        _ => Strings.TextLayoutWouldChange,
+    };
 
     /// <summary>
     /// Rewrites an added text box in a new face, size or wording (#43, SDD §6.2

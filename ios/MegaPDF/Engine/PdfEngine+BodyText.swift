@@ -45,6 +45,67 @@ enum PdfTextEditOutcome: Equatable {
     case substituted
 }
 
+/// Which check of the layout guard refused (#128). Mirrors MEGAPDF_LAYOUT_* in megapdf_core.h.
+enum PdfLayoutCause: Equatable {
+    /// Editable: the rewrite changed nothing past the guard's budgets.
+    case ok
+    /// More than 0.05% of the page's pixels would look different.
+    case render
+    /// Some text object's bounds would move by more than 0.5 pt.
+    case textMoved
+    /// The page would have a different number of text objects, or different text.
+    case textChanged
+    /// PDFium could not rewrite, save or reopen the copy of the page.
+    case rewriteFailed
+
+    init(core cause: Int32) {
+        // Compared the way the other core constants are (`status == MEGAPDF_ERR_LAYOUT`).
+        if cause == MEGAPDF_LAYOUT_OK {
+            self = .ok
+        } else if cause == MEGAPDF_LAYOUT_RENDER {
+            self = .render
+        } else if cause == MEGAPDF_LAYOUT_TEXT_MOVED {
+            self = .textMoved
+        } else if cause == MEGAPDF_LAYOUT_TEXT_CHANGED {
+            self = .textChanged
+        } else {
+            self = .rewriteFailed
+        }
+    }
+
+    /// What the person is told: text elsewhere would move, or other parts of the page would look different.
+    var notice: String {
+        switch self {
+        case .textMoved, .textChanged:
+            return String(localized: "This line can't be changed without moving text elsewhere on the page.")
+        case .render:
+            return String(localized: "This line can't be changed without making other parts of the page look different.")
+        case .ok, .rewriteFailed:
+            return String(localized: "This page's text can't be changed without disturbing its layout.")
+        }
+    }
+}
+
+/// The layout guard's verdict on one text object (#118, #128), with the numbers the dry run saw.
+struct PdfLayoutVerdict: Equatable {
+    let editable: Bool
+    let cause: PdfLayoutCause
+    /// MEGAPDF_LAYOUT_WHERE_* bits: 1 on the judged text, 2 on other text, 4 off text.
+    let areas: Int
+    let changedPixels: Int
+    let totalPixels: Int
+    let maxShiftPoints: Double
+
+    init(_ v: megapdf_layout_verdict) {
+        editable = v.editable != 0
+        cause = PdfLayoutCause(core: v.cause)
+        areas = Int(v.`where`)
+        changedPixels = Int(v.changed_pixels)
+        totalPixels = Int(v.total_pixels)
+        maxShiftPoints = v.max_shift_pt
+    }
+}
+
 /// A page object removed from its page and kept alive by the core for undo.
 /// Restoring consumes it; the document frees any still held when it closes.
 final class PdfDetachedObject {
@@ -112,7 +173,7 @@ extension PdfEngine {
             let status = wide.withUnsafeBufferPointer {
                 megapdf_set_text(page, Int32(objectIndex), $0.baseAddress, 0, &outcome, &replaced)
             }
-            if status == MEGAPDF_ERR_LAYOUT { throw PdfError.layoutWouldChange }
+            if status == MEGAPDF_ERR_LAYOUT { throw PdfError.layoutWouldChange(Self.lastLayoutCause()) }
             guard status == MEGAPDF_OK, let replaced else { throw PdfError.editFailed }
             return (outcome == MEGAPDF_EDIT_SUBSTITUTED ? .substituted : .inPlace,
                     PdfDetachedObject(handle: replaced))
@@ -126,6 +187,26 @@ extension PdfEngine {
             megapdf_text_editable(page, Int32(objectIndex)) == 1
         }
     }
+
+    /// `textEditable` with its reason (#128): the same cached dry run. nil when the object
+    /// is not text, which `textEditable` answers with false.
+    func layoutVerdict(_ document: PdfDocument, pageIndex: Int, objectIndex: Int) throws -> PdfLayoutVerdict? {
+        try withCorePage(document, index: pageIndex) { page in
+            var verdict = megapdf_layout_verdict()
+            guard megapdf_text_editable_reason(page, Int32(objectIndex), &verdict) >= 0 else { return nil }
+            return PdfLayoutVerdict(verdict)
+        }
+    }
+
+    /// Why the core's last call on this thread was refused by the layout guard. Read straight
+    /// after the refused call, inside the same `withCorePage`.
+    private static func lastLayoutVerdict() -> PdfLayoutVerdict {
+        var verdict = megapdf_layout_verdict()
+        _ = megapdf_last_layout_verdict(&verdict)
+        return PdfLayoutVerdict(verdict)
+    }
+
+    private static func lastLayoutCause() -> PdfLayoutCause { lastLayoutVerdict().cause }
 
     /// Undoes `setText`: takes the edited run at `objectIndex` off the page and puts the
     /// original back where it was, with any hidden copy of the run the edit took along (#136).
@@ -153,7 +234,7 @@ extension PdfEngine {
                     megapdf_set_line_text(page, $0.baseAddress, $0.count, chars.baseAddress, 0, &outcome, &replaced)
                 }
             }
-            if status == MEGAPDF_ERR_LAYOUT { throw PdfError.layoutWouldChange }
+            if status == MEGAPDF_ERR_LAYOUT { throw PdfError.layoutWouldChange(Self.lastLayoutCause()) }
             guard status == MEGAPDF_OK, let replaced else { throw PdfError.editFailed }
             return (outcome == MEGAPDF_EDIT_SUBSTITUTED ? .substituted : .inPlace,
                     PdfDetachedObject(handle: replaced))
@@ -170,7 +251,11 @@ extension PdfEngine {
             let handle = indices.withUnsafeBufferPointer {
                 megapdf_detach_text_runs(page, $0.baseAddress, $0.count)
             }
-            guard let handle else { throw PdfError.editFailed }
+            guard let handle else {
+                // A layout refusal says so on this thread (#128); anything else is a failed edit.
+                let refusal = Self.lastLayoutVerdict()
+                throw refusal.editable ? PdfError.editFailed : PdfError.layoutWouldChange(refusal.cause)
+            }
             return PdfDetachedObject(handle: handle)
         }
     }

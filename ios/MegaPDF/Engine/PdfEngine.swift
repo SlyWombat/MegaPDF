@@ -20,8 +20,8 @@ enum PdfError: Error, Equatable {
     case renderFailed
     case saveFailed
     case editFailed
-    /// PDFium would change the rest of the page if it rewrote this text (#118).
-    case layoutWouldChange
+    /// PDFium would change the rest of the page if it rewrote this text (#118), and why (#128).
+    case layoutWouldChange(PdfLayoutCause)
     /// The document's security doesn't allow it; its owner password would (#131).
     case restricted
     /// A security handler PDFium can't open, such as a certificate handler (#131, ADR-004 §8).
@@ -45,8 +45,8 @@ extension PdfError: LocalizedError {
             return String(localized: "Couldn't save the document.")
         case .editFailed:
             return String(localized: "Couldn't change the document.")
-        case .layoutWouldChange:
-            return String(localized: "This page's text can't be changed without disturbing its layout.")
+        case let .layoutWouldChange(cause):
+            return cause.notice
         case .restricted:
             return String(localized: "This document's security doesn't allow that without its owner password.")
         case .unsupportedSecurity:

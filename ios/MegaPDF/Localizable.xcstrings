@@ -1829,6 +1829,38 @@
         }
       }
     },
+    "This line can't be changed without making other parts of the page look different." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette ligne ne peut pas être modifiée sans changer l'apparence d'autres parties de la page."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette ligne ne peut pas être modifiée sans changer l'apparence d'autres parties de la page."
+          }
+        }
+      }
+    },
+    "This line can't be changed without moving text elsewhere on the page." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette ligne ne peut pas être modifiée sans déplacer du texte ailleurs sur la page."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cette ligne ne peut pas être modifiée sans déplacer du texte ailleurs sur la page."
+          }
+        }
+      }
+    },
     "This page is a scanned image, so its text can't be edited." : {
       "localizations" : {
         "fr" : {

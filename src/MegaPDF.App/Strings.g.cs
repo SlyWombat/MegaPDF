@@ -277,6 +277,12 @@ public static partial class Strings
     /// <summary>This page's text can't be changed without disturbing its layout: rewriting it would shift the spacing of other text. Cover it with whiteout and add new text instead.</summary>
     public static string ErrorLayoutWouldChange => Get("ErrorLayoutWouldChange");
 
+    /// <summary>This line can't be changed without making other parts of the page look different. Cover it with whiteout and add new text instead.</summary>
+    public static string ErrorLayoutRenderWouldChange => Get("ErrorLayoutRenderWouldChange");
+
+    /// <summary>This line can't be changed without moving text elsewhere on the page. Cover it with whiteout and add new text instead.</summary>
+    public static string ErrorLayoutTextWouldMove => Get("ErrorLayoutTextWouldMove");
+
     /// <summary>This PDF uses a kind of protection MegaPDF can't open.</summary>
     public static string ErrorUnsupportedSecurity => Get("ErrorUnsupportedSecurity");
 

@@ -89,6 +89,9 @@ internal object PdfiumNative {
     external fun nativeRestoreDetached(handle: Long, detached: Long): Boolean
     external fun nativeDiscardDetached(detached: Long)
     external fun nativeTextEditable(handle: Long, objectIndex: Int): Int
+    // The layout guard's reason (#128): [status, editable, cause, where, changedPixels, totalPixels, maxShiftPt].
+    external fun nativeTextEditableReason(handle: Long, objectIndex: Int): DoubleArray
+    external fun nativeLastLayoutVerdict(): DoubleArray
 
     // FPDF_GetLastError codes (fpdfview.h).
     const val ERR_PASSWORD = 4

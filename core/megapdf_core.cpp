@@ -39,7 +39,7 @@ struct megapdf_document {
     FPDF_FORMFILLINFO ffi{};
     std::vector<megapdf_page*> open_pages;  // closed for the caller if still open at megapdf_close()
     std::vector<megapdf_detached*> detached;  // freed at megapdf_close() if never restored or discarded
-    std::map<std::pair<int, int>, bool> rewrite_keeps_page;  // #118 verdicts by (page index, object index)
+    std::map<std::pair<int, int>, megapdf_layout_verdict> rewrite_keeps_page;  // #118/#128 verdicts by (page index, object index)
     // What the document was opened with, so megapdf_open_like() can read back a saved
     // copy that is still protected (#132). Memory only; megapdf_close() wipes it.
     std::string unlock;
@@ -86,6 +86,15 @@ using Guard = std::lock_guard<std::recursive_mutex>;
 
 thread_local unsigned int g_last_error = 0;
 thread_local std::string g_last_message;
+
+// The verdict behind this thread's latest layout refusal (#128); see megapdf_last_layout_verdict().
+megapdf_layout_verdict EditableVerdict() {
+    megapdf_layout_verdict v{};
+    v.editable = 1;
+    v.cause = MEGAPDF_LAYOUT_OK;
+    return v;
+}
+thread_local megapdf_layout_verdict g_last_layout = EditableVerdict();
 
 void SetError(unsigned long code, const char* message) {
     // PDFium's code is an unsigned long; the ABI narrows it (values are single digits).
@@ -1260,26 +1269,118 @@ int ScratchWriteBlock(FPDF_FILEWRITE* self, const void* data, unsigned long size
     return 1;
 }
 
-bool SameShot(const ScratchShot& a, const ScratchShot& b) {
-    if (a.w == 0 || a.w != b.w || a.h != b.h) return false;
-    size_t differing = 0;
-    for (size_t i = 0; i < a.px.size(); i += 4) {
-        const int d = std::abs(a.px[i] - b.px[i]) + std::abs(a.px[i + 1] - b.px[i + 1]) + std::abs(a.px[i + 2] - b.px[i + 2]);
-        if (d > 60) differing++;
+struct PageBox {
+    float l, b, r, t;   // page space
+};
+
+// Bounds of the objects at `indices` on `page`, as they are now.
+std::vector<PageBox> BoundsOf(FPDF_PAGE page, const std::vector<int>& indices) {
+    std::vector<PageBox> out;
+    for (int i : indices) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        PageBox box{};
+        if (obj != nullptr && FPDFPageObj_GetBounds(obj, &box.l, &box.b, &box.r, &box.t)) out.push_back(box);
     }
-    return differing * 2000 <= static_cast<size_t>(a.w) * a.h;   // at most 0.05% of pixels
+    return out;
 }
 
-bool SameRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b) {
-    if (a.size() != b.size()) return false;
-    for (size_t i = 0; i < a.size(); i++) {
-        if (a[i].text != b[i].text) return false;
-        if (std::fabs(a[i].left - b[i].left) > 0.5f || std::fabs(a[i].bottom - b[i].bottom) > 0.5f ||
-            std::fabs(a[i].right - b[i].right) > 0.5f || std::fabs(a[i].top - b[i].top) > 0.5f) {
-            return false;
+constexpr int kShotThreshold = 60;      // |dR|+|dG|+|dB| above this is a changed pixel
+constexpr float kObjectPadPt = 2.0f;    // MEGAPDF_LAYOUT_WHERE_OBJECT reaches this far past the object
+constexpr float kRunShiftPt = 0.5f;     // a text object moving further has moved
+
+// Marks `box`, padded by `pad` points, with `value` in a mask of the page rendered as `shot`.
+// (std::min) and (std::max) in parentheses: <windef.h>, which pdfium pulls in on Windows, defines min and max macros.
+void PaintBox(FPDF_PAGE page, const ScratchShot& shot, const PageBox& box, float pad, unsigned char value,
+              std::vector<unsigned char>* mask) {
+    int x0 = shot.w, y0 = shot.h, x1 = -1, y1 = -1;
+    const double xs[2] = {box.l - pad, box.r + pad}, ys[2] = {box.b - pad, box.t + pad};
+    for (double x : xs) {
+        for (double y : ys) {
+            int dx = 0, dy = 0;
+            if (!FPDF_PageToDevice(page, 0, 0, shot.w, shot.h, 0, x, y, &dx, &dy)) return;
+            x0 = (std::min)(x0, dx); x1 = (std::max)(x1, dx);
+            y0 = (std::min)(y0, dy); y1 = (std::max)(y1, dy);
         }
     }
+    x0 = (std::max)(x0, 0); y0 = (std::max)(y0, 0);
+    x1 = (std::min)(x1, shot.w - 1); y1 = (std::min)(y1, shot.h - 1);
+    for (int y = y0; y <= y1; y++) {
+        const size_t row = static_cast<size_t>(y) * static_cast<size_t>(shot.w);
+        for (int x = x0; x <= x1; x++) {
+            unsigned char& m = (*mask)[row + static_cast<size_t>(x)];
+            if (value > m) m = value;
+        }
+    }
+}
+
+// The render check (#118) with its numbers (#128): how many pixels differ between the page as
+// it was and the rewrite, and where. `edited` are the judged objects' bounds; `runs` the text
+// objects of the page as it was. False when a render failed.
+bool CompareShots(FPDF_PAGE was_page, const ScratchShot& a, const ScratchShot& b, const std::vector<PageBox>& edited,
+                  const std::vector<ScratchRun>& runs, megapdf_layout_verdict* v) {
+    if (a.w == 0 || b.w == 0) return false;
+    v->total_pixels = a.w * a.h;
+    if (a.w != b.w || a.h != b.h) {   // a different page size: all of it changed
+        v->changed_pixels = (std::max)(v->total_pixels, b.w * b.h);
+        v->where = MEGAPDF_LAYOUT_WHERE_OTHER;
+        return true;
+    }
+    auto differs = [&](size_t i) {
+        return std::abs(a.px[i] - b.px[i]) + std::abs(a.px[i + 1] - b.px[i + 1]) + std::abs(a.px[i + 2] - b.px[i + 2]) > kShotThreshold;
+    };
+    int changed = 0;
+    for (size_t i = 0; i < a.px.size(); i += 4) if (differs(i)) changed++;
+    v->changed_pixels = changed;
+    if (changed == 0) return true;
+    // Only a page that changed pays for the map: 0 elsewhere, 1 on a text object, 2 on the judged ones.
+    std::vector<unsigned char> mask(static_cast<size_t>(a.w) * static_cast<size_t>(a.h), 0);
+    for (const ScratchRun& run : runs) PaintBox(was_page, a, PageBox{run.left, run.bottom, run.right, run.top}, 0.0f, 1, &mask);
+    for (const PageBox& box : edited) PaintBox(was_page, a, box, kObjectPadPt, 2, &mask);
+    for (size_t p = 0; p < mask.size(); p++) {
+        if (!differs(p * 4)) continue;
+        v->where |= mask[p] == 2 ? MEGAPDF_LAYOUT_WHERE_OBJECT : mask[p] == 1 ? MEGAPDF_LAYOUT_WHERE_TEXT : MEGAPDF_LAYOUT_WHERE_OTHER;
+    }
     return true;
+}
+
+// The run check (#118) with its numbers (#128): every text object's text and bounds, in content order.
+void CompareRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b, bool* text_changed, bool* moved,
+                 megapdf_layout_verdict* v) {
+    *text_changed = a.size() != b.size();
+    *moved = false;
+    if (*text_changed) return;
+    double worst = 0;
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].text != b[i].text) *text_changed = true;
+        const double shift = (std::max)({std::fabs(a[i].left - b[i].left), std::fabs(a[i].bottom - b[i].bottom),
+                                       std::fabs(a[i].right - b[i].right), std::fabs(a[i].top - b[i].top)});
+        worst = (std::max)(worst, shift);
+    }
+    *moved = worst > kRunShiftPt;
+    v->max_shift_pt = worst;
+}
+
+// Judges a reopened rewrite against the reopened page as it was.
+megapdf_layout_verdict CompareRewrite(FPDF_PAGE was_page, FPDF_PAGE reopened, const std::vector<PageBox>& edited) {
+    megapdf_layout_verdict v{};
+    v.cause = MEGAPDF_LAYOUT_REWRITE_FAILED;
+    // Rendered before the text layer is read, as the guard always has.
+    const ScratchShot shot_was = RenderScratchPage(was_page);
+    const ScratchShot shot_now = RenderScratchPage(reopened);
+    const std::vector<ScratchRun> runs_was = ScratchRuns(was_page);
+    const std::vector<ScratchRun> runs_now = ScratchRuns(reopened);
+    if (!CompareShots(was_page, shot_was, shot_now, edited, runs_was, &v)) {
+        return megapdf_layout_verdict{0, MEGAPDF_LAYOUT_REWRITE_FAILED, 0, 0, 0, 0.0};
+    }
+    bool text_changed = false, moved = false;
+    CompareRuns(runs_was, runs_now, &text_changed, &moved, &v);
+    const bool render_kept = static_cast<size_t>(v.changed_pixels) * 2000 <= static_cast<size_t>(v.total_pixels);   // at most 0.05%
+    v.editable = render_kept && !text_changed && !moved ? 1 : 0;
+    v.cause = text_changed ? MEGAPDF_LAYOUT_TEXT_CHANGED
+            : moved        ? MEGAPDF_LAYOUT_TEXT_MOVED
+            : !render_kept ? MEGAPDF_LAYOUT_RENDER
+                           : MEGAPDF_LAYOUT_OK;
+    return v;
 }
 
 // --------------------------------------------------------------------------
@@ -1474,16 +1575,20 @@ void ForgetVerdicts(megapdf_document* d, int page_index) {
 // their hidden copies (#136) on a copy of the page — take them off and put them straight
 // back, which is what any edit forces — then saves, reopens and compares with the copy
 // before the rewrite. One dry run judges a whole line; the verdict is cached per object.
-bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, const std::vector<int>& runs) {
+// The answer is the first refused run's verdict, or an editable one (#128).
+megapdf_layout_verdict JudgeRewriteUnlocked(megapdf_document* d, int page_index, const std::vector<int>& runs) {
     bool all_judged = true;
+    megapdf_layout_verdict judged = EditableVerdict();
+    bool judged_set = false;
     for (int i : runs) {
         const auto cached = d->rewrite_keeps_page.find(std::make_pair(page_index, i));
         if (cached == d->rewrite_keeps_page.end()) all_judged = false;
-        else if (!cached->second) return false;
+        else if (!cached->second.editable) return cached->second;
+        else if (!judged_set) { judged = cached->second; judged_set = true; }
     }
-    if (all_judged) return true;
+    if (all_judged) return judged;
 
-    bool keeps = false;
+    megapdf_layout_verdict verdict{0, MEGAPDF_LAYOUT_REWRITE_FAILED, 0, 0, 0, 0.0};
     FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
     if (scratch != nullptr) {
         const int indices[1] = {page_index};
@@ -1501,7 +1606,9 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, const std::ve
             unchanged.fw.version = 1;
             unchanged.fw.WriteBlock = ScratchWriteBlock;
             const bool saved_unchanged = FPDF_SaveAsCopy(scratch, &unchanged.fw, 0);
-            const bool rewritten = RewriteObjectsUnlocked(page, WithHiddenCopies(page, runs));
+            const std::vector<int> judged_objects = WithHiddenCopies(page, runs);
+            const std::vector<PageBox> edited = BoundsOf(page, judged_objects);
+            const bool rewritten = RewriteObjectsUnlocked(page, judged_objects);
             FPDF_ClosePage(page);
             ScratchWriter writer{};
             writer.fw.version = 1;
@@ -1511,10 +1618,7 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, const std::ve
                 FPDF_DOCUMENT again = FPDF_LoadMemDocument64(writer.out.data(), writer.out.size(), nullptr);
                 FPDF_PAGE was_page = was ? FPDF_LoadPage(was, 0) : nullptr;
                 FPDF_PAGE reopened = again ? FPDF_LoadPage(again, 0) : nullptr;
-                if (was_page != nullptr && reopened != nullptr) {
-                    keeps = SameShot(RenderScratchPage(was_page), RenderScratchPage(reopened)) &&
-                            SameRuns(ScratchRuns(was_page), ScratchRuns(reopened));
-                }
+                if (was_page != nullptr && reopened != nullptr) verdict = CompareRewrite(was_page, reopened, edited);
                 if (reopened != nullptr) FPDF_ClosePage(reopened);
                 if (was_page != nullptr) FPDF_ClosePage(was_page);
                 if (again != nullptr) FPDF_CloseDocument(again);
@@ -1523,17 +1627,20 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, const std::ve
         }
         FPDF_CloseDocument(scratch);
     }
-    if (keeps || runs.size() == 1) {
-        for (int i : runs) d->rewrite_keeps_page[std::make_pair(page_index, i)] = keeps;
-        return keeps;
+    if (verdict.editable || runs.size() == 1) {
+        for (int i : runs) d->rewrite_keeps_page[std::make_pair(page_index, i)] = verdict;
+        return verdict;
     }
     // A refused batch says nothing about which run PDFium cannot rewrite: judge each alone,
     // so every verdict cached is that object's own, and the answer is theirs together.
-    bool all_keep = true;
+    megapdf_layout_verdict first_refused{};
+    bool refused = false;
     for (int i : runs) {
-        if (!RewriteKeepsPageUnlocked(d, page_index, std::vector<int>{i})) all_keep = false;
+        const megapdf_layout_verdict one = JudgeRewriteUnlocked(d, page_index, std::vector<int>{i});
+        if (!one.editable && !refused) { first_refused = one; refused = true; }
     }
-    return all_keep;
+    if (refused) return first_refused;
+    return d->rewrite_keeps_page[std::make_pair(page_index, runs.front())];
 }
 
 }  // namespace
@@ -1541,11 +1648,23 @@ bool RewriteKeepsPageUnlocked(megapdf_document* d, int page_index, const std::ve
 extern "C" {
 
 MEGAPDF_API int megapdf_text_editable(const megapdf_page* p, int object_index) {
-    if (p == nullptr || p->owner == nullptr || p->index < 0 || object_index < 0) return MEGAPDF_ERR_ARGUMENT;
+    megapdf_layout_verdict verdict{};
+    return megapdf_text_editable_reason(p, object_index, &verdict);
+}
+
+MEGAPDF_API int megapdf_text_editable_reason(const megapdf_page* p, int object_index, megapdf_layout_verdict* out) {
+    if (p == nullptr || p->owner == nullptr || p->index < 0 || object_index < 0 || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) return MEGAPDF_ERR_ARGUMENT;
-    return RewriteKeepsPageUnlocked(p->owner, p->index, std::vector<int>{object_index}) ? 1 : 0;
+    *out = JudgeRewriteUnlocked(p->owner, p->index, std::vector<int>{object_index});
+    return out->editable ? 1 : 0;
+}
+
+MEGAPDF_API int megapdf_last_layout_verdict(megapdf_layout_verdict* out) {
+    if (out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    *out = g_last_layout;
+    return MEGAPDF_OK;
 }
 
 }  // extern "C"
@@ -1751,7 +1870,8 @@ bool PlanTextRuns(const megapdf_page* p, const int* indices, size_t count, std::
 }
 
 // #118 for the body text among `indices`; text boxes are MegaPDF's own and are not judged,
-// except that megapdf_set_text() has always judged the run it edits.
+// except that megapdf_set_text() has always judged the run it edits. A refusal is recorded
+// for megapdf_last_layout_verdict() (#128).
 bool BodyTextRewriteKeepsPage(const megapdf_page* p, const int* indices, size_t count, bool judge_first_always) {
     if (p->owner == nullptr || p->index < 0) return true;
     std::vector<int> body;
@@ -1760,7 +1880,11 @@ bool BodyTextRewriteKeepsPage(const megapdf_page* p, const int* indices, size_t 
             body.push_back(indices[k]);
         }
     }
-    return body.empty() || RewriteKeepsPageUnlocked(p->owner, p->index, body);
+    if (body.empty()) return true;
+    const megapdf_layout_verdict verdict = JudgeRewriteUnlocked(p->owner, p->index, body);
+    if (verdict.editable) return true;
+    g_last_layout = verdict;
+    return false;
 }
 
 }  // namespace
@@ -1878,12 +2002,13 @@ MEGAPDF_API int megapdf_remove_text_box(const megapdf_page* p, const unsigned sh
 }
 
 MEGAPDF_API megapdf_detached* megapdf_detach_object(const megapdf_page* p, int object_index) {
+    g_last_layout = EditableVerdict();
     if (p == nullptr || p->owner == nullptr || object_index < 0) return nullptr;
     Guard guard(CoreLock());
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     if (obj == nullptr) { SetError(0, "no page object at that index"); return nullptr; }
-    if (FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT && !HasMark(obj, kTextBoxMark) && p->index >= 0 &&
-        !RewriteKeepsPageUnlocked(p->owner, p->index, std::vector<int>{object_index})) {
+    if (FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT && !HasMark(obj, kTextBoxMark) &&
+        !BodyTextRewriteKeepsPage(p, &object_index, 1, /*judge_first_always=*/false)) {
         SetError(0, "PDFium would change how this page looks if its text were rewritten");
         return nullptr;
     }
@@ -1929,6 +2054,7 @@ MEGAPDF_API void megapdf_discard_detached(megapdf_detached* x) {
 }
 
 MEGAPDF_API megapdf_detached* megapdf_detach_text_runs(const megapdf_page* p, const int* indices, size_t count) {
+    g_last_layout = EditableVerdict();
     if (p == nullptr || p->owner == nullptr || indices == nullptr || count == 0) {
         SetError(0, "no text runs to remove");
         return nullptr;
@@ -2543,6 +2669,7 @@ extern "C" {
 
 MEGAPDF_API int megapdf_set_line_text(const megapdf_page* p, const int* indices, size_t count, const unsigned short* text,
                                       unsigned int flags, int* out_outcome, megapdf_detached** out_replaced) {
+    g_last_layout = EditableVerdict();
     if (out_replaced != nullptr) *out_replaced = nullptr;
     const bool force_substitute = (flags & MEGAPDF_SET_TEXT_FORCE_SUBSTITUTE) != 0;
     if (p == nullptr || indices == nullptr || count == 0 || indices[0] < 0 || text == nullptr || text[0] == 0 ||
