@@ -29,6 +29,10 @@
   <StreamGeometry x:Key="IconFitPage">M12,3 L12,21 M8,3 L16,3 M8,21 L16,21 M9,7 L12,4 L15,7 M9,17 L12,20 L15,17</StreamGeometry>
   <StreamGeometry x:Key="IconOptions">M4,7 L20,7 M4,12 L20,12 M4,17 L20,17 M9,7 A2,2 0 1 1 9,7.01 M15,12 A2,2 0 1 1 15,12.01 M8,17 A2,2 0 1 1 8,17.01</StreamGeometry>
   <StreamGeometry x:Key="IconFind">M10,3 A7,7 0 1 1 10,17 A7,7 0 1 1 10,3 M15,15 L21,21</StreamGeometry>
+  <!-- The toolbar's More menu (#143). Three filled discs rather than strokes: a
+       stroked zero-length segment has no bounds for Stretch to work with, so the
+       dots are painted with the foreground as a fill. -->
+  <StreamGeometry x:Key="IconMore">M6,10 A2,2 0 1 0 6,14 A2,2 0 1 0 6,10 Z M12,10 A2,2 0 1 0 12,14 A2,2 0 1 0 12,10 Z M18,10 A2,2 0 1 0 18,14 A2,2 0 1 0 18,10 Z</StreamGeometry>
 
   <!--
     Icon above label, which is how the Windows toolbar reads. The label stays:

@@ -6,6 +6,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
 using MegaPDF.Avalonia.Views;
@@ -321,7 +322,24 @@ public partial class App : Application
             }
 
             var viewModel = new MainViewModel();
-            desktop.MainWindow = new MainWindow { DataContext = viewModel };
+            var window = new MainWindow { DataContext = viewModel };
+            desktop.MainWindow = window;
+
+            // Opening a PDF from Finder (#143): a double-click, a drop on the Dock
+            // icon, Open With. macOS sends these as an Apple Event, not as arguments,
+            // to a running app and to one it is launching alike, and Avalonia raises
+            // them here. Subscribed before the run loop starts, because Avalonia does
+            // not hold on to an event nobody was listening for — and a cold launch's
+            // file arrives as the run loop starts. The window queues it until it is open.
+            if (TryGetFeature(typeof(IActivatableLifetime)) is IActivatableLifetime activatable)
+            {
+                activatable.Activated += (_, e) =>
+                {
+                    if (e is FileActivatedEventArgs { Files: var items }
+                        && items.OfType<IStorageFile>().FirstOrDefault() is { } file)
+                        window.OpenFromSystem(file);
+                };
+            }
 
             // --window 1440x900: the size the window opens at, for captures. The
             // default 1000x800 is right for a design-review shot and wrong for a
@@ -339,12 +357,13 @@ public partial class App : Application
             // it go on the way out rather than at finalisation.
             desktop.ShutdownRequested += (_, _) => viewModel.Dispose();
 
-            // A PDF passed on the command line (Finder "Open With", or the
-            // Windows file association) opens straight away.
+            // A PDF passed on the command line (the Windows file association, the
+            // capture scripts, `open --args`) opens as soon as the window does. Finder
+            // does not pass files this way; see the activation handler above.
             var path = desktop.Args?.FirstOrDefault(a =>
                 a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
             if (path is not null)
-                viewModel.Open(path);
+                window.OpenFromSystem(path);
 
             // --screenshot <out.png>: render the window to a file and quit.
             //

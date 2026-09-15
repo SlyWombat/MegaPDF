@@ -466,4 +466,13 @@ public static partial class Strings
 
     /// <summary>e.g. Dave</summary>
     public static string NameExample => Get("NameExample");
+
+    /// <summary>More</summary>
+    public static string ToolbarMore => Get("ToolbarMore");
+
+    /// <summary>Text font</summary>
+    public static string TextFontName => Get("TextFontName");
+
+    /// <summary>Text size</summary>
+    public static string TextSizeName => Get("TextSizeName");
 }

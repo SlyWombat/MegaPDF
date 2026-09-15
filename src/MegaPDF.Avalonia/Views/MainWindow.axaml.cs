@@ -26,6 +26,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SizeToWorkingArea();
 
         // ADR-002 called this one of the two MainViewModel touch points that is a
         // reshape rather than a rename: WinUI's FileOpenPicker is a type you
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
 
         BindShortcuts();
+        WireToolbar();
         WireSignatures();
         WireFind();
 
@@ -173,7 +175,106 @@ public partial class MainWindow : Window
         PageScroller.ScrollChanged += (_, _) => UpdateViewport();
         PageScroller.SizeChanged += (_, _) => UpdateViewport();
 
-        _ = OfferRecoveryAsync();
+        _isOpen = true;
+        _ = OpenPendingThenOfferRecoveryAsync();
+    }
+
+    /// <summary>The size the window opens at, screen permitting (#143).</summary>
+    private const double PreferredWidth = 1280;
+    private const double PreferredHeight = 900;
+
+    /// <summary>
+    /// Opens the window as large as is comfortable on this screen (#143). A fixed
+    /// 1000×800 was too narrow for the toolbar, and on a 15" MacBook Air (1470×956
+    /// points) left a page viewport about 650 DIP tall. Up to 1280×900, never more
+    /// than 90% of the working area (the screen less the menu bar and Dock, or the
+    /// taskbar), and centred by WindowStartupLocation. A --window size on the command
+    /// line still wins: App applies it after the constructor.
+    /// </summary>
+    private void SizeToWorkingArea()
+    {
+        try
+        {
+            if (Screens is not { } screens || (screens.ScreenFromWindow(this) ?? screens.Primary) is not { } screen)
+                return;
+
+            // WorkingArea is in pixels on Windows and in points on macOS, where
+            // Avalonia 11.2 reports a Scaling of 1; divided by Scaling it is DIPs on both.
+            var scaling = screen.Scaling > 0 ? screen.Scaling : 1;
+            Width = Math.Max(MinWidth, Math.Min(PreferredWidth, screen.WorkingArea.Width / scaling * 0.9));
+            Height = Math.Max(MinHeight, Math.Min(PreferredHeight, screen.WorkingArea.Height / scaling * 0.9));
+        }
+        catch (Exception)
+        {
+            // No screen information: the XAML size stands.
+        }
+    }
+
+    // --- Documents handed over by the OS (#143) ---
+
+    /// <summary>True once OnOpened has run; before that a handed-over document waits.</summary>
+    private bool _isOpen;
+
+    /// <summary>A document the OS handed over before the window was open.</summary>
+    private Func<Task>? _pendingOpen;
+
+    /// <summary>
+    /// Opens a document from Finder: a double-click, a PDF dropped on the Dock icon,
+    /// Open With. macOS delivers these as an Apple Event after launch rather than as
+    /// arguments, both to an app it is starting and to one already running, and
+    /// Avalonia surfaces them as IActivatableLifetime.Activated (App wires that up).
+    /// The storage file, not just its path, is kept so Save can write back through it.
+    /// </summary>
+    public void OpenFromSystem(IStorageFile file) => OpenWhenReady(() => OpenStorageFileAsync(file));
+
+    /// <summary>A PDF path from the command line (the Windows file association, `open --args`).</summary>
+    public void OpenFromSystem(string path) => OpenWhenReady(async () =>
+    {
+        // Asked for as a storage file for the same reason as above; without one
+        // Save would have nothing to write through.
+        if (await StorageProvider.TryGetFileFromPathAsync(path) is { } file)
+            await OpenStorageFileAsync(file);
+        else
+            ViewModel?.Open(path);
+    });
+
+    private void OpenWhenReady(Func<Task> open)
+    {
+        if (!_isOpen)
+        {
+            // One window shows one document, so the last one handed over wins.
+            _pendingOpen = open;
+            return;
+        }
+        _ = RunOpenAsync(open);
+        Activate();
+    }
+
+    private async Task RunOpenAsync(Func<Task> open)
+    {
+        try
+        {
+            await open();
+        }
+        catch (Exception ex)
+        {
+            if (ViewModel is { } vm)
+                vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// The handed-over document first, then the recovery offer — which only asks when
+    /// nothing is open, so it must not run before the document has had its chance.
+    /// </summary>
+    private async Task OpenPendingThenOfferRecoveryAsync()
+    {
+        if (_pendingOpen is { } open)
+        {
+            _pendingOpen = null;
+            await RunOpenAsync(open);
+        }
+        await OfferRecoveryAsync();
     }
 
     protected override void OnClosed(EventArgs e)
@@ -372,6 +473,8 @@ public partial class MainWindow : Window
 
         vm.ViewportWidth = PageScroller.Viewport.Width;
         vm.ViewportHeight = PageScroller.Viewport.Height;
+        // A document that opened before the window was laid out is fitted now (#143).
+        vm.FitOnOpen();
 
         if (vm.Pages.Count == 0)
             return;
@@ -860,19 +963,28 @@ public partial class MainWindow : Window
         if (files.Count == 0)
             return;
 
+        await OpenStorageFileAsync(files[0]);
+    }
+
+    /// <summary>Opens a file the picker or the OS gave us, and remembers it.</summary>
+    private async Task OpenStorageFileAsync(IStorageFile file)
+    {
+        if (ViewModel is not { } vm)
+            return;
+
         // TryGetLocalPath returns null for a document the OS handed us out of a
         // sandboxed or virtual location; the engine takes a path, so say so rather
         // than failing silently.
-        var path = files[0].TryGetLocalPath();
+        var path = file.TryGetLocalPath();
         if (path is null)
         {
             vm.Status = Strings.FileNotLocal;
             return;
         }
 
-        _openedFile = files[0];
+        _openedFile = file;
         vm.Open(path);
-        await RememberAsync(vm, files[0], path);
+        await RememberAsync(vm, file, path);
     }
 
     /// <summary>

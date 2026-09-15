@@ -203,6 +203,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Pages.Add(new PageViewModel(document, i, page.Width, page.Height) { Zoom = Zoom });
         }
 
+        // Opens fitted to the window, not at whatever the last document was zoomed
+        // to (#143). Before any page is realised, so nothing renders twice.
+        _fitOnOpenPending = true;
+        FitOnOpen();
+
         DocumentPath = path;
         DocumentName = Path.GetFileName(path);
         IsDocumentOpen = true;
@@ -1472,6 +1477,41 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (TallestPagePoints <= 0 || ViewportHeight <= 0)
             return;
         Zoom = Clamp((ViewportHeight - FitPadding) / (TallestPagePoints * Rendering.PageBitmap.PointsToPixels));
+    }
+
+    /// <summary>Set when a document opens; cleared once it has been fitted (#143).</summary>
+    private bool _fitOnOpenPending;
+
+    /// <summary>
+    /// The zoom a document opens at (#143). At actual size a Letter page is 1056 DIP
+    /// tall and the micro:bit schematic 1487 DIP wide, so in a laptop-sized window
+    /// the first view hid part of the page, and on macOS nothing said there was more.
+    ///
+    /// The rule, in full: the width of the widest page fits the viewport; if the
+    /// first page is landscape, its height must fit as well; and never above 100%,
+    /// so a small page is not blown up. Nothing else — no memory of the last
+    /// document's zoom, no per-document heuristics.
+    ///
+    /// Waits for a real viewport: a file handed over at launch opens before the
+    /// window has been laid out, and the view calls this again once it has.
+    /// </summary>
+    public void FitOnOpen()
+    {
+        if (!_fitOnOpenPending || Pages.Count == 0
+            || ViewportWidth <= FitPadding || ViewportHeight <= FitPadding)
+            return;
+        _fitOnOpenPending = false;
+
+        var scale = Rendering.PageBitmap.PointsToPixels;
+        var first = Pages[0];
+        var fit = (ViewportWidth - FitPadding) / (WidestPagePoints * scale);
+        if (first.PointWidth > first.PointHeight)
+        {
+            // The list's top margin and the page's bottom gap as well as the sides'.
+            var verticalPadding = FitPadding + 16;
+            fit = Math.Min(fit, (ViewportHeight - verticalPadding) / (first.PointHeight * scale));
+        }
+        Zoom = Clamp(Math.Min(1.0, fit));
     }
 
     /// <summary>Fitted zooms are free-form, but still bounded by the stops' range.</summary>
