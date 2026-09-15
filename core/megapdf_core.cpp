@@ -24,8 +24,8 @@
 #include "fpdf_annot.h"
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
-#include "fpdf_ppo.h"
-#include "fpdf_progressive.h"  // the page check renders in slices it can stop between (#145)   // FPDF_ImportPagesByIndex: the #118 dry run works on a copy of the page
+#include "fpdf_ppo.h"   // FPDF_ImportPagesByIndex: the #118 dry run works on a copy of the page
+#include "fpdf_progressive.h"  // the page check renders in slices it can stop between (#145)
 #include "fpdf_flatten.h"
 #include "fpdf_save.h"
 #include "fpdf_text.h"
