@@ -27,6 +27,9 @@ public partial class MainWindow
     private readonly List<(NativeMenuItem Item, Func<bool> Enabled)> _menuBarEnabled = [];
     private readonly List<(NativeMenuItem Item, Func<bool> Checked)> _menuBarChecked = [];
 
+    /// <summary>Items with a submenu, which show it only while they are enabled; see RefreshMenuBar.</summary>
+    private readonly List<(NativeMenuItem Item, NativeMenu Menu, Func<bool> Enabled)> _menuBarSubmenus = [];
+
     /// <summary>The commands that live in More rather than on the row.</summary>
     internal static readonly string[] MoreMenuCommands = ["SaveAs", "Password", "Print", "Shrink", "Options"];
 
@@ -166,6 +169,18 @@ public partial class MainWindow
             item.IsEnabled = enabled();
         foreach (var (item, isChecked) in _menuBarChecked)
             item.IsChecked = isChecked();
+
+        // On the Mac an item with a submenu is enabled whatever IsEnabled says: Avalonia's
+        // native menu item validates YES for any item that has one. So Tools > Text font
+        // and Text size stayed enabled outside Add text (#144). Out of context the
+        // submenu comes off, and the item greys out like any other; it goes back on
+        // when the context returns.
+        foreach (var (item, menu, enabled) in _menuBarSubmenus)
+        {
+            var wanted = enabled() ? menu : null;
+            if (!ReferenceEquals(item.Menu, wanted))
+                item.Menu = wanted;
+        }
     }
 
     private NativeMenuItem Command(string id, string header, KeyGesture? gesture, Func<bool> enabled, Action invoke)
@@ -211,6 +226,7 @@ public partial class MainWindow
 
         var item = new NativeMenuItem(header) { Menu = menu };
         _menuBarEnabled.Add((item, enabled));
+        _menuBarSubmenus.Add((item, menu, enabled));
         _menuBarItems[id] = item;
         return item;
     }
@@ -250,6 +266,9 @@ public partial class MainWindow
             .Where(id => !_menuBarItems.TryGetValue(id, out var item) || !inBar.Contains(item))
             .ToList();
     }
+
+    /// <summary>The menu bar item that mirrors a toolbar command, for the self-test.</summary>
+    internal NativeMenuItem? MenuBarItem(string id) => _menuBarItems.GetValueOrDefault(id);
 
     /// <summary>For --screenshot runs: the audit, one line, and how many commands it covered.</summary>
     internal string DescribeMenuBar()

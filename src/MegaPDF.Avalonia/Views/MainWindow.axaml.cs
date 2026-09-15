@@ -482,6 +482,11 @@ public partial class MainWindow : Window
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
         var editor = new TextBox
         {
+            // Off while the starting text goes in, on once the editor is up (#144): the
+            // text a line or field already had is where editing starts, not an edit, so
+            // Cmd+Z straight away must not empty the box. Turning undo off clears its
+            // history; turning it back on after load leaves nothing to undo until typing.
+            IsUndoEnabled = false,
             MinWidth = Math.Max(140, minWidth),
             Text = initialText,
             FontSize = fontSizePoints * dip,
@@ -522,6 +527,10 @@ public partial class MainWindow : Window
             if (_inlineEditor == editor && !IsInTextPicker(FocusManager?.GetFocusedElement()))
                 Commit();
         };
+
+        // After its template and first layout, so nothing the editor does to show its
+        // starting text lands in the history that Cmd+Z walks.
+        editor.Loaded += (_, _) => editor.IsUndoEnabled = true;
 
         if (OverlayOf(presenter) is { } overlay)
         {
@@ -1206,14 +1215,23 @@ public partial class MainWindow : Window
         // The gestures themselves are defined once, in MainWindow.MenuBar.cs, so the
         // key binding, the tooltip, the More menu and the menu bar cannot disagree.
         Bind(OpenButton, OpenGesture, Strings.OpenAPdf, () => _ = OpenDocumentAsync());
-        Bind(SaveButton, SaveGesture, Strings.Save, () => ViewModel?.SaveCommand.Execute(null));
+        Bind(SaveButton, SaveGesture, Strings.Save, () => Run(ViewModel?.SaveCommand));
         Bind(null, SaveAsGesture, Strings.SaveAs, () => { if (ViewModel?.IsDocumentOpen == true) _ = SaveAsAsync(); });
-        Bind(null, PrintGesture, Strings.Print, () => ViewModel?.PrintCommand.Execute(null));
-        Bind(UndoButton, UndoGesture, Strings.Undo, () => ViewModel?.UndoCommand.Execute(null));
-        Bind(RedoButton, RedoGesture, Strings.Redo, () => ViewModel?.RedoCommand.Execute(null));
-        Bind(ZoomOutButton, ZoomOutGesture, Strings.ZoomOut, () => ViewModel?.ZoomOutCommand.Execute(null));
-        Bind(ZoomInButton, ZoomInGesture, Strings.ZoomIn, () => ViewModel?.ZoomInCommand.Execute(null));
-        Bind(null, ActualSizeGesture, Strings.ActualSize, () => ViewModel?.ZoomResetCommand.Execute(null));
+        Bind(null, PrintGesture, Strings.Print, () => Run(ViewModel?.PrintCommand));
+        Bind(UndoButton, UndoGesture, Strings.Undo, () => Run(ViewModel?.UndoCommand));
+        Bind(RedoButton, RedoGesture, Strings.Redo, () => Run(ViewModel?.RedoCommand));
+        Bind(ZoomOutButton, ZoomOutGesture, Strings.ZoomOut, () => Run(ViewModel?.ZoomOutCommand));
+        Bind(ZoomInButton, ZoomInGesture, Strings.ZoomIn, () => Run(ViewModel?.ZoomInCommand));
+        Bind(null, ActualSizeGesture, Strings.ActualSize, () => Run(ViewModel?.ZoomResetCommand));
+
+        // A key binding calls Execute directly, and a RelayCommand's Execute does not ask
+        // CanExecute: Cmd+S with nothing changed rewrote the file while Save sat greyed
+        // out (#144). A shortcut does what its button would, and nothing when it is off.
+        static void Run(System.Windows.Input.ICommand? command)
+        {
+            if (command?.CanExecute(null) == true)
+                command.Execute(null);
+        }
         Bind(null, OptionsGesture, Strings.Options, ShowOptions);
 
         // Cmd/Ctrl+F has no toolbar button to hang a tooltip on — the find bar is
