@@ -369,4 +369,109 @@ public static partial class Strings
 
     /// <summary>Continue</summary>
     public static string Continue => Get("Continue");
+
+    /// <summary>Open</summary>
+    public static string ToolbarOpen => Get("ToolbarOpen");
+
+    /// <summary>Open a PDF (Ctrl+O)</summary>
+    public static string ToolbarOpenTip => Get("ToolbarOpenTip");
+
+    /// <summary>Save (Ctrl+S)</summary>
+    public static string ToolbarSaveTip => Get("ToolbarSaveTip");
+
+    /// <summary>Save As</summary>
+    public static string ToolbarSaveAs => Get("ToolbarSaveAs");
+
+    /// <summary>Save a copy (Ctrl+Shift+S)</summary>
+    public static string ToolbarSaveAsTip => Get("ToolbarSaveAsTip");
+
+    /// <summary>Password…</summary>
+    public static string ToolbarPassword => Get("ToolbarPassword");
+
+    /// <summary>Password</summary>
+    public static string ToolbarPasswordName => Get("ToolbarPasswordName");
+
+    /// <summary>Set, change or remove the document's password</summary>
+    public static string ToolbarPasswordTip => Get("ToolbarPasswordTip");
+
+    /// <summary>Shrink</summary>
+    public static string ToolbarShrink => Get("ToolbarShrink");
+
+    /// <summary>Shrink for email</summary>
+    public static string ToolbarShrinkName => Get("ToolbarShrinkName");
+
+    /// <summary>Save a smaller copy for email</summary>
+    public static string ToolbarShrinkTip => Get("ToolbarShrinkTip");
+
+    /// <summary>Print</summary>
+    public static string ToolbarPrint => Get("ToolbarPrint");
+
+    /// <summary>Print (Ctrl+P)</summary>
+    public static string ToolbarPrintTip => Get("ToolbarPrintTip");
+
+    /// <summary>Undo</summary>
+    public static string ToolbarUndo => Get("ToolbarUndo");
+
+    /// <summary>Undo (Ctrl+Z)</summary>
+    public static string ToolbarUndoTip => Get("ToolbarUndoTip");
+
+    /// <summary>Redo</summary>
+    public static string ToolbarRedo => Get("ToolbarRedo");
+
+    /// <summary>Redo (Ctrl+Y)</summary>
+    public static string ToolbarRedoTip => Get("ToolbarRedoTip");
+
+    /// <summary>Signatures</summary>
+    public static string ToolbarSignatures => Get("ToolbarSignatures");
+
+    /// <summary>Your signatures</summary>
+    public static string ToolbarSignaturesTip => Get("ToolbarSignaturesTip");
+
+    /// <summary>Whiteout</summary>
+    public static string ToolbarWhiteout => Get("ToolbarWhiteout");
+
+    /// <summary>Cover an area with whiteout</summary>
+    public static string ToolbarWhiteoutTip => Get("ToolbarWhiteoutTip");
+
+    /// <summary>Add text</summary>
+    public static string ToolbarAddText => Get("ToolbarAddText");
+
+    /// <summary>Add new text anywhere</summary>
+    public static string ToolbarAddTextTip => Get("ToolbarAddTextTip");
+
+    /// <summary>Find</summary>
+    public static string ToolbarFind => Get("ToolbarFind");
+
+    /// <summary>Find in document (Ctrl+F)</summary>
+    public static string ToolbarFindTip => Get("ToolbarFindTip");
+
+    /// <summary>Zoom out</summary>
+    public static string ToolbarZoomOut => Get("ToolbarZoomOut");
+
+    /// <summary>Zoom out (Ctrl+Minus)</summary>
+    public static string ToolbarZoomOutTip => Get("ToolbarZoomOutTip");
+
+    /// <summary>Zoom in</summary>
+    public static string ToolbarZoomIn => Get("ToolbarZoomIn");
+
+    /// <summary>Zoom in (Ctrl+Plus)</summary>
+    public static string ToolbarZoomInTip => Get("ToolbarZoomInTip");
+
+    /// <summary>Zoom level</summary>
+    public static string ToolbarZoomLevel => Get("ToolbarZoomLevel");
+
+    /// <summary>Actual size</summary>
+    public static string ToolbarActualSize => Get("ToolbarActualSize");
+
+    /// <summary>Fit width</summary>
+    public static string ToolbarFitWidth => Get("ToolbarFitWidth");
+
+    /// <summary>Fit page</summary>
+    public static string ToolbarFitPage => Get("ToolbarFitPage");
+
+    /// <summary>Settings</summary>
+    public static string ToolbarSettings => Get("ToolbarSettings");
+
+    /// <summary>{0}%</summary>
+    public static string ZoomPercent(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ZoomPercent"), arg0);
 }

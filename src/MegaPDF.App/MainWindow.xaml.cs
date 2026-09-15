@@ -15,7 +15,6 @@ namespace MegaPDF.App;
 public sealed partial class MainWindow : Window
 {
     private TextBox? _activeEditor;
-    private StackPanel? _activeStyleBar;
     private Func<Task>? _activeEditorCommit;
 
     public MainViewModel ViewModel { get; }
@@ -39,6 +38,7 @@ public sealed partial class MainWindow : Window
             DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
         AppWindow.Closing += OnAppWindowClosing;
         InitializePageKeyboard();
+        InitializeToolbar();
 
         // Keyboard interaction with the selected signature (SDD §3.3):
         // Delete removes, arrows nudge 1pt (Shift = 10pt), Esc deselects.
@@ -103,6 +103,9 @@ public sealed partial class MainWindow : Window
             // A different document means the matches are gone — close the stale bar.
             if (e.PropertyName is nameof(MainViewModel.DocumentPath) && FindBar.Visibility == Visibility.Visible)
                 CloseFindBar();
+            // Arming Add text brings the font and size pickers onto the toolbar (#144).
+            if (e.PropertyName is nameof(MainViewModel.IsTextBoxMode))
+                OnTextBoxModeChanged();
         };
         Title = ViewModel.WindowTitle;
     }
@@ -181,8 +184,9 @@ public sealed partial class MainWindow : Window
         // Text-box mode: the click chooses where the new text goes (SDD-style inline editor).
         if (ViewModel.IsTextBoxMode)
         {
+            // The toolbar's pickers chose the face and size while the mode was armed (#144).
+            var newStyle = PickedTextStyle(ViewModel.LastTextStyle);
             ViewModel.CancelPlacementModes();
-            var newStyle = ViewModel.LastTextStyle;
             ShowInlineEditor(pageGrid, new PdfRect(pagePoint.X, pagePoint.Y, 0, newStyle.FontSize),
                 "", newStyle.FontSize, newStyle,
                 (newText, style) => string.IsNullOrWhiteSpace(newText)
@@ -223,7 +227,7 @@ public sealed partial class MainWindow : Window
 
             case PageHitKind.TextBox:
                 // Added text moves/nudges like a signature; double-click edits (no resize).
-                SelectStamp(pageGrid, pageView, $"textbox:{hit.ObjectIndex}", hit.Bounds!.Value, resizable: false);
+                SelectStamp(pageGrid, pageView, $"textbox:{hit.ObjectIndex}", hit.Bounds!.Value, resizable: false, run: hit.TextRun);
                 break;
 
             case PageHitKind.FormTextField:
@@ -311,10 +315,11 @@ public sealed partial class MainWindow : Window
         fontName == StandardTextBoxFonts.Serif ? "Times" : fontName;
 
     /// <summary>
-    /// The inline editor. <paramref name="style"/> non-null adds the size and face
-    /// pickers above it — passed only for MegaPDF's own text boxes. It is null for
-    /// the document's own text and for form fields, where SDD §3.1 is explicit that
-    /// no formatting UI appears because the formatting is inherited.
+    /// The inline editor. <paramref name="style"/> non-null brings the toolbar's size
+    /// and face pickers, showing it (#144; they used to sit above the editor) — passed
+    /// only for MegaPDF's own text boxes. It is null for the document's own text and
+    /// for form fields, where SDD §3.1 is explicit that no formatting UI appears
+    /// because the formatting is inherited.
     /// </summary>
     private void ShowInlineEditor(Grid pageGrid, PdfRect bounds, string initialText,
                                   double fontSizePoints, TextStyleChoice? style,
@@ -332,43 +337,7 @@ public sealed partial class MainWindow : Window
             AcceptsReturn = false,
         };
 
-        StackPanel? styleBar = null;
-        ComboBox? sizeBox = null;
-        ComboBox? fontBox = null;
-        if (style is not null)
-        {
-            sizeBox = new ComboBox { MinWidth = 72 };
-            foreach (var size in ViewModel.TextSizes)
-                sizeBox.Items.Add(new ComboBoxItem { Content = ((int)size).ToString(), Tag = size });
-            sizeBox.SelectedIndex = Math.Max(0, ViewModel.TextSizes.ToList().IndexOf(style.FontSize));
-            AutomationProperties.SetName(sizeBox, Strings.TextSizeName);
-
-            fontBox = new ComboBox { MinWidth = 110 };
-            foreach (var face in StandardTextBoxFonts.All)
-                fontBox.Items.Add(new ComboBoxItem { Content = FontLabel(face), Tag = face });
-            fontBox.SelectedIndex = Math.Max(0, StandardTextBoxFonts.All.ToList().IndexOf(style.FontName));
-            AutomationProperties.SetName(fontBox, Strings.TextFontName);
-
-            styleBar = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 6,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(bounds.X * toDip - 6, bounds.Y * toDip - 48, 0, 0),
-            };
-            styleBar.Children.Add(sizeBox);
-            styleBar.Children.Add(fontBox);
-        }
-
-        TextStyleChoice? ChosenStyle()
-        {
-            if (style is null)
-                return null;
-            var size = (sizeBox?.SelectedItem as ComboBoxItem)?.Tag as double? ?? style.FontSize;
-            var face = (fontBox?.SelectedItem as ComboBoxItem)?.Tag as string ?? style.FontName;
-            return new TextStyleChoice(size, face);
-        }
+        TextStyleChoice? ChosenStyle() => style is null ? null : PickedTextStyle(style);
 
         async Task CommitAsync()
         {
@@ -385,7 +354,8 @@ public sealed partial class MainWindow : Window
         //
         // Opened from the keyboard (#2), closing hands focus back to the page, and Tab
         // commits and moves on to the next region — filling a form is type, Tab, type.
-        // Not for added text boxes: there Tab has to reach the size and face pickers.
+        // Not for added text boxes: there Tab goes to the face and size pickers on the
+        // toolbar (#144), and the edit stays open while they are used.
         editor.PreviewKeyDown += async (_, args) =>
         {
             if (args.Key == VirtualKey.Enter)
@@ -401,6 +371,12 @@ public sealed partial class MainWindow : Window
                 CloseEditor(pageGrid, editor);
                 ReturnFocusToPage();
             }
+            else if (args.Key == VirtualKey.Tab && style is not null && !IsShiftDown()
+                     && FontPickerItem.Visibility == Visibility.Visible && !FontPickerItem.IsInOverflow)
+            {
+                args.Handled = true;
+                FontPicker.Focus(FocusState.Keyboard);
+            }
             else if (args.Key == VirtualKey.Tab && style is null && ViewModel.PageFocus is not null)
             {
                 args.Handled = true;
@@ -411,11 +387,13 @@ public sealed partial class MainWindow : Window
                 await StepPageFocusAsync(forward);
             }
         };
-        // Focus moving into the pickers must not commit and tear the editor down.
+        // Focus moving into the toolbar's pickers, or the list one has open, must not
+        // commit and tear the editor down (#144).
         editor.LostFocus += async (_, _) =>
         {
-            if (FocusManager.GetFocusedElement(pageGrid.XamlRoot) is DependencyObject focused
-                && styleBar is not null && IsWithin(focused, styleBar))
+            if (style is not null
+                && FocusManager.GetFocusedElement(pageGrid.XamlRoot) is DependencyObject focused
+                && (IsWithin(focused, FontPicker) || IsWithin(focused, SizePicker) || focused is ComboBoxItem))
             {
                 return;
             }
@@ -423,10 +401,11 @@ public sealed partial class MainWindow : Window
         };
 
         AutomationProperties.SetName(editor, Strings.EditTextName);
-        if (styleBar is not null)
+        if (style is not null)
         {
-            pageGrid.Children.Add(styleBar);
-            _activeStyleBar = styleBar;
+            _styleEditorOpen = true;
+            ShowStyleInPickers(style);
+            UpdateTextPickers();
         }
         pageGrid.Children.Add(editor);
         _activeEditor = editor;
@@ -438,15 +417,15 @@ public sealed partial class MainWindow : Window
     private void CloseEditor(Grid pageGrid, TextBox editor)
     {
         pageGrid.Children.Remove(editor);
-        if (_activeStyleBar is not null)
-        {
-            pageGrid.Children.Remove(_activeStyleBar);
-            _activeStyleBar = null;
-        }
         if (_activeEditor == editor)
         {
             _activeEditor = null;
             _activeEditorCommit = null;
+            if (_styleEditorOpen)
+            {
+                _styleEditorOpen = false;
+                UpdateTextPickers();
+            }
         }
     }
 
@@ -464,17 +443,18 @@ public sealed partial class MainWindow : Window
 
     // --- Signature selection chrome (SDD §3.3: drag to move, handle to resize, ✕/Delete to remove) ---
 
-    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable);
+    /// <summary><paramref name="Run"/> is set for an added text box: what the toolbar's pickers restyle (#144).</summary>
+    private sealed record StampSelection(PageCanvas Canvas, PageView Page, string Id, PdfRect Bounds, bool Movable, PdfTextRun? Run = null);
 
     private StampSelection? _selection;
     private Grid? _selectionChrome;
 
-    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds, bool movable = true, bool resizable = true)
+    private void SelectStamp(Grid pageGrid, PageView pageView, string annotationId, PdfRect bounds, bool movable = true, bool resizable = true, PdfTextRun? run = null)
     {
         Deselect();
         if (pageGrid is not PageCanvas canvas)
             return;
-        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable);
+        _selection = new StampSelection(canvas, pageView, annotationId, bounds, movable, run);
 
         var toDip = 96.0 / 72 * ViewModel.ZoomFactor;
         var accent = Brand.Brush("BrandAccentBrush");
@@ -567,6 +547,11 @@ public sealed partial class MainWindow : Window
 
         canvas.Children.Add(chrome);
         _selectionChrome = chrome;
+
+        // An added text box brings the toolbar's pickers, showing its own face and size (#144).
+        if (run is not null)
+            ShowStyleInPickers(new TextStyleChoice(run.FontSize, run.TextBoxFont ?? StandardTextBoxFonts.Default));
+        UpdateTextPickers();
     }
 
     /// <summary>✕ chip / Delete key: whiteouts and stamps remove through different operations.</summary>
@@ -638,7 +623,11 @@ public sealed partial class MainWindow : Window
             && selection.Page.Index < ViewModel.Pages.Count
             && FindPageCanvas(selection.Page.Index) is { } canvas)
         {
-            SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], selection.Id, moved ? newBounds : selection.Bounds, resizable: !isTextBox);
+            var run = isTextBox && selection.Run is { } before
+                ? ViewModel.FindTextBox(selection.Page.Index, before.TextBoxId, before.ObjectIndex) ?? before
+                : null;
+            SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], selection.Id, moved ? newBounds : selection.Bounds,
+                        resizable: !isTextBox, run: run);
         }
     }
 
@@ -667,6 +656,7 @@ public sealed partial class MainWindow : Window
             _selection?.Canvas.Children.Remove(_selectionChrome);
         _selection = null;
         _selectionChrome = null;
+        UpdateTextPickers();
     }
 
     // --- Hover affordances (SDD §2.2: the document teaches what's clickable) ---
@@ -968,80 +958,6 @@ public sealed partial class MainWindow : Window
         ViewModel.ClearSearch();
     }
 
-    // Toolbar breakpoints, in effective pixels (the states themselves live in
-    // MainWindow.xaml). Above Full the toolbar shows icon + label; below it the labels
-    // go and every button stays; below Icons the zoom cluster folds into the single
-    // View flyout.
-    //
-    // Full is measured, not assumed. It was a constant (1500) sized against the
-    // English labels; French runs about a fifth longer and every language would
-    // have needed its own number, re-measured by hand (#91). Instead the bar reports
-    // its own desired width with every label showing and Save wearing its
-    // unsaved-changes dot — the widest it ever gets — and that is the breakpoint.
-    // Icons is still a constant: icons do not change with language.
-    private const double ToolbarIconsWidth = 980;
-    private const double ToolbarFullSlack = 24;
-    private double? _toolbarFullWidth;
-
-    private void OnRootSizeChanged(object sender, SizeChangedEventArgs e) =>
-        ApplyToolbarLayout(e.NewSize.Width);
-
-    private TextBlock[] ToolbarLabels =>
-    [
-        LabelOpen, LabelSave, LabelSaveAs, LabelSecurity, LabelShrink, LabelPrint, LabelUndo,
-        LabelRedo, LabelSignatures, LabelWhiteout, LabelAddText, LabelFind,
-    ];
-
-    /// <summary>
-    /// Sheds toolbar detail as the window narrows so no command is ever clipped:
-    /// wide shows icon + label, then labels drop, then the zoom cluster collapses
-    /// behind the View flyout. Width is in effective pixels, so one set of
-    /// breakpoints holds at every display scale.
-    /// </summary>
-    private void ApplyToolbarLayout(double width)
-    {
-        var full = _toolbarFullWidth ??= MeasureFullToolbarWidth();
-        var labels = width >= full ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var label in ToolbarLabels)
-            label.Visibility = labels;
-
-        var compact = width < ToolbarIconsWidth;
-        ViewControls.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
-        ViewMenuButton.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>
-    /// For --screenshot diagnostics: the resolved toolbar labels and the measured
-    /// Full breakpoint, so a language's breakpoint can be read off a run without a
-    /// display wide enough to show the labels.
-    /// </summary>
-    internal string DescribeToolbar() =>
-        $"toolbar: labels [{string.Join(", ", ToolbarLabels.Select(l => l.Text))}] "
-        + $"full={(_toolbarFullWidth ??= MeasureFullToolbarWidth()):F0} effective px, "
-        + $"window={RootGrid.ActualWidth:F0} effective px";
-
-    /// <summary>
-    /// The toolbar's natural width in its widest state: labels on, zoom cluster
-    /// expanded, Save carrying its dot. Measured once; label text only changes
-    /// with the language, and that is fixed for the life of the process.
-    /// </summary>
-    private double MeasureFullToolbarWidth()
-    {
-        foreach (var label in ToolbarLabels)
-            label.Visibility = Visibility.Visible;
-        ViewControls.Visibility = Visibility.Visible;
-        ViewMenuButton.Visibility = Visibility.Collapsed;
-
-        var saveLabel = LabelSave.Text;
-        LabelSave.Text = Strings.SaveWithDot;
-        Toolbar.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-        var width = Toolbar.DesiredSize.Width;
-        LabelSave.Text = saveLabel;
-
-        // Slack covers the page indicator growing from "Page 1 of 9" to three digits.
-        return width + ToolbarFullSlack;
-    }
-
     /// <summary>
     /// Brings the current search match into view. Zoomed in, a match is just as
     /// likely to be off to the side as below the fold, and the horizontal offset used
@@ -1277,9 +1193,6 @@ public sealed partial class MainWindow : Window
         if (ViewModel.PendingSignature is not null)
             Announce(Strings.PlaceSignatureKeyHint);
     }
-
-    /// <summary>Opens the library flyout on its toolbar button.</summary>
-    public void ShowSignaturesFlyout() => SignaturesFlyout.ShowAt(SignaturesToolbarButton);
 
     /// <summary>
     /// Shows the in-tree copy of the library where the flyout would open (the `sign`

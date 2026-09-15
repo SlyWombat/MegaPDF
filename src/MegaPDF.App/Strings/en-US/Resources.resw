@@ -27,85 +27,6 @@
   </resheader>
 
   <!-- ===== Toolbar (MainWindow.xaml) ===== -->
-  <data name="OpenButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Open a PDF (Ctrl+O)</value>
-  </data>
-  <data name="OpenButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Open</value>
-  </data>
-  <data name="LabelOpen.Text" xml:space="preserve">
-    <value>Open</value>
-  </data>
-  <data name="SaveButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Save (Ctrl+S)</value>
-  </data>
-  <data name="SaveButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Save</value>
-  </data>
-  <data name="SaveAsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Save a copy (Ctrl+Shift+S)</value>
-  </data>
-  <data name="SaveAsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Save As</value>
-  </data>
-  <data name="LabelSaveAs.Text" xml:space="preserve">
-    <value>Save As</value>
-  </data>
-  <data name="SecurityButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Set, change or remove the document's password</value>
-    <comment>#131</comment>
-  </data>
-  <data name="SecurityButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Password</value>
-  </data>
-  <data name="LabelSecurity.Text" xml:space="preserve">
-    <value>Password…</value>
-  </data>
-  <data name="ShrinkButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Save a smaller copy for email</value>
-  </data>
-  <data name="ShrinkButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Shrink for email</value>
-  </data>
-  <data name="LabelShrink.Text" xml:space="preserve">
-    <value>Shrink</value>
-  </data>
-  <data name="PrintButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Print (Ctrl+P)</value>
-  </data>
-  <data name="PrintButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Print</value>
-  </data>
-  <data name="LabelPrint.Text" xml:space="preserve">
-    <value>Print</value>
-  </data>
-  <data name="UndoButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Undo (Ctrl+Z)</value>
-  </data>
-  <data name="UndoButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Undo</value>
-  </data>
-  <data name="LabelUndo.Text" xml:space="preserve">
-    <value>Undo</value>
-  </data>
-  <data name="RedoButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Redo (Ctrl+Y)</value>
-  </data>
-  <data name="RedoButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Redo</value>
-  </data>
-  <data name="LabelRedo.Text" xml:space="preserve">
-    <value>Redo</value>
-  </data>
-  <data name="SignaturesButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Your signatures</value>
-  </data>
-  <data name="SignaturesButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Signatures</value>
-  </data>
-  <data name="LabelSignatures.Text" xml:space="preserve">
-    <value>Signatures</value>
-  </data>
   <data name="SignaturesHeading.Text" xml:space="preserve">
     <value>Signatures</value>
   </data>
@@ -142,85 +63,10 @@
   <data name="AddSignatureFromImageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
     <value>Use a photo or scan of your signature</value>
   </data>
-  <data name="WhiteoutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Cover an area with whiteout</value>
-  </data>
-  <data name="WhiteoutButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Whiteout</value>
-  </data>
-  <data name="LabelWhiteout.Text" xml:space="preserve">
-    <value>Whiteout</value>
-  </data>
-  <data name="AddTextButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Add new text anywhere</value>
-  </data>
-  <data name="AddTextButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Add text</value>
-  </data>
-  <data name="LabelAddText.Text" xml:space="preserve">
-    <value>Add text</value>
-  </data>
-  <data name="FindButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Find in document (Ctrl+F)</value>
-  </data>
-  <data name="FindButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Find</value>
-  </data>
-  <data name="LabelFind.Text" xml:space="preserve">
-    <value>Find</value>
-  </data>
 
   <!-- Zoom cluster and its narrow-window flyout -->
-  <data name="ZoomOutButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Zoom out</value>
-  </data>
-  <data name="ZoomOutButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Zoom out</value>
-  </data>
-  <data name="ZoomInButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Zoom in</value>
-  </data>
-  <data name="ZoomInButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Zoom in</value>
-  </data>
-  <data name="FitWidthButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Fit width</value>
-  </data>
-  <data name="FitWidthButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Fit width</value>
-  </data>
-  <data name="FitPageButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Fit page</value>
-  </data>
-  <data name="FitPageButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Fit page</value>
-  </data>
-  <data name="ViewMenuButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Zoom and fit</value>
-  </data>
-  <data name="ViewMenuButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Zoom and fit</value>
-  </data>
-  <data name="ZoomInItem.Text" xml:space="preserve">
-    <value>Zoom in</value>
-  </data>
-  <data name="ZoomOutItem.Text" xml:space="preserve">
-    <value>Zoom out</value>
-  </data>
-  <data name="FitWidthItem.Text" xml:space="preserve">
-    <value>Fit width</value>
-  </data>
-  <data name="FitPageItem.Text" xml:space="preserve">
-    <value>Fit page</value>
-  </data>
 
   <!-- Settings flyout -->
-  <data name="SettingsButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve">
-    <value>Settings</value>
-  </data>
-  <data name="SettingsButton.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Settings</value>
-  </data>
   <data name="CheckboxMarkHeading.Text" xml:space="preserve">
     <value>Checkbox mark</value>
   </data>
@@ -761,5 +607,145 @@ Saved as {2} — ready to email.</value>
   </data>
   <data name="Continue" xml:space="preserve">
     <value>Continue</value>
+  </data>
+  <data name="ToolbarOpen" xml:space="preserve">
+    <value>Open</value>
+    <comment>Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarOpenTip" xml:space="preserve">
+    <value>Open a PDF (Ctrl+O)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarSaveTip" xml:space="preserve">
+    <value>Save (Ctrl+S)</value>
+    <comment>Windows toolbar (#144): tooltip; the label is Save or SaveWithDot</comment>
+  </data>
+  <data name="ToolbarSaveAs" xml:space="preserve">
+    <value>Save As</value>
+    <comment>Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarSaveAsTip" xml:space="preserve">
+    <value>Save a copy (Ctrl+Shift+S)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarPassword" xml:space="preserve">
+    <value>Password…</value>
+    <comment>Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarPasswordName" xml:space="preserve">
+    <value>Password</value>
+    <comment>Windows toolbar (#144): UIA name</comment>
+  </data>
+  <data name="ToolbarPasswordTip" xml:space="preserve">
+    <value>Set, change or remove the document's password</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarShrink" xml:space="preserve">
+    <value>Shrink</value>
+    <comment>Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarShrinkName" xml:space="preserve">
+    <value>Shrink for email</value>
+    <comment>Windows toolbar (#144): UIA name</comment>
+  </data>
+  <data name="ToolbarShrinkTip" xml:space="preserve">
+    <value>Save a smaller copy for email</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarPrint" xml:space="preserve">
+    <value>Print</value>
+    <comment>Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarPrintTip" xml:space="preserve">
+    <value>Print (Ctrl+P)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarUndo" xml:space="preserve">
+    <value>Undo</value>
+    <comment>Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarUndoTip" xml:space="preserve">
+    <value>Undo (Ctrl+Z)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarRedo" xml:space="preserve">
+    <value>Redo</value>
+    <comment>Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarRedoTip" xml:space="preserve">
+    <value>Redo (Ctrl+Y)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarSignatures" xml:space="preserve">
+    <value>Signatures</value>
+    <comment>Windows toolbar (#144): label and UIA name</comment>
+  </data>
+  <data name="ToolbarSignaturesTip" xml:space="preserve">
+    <value>Your signatures</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarWhiteout" xml:space="preserve">
+    <value>Whiteout</value>
+    <comment>Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarWhiteoutTip" xml:space="preserve">
+    <value>Cover an area with whiteout</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarAddText" xml:space="preserve">
+    <value>Add text</value>
+    <comment>Windows toolbar (#144): label</comment>
+  </data>
+  <data name="ToolbarAddTextTip" xml:space="preserve">
+    <value>Add new text anywhere</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarFind" xml:space="preserve">
+    <value>Find</value>
+    <comment>Windows toolbar (#144): More menu label</comment>
+  </data>
+  <data name="ToolbarFindTip" xml:space="preserve">
+    <value>Find in document (Ctrl+F)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarZoomOut" xml:space="preserve">
+    <value>Zoom out</value>
+    <comment>Windows toolbar (#144): UIA name and overflow label</comment>
+  </data>
+  <data name="ToolbarZoomOutTip" xml:space="preserve">
+    <value>Zoom out (Ctrl+Minus)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarZoomIn" xml:space="preserve">
+    <value>Zoom in</value>
+    <comment>Windows toolbar (#144): UIA name and overflow label</comment>
+  </data>
+  <data name="ToolbarZoomInTip" xml:space="preserve">
+    <value>Zoom in (Ctrl+Plus)</value>
+    <comment>Windows toolbar (#144): tooltip</comment>
+  </data>
+  <data name="ToolbarZoomLevel" xml:space="preserve">
+    <value>Zoom level</value>
+    <comment>Windows toolbar (#144): zoom menu button: tooltip and UIA name</comment>
+  </data>
+  <data name="ToolbarActualSize" xml:space="preserve">
+    <value>Actual size</value>
+    <comment>Windows toolbar (#144): zoom menu item</comment>
+  </data>
+  <data name="ToolbarFitWidth" xml:space="preserve">
+    <value>Fit width</value>
+    <comment>Windows toolbar (#144): zoom menu item</comment>
+  </data>
+  <data name="ToolbarFitPage" xml:space="preserve">
+    <value>Fit page</value>
+    <comment>Windows toolbar (#144): zoom menu item</comment>
+  </data>
+  <data name="ToolbarSettings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Windows toolbar (#144): More menu label, tooltip and UIA name</comment>
+  </data>
+  <data name="ZoomPercent" xml:space="preserve">
+    <value>{0}%</value>
+    <comment>Windows toolbar (#144): zoom level on the zoom menu button and its presets</comment>
   </data>
 </root>
