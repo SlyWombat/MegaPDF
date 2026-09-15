@@ -45,14 +45,34 @@ internal static class CoreNative
 
     // Documents ------------------------------------------------------------
 
+    /// <summary>
+    /// <see cref="megapdf_last_error"/> when a file is past what the platform can address
+    /// through PDFium's custom file access — 4 GiB on Windows, no limit elsewhere (#147).
+    /// </summary>
+    public const uint OpenErrTooLarge = 100;
+
     /// <summary>Opens a document from memory; the core copies the bytes. Zero on failure.</summary>
     [DllImport(Dll)]
     public static extern unsafe IntPtr megapdf_open(byte* bytes, nuint length,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string? password);
 
+    /// <summary>
+    /// Opens a document from its file, read on demand (#147, #148): the core keeps the file
+    /// open and PDFium reads the parts it needs through it, so nothing holds a copy of the
+    /// document and its size stops being a limit. Zero on failure.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_open_file([MarshalAs(UnmanagedType.LPUTF8Str)] string path,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string? password);
+
     /// <summary>Opens bytes with the credentials <paramref name="like"/> was opened with (#132). Zero on failure.</summary>
     [DllImport(Dll)]
     public static extern unsafe IntPtr megapdf_open_like(IntPtr like, byte* bytes, nuint length);
+
+    /// <summary><see cref="megapdf_open_file"/> with the credentials <paramref name="like"/> was opened with (#132).</summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_open_file_like(IntPtr like,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
 
     [DllImport(Dll)]
     public static extern void megapdf_close(IntPtr document);
