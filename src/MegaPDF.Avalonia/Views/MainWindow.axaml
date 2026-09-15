@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="using:MegaPDF.Avalonia"
         xmlns:vm="using:MegaPDF.Avalonia.ViewModels"
+        xmlns:views="using:MegaPDF.Avalonia.Views"
         x:Class="MegaPDF.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="{Binding WindowTitle}"
@@ -243,15 +244,17 @@
              text box is selected or being edited. -->
         <!-- Display names, not the raw PostScript names and enum values the
              engine speaks: "Times", not "Times-Roman"; "Croix", not "Cross". -->
-        <ComboBox Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
+        <!-- ToolbarPicker is a ComboBox that leaves an unnamed template part out of the
+             accessibility tree (Views/ToolbarPicker.cs). -->
+        <views:ToolbarPicker Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
                   SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding CanAddText}">
           <ComboBox.ItemTemplate>
             <DataTemplate DataType="vm:FontChoice">
               <TextBlock Text="{Binding Label}" />
             </DataTemplate>
           </ComboBox.ItemTemplate>
-        </ComboBox>
-        <ComboBox Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
+        </views:ToolbarPicker>
+        <views:ToolbarPicker Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
                   SelectedItem="{Binding TextSize}" IsEnabled="{Binding CanAddText}" />
         <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
         <Button Name="UndoButton" Command="{Binding UndoCommand}">

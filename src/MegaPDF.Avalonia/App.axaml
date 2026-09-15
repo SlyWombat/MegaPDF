@@ -26,8 +26,9 @@
            no name at all. Hiding them (AccessibilityView Raw) works for UI Automation
            but not on the Mac, whose accessibility tree lists every child regardless, so
            they are named for what they do.
-         - A ComboBox's drop-down chevron and its placeholder text, an unnamed element
-           beside each picker. The ComboBox itself carries the name and the value. -->
+
+         The unnamed "unknown" element beside each toolbar picker is handled where the
+         pickers are: Views/ToolbarPicker.cs. -->
     <Style Selector="ScrollBar:vertical /template/ RepeatButton#PART_LineUpButton">
       <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarLineUp}" />
     </Style>
@@ -51,9 +52,6 @@
     </Style>
     <Style Selector="ScrollBar:horizontal /template/ RepeatButton#PART_PageDownButton">
       <Setter Property="AutomationProperties.Name" Value="{x:Static loc:Strings.ScrollBarPageRight}" />
-    </Style>
-    <Style Selector="ComboBox /template/ PathIcon#DropDownGlyph, ComboBox /template/ TextBlock#PlaceholderTextBlock">
-      <Setter Property="AutomationProperties.AccessibilityView" Value="Raw" />
     </Style>
   </Application.Styles>
 </Application>

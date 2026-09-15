@@ -1089,11 +1089,24 @@ internal static class Program
 
         vm.ToggleAddTextCommand.Execute(null);
         Pump();
-        var glyphs = global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window.FontBox)
-            .OfType<global::Avalonia.Controls.PathIcon>().ToList();
-        check($"the font picker's chevron is hidden from accessibility ({glyphs.Count} found)",
-              glyphs.Count > 0 && glyphs.All(g =>
-                  !global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(g).IsControlElement()));
+        foreach (var picker in new global::Avalonia.Controls.ComboBox[] { window.FontBox, window.SizeBox })
+        {
+            var children = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(picker).GetChildren();
+            var described = children.Select(c =>
+                $"{c.GetType().Name} for {(c as global::Avalonia.Automation.Peers.ControlAutomationPeer)?.Owner.GetType().Name}"
+                + $"#{(c as global::Avalonia.Automation.Peers.ControlAutomationPeer)?.Owner.Name}"
+                + $"/{c.GetAutomationControlType()}/'{c.GetName()}'").ToList();
+            var pickerName = global::Avalonia.Automation.AutomationProperties.GetName(picker);
+            check($"{pickerName}'s accessible children are all named ({string.Join("; ", described)})",
+                  children.All(c => !string.IsNullOrWhiteSpace(c.GetName())));
+        }
+        // Hiding the Popup element from the peer must not stop the list opening.
+        window.FontBox.IsDropDownOpen = true;
+        Pump();
+        check($"the font picker still opens its list of {window.FontBox.ItemCount} faces",
+              window.FontBox.ContainerFromIndex(0) is { IsEffectivelyVisible: true, Bounds.Height: > 0 });
+        window.FontBox.IsDropDownOpen = false;
+        Pump();
         vm.ToggleAddTextCommand.Execute(null);
         Pump();
 
