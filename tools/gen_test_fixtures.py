@@ -24,7 +24,7 @@ Writes:
                 twice the user space value. Page 612x600 pt; "Hello MegaPDF" at
                 36 pt with its baseline at 550 pt in crop space; a stroked 10x10 pt
                 square at (100,400)-(110,410); a text field "fullname" at
-                (100,300)-(300,320); a 2x2 px image placed 100x50 pt at (300,100).
+                (100,300)-(300,320); a checkbox "agree" at (100,260)-(115,275); a 2x2 px image placed 100x50 pt at (300,100).
   textbox.pdf - a MegaPDFTextBox-marked text object with an id property (#34),
                 so every platform can prove it reads boxes written elsewhere.
   doubled.pdf - lines drawn twice (fake bold, fill + stroke, shadow, a two-run
@@ -377,19 +377,28 @@ def gen_userunit():
                                b"q 50 0 0 25 150 100 cm /Im1 Do Q\n"))
     ap = add(stream(b"/Type /XObject /Subtype /Form /BBox [0 0 100 10]",
                     b"0.45 0.5 0.6 RG 0.5 w 0.25 0.25 99.5 9.5 re S\n"))
-    pages_num = len(objs) + 3
+    box_on = add(stream(b"/Type /XObject /Subtype /Form /BBox [0 0 7.5 7.5]",
+                        b"0.13 0.13 0.13 RG 0.5 w 0.25 0.25 7 7 re S 0.8 w 1.5 1.5 m 6 6 l S 1.5 6 m 6 1.5 l S\n"))
+    box_off = add(stream(b"/Type /XObject /Subtype /Form /BBox [0 0 7.5 7.5]",
+                         b"0.13 0.13 0.13 RG 0.5 w 0.25 0.25 7 7 re S\n"))
+    pages_num = len(objs) + 4
     widget = len(objs) + 2
+    checkbox = len(objs) + 3
     page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 306 396] "
                b"/CropBox [0 50 306 350] /UserUnit 2 "
-               b"/Resources << /Font << /F1 %d 0 R >> /XObject << /Im1 %d 0 R >> >> /Contents %d 0 R /Annots [%d 0 R] >>"
-               % (pages_num, font, image, content, widget))
+               b"/Resources << /Font << /F1 %d 0 R >> /XObject << /Im1 %d 0 R >> >> /Contents %d 0 R /Annots [%d 0 R %d 0 R] >>"
+               % (pages_num, font, image, content, widget, checkbox))
     w = add(b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /DA (/Helv 6 Tf 0 g) "
             b"/Rect [50 200 150 210] /F 4 /P %d 0 R /AP << /N %d 0 R >> >>" % (page, ap))
     assert w == widget
+    c = add(b"<< /Type /Annot /Subtype /Widget /FT /Btn /T (agree) /V /Off /AS /Off "
+            b"/Rect [50 180 57.5 187.5] /F 4 /P %d 0 R "
+            b"/AP << /N << /Yes %d 0 R /Off %d 0 R >> >> >>" % (page, box_on, box_off))
+    assert c == checkbox
     pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
     assert pages == pages_num
-    add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R] "
-        b"/DR << /Font << /Helv %d 0 R >> >> /DA (/Helv 0 Tf 0 g) >> >>" % (pages, widget, font))
+    add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R %d 0 R] "
+        b"/DR << /Font << /Helv %d 0 R >> >> /DA (/Helv 0 Tf 0 g) >> >>" % (pages, widget, checkbox, font))
     return build(objs)
 
 

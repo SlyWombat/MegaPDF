@@ -3701,9 +3701,17 @@ void test_user_unit(const std::string& fixtures) {
     // Form fields: bounds out, a tap in.
     megapdf_form_fields* f = megapdf_form_fields_load(p.page);
     megapdf_form_field field{};
-    check(megapdf_form_field_count(f) == 1 && megapdf_form_field_get(f, 0, &field) == MEGAPDF_OK &&
+    check(megapdf_form_field_count(f) == 2 && megapdf_form_field_get(f, 0, &field) == MEGAPDF_OK &&
               rect_close(field.bounds, megapdf_rect{100, 300, 300, 320}, 0.01),
-          "the field is at (100,300)-(300,320) pt", rect_str(field.bounds));
+          "the text field is at (100,300)-(300,320) pt", rect_str(field.bounds));
+    megapdf_form_field box{};
+    check(megapdf_form_field_get(f, 1, &box) == MEGAPDF_OK && box.kind == MEGAPDF_FIELD_CHECKBOX && !box.is_checked &&
+              rect_close(box.bounds, megapdf_rect{100, 260, 115, 275}, 0.01),
+          "the checkbox is at (100,260)-(115,275) pt", rect_str(box.bounds));
+    megapdf_form_fields_free(f);
+    megapdf_form_click(p.page, 107.5, 267.5);
+    f = megapdf_form_fields_load(p.page);
+    check(megapdf_form_field_get(f, 1, &box) == MEGAPDF_OK && box.is_checked, "a tap at the checkbox's centre in points ticks it");
     megapdf_form_fields_free(f);
     auto value = utf16("Ada Lovelace");
     megapdf_form_set_text(p.page, 200, 310, value.data());

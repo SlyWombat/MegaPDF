@@ -37,11 +37,13 @@ class UserUnitTest {
                     assertEquals(100.0, square.left, 1.0)
                     assertEquals(400.0, square.bottom, 1.0)
 
-                    val field = page.formFields().single()
-                    assertEquals(100.0, field.rect.left, 0.1)
-                    assertEquals(300.0, field.rect.bottom, 0.1)
-                    assertEquals(300.0, field.rect.right, 0.1)
-                    assertEquals(320.0, field.rect.top, 0.1)
+                    val box = page.formFields().single()
+                    assertEquals(100.0, box.rect.left, 0.1)
+                    assertEquals(260.0, box.rect.bottom, 0.1)
+                    assertEquals(115.0, box.rect.right, 0.1)
+                    assertEquals(275.0, box.rect.top, 0.1)
+                    page.clickAt(107.5, 267.5)
+                    assertTrue("a tap at the checkbox's centre ticks it", page.formFields().single().isChecked)
 
                     val rect = page.search("megapdf").single().rects.single()
                     assertTrue("the hit should straddle the 550 pt baseline, was $rect",

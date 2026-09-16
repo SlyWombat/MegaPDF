@@ -31,9 +31,13 @@ public class UserUnitTests
         Assert.InRange(square.X, 99, 101);
         Assert.InRange(square.Y, 189, 191);
 
-        // The text field at crop (100,300)-(300,320).
-        var field = Assert.Single(page.GetFormFields());
-        Assert.Equal(new PdfRect(100, 280, 200, 20), Round(field.Bounds));
+        // The text field at crop (100,300)-(300,320) and the checkbox at (100,260)-(115,275).
+        var fields = page.GetFormFields();
+        Assert.Equal(new PdfRect(100, 280, 200, 20), Round(Assert.Single(fields, f => f.Name == "fullname").Bounds));
+        var agree = Assert.Single(fields, f => f.Name == "agree");
+        Assert.Equal(new PdfRect(100, 325, 15, 15), Round(agree.Bounds));
+        page.ToggleCheckbox(agree);
+        Assert.True(Assert.Single(page.GetFormFields(), f => f.Name == "agree").IsChecked);
 
         // "Hello MegaPDF" in 36 pt with its baseline 50 pt below the top.
         var run = Assert.Single(page.GetTextRuns());
