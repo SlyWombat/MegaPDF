@@ -35,6 +35,10 @@
 
 #include "megapdf_core.h"
 #include "megapdf_core_testing.h"
+// PDFium itself, as the oracle for what the core reads (#149).
+#include "fpdf_edit.h"
+#include "fpdf_text.h"
+#include "fpdfview.h"
 
 // How many MegaPDF patches the linked PDFium carries (core/CMakeLists.txt reads VERSION).
 #ifndef MEGAPDF_PDFIUM_PATCHES
@@ -3064,6 +3068,116 @@ void test_scaled_jpeg_render() {
     megapdf_close(d);
 }
 
+// #149: the core reads every text object's text in one pass over the page's characters instead
+// of calling FPDFTextObj_GetText per object, which walks the whole page each time. PDFium's own
+// call, on a second copy of the same document, is the oracle: every run's text must be exactly
+// what it returns, and every object left out must extract as nothing or whitespace.
+bool is_white_space(unsigned short c) {
+    return (c >= 0x09 && c <= 0x0D) || c == 0x20 || c == 0x85 || c == 0xA0 || c == 0x1680 ||
+           (c >= 0x2000 && c <= 0x200A) || c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x3000;
+}
+
+void check_texts_match_pdfium(const std::vector<unsigned char>& bytes, const std::string& tag, int max_pages = 8) {
+    megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+    FPDF_DOCUMENT raw = FPDF_LoadMemDocument(bytes.data(), static_cast<int>(bytes.size()), nullptr);
+    check(d != nullptr && raw != nullptr, "text oracle: " + tag + " opens twice");
+    if (d == nullptr || raw == nullptr) {
+        megapdf_close(d);
+        if (raw != nullptr) FPDF_CloseDocument(raw);
+        return;
+    }
+    const int pages = std::min(megapdf_page_count(d), max_pages);
+    for (int pi = 0; pi < pages; pi++) {
+        const std::string where = tag + " page " + std::to_string(pi + 1);
+        std::map<int, U16> oracle;
+        FPDF_PAGE page = FPDF_LoadPage(raw, pi);
+        FPDF_TEXTPAGE text_page = page != nullptr ? FPDFText_LoadPage(page) : nullptr;
+        const int objects = page != nullptr ? FPDFPage_CountObjects(page) : 0;
+        for (int j = 0; j < objects && text_page != nullptr; j++) {
+            FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, j);
+            if (FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) continue;
+            const unsigned long n = FPDFTextObj_GetText(obj, text_page, nullptr, 0);   // bytes, with the terminator
+            U16 text(n / 2);
+            if (n > 2) FPDFTextObj_GetText(obj, text_page, text.data(), n);
+            if (!text.empty()) text.pop_back();
+            oracle[j] = text;
+        }
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+        if (page != nullptr) FPDF_ClosePage(page);
+
+        Page p(d, pi);
+        megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+        std::map<int, U16> runs;
+        for (size_t i = 0; i < megapdf_text_run_count(t); i++) {
+            megapdf_text_run r{};
+            megapdf_text_run_get(t, i, &r);
+            runs[r.object_index] = run_string(t, i, MEGAPDF_TEXT_RUN_TEXT);
+        }
+        megapdf_text_free(t);
+        int wrong = 0;
+        std::string first;
+        for (const auto& [index, text] : oracle) {
+            const auto it = runs.find(index);
+            const bool blank = std::all_of(text.begin(), text.end(), is_white_space);
+            const bool ok = it == runs.end() ? blank : !blank && it->second == text;
+            if (!ok && wrong++ == 0) first = "object " + std::to_string(index);
+        }
+        for (const auto& run : runs)
+            if (oracle.find(run.first) == oracle.end() && wrong++ == 0) first = "run " + std::to_string(run.first) + " is no text object";
+        check(wrong == 0, "text oracle: every run reads as FPDFTextObj_GetText does", where + ": " + std::to_string(wrong) + " wrong, first " + first);
+    }
+    megapdf_close(d);
+    FPDF_CloseDocument(raw);
+}
+
+void test_text_in_one_pass(const std::string& fixtures, const std::string& schematic) {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+    // What decides the text PDFium gives one object: separator spaces it generates between
+    // objects on a line, spaces it generates inside a wide TJ, line breaks when an object's
+    // characters resume on another line, duplicates it drops, and text drawn in another order.
+    const std::string tricky =
+        "BT /F1 12 Tf 72 700 Td (Hello) Tj ET BT /F1 12 Tf 110 700 Td (world) Tj ET "
+        "BT /F1 12 Tf 72 680 Td [(Wide) -3000 (gap) -200 (kern) 400 (tight)] TJ ET "
+        "BT /F1 12 Tf 72 660 Td ( leading and  double  spaces ) Tj ET "
+        "BT /F1 12 Tf 300 640 Td (right first) Tj ET BT /F1 12 Tf 72 640 Td (then left) Tj ET "
+        "BT /F1 12 Tf 72 620 Td (Twice) Tj ET BT /F1 12 Tf 72 620 Td (Twice) Tj ET "
+        "BT /F1 12 Tf 72 600 Td (d\351j\340 vu) Tj 0 -14 Td (next line, same object) Tj ET "
+        "BT /F1 12 Tf 0 1 -1 0 500 300 Tm (Rotated text) Tj ET "
+        "BT /F1 12 Tf 72 560 Td (   ) Tj ET "
+        "BT /F1 12 Tf 72 540 Td (up) Tj 0 40 Td (and back) Tj ET "
+        "BT /F1 12 Tf 3 Tr 72 520 Td (invisible) Tj ET "
+        "BT /F1 6 Tf 72 500 Td (small) Tj /F1 30 Tf 30 0 Td (LARGE) Tj ET";
+    check_texts_match_pdfium(one_page_pdf(tricky, helvetica), "tricky page");
+    for (const char* name : {"fixture.pdf", "forms.pdf", "formtext.pdf", "textbox.pdf", "doubled.pdf", "doubled-far.pdf",
+                             "demo.pdf", "demo-fr.pdf", "cropped.pdf", "stamped.pdf", "softmask.pdf"})
+        check_texts_match_pdfium(read_file(fixtures + "/" + name), name);
+    check_texts_match_pdfium(read_file(schematic), "microbit-v2-schematic.pdf");
+    for (const char* name : {"cid-font.pdf", "subset-font.pdf"})
+        check_texts_match_pdfium(read_file(std::string(MEGAPDF_REPO_FIXTURES) + "/" + name), name);
+
+    // And the time it takes grows with the page, not with its square. 30,000 one-word objects
+    // took about 25 s to list read one by one (11 s at 20,000); read in one pass, well under 0.1 s
+    // in a Release build. The budget sits far from both, so neither a slow runner nor a sanitizer
+    // makes it flaky, and the old way cannot pass it.
+    std::string many;
+    for (int i = 0; i < 30000; i++) {
+        char obj[96];
+        std::snprintf(obj, sizeof obj, "BT /F1 1 Tf %d %d Td (w%d) Tj ET\n", 20 + (i % 60) * 9, 770 - (i / 60) * 3 / 2, i);
+        many += obj;
+    }
+    OpenDoc d(one_page_pdf(many, helvetica));
+    Page p(d.doc, 0);
+    const auto started = std::chrono::steady_clock::now();
+    megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+    const size_t runs = megapdf_text_run_count(t);
+    U16 last = runs > 0 ? run_string(t, runs - 1, MEGAPDF_TEXT_RUN_TEXT) : U16{};
+    last.push_back(0);   // u16() ends with a terminator
+    megapdf_text_free(t);
+    check(runs == 30000 && last == u16("w29999"), "text in one pass: 30,000 text objects are 30,000 runs", std::to_string(runs) + " runs");
+    check(ms < 5000, "text in one pass: 30,000 text objects list in under 5 s", std::to_string(static_cast<int>(ms)) + " ms");
+}
+
 // #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves
 // object indices and rewrites the page's streams. After a change every answer must be what a
 // fresh open of the saved page gives. PDFium regenerates every stream of a page (patch 5), so one
@@ -3568,6 +3682,7 @@ int main(int argc, char** argv) {
     test_hidden_copies(argv[1]);
     test_far_hidden_copies(argv[1]);
     test_scaled_jpeg_render();
+    test_text_in_one_pass(argv[1], argv[2]);
     test_verdicts_follow_changes();
     test_layout_verdicts();
     test_page_regeneration_verdict();

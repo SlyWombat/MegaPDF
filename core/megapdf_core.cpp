@@ -19,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -519,15 +520,83 @@ U16 Utf8ToUtf16(const std::vector<unsigned char>& in) {
     return out;
 }
 
-// FPDFTextObj_GetText's length is in BYTES including the UTF-16 terminator,
-// whatever the header says — verified against pdfium 152 on every platform.
-U16 ReadObjectText(FPDF_PAGEOBJECT obj, FPDF_TEXTPAGE text_page) {
-    const unsigned long bytes = FPDFTextObj_GetText(obj, text_page, nullptr, 0);
-    if (bytes <= 2) return {};
-    U16 buf(bytes / 2);
-    FPDFTextObj_GetText(obj, text_page, buf.data(), bytes);
-    buf.resize(bytes / 2 - 1);
-    return buf;
+// The text of every text object on `text_page`, exactly as FPDFTextObj_GetText reports it,
+// from one pass over the page's characters (#149). FPDFTextObj_GetText walks the whole
+// character list on every call, so reading each object in turn was quadratic: 20,000 text
+// objects took 11 s to list and 24 s to judge an edit. Objects with no characters are absent.
+//
+// This replays PDFium's CPDF_TextPage::GetTextByPredicate for every object at once. For one
+// object, the characters of other objects only matter through the state they leave behind,
+// and a stretch of them between two of the object's characters always leaves the same one:
+// a separator space when the stretch starts with a space, and a pending line break when it
+// holds anything that is not a space. A prefix count of non-space characters answers the
+// second in O(1).
+using ObjectTexts = std::unordered_map<FPDF_PAGEOBJECT, U16>;
+
+ObjectTexts ReadObjectTexts(FPDF_TEXTPAGE text_page) {
+    ObjectTexts texts;
+    const int count = text_page != nullptr ? FPDFText_CountChars(text_page) : 0;
+    if (count <= 0) return texts;
+    std::vector<unsigned int> unicode(static_cast<size_t>(count));
+    std::vector<int> non_space_before(static_cast<size_t>(count) + 1, 0);
+    for (int i = 0; i < count; i++) {
+        unicode[static_cast<size_t>(i)] = FPDFText_GetUnicode(text_page, i);
+        non_space_before[static_cast<size_t>(i) + 1] =
+            non_space_before[static_cast<size_t>(i)] + (unicode[static_cast<size_t>(i)] != L' ' ? 1 : 0);
+    }
+    struct State {
+        int last = -1;      // the object's previous character
+        float posy = 0;
+    };
+    std::unordered_map<FPDF_PAGEOBJECT, State> states;
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(text_page, i);
+        if (obj == nullptr) continue;
+        State& st = states[obj];
+        U16& text = texts[obj];
+        bool contains_pre_char;   // GetTextByPredicate's IsContainPreChar, before this character
+        bool add_line_feed;       // and its IsAddLineFeed
+        if (st.last < 0) {
+            contains_pre_char = false;
+            add_line_feed = non_space_before[static_cast<size_t>(i)] > 0;
+        } else if (st.last + 1 == i) {
+            contains_pre_char = true;
+            add_line_feed = false;
+        } else {
+            if (unicode[static_cast<size_t>(st.last) + 1] == L' ') text.push_back(L' ');
+            contains_pre_char = false;
+            add_line_feed = non_space_before[static_cast<size_t>(i)] - non_space_before[static_cast<size_t>(st.last) + 1] > 0;
+        }
+        double x = 0, y = 0;
+        FPDFText_GetCharOrigin(text_page, i, &x, &y);
+        const float origin_y = static_cast<float>(y);
+        if (std::fabs(st.posy - origin_y) > 0 && !contains_pre_char && add_line_feed) {
+            st.posy = origin_y;
+            if (!text.empty()) {
+                text.push_back(L'\r');
+                text.push_back(L'\n');
+            }
+        }
+        const unsigned int u = unicode[static_cast<size_t>(i)];
+        if (u > 0xFFFF && u <= 0x10FFFF) {
+            text.push_back(static_cast<unsigned short>(0xD800 + ((u - 0x10000) >> 10)));
+            text.push_back(static_cast<unsigned short>(0xDC00 + ((u - 0x10000) & 0x3FF)));
+        } else if (u != 0) {
+            text.push_back(static_cast<unsigned short>(u));
+        }
+        st.last = i;
+    }
+    // The stretch after an object's last character leaves only its separator space.
+    for (const auto& [obj, st] : states) {
+        if (st.last + 1 < count && unicode[static_cast<size_t>(st.last) + 1] == L' ') texts[obj].push_back(L' ');
+    }
+    return texts;
+}
+
+const U16& TextOf(const ObjectTexts& texts, FPDF_PAGEOBJECT obj) {
+    static const U16 kEmpty;
+    const auto it = texts.find(obj);
+    return it != texts.end() ? it->second : kEmpty;
 }
 
 U16 ReadFontFamily(FPDF_PAGEOBJECT obj) {
@@ -666,6 +735,14 @@ MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int 
     }
     try {
         FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+        ObjectTexts texts;
+        try {
+            texts = ReadObjectTexts(text_page);
+        } catch (...) {
+            if (text_page != nullptr) FPDFText_ClosePage(text_page);
+            throw;
+        }
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
         const int count = FPDFPage_CountObjects(p->page);
         for (int i = 0; i < count; i++) {
             FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, i);
@@ -674,7 +751,7 @@ MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int 
             if (boxes_only && !is_box) continue;
             float l = 0, b = 0, r = 0, tp = 0;
             if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &tp)) continue;
-            U16 text = ReadObjectText(obj, text_page);
+            const U16& text = TextOf(texts, obj);
             if (text.empty() || AllWhiteSpace(text)) continue;
 
             TextRun run;
@@ -687,7 +764,7 @@ MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int 
             FPDFTextObj_GetFontSize(obj, &size);
             run.info.font_size = static_cast<double>(size);
             run.info.is_text_box = is_box ? 1 : 0;
-            run.text = std::move(text);
+            run.text = text;
             run.font = ReadFontFamily(obj);
             if (run.info.is_text_box) {
                 run.box_id = ReadMarkParam(obj, "id");
@@ -695,7 +772,6 @@ MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int 
             }
             t->runs.push_back(std::move(run));
         }
-        if (text_page != nullptr) FPDFText_ClosePage(text_page);
     } catch (...) {
         delete t;
         SetError(FPDF_ERR_UNKNOWN, "out of memory reading text");
@@ -1310,16 +1386,23 @@ struct ScratchRun {
 std::vector<ScratchRun> ScratchRuns(FPDF_PAGE page) {
     std::vector<ScratchRun> out;
     FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+    ObjectTexts texts;
+    try {
+        texts = ReadObjectTexts(text_page);
+    } catch (...) {
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+        throw;
+    }
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
     const int count = FPDFPage_CountObjects(page);
     for (int i = 0; i < count; i++) {
         FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
         if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_TEXT) continue;
         ScratchRun run{};
         FPDFPageObj_GetBounds(obj, &run.left, &run.bottom, &run.right, &run.top);
-        run.text = ReadObjectText(obj, text_page);
+        run.text = TextOf(texts, obj);
         out.push_back(std::move(run));
     }
-    if (text_page != nullptr) FPDFText_ClosePage(text_page);
     return out;
 }
 
@@ -1552,8 +1635,15 @@ std::vector<std::pair<int, int>> HiddenCopies(FPDF_PAGE page, FPDF_TEXTPAGE text
         }
         return s == 1 ? &shapes[static_cast<size_t>(j)] : nullptr;
     };
+    // Read on first use, all at once: most runs have no copy candidate at all.
+    ObjectTexts texts;
+    bool texts_read = false;
     auto extracts_empty = [&](int j) {
-        const U16 text = ReadObjectText(FPDFPage_GetObject(page, j), text_page);
+        if (!texts_read) {
+            texts = ReadObjectTexts(text_page);
+            texts_read = true;
+        }
+        const U16& text = TextOf(texts, FPDFPage_GetObject(page, j));
         return text.empty() || AllWhiteSpace(text);
     };
     auto take = [&](int j, int i) {
@@ -2789,15 +2879,22 @@ bool NeedsSubstitution(const megapdf_page* p, FPDF_PAGEOBJECT obj, const unsigne
 
     std::vector<bool> covered(65536, false);
     FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+    ObjectTexts texts;
+    try {
+        texts = ReadObjectTexts(text_page);
+    } catch (...) {
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+        throw;
+    }
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
     const int count = FPDFPage_CountObjects(p->page);
     for (int i = 0; i < count; i++) {
         FPDF_PAGEOBJECT other = FPDFPage_GetObject(p->page, i);
         if (other == nullptr || FPDFPageObj_GetType(other) != FPDF_PAGEOBJ_TEXT) continue;
         FPDF_FONT other_font = FPDFTextObj_GetFont(other);
         if (other_font == nullptr || ReadFontNameUtf8(other_font, true) != base) continue;
-        for (unsigned short c : ReadObjectText(other, text_page)) covered[c] = true;
+        for (unsigned short c : TextOf(texts, other)) covered[c] = true;
     }
-    if (text_page != nullptr) FPDFText_ClosePage(text_page);
     for (size_t i = 0; text[i] != 0; i++) if (!covered[text[i]]) return true;
     return false;
 }
