@@ -31,6 +31,13 @@ MEGAPDF_API void megapdf_testing_set_page_check_hook(megapdf_page_check_stage_ho
  */
 MEGAPDF_API int megapdf_testing_compare_pages(const megapdf_page* was, const megapdf_page* now, megapdf_layout_verdict* out);
 
+/**
+ * While non-zero, megapdf_open_file() and megapdf_open_fd() refuse a file longer than `bytes`
+ * with MEGAPDF_OPEN_ERR_TOO_LARGE, as they do past 4 GiB on Windows (#147). 0 restores the
+ * platform's own limit.
+ */
+MEGAPDF_API void megapdf_testing_set_max_file_bytes(unsigned long long bytes);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

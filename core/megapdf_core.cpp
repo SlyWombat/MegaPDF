@@ -145,6 +145,10 @@ std::condition_variable_any& ChecksDone() {
 std::atomic<megapdf_page_check_stage_hook> g_page_check_hook{nullptr};
 std::atomic<void*> g_page_check_hook_context{nullptr};
 
+// megapdf_testing_set_max_file_bytes(): the core tests lower the file-backed open's size
+// limit, so the refusal past it runs on every platform without a 4 GiB file (#147). 0 = none.
+std::atomic<unsigned long long> g_testing_max_file_bytes{0};
+
 thread_local unsigned int g_last_error = 0;
 thread_local std::string g_last_message;
 
@@ -294,7 +298,8 @@ bool FileSourceFinish(FileSource* s, unsigned long long length) {
         SetError(FPDF_ERR_FILE, "the file is empty");
         return false;
     }
-    if (length > kMaxFileSourceBytes) {
+    const unsigned long long testing_max = g_testing_max_file_bytes.load();
+    if (length > kMaxFileSourceBytes || (testing_max != 0 && length > testing_max)) {
         FileSourceClose(s);
         SetError(MEGAPDF_OPEN_ERR_TOO_LARGE, "the file is too large to open on this platform");
         return false;
@@ -2345,6 +2350,10 @@ MEGAPDF_API int megapdf_testing_compare_pages(const megapdf_page* was, const meg
 MEGAPDF_API void megapdf_testing_set_page_check_hook(megapdf_page_check_stage_hook hook, void* context) {
     g_page_check_hook_context.store(context);
     g_page_check_hook.store(hook);
+}
+
+MEGAPDF_API void megapdf_testing_set_max_file_bytes(unsigned long long bytes) {
+    g_testing_max_file_bytes.store(bytes);
 }
 
 MEGAPDF_API megapdf_cancel* megapdf_cancel_new(void) {

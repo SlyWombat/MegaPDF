@@ -31,7 +31,15 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <filesystem>
 #include <tuple>
+
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include "megapdf_core.h"
 #include "megapdf_core_testing.h"
@@ -2456,6 +2464,167 @@ void test_subset_font_glyphs() {
 // #132: a protected document saves still protected, and megapdf_open_like() reads the
 // copy back with the credentials the document was opened with. Every platform's save
 // check reopened the copy without them, so every protected save failed.
+// #147/#148: a document opened from its file is read on demand through the handle the core
+// keeps, so the file must stay usable (renamed over, deleted) while it is open, the error
+// paths must say what went wrong, and a descriptor handed over is always closed.
+void test_open_from_file(const std::string& fixtures) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+#if defined(_WIN32)
+    const long long pid = static_cast<long long>(_getpid());
+#else
+    const long long pid = static_cast<long long>(getpid());
+#endif
+    const fs::path dir = fs::temp_directory_path(ec) / ("megapdf-core-open-file-" + std::to_string(pid));
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    check(!ec, "open from file: a scratch folder", ec.message());
+    auto write = [](const fs::path& path, const std::vector<unsigned char>& bytes) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    };
+    auto utf8 = [](const fs::path& path) { return path.u8string(); };
+    const auto plain = read_file(fixtures + "/fixture.pdf");
+    const auto other = read_file(fixtures + "/cropped.pdf");
+    // A non-ASCII name: the core takes UTF-8 on every platform and widens it itself on Windows.
+    const fs::path doc = dir / fs::u8path("document \xC3\xA9.pdf");
+
+    write(doc, plain);
+    megapdf_document* d = megapdf_open_file(utf8(doc).c_str(), nullptr);
+    check(d != nullptr, "open from file: fixture.pdf opens from its file", megapdf_last_error_message());
+    check(megapdf_last_error() == 0, "open from file: a successful open clears the last error");
+    if (d) {
+        check(megapdf_page_count(d) == 2, "open from file: 2 pages");
+        {
+            Page p(d, 0);
+            check(p.page != nullptr && search(p.page, "fixture").size() == 1, "open from file: page 1 loads and searches");
+        }
+
+        // The atomic-replace save swaps another file in under the open document, and a sync
+        // client may delete it: the open document keeps reading the bytes it was opened on.
+        const fs::path staged = dir / "staged.pdf";
+        write(staged, other);
+        fs::rename(staged, doc, ec);
+        check(!ec, "open from file: the file can be replaced while it is open", ec.message());
+        {
+            Page p2(d, 1);
+            check(p2.page != nullptr && !search(p2.page, "Page").empty(),
+                  "open from file: after the replace, the document still reads what it was opened on");
+        }
+        std::vector<unsigned char> saved;
+        check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, "open from file: saves after the replace");
+        megapdf_document* back = megapdf_open(saved.data(), saved.size(), nullptr);
+        check(back != nullptr && megapdf_page_count(back) == 2, "open from file: the save is the original document");
+        megapdf_close(back);
+
+        megapdf_document* replaced = megapdf_open_file(utf8(doc).c_str(), nullptr);
+        check(replaced != nullptr && megapdf_page_count(replaced) == 1, "open from file: reopening reads the replacement");
+        megapdf_close(replaced);
+
+        fs::remove(doc, ec);
+        check(!ec, "open from file: the file can be deleted while it is open", ec.message());
+        {
+            Page p1(d, 0);
+            check(p1.page != nullptr, "open from file: pages still load after the file is deleted");
+        }
+        megapdf_close(d);
+    }
+
+    check(megapdf_open_file(nullptr, nullptr) == nullptr && megapdf_last_error() == 2 /* FPDF_ERR_FILE */,
+          "open from file: no path reports FPDF_ERR_FILE");
+    check(megapdf_open_file("", nullptr) == nullptr && megapdf_last_error() == 2, "open from file: an empty path reports FPDF_ERR_FILE");
+    check(megapdf_open_file(utf8(dir / "missing.pdf").c_str(), nullptr) == nullptr && megapdf_last_error() == 2,
+          "open from file: a missing file reports FPDF_ERR_FILE", std::to_string(megapdf_last_error()));
+    check(megapdf_open_file(utf8(dir).c_str(), nullptr) == nullptr && megapdf_last_error() == 2,
+          "open from file: a folder reports FPDF_ERR_FILE", std::to_string(megapdf_last_error()));
+    const fs::path empty = dir / "empty.pdf";
+    write(empty, {});
+    check(megapdf_open_file(utf8(empty).c_str(), nullptr) == nullptr && megapdf_last_error() == 2,
+          "open from file: an empty file reports FPDF_ERR_FILE", std::to_string(megapdf_last_error()));
+    const fs::path junk = dir / "junk.pdf";
+    const std::string junk_text = "this is not a pdf at all";
+    write(junk, std::vector<unsigned char>(junk_text.begin(), junk_text.end()));
+    check(megapdf_open_file(utf8(junk).c_str(), nullptr) == nullptr && megapdf_last_error() == 3 /* FPDF_ERR_FORMAT */,
+          "open from file: junk reports FPDF_ERR_FORMAT", std::to_string(megapdf_last_error()));
+
+    // Past the size limit (4 GiB, and Windows only, in real life) the open is refused with its own code.
+    const fs::path limited = dir / "limited.pdf";
+    write(limited, plain);
+    megapdf_testing_set_max_file_bytes(plain.size() - 1);
+    check(megapdf_open_file(utf8(limited).c_str(), nullptr) == nullptr && megapdf_last_error() == MEGAPDF_OPEN_ERR_TOO_LARGE,
+          "open from file: past the size limit reports MEGAPDF_OPEN_ERR_TOO_LARGE", std::to_string(megapdf_last_error()));
+    megapdf_testing_set_max_file_bytes(plain.size());
+    megapdf_document* at_limit = megapdf_open_file(utf8(limited).c_str(), nullptr);
+    check(at_limit != nullptr, "open from file: a file exactly at the limit opens");
+    megapdf_close(at_limit);
+    megapdf_testing_set_max_file_bytes(0);
+
+    // Credentials carry over to a file-backed reopen (#132): the saved copy is still protected.
+    const auto locked_bytes = read_file(fixtures + "/encrypted.pdf");
+    const char* unlock = "u123";   // tools/gen_test_fixtures.py
+    const fs::path locked = dir / "locked.pdf";
+    write(locked, locked_bytes);
+    check(megapdf_open_file(utf8(locked).c_str(), nullptr) == nullptr && megapdf_last_error() == 4 /* FPDF_ERR_PASSWORD */,
+          "open from file: encrypted.pdf asks to be unlocked");
+    megapdf_document* e = megapdf_open_file(utf8(locked).c_str(), unlock);
+    check(e != nullptr, "open from file: encrypted.pdf opens once unlocked");
+    if (e) {
+        std::vector<unsigned char> saved;
+        check(megapdf_save(e, collect, &saved) == MEGAPDF_OK, "open from file: the unlocked document saves");
+        const fs::path copy = dir / "locked-copy.pdf";
+        write(copy, saved);
+        check(megapdf_open_file(utf8(copy).c_str(), nullptr) == nullptr, "open from file: the saved copy is still protected");
+        megapdf_document* again = megapdf_open_file_like(e, utf8(copy).c_str());
+        check(again != nullptr && megapdf_page_count(again) == megapdf_page_count(e),
+              "open from file: megapdf_open_file_like reads the saved copy back", std::to_string(megapdf_last_error()));
+        megapdf_close(again);
+        megapdf_close(e);
+    }
+    check(megapdf_open_file_like(nullptr, utf8(limited).c_str()) == nullptr, "open from file: no document to open like returns NULL");
+
+#if defined(_WIN32)
+    check(megapdf_open_fd(0, nullptr) == nullptr && megapdf_last_error() == 2, "open from fd: not supported on Windows");
+#else
+    int fd = ::open(utf8(limited).c_str(), O_RDONLY);
+    megapdf_document* f = megapdf_open_fd(fd, nullptr);
+    check(f != nullptr && megapdf_page_count(f) == 2, "open from fd: fixture.pdf opens from a descriptor", megapdf_last_error_message());
+    if (f) {
+        Page p(f, 0);
+        check(p.page != nullptr && search(p.page, "fixture").size() == 1, "open from fd: page 1 loads and searches");
+    }
+    megapdf_close(f);
+    check(::fcntl(fd, F_GETFD) == -1, "open from fd: closing the document closes the descriptor");
+
+    fd = ::open(utf8(junk).c_str(), O_RDONLY);
+    check(megapdf_open_fd(fd, nullptr) == nullptr && megapdf_last_error() == 3, "open from fd: junk reports FPDF_ERR_FORMAT");
+    check(::fcntl(fd, F_GETFD) == -1, "open from fd: a failed open still closes the descriptor");
+
+    fd = ::open(utf8(empty).c_str(), O_RDONLY);
+    check(megapdf_open_fd(fd, nullptr) == nullptr && megapdf_last_error() == 2, "open from fd: an empty file reports FPDF_ERR_FILE");
+    check(::fcntl(fd, F_GETFD) == -1, "open from fd: an empty file's descriptor is closed");
+
+    fd = ::open(utf8(dir).c_str(), O_RDONLY);
+    check(megapdf_open_fd(fd, nullptr) == nullptr && megapdf_last_error() == 2, "open from fd: a folder reports FPDF_ERR_FILE");
+    check(::fcntl(fd, F_GETFD) == -1, "open from fd: a folder's descriptor is closed");
+
+    check(megapdf_open_fd(-1, nullptr) == nullptr && megapdf_last_error() == 2, "open from fd: -1 reports FPDF_ERR_FILE");
+
+    fd = ::open(utf8(limited).c_str(), O_RDONLY);
+    check(megapdf_open_fd_like(nullptr, fd) == nullptr, "open from fd: no document to open like returns NULL");
+    check(::fcntl(fd, F_GETFD) == -1, "open from fd: open_fd_like without a document still closes the descriptor");
+
+    megapdf_document* e2 = megapdf_open_file(utf8(locked).c_str(), unlock);
+    fd = ::open(utf8(locked).c_str(), O_RDONLY);
+    megapdf_document* e3 = e2 ? megapdf_open_fd_like(e2, fd) : nullptr;
+    check(e3 != nullptr, "open from fd: megapdf_open_fd_like unlocks with the document's credentials", std::to_string(megapdf_last_error()));
+    if (e2 == nullptr) ::close(fd);
+    megapdf_close(e3);
+    megapdf_close(e2);
+#endif
+
+    fs::remove_all(dir, ec);
+}
+
 void test_protected_save(const std::string& fixtures) {
     const auto bytes = read_file(fixtures + "/encrypted.pdf");
     check(megapdf_open(bytes.data(), bytes.size(), nullptr) == nullptr, "encrypted.pdf does not open without unlocking");
@@ -3872,6 +4041,7 @@ int main(int argc, char** argv) {
     test_open_failures(argv[1]);
     test_document_and_geometry(argv[1]);
     test_lifecycle(argv[1]);
+    test_open_from_file(argv[1]);
     test_fixture_square(argv[1]);
     test_search(argv[1]);
     test_schematic(argv[2]);
