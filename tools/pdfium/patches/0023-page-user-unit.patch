@@ -1,0 +1,53 @@
+--- a/public/fpdf_transformpage.h
++++ b/public/fpdf_transformpage.h
+@@ -111,6 +111,19 @@
+                                                         float* right,
+                                                         float* top);
+ 
++// Experimental API (MegaPDF patch series).
++// Get the "UserUnit" entry from the page dictionary: the size of one default
++// user space unit, in multiples of 1/72 inch (PDF 1.6).
++//
++// page - Handle to a page.
++//
++// Returns the page's UserUnit when it is a positive, finite number, and 1.0
++// otherwise: when |page| is NULL, the entry is missing, or it holds anything
++// else. The entry is read from the page dictionary only, as the specification
++// does not make it inheritable. Page sizes, bounds and coordinates PDFium
++// reports stay in user space units; multiply by this to get points.
++FPDF_EXPORT float FPDF_CALLCONV FPDFPage_GetUserUnit(FPDF_PAGE page);
++
+ // Get "BleedBox" entry from the page dictionary.
+ //
+ // page   - Handle to a page.
+--- a/fpdfsdk/fpdf_transformpage.cpp
++++ b/fpdfsdk/fpdf_transformpage.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include "public/fpdf_transformpage.h"
+ 
++#include <cmath>
+ #include <memory>
+ #include <sstream>
+ 
+@@ -174,6 +175,20 @@
+                         top);
+ }
+ 
++FPDF_EXPORT float FPDF_CALLCONV FPDFPage_GetUserUnit(FPDF_PAGE page) {
++  const CPDF_Page* pPage = CPDFPageFromFPDFPage(page);
++  if (!pPage) {
++    return 1.0f;
++  }
++  RetainPtr<const CPDF_Number> unit =
++      ToNumber(pPage->GetDict()->GetDirectObjectFor("UserUnit"));
++  if (!unit) {
++    return 1.0f;
++  }
++  const float value = unit->GetNumber();
++  return std::isfinite(value) && value > 0.0f ? value : 1.0f;
++}
++
+ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFPage_GetBleedBox(FPDF_PAGE page,
+                                                          float* left,
+                                                          float* bottom,
