@@ -1384,6 +1384,43 @@ ScratchShot RenderScratchPage(FPDF_PAGE page, const std::function<bool()>* go_on
     return shot;
 }
 
+// Takes every image off `obj`'s form and the forms inside it; with `page`, off the page.
+void RemoveImages(FPDF_PAGE page, FPDF_PAGEOBJECT form) {
+    const int count = page != nullptr ? FPDFPage_CountObjects(page) : FPDFFormObj_CountObjects(form);
+    for (int i = count - 1; i >= 0; i--) {
+        FPDF_PAGEOBJECT obj = page != nullptr ? FPDFPage_GetObject(page, i) : FPDFFormObj_GetObject(form, static_cast<unsigned long>(i));
+        if (obj == nullptr) continue;
+        const int type = FPDFPageObj_GetType(obj);
+        if (type == FPDF_PAGEOBJ_FORM) {
+            RemoveImages(nullptr, obj);
+        } else if (type == FPDF_PAGEOBJ_IMAGE &&
+                   (page != nullptr ? FPDFPage_RemoveObject(page, obj) : FPDFFormObj_RemoveObject(form, obj))) {
+            FPDFPageObj_Destroy(obj);
+        }
+    }
+}
+
+// Resolves the fonts of the document's page `page_index` the way rendering it would (#128),
+// without decoding its images (#151). PDFium resolves a non-embedded font against a
+// process-wide face cache, so rendering the page's text once, in any document, is what makes
+// every later document get the same face. The images play no part in that and are the slow
+// part of a render: a 20,000 x 15,000 px Flate image is inflated whole, at any scale, over a
+// second each time. So the page is copied into a throwaway document, its images taken off,
+// and that copy rendered; nothing of it is ever saved. `go_on` and `stopped` as
+// RenderScratchPage's.
+void WarmFontsUnlocked(FPDF_DOCUMENT doc, int page_index, const std::function<bool()>* go_on, bool* stopped) {
+    FPDF_DOCUMENT warm = FPDF_CreateNewDocument();
+    if (warm == nullptr) return;
+    const int indices[1] = {page_index};
+    FPDF_PAGE page = FPDF_ImportPagesByIndex(warm, doc, indices, 1, 0) ? FPDF_LoadPage(warm, 0) : nullptr;
+    if (page != nullptr) {
+        RemoveImages(page, nullptr);
+        RenderScratchPage(page, go_on, stopped);
+        FPDF_ClosePage(page);
+    }
+    FPDF_CloseDocument(warm);
+}
+
 struct ScratchRun {
     float left, bottom, right, top;
     U16 text;
@@ -1791,9 +1828,9 @@ megapdf_layout_verdict DryRunUnlocked(megapdf_document* d, int page_index, const
             // straight from memory therefore compared a cold lookup with the reopened
             // document's warm one, and refused edits that changed nothing. Resolve the
             // page's fonts here first, then judge a reopened copy of the page as it was
-            // against a reopened copy of the rewrite.
+            // against a reopened copy of the rewrite. (Without its images, #151.)
             bool stopped = false;
-            RenderScratchPage(page, between != nullptr ? &go_on : nullptr, &stopped);
+            WarmFontsUnlocked(d->doc, page_index, between != nullptr ? &go_on : nullptr, &stopped);
             if (stopped || !go_on()) {
                 FPDF_ClosePage(page);
                 FPDF_CloseDocument(scratch);
