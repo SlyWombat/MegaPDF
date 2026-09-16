@@ -16,8 +16,9 @@
 //   * Buffers are caller-owned, count-then-fill: a call with capacity 0 returns
 //     how much is needed, a call with a buffer fills up to its capacity and
 //     returns the total. That keeps JNI and P/Invoke marshalling boring.
-//   * Coordinates are crop space — bottom-left origin, PDF points, the CropBox
-//     origin already subtracted. Getting that wrong is #30, so it happens once.
+//   * Coordinates are crop space — bottom-left origin, the CropBox origin already
+//     subtracted, in points: user space units times the page's /UserUnit (#150).
+//     Getting that wrong is #30, so it happens once.
 //   * Thread safety: every call takes the core's own mutex, because PDFium is not
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
@@ -133,12 +134,19 @@ MEGAPDF_API int megapdf_page_count(const megapdf_document* document);
 MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* document, int index);
 MEGAPDF_API void megapdf_close_page(megapdf_page* page);
 
-/** Page size in points — the CropBox size, which is what a viewer shows. */
+/** Page size in points — the CropBox size, which is what a viewer shows, times the page's /UserUnit. */
 MEGAPDF_API double megapdf_page_width(const megapdf_page* page);
 MEGAPDF_API double megapdf_page_height(const megapdf_page* page);
 
 /** The CropBox origin in PDF user space that every returned coordinate has had subtracted. */
 MEGAPDF_API void megapdf_page_crop_origin(const megapdf_page* page, double* out_x, double* out_y);
+/**
+ * The page's /UserUnit (#150): how many points one user space unit is, 1.0 for almost every
+ * page. Crop space is already scaled by it: page sizes, bounds, font sizes and every
+ * coordinate the core returns or takes are points, so a 10 m banner drawn in 2-point units
+ * measures 10 m. 1.0 for a NULL page. Needs MegaPDF's PDFium patch 0023.
+ */
+MEGAPDF_API double megapdf_page_user_unit(const megapdf_page* page);
 
 /* --------------------------------------------------------------------------
  * Contracts (SDD §6.2)

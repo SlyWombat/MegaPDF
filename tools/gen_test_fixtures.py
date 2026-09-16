@@ -19,6 +19,12 @@ Writes:
 
   cropped.pdf - CropBox [0 100 612 700] on a 612x792 MediaBox (#28/#30): the
                 offset that makes user-space and rendered coordinates disagree.
+  userunit.pdf - /UserUnit 2 with a CropBox offset (#150): cropped.pdf drawn in
+                2-point units, so every size and coordinate the core reports is
+                twice the user space value. Page 612x600 pt; "Hello MegaPDF" at
+                36 pt with its baseline at 550 pt in crop space; a stroked 10x10 pt
+                square at (100,400)-(110,410); a text field "fullname" at
+                (100,300)-(300,320); a 2x2 px image placed 100x50 pt at (300,100).
   textbox.pdf - a MegaPDFTextBox-marked text object with an id property (#34),
                 so every platform can prove it reads boxes written elsewhere.
   doubled.pdf - lines drawn twice (fake bold, fill + stroke, shadow, a two-run
@@ -352,6 +358,41 @@ def gen_cropped():
     return build(objs)
 
 
+def gen_userunit():
+    """cropped.pdf in 2-point units: /UserUnit 2 on a 306x396 MediaBox (#150).
+
+    PDFium reports user space units; a viewer that ignores /UserUnit shows the page
+    at half size and puts taps, marks and text at half their distance from the corner.
+    CropBox [0 50 306 350] keeps the #28 offset in play: crop space is (user - crop
+    origin) x 2. The square is 5x5 units (10 pt), under the 6 pt a checkbox needs
+    unless the unit is applied.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    image = add(stream(b"/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB "
+                       b"/BitsPerComponent 8", b"\xff\x00\x00\x00\xff\x00\x00\x00\xff\xff\xff\x00"))
+    content = add(stream(b"", b"BT /F1 18 Tf 36 325 Td (Hello MegaPDF) Tj ET\n"
+                               b"0.5 w 0.13 0.13 0.13 RG 50 250 5 5 re S\n"
+                               b"q 50 0 0 25 150 100 cm /Im1 Do Q\n"))
+    ap = add(stream(b"/Type /XObject /Subtype /Form /BBox [0 0 100 10]",
+                    b"0.45 0.5 0.6 RG 0.5 w 0.25 0.25 99.5 9.5 re S\n"))
+    pages_num = len(objs) + 3
+    widget = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 306 396] "
+               b"/CropBox [0 50 306 350] /UserUnit 2 "
+               b"/Resources << /Font << /F1 %d 0 R >> /XObject << /Im1 %d 0 R >> >> /Contents %d 0 R /Annots [%d 0 R] >>"
+               % (pages_num, font, image, content, widget))
+    w = add(b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /DA (/Helv 6 Tf 0 g) "
+            b"/Rect [50 200 150 210] /F 4 /P %d 0 R /AP << /N %d 0 R >> >>" % (page, ap))
+    assert w == widget
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R] "
+        b"/DR << /Font << /Helv %d 0 R >> >> /DA (/Helv 0 Tf 0 g) >> >>" % (pages, widget, font))
+    return build(objs)
+
+
 def gen_doubled():
     """Lines drawn twice, the way producers fake bold, outlines and shadows (#136).
 
@@ -608,7 +649,8 @@ def main():
                        ("demo-blank.pdf", gen_demo(filled=False)),
                        ("demo-fr-blank.pdf", gen_demo("fr", filled=False)),
                        ("formtext.pdf", gen_formtext()),
-                              ("cropped.pdf", gen_cropped()),
+                       ("cropped.pdf", gen_cropped()),
+                       ("userunit.pdf", gen_userunit()),
                        ("textbox.pdf", gen_textbox()),
                        ("doubled.pdf", gen_doubled()),
                        ("doubled-far.pdf", gen_doubled_far()),

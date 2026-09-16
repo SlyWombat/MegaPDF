@@ -111,6 +111,19 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFPage_GetCropBox(FPDF_PAGE page,
                                                         float* right,
                                                         float* top);
 
+// Experimental API (MegaPDF patch series).
+// Get the "UserUnit" entry from the page dictionary: the size of one default
+// user space unit, in multiples of 1/72 inch (PDF 1.6).
+//
+// page - Handle to a page.
+//
+// Returns the page's UserUnit when it is a positive, finite number, and 1.0
+// otherwise: when |page| is NULL, the entry is missing, or it holds anything
+// else. The entry is read from the page dictionary only, as the specification
+// does not make it inheritable. Page sizes, bounds and coordinates PDFium
+// reports stay in user space units; multiply by this to get points.
+FPDF_EXPORT float FPDF_CALLCONV FPDFPage_GetUserUnit(FPDF_PAGE page);
+
 // Get "BleedBox" entry from the page dictionary.
 //
 // page   - Handle to a page.

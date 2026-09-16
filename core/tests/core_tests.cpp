@@ -3656,6 +3656,140 @@ void test_page_check_cancel_and_concurrency() {
     }
 }
 
+// #150: /UserUnit. userunit.pdf is cropped.pdf drawn in 2-point units (MediaBox [0 0 306 396],
+// CropBox [0 50 306 350], /UserUnit 2), so every coordinate and size crossing the ABI is in
+// points: (user - crop origin) x 2 out, the inverse in. Needs PDFium patch 0023.
+void test_user_unit(const std::string& fixtures) {
+    check(megapdf_page_user_unit(nullptr) == 1.0, "a null page has a user unit of 1");
+    {
+        Doc c(fixtures + "/cropped.pdf");
+        Page cp(c.doc, 0);
+        check(cp.page != nullptr && megapdf_page_user_unit(cp.page) == 1.0, "a page without /UserUnit has 1");
+    }
+    Doc d(fixtures + "/userunit.pdf");
+    if (!d.doc) { check(false, "userunit.pdf opens"); return; }
+    Page p(d.doc, 0);
+    if (!p.page) { check(false, "userunit.pdf page loads"); return; }
+    check(close_to(megapdf_page_user_unit(p.page), 2.0, 1e-9), "userunit.pdf has /UserUnit 2",
+          std::to_string(megapdf_page_user_unit(p.page)));
+    check(close_to(megapdf_page_width(p.page), 612) && close_to(megapdf_page_height(p.page), 600),
+          "userunit.pdf measures 612 x 600 pt, not its 306 x 300 units",
+          std::to_string(megapdf_page_width(p.page)) + "x" + std::to_string(megapdf_page_height(p.page)));
+    double ox = -1, oy = -1;
+    megapdf_page_crop_origin(p.page, &ox, &oy);
+    check(close_to(ox, 0) && close_to(oy, 50), "the crop origin stays in user space (0,50)",
+          std::to_string(ox) + "," + std::to_string(oy));
+
+    // Drawn squares: 5.5 units with the stroke is 11 pt, a checkbox only in points.
+    auto sq = squares(p.page);
+    check(sq.size() == 1 && rect_close(sq[0], megapdf_rect{100, 400, 110, 410}, 1.0),
+          "the 10 pt square is found at (100,400)-(110,410)", sq.empty() ? "none" : rect_str(sq[0]));
+
+    // Search and text runs.
+    auto hits = search(p.page, "megapdf");
+    check(hits.size() == 1 && !hits[0].rects.empty() && hits[0].rects[0].bottom > 530 && hits[0].rects[0].bottom < 560 &&
+              hits[0].rects[0].left > 150 && hits[0].rects[0].right < 340,
+          "a search hit is in points (bottom near the 550 pt baseline)",
+          hits.empty() || hits[0].rects.empty() ? "none" : rect_str(hits[0].rects[0]));
+    megapdf_text* t = megapdf_text_load(p.page, MEGAPDF_TEXT_ALL);
+    megapdf_text_run run{};
+    check(megapdf_text_run_count(t) == 1 && megapdf_text_run_get(t, 0, &run) == MEGAPDF_OK && close_to(run.font_size, 36, 0.01) &&
+              run.bounds.bottom < 550 && run.bounds.top > 570 && close_to(run.bounds.left, 72, 4.0),
+          "the text run is 36 pt at x = 72 pt", std::to_string(run.font_size) + " " + rect_str(run.bounds));
+    megapdf_text_free(t);
+
+    // Form fields: bounds out, a tap in.
+    megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+    megapdf_form_field field{};
+    check(megapdf_form_field_count(f) == 1 && megapdf_form_field_get(f, 0, &field) == MEGAPDF_OK &&
+              rect_close(field.bounds, megapdf_rect{100, 300, 300, 320}, 0.01),
+          "the field is at (100,300)-(300,320) pt", rect_str(field.bounds));
+    megapdf_form_fields_free(f);
+    auto value = utf16("Ada Lovelace");
+    megapdf_form_set_text(p.page, 200, 310, value.data());
+    f = megapdf_form_fields_load(p.page);
+    check(show(field_string(f, 0, MEGAPDF_FIELD_VALUE)) == "Ada Lovelace", "a tap at the field's centre in points fills it",
+          show(field_string(f, 0, MEGAPDF_FIELD_VALUE)));
+    megapdf_form_fields_free(f);
+
+    // Stamps land where the UI asked, with the mark's stroke in points.
+    const megapdf_rect square{200, 200, 220, 220};
+    auto mark_id = utf16("mark:uu");
+    check(megapdf_add_check_mark(p.page, &square, MEGAPDF_MARK_CROSS, mark_id.data()) == MEGAPDF_OK, "a mark goes on");
+    const megapdf_rect sig{300, 100, 400, 150};
+    std::vector<unsigned char> bgra(4 * 4 * 4, 0x80);
+    auto sig_id = utf16("sig:uu");
+    check(megapdf_add_image_stamp(p.page, bgra.data(), 4, 4, &sig, sig_id.data()) == MEGAPDF_OK, "a signature goes on");
+    auto list = stamps_of(p.page);
+    check(list.ids.size() == 2 && rect_close(list.stamps[0].bounds, megapdf_rect{202, 202, 218, 218}, 0.05) &&
+              rect_close(list.stamps[1].bounds, sig, 0.05),
+          "the mark and the signature read back where they were placed, in points",
+          list.ids.size() == 2 ? rect_str(list.stamps[0].bounds) + " / " + rect_str(list.stamps[1].bounds) : "count");
+    const megapdf_rect moved{350, 200, 450, 250};
+    check(megapdf_move_image_stamp(p.page, sig_id.data(), &moved) == MEGAPDF_OK, "the signature moves");
+    list = stamps_of(p.page);
+    check(list.ids.size() == 2 && rect_close(list.stamps[1].bounds, moved, 0.05), "the moved signature is where it was dropped",
+          list.ids.size() == 2 ? rect_str(list.stamps[1].bounds) : "count");
+
+    // Whiteouts, text boxes and a recreated run: positions and font sizes in points.
+    const megapdf_rect cover{10, 10, 50, 30};
+    int wo = -1;
+    check(megapdf_add_whiteout(p.page, &cover, &wo) == MEGAPDF_OK, "a whiteout goes on");
+    auto covers = whiteouts_of(p.page);
+    check(covers.size() == 1 && rect_close(covers[0].bounds, cover, 0.05), "the whiteout reads back in points",
+          covers.empty() ? "none" : rect_str(covers[0].bounds));
+    megapdf_rect wb{};
+    check(megapdf_object_bounds(p.page, wo, &wb) == MEGAPDF_OK && rect_close(wb, cover, 0.05), "object bounds are in points", rect_str(wb));
+
+    auto text = utf16("Unit"), box_id = utf16("text:uu");
+    int index = -1;
+    check(megapdf_add_text_box(p.page, -1, text.data(), "Courier", 10, 40, 60, box_id.data(), &index) == MEGAPDF_OK, "a text box goes on");
+    auto boxes = boxes_of(p.page);
+    check(boxes.size() == 1 && close_to(boxes[0].size, 10, 0.01) && close_to(boxes[0].bounds.left, 40, 1.0) &&
+              boxes[0].bounds.bottom < 60 && boxes[0].bounds.top > 60 && boxes[0].bounds.top - boxes[0].bounds.bottom < 14,
+          "a 10 pt text box reads back 10 pt tall at its baseline", boxes.empty() ? "none" : std::to_string(boxes[0].size) + " " + rect_str(boxes[0].bounds));
+    check(megapdf_move_text_box(p.page, index, 80, 90) == MEGAPDF_OK, "the text box moves");
+    boxes = boxes_of(p.page);
+    check(boxes.size() == 1 && close_to(boxes[0].bounds.left, 80, 0.05) && close_to(boxes[0].bounds.bottom, 90, 0.05),
+          "the moved text box's corner is where it was dropped", boxes.empty() ? "none" : rect_str(boxes[0].bounds));
+    auto run_text = utf16("Recreated");
+    const int objects = FPDFPage_CountObjects_via_bounds_probe(p.page);
+    check(megapdf_insert_text_run(p.page, objects, run_text.data(), "Helvetica", 12, 40, 500) == MEGAPDF_OK, "a run is recreated");
+    megapdf_rect rb{};
+    megapdf_object_bounds(p.page, objects, &rb);
+    check(close_to(rb.left, 40, 2.0) && rb.bottom < 500 && rb.top > 505 && rb.top - rb.bottom < 16,
+          "the recreated 12 pt run stands at its baseline in points", rect_str(rb));
+
+    // Images: shrink sizes its target from the placed size in points.
+    megapdf_images* images = megapdf_images_load(d.doc);
+    megapdf_image_info info{};
+    check(megapdf_image_count(images) == 1 && megapdf_image_get(images, 0, &info) == MEGAPDF_OK &&
+              close_to(info.display_width, 100, 0.01) && close_to(info.display_height, 50, 0.01),
+          "the image is placed 100 x 50 pt", std::to_string(info.display_width) + "x" + std::to_string(info.display_height));
+    megapdf_images_free(images);
+
+    // The layout guard's budgets are points: an untouched rewrite keeps the page.
+    megapdf_layout_verdict page_verdict{};
+    check(megapdf_page_regeneration_verdict(p.page, &page_verdict) == 1, "the page keeps its look when regenerated",
+          std::to_string(page_verdict.cause));
+
+    // A save keeps the unit, and everything stays where it was put.
+    std::vector<unsigned char> out;
+    check(megapdf_save(d.doc, collect, &out) == MEGAPDF_OK, "userunit.pdf saves");
+    keep_saved("userunit", out);
+    megapdf_document* again = megapdf_open(out.data(), out.size(), nullptr);
+    megapdf_page* ap = again ? megapdf_load_page(again, 0) : nullptr;
+    check(ap != nullptr && close_to(megapdf_page_user_unit(ap), 2.0, 1e-9) && close_to(megapdf_page_width(ap), 612),
+          "the saved copy keeps /UserUnit 2");
+    if (ap != nullptr) {
+        auto reboxes = boxes_of(ap);
+        check(reboxes.size() == 1 && close_to(reboxes[0].bounds.left, 80, 0.05) && close_to(reboxes[0].bounds.bottom, 90, 0.05),
+              "the text box is where it was left after a reopen", reboxes.empty() ? "none" : rect_str(reboxes[0].bounds));
+        megapdf_close_page(ap);
+    }
+    megapdf_close(again);
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -3692,6 +3826,7 @@ int main(int argc, char** argv) {
     test_layout_verdicts();
     test_page_regeneration_verdict();
     test_page_check_cancel_and_concurrency();
+    test_user_unit(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

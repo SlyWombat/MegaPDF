@@ -91,6 +91,7 @@ struct megapdf_page {
     int index = -1;
     double crop_x = 0.0;
     double crop_y = 0.0;
+    double unit = 1.0;   // the page's /UserUnit: points per user space unit (#150)
 };
 
 namespace {
@@ -186,6 +187,17 @@ void ReadCropOrigin(FPDF_PAGE page, double* x, double* y) {
         *x = 0.0;
         *y = 0.0;
     }
+}
+
+// Crop space is points: user space, less the CropBox origin, times the page's /UserUnit
+// (#150). Most pages have none, and the factor is 1. Every coordinate and length that
+// leaves the core goes through Out*, and every one that comes in through In*.
+double OutX(const megapdf_page* p, double x) { return (x - p->crop_x) * p->unit; }
+double OutY(const megapdf_page* p, double y) { return (y - p->crop_y) * p->unit; }
+double InX(const megapdf_page* p, double x) { return x / p->unit + p->crop_x; }
+double InY(const megapdf_page* p, double y) { return y / p->unit + p->crop_y; }
+megapdf_rect OutRect(const megapdf_page* p, double l, double b, double r, double t) {
+    return megapdf_rect{OutX(p, l), OutY(p, b), OutX(p, r), OutY(p, t)};
 }
 
 void ClosePageUnlocked(megapdf_page* p) {
@@ -334,6 +346,7 @@ MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* d, int index) {
     p->page = page;
     p->index = index;
     ReadCropOrigin(page, &p->crop_x, &p->crop_y);
+    p->unit = static_cast<double>(FPDFPage_GetUserUnit(page));
     d->open_pages.push_back(p);
     return p;
 }
@@ -357,18 +370,22 @@ MEGAPDF_API void megapdf_close_page(megapdf_page* p) {
 MEGAPDF_API double megapdf_page_width(const megapdf_page* p) {
     if (p == nullptr) return 0.0;
     Guard guard(CoreLock());
-    return static_cast<double>(FPDF_GetPageWidthF(p->page));
+    return static_cast<double>(FPDF_GetPageWidthF(p->page)) * p->unit;
 }
 
 MEGAPDF_API double megapdf_page_height(const megapdf_page* p) {
     if (p == nullptr) return 0.0;
     Guard guard(CoreLock());
-    return static_cast<double>(FPDF_GetPageHeightF(p->page));
+    return static_cast<double>(FPDF_GetPageHeightF(p->page)) * p->unit;
 }
 
 MEGAPDF_API void megapdf_page_crop_origin(const megapdf_page* p, double* out_x, double* out_y) {
     if (out_x != nullptr) *out_x = p ? p->crop_x : 0.0;
     if (out_y != nullptr) *out_y = p ? p->crop_y : 0.0;
+}
+
+MEGAPDF_API double megapdf_page_user_unit(const megapdf_page* p) {
+    return p ? p->unit : 1.0;
 }
 
 // --------------------------------------------------------------------------
@@ -387,7 +404,7 @@ MEGAPDF_API size_t megapdf_detect_checkbox_squares(const megapdf_page* p, megapd
 
         float l = 0, b = 0, r = 0, t = 0;
         if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
-        const float w = r - l, h = t - b;
+        const float w = (r - l) * static_cast<float>(p->unit), h = (t - b) * static_cast<float>(p->unit);
         // Small, roughly square (bounds include stroke width, so allow slack).
         if (w < 6 || w > 24 || h < 6 || h > 24) continue;
         const float larger = w > h ? w : h;
@@ -401,12 +418,7 @@ MEGAPDF_API size_t megapdf_detect_checkbox_squares(const megapdf_page* p, megapd
         if (!FPDFPath_GetDrawMode(obj, &fillmode, &stroke)) continue;
         if (!stroke || fillmode != FPDF_FILLMODE_NONE) continue;
 
-        if (found < capacity && out != nullptr) {
-            out[found].left = static_cast<double>(l) - p->crop_x;
-            out[found].bottom = static_cast<double>(b) - p->crop_y;
-            out[found].right = static_cast<double>(r) - p->crop_x;
-            out[found].top = static_cast<double>(t) - p->crop_y;
-        }
+        if (found < capacity && out != nullptr) out[found] = OutRect(p, l, b, r, t);
         found++;
     }
     return found;
@@ -442,10 +454,10 @@ MEGAPDF_API size_t megapdf_search_page(const megapdf_page* p, const unsigned sho
             for (int i = 0; i < rects; i++) {
                 double l = 0, t = 0, r = 0, b = 0;
                 if (!FPDFText_GetRect(text, i, &l, &t, &r, &b)) continue;
-                match.push_back(l - p->crop_x);
-                match.push_back(b - p->crop_y);
-                match.push_back(r - p->crop_x);
-                match.push_back(t - p->crop_y);
+                match.push_back(OutX(p, l));
+                match.push_back(OutY(p, b));
+                match.push_back(OutX(p, r));
+                match.push_back(OutY(p, t));
             }
             if (match.empty()) continue;
             emit(static_cast<double>(match.size() / 4));
@@ -757,13 +769,10 @@ MEGAPDF_API megapdf_text* megapdf_text_load(const megapdf_page* p, unsigned int 
 
             TextRun run;
             run.info.object_index = i;
-            run.info.bounds.left = static_cast<double>(l) - p->crop_x;
-            run.info.bounds.bottom = static_cast<double>(b) - p->crop_y;
-            run.info.bounds.right = static_cast<double>(r) - p->crop_x;
-            run.info.bounds.top = static_cast<double>(tp) - p->crop_y;
+            run.info.bounds = OutRect(p, l, b, r, tp);
             float size = 0;
             FPDFTextObj_GetFontSize(obj, &size);
-            run.info.font_size = static_cast<double>(size);
+            run.info.font_size = static_cast<double>(size) * p->unit;
             run.info.is_text_box = is_box ? 1 : 0;
             run.text = text;
             run.font = ReadFontFamily(obj);
@@ -905,10 +914,7 @@ MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* p)
                 if (FPDFAnnot_GetRect(annot, &r)) {
                     FormField field;
                     field.info.kind = KindOf(FPDFAnnot_GetFormFieldType(form, annot));
-                    field.info.bounds.left = static_cast<double>(r.left) - p->crop_x;
-                    field.info.bounds.bottom = static_cast<double>(r.bottom) - p->crop_y;
-                    field.info.bounds.right = static_cast<double>(r.right) - p->crop_x;
-                    field.info.bounds.top = static_cast<double>(r.top) - p->crop_y;
+                    field.info.bounds = OutRect(p, r.left, r.bottom, r.right, r.top);
                     field.info.is_checked =
                         (field.info.kind == MEGAPDF_FIELD_CHECKBOX || field.info.kind == MEGAPDF_FIELD_RADIO) &&
                         FPDFAnnot_IsChecked(form, annot) ? 1 : 0;
@@ -958,8 +964,8 @@ MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
     if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
     FPDF_FORMHANDLE form = p->owner->form;
-    FORM_OnLButtonDown(form, p->page, 0, x + p->crop_x, y + p->crop_y);
-    FORM_OnLButtonUp(form, p->page, 0, x + p->crop_x, y + p->crop_y);
+    FORM_OnLButtonDown(form, p->page, 0, InX(p, x), InY(p, y));
+    FORM_OnLButtonUp(form, p->page, 0, InX(p, x), InY(p, y));
     FORM_ForceToKillFocus(form);
     return MEGAPDF_OK;
 }
@@ -968,8 +974,8 @@ MEGAPDF_API int megapdf_form_set_text(const megapdf_page* p, double x, double y,
     if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr || value_utf16 == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
     FPDF_FORMHANDLE form = p->owner->form;
-    FORM_OnLButtonDown(form, p->page, 0, x + p->crop_x, y + p->crop_y);
-    FORM_OnLButtonUp(form, p->page, 0, x + p->crop_x, y + p->crop_y);
+    FORM_OnLButtonDown(form, p->page, 0, InX(p, x), InY(p, y));
+    FORM_OnLButtonUp(form, p->page, 0, InX(p, x), InY(p, y));
     FORM_SelectAllText(form, p->page);
     FORM_ReplaceSelection(form, p->page, reinterpret_cast<FPDF_WIDESTRING>(value_utf16));
     FORM_ForceToKillFocus(form);
@@ -1096,10 +1102,10 @@ megapdf_image* LoadStampImageUnlocked(const megapdf_page* p, int annot_index) {
 
 int AddImageStampUnlocked(const megapdf_page* p, const unsigned char* bgra, int width, int height,
                           const megapdf_rect* bounds, const unsigned short* id) {
-    const float left = static_cast<float>(bounds->left + p->crop_x);
-    const float right = static_cast<float>(bounds->right + p->crop_x);
-    const float bottom = static_cast<float>(bounds->bottom + p->crop_y);
-    const float top = static_cast<float>(bounds->top + p->crop_y);
+    const float left = static_cast<float>(InX(p, bounds->left));
+    const float right = static_cast<float>(InX(p, bounds->right));
+    const float bottom = static_cast<float>(InY(p, bounds->bottom));
+    const float top = static_cast<float>(InY(p, bounds->top));
 
     FPDF_BITMAP bmp = FPDFBitmap_Create(width, height, /*alpha=*/1);
     if (bmp == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the stamp bitmap"); return MEGAPDF_ERR_PDFIUM; }
@@ -1151,10 +1157,10 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* p, const megapdf_rect
     const double width = square->right - square->left;
     const double height = square->top - square->bottom;
     const double inset = (width > height ? width : height) * 0.10;
-    const float left = static_cast<float>(square->left + inset + p->crop_x);
-    const float right = static_cast<float>(square->right - inset + p->crop_x);
-    const float bottom = static_cast<float>(square->bottom + inset + p->crop_y);
-    const float top = static_cast<float>(square->top - inset + p->crop_y);
+    const float left = static_cast<float>(InX(p, square->left + inset));
+    const float right = static_cast<float>(InX(p, square->right - inset));
+    const float bottom = static_cast<float>(InY(p, square->bottom + inset));
+    const float top = static_cast<float>(InY(p, square->top - inset));
 
     FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(p->page, FPDF_ANNOT_STAMP);
     if (annot == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the mark annotation"); return MEGAPDF_ERR_PDFIUM; }
@@ -1187,7 +1193,7 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* p, const megapdf_rect
     if (path != nullptr) {
         FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
         const double stroke_width = width * 0.11 > 1.2 ? width * 0.11 : 1.2;
-        FPDFPageObj_SetStrokeWidth(path, static_cast<float>(stroke_width));
+        FPDFPageObj_SetStrokeWidth(path, static_cast<float>(stroke_width / p->unit));
         FPDFPath_SetDrawMode(path, fill, stroke);
         if (ok) {
             ok = FPDFAnnot_AppendObject(annot, path);
@@ -1226,10 +1232,7 @@ MEGAPDF_API megapdf_stamps* megapdf_stamps_load(const megapdf_page* p) {
             if (!id.empty() && FPDFAnnot_GetRect(annot, &r)) {
                 Stamp st;
                 st.info.annot_index = i;
-                st.info.bounds.left = static_cast<double>(r.left) - p->crop_x;
-                st.info.bounds.bottom = static_cast<double>(r.bottom) - p->crop_y;
-                st.info.bounds.right = static_cast<double>(r.right) - p->crop_x;
-                st.info.bounds.top = static_cast<double>(r.top) - p->crop_y;
+                st.info.bounds = OutRect(p, r.left, r.bottom, r.right, r.top);
                 st.id = std::move(id);
                 s->stamps.push_back(std::move(st));
             }
@@ -1346,7 +1349,9 @@ FPDF_BOOL ScratchNeedToPause(IFSDK_PAUSE* pause) {
 // asked only between whole renders could still wait that long. Between slices no PDFium call
 // is in progress, so other threads may use the library. The pixels are the same either way.
 ScratchShot RenderScratchPage(FPDF_PAGE page, const std::function<bool()>* go_on = nullptr, bool* stopped = nullptr) {
-    const double pw = FPDF_GetPageWidthF(page), ph = FPDF_GetPageHeightF(page);
+    // 72 dpi in points, not user space units (#150).
+    const double unit = FPDFPage_GetUserUnit(page);
+    const double pw = FPDF_GetPageWidthF(page) * unit, ph = FPDF_GetPageHeightF(page) * unit;
     double scale = 1.0;
     while (pw * ph * scale * scale > 1.0e6 && scale > 1e-3) scale /= 2;
     ScratchShot shot;
@@ -1437,11 +1442,12 @@ constexpr int kShotThreshold = 60;      // |dR|+|dG|+|dB| above this is a change
 constexpr float kObjectPadPt = 2.0f;    // MEGAPDF_LAYOUT_WHERE_OBJECT reaches this far past the object
 constexpr float kRunShiftPt = 0.5f;     // a text object moving further has moved
 
-// Marks `box`, padded by `pad` points, with `value` in a mask of the page rendered as `shot`.
+// Marks `box` (page space), padded by `pad` points, with `value` in a mask of the page rendered as `shot`.
 // (std::min) and (std::max) in parentheses: <windef.h>, which pdfium pulls in on Windows, defines min and max macros.
 void PaintBox(FPDF_PAGE page, const ScratchShot& shot, const PageBox& box, float pad, unsigned char value,
               std::vector<unsigned char>* mask) {
     int x0 = shot.w, y0 = shot.h, x1 = -1, y1 = -1;
+    pad /= FPDFPage_GetUserUnit(page);   // points to user space units (#150)
     const double xs[2] = {box.l - pad, box.r + pad}, ys[2] = {box.b - pad, box.t + pad};
     for (double x : xs) {
         for (double y : ys) {
@@ -1493,8 +1499,9 @@ bool CompareShots(FPDF_PAGE was_page, const ScratchShot& a, const ScratchShot& b
 }
 
 // The run check (#118) with its numbers (#128): every text object's text and bounds, in content order.
-void CompareRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b, bool* text_changed, bool* moved,
-                 megapdf_layout_verdict* v) {
+// `unit` is the page's /UserUnit: the bounds are in user space, the budget in points (#150).
+void CompareRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>& b, double unit, bool* text_changed,
+                 bool* moved, megapdf_layout_verdict* v) {
     *text_changed = a.size() != b.size();
     *moved = false;
     if (*text_changed) return;
@@ -1503,7 +1510,7 @@ void CompareRuns(const std::vector<ScratchRun>& a, const std::vector<ScratchRun>
         if (a[i].text != b[i].text) *text_changed = true;
         const double shift = (std::max)({std::fabs(a[i].left - b[i].left), std::fabs(a[i].bottom - b[i].bottom),
                                        std::fabs(a[i].right - b[i].right), std::fabs(a[i].top - b[i].top)});
-        worst = (std::max)(worst, shift);
+        worst = (std::max)(worst, shift * unit);
     }
     *moved = worst > kRunShiftPt;
     v->max_shift_pt = worst;
@@ -1528,7 +1535,7 @@ megapdf_layout_verdict CompareRewrite(FPDF_PAGE was_page, FPDF_PAGE reopened, co
         return megapdf_layout_verdict{0, MEGAPDF_LAYOUT_REWRITE_FAILED, 0, 0, 0, 0.0};
     }
     bool text_changed = false, moved = false;
-    CompareRuns(runs_was, runs_now, &text_changed, &moved, &v);
+    CompareRuns(runs_was, runs_now, FPDFPage_GetUserUnit(was_page), &text_changed, &moved, &v);
     const bool render_kept = static_cast<size_t>(v.changed_pixels) * 2000 <= static_cast<size_t>(v.total_pixels);   // at most 0.05%
     v.editable = render_kept && !text_changed && !moved ? 1 : 0;
     v.cause = text_changed ? MEGAPDF_LAYOUT_TEXT_CHANGED
@@ -2058,8 +2065,8 @@ int MoveTextBoxUnlocked(const megapdf_page* p, int object_index, double left, do
     }
     // Translate in place so the bounds' bottom-left lands on the target; scale and
     // rotation stay as they are.
-    m.e += static_cast<float>(left + p->crop_x) - l;
-    m.f += static_cast<float>(bottom + p->crop_y) - b;
+    m.e += static_cast<float>(InX(p, left)) - l;
+    m.f += static_cast<float>(InY(p, bottom)) - b;
     if (!FPDFPageObj_SetMatrix(obj, &m)) {
         SetError(FPDF_ERR_UNKNOWN, "could not move the text box");
         return MEGAPDF_ERR_PDFIUM;
@@ -2076,10 +2083,10 @@ int AddTextBoxUnlocked(const megapdf_page* p, int object_index, const unsigned s
 
     FPDF_FONT font = FPDFText_LoadStandardFont(doc, font_name);
     if (font == nullptr) { SetError(FPDF_ERR_UNKNOWN, "the standard font could not be loaded"); return MEGAPDF_ERR_PDFIUM; }
-    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size));
+    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size / p->unit));
     bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
     if (ok) {
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(baseline_x + p->crop_x), static_cast<float>(baseline_y + p->crop_y)};
+        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(InX(p, baseline_x)), static_cast<float>(InY(p, baseline_y))};
         ok = FPDFPageObj_SetMatrix(obj, &m);
     }
     if (ok) {
@@ -2208,8 +2215,8 @@ extern "C" {
 MEGAPDF_API int megapdf_add_whiteout(const megapdf_page* p, const megapdf_rect* bounds, int* out_object_index) {
     if (p == nullptr || bounds == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
-    const float left = static_cast<float>(bounds->left + p->crop_x), right = static_cast<float>(bounds->right + p->crop_x);
-    const float bottom = static_cast<float>(bounds->bottom + p->crop_y), top = static_cast<float>(bounds->top + p->crop_y);
+    const float left = static_cast<float>(InX(p, bounds->left)), right = static_cast<float>(InX(p, bounds->right));
+    const float bottom = static_cast<float>(InY(p, bounds->bottom)), top = static_cast<float>(InY(p, bounds->top));
     FPDF_PAGEOBJECT path = FPDFPageObj_CreateNewPath(left, bottom);
     if (path == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the whiteout"); return MEGAPDF_ERR_PDFIUM; }
     FPDFPath_LineTo(path, right, bottom);
@@ -2241,7 +2248,7 @@ MEGAPDF_API size_t megapdf_whiteouts(const megapdf_page* p, megapdf_object_rect*
         if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
         if (found < capacity && out != nullptr) {
             out[found].object_index = i;
-            out[found].bounds = megapdf_rect{l - p->crop_x, b - p->crop_y, r - p->crop_x, t - p->crop_y};
+            out[found].bounds = OutRect(p, l, b, r, t);
         }
         found++;
     }
@@ -2294,7 +2301,7 @@ MEGAPDF_API int megapdf_object_bounds(const megapdf_page* p, int object_index, m
     FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p->page, object_index);
     float l = 0, b = 0, r = 0, t = 0;
     if (obj == nullptr || !FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) return MEGAPDF_ERR_ARGUMENT;
-    *out = megapdf_rect{l - p->crop_x, b - p->crop_y, r - p->crop_x, t - p->crop_y};
+    *out = OutRect(p, l, b, r, t);
     return MEGAPDF_OK;
 }
 
@@ -2641,8 +2648,8 @@ MEGAPDF_API megapdf_images* megapdf_images_load(const megapdf_document* d) {
                 info.object_index = i;
                 info.pixel_width = static_cast<int>(pw);
                 info.pixel_height = static_cast<int>(ph);
-                info.display_width = static_cast<double>(r - l);
-                info.display_height = static_cast<double>(t - b);
+                info.display_width = static_cast<double>(r - l) * sp.page->unit;
+                info.display_height = static_cast<double>(t - b) * sp.page->unit;
                 info.stored_bytes = static_cast<long long>(FPDFImageObj_GetImageDataRaw(obj, nullptr, 0));
                 result->images.push_back(info);
             }
@@ -3095,10 +3102,10 @@ MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* p, int object_index,
     FPDF_DOCUMENT doc = p->owner ? p->owner->doc : nullptr;
     FPDF_FONT font = FPDFText_LoadStandardFont(doc, MapToStandard(font_name).c_str());
     if (font == nullptr) { SetError(0, "no substitute font could be loaded"); return MEGAPDF_ERR_NO_FONT; }
-    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size));
+    FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size / p->unit));
     bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
     if (ok) {
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(left + p->crop_x), static_cast<float>(baseline + p->crop_y)};
+        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(InX(p, left)), static_cast<float>(InY(p, baseline))};
         FPDFPageObj_SetMatrix(obj, &m);
         const int count = FPDFPage_CountObjects(p->page);
         ok = FPDFPage_InsertObjectAtIndex(p->page, obj, static_cast<size_t>(object_index > count ? count : object_index));
