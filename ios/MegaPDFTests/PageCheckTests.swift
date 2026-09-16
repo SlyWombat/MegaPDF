@@ -325,14 +325,16 @@ final class PageCheckTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         model.noteDocumentChanged()
-        let data = await model.exportData()
-        XCTAssertNotNil(data)
+        let file = await model.exportFile()
+        XCTAssertNotNil(file)
+        if let file { XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "the copy is staged in a file (#147)") }
         model.noteDocumentChanged()
-        model.markSavedCopy()
+        model.finishExport(saved: true)
         XCTAssertTrue(model.isDirty)
+        if let file { XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the staged copy goes once the exporter is done") }
 
-        _ = await model.exportData()
-        model.markSavedCopy()
+        _ = await model.exportFile()
+        model.finishExport(saved: true)
         XCTAssertFalse(model.isDirty)
         model.close()
     }

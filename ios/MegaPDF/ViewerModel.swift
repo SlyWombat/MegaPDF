@@ -2,10 +2,17 @@ import CoreGraphics
 import Foundation
 import UIKit
 
+/// Where a document is opened from (#147): its file, read on demand, or bytes already in
+/// memory (the demo and UI-test documents).
+enum DocumentSource {
+    case file(URL)
+    case bytes(Data)
+}
+
 enum ViewerState {
     case home(recents: [RecentEntry], error: String?)
     case loading
-    case passwordNeeded(bytes: Data, displayName: String, sourceURL: URL?, wrongPassword: Bool)
+    case passwordNeeded(source: DocumentSource, displayName: String, sourceURL: URL?, wrongPassword: Bool)
     case viewing(displayName: String, pageSizes: [CGSize])
 }
 
@@ -170,6 +177,11 @@ final class ViewerModel: ObservableObject {
     private var searchToken: BusyToken?
     private var pageRewriteContinuation: CheckedContinuation<Bool, Never>?
     private var sourceURL: URL?
+    /// The picked file whose security-scoped access is held while its document is open (#147):
+    /// the document reads the file for as long as it is open, and Save writes it.
+    private var scopedAccessURL: URL?
+    /// The staged copy the Save-a-copy exporter writes from, removed once it has (#147).
+    private var exportStagedURL: URL?
     private var renderedWidths: [Int: Int] = [:]
     private var renderTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
@@ -197,7 +209,7 @@ final class ViewerModel: ObservableObject {
               let token = busy.begin(.opening, scope: .document, blocksFileCommands: true) else { return }
         Task {
             defer { busy.end(token) }
-            await open(bytes: bytes, password: nil, displayName: "UITest.pdf", sourceURL: nil)
+            await open(source: .bytes(bytes), password: nil, displayName: "UITest.pdf", sourceURL: nil)
         }
         #endif
     }
@@ -219,7 +231,7 @@ final class ViewerModel: ObservableObject {
                 if mode == "draw" { screenshotSheet = .draw }
                 if mode == "search" { screenshotSearchTerm = DemoContent.searchTerm }
                 Task {
-                    await open(bytes: bytes, password: nil,
+                    await open(source: .bytes(bytes), password: nil,
                                displayName: DemoContent.documentName, sourceURL: nil)
                     if mode == "text-edit", let doc = document,
                        let line = try? await PdfEngine.shared.textLines(doc, pageIndex: 0).first {
@@ -255,18 +267,9 @@ final class ViewerModel: ObservableObject {
         state = .loading
         Task {
             defer { busy.end(token) }
-            // Read off the main actor: a large file, or one still downloading from a file
-            // provider, must not freeze the screen.
-            let bytes: Data? = await Task.detached(priority: .userInitiated) {
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                return try? Data(contentsOf: url)
-            }.value
-            guard let bytes else {
-                toHome(String(localized: "Couldn't read that file."))
-                return
-            }
-            await open(bytes: bytes, password: nil,
+            // Opened from the file, read on demand (#147, #148): nothing reads it whole, so a
+            // file of any size opens in the time PDFium takes to parse its structure.
+            await open(source: .file(url), password: nil,
                        displayName: url.lastPathComponent, sourceURL: url)
         }
     }
@@ -294,20 +297,30 @@ final class ViewerModel: ObservableObject {
     }
 
     func submitPassword(_ password: String) {
-        guard case let .passwordNeeded(bytes, displayName, url, _) = state,
+        guard case let .passwordNeeded(source, displayName, url, _) = state,
               let token = busy.begin(.opening, scope: .document, blocksFileCommands: true) else { return }
         state = .loading
         Task {
             defer { busy.end(token) }
-            await open(bytes: bytes, password: password,
+            await open(source: source, password: password,
                        displayName: displayName, sourceURL: url)
         }
     }
 
-    private func open(bytes: Data, password: String?,
+    private func open(source: DocumentSource, password: String?,
                       displayName: String, sourceURL: URL?) async {
         do {
-            let doc = try await PdfEngine.shared.open(bytes, password: password)
+            let doc: PdfDocument
+            switch source {
+            case let .bytes(bytes):
+                doc = try await PdfEngine.shared.open(bytes, password: password)
+            case let .file(url):
+                // Off the main actor: PDFium reads the file's structure here, and a file provider
+                // may still be fetching it.
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                doc = try await PdfEngine.shared.open(file: url, password: password)
+            }
             let count = await PdfEngine.shared.pageCount(doc)
             var sizes: [CGSize] = []
             for i in 0..<count {
@@ -318,6 +331,10 @@ final class ViewerModel: ObservableObject {
             document = doc
             security = openedSecurity
             self.sourceURL = sourceURL
+            // Held for the document's life (#147): it reads its file on demand, and Save writes it.
+            if let sourceURL, sourceURL.startAccessingSecurityScopedResource() {
+                scopedAccessURL = sourceURL
+            }
             if let sourceURL,
                let bookmark = try? sourceURL.bookmarkData() {
                 recents.add(RecentEntry(
@@ -329,11 +346,15 @@ final class ViewerModel: ObservableObject {
             // A restricted open says so, and where the owner password goes (ADR-004 §3).
             if capabilities.isRestricted { showRestrictedNotice() }
         } catch PdfError.passwordRequired {
-            state = .passwordNeeded(bytes: bytes, displayName: displayName,
+            state = .passwordNeeded(source: source, displayName: displayName,
                                     sourceURL: sourceURL, wrongPassword: password != nil)
         } catch PdfError.unsupportedSecurity {
             // Not corrupt and not a wrong password: say which it is (ADR-004 §8).
             toHome(String(localized: "This PDF uses a kind of protection MegaPDF can't open."))
+        } catch PdfError.tooLarge {
+            toHome(String(localized: "This file is too large for MegaPDF to open."))
+        } catch PdfError.load(code: Int(FPDF_ERR_FILE)) {
+            toHome(String(localized: "Couldn't read that file."))
         } catch {
             // A plain sentence, not the raw error: the engine's own description is
             // not something the home screen should print.
@@ -1215,15 +1236,17 @@ final class ViewerModel: ObservableObject {
                 isSaving = false
                 busy.end(token)
             }
+            let staged = Self.stagingURL()
+            defer { try? FileManager.default.removeItem(at: staged) }
             do {
                 let engine = PdfEngine.shared
-                let data = try await engine.save(doc)
+                try await engine.save(doc, to: staged)
                 busy.update(token, label: .checkingSavedFile)
-                let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
+                let verify = try await engine.open(file: staged, like: doc)  // still protected if the document was (#132)
                 await engine.close(verify)
 
                 busy.update(token, label: .saving)
-                try await Self.write(data, to: url)
+                try await Self.write(staged, over: url, readBy: doc)
                 guard document === doc else { return }
                 let unchanged = editCount == editsAtStart
                 if unchanged { isDirty = false }
@@ -1240,12 +1263,26 @@ final class ViewerModel: ObservableObject {
         }
     }
 
-    /// Writes already-verified bytes over the opened file: security-scoped access,
-    /// coordinated with any other writer, atomic. Save and the Password command share
-    /// it; both verify `data` before calling, so nothing unchecked reaches the file.
-    /// Off the main actor, so a slow file provider doesn't freeze the screen.
-    private nonisolated static func write(_ data: Data, to url: URL) async throws {
+    /// A new file in the temporary directory for a save to be staged in (#147).
+    private nonisolated static func stagingURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("save-\(UUID().uuidString).pdf")
+    }
+
+    /// Writes an already-verified staged file over the opened file: security-scoped access,
+    /// coordinated with any other writer, atomic. Save and the Password command share it; both
+    /// verify `staged` before calling, so nothing unchecked reaches the file. Off the main
+    /// actor, so a slow file provider doesn't freeze the screen.
+    ///
+    /// The staged file is mapped, not read, so a large document is not held in memory (#147).
+    /// An atomic write replaces the file, which leaves `document` reading what it was opened on;
+    /// in case a provider writes in place instead, the document first moves onto a copy of it,
+    /// a clone on APFS that costs nothing. Should that copy fail, the atomic write goes ahead.
+    private nonisolated static func write(_ staged: URL, over url: URL, readBy document: PdfDocument) async throws {
+        if await PdfEngine.shared.reads(document, file: url) {
+            try? await PdfEngine.shared.readFromCopy(document)
+        }
         try await Task.detached(priority: .userInitiated) {
+            let data = try Data(contentsOf: staged, options: .alwaysMapped)
             let scoped = url.startAccessingSecurityScopedResource()
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             var coordError: NSError?
@@ -1268,33 +1305,52 @@ final class ViewerModel: ObservableObject {
             + " " + error.localizedDescription
     }
 
-    /// Serialized (and engine-verified) bytes for the Save-a-copy exporter, with the same busy
-    /// state as Save (#145). Nil when it failed, or when other work is still running.
-    func exportData() async -> Data? {
+    /// A serialized (and engine-verified) copy in a staged file for the Save-a-copy exporter,
+    /// with the same busy state as Save (#145). Staged rather than in memory, so a large document
+    /// exports without holding its size twice (#147); `finishExport` removes it. Nil when it
+    /// failed, or when other work is still running.
+    func exportFile() async -> URL? {
         guard let doc = document,
               let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return nil }
         defer { busy.end(token) }
         let editsAtStart = editCount
+        discardExportFile()
+        let staged = Self.stagingURL()
         do {
             let engine = PdfEngine.shared
-            let data = try await engine.save(doc)
+            try await engine.save(doc, to: staged)
             busy.update(token, label: .checkingSavedFile)
-            let verify = try await engine.open(data, like: doc)  // still protected if the document was (#132)
+            let verify = try await engine.open(file: staged, like: doc)  // still protected if the document was (#132)
             await engine.close(verify)
-            guard document === doc else { return nil }
+            guard document === doc else {
+                try? FileManager.default.removeItem(at: staged)
+                return nil
+            }
             exportEditCount = editsAtStart
-            return data
+            exportStagedURL = staged
+            return staged
         } catch {
+            try? FileManager.default.removeItem(at: staged)
             statusMessage = String(localized: "Couldn't prepare the copy.")
             return nil
         }
     }
 
-    /// The exporter wrote the copy. Marked saved only if nothing changed since its bytes were made (D3).
-    func markSavedCopy() {
+    /// The exporter finished. When it wrote the copy, the document is marked saved, but only if
+    /// nothing changed since the copy was made (D3). The staged file goes either way.
+    func finishExport(saved: Bool) {
+        discardExportFile()
+        guard saved else { return }
         if exportEditCount == editCount { isDirty = false }
         exportEditCount = nil
         statusMessage = String(localized: "Saved")
+    }
+
+    private func discardExportFile() {
+        if let staged = exportStagedURL {
+            try? FileManager.default.removeItem(at: staged)
+            exportStagedURL = nil
+        }
     }
 
     // MARK: - password command (#131)
@@ -1342,11 +1398,15 @@ final class ViewerModel: ObservableObject {
             }
             let engine = PdfEngine.shared
             let wrong = String(localized: "That password didn't work. Try again.")
+            // The document as it stands, staged in a file (#147); the unlocked document reads it,
+            // and its name goes once that document has it open.
+            let staged = Self.stagingURL()
+            defer { try? FileManager.default.removeItem(at: staged) }
             do {
-                let data = try await engine.save(doc)
+                try await engine.save(doc, to: staged)
                 let trial: PdfDocument
                 do {
-                    trial = try await engine.open(data, password: ownerPassword)
+                    trial = try await engine.open(file: staged, password: ownerPassword)
                 } catch PdfError.passwordRequired {
                     securityError = wrong
                     return
@@ -1362,7 +1422,7 @@ final class ViewerModel: ObservableObject {
                 let wasDirty = isDirty
                 let url = sourceURL
                 securitySheet = nil
-                await open(bytes: data, password: ownerPassword, displayName: displayName, sourceURL: url)
+                await open(source: .file(staged), password: ownerPassword, displayName: displayName, sourceURL: url)
                 guard case .viewing = state else { return }
                 // The reopen starts clean; edits made before the unlock are still unsaved.
                 isDirty = wasDirty
@@ -1408,26 +1468,28 @@ final class ViewerModel: ObservableObject {
                 busy.end(token)
             }
             let engine = PdfEngine.shared
+            let staged = Self.stagingURL()
+            defer { try? FileManager.default.removeItem(at: staged) }
             do {
-                let data: Data
                 if let newPassword {
-                    data = try await engine.save(doc, userPassword: newPassword, ownerPassword: nil,
-                                                 permissions: .all)
+                    try await engine.save(doc, userPassword: newPassword, ownerPassword: nil,
+                                          permissions: .all, to: staged)
                     busy.update(token, label: .checkingSavedFile)
-                    let verify = try await engine.open(data, password: newPassword)
+                    let verify = try await engine.open(file: staged, password: newPassword)
                     await engine.close(verify)
                 } else {
-                    data = try await engine.saveWithoutSecurity(doc)
+                    try await engine.saveWithoutSecurity(doc, to: staged)
                     busy.update(token, label: .checkingSavedFile)
-                    let verify = try await engine.open(data)
+                    let verify = try await engine.open(file: staged)
                     await engine.close(verify)
                 }
                 busy.update(token, label: .saving)
-                try await Self.write(data, to: url)
+                try await Self.write(staged, over: url, readBy: doc)
                 guard document === doc else { return }
                 securitySheet = nil
                 busy.update(token, label: .opening)
-                await open(bytes: data, password: newPassword, displayName: displayName, sourceURL: url)
+                // What was written, from the staged file it was written from (#147).
+                await open(source: .file(staged), password: newPassword, displayName: displayName, sourceURL: url)
                 guard case .viewing = state else { return }
                 if newPassword == nil {
                     showNotice(String(localized: "Password removed."))
@@ -1466,6 +1528,11 @@ final class ViewerModel: ObservableObject {
         renderedWidths = [:]
         lastWindow = nil
         sourceURL = nil
+        if let scoped = scopedAccessURL {
+            scoped.stopAccessingSecurityScopedResource()
+            scopedAccessURL = nil
+        }
+        discardExportFile()
         isDirty = false
         pendingSignature = nil
         selectedStamp = nil

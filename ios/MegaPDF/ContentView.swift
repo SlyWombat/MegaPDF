@@ -1,17 +1,20 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Wraps serialized PDF bytes for the Save-a-copy file exporter.
+/// Wraps a staged, serialized PDF for the Save-a-copy file exporter. The file is handed over
+/// as it is, not read into memory, so a large document exports like a small one (#147).
 struct PdfExportDocument: FileDocument {
     static let readableContentTypes: [UTType] = [.pdf]
-    var data: Data
+    var file: URL?
+    var data: Data?
 
-    init(data: Data) { self.data = data }
+    init(file: URL) { self.file = file }
     init(configuration: ReadConfiguration) throws {
         data = configuration.file.regularFileContents ?? Data()
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
+        if let file { return try FileWrapper(url: file, options: []) }
+        return FileWrapper(regularFileWithContents: data ?? Data())
     }
 }
 
@@ -71,8 +74,8 @@ struct ContentView: View {
                         guard !model.fileCommandsBlocked else { return }
                         exportName = displayName
                         Task {
-                            if let data = await model.exportData() {
-                                exportDoc = PdfExportDocument(data: data)
+                            if let file = await model.exportFile() {
+                                exportDoc = PdfExportDocument(file: file)
                                 exporting = true
                             }
                         }
@@ -87,7 +90,11 @@ struct ContentView: View {
             contentType: .pdf,
             defaultFilename: exportName
         ) { result in
-            if case .success = result { model.markSavedCopy() }
+            if case .success = result {
+                model.finishExport(saved: true)
+            } else {
+                model.finishExport(saved: false)
+            }
         }
         .alert(
             model.statusMessage ?? "",

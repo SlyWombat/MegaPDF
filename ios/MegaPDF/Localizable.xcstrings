@@ -1989,6 +1989,22 @@
         }
       }
     },
+    "This file is too large for MegaPDF to open." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir."
+          }
+        }
+      }
+    },
     "This line can't be changed without making other parts of the page look different." : {
       "localizations" : {
         "fr" : {

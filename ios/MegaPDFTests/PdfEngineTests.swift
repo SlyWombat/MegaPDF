@@ -57,6 +57,66 @@ final class PdfEngineTests: XCTestCase {
         XCTAssertEqual(count, 2)
     }
 
+    private func scratch(_ name: String, _ data: Data) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+        try data.write(to: url)
+        return url
+    }
+
+    // #147/#148: a document opened from its file is read on demand, and a save streams into a
+    // file that opens again like the document.
+    func testOpensFromAFileAndSavesIntoOne() async throws {
+        let engine = PdfEngine.shared
+        let url = try scratch("fixture.pdf", try fixture("fixture"))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let doc = try await engine.open(file: url)
+        let count = await engine.pageCount(doc)
+        XCTAssertEqual(count, 2)
+        let reads = await engine.reads(doc, file: url)
+        XCTAssertTrue(reads)
+
+        let saved = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)-saved.pdf")
+        defer { try? FileManager.default.removeItem(at: saved) }
+        try await engine.save(doc, to: saved)
+        let reopened = try await engine.open(file: saved, like: doc)
+        let reopenedCount = await engine.pageCount(reopened)
+        await engine.close(reopened)
+        await engine.close(doc)
+        XCTAssertEqual(reopenedCount, 2)
+
+        do {
+            _ = try await engine.open(file: FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID().uuidString).pdf"))
+            XCTFail("a missing file opened")
+        } catch PdfError.load(let code) {
+            XCTAssertEqual(code, Int(FPDF_ERR_FILE))
+        }
+    }
+
+    // #147: before the file a document reads is written in place, the document moves onto a
+    // copy (a clone on APFS) and keeps reading what it was opened on.
+    func testReadFromCopySurvivesTheFileBeingWrittenInPlace() async throws {
+        let engine = PdfEngine.shared
+        let url = try scratch("in-place.pdf", try fixture("fixture"))
+        defer { try? FileManager.default.removeItem(at: url) }
+        let doc = try await engine.open(file: url)
+        try await engine.readFromCopy(doc)
+        let stillReads = await engine.reads(doc, file: url)
+        XCTAssertFalse(stillReads)
+
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.write(contentsOf: Data("overwritten in place".utf8))
+        try handle.truncate(atOffset: 20)
+        try handle.close()
+
+        _ = try await engine.pageSize(doc, index: 1)
+        let saved = try await engine.save(doc)
+        await engine.close(doc)
+        let reopened = try await engine.open(saved)
+        let count = await engine.pageCount(reopened)
+        await engine.close(reopened)
+        XCTAssertEqual(count, 2)
+    }
+
     func testProtectedDocumentSavesStillProtectedAndReadsBack() async throws {
         // #132: the save check reopened the copy without the password, and the copy is
         // still protected, so every protected save failed.
