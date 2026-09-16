@@ -127,6 +127,7 @@ Conventions (OQLF, Canadian French):
 | Your changes will be lost if you don't save them. | Vos modifications seront perdues si vous ne les enregistrez pas. | |
 | Restore unsaved changes? | Restaurer les modifications non enregistrées? | |
 | Couldn't open that file | Impossible d'ouvrir ce fichier | |
+| This file is too large for MegaPDF to open. | Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir. | #147; *volumineux* for a file's size, never *gros* |
 | Couldn't save | Impossible d'enregistrer | |
 | Couldn't shrink | Impossible de réduire | |
 | Couldn't update | Impossible de mettre à jour | |

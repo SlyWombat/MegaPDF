@@ -449,6 +449,9 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="ErrorFileUnreadable" xml:space="preserve">
     <value>Le fichier n'a pas pu être lu.</value>
   </data>
+  <data name="ErrorFileTooLarge" xml:space="preserve">
+    <value>Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir.</value>
+  </data>
   <data name="ErrorNotAPdf" xml:space="preserve">
     <value>Ce fichier n'est pas un PDF.</value>
   </data>

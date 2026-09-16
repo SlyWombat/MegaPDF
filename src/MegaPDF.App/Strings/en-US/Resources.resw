@@ -475,6 +475,10 @@ Saved as {2} — ready to email.</value>
   <data name="ErrorFileUnreadable" xml:space="preserve">
     <value>The file could not be read.</value>
   </data>
+  <data name="ErrorFileTooLarge" xml:space="preserve">
+    <value>This file is too large for MegaPDF to open.</value>
+    <comment>#147: a file of 4 GB or more, past what PDFium can address on Windows</comment>
+  </data>
   <data name="ErrorNotAPdf" xml:space="preserve">
     <value>That file is not a PDF.</value>
   </data>

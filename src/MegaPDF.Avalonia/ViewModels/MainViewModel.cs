@@ -483,6 +483,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private static string DescribeLoadFailure(PdfLoadException ex) => ex switch
     {
         { IsPasswordError: true } => Strings.PdfIsPasswordProtected,
+        { IsTooLargeError: true } => Strings.FileTooLarge,
         { IsFileError: true } => Strings.FileCouldNotBeRead,
         { IsFormatError: true } => Strings.FileNotValidPdf,
         // Not corrupt and not a wrong password: a handler PDFium cannot open (ADR-004 §8).

@@ -315,6 +315,10 @@
     <value>That file could not be read.</value>
     <comment>PdfLoadException FPDF_ERR_FILE</comment>
   </data>
+  <data name="FileTooLarge" xml:space="preserve">
+    <value>This file is too large for MegaPDF to open.</value>
+    <comment>PdfLoadException MEGAPDF_OPEN_ERR_TOO_LARGE (#147)</comment>
+  </data>
   <data name="FileNotValidPdf" xml:space="preserve">
     <value>That file is not a valid PDF.</value>
     <comment>PdfLoadException FPDF_ERR_FORMAT</comment>

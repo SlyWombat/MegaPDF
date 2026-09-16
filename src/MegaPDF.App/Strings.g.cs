@@ -256,6 +256,9 @@ public static partial class Strings
     /// <summary>The file could not be read.</summary>
     public static string ErrorFileUnreadable => Get("ErrorFileUnreadable");
 
+    /// <summary>This file is too large for MegaPDF to open.</summary>
+    public static string ErrorFileTooLarge => Get("ErrorFileTooLarge");
+
     /// <summary>That file is not a PDF.</summary>
     public static string ErrorNotAPdf => Get("ErrorNotAPdf");
 

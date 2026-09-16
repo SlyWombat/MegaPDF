@@ -227,6 +227,9 @@ public static partial class Strings
     /// <summary>That file could not be read.</summary>
     public static string FileCouldNotBeRead => Get("FileCouldNotBeRead");
 
+    /// <summary>This file is too large for MegaPDF to open.</summary>
+    public static string FileTooLarge => Get("FileTooLarge");
+
     /// <summary>That file is not a valid PDF.</summary>
     public static string FileNotValidPdf => Get("FileNotValidPdf");
 

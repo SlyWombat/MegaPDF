@@ -18,6 +18,7 @@ internal static class UserFacing
 {
     public static string Describe(Exception ex) => ex switch
     {
+        PdfLoadException { IsTooLargeError: true } => Strings.ErrorFileTooLarge,
         PdfLoadException { IsFileError: true } => Strings.ErrorFileUnreadable,
         PdfLoadException { IsFormatError: true } => Strings.ErrorNotAPdf,
         PdfLoadException { IsPasswordError: true } => Strings.ErrorPasswordProtected,
