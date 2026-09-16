@@ -35,7 +35,12 @@
 
 #include "megapdf_core.h"
 #include "megapdf_core_testing.h"
-// PDFium itself, as the oracle for what the core reads (#149).
+// PDFium itself, as the oracle for what the core reads (#149). On Windows its headers include
+// <windows.h>: keep out the min/max macros and the RPC headers' `small`.
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include "fpdf_edit.h"
 #include "fpdf_text.h"
 #include "fpdfview.h"
