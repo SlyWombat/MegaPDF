@@ -39,6 +39,9 @@
 #ifndef NOMINMAX
 #define NOMINMAX   // the tests call std::min and std::max
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN   // no <rpcndr.h>, whose `small` macro breaks a variable name here
+#endif
 #include <windows.h>   // ReplaceFileW (#147)
 #else
 #include <fcntl.h>

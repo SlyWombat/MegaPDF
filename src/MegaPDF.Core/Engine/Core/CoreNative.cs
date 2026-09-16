@@ -77,6 +77,18 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern void megapdf_close(IntPtr document);
 
+    /// <summary>1 when the document reads the file at <paramref name="path"/> — the same file, not the same name (#147).</summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_reads_file(IntPtr document, [MarshalAs(UnmanagedType.LPUTF8Str)] string path);
+
+    /// <summary>
+    /// Moves the document onto a private copy of the file it reads, created at
+    /// <paramref name="copyPath"/> and unnamed at once, so that file can be written in place
+    /// (#147). MEGAPDF_OK (0), or MEGAPDF_ERR_FILE (-9) with the document still on its file.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_read_from_copy(IntPtr document, [MarshalAs(UnmanagedType.LPUTF8Str)] string copyPath);
+
     [DllImport(Dll)]
     public static extern int megapdf_page_count(IntPtr document);
 

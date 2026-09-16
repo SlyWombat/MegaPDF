@@ -856,34 +856,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Prepares a smaller copy, without touching any destination.
     ///
-    /// Returns bytes only when something was actually re-encoded, and the caller
+    /// Returns a staged copy only when something was actually re-encoded, and the caller
     /// must not open a destination before it has that answer. Opening one is
     /// destructive on its own — Avalonia's writable stream truncates — so deciding
     /// afterwards meant a document with nothing to shrink left a 0-byte file
     /// behind, or destroyed whichever file the user chose to overwrite, while the
     /// status line said nothing had happened (#59).
     /// </summary>
-    public (ImageShrinker.Result Result, byte[]? Bytes) PrepareShrunkCopy()
+    public (ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy) PrepareShrunkCopy()
     {
-        (ImageShrinker.Result Result, byte[]? Bytes) prepared = (new ImageShrinker.Result(0), null);
+        (ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy) prepared = (new ImageShrinker.Result(0), null);
         RunSynchronously(async () => prepared = await PrepareShrunkCopyAsync());
         return prepared;
     }
 
     /// <inheritdoc cref="PrepareShrunkCopy"/>
-    /// <remarks>Off the UI thread, with "Making a smaller copy…" (#145).</remarks>
-    public async Task<(ImageShrinker.Result Result, byte[]? Bytes)> PrepareShrunkCopyAsync()
+    /// <remarks>
+    /// Off the UI thread, with "Making a smaller copy…" (#145). The copy comes back staged in a
+    /// temporary file, not as bytes, so a document of any size shrinks without being held in
+    /// memory (#147); the caller writes it where the person chooses and disposes it.
+    /// </remarks>
+    public async Task<(ImageShrinker.Result Result, VerifiedSave.StagedCopy? Copy)> PrepareShrunkCopyAsync()
     {
         if (DocumentPath is not { } path)
         {
             // Not the same as "nothing to shrink": we have no file to read. Saying
             // so beats reporting that the pictures are already small (#68).
             Status = Strings.ReopenBeforeShrinking;
-            return (new ImageShrinker.Result(0), null);
+            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
         }
 
         if (_document is not { } document || Busy.IsBusy)
-            return (new ImageShrinker.Result(0), null);
+            return (new ImageShrinker.Result(0), (VerifiedSave.StagedCopy?)null);
 
         using var busy = Busy.Begin(Strings.BusyShrinking);
         return await OffUiThread(() =>
@@ -893,11 +897,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             using var copy = _engine.OpenLike(document, path);
             var result = ImageShrinker.Shrink(copy, Platform.SkiaJpeg.Encode);
             if (result.ImagesReplaced == 0)
-                return (result, (byte[]?)null);
+                return (result, (VerifiedSave.StagedCopy?)null);
 
-            using var buffer = new MemoryStream();
-            VerifiedSave.ToStream(_engine, copy, buffer);
-            return (result, buffer.ToArray());
+            return (result, VerifiedSave.ToStagedFile(_engine, copy));
         });
     }
 
@@ -2075,7 +2077,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             if (unchanged && DocumentPath is { } saved)
                 _journal.MarkSaved(saved);
             Status = Strings.SavedFile(DocumentName);
-        });
+        }, inPlacePath: DocumentPath);
 
     /// <summary>
     /// Writes to a real path, which Windows can do with the stronger guarantee:
@@ -2105,7 +2107,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// changed while the save ran (D3). Failures land in the status line.
     /// </summary>
     private async Task<bool> SaveCoreAsync(Func<Task<Stream>>? openDestination, bool ownsDestination, string? atomicPath,
-                                           Action<bool> saved)
+                                           Action<bool> saved, string? inPlacePath = null)
     {
         if (_document is not { } document || Busy.IsBusy)
             return false;
@@ -2131,19 +2133,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             }
             else
             {
-                var bytes = await OffUiThread(() =>
+                // Staged in a temporary file and verified, not built in memory (#147).
+                using var staged = await OffUiThread(() =>
                 {
                     FailSaveForTest?.Invoke();
-                    using var buffer = new MemoryStream();
-                    VerifiedSave.ToStream(_engine, document, buffer, Stage);
-                    return buffer.ToArray();
+                    return VerifiedSave.ToStagedFile(_engine, document, Stage);
                 });
                 busy.SetLabel(Strings.BusySaving);
+                // The write below is in place, so the document moves off its file first if that
+                // is the file being written (#147).
+                await KeepOffFileAsync(document, inPlacePath);
                 // Only now is the person's file opened, and so truncated.
                 var destination = await openDestination!();
                 try
                 {
-                    await OffUiThread(() => StagedStreamWriter.Write(destination, target => target.Write(bytes)));
+                    await OffUiThread(() => staged.WriteOver(destination));
                 }
                 finally
                 {
@@ -2237,7 +2241,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Status = newPath is null
                 ? Strings.SavedCannotShrink(fileName)
                 : Strings.SavedFile(fileName);
-        });
+        }, inPlacePath: newPath);
+
+    /// <summary><see cref="KeepOffFileAsync"/> for the open document, before the view writes a file in place.</summary>
+    public Task KeepOpenDocumentOffFileAsync(string? path) =>
+        _document is { } document ? KeepOffFileAsync(document, path) : Task.CompletedTask;
+
+    /// <summary>
+    /// Before a file is written in place: if it is the file <paramref name="document"/> reads,
+    /// the document moves onto a private copy first (#147). The document is read from its file
+    /// on demand, so a write over that file would change what it reads. On APFS the copy is a
+    /// clone and costs nothing. Throws when the copy cannot be made, before anything is written.
+    /// </summary>
+    private Task KeepOffFileAsync(IPdfDocument document, string? path) =>
+        path is null
+            ? Task.CompletedTask
+            : OffUiThread(() =>
+            {
+                if (document.ReadsFile(path))
+                    document.ReadFromCopy();
+            });
 
     /// <summary>
     /// A save that failed, in words. The one typed failure — the engine could not
@@ -2318,7 +2341,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// document, its credentials and its permissions match what is on disk (ADR-004 §6). False
     /// when nothing was written; the status line says why.
     /// </remarks>
-    public async Task<bool> ChangeSecurityAsync(string path, string? newPassword, string doneMessage, Func<byte[], Task> writeBytes)
+    public async Task<bool> ChangeSecurityAsync(string path, string? newPassword, string doneMessage,
+                                                Func<VerifiedSave.StagedCopy, Task> writeStaged)
     {
         if (_document is not { } document || Busy.IsBusy)
             return false;
@@ -2332,17 +2356,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 if (FlattenOnSave)
                     await FlattenOpenDocumentAsync(document);
 
-                var bytes = await OffUiThread(() =>
-                {
-                    using var buffer = new MemoryStream();
-                    if (newPassword is null)
-                        VerifiedSave.ToStreamWithoutSecurity(_engine, document, buffer, Stage);
-                    else
-                        VerifiedSave.ToStreamWithSecurity(_engine, document, buffer, newPassword, ownerPassword: null, PdfPermissions.All, Stage);
-                    return buffer.ToArray();
-                });
+                // Staged in a temporary file, not built in memory (#147).
+                using var staged = await OffUiThread(() => newPassword is null
+                    ? VerifiedSave.ToStagedFileWithoutSecurity(_engine, document, Stage)
+                    : VerifiedSave.ToStagedFileWithSecurity(_engine, document, newPassword, ownerPassword: null, PdfPermissions.All, Stage));
                 busy.SetLabel(Strings.BusySaving);
-                await writeBytes(bytes);
+                await writeStaged(staged);
             }
             catch (Exception ex)
             {

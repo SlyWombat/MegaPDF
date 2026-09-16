@@ -67,6 +67,23 @@ public interface IPdfDocument : IDisposable
 
     /// <summary>Swaps an image's stream for the given JPEG bytes (shrink-for-email).</summary>
     void ReplaceImageWithJpeg(PdfImageInfo image, byte[] jpegBytes);
+
+    /// <summary>
+    /// Whether this document reads the file at <paramref name="filePath"/> (the same file, not
+    /// the same name). A document is read from its file on demand for as long as it is open
+    /// (#147): replacing that file (<see cref="Services.AtomicFileWriter"/>) is safe, writing
+    /// it in place is not, until <see cref="ReadFromCopy"/> has moved the document off it.
+    /// </summary>
+    bool ReadsFile(string filePath);
+
+    /// <summary>
+    /// Moves the document onto a private copy of the file it reads, so that file can be
+    /// written in place — the macOS sandbox's only way to save (#147). A clone on APFS, which
+    /// costs no time or space; elsewhere a copy in the temp folder. The copy leaves no name
+    /// behind and is freed with the document. Throws <see cref="IOException"/> when the copy
+    /// cannot be made, and the document still reads its file.
+    /// </summary>
+    void ReadFromCopy();
 }
 
 public interface IPdfPage : IDisposable

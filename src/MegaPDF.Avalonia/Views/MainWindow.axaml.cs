@@ -1558,16 +1558,18 @@ public partial class MainWindow : Window
         {
             // The view model produces the verified bytes first, off the UI thread; the file is
             // written — and, under the sandbox, truncated — only then, and reopened after.
-            await vm.ChangeSecurityAsync(path, newPassword, done, async bytes =>
+            await vm.ChangeSecurityAsync(path, newPassword, done, async staged =>
             {
                 if (local is not null && !OperatingSystem.IsMacOS())
                 {
-                    await Task.Run(() => AtomicFileWriter.Write(local, target => target.Write(bytes)));
+                    await Task.Run(() => AtomicFileWriter.Write(local, staged.CopyTo));
                 }
                 else
                 {
+                    // In place, over the file the document reads: it moves off it first (#147).
+                    await vm.KeepOpenDocumentOffFileAsync(local ?? path);
                     await using var stream = await file.OpenWriteAsync();
-                    await stream.WriteAsync(bytes);
+                    await Task.Run(() => staged.WriteOver(stream));
                 }
             });
         }
@@ -1625,12 +1627,13 @@ public partial class MainWindow : Window
             // is there, so asking first meant a document with nothing to shrink
             // left a 0-byte file behind — or destroyed the file the user picked to
             // overwrite — while reporting that nothing had happened (#59).
-            var (result, bytes) = await vm.PrepareShrunkCopyAsync();
-            if (bytes is null)
+            var (result, staged) = await vm.PrepareShrunkCopyAsync();
+            if (staged is null)
             {
                 vm.Status = Strings.NothingToShrink;
                 return;
             }
+            using var stagedCopy = staged;
 
             var baseName = vm.DocumentName is { } n ? Path.GetFileNameWithoutExtension(n) : Strings.DefaultDocumentName;
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
@@ -1645,8 +1648,10 @@ public partial class MainWindow : Window
             if (file is null)
                 return;
 
+            // Picked over the open document's own file, the write is in place (#147).
+            await vm.KeepOpenDocumentOffFileAsync(file.TryGetLocalPath());
             await using (var stream = await file.OpenWriteAsync())
-                await stream.WriteAsync(bytes);
+                await Task.Run(() => stagedCopy.WriteOver(stream));
 
             vm.Status = Strings.Plural(result.ImagesReplaced,
                 Strings.SmallerCopySavedOne(result.ImagesReplaced),

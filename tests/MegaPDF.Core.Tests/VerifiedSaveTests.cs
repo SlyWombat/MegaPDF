@@ -76,6 +76,56 @@ public class VerifiedSaveTests : IDisposable
     }
 
     [Fact]
+    public void ToPath_OverTheFileTheDocumentReads_ReplacesItAndTheDocumentReadsOn()
+    {
+        // #147: the document is read from its file on demand. The desktop save replaces that
+        // file (File.Replace), which leaves the open document on the bytes it was opened on.
+        var source = WriteSample();
+        using var document = _engine.Open(source);
+
+        VerifiedSave.ToPath(_engine, document, source);
+        Assert.False(document.ReadsFile(source), "the file was replaced, not written in place");
+        VerifiedSave.ToPath(_engine, document, source);
+
+        using var reopened = _engine.Open(source);
+        Assert.Equal(document.PageCount, reopened.PageCount);
+    }
+
+    [Fact]
+    public void ToStagedFile_WriteOverInPlace_AfterReadFromCopy_KeepsTheDocumentWhole()
+    {
+        // #147: the macOS sandbox can only write the opened file in place. The save is staged in a
+        // file (not built in memory), the document moves onto a copy of its file, and the staged
+        // save is written over the original, twice.
+        var source = WriteSample();
+        using var document = _engine.Open(source);
+        Assert.True(document.ReadsFile(source));
+        Assert.False(document.ReadsFile(WriteSample()), "identical bytes elsewhere are another file");
+
+        for (var round = 0; round < 2; round++)
+        {
+            string stagedPath;
+            using (var staged = VerifiedSave.ToStagedFile(_engine, document))
+            {
+                stagedPath = staged.Path;
+                Assert.True(File.Exists(stagedPath));
+                Assert.True(staged.Length > 0);
+                if (document.ReadsFile(source))
+                    document.ReadFromCopy();
+                Assert.False(document.ReadsFile(source));
+                using var destination = new FileStream(source, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete);
+                destination.Write(new byte[destination.Length + 4096]);   // what was there was longer: WriteOver cuts it off
+                staged.WriteOver(destination);
+            }
+            Assert.False(File.Exists(stagedPath), "disposing the staged copy deletes it");
+
+            using var page = document.GetPage(document.PageCount - 1);
+            using var reopened = _engine.Open(source);
+            Assert.Equal(document.PageCount, reopened.PageCount);
+        }
+    }
+
+    [Fact]
     public void ToPath_WhenTheOutputIsUnreadable_LeavesTheOriginalIntact()
     {
         // The whole point: a save that cannot be read back must not have replaced

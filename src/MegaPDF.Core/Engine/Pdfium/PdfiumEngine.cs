@@ -176,6 +176,25 @@ internal sealed class PdfiumDocument : IPdfDocument
         ThroughCore(target, write => CoreNative.megapdf_save(_core, write, IntPtr.Zero));
     }
 
+    public bool ReadsFile(string filePath)
+    {
+        lock (PdfiumLibrary.Lock)
+        {
+            ThrowIfDisposed();
+            return CoreNative.megapdf_reads_file(_core, filePath) == 1;
+        }
+    }
+
+    public void ReadFromCopy()
+    {
+        // Not under PdfiumLibrary.Lock: the core copies without its own lock, so pages render
+        // while a big file copies, and megapdf_close waits for the copy to finish.
+        ThrowIfDisposed();
+        var copyPath = Path.Combine(Path.GetTempPath(), $"megapdf-reading-{Guid.NewGuid():N}.pdf");
+        if (CoreNative.megapdf_read_from_copy(_core, copyPath) != 0)
+            throw new IOException($"The document's file could not be copied before it is written: {CoreNative.LastErrorMessage()}");
+    }
+
     public PdfSecurity Security
     {
         get

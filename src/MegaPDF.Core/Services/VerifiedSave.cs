@@ -29,6 +29,63 @@ public static class VerifiedSave
     public enum SaveStage { Writing, Verifying }
 
     /// <summary>
+    /// A save that has been written to a temporary file and read back, waiting to be written
+    /// to its destination (#147). A host that must open the destination only once the save is
+    /// known good — the macOS sandbox, where opening the file for writing truncates it — holds
+    /// one of these instead of the bytes in memory, so a large document never is. Disposing it
+    /// deletes the file.
+    /// </summary>
+    public sealed class StagedCopy : IDisposable
+    {
+        internal StagedCopy(string path) => Path = path;
+
+        /// <summary>The staged file.</summary>
+        public string Path { get; }
+
+        public long Length => new FileInfo(Path).Length;
+
+        /// <summary>Streams the staged file into <paramref name="target"/> from its current position.</summary>
+        public void CopyTo(Stream target)
+        {
+            using var staged = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+            staged.CopyTo(target, 1 << 20);
+        }
+
+        /// <summary>
+        /// Writes the staged file over <paramref name="destination"/> from its start, and cuts
+        /// off whatever of the previous contents was longer. The destination is written in
+        /// place: if it is the file an open document reads, move that document off it first
+        /// (<see cref="IPdfDocument.ReadFromCopy"/>).
+        /// </summary>
+        public void WriteOver(Stream destination)
+        {
+            ArgumentNullException.ThrowIfNull(destination);
+            if (destination.CanSeek)
+                destination.Seek(0, SeekOrigin.Begin);
+            CopyTo(destination);
+            destination.Flush();
+            if (destination.CanSeek)
+                destination.SetLength(destination.Position);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (File.Exists(Path))
+                    File.Delete(Path);
+            }
+            catch (IOException)
+            {
+                // Left in the temp folder; nothing depends on it any more.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
     /// Writes to a path with <see cref="AtomicFileWriter"/>'s swap, after verifying.
     /// </summary>
     public static void ToPath(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
@@ -82,6 +139,37 @@ public static class VerifiedSave
     {
         Stage(engine, document, document.SaveWithoutSecurity, OpenWith(engine, null),
             staged => StagedStreamWriter.Write(destination, CopyFrom(staged)), onStage);
+    }
+
+    /// <summary>
+    /// The save, written to a temporary file and verified, for the caller to write where it
+    /// must (#147). Throws as <see cref="ToPath"/> does, with nothing left behind.
+    /// </summary>
+    public static StagedCopy ToStagedFile(IPdfEngine engine, IPdfDocument document, Action<SaveStage>? onStage = null) =>
+        StageOnly(engine, document, document.Save, OpenLike(engine, document), onStage);
+
+    /// <inheritdoc cref="ToPathWithSecurity"/>
+    public static StagedCopy ToStagedFileWithSecurity(IPdfEngine engine, IPdfDocument document,
+        string userPassword, string? ownerPassword, PdfPermissions permissions, Action<SaveStage>? onStage = null) =>
+        StageOnly(engine, document, target => document.SaveWithSecurity(target, userPassword, ownerPassword, permissions),
+            OpenWith(engine, userPassword), onStage);
+
+    /// <inheritdoc cref="ToPathWithoutSecurity"/>
+    public static StagedCopy ToStagedFileWithoutSecurity(IPdfEngine engine, IPdfDocument document, Action<SaveStage>? onStage = null) =>
+        StageOnly(engine, document, document.SaveWithoutSecurity, OpenWith(engine, null), onStage);
+
+    private static StagedCopy StageOnly(IPdfEngine engine, IPdfDocument document, Action<Stream> save,
+        Func<string, IPdfDocument> reopen, Action<SaveStage>? onStage)
+    {
+        StagedCopy? staged = null;
+        Stage(engine, document, save, reopen, stagingPath =>
+        {
+            // Keep the file: move it out from under Stage's cleanup.
+            var kept = Path.Combine(Path.GetDirectoryName(stagingPath)!, $"megapdf-staged-{Guid.NewGuid():N}.pdf");
+            File.Move(stagingPath, kept);
+            staged = new StagedCopy(kept);
+        }, onStage);
+        return staged!;
     }
 
     private static Action<Stream> CopyFrom(string stagedPath) => target =>

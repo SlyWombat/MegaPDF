@@ -884,6 +884,23 @@ internal static class Program
                 using (var page = reopened.GetPage(0))
                     Check("and what it wrote reads back with the tick", page.GetStamps().Any(st => st.Id.StartsWith("mark:", StringComparison.Ordinal)));
 
+                // #147: that save wrote, in place, the file the document is read from on demand. The
+                // document moved onto a copy first, so it still reads what it was opened on: the next
+                // save, in place again, serialises it from that copy and reads back right.
+                vm.HandlePageClick(0, box); // untick
+                saved = vm.SaveThroughAsync(() => Task.FromResult<Stream>(new FileStream(original, FileMode.Create)))
+                          .GetAwaiter().GetResult();
+                Check("a second save in place, over the file the document reads, works (#147)", saved && !vm.IsDirty);
+                using (var engine = new PdfiumEngine())
+                using (var reopened = engine.Open(original))
+                using (var page = reopened.GetPage(0))
+                    Check("and reads back without the tick", reopened.PageCount == 2
+                          && !page.GetStamps().Any(st => st.Id.StartsWith("mark:", StringComparison.Ordinal)));
+                vm.HandlePageClick(0, box); // tick again, and save, for what follows
+                saved = vm.SaveThroughAsync(() => Task.FromResult<Stream>(new FileStream(original, FileMode.Create)))
+                          .GetAwaiter().GetResult();
+                Check("and a third", saved && !vm.IsDirty);
+
                 vm.HandlePageClick(0, box); // untick: dirty again
                 var kindBefore = vm.HitTest(0, box).Kind;
                 using (vm.Busy.Begin(Strings.BusySaving))
