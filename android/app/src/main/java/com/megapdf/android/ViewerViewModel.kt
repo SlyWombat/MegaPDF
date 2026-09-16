@@ -24,6 +24,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -110,6 +111,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private var document: PdfDocument? = null
     // Observable so the Password command can enable itself on it (#131).
     private var currentUri: Uri? by mutableStateOf(null)
+
+    /**
+     * The uri whose file the open document reads on demand (#147), or null when it reads a
+     * private copy or nothing. Writing that file in place would change what the document
+     * reads, so a save to it moves the document onto a copy first ([keepDocumentOffFile]).
+     */
+    private var documentReadsUri: Uri? = null
     private val recentsStore =
         RecentFilesStore(File(application.filesDir, "recent.json"))
     private val signatureStore =
@@ -520,14 +528,21 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             // ADR-004 decision 8: protection PDFium can't open is neither corrupt nor a wrong password.
             ViewerUiState.Home(
                 recentsStore.load(),
-                if (e.isUnsupportedSecurity) str(R.string.open_unsupported_security)
-                else str(R.string.open_failed_code, e.errorCode),
+                when {
+                    e.isUnsupportedSecurity -> str(R.string.open_unsupported_security)
+                    e.isTooLarge -> str(R.string.open_too_large)
+                    else -> str(R.string.open_failed_code, e.errorCode)
+                },
             )
         } catch (_: SecurityException) {
             recentsStore.remove(uri.toString())
             ViewerUiState.Home(recentsStore.load(), str(R.string.open_access_revoked))
         } catch (_: Exception) {
             ViewerUiState.Home(recentsStore.load(), str(R.string.open_failed))
+        } catch (_: OutOfMemoryError) {
+            // Read on demand, a document no longer needs its size in memory (#147); one that
+            // still runs out while its pages are measured is too big for this device.
+            ViewerUiState.Home(recentsStore.load(), str(R.string.open_too_large))
         }
         // A security save reopens its file from the viewer (#131); if that fails, the document
         // still open no longer matches the file, so it goes too. From home this is a no-op.
@@ -536,16 +551,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         return false
     }
 
-    /** A document read from its uri and opened, not yet on screen. */
-    private class OpenedDocument(val doc: PdfDocument, val pageSizes: List<PageSize>, val security: PdfSecurity)
+    /**
+     * A document opened from its uri, not yet on screen. [readsUri] when it reads the uri's
+     * own file on demand, rather than a private copy of it (#147).
+     */
+    private class OpenedDocument(
+        val doc: PdfDocument,
+        val pageSizes: List<PageSize>,
+        val security: PdfSecurity,
+        val readsUri: Boolean,
+    )
 
     private suspend fun readAndOpen(uri: Uri, password: String?): OpenedDocument {
-        val bytes = withContext(Dispatchers.IO) {
-            getApplication<Application>().contentResolver.openInputStream(uri)
-                ?.use { it.readBytes() }
-                ?: throw IllegalStateException("provider returned no stream")
-        }
-        val doc = engine.open(bytes, password)
+        val (doc, readsUri) = openFromUri(uri, password)
         try {
             val count = doc.pageCount()
             val sizes = ArrayList<PageSize>(count)
@@ -554,11 +572,70 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 sizes += PageSize(page.widthPoints, page.heightPoints)
                 page.close()
             }
-            return OpenedDocument(doc, sizes, doc.security())
-        } catch (e: Exception) {
+            return OpenedDocument(doc, sizes, doc.security(), readsUri)
+        } catch (e: Throwable) {
             doc.close()
             throw e
         }
+    }
+
+    /**
+     * Opens [uri] read on demand (#147, #148), so a document costs what PDFium parses rather
+     * than its size, and a file of several gigabytes opens like any other. Through the
+     * provider's descriptor when it gives a regular file (true); a provider that only streams
+     * (a pipe) is copied into the cache and opened from there (false), and the copy's name
+     * goes at once, since the open document holds the file.
+     */
+    private suspend fun openFromUri(uri: Uri, password: String?): Pair<PdfDocument, Boolean> {
+        val app = getApplication<Application>()
+        val fd = withContext(Dispatchers.IO) {
+            try {
+                app.contentResolver.openFileDescriptor(uri, "r")?.detachFd()
+            } catch (_: java.io.FileNotFoundException) {
+                null   // some providers stream but give no descriptor; the stream below says if the file is gone
+            }
+        }
+        if (fd != null) {
+            try {
+                return engine.openFd(fd, password) to true
+            } catch (e: PdfLoadException) {
+                if (!e.isFileError) throw e
+                // Not a regular file: a pipe from a provider that streams. Copy it instead.
+            }
+        }
+        val copy = File(app.cacheDir, "open-${System.nanoTime()}.pdf")
+        try {
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openInputStream(uri)?.use { input ->
+                    copy.outputStream().use { input.copyTo(it, COPY_BUFFER_BYTES) }
+                } ?: throw IllegalStateException("provider returned no stream")
+            }
+            return engine.openFile(copy.path, password) to false
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { copy.delete() }
+        }
+    }
+
+    /**
+     * Before [uri] is written in place: if it is the file [doc] reads on demand, [doc] moves
+     * onto a private copy first (#147). Otherwise the save would change the bytes under the
+     * open document, and the next page it loaded, or the next save, would read the new file
+     * at the old one's offsets. Known when the document was opened from [uri]; also found by
+     * identity, for a Save As that picks the document's own file. Throws when the copy cannot
+     * be made (no space), and nothing is written.
+     */
+    private suspend fun keepDocumentOffFile(doc: PdfDocument, uri: Uri) {
+        val reads = uri == documentReadsUri || withContext(Dispatchers.IO) {
+            try {
+                getApplication<Application>().contentResolver.openFileDescriptor(uri, "r")
+            } catch (_: Exception) {
+                null
+            }
+        }?.use { doc.readsFd(it.fd) } == true
+        if (!reads) return
+        val copy = File(getApplication<Application>().cacheDir, "reading-${System.nanoTime()}.pdf")
+        doc.readFromCopy(copy.path)
+        if (document === doc) documentReadsUri = null
     }
 
     /** Puts [opened] on screen in place of whatever was open. */
@@ -566,6 +643,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         closeCurrent()
         attach(opened.doc, opened.security)
         currentUri = uri
+        documentReadsUri = if (opened.readsUri) uri else null
         val name = queryDisplayName(uri)
         persistReadPermission(uri)
         // The uri and name only: whatever password opened it stays with the open document.
@@ -1353,7 +1431,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 // Verified opened like the document: a protected document's copy is still
                 // protected (#132).
-                writeVerified(uri, token, { doc.save(it) }, { engine.openLike(doc, it).close() })
+                writeVerified(doc, uri, token, { doc.save(it) }, { engine.openFileLike(doc, it.path).close() })
 
                 if (isSaveAs) {
                     currentUri = uri
@@ -1385,17 +1463,22 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * The verified write every save shares (#18, #131): [serialize] into an app-cache temp
-     * file, so a PDFium failure never touches the user's file; [verify] the bytes by opening
-     * them, which throws when they don't; only then stream them to [uri] with truncation and
+     * file, so a PDFium failure never touches the user's file; [verify] that file by opening
+     * it, which throws when it doesn't open; only then stream it to [uri] with truncation and
      * fsync. Throws on any failure, for the caller to report. Bytes that did not verify
      * never reach the destination. [token] follows the steps: Saving…, Checking the saved
      * file…, Saving… (#145).
+     *
+     * Nothing here holds the document in memory (#147): the check reads the temp file on
+     * demand and the write streams it. If [uri] is the file [doc] reads, [doc] moves onto a
+     * copy before it is truncated.
      */
     private suspend fun writeVerified(
+        doc: PdfDocument,
         uri: Uri,
         token: BusyToken?,
         serialize: suspend (java.io.OutputStream) -> Unit,
-        verify: suspend (ByteArray) -> Unit,
+        verify: suspend (File) -> Unit,
     ) {
         val app = getApplication<Application>()
         val temp = File(app.cacheDir, "save-${System.currentTimeMillis()}.pdf")
@@ -1408,11 +1491,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 java.io.FileOutputStream(temp).use { serialize(it) }
             }
 
-            val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
-            check(bytes.isNotEmpty()) { "engine produced an empty document" }
+            check(withContext(Dispatchers.IO) { temp.length() } > 0L) { "engine produced an empty document" }
             token?.relabel(BusyLabel.VERIFYING_SAVE)
-            verify(bytes)
+            verify(temp)
             token?.relabel(BusyLabel.SAVING)
+            keepDocumentOffFile(doc, uri)
 
             withContext(Dispatchers.IO) {
                 // "wt" guarantees truncation; plain "w" can leave a stale tail
@@ -1421,7 +1504,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     ?: throw IllegalStateException("provider returned no descriptor")
                 pfd.use {
                     java.io.FileOutputStream(it.fileDescriptor).use { out ->
-                        out.write(bytes)
+                        java.io.FileInputStream(temp).use { input -> input.copyTo(out, COPY_BUFFER_BYTES) }
                         out.fd.sync()
                     }
                 }
@@ -1540,13 +1623,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val written = try {
                     if (newPassword == null) {
-                        writeVerified(uri, token, { doc.saveWithoutSecurity(it) }, { engine.open(it).close() })
+                        writeVerified(doc, uri, token, { doc.saveWithoutSecurity(it) }, { engine.openFile(it.path).close() })
                     } else {
                         writeVerified(
+                            doc,
                             uri,
                             token,
                             { doc.saveWithSecurity(it, newPassword, null, PdfPermissions.ALL) },
-                            { engine.open(it, newPassword).close() },
+                            { engine.openFile(it.path, newPassword).close() },
                         )
                     }
                     true
@@ -1598,6 +1682,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         renderedWidths.clear()
         lastWindow = null
         currentUri = null
+        documentReadsUri = null
         dirty.reset()
         pendingSignature = null
         selectedStamp = null
@@ -1696,6 +1781,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         const val MAX_BITMAP_DIM = 2048  // bound worst-case bitmap memory
         const val MAX_SIGNATURE_SOURCE_DIM = 1500  // downscale huge photos before cleanup
         const val SEARCH_DEBOUNCE_MS = 250L  // keep typing from spamming the engine
+        const val COPY_BUFFER_BYTES = 1 shl 20  // streaming a document between files (#147)
         // The screenshot search term, document names and typed text are string
         // resources (screenshot_*), so a French run shows French content (#91).
 

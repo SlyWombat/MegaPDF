@@ -17,6 +17,13 @@ internal object PdfiumNative {
     /** [passwordUtf8] is NUL-terminated UTF-8, as for the security saves below (#131). */
     external fun nativeOpen(bytes: ByteArray, passwordUtf8: ByteArray?): Long
     external fun nativeOpenLike(like: Long, bytes: ByteArray): Long
+    /** Takes ownership of [fd] (#147): the core closes it with the document, or at once if the open fails. */
+    external fun nativeOpenFd(fd: Int, passwordUtf8: ByteArray?): Long
+    /** [pathUtf8] is NUL-terminated UTF-8, like the password (#147). */
+    external fun nativeOpenFile(pathUtf8: ByteArray, passwordUtf8: ByteArray?): Long
+    external fun nativeOpenFileLike(like: Long, pathUtf8: ByteArray): Long
+    external fun nativeReadsFd(handle: Long, fd: Int): Boolean
+    external fun nativeReadFromCopy(handle: Long, pathUtf8: ByteArray): Int
     external fun nativeLastError(): Int
     external fun nativeCloseDocument(handle: Long)
     external fun nativePageCount(handle: Long): Int
@@ -111,4 +118,8 @@ internal object PdfiumNative {
     const val ERR_PASSWORD = 4
     /** FPDF_ERR_SECURITY: a security handler PDFium does not support (#131). */
     const val ERR_SECURITY = 6
+    /** FPDF_ERR_FILE: the file could not be opened or read. */
+    const val ERR_FILE = 2
+    /** MEGAPDF_OPEN_ERR_TOO_LARGE: past what the platform can address (#147); not reachable on 64-bit Android. */
+    const val ERR_TOO_LARGE = 100
 }

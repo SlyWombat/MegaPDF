@@ -11,7 +11,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
+import android.os.ParcelFileDescriptor
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 @RunWith(AndroidJUnit4::class)
 class PdfEngineTest {
@@ -220,6 +222,88 @@ class PdfEngineTest {
                 fail("expected PdfLoadException")
             } catch (expected: PdfLoadException) {
                 // expected
+            }
+        }
+    }
+
+    private fun scratchFile(name: String, bytes: ByteArray): File {
+        val dir = File(InstrumentationRegistry.getInstrumentation().targetContext.cacheDir, "engine-test-files")
+        dir.mkdirs()
+        return File(dir, name).apply { writeBytes(bytes) }
+    }
+
+    // #147/#148: a document opened from its descriptor is read on demand; the descriptor is
+    // the engine's from the call on, and a failed open closes it too.
+    @Test
+    fun opensFromADescriptorAndAFile() {
+        runBlocking {
+            val file = scratchFile("fd.pdf", fixtureBytes())
+            val fd = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).detachFd()
+            val doc = engine.openFd(fd)
+            try {
+                assertEquals(2, doc.pageCount())
+                val page = doc.openPage(1)
+                page.close()
+                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use {
+                    assertTrue("the document reads the file its descriptor is on", doc.readsFd(it.fd))
+                }
+            } finally {
+                doc.close()
+            }
+            val byPath = engine.openFile(file.path)
+            try {
+                assertEquals(2, byPath.pageCount())
+            } finally {
+                byPath.close()
+            }
+
+            val junk = scratchFile("junk.pdf", "not a pdf".toByteArray())
+            try {
+                engine.openFd(ParcelFileDescriptor.open(junk, ParcelFileDescriptor.MODE_READ_ONLY).detachFd())
+                fail("junk opened")
+            } catch (_: PdfLoadException) {
+            }
+
+            // A pipe is not a file: refused as a file error, which the app answers by copying.
+            val pipe = ParcelFileDescriptor.createPipe()
+            pipe[1].close()
+            try {
+                engine.openFd(pipe[0].detachFd())
+                fail("a pipe opened")
+            } catch (e: PdfLoadException) {
+                assertTrue("a pipe is a file error, got ${e.errorCode}", e.isFileError)
+            }
+        }
+    }
+
+    // #147: before the app writes the document's own file in place, the document moves onto a
+    // private copy, and then keeps reading what it was opened on.
+    @Test
+    fun readFromCopySurvivesTheFileBeingWrittenInPlace() {
+        runBlocking {
+            val file = scratchFile("in-place.pdf", fixtureBytes())
+            val doc = engine.openFd(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).detachFd())
+            try {
+                val copy = File(file.parentFile, "copy-of-in-place.pdf")
+                doc.readFromCopy(copy.path)
+                assertTrue("the copy's name is gone", !copy.exists())
+                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use {
+                    assertTrue("the document no longer reads the file", !doc.readsFd(it.fd))
+                }
+                file.writeBytes("overwritten".toByteArray())
+
+                val page = doc.openPage(1)
+                page.close()
+                val saved = ByteArrayOutputStream()
+                doc.save(saved)
+                val reopened = engine.open(saved.toByteArray())
+                try {
+                    assertEquals(2, reopened.pageCount())
+                } finally {
+                    reopened.close()
+                }
+            } finally {
+                doc.close()
             }
         }
     }

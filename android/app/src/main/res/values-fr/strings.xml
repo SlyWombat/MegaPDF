@@ -41,6 +41,7 @@
     <string name="open_failed">Impossible d\'ouvrir ce fichier.</string>
     <string name="open_failed_code">Impossible d\'ouvrir ce fichier (erreur %1$d).</string>
     <string name="open_unsupported_security">Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</string>
+    <string name="open_too_large">Ce fichier est trop volumineux pour que MegaPDF puisse l\'ouvrir.</string>
     <string name="open_access_revoked">L\'accès à ce fichier a été révoqué. Sélectionnez-le de nouveau pour le rouvrir.</string>
     <string name="document">Document</string>
 

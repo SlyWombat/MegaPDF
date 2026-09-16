@@ -48,6 +48,45 @@ class PdfEngine {
         }
 
     /**
+     * Opens a document from a descriptor, read on demand for as long as it is open (#147,
+     * #148): nothing holds the file in memory, so its size is bounded by storage, not the
+     * heap. Ownership of [fd] passes to the engine with the call, as from
+     * `ParcelFileDescriptor.detachFd()`; it is closed with the document, or at once if the
+     * open fails. It must be a regular file: a pipe is refused with [PdfLoadException]
+     * ([PdfLoadException.isFileError]).
+     *
+     * Writing the file in place while the document is open would change what it reads:
+     * see [PdfDocument.readsFd] and [PdfDocument.readFromCopy].
+     * @throws PdfPasswordException wrong or missing password
+     * @throws PdfLoadException corrupt or unreadable document, or security PDFium cannot open
+     */
+    suspend fun openFd(fd: Int, password: String? = null): PdfDocument =
+        withContext(dispatcher) {
+            opened(PdfiumNative.nativeOpenFd(fd, password?.nulTerminatedUtf8()))
+        }
+
+    /** [openFd] for a file with a path, such as one in the app's cache (#147). */
+    suspend fun openFile(path: String, password: String? = null): PdfDocument =
+        withContext(dispatcher) {
+            opened(PdfiumNative.nativeOpenFile(path.nulTerminatedUtf8(), password?.nulTerminatedUtf8()))
+        }
+
+    /** [openLike] for a file, read on demand: how a save is verified without reading it into memory (#147). */
+    suspend fun openFileLike(like: PdfDocument, path: String): PdfDocument =
+        withContext(dispatcher) {
+            opened(PdfiumNative.nativeOpenFileLike(like.nativeHandle(), path.nulTerminatedUtf8()))
+        }
+
+    private fun opened(handle: Long): PdfDocument {
+        if (handle == 0L) {
+            val error = PdfiumNative.nativeLastError()
+            if (error == PdfiumNative.ERR_PASSWORD) throw PdfPasswordException()
+            throw PdfLoadException(error)
+        }
+        return PdfDocument(this, handle)
+    }
+
+    /**
      * Opens [bytes] with the credentials [like] was opened with (#132): a saved copy of a
      * protected document is still protected, so reading it back needs the same password.
      * @throws PdfPasswordException the bytes need a different password
@@ -159,6 +198,32 @@ class PdfDocument internal constructor(
         check(!closed) { "document is closed" }
         if (!PdfiumNative.nativeSave(handle, out)) throw PdfSaveException()
         out.flush()
+    }
+
+    /**
+     * Whether this document reads the file [fd] is open on (#147); [fd] stays the caller's.
+     * False for a document opened from bytes, or one already moved to a copy.
+     */
+    suspend fun readsFd(fd: Int): Boolean = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        PdfiumNative.nativeReadsFd(handle, fd)
+    }
+
+    /**
+     * Moves the document onto a private copy of the file it reads, at [copyPath] (which must
+     * not exist), so that file can be written over in place (#147): a document read on demand
+     * would otherwise read the new bytes where it expects the old. The copy's name is removed
+     * at once and its space freed when the document closes. Nothing to do for a document
+     * opened from bytes.
+     *
+     * The copy runs off the engine thread, so pages keep rendering while a big file copies.
+     * @throws java.io.IOException the copy could not be made (no space, say); the document
+     *   still reads its file, which must then not be written in place
+     */
+    suspend fun readFromCopy(copyPath: String) {
+        check(!closed) { "document is closed" }
+        val status = withContext(Dispatchers.IO) { PdfiumNative.nativeReadFromCopy(handle, copyPath.nulTerminatedUtf8()) }
+        if (status != 0) throw java.io.IOException("could not copy the document's file (status $status)")
     }
 
     /** Whether the document is encrypted and what this open may do (#131). */
@@ -819,6 +884,12 @@ class PdfLoadException(val errorCode: Int) :
      * say. Not corrupt and not a wrong password (#131, ADR-004 decision 8).
      */
     val isUnsupportedSecurity: Boolean get() = errorCode == PdfiumNative.ERR_SECURITY
+
+    /** The file could not be opened or read as a file: not a regular file, or gone (#147). */
+    val isFileError: Boolean get() = errorCode == PdfiumNative.ERR_FILE
+
+    /** The file is past what this platform can address (#147). */
+    val isTooLarge: Boolean get() = errorCode == PdfiumNative.ERR_TOO_LARGE
 }
 
 class PdfSaveException : Exception("Failed to serialize document")

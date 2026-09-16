@@ -47,6 +47,7 @@
     <string name="open_failed_code">Couldn\'t open this file (error %1$d).</string>
     <!-- A security handler PDFium doesn't support, e.g. certificate security (#131). -->
     <string name="open_unsupported_security">This PDF uses a kind of protection MegaPDF can\'t open.</string>
+    <string name="open_too_large">This file is too large for MegaPDF to open.</string>
     <string name="open_access_revoked">Access to this file was revoked. Pick it again to reopen it.</string>
     <!-- Display name when the provider gives none. -->
     <string name="document">Document</string>

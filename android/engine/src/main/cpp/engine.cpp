@@ -104,6 +104,67 @@ Java_com_megapdf_engine_PdfiumNative_nativeOpenLike(JNIEnv* env, jobject, jlong 
     return reinterpret_cast<jlong>(d);
 }
 
+// Opens a document from a descriptor, read on demand for its whole life (#147, #148): a
+// content URI has a descriptor but no path. The core owns `fd` from here, and closes it
+// whether or not the open succeeds.
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeOpenFd(JNIEnv* env, jobject, jint fd, jbyteArray passwordUtf8) {
+    jbyte* pw = passwordUtf8 != nullptr ? env->GetByteArrayElements(passwordUtf8, nullptr) : nullptr;
+    megapdf_document* core = megapdf_open_fd(static_cast<int>(fd), reinterpret_cast<const char*>(pw));
+    if (pw != nullptr) env->ReleaseByteArrayElements(passwordUtf8, pw, JNI_ABORT);
+    if (core == nullptr) return 0;
+
+    auto* d = new Document();
+    d->core = core;
+    return reinterpret_cast<jlong>(d);
+}
+
+// Opens a document from a file path, read on demand (#147, #148). The path arrives as
+// NUL-terminated UTF-8 bytes for the same reason the password does.
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeOpenFile(JNIEnv* env, jobject, jbyteArray pathUtf8, jbyteArray passwordUtf8) {
+    jbyte* path = env->GetByteArrayElements(pathUtf8, nullptr);
+    jbyte* pw = passwordUtf8 != nullptr ? env->GetByteArrayElements(passwordUtf8, nullptr) : nullptr;
+    megapdf_document* core = megapdf_open_file(reinterpret_cast<const char*>(path), reinterpret_cast<const char*>(pw));
+    if (pw != nullptr) env->ReleaseByteArrayElements(passwordUtf8, pw, JNI_ABORT);
+    env->ReleaseByteArrayElements(pathUtf8, path, JNI_ABORT);
+    if (core == nullptr) return 0;
+
+    auto* d = new Document();
+    d->core = core;
+    return reinterpret_cast<jlong>(d);
+}
+
+// nativeOpenFile with the credentials `like` was opened with (#132, #148).
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeOpenFileLike(JNIEnv* env, jobject, jlong like, jbyteArray pathUtf8) {
+    jbyte* path = env->GetByteArrayElements(pathUtf8, nullptr);
+    megapdf_document* core =
+        megapdf_open_file_like(reinterpret_cast<Document*>(like)->core, reinterpret_cast<const char*>(path));
+    env->ReleaseByteArrayElements(pathUtf8, path, JNI_ABORT);
+    if (core == nullptr) return 0;
+
+    auto* d = new Document();
+    d->core = core;
+    return reinterpret_cast<jlong>(d);
+}
+
+// Whether the document reads the file `fd` is open on (#147); `fd` stays the caller's.
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeReadsFd(JNIEnv*, jobject, jlong handle, jint fd) {
+    return megapdf_reads_fd(reinterpret_cast<Document*>(handle)->core, static_cast<int>(fd)) == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
+// Moves the document onto a private copy of its file before that file is written in place
+// (#147). The core's status: 0, or -9 when the copy could not be made.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeReadFromCopy(JNIEnv* env, jobject, jlong handle, jbyteArray pathUtf8) {
+    jbyte* path = env->GetByteArrayElements(pathUtf8, nullptr);
+    const int status = megapdf_read_from_copy(reinterpret_cast<Document*>(handle)->core, reinterpret_cast<const char*>(path));
+    env->ReleaseByteArrayElements(pathUtf8, path, JNI_ABORT);
+    return static_cast<jint>(status);
+}
+
 JNIEXPORT jint JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeLastError(JNIEnv*, jobject) {
     return static_cast<jint>(megapdf_last_error());
