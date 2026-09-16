@@ -153,7 +153,7 @@ actor PdfEngine {
         guard !document.isDestroyed else { throw PdfError.saveFailed }
         let copy = FileManager.default.temporaryDirectory.appendingPathComponent("reading-\(UUID().uuidString).pdf")
         let status = copy.withUnsafeFileSystemRepresentation { path -> Int32 in
-            guard let path else { return MEGAPDF_ERR_ARGUMENT }
+            guard let path else { return Int32(MEGAPDF_ERR_ARGUMENT) }
             return megapdf_read_from_copy(document.core, path)
         }
         guard status == MEGAPDF_OK else { throw PdfError.saveFailed }

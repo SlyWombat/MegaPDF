@@ -353,7 +353,7 @@ final class ViewerModel: ObservableObject {
             toHome(String(localized: "This PDF uses a kind of protection MegaPDF can't open."))
         } catch PdfError.tooLarge {
             toHome(String(localized: "This file is too large for MegaPDF to open."))
-        } catch PdfError.load(code: Int(FPDF_ERR_FILE)) {
+        } catch PdfError.load(code: 2) {   // FPDF_ERR_FILE: gone, or not readable
             toHome(String(localized: "Couldn't read that file."))
         } catch {
             // A plain sentence, not the raw error: the engine's own description is

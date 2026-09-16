@@ -88,7 +88,7 @@ final class PdfEngineTests: XCTestCase {
             _ = try await engine.open(file: FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID().uuidString).pdf"))
             XCTFail("a missing file opened")
         } catch PdfError.load(let code) {
-            XCTAssertEqual(code, Int(FPDF_ERR_FILE))
+            XCTAssertEqual(code, 2)   // FPDF_ERR_FILE
         }
     }
 
