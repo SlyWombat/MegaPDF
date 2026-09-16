@@ -27,8 +27,9 @@ public class UserUnitTests
 
         // The 10 pt square at crop (100,400)-(110,410): top-left y = 600 - 410 = 190.
         var square = Assert.Single(page.DetectCheckboxSquares());
-        Assert.Equal(100, square.X, 1);
-        Assert.Equal(190, square.Y, 1);
+        // The square's bounds take in its 1 pt stroke.
+        Assert.InRange(square.X, 99, 101);
+        Assert.InRange(square.Y, 189, 191);
 
         // The text field at crop (100,300)-(300,320).
         var field = Assert.Single(page.GetFormFields());
@@ -65,8 +66,8 @@ public class UserUnitTests
         Assert.InRange(written.Bounds.X, 39, 43);
         page.MoveTextBox(box, written.Bounds with { X = 200, Y = 220 });
         var moved = Assert.Single(page.GetTextBoxes());
-        Assert.Equal(200, moved.Bounds.X, 1);
-        Assert.Equal(220, moved.Bounds.Y, 1);
+        Assert.InRange(moved.Bounds.X, 199.9, 200.1);
+        Assert.InRange(moved.Bounds.Y, 219.9, 220.1);
 
         var bgra = Enumerable.Range(0, 4 * 4 * 4).Select(i => i % 4 == 3 ? (byte)0xFF : (byte)0x40).ToArray();
         var placed = new PdfRect(350, 100, 120, 60);
