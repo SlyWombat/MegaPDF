@@ -2625,6 +2625,96 @@ void test_open_from_file(const std::string& fixtures) {
     fs::remove_all(dir, ec);
 }
 
+// #147: a platform that must write the document's own file in place (the macOS sandbox,
+// Android's content URIs) first moves the document onto a private copy of it, and the
+// document then keeps working however the original is written.
+void test_read_from_copy(const std::string& fixtures) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+#if defined(_WIN32)
+    const long long pid = static_cast<long long>(_getpid());
+#else
+    const long long pid = static_cast<long long>(getpid());
+#endif
+    const fs::path dir = fs::temp_directory_path(ec) / ("megapdf-core-read-from-copy-" + std::to_string(pid));
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    auto write = [](const fs::path& path, const std::vector<unsigned char>& bytes) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    };
+    auto utf8 = [](const fs::path& path) { return path.u8string(); };
+    const auto plain = read_file(fixtures + "/fixture.pdf");
+    const auto other = read_file(fixtures + "/cropped.pdf");
+    const fs::path original = dir / "original.pdf";
+    const fs::path link = dir / "link.pdf";
+    const fs::path copy = dir / "copy.pdf";
+    write(original, plain);
+
+    megapdf_document* d = megapdf_open_file(utf8(original).c_str(), nullptr);
+    check(d != nullptr, "read from copy: opens");
+    if (!d) return;
+    check(megapdf_reads_file(d, utf8(original).c_str()) == 1, "read from copy: the document reads its file");
+    fs::create_hard_link(original, link, ec);
+    if (!ec) check(megapdf_reads_file(d, utf8(link).c_str()) == 1, "read from copy: a second name for the file is the same file");
+    check(megapdf_reads_file(d, utf8(dir / "missing.pdf").c_str()) == 0, "read from copy: a missing path is not the file");
+    write(dir / "twin.pdf", plain);
+    check(megapdf_reads_file(d, utf8(dir / "twin.pdf").c_str()) == 0, "read from copy: identical bytes elsewhere are not the file");
+    check(megapdf_reads_file(nullptr, utf8(original).c_str()) == 0 && megapdf_reads_file(d, nullptr) == 0,
+          "read from copy: NULLs are not the file");
+#if !defined(_WIN32)
+    int fd = ::open(utf8(original).c_str(), O_RDONLY);
+    check(megapdf_reads_fd(d, fd) == 1, "read from copy: a descriptor on the file is the file");
+    ::close(fd);
+    fd = ::open(utf8(dir / "twin.pdf").c_str(), O_RDONLY);
+    check(megapdf_reads_fd(d, fd) == 0, "read from copy: a descriptor on another file is not the file");
+    ::close(fd);
+#endif
+    {
+        Page p(d, 0);   // something parsed before the move, something (page 2) after
+        check(p.page != nullptr, "read from copy: page 1 loads before the move");
+    }
+
+    // A copy that cannot be made leaves the document reading the original.
+    write(copy, other);
+    check(megapdf_read_from_copy(d, utf8(copy).c_str()) == MEGAPDF_ERR_FILE, "read from copy: an existing copy path is refused");
+    check(megapdf_reads_file(d, utf8(original).c_str()) == 1, "read from copy: after a refusal the document still reads its file");
+    fs::remove(copy, ec);
+    check(megapdf_read_from_copy(d, nullptr) == MEGAPDF_ERR_ARGUMENT && megapdf_read_from_copy(nullptr, "x") == MEGAPDF_ERR_ARGUMENT,
+          "read from copy: NULLs are refused");
+
+    check(megapdf_read_from_copy(d, utf8(copy).c_str()) == MEGAPDF_OK, "read from copy: moves", megapdf_last_error_message());
+    check(!fs::exists(copy), "read from copy: the copy's name is gone at once");
+    check(megapdf_reads_file(d, utf8(original).c_str()) == 0, "read from copy: the document no longer reads its file");
+
+    // Now the original is written over where it is, shorter, as a sandboxed save would.
+    {
+        std::fstream in_place(original, std::ios::binary | std::ios::in | std::ios::out);
+        in_place.seekp(0);
+        in_place.write(reinterpret_cast<const char*>(other.data()), static_cast<std::streamsize>(other.size()));
+    }
+    fs::resize_file(original, other.size(), ec);
+    {
+        Page p2(d, 1);
+        check(p2.page != nullptr && !search(p2.page, "Page").empty(), "read from copy: page 2 still reads the original bytes");
+    }
+    std::vector<unsigned char> saved;
+    check(megapdf_save(d, collect, &saved) == MEGAPDF_OK, "read from copy: saves after the original was written over");
+    megapdf_document* back = megapdf_open(saved.data(), saved.size(), nullptr);
+    check(back != nullptr && megapdf_page_count(back) == 2, "read from copy: the save is the document, not what was written");
+    megapdf_close(back);
+    check(megapdf_read_from_copy(d, utf8(copy).c_str()) == MEGAPDF_OK && !fs::exists(copy), "read from copy: moving again works");
+    megapdf_close(d);
+
+    megapdf_document* m = megapdf_open(plain.data(), plain.size(), nullptr);
+    check(m != nullptr && megapdf_reads_file(m, utf8(original).c_str()) == 0, "read from copy: a document from memory reads no file");
+    check(megapdf_read_from_copy(m, utf8(copy).c_str()) == MEGAPDF_OK && !fs::exists(copy),
+          "read from copy: a document from memory has nothing to move");
+    megapdf_close(m);
+
+    fs::remove_all(dir, ec);
+}
+
 void test_protected_save(const std::string& fixtures) {
     const auto bytes = read_file(fixtures + "/encrypted.pdf");
     check(megapdf_open(bytes.data(), bytes.size(), nullptr) == nullptr, "encrypted.pdf does not open without unlocking");
@@ -4042,6 +4132,7 @@ int main(int argc, char** argv) {
     test_document_and_geometry(argv[1]);
     test_lifecycle(argv[1]);
     test_open_from_file(argv[1]);
+    test_read_from_copy(argv[1]);
     test_fixture_square(argv[1]);
     test_search(argv[1]);
     test_schematic(argv[2]);

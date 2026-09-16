@@ -31,6 +31,9 @@
 #  include <fcntl.h>
 #  include <sys/stat.h>
 #  include <unistd.h>
+#  if defined(__APPLE__)
+#    include <sys/clonefile.h>   // a copy of the file that shares its blocks (#147)
+#  endif
 #endif
 
 #include "fpdf_annot.h"
@@ -89,6 +92,7 @@ struct megapdf_document {
     std::map<int, unsigned long long> page_changes;
     // Page checks running between stages without the lock; megapdf_close() waits for them (#145).
     int active_checks = 0;
+    bool moving_source = false;   // megapdf_read_from_copy() is copying without the lock (#147)
     bool closing = false;
     // What the document was opened with, so megapdf_open_like() can read back a saved
     // copy that is still protected (#132). Memory only; megapdf_close() wipes it.
@@ -381,6 +385,144 @@ bool FileSourceAdoptFd(FileSource* s, int fd) {
 #endif
 }
 
+#if defined(_WIN32)
+// The volume and file index that name a file on Windows, whatever path reached it.
+bool FileIdentity(HANDLE h, unsigned long long* volume, unsigned long long* index) {
+    BY_HANDLE_FILE_INFORMATION info{};
+    if (!GetFileInformationByHandle(h, &info)) return false;
+    *volume = info.dwVolumeSerialNumber;
+    *index = (static_cast<unsigned long long>(info.nFileIndexHigh) << 32) | info.nFileIndexLow;
+    return true;
+}
+
+std::wstring Widen(const char* utf8) {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, nullptr, 0);
+    if (n <= 0) return std::wstring();
+    std::wstring wide(static_cast<size_t>(n), L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide.data(), n);
+    wide.resize(static_cast<size_t>(n - 1));
+    return wide;
+}
+#endif
+
+// Whether `s` reads the file at `path_utf8` (#147).
+bool FileSourceIsPath(const FileSource& s, const char* path_utf8) {
+    if (!s.open || path_utf8 == nullptr || path_utf8[0] == '\0') return false;
+#if defined(_WIN32)
+    const std::wstring wide = Widen(path_utf8);
+    if (wide.empty()) return false;
+    // No access asked for: only the identity is read, and nothing is locked.
+    HANDLE h = CreateFileW(wide.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                           OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    unsigned long long v1 = 0, i1 = 0, v2 = 0, i2 = 0;
+    const bool same = FileIdentity(h, &v1, &i1) && FileIdentity(static_cast<HANDLE>(s.handle), &v2, &i2) &&
+                      v1 == v2 && i1 == i2;
+    CloseHandle(h);
+    return same;
+#else
+    struct stat a{}, b{};
+    return ::stat(path_utf8, &a) == 0 && ::fstat(s.fd, &b) == 0 && a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+#endif
+}
+
+// Makes a private copy of what `s` reads at `path_utf8` and returns a source reading it, with
+// the copy's name already gone. Runs without the core lock: FileSourceRead takes none.
+bool FileSourceCopy(const FileSource& s, const char* path_utf8, FileSource* out) {
+#if defined(_WIN32)
+    const std::wstring wide = Widen(path_utf8);
+    if (wide.empty()) {
+        SetError(FPDF_ERR_FILE, "the copy's file name could not be read");
+        return false;
+    }
+    // Deleted when the handle closes, whether the document closes or the process dies.
+    HANDLE h = CreateFileW(wide.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
+                           CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE | FILE_FLAG_RANDOM_ACCESS,
+                           nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        SetError(FPDF_ERR_FILE, "the copy could not be created");
+        return false;
+    }
+    out->handle = h;
+    const bool cloned = false;
+#else
+    int fd = -1;
+    bool cloned = false;
+#  if defined(__APPLE__)
+    // APFS clones in constant time and shares the blocks until either side is written, which
+    // is exactly the case here: the original is about to be written, the copy never is.
+    if (::fclonefileat(s.fd, AT_FDCWD, path_utf8, 0) == 0) {
+        fd = ::open(path_utf8, O_RDONLY | O_CLOEXEC);
+        ::unlink(path_utf8);
+        struct stat st{};
+        if (fd >= 0 && (::fstat(fd, &st) != 0 || static_cast<unsigned long long>(st.st_size) != s.length)) {
+            ::close(fd);   // the original changed length since it was opened: copy what the document read
+            fd = -1;
+        }
+        cloned = fd >= 0;
+    }
+    if (fd < 0)
+#  endif
+    {
+        fd = ::open(path_utf8, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        if (fd < 0) {
+            SetError(FPDF_ERR_FILE, "the copy could not be created");
+            return false;
+        }
+        ::unlink(path_utf8);   // the descriptor keeps it; nothing is left however the app ends
+    }
+    out->fd = fd;
+#endif
+    out->length = s.length;
+    out->open = true;
+    if (cloned) return true;   // a clone is already complete
+
+    std::vector<unsigned char> buffer;
+    try {
+        buffer.resize(4u << 20);
+    } catch (...) {
+        FileSourceClose(out);
+        SetError(FPDF_ERR_UNKNOWN, "out of memory copying the file");
+        return false;
+    }
+    for (unsigned long long at = 0; at < s.length;) {
+        const size_t n = static_cast<size_t>(std::min<unsigned long long>(buffer.size(), s.length - at));
+        if (!FileSourceRead(const_cast<FileSource*>(&s), at, buffer.data(), n)) {
+            FileSourceClose(out);
+            SetError(FPDF_ERR_FILE, "the file could not be read to copy it");
+            return false;
+        }
+        size_t done = 0;
+        while (done < n) {
+#if defined(_WIN32)
+            const unsigned long long to = at + done;
+            OVERLAPPED ov{};
+            ov.Offset = static_cast<DWORD>(to & 0xFFFFFFFFull);
+            ov.OffsetHigh = static_cast<DWORD>(to >> 32);
+            DWORD wrote = 0;
+            if (!WriteFile(static_cast<HANDLE>(out->handle), buffer.data() + done, static_cast<DWORD>(n - done), &wrote, &ov) ||
+                wrote == 0) {
+                FileSourceClose(out);
+                SetError(FPDF_ERR_FILE, "the copy could not be written");
+                return false;
+            }
+            done += wrote;
+#else
+            const ssize_t wrote = ::pwrite(out->fd, buffer.data() + done, n - done, static_cast<off_t>(at + done));
+            if (wrote < 0 && errno == EINTR) continue;
+            if (wrote <= 0) {
+                FileSourceClose(out);
+                SetError(FPDF_ERR_FILE, "the copy could not be written");
+                return false;
+            }
+            done += static_cast<size_t>(wrote);
+#endif
+        }
+        at += n;
+    }
+    return true;
+}
+
 // The tail every open shares. PDFium has either produced the document or it has not;
 // the failure message, the password kept for megapdf_open_like() (#132) and the
 // form-fill environment are the same however the bytes arrived. Takes ownership of
@@ -545,6 +687,62 @@ MEGAPDF_API megapdf_document* megapdf_open_fd_like(const megapdf_document* like,
         return nullptr;
     }
     return OpenLike(like, [&](const char* pw) { return megapdf_open_fd(fd, pw); });
+}
+
+MEGAPDF_API int megapdf_reads_file(const megapdf_document* d, const char* path_utf8) {
+    if (d == nullptr) return 0;
+    Guard guard(CoreLock());
+    return !d->moving_source && FileSourceIsPath(d->source, path_utf8) ? 1 : 0;
+}
+
+MEGAPDF_API int megapdf_reads_fd(const megapdf_document* d, int fd) {
+    if (d == nullptr || fd < 0) return 0;
+    Guard guard(CoreLock());
+    if (!d->source.open || d->moving_source) return 0;
+#if defined(_WIN32)
+    return 0;
+#else
+    struct stat a{}, b{};
+    return ::fstat(fd, &a) == 0 && ::fstat(d->source.fd, &b) == 0 && a.st_dev == b.st_dev && a.st_ino == b.st_ino ? 1 : 0;
+#endif
+}
+
+MEGAPDF_API int megapdf_read_from_copy(megapdf_document* d, const char* copy_path_utf8) {
+    if (d == nullptr || copy_path_utf8 == nullptr || copy_path_utf8[0] == '\0') return MEGAPDF_ERR_ARGUMENT;
+    std::unique_lock<std::recursive_mutex> lock(CoreLock());
+    if (!d->source.open) return MEGAPDF_OK;   // opened from memory: nothing reads a file
+    if (d->moving_source || d->closing) {
+        SetError(FPDF_ERR_UNKNOWN, "the document is already being moved or closed");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    // The copy can take a while for a big file, so it runs without the lock: reading the source
+    // takes none, and the source stays open because megapdf_close() waits for this as it waits
+    // for a page check.
+    d->moving_source = true;
+    d->active_checks++;
+    const FileSource original = d->source;
+    lock.unlock();
+    FileSource copy{};
+    const bool ok = FileSourceCopy(original, copy_path_utf8, &copy);
+    lock.lock();
+    d->active_checks--;
+    d->moving_source = false;
+    ChecksDone().notify_all();
+    if (!ok) return MEGAPDF_ERR_FILE;   // the error is set; the document still reads the original
+
+    // Swapped under the lock: every PDFium call, and so every read, holds it. PDFium keeps a
+    // pointer to d->source.access, so the handle changes and the structure stays where it is.
+#if defined(_WIN32)
+    const HANDLE old_handle = static_cast<HANDLE>(d->source.handle);
+    d->source.handle = copy.handle;
+    if (old_handle != nullptr) CloseHandle(old_handle);
+#else
+    const int old_fd = d->source.fd;
+    d->source.fd = copy.fd;
+    if (old_fd >= 0) ::close(old_fd);
+#endif
+    SetError(0, "");
+    return MEGAPDF_OK;
 }
 
 MEGAPDF_API void megapdf_close(megapdf_document* d) {

@@ -66,7 +66,8 @@ enum {
     MEGAPDF_ERR_LAYOUT = -5,      /* PDFium would change how the page looks if it rewrote this text (#118) */
     MEGAPDF_ERR_RESTRICTED = -6,  /* the document's security does not allow it; its owner password would (#131) */
     MEGAPDF_ERR_CANCELLED = -7,   /* a page check stopped early: its cancel flag was raised or its document is closing (#145) */
-    MEGAPDF_ERR_NOT_JUDGED = -8   /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
+    MEGAPDF_ERR_NOT_JUDGED = -8,  /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
+    MEGAPDF_ERR_FILE = -9         /* a file could not be created, read or written (#147) */
 };
 
 /**
@@ -166,6 +167,36 @@ MEGAPDF_API megapdf_document* megapdf_open_file_like(const megapdf_document* lik
 
 /** megapdf_open_fd() with the credentials `like` was opened with (#132, #148). */
 MEGAPDF_API megapdf_document* megapdf_open_fd_like(const megapdf_document* like, int fd);
+
+/**
+ * 1 when `document` reads from the same file as `path_utf8` — the same file, not the same
+ * name, so a link or a second path to it counts — and 0 otherwise: a document opened from
+ * memory, one already moved to a copy, or a path that does not exist (#147).
+ *
+ * A document opened from its file reads it for as long as it is open. Replacing the file
+ * (a write to a sibling, then a rename) is safe; writing over it where it is is not, because
+ * the document would then read the new bytes where it expects the old ones. A binding that
+ * must write in place — the macOS sandbox, Android's content URIs — asks this first and, when
+ * it answers 1, calls megapdf_read_from_copy() before writing.
+ */
+MEGAPDF_API int megapdf_reads_file(const megapdf_document* document, const char* path_utf8);
+
+/** megapdf_reads_file() for a descriptor, which stays the caller's. POSIX only; 0 on Windows. */
+MEGAPDF_API int megapdf_reads_fd(const megapdf_document* document, int fd);
+
+/**
+ * Moves `document` onto a private copy of the file it reads, so that file may be written
+ * over in place (#147). The core creates `copy_path_utf8` (it must not exist), copies the
+ * file into it — a clone on file systems that can, which costs no time or space — and reads
+ * from the copy from then on. The copy's name is gone before this returns: nothing is left
+ * behind however the app ends, and its space is freed when the document closes.
+ *
+ * MEGAPDF_OK, with nothing to do for a document opened from memory; MEGAPDF_ERR_FILE when
+ * the copy cannot be made (no space, say), and the document still reads the original;
+ * MEGAPDF_ERR_ARGUMENT for a NULL document or path. Pages, edits and page checks carry on
+ * while the bytes are copied.
+ */
+MEGAPDF_API int megapdf_read_from_copy(megapdf_document* document, const char* copy_path_utf8);
 
 /** Closes every page still open on it, tears down the form environment, frees it. NULL is fine. */
 MEGAPDF_API void megapdf_close(megapdf_document* document);
