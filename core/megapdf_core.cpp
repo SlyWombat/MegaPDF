@@ -587,8 +587,9 @@ ObjectTexts ReadObjectTexts(FPDF_TEXTPAGE text_page) {
         st.last = i;
     }
     // The stretch after an object's last character leaves only its separator space.
-    for (const auto& [obj, st] : states) {
-        if (st.last + 1 < count && unicode[static_cast<size_t>(st.last) + 1] == L' ') texts[obj].push_back(L' ');
+    for (const auto& entry : states) {
+        const int last = entry.second.last;
+        if (last + 1 < count && unicode[static_cast<size_t>(last) + 1] == L' ') texts[entry.first].push_back(L' ');
     }
     return texts;
 }
