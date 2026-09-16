@@ -436,13 +436,18 @@ bool FileSourceCopy(const FileSource& s, const char* path_utf8, FileSource* out)
         return false;
     }
     // Deleted when the handle closes, whether the document closes or the process dies.
-    HANDLE h = CreateFileW(wide.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, nullptr,
-                           CREATE_NEW, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE | FILE_FLAG_RANDOM_ACCESS,
-                           nullptr);
+    HANDLE h = CreateFileW(wide.c_str(), GENERIC_READ | GENERIC_WRITE | DELETE, FILE_SHARE_READ | FILE_SHARE_DELETE,
+                           nullptr, CREATE_NEW,
+                           FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE | FILE_FLAG_RANDOM_ACCESS, nullptr);
     if (h == INVALID_HANDLE_VALUE) {
         SetError(FPDF_ERR_FILE, "the copy could not be created");
         return false;
     }
+    // And its name goes now where the file system can (NTFS on Windows 10 1809 and later): a
+    // POSIX-style delete, as on the other platforms. Elsewhere the name lasts until the close.
+    FILE_DISPOSITION_INFO_EX gone{};
+    gone.Flags = FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
+    SetFileInformationByHandle(h, FileDispositionInfoEx, &gone, sizeof(gone));
     out->handle = h;
     const bool cloned = false;
 #else
@@ -486,7 +491,7 @@ bool FileSourceCopy(const FileSource& s, const char* path_utf8, FileSource* out)
         return false;
     }
     for (unsigned long long at = 0; at < s.length;) {
-        const size_t n = static_cast<size_t>(std::min<unsigned long long>(buffer.size(), s.length - at));
+        const size_t n = static_cast<size_t>((std::min<unsigned long long>)(buffer.size(), s.length - at));
         if (!FileSourceRead(const_cast<FileSource*>(&s), at, buffer.data(), n)) {
             FileSourceClose(out);
             SetError(FPDF_ERR_FILE, "the file could not be read to copy it");

@@ -36,6 +36,10 @@
 
 #if defined(_WIN32)
 #include <process.h>
+#ifndef NOMINMAX
+#define NOMINMAX   // the tests call std::min and std::max
+#endif
+#include <windows.h>   // ReplaceFileW (#147)
 #else
 #include <fcntl.h>
 #include <unistd.h>
@@ -2504,8 +2508,16 @@ void test_open_from_file(const std::string& fixtures) {
         // client may delete it: the open document keeps reading the bytes it was opened on.
         const fs::path staged = dir / "staged.pdf";
         write(staged, other);
+#if defined(_WIN32)
+        // What .NET's File.Replace does for the desktop save: MoveFileEx cannot replace a file
+        // another handle has open, even one shared for delete, but ReplaceFile can.
+        const bool replaced_ok = ReplaceFileW(doc.wstring().c_str(), staged.wstring().c_str(), nullptr,
+                                              REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr) != 0;
+        check(replaced_ok, "open from file: the file can be replaced while it is open", std::to_string(GetLastError()));
+#else
         fs::rename(staged, doc, ec);
         check(!ec, "open from file: the file can be replaced while it is open", ec.message());
+#endif
         {
             Page p2(d, 1);
             check(p2.page != nullptr && !search(p2.page, "Page").empty(),
@@ -2703,7 +2715,8 @@ void test_read_from_copy(const std::string& fixtures) {
     megapdf_document* back = megapdf_open(saved.data(), saved.size(), nullptr);
     check(back != nullptr && megapdf_page_count(back) == 2, "read from copy: the save is the document, not what was written");
     megapdf_close(back);
-    check(megapdf_read_from_copy(d, utf8(copy).c_str()) == MEGAPDF_OK && !fs::exists(copy), "read from copy: moving again works");
+    const fs::path second = dir / "second-copy.pdf";
+    check(megapdf_read_from_copy(d, utf8(second).c_str()) == MEGAPDF_OK && !fs::exists(second), "read from copy: moving again works");
     megapdf_close(d);
 
     megapdf_document* m = megapdf_open(plain.data(), plain.size(), nullptr);
