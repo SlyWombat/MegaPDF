@@ -171,7 +171,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
         };
-        switch (await dialog.ShowAsync())
+        switch (await dialog.ShowOneAtATimeAsync())
         {
             case ContentDialogResult.Primary:
                 await SaveCommand.ExecuteAsync(null);
@@ -1347,7 +1347,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
         };
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        return await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary;
     }
 
     public async Task ApplyLineEditAsync(int pageIndex, PdfTextLine line, string newText)
@@ -1945,7 +1945,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         };
         first.Loaded += (_, _) => first.Focus(FocusState.Programmatic);
 
-        return await dialog.ShowAsync() == ContentDialogResult.Primary ? first.Password : null;
+        return await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary ? first.Password : null;
     }
 
     /// <summary>A protected document with full access: Primary changes, Secondary removes.</summary>
@@ -1964,7 +1964,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
         };
-        return await dialog.ShowAsync();
+        return await dialog.ShowOneAtATimeAsync();
     }
 
     /// <summary>Password prompt: opening a protected PDF, or unlocking a restricted one. Returns null on cancel.</summary>
@@ -1993,7 +1993,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         };
         box.Loaded += (_, _) => box.Focus(FocusState.Programmatic);
 
-        return await dialog.ShowAsync() == ContentDialogResult.Primary && box.Password.Length > 0
+        return await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary && box.Password.Length > 0
             ? box.Password
             : null;
     }
@@ -2009,7 +2009,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             CloseButtonText = Strings.OK,
             XamlRoot = xamlRoot,
         };
-        await dialog.ShowAsync();
+        await dialog.ShowOneAtATimeAsync();
     }
 }
 

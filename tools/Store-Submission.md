@@ -89,6 +89,18 @@ dotnet build src/MegaPDF.App/MegaPDF.App.csproj \
   -p:GenerateAppxPackageOnBuild=true
 ```
 
+⚠️ **Build the package from a clean output, never on top of an unpackaged build.** An
+unpackaged Release build (`WindowsPackageType=None`, what the dev loop and the capture
+harness run) writes `resources.pri` with the resource map named `MegaPDF`. A package built
+straight after it into the same `bin\x64\Release`/`obj\x64\Release` keeps that file, and
+the Store needs the map named after the package, `ElectricRV.MegaPDF`. WACK reports it as the
+optional "App resources" FAIL ("The resources.pri file must contain a resource map with a
+name that matches the package name"). Worse, a package like that may not resolve its `x:Uid`
+strings, so the French chrome can fall back to English. Found 2026-09-17 (#166). Delete
+`src/MegaPDF.App/bin/x64/Release` and `src/MegaPDF.App/obj/x64/Release` first, then check:
+`makepri.exe dump /if resources.pri /of out.xml` (with `resources.pri` taken from the `.msix`)
+must show `<ResourceMap name="ElectricRV.MegaPDF"`.
+
 ⚠️ If it fails with **MSB3231 "Unable to remove directory … Access to the path …
 `Add-AppDevPackage.resources\cs-CZ` is denied"**, OneDrive is holding a lock on the
 previous `AppPackages` output (this repo lives under OneDrive). Delete the

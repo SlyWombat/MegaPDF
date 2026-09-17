@@ -1055,7 +1055,7 @@ public sealed partial class MainWindow : Window
             XamlRoot = Content.XamlRoot,
         };
 
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
             await ViewModel.RestoreSessionAsync(session);
         else
             Core.Recovery.RecoveryJournal.Discard(session.JournalPath);
@@ -1265,7 +1265,7 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
         };
-        await dialog.ShowAsync();
+        await dialog.ShowOneAtATimeAsync();
     }
 
     public void ApplyTheme()
@@ -1278,8 +1278,35 @@ public sealed partial class MainWindow : Window
                 "Dark" => ElementTheme.Dark,
                 _ => ElementTheme.Default,
             };
+            if (!_titleBarFollowsTheme)
+            {
+                _titleBarFollowsTheme = true;
+                root.ActualThemeChanged += (_, _) => ApplyTitleBarTheme();
+            }
+            ApplyTitleBarTheme();
         }
     }
+
+    private bool _titleBarFollowsTheme;
+
+    /// <summary>
+    /// The caption bar is drawn by Windows, not XAML, so it follows the Windows app mode and
+    /// stayed white over a dark window when the app's own Theme setting said Dark (#163).
+    /// DWMWA_USE_IMMERSIVE_DARK_MODE puts it in step with the content's actual theme.
+    /// </summary>
+    private void ApplyTitleBarTheme()
+    {
+        if (Content is not FrameworkElement root)
+            return;
+        var dark = root.ActualTheme == ElementTheme.Dark ? 1 : 0;
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        _ = DwmSetWindowAttribute(hwnd, DwmwaUseImmersiveDarkMode, ref dark, sizeof(int));
+    }
+
+    private const int DwmwaUseImmersiveDarkMode = 20;
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     // --- Signature library & placement (SDD §3.3) ---
 
@@ -1327,7 +1354,7 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
             await ViewModel.RenameSignatureAsync(item, input.Text);
         ShowSignaturesFlyout();
     }
@@ -1346,7 +1373,7 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Close,
             XamlRoot = Content.XamlRoot,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
             ViewModel.RemoveSignatureFromLibrary(item);
         ShowSignaturesFlyout();
     }
@@ -1399,7 +1426,7 @@ public sealed partial class MainWindow : Window
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = Content.XamlRoot,
         };
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(input.Text))
+        if (await dialog.ShowOneAtATimeAsync() != ContentDialogResult.Primary || string.IsNullOrWhiteSpace(input.Text))
             return;
 
         var image = await RenderTypedSignatureAsync(input.Text.Trim());
@@ -1511,7 +1538,7 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary || captured is null)
+        if (await dialog.ShowOneAtATimeAsync() != ContentDialogResult.Primary || captured is null)
             return;
 
         var name = string.IsNullOrWhiteSpace(nameInput.Text) ? Strings.MySignature : nameInput.Text.Trim();
