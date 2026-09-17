@@ -3977,7 +3977,10 @@ bool PlanPageUnlocked(FPDF_PAGE page, const std::vector<Area>& areas, std::vecto
                 break;
             }
             case FPDF_PAGEOBJ_IMAGE:
-                // Handled by overwriting the stored pixels; planned as a rewrite with no survivors.
+                // Handled by overwriting the stored pixels; planned as a rewrite with no
+                // survivors. Whether the picture survives that round trip is measured by
+                // the guard rather than guessed from its bit depth: a small bilevel image
+                // comes back fine, and a large halftone scan does not.
                 { RObject o; o.index = i; o.act = RAct::Rewrite; plan->push_back(o); }
                 break;
             case FPDF_PAGEOBJ_PATH:
@@ -4323,9 +4326,17 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
                          const std::vector<RObject>& plan, const std::vector<int>& annots,
                          const megapdf_redact_options& opt, megapdf_redaction_counts* counts, Refusal* refusal,
                          Area* out_affected = nullptr) {
-    // Where the page may look different: the areas, grown to the bounds of everything taken
-    // off it. A glyph cannot be half removed, so one straddling the edge takes its part
-    // outside the mark with it (see megapdf_redaction_applied_areas).
+    // Where the page may look different: the areas, grown to the bounds of what was
+    // REMOVED. A glyph cannot be half removed, so one straddling the edge takes its part
+    // outside the mark with it (see megapdf_redaction_applied_areas), and that is the whole
+    // reason this concession exists.
+    //
+    // It is granted to removals only. An image whose pixels are overwritten keeps its
+    // geometry and is supposed to keep every pixel outside the mark; a path clipped to the
+    // page minus the areas loses ink only inside them. Granting it to those made the guard
+    // blind to everything they cover — a full-page scan widened it to the whole page, and a
+    // single word redacted on one changed 83% of it without the guard seeing a thing,
+    // because re-encoding a CMYK image through a decoded bitmap writes DeviceRGB back.
     auto grow = [&](FPDF_PAGEOBJECT obj) {
         if (out_affected == nullptr || obj == nullptr) return;
         float l = 0, b = 0, r = 0, t = 0;
@@ -4341,7 +4352,9 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
         // widget off leaves the field dictionary and its /V in the file (PDFium patch 0028).
         FPDF_ANNOTATION annot = FPDFPage_GetAnnot(page, annots[k]);
         bool was_field = false;
+        FS_RECTF rect{};
         if (annot != nullptr) {
+            FPDFAnnot_GetRect(annot, &rect);
             if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) {
                 was_field = FPDFDoc_RemoveFormField(doc, annot) == 1;
             }
@@ -4353,6 +4366,14 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
             refusal->reason = MEGAPDF_REDACT_ANNOTATION;
             refusal->message = "an annotation reaching into the area could not be removed";
             return false;
+        }
+        // A removal, so its rect joins the concession: an appearance stream may draw right
+        // up to its edge, and what it drew is now gone.
+        if (out_affected != nullptr) {
+            out_affected->l = (std::min)(out_affected->l, static_cast<double>((std::min)(rect.left, rect.right)));
+            out_affected->b = (std::min)(out_affected->b, static_cast<double>((std::min)(rect.bottom, rect.top)));
+            out_affected->r = (std::max)(out_affected->r, static_cast<double>((std::max)(rect.left, rect.right)));
+            out_affected->t = (std::max)(out_affected->t, static_cast<double>((std::max)(rect.bottom, rect.top)));
         }
         if (was_field) counts->form_fields++;
         counts->annotations++;
@@ -4366,7 +4387,9 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
             return false;
         }
         const int type = FPDFPageObj_GetType(obj);
-        grow(obj);
+        if (o.act == RAct::Remove || (o.act == RAct::Rewrite && type == FPDF_PAGEOBJ_TEXT)) {
+            grow(obj);
+        }
         if (o.act == RAct::Remove) {
             if (!FPDFPage_RemoveObject(page, obj)) {
                 refusal->reason = MEGAPDF_REDACT_PDFIUM;
@@ -4582,6 +4605,9 @@ bool RehearseUnlocked(megapdf_document* d, const std::vector<int>& pages,
     before.fw.WriteBlock = ScratchWriteBlock;
     bool ok = FPDF_SaveAsCopy(scratch, &before.fw, 0) == 1;
 
+    // Which pages rewrote a picture, for the refusal message below.
+    std::map<int, bool> images_rewritten;
+
     for (size_t k = 0; ok && k < pages.size(); k++) {
         const std::vector<Area>& areas = areas_by_page.at(pages[k]);
         FPDF_PAGE page = FPDF_LoadPage(scratch, static_cast<int>(k));
@@ -4596,8 +4622,20 @@ bool RehearseUnlocked(megapdf_document* d, const std::vector<int>& pages,
         megapdf_redaction_counts counts{};
         std::vector<RObject> plan;
         std::vector<int> annots;
-        ok = PlanPageUnlocked(page, areas, &plan, &annots, refusal) &&
-             ExecutePageUnlocked(scratch, page, areas, plan, annots, opt, &counts, refusal, &affected);
+        ok = PlanPageUnlocked(page, areas, &plan, &annots, refusal);
+        // Whether the page's redaction rewrote a picture, so a render refusal below can say
+        // that a picture is what it was about.
+        bool rewrote_an_image = false;
+        for (const RObject& o : plan) {
+            if (o.act != RAct::Rewrite) continue;
+            if (FPDFPageObj_GetType(FPDFPage_GetObject(page, o.index)) == FPDF_PAGEOBJ_IMAGE) {
+                rewrote_an_image = true;
+            }
+        }
+        images_rewritten[pages[k]] = rewrote_an_image;
+        if (ok) {
+            ok = ExecutePageUnlocked(scratch, page, areas, plan, annots, opt, &counts, refusal, &affected);
+        }
         FPDF_ClosePage(page);
         if (!ok) { *out_page = pages[k]; break; }
         (*affected_by_page)[pages[k]] = affected;
@@ -4625,11 +4663,22 @@ bool RehearseUnlocked(megapdf_document* d, const std::vector<int>& pages,
         if (ok && verdict.editable != 1) {
             g_last_layout = verdict;
             *out_page = pages[k];
-            refusal->reason = MEGAPDF_REDACT_LAYOUT;
+            // A render refusal on a page whose picture was rewritten is almost always the
+            // picture: PDFium can only give an image's pixels back as 8-bit colour, so a
+            // scan stored at one bit per pixel comes back looking different all over — 91%
+            // of one corpus page's pixels moved when its scan was written back UNCHANGED.
+            // Say that, rather than "the page would look different", which tells nobody
+            // anything they can act on.
+            const bool about_a_picture =
+                verdict.cause == MEGAPDF_LAYOUT_RENDER && images_rewritten[pages[k]];
+            refusal->reason = about_a_picture ? MEGAPDF_REDACT_IMAGE : MEGAPDF_REDACT_LAYOUT;
             refusal->message = verdict.cause == MEGAPDF_LAYOUT_TEXT_CHANGED
                                    ? "text outside the area would be lost or changed by the redaction"
                                : verdict.cause == MEGAPDF_LAYOUT_TEXT_MOVED
                                    ? "text outside the area would move by more than half a point"
+                               : about_a_picture
+                                   ? "the picture could not be written back without changing how it looks "
+                                     "elsewhere on the page"
                                    : "the page would look different outside the area";
             ok = false;
         }
