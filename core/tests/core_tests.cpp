@@ -3474,8 +3474,8 @@ void test_text_in_one_pass(const std::string& fixtures, const std::string& schem
 // still show: where it lands, which way up, its clip, and which image it is; and a stencil
 // mask, whose colour is the content stream's, keeps its own pixels. Each case compares a page
 // with a copy that differs in one way, as the guard compares a page before and after a rewrite.
-std::vector<unsigned char> big_image_pdf(const std::string& content, unsigned char shade, bool stencil) {
-    const int w = 4000, h = 4000;   // 16 megapixels: the stand-in threshold
+std::vector<unsigned char> big_image_pdf(const std::string& content, unsigned char shade, bool stencil, int side = 4000) {
+    const int w = side, h = side;   // 4,000: 16 megapixels, the stand-in threshold
     // RunLengthDecode keeps the fixture small without zlib: grey bands, in runs of up to 128 bytes.
     std::string data;
     auto run = [&](unsigned char value, int count) {
@@ -3494,7 +3494,7 @@ std::vector<unsigned char> big_image_pdf(const std::string& content, unsigned ch
         }
     }
     data += static_cast<char>(128);   // EOD
-    const std::string dict = std::string("<< /Type /XObject /Subtype /Image /Width 4000 /Height 4000 ") +
+    const std::string dict = "<< /Type /XObject /Subtype /Image /Width " + std::to_string(w) + " /Height " + std::to_string(h) + " " +
                              (stencil ? "/ImageMask true /BitsPerComponent 1" : "/ColorSpace /DeviceRGB /BitsPerComponent 8") +
                              " /Filter /RunLengthDecode /Length " + std::to_string(data.size()) + " >>";
     return one_page_pdf(content, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
@@ -3531,6 +3531,64 @@ void test_large_image_stand_ins() {
         const int editable = megapdf_testing_compare_pages(pa.page, pb.page, &v);
         check(editable == (c.same ? 1 : 0), what + (c.same ? " compares as unchanged" : " is seen"),
               "cause " + std::to_string(v.cause) + ", " + std::to_string(v.changed_pixels) + " of " + std::to_string(v.total_pixels) + " px");
+    }
+}
+
+// #151, PDFium patch 0025: an image of 60 MB or more decoded was never kept by PDFium's page
+// image cache in a usable form, so every render of its page inflated the whole stream again,
+// however small the render. The patch keeps a copy reduced towards the render size for the
+// page's life. Renders through the page handle must come out the same each time, show the
+// image's content, and after the first be far faster than decoding it.
+void test_huge_image_render_cache() {
+    const int side = 5000;   // 75 MB of RGB decoded, over PDFium's 60 MB "huge image" line
+    OpenDoc d(big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side));
+    OpenDoc fresh(big_image_pdf("q 612 0 0 792 0 0 cm /Im1 Do Q", 0, false, side));
+    check(d.doc != nullptr && fresh.doc != nullptr, "huge image cache: the page opens");
+    if (d.doc == nullptr || fresh.doc == nullptr) return;
+    Page p(d.doc, 0), q(fresh.doc, 0);
+    auto render = [](const megapdf_page* page, int w, int h, double* ms) {
+        std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4);
+        const auto started = std::chrono::steady_clock::now();
+        const int rc = megapdf_render(page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
+        if (ms != nullptr) *ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+        if (rc != MEGAPDF_OK) px.clear();
+        return px;
+    };
+    const int w = 306, h = 396;
+    double first_ms = 0, second_ms = 0, third_ms = 0;
+    const auto first = render(p.page, w, h, &first_ms);
+    const auto second = render(p.page, w, h, &second_ms);
+    const auto third = render(p.page, w, h, &third_ms);
+    check(!first.empty() && first == second && second == third, "huge image cache: repeated renders of the page are identical");
+
+    // What the image holds: eight vertical grey bands, each 30 levels apart, darkening
+    // downwards by one level per 16 image rows (modulo 256).
+    int wrong = 0, sampled = 0;
+    for (int band = 0; band < 8 && !first.empty(); band++) {
+        for (int k = 1; k <= 5; k++) {
+            const int x = static_cast<int>((band + 0.5) * w / 8), y = k * h / 6;
+            const int row = static_cast<int>((y + 0.5) * side / h);
+            const int expected = (band * 30 + row / 16) % 256;
+            if (expected < 12 || expected > 243) continue;   // next to a wrap, where averaging mixes both sides
+            const unsigned char* px = &first[(static_cast<size_t>(y) * w + x) * 4];
+            sampled++;
+            if (std::abs(px[0] - expected) > 10 || std::abs(px[1] - expected) > 10 || std::abs(px[2] - expected) > 10) wrong++;
+        }
+    }
+    check(sampled > 20 && wrong == 0, "huge image cache: the render shows the image's bands",
+          std::to_string(wrong) + " of " + std::to_string(sampled) + " samples off");
+
+    // A larger render afterwards is not drawn from the smaller copy: the same as on a page
+    // that never rendered small.
+    const auto large = render(p.page, 1224, 1584, nullptr);
+    const auto large_fresh = render(q.page, 1224, 1584, nullptr);
+    check(!large.empty() && large == large_fresh, "huge image cache: a larger render matches a page that never rendered small");
+
+    const double again_ms = std::min(second_ms, third_ms);
+    std::printf("huge image cache: first render %.0f ms, again %.0f ms (PDFium patches %d)\n", first_ms, again_ms, MEGAPDF_PDFIUM_PATCHES);
+    if (MEGAPDF_PDFIUM_PATCHES >= 25) {
+        check(again_ms * 4 < first_ms, "huge image cache: rendering the page again does not decode the image again (patch 0025)",
+              std::to_string(static_cast<int>(first_ms)) + " ms, then " + std::to_string(static_cast<int>(again_ms)) + " ms");
     }
 }
 
@@ -4184,6 +4242,7 @@ int main(int argc, char** argv) {
     test_scaled_jpeg_render();
     test_text_in_one_pass(argv[1], argv[2]);
     test_large_image_stand_ins();
+    test_huge_image_render_cache();
     test_verdicts_follow_changes();
     test_layout_verdicts();
     test_page_regeneration_verdict();
