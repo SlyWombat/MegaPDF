@@ -73,6 +73,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -423,7 +424,19 @@ fun ViewerScreen(
                     )
                 } else {
                     TopAppBar(
-                        title = { Text((if (isDirty) "• " else "") + displayName, maxLines = 1) },
+                        title = {
+                            Text(
+                                (if (isDirty) "• " else "") + displayName,
+                                maxLines = 1,
+                                // One line, laid out as one line. With soft wrap on,
+                                // Compose breaks the name at a space and then clips to
+                                // the first line, so "Rental Agreement.pdf" showed
+                                // "Rental" — and once the document was dirty, the break
+                                // after the bullet left the title reading just "•".
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
                         navigationIcon = {
                             IconButton(onClick = requestClose, enabled = !documentLocked) {
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close_document))
