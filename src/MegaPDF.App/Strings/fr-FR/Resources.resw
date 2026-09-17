@@ -936,5 +936,10 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="WhiteoutCoversOnlyBody" xml:space="preserve">
     <value>Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder.</value>
     <comment>First-use hint body (#173). #173 — new French, for francophone review</comment>
+  <data name="PageRegionDescriptionWithContent" xml:space="preserve">
+    <value>Page {0}, {1} : {2}</value>
+  </data>
+  <data name="SavedAnnouncement" xml:space="preserve">
+    <value>{0} enregistré</value>
   </data>
 </root>

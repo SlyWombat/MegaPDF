@@ -27,13 +27,42 @@ public partial class MainViewModel
     /// Where keyboard focus is on the page: which page, and which of its regions in
     /// reading order. Null means focus is not on the page at all.
     /// </summary>
-    public sealed record FocusedRegion(int PageIndex, int RegionIndex, PdfRect Bounds, PageHitKind Kind, bool IsChecked)
+    public sealed record FocusedRegion(int PageIndex, int RegionIndex, PdfRect Bounds, PageHitKind Kind, bool IsChecked, string? Content = null)
     {
         /// <summary>What the region is, for a screen reader.</summary>
         public string What => DescribeRegion(Kind, IsChecked);
 
-        /// <summary>"Page 2, Checkbox, ticked" — the ring's UIA name and what Narrator announces.</summary>
-        public string AccessibleName => Strings.PageRegionDescription(PageIndex + 1, What);
+        /// <summary>
+        /// "Page 2, Checkbox, ticked: Damage insurance accepted" — the ring's UIA name and
+        /// what a screen reader announces.
+        ///
+        /// The kind alone was not enough (#190): NVDA read "Page 1, Text, editable" for
+        /// every line on the page and "Page 1, Box to tick" for every box, so nothing told
+        /// them apart. What the region says comes with it now.
+        /// </summary>
+        public string AccessibleName => string.IsNullOrWhiteSpace(Content)
+            ? Strings.PageRegionDescription(PageIndex + 1, What)
+            : Strings.PageRegionDescriptionWithContent(PageIndex + 1, What, Content);
+    }
+
+    /// <summary>
+    /// What the focused region says, for the announcement: the words of a line of text, a
+    /// form field's name and value, the label beside a box. Trimmed to a sentence's worth —
+    /// a screen reader repeats this on every Tab.
+    /// </summary>
+    internal static string? DescribeContent(PageHit hit)
+    {
+        var text = hit.Kind switch
+        {
+            PageHitKind.FormTextField or PageHitKind.FormCheckbox => hit.Field is { } field
+                ? (string.IsNullOrWhiteSpace(field.Value) ? field.Name : $"{field.Name}: {field.Value}")
+                : null,
+            _ => hit.TextRun?.Text ?? hit.TextLine?.Text,
+        };
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+        text = System.Text.RegularExpressions.Regex.Replace(text.Trim(), @"\s+", " ");
+        return text.Length <= 80 ? text : text[..79] + "…";
     }
 
     public static string DescribeRegion(PageHitKind kind, bool isChecked) => kind switch
@@ -226,15 +255,20 @@ public partial class MainViewModel
         public FocusedRegion Focus(RegionPosition at)
         {
             var (bounds, kind) = RegionsFor(at.PageIndex)[at.RegionIndex];
-            var isChecked = false;
-            if (kind == PageHitKind.FormCheckbox)
+            // The map knows where a region is and what kind it is, not what it says or
+            // whether a box is ticked. One hit-test at its centre answers both (#190).
+            using var page = doc.GetPage(at.PageIndex);
+            var hit = page.HitTest(bounds.Center);
+            var isChecked = kind == PageHitKind.FormCheckbox && hit.Field is { IsChecked: true };
+            var content = DescribeContent(hit);
+            if (content is null && kind == PageHitKind.DrawnCheckbox)
             {
-                // The map knows where a checkbox is, not whether it is ticked; the
-                // form field under its centre does.
-                using var page = doc.GetPage(at.PageIndex);
-                isChecked = page.HitTest(bounds.Center).Field is { IsChecked: true };
+                // A drawn box is just ink: nothing under it says what ticking it means. Its
+                // label is the text beside it, which is what a sighted person reads (#190).
+                var beside = new PdfPoint(bounds.X + bounds.Width * 1.5 + 4, bounds.Y + bounds.Height / 2);
+                content = DescribeContent(page.HitTest(beside));
             }
-            return new FocusedRegion(at.PageIndex, at.RegionIndex, bounds, kind, isChecked);
+            return new FocusedRegion(at.PageIndex, at.RegionIndex, bounds, kind, isChecked, content);
         }
     }
 }

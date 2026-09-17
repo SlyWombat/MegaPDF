@@ -350,6 +350,12 @@ public partial class MainViewModel(Window window) : ObservableObject
             RemoveFromRecent(recent.Path);
     }
 
+    /// <summary>
+    /// Something worth saying out loud happened (#190). The window raises it as a UI
+    /// Automation notification on the pages pane, the same way a focus move is announced.
+    /// </summary>
+    public event Action<string>? Announced;
+
     public ObservableCollection<PageView> Pages { get; } = [];
 
     [ObservableProperty]
@@ -1758,6 +1764,9 @@ public partial class MainViewModel(Window window) : ObservableObject
                 HasUnsavedChanges = false;
                 _journal.MarkSaved(path);
             }
+            // Nothing on screen changes except the dot on Save, so a screen reader had no
+            // way to know the save finished — NVDA said nothing at all (#190).
+            Announced?.Invoke(Strings.SavedAnnouncement(Path.GetFileName(path)));
             if (flattened)
                 await OnDocumentFlattenedAsync();
         }
