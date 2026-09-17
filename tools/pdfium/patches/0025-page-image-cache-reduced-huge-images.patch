@@ -1,25 +1,24 @@
 --- a/core/fpdfapi/page/cpdf_pageimagecache.cpp
 +++ b/core/fpdfapi/page/cpdf_pageimagecache.cpp
-@@ -34,6 +34,52 @@
+@@ -34,6 +34,51 @@
  
  namespace {
  
 +// The most a reduced copy of a huge image may take (MegaPDF): a 32-megapixel RGB
-+// render at the device size, under the page cache's 100 MB limit.
++// render at the device size.
 +constexpr uint64_t kMaxReducedImageBytes = 96 * 1024 * 1024;
 +
-+// A huge image (kHugeImageSize and over) is never realized, and its size keeps it
-+// over the page cache's limit, so CacheOptimization() drops it after every render and
-+// the next render decodes the whole stream again: over a second for a 20,000 x 15,000
-+// px Flate image, at any zoom. When the render needs far fewer pixels, keep an
-+// area-averaged copy instead, at twice the device size in each direction where the
-+// image has them (as JPX and DCT decoding skip levels), at most
-+// kMaxReducedImageBytes, and never under the device size. IsCacheValid() already
-+// compares a cached bitmap with the size a later render needs, so a larger render
-+// decodes again and replaces the copy. A huge image cached whole (a render too large
-+// to reduce for) is reduced the next time a smaller render finds it: its lazy DIB
-+// counts as small in the cache, so it is never dropped, and every render through it
-+// decodes the stream again. Returns null when there is nothing to gain.
++// A huge image (kHugeImageSize and over) is never realized: the cache keeps its lazy
++// DIB, so every render through it decodes the whole stream again, over a second for a
++// 20,000 x 15,000 px Flate image at any zoom (and with FPDF_RENDER_LIMITEDIMAGECACHE,
++// CacheOptimization() drops it outright). When the render needs at most a quarter of
++// the image's pixels, keep an area-averaged copy instead: at twice the device size in
++// each direction where the image has them (as JPX and DCT decoding skip levels), then
++// 1.5 times, then the device size, the first that fits kMaxReducedImageBytes; never
++// under the device size. IsCacheValid() already compares a cached bitmap with the size
++// a later render needs, so a larger render decodes again and replaces the copy, and a
++// huge image cached whole by such a render is reduced the next time a smaller render
++// finds it. Returns null when there is nothing to gain.
 +RetainPtr<CFX_DIBBase> ReduceHugeImage(const RetainPtr<CFX_DIBBase>& image,
 +                                       const CFX_Size& required) {
 +  if (!image || required.width <= 0 || required.height <= 0 ||
@@ -38,7 +37,7 @@
 +    const uint64_t dest_height =
 +        std::min<uint64_t>(height, (required.height * factor + 1) / 2);
 +    if (dest_width * dest_height * 4 > width * height) {
-+      return nullptr;  // not a quarter of the pixels: keep the upstream path
++      continue;  // not a quarter of the pixels: try a smaller copy
 +    }
 +    if (dest_width * dest_height * bytes_per_pixel > kMaxReducedImageBytes) {
 +      continue;
@@ -53,7 +52,7 @@
  struct CacheInfo {
    CacheInfo(uint32_t t, RetainPtr<const CPDF_Stream> stream)
        : time(t), pStream(std::move(stream)) {}
-@@ -185,6 +231,9 @@
+@@ -185,6 +230,9 @@
    cur_find_cache_ = it != image_cache_.end();
    if (cur_find_cache_) {
      cur_image_cache_entry_ = it->second.get();
@@ -63,38 +62,59 @@
    } else {
      cur_image_cache_entry_ = std::make_unique<Entry>(std::move(pImage));
    }
-@@ -279,6 +328,7 @@
+@@ -254,6 +302,7 @@
+ 
+ void CPDF_PageImageCache::Entry::Reset() {
+   cached_bitmap_.Reset();
++  cached_reduced_ = false;
+   CalcSize();
+ }
+ 
+@@ -279,6 +328,15 @@
      return CPDF_DIB::LoadState::kSuccess;
    }
  
++  if (cached_reduced_) {
++    // Too small for this render: let it go before the image is decoded again, so
++    // two reduced copies are never held at once.
++    cached_bitmap_.Reset();
++    cached_mask_.Reset();
++    cached_reduced_ = false;
++    CalcSize();
++  }
 +  max_size_required_ = max_size_required;
    cur_bitmap_ = image_->CreateNewDIB();
    CPDF_DIB::LoadState ret = cur_bitmap_.AsRaw<CPDF_DIB>()->StartLoadDIBBase(
        true, pFormResources, pPageResources, bStdCS, eFamily, bLoadMask,
-@@ -319,6 +369,16 @@
+@@ -319,6 +377,19 @@
    matte_color_ = cur_bitmap_.AsRaw<CPDF_DIB>()->GetMatteColor();
    cur_mask_ = cur_bitmap_.AsRaw<CPDF_DIB>()->DetachMask();
    time_count_ = pPageImageCache->GetTimeCount();
++  cached_reduced_ = false;
 +  if (cached_set_max_size_required_) {
 +    if (RetainPtr<CFX_DIBBase> reduced =
 +            ReduceHugeImage(cur_bitmap_, max_size_required_)) {
 +      cur_bitmap_ = std::move(reduced);
++      cached_reduced_ = true;
 +    }
 +    if (RetainPtr<CFX_DIBBase> reduced =
 +            ReduceHugeImage(cur_mask_, max_size_required_)) {
 +      cur_mask_ = std::move(reduced);
++      cached_reduced_ = true;
 +    }
 +  }
    if (cur_bitmap_->GetPitch() * cur_bitmap_->GetHeight() < kHugeImageSize) {
      cached_bitmap_ = MakeCachedImage(cur_bitmap_, /*realize_hint=*/true);
      cur_bitmap_.Reset();
-@@ -334,6 +394,30 @@
+@@ -334,6 +405,33 @@
    CalcSize();
  }
  
 +void CPDF_PageImageCache::Entry::ReduceCached(
 +    const CFX_Size& max_size_required) {
-+  if (!cached_bitmap_ || max_size_required.width == 0 ||
++  // A copy already reduced stays: reducing it again for a smaller render would make
++  // the next render at its own size decode the whole image again.
++  if (!cached_bitmap_ || cached_reduced_ || max_size_required.width == 0 ||
 +      max_size_required.height == 0 || !IsCacheValid(max_size_required)) {
 +    return;
 +  }
@@ -110,6 +130,7 @@
 +    reduced_any = true;
 +  }
 +  if (reduced_any) {
++    cached_reduced_ = true;
 +    cached_set_max_size_required_ = true;
 +    max_size_required_ = max_size_required;
 +    CalcSize();
@@ -131,12 +152,14 @@
      uint32_t EstimateSize() const { return cache_size_; }
      uint32_t GetMatteColor() const { return matte_color_; }
      uint32_t GetTimeCount() const { return time_count_; }
-@@ -91,6 +94,8 @@
+@@ -91,6 +94,10 @@
      RetainPtr<CFX_DIBBase> cached_bitmap_;
      RetainPtr<CFX_DIBBase> cached_mask_;
      bool cached_set_max_size_required_ = false;
 +    // The device size the load was asked for; a huge image is kept reduced towards it.
 +    CFX_Size max_size_required_;
++    // Whether the cached bitmap or mask is such a reduced copy.
++    bool cached_reduced_ = false;
    };
  
    void ClearImageCacheEntry(const CPDF_Stream* pStream);

@@ -3580,15 +3580,29 @@ void test_huge_image_render_cache() {
 
     // A larger render afterwards is not drawn from the smaller copy: the same as on a page
     // that never rendered small.
-    const auto large = render(p.page, 1224, 1584, nullptr);
+    double large_ms = 0;
+    const auto large = render(p.page, 1224, 1584, &large_ms);
     const auto large_fresh = render(q.page, 1224, 1584, nullptr);
     check(!large.empty() && large == large_fresh, "huge image cache: a larger render matches a page that never rendered small");
 
+    // Zooming out and back in again: the smaller render draws from the larger copy, and
+    // keeps it, so the larger render after it does not decode the image again.
+    double small_again_ms = 0, large_again_ms = 0;
+    const auto small_again = render(p.page, w, h, &small_again_ms);
+    const auto large_again = render(p.page, 1224, 1584, &large_again_ms);
+    check(!small_again.empty() && !large_again.empty() && large_again == large,
+          "huge image cache: zooming out and in again renders the same");
+
     const double again_ms = std::min(second_ms, third_ms);
-    std::printf("huge image cache: first render %.0f ms, again %.0f ms (PDFium patches %d)\n", first_ms, again_ms, MEGAPDF_PDFIUM_PATCHES);
+    std::printf("huge image cache: first render %.0f ms, again %.0f ms; larger %.0f ms, out %.0f ms, in again %.0f ms (PDFium patches %d)\n",
+                first_ms, again_ms, large_ms, small_again_ms, large_again_ms, MEGAPDF_PDFIUM_PATCHES);
     if (MEGAPDF_PDFIUM_PATCHES >= 25) {
         check(again_ms * 4 < first_ms, "huge image cache: rendering the page again does not decode the image again (patch 0025)",
               std::to_string(static_cast<int>(first_ms)) + " ms, then " + std::to_string(static_cast<int>(again_ms)) + " ms");
+        check(large_again_ms * 4 < large_ms && small_again_ms * 4 < large_ms,
+              "huge image cache: zooming out and in again does not decode the image again (patch 0025)",
+              std::to_string(static_cast<int>(large_ms)) + " ms, then " + std::to_string(static_cast<int>(small_again_ms)) + " and " +
+                  std::to_string(static_cast<int>(large_again_ms)) + " ms");
     }
 }
 
