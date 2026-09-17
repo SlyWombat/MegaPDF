@@ -135,6 +135,11 @@ public partial class MainWindow
         tools.Items.Add(Toggle("WhiteoutButton", Strings.Cover,
             () => ViewModel?.CanEditContent == true, () => ViewModel?.IsWhiteoutMode == true,
             () => ViewModel?.ToggleWhiteoutCommand.Execute(null)));
+        // Redact next to Cover, because the pair is the point (#173): one covers, the
+        // other removes.
+        tools.Items.Add(Toggle("RedactButton", Strings.ToolbarRedact,
+            () => ViewModel?.CanEditContent == true, () => ViewModel?.IsRedactMode == true,
+            () => ViewModel?.ToggleRedactCommand.Execute(null)));
         tools.Items.Add(new NativeMenuItemSeparator());
         tools.Items.Add(Submenu("FontBox", Strings.TextFontName, TextPickerEnabled,
             ViewModel?.TextFontChoices.Cast<object>().ToList() ?? [],
