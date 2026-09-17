@@ -229,4 +229,10 @@
     <string name="redact_needs_permission">Ce document n\'autorise pas les modifications; il ne peut pas être caviardé.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review -->
     <string name="redact_failed">Le caviardage n\'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n\'a été écrit.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_mark_count">%1$s zones marquées pour caviardage</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_mark_count_one">1 zone marquée pour caviardage</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_ok">OK</string>
 </resources>

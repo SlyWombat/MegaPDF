@@ -14,6 +14,10 @@ import com.megapdf.android.ui.MegaPdfTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -46,6 +50,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * The name Save a copy offers after a redaction (#173): "lease.pdf" becomes
+ * "lease-redacted.pdf". The suffix is localised and carries no accent, because it is a
+ * file name.
+ */
+private fun redactedName(displayName: String): String {
+    val dot = displayName.lastIndexOf('.')
+    val stem = if (dot > 0) displayName.substring(0, dot) else displayName
+    val extension = if (dot > 0) displayName.substring(dot) else ".pdf"
+    return stem + REDACTED_SUFFIX + extension
+}
+
+/** Kept here rather than read from resources: this runs outside a composable. */
+private const val REDACTED_SUFFIX = "-redacted"
+
 @Composable
 fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String? = null) {
     LaunchedEffect(screenshotState) { viewModel.applyScreenshotMode(screenshotState) }
@@ -58,6 +77,13 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     val pickSignatureImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
+
+    // The Redact confirmation is open (#173): marks are on the document and a save has
+    // been asked for, so the question comes before anything is written.
+    var redactConfirmOpen by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // One-shot status toasts ("Saved", save errors).
     val context = LocalContext.current
@@ -135,8 +161,16 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onCommitTextBoxRect = viewModel::commitTextBoxRect,
                 onEditTextBox = viewModel::editSelectedTextBox,
                 onRemoveTextBox = viewModel::removeSelectedTextBox,
-                onSave = viewModel::save,
-                onSaveAs = { createDocument.launch(state.displayName) },
+                onSave = {
+                    if (viewModel.redactionMarkCount > 0) redactConfirmOpen = true else viewModel.save()
+                },
+                onSaveAs = {
+                    if (viewModel.redactionMarkCount > 0) {
+                        redactConfirmOpen = true
+                    } else {
+                        createDocument.launch(state.displayName)
+                    }
+                },
                 capabilities = viewModel.capabilities,
                 hasDocumentFile = viewModel.hasDocumentFile,
                 unlockPrompt = viewModel.unlockPrompt,
@@ -157,7 +191,76 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 toolsDisabled = viewModel.toolsDisabled,
                 onCurrentPageChange = viewModel::onCurrentPageChanged,
                 onSaveAndClose = viewModel::saveAndClose,
+                // Redaction (#173). Marks are drawn by the screen because the core never
+                // writes them into the document.
+                redactMode = viewModel.redactMode,
+                redactionMarks = viewModel.redactionMarks,
+                onToggleRedact = viewModel::toggleRedactMode,
+                onMarkForRedaction = viewModel::markForRedaction,
             )
+
+            // The confirmation #173 asks for, before either save path writes anything:
+            // what redaction does, that it cannot be undone once saved, and Save a copy as
+            // the default action — the reversible choice, because the other one cannot be
+            // taken back.
+            if (redactConfirmOpen) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { redactConfirmOpen = false },
+                    title = { androidx.compose.material3.Text(stringResource(R.string.redact_confirm_title)) },
+                    text = {
+                        androidx.compose.material3.Text(
+                            stringResource(R.string.redact_confirm_body) + "\n\n" +
+                                if (viewModel.redactionMarkCount == 1) {
+                                    stringResource(R.string.redact_mark_count_one)
+                                } else {
+                                    stringResource(
+                                        R.string.redact_mark_count,
+                                        viewModel.redactionMarkCount.toString(),
+                                    )
+                                },
+                        )
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            redactConfirmOpen = false
+                            scope.launch {
+                                if (viewModel.applyRedactions()) createDocument.launch(redactedName(state.displayName))
+                            }
+                        }) { androidx.compose.material3.Text(stringResource(R.string.redact_save_copy)) }
+                    },
+                    dismissButton = {
+                        androidx.compose.material3.TextButton(onClick = {
+                            redactConfirmOpen = false
+                            scope.launch { if (viewModel.applyRedactions()) viewModel.save() }
+                        }) { androidx.compose.material3.Text(stringResource(R.string.redact_overwrite)) }
+                    },
+                )
+            }
+
+            // The summary after saving, and the refusal when a redaction removed nothing.
+            viewModel.redactionSummary?.let { summary ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { viewModel.redactionSummary = null },
+                    text = { androidx.compose.material3.Text(summary) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.redactionSummary = null },
+                        ) { androidx.compose.material3.Text(stringResource(R.string.redact_ok)) }
+                    },
+                )
+            }
+            viewModel.redactionRefusal?.let { refusal ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { viewModel.redactionRefusal = null },
+                    title = { androidx.compose.material3.Text(stringResource(R.string.redact_refused_title)) },
+                    text = { androidx.compose.material3.Text(viewModel.describeRefusal(refusal)) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.redactionRefusal = null },
+                        ) { androidx.compose.material3.Text(stringResource(R.string.redact_ok)) }
+                    },
+                )
+            }
         }
     }
 }

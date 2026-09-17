@@ -20,6 +20,16 @@ internal object ToolbarIcons {
             "5.12,-1.88c3.54,0 6.55,2.31 7.6,5.5l2.37,-0.78C21.08,11.03 17.15,8 12.5,8z",
     )
 
+    /**
+     * Redact (#173): the block Whiteout draws, with the lines it removes struck out of it.
+     * Cover is a blank block; Redact is a block with the content gone, which is the whole
+     * difference between the two tools.
+     */
+    val Redact: ImageVector = icon(
+        "Redact",
+        "M3,5h18v14H3zM5,7v10h14V7zM6.5,9.5h11v1.2h-11zM6.5,12h6.5v1.2H6.5zM6.5,14.5h11v1.2h-11z",
+    )
+
     /** Material "redo" — the undo arrow mirrored. */
     val Redo: ImageVector = icon(
         "Redo",

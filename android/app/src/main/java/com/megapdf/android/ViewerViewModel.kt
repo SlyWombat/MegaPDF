@@ -208,7 +208,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private suspend fun refreshRedactionMarks() {
         val doc = document ?: return
         val byPage = mutableMapOf<Int, List<com.megapdf.engine.RedactionMark>>()
-        for (index in 0 until doc.pageCount) {
+        for (index in 0 until doc.pageCount()) {
             val marks = doc.onPageForRedaction(index) { it.redactionMarks() }
             if (marks.isNotEmpty()) byPage[index] = marks
         }

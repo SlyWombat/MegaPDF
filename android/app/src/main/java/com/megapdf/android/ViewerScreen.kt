@@ -99,6 +99,8 @@ private const val MAX_ZOOM = 4f
 // current match is set apart in translucent brand blue. Amber used to carry the
 // current match, which read well but is not a colour MegaPDF owns
 // (docs/design-tokens.md §1.2).
+private val REDACTION_MARK = Brand.RedactionMark
+private val REDACTION_MARK_OUTLINE = Brand.RedactionMarkOutline
 private val MATCH_HIGHLIGHT = Brand.FindMatch
 private val CURRENT_MATCH_HIGHLIGHT = Brand.FindMatchCurrent
 
@@ -149,6 +151,12 @@ fun ViewerScreen(
     onRemoveTextBox: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    // Redaction (SDD §3.8 / F7, #173). Marks are not page content: the core keeps them and
+    // never writes them, so the screen draws them and nothing here is in the raster.
+    redactMode: Boolean = false,
+    redactionMarks: Map<Int, List<com.megapdf.engine.RedactionMark>> = emptyMap(),
+    onToggleRedact: () -> Unit = {},
+    onMarkForRedaction: (pageIndex: Int, rect: com.megapdf.engine.PdfRect) -> Unit = { _, _ -> },
     // Document security (#131).
     capabilities: DocumentCapabilities = DocumentCapabilities.FULL,
     hasDocumentFile: Boolean = false,
@@ -176,6 +184,8 @@ fun ViewerScreen(
     onSaveAndClose: () -> Unit = onSave,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
+    // The rubber band a redaction drag is drawing; null the rest of the time (#173).
+    var redactBand: RedactBand? by remember { mutableStateOf(null) }
     val listState = rememberLazyListState()
     // Hoisted so search navigation can reach a hit that is off to the side when zoomed.
     val hScroll = rememberScrollState()
@@ -505,6 +515,16 @@ fun ViewerScreen(
                         enabled = capabilities.canAddText && !toolsDisabled,
                         onClick = onStartTextPlacement,
                     )
+                    // Redact beside the creating tools, because the pair is the point
+                    // (#173): Whiteout covers, Redact removes. The phone has no Whiteout,
+                    // so this is the only one of the two here — and it says what it does.
+                    ToolbarAction(
+                        icon = ToolbarIcons.Redact,
+                        label = stringResource(R.string.redact),
+                        enabled = capabilities.canEditContent && !toolsDisabled,
+                        selected = redactMode,
+                        onClick = onToggleRedact,
+                    )
                     ToolbarAction(
                         icon = Icons.Filled.Search,
                         label = stringResource(R.string.search),
@@ -654,6 +674,45 @@ fun ViewerScreen(
                         .width(pageWidthDp)
                         .aspectRatio((size.widthPoints / size.heightPoints).toFloat())
                         .background(Color.White)
+                        // While Redact is armed a drag marks an area instead of scrolling
+                        // (#173). The gesture is only installed when the tool is on, so
+                        // the list keeps its scrolling the rest of the time.
+                        .pointerInput(index, redactMode) {
+                            if (!redactMode) return@pointerInput
+                            var origin = androidx.compose.ui.geometry.Offset.Zero
+                            var current = androidx.compose.ui.geometry.Offset.Zero
+                            detectDragGestures(
+                                onDragStart = { at ->
+                                    origin = at
+                                    current = at
+                                    redactBand = RedactBand(index, at, at)
+                                },
+                                onDrag = { change, delta ->
+                                    change.consume()
+                                    current += delta
+                                    redactBand = RedactBand(index, origin, current)
+                                },
+                                onDragCancel = { redactBand = null },
+                                onDragEnd = {
+                                    redactBand = null
+                                    val left = minOf(origin.x, current.x) / this.size.width
+                                    val right = maxOf(origin.x, current.x) / this.size.width
+                                    val top = minOf(origin.y, current.y) / this.size.height
+                                    val bottom = maxOf(origin.y, current.y) / this.size.height
+                                    if (right - left > 0.005f && bottom - top > 0.005f) {
+                                        onMarkForRedaction(
+                                            index,
+                                            com.megapdf.engine.PdfRect(
+                                                left * size.widthPoints,
+                                                (1.0 - bottom) * size.heightPoints,
+                                                right * size.widthPoints,
+                                                (1.0 - top) * size.heightPoints,
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
+                        }
                         .pointerInput(index) {
                             detectTapGestures(
                                 onTap = { offset ->
@@ -674,6 +733,13 @@ fun ViewerScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Fit,
                             )
+                        }
+                        val marks = redactionMarks[index]
+                        if (!marks.isNullOrEmpty()) {
+                            RedactionMarkOverlay(marks = marks, pageSize = size)
+                        }
+                        redactBand?.let { band ->
+                            if (band.pageIndex == index) RedactionBandOverlay(band)
                         }
                         val pageHits = searchHits.withIndex()
                             .filter { it.value.pageIndex == index }
@@ -801,14 +867,23 @@ private fun ToolbarAction(
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    selected: Boolean = false,
 ) {
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick, enabled = enabled) {
-            Icon(icon, contentDescription = label)
+        // An armed tool says so: a mode with no visible affordance is a mode people get
+        // stuck in (SDD §2.2). FilledIconButton is Material 3's "this is on".
+        if (selected) {
+            androidx.compose.material3.FilledIconButton(onClick = onClick, enabled = enabled) {
+                Icon(icon, contentDescription = label)
+            }
+        } else {
+            IconButton(onClick = onClick, enabled = enabled) {
+                Icon(icon, contentDescription = label)
+            }
         }
     }
 }
@@ -914,6 +989,69 @@ private fun SearchHighlightOverlay(
                 )
             }
         }
+    }
+}
+
+/** The rubber band while a redaction drag is in progress, in page-box pixels. */
+data class RedactBand(
+    val pageIndex: Int,
+    val origin: androidx.compose.ui.geometry.Offset,
+    val current: androidx.compose.ui.geometry.Offset,
+)
+
+/**
+ * Areas marked for redaction, drawn over the page (#173). Translucent with an outline, so
+ * the user can still read what they are about to remove — which is the reason marking and
+ * applying are two steps. Over the page rather than into it because a mark is never written
+ * to the file: there is nothing in the raster to draw, and marking costs no re-render.
+ */
+@Composable
+private fun RedactionMarkOverlay(
+    marks: List<com.megapdf.engine.RedactionMark>,
+    pageSize: PageSize,
+) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val sx = size.width / pageSize.widthPoints.toFloat()
+        val sy = size.height / pageSize.heightPoints.toFloat()
+        for (mark in marks) {
+            val topLeft = androidx.compose.ui.geometry.Offset(
+                (mark.rect.left * sx).toFloat(),
+                ((pageSize.heightPoints - mark.rect.top) * sy).toFloat(),
+            )
+            val boxSize = androidx.compose.ui.geometry.Size(
+                ((mark.rect.right - mark.rect.left) * sx).toFloat(),
+                ((mark.rect.top - mark.rect.bottom) * sy).toFloat(),
+            )
+            drawRect(color = REDACTION_MARK, topLeft = topLeft, size = boxSize)
+            drawRect(
+                color = REDACTION_MARK_OUTLINE,
+                topLeft = topLeft,
+                size = boxSize,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
+            )
+        }
+    }
+}
+
+/** The band a redaction drag is drawing, in the same ink as the marks it will become. */
+@Composable
+private fun RedactionBandOverlay(band: RedactBand) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val topLeft = androidx.compose.ui.geometry.Offset(
+            minOf(band.origin.x, band.current.x),
+            minOf(band.origin.y, band.current.y),
+        )
+        val boxSize = androidx.compose.ui.geometry.Size(
+            kotlin.math.abs(band.current.x - band.origin.x),
+            kotlin.math.abs(band.current.y - band.origin.y),
+        )
+        drawRect(color = REDACTION_MARK, topLeft = topLeft, size = boxSize)
+        drawRect(
+            color = REDACTION_MARK_OUTLINE,
+            topLeft = topLeft,
+            size = boxSize,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
+        )
     }
 }
 

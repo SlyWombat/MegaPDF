@@ -51,6 +51,13 @@ object Brand {
     val FindMatch = Color(0x4D18B6C8)
     val FindMatchCurrent = Color(0x730E6FD8)
 
+    // A redaction mark (#173): translucent, so what is about to be removed can still be
+    // read, over an outline in the same hue so the edge is unambiguous on a white page and
+    // on a dark scan alike. Deliberately not the find hue and not the danger red: it is
+    // neither a search result nor an error, and it becomes a black box.
+    val RedactionMark = Color(0x3D16324F)
+    val RedactionMarkOutline = Color(0xB216324F)
+
     val Danger = Color(0xFFC0362C)
 
     /** The wall the page sits on. Neutral shade, not a brand hue. */

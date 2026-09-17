@@ -226,4 +226,7 @@
     <string name="redact_needs_permission">This document doesn\'t allow changes, so it can\'t be redacted.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173) -->
     <string name="redact_failed">The redaction couldn\'t be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</string>
+    <string name="redact_mark_count">%1$s areas marked for redaction</string>
+    <string name="redact_mark_count_one">1 area marked for redaction</string>
+    <string name="redact_ok">OK</string>
 </resources>
