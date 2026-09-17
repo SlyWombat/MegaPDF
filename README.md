@@ -32,12 +32,16 @@ The full Software Design Document lives in [SDD.md](SDD.md) — product principl
 
 ```
 SDD.md                     Software Design Document (start here)
+core/                      The shared engine core in C++ (ADR-003)
 src/MegaPDF.Core/          Engine adapter, services, edit operations (UI-independent)
-src/MegaPDF.App/           WinUI 3 application
+src/MegaPDF.App/           WinUI 3 application (Windows)
+src/MegaPDF.Avalonia/      The cross-platform app (macOS, Linux) — ADR-002
 tests/MegaPDF.Core.Tests/  Unit tests (engine mocked)
 ```
 
 ## Building
+
+### Windows
 
 Requires the .NET 8 SDK on Windows 11 (or Windows 10 1809+). No Visual Studio needed.
 
@@ -45,6 +49,32 @@ Requires the .NET 8 SDK on Windows 11 (or Windows 10 1809+). No Visual Studio ne
 dotnet build MegaPDF.sln
 dotnet test MegaPDF.sln
 ```
+
+### Linux (#158)
+
+The cross-platform app in `src/MegaPDF.Avalonia` builds and runs on Linux x64.
+Tested on **Ubuntu 24.04 LTS**; **Fedora current** is the other target
+distribution. `linux-arm64` is not buildable yet — the patched PDFium series has
+no arm64 build.
+
+Needs the .NET 8 SDK, CMake and a C++ toolchain. Ninja is used when present:
+
+```
+sudo apt install -y dotnet-sdk-8.0 cmake ninja-build g++ python3
+tools/fetch-pdfium-linux.sh          # the pinned PDFium prebuilt
+tools/build-linux-app.sh             # -> artifacts/linux/MegaPDF
+artifacts/linux/MegaPDF/install.sh   # into ~/.local, no root
+```
+
+`install.sh` puts MegaPDF in the applications menu, offers it in a PDF's Open
+With menu, installs the hicolor icons, and adds a `megapdf` command.
+`uninstall.sh` takes it all back out and keeps your signatures and settings.
+
+Two packages are worth having beside it, and neither is required:
+`cups-client` for printing (`lp`), and `fonts-urw-base35` for a script face to
+type signatures in — without it they are drawn in the body font.
+
+Packaging for Flathub, AppImage and `.deb` is not done yet; #158 tracks it.
 
 ## Installing
 

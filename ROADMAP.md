@@ -132,6 +132,23 @@ the pseudo-locale for the +30 % layout check. How it works:
 
 ---
 
+## Desktop (macOS & Linux)
+
+Like the mobile roadmap, this lives in GitHub issues rather than here. Both ship
+from `src/MegaPDF.Avalonia` over the shared `MegaPDF.Core`, the decision recorded
+in [ADR-002](docs/adr-002-macos-desktop.md).
+
+- **macOS** — shipping. Bundle, signing and notarization in ADR-002 §7.
+- **Linux** — [#158](https://github.com/SlyWombat/MegaPDF/issues/158), in 2.0
+  scope and released after the other platforms, so it never blocks a submission.
+  Ubuntu 24.04 LTS and Fedora current are the target distributions. The app
+  builds, runs, prints through CUPS, speaks French from the POSIX locale, and is
+  built and tested by the `Linux app` job in `ci.yml` on every push. What is left
+  is packaging — Flathub first — and a QA pass on real GNOME and KDE sessions.
+  Build steps are in the README.
+
+---
+
 ## Mobile (Android & iOS)
 
 The mobile roadmap lives directly in GitHub issues, not in this file: issues

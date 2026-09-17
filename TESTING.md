@@ -90,6 +90,38 @@ Scroll through a long document; pages should appear as you reach them.
 - Password-protected PDFs show an error instead of a password prompt.
 - No page add/remove/reorder, no merging — out of scope for 1.0.
 
+## Linux (for contributors — there is nothing to install yet)
+
+The Linux app (#158) builds and runs, but is not packaged, so there is no
+download and nothing for a tester to install. Until Flathub happens, trying it
+means building it — the README has the steps, and `install.sh` puts it in the
+applications menu without root.
+
+Everything above applies once it is open, with two differences worth knowing:
+
+- **Print** opens MegaPDF's own small dialog — which printer, how many copies —
+  rather than the system print panel, and then hands the job to CUPS. It needs
+  `cups-client` installed; without it the status line says so.
+- **Signatures you type** are drawn in whatever script face the machine has.
+  `fonts-urw-base35` supplies one on most desktops; with none, they come out in
+  the body font in italic, which is legible and does not look like a signature.
+
+The app's own diagnostics answer most "is this my machine or the app" questions,
+and none of them needs a document:
+
+```
+megapdf --desktop-check     # session, fonts, file dialogs, where saves are staged
+megapdf --language-check    # which language it would run in, and why
+megapdf --print-check       # the CUPS route
+megapdf --self-test <dir>   # fill, check, sign, save, reopen — no window needed
+```
+
+Two known differences from Windows and the Mac, both filed: a save of a very
+large document fails if `/tmp` is a tmpfs, as it is on Fedora
+([#193](https://github.com/SlyWombat/MegaPDF/issues/193)), and the app has no
+third-party notices file yet
+([#194](https://github.com/SlyWombat/MegaPDF/issues/194)).
+
 ## Automated coverage (for contributors, not testers)
 
 Search is covered by engine-level tests on all three platforms, so a parity break shows
