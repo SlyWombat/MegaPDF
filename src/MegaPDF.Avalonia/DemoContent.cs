@@ -32,6 +32,14 @@ internal static class DemoContent
     internal static string SearchTerm => ForLanguage(
         english: "rental", frenchCanadian: "location", french: "location");
 
+    /// <summary>
+    /// What the Redact capture marks (#173): a line of the demo agreement with something on
+    /// it worth removing. Marked by what it says rather than by a rectangle, so the shot
+    /// lands on a sentence in every language rather than on whatever a fixed box covers.
+    /// </summary>
+    internal static string RedactedWord => ForLanguage(
+        english: "customer named", frenchCanadian: "client nommé", french: "client nommé");
+
     private static string ForLanguage(string english, string frenchCanadian, string french)
     {
         var culture = CultureInfo.CurrentUICulture;

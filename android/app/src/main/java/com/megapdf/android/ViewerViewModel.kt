@@ -386,7 +386,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     RecentEntry("demo://3", app.getString(R.string.screenshot_recent_3), now - 6 * day),
                 ), null)
             }
-            "viewer", "sign", "draw", "search", "text", "text-edit" -> {
+            "viewer", "sign", "draw", "search", "text", "text-edit", "redact" -> {
                 screenshotSheet = if (state == "viewer") null else state
                 viewModelScope.launch {
                     try {
@@ -412,6 +412,23 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                             // return, and the debounce is skipped so the hits and
                             // the "N of M" count are on screen without any wait.
                             startSearch(app.getString(R.string.screenshot_search_term), debounceMs = 0L)
+                        }
+                        if (state == "redact") {
+                            // The state the feature has to be legible in (#173): the tool
+                            // armed, and a line of the demo document marked — a translucent
+                            // box you can still read through, over text you are about to
+                            // remove. Marked through the same call a drag makes.
+                            redactMode = true
+                            markForRedaction(
+                                0,
+                                com.megapdf.engine.PdfRect(72.0, 392.0, 292.0, 408.0),
+                            )
+                            // markForRedaction disarms the tool when it lands; arm it again
+                            // so the shot shows the tool on as well as the mark placed.
+                            viewModelScope.launch {
+                                kotlinx.coroutines.delay(400)
+                                redactMode = true
+                            }
                         }
                         if (state == "text") {
                             // The Add text dialog, open on a typed name with the size

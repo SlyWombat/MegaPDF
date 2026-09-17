@@ -153,8 +153,18 @@ public partial class App : Application
                     Console.Error.WriteLine("::error::--screenshot-state redact: the tool did not arm.");
                     return false;
                 }
-                // The demo document's amount line; a drag across it is what a person does.
-                viewModel.AddRedactionMark(0, new PdfRect(72, 392, 220, 16));
+                // A run of the document's own text, found by what it says rather than by a
+                // rectangle that has to be right: a fixed one landed on the signature line,
+                // and a capture is supposed to show the feature doing its job on a sentence.
+                var markedLine = viewModel.LinesOn(0)
+                    .FirstOrDefault(l => l.Text.Contains(DemoContent.RedactedWord, StringComparison.Ordinal));
+                if (markedLine is null)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state redact: the document has no line to mark.");
+                    return false;
+                }
+                viewModel.AddRedactionMark(0, markedLine.Bounds);
                 if (!viewModel.HasRedactionMarks)
                 {
                     Console.Error.WriteLine("::error::--screenshot-state redact: nothing was marked.");

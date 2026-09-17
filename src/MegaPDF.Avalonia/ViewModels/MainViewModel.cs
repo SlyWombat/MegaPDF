@@ -172,6 +172,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             PrintCommand.NotifyCanExecuteChanged();
             ToggleAddTextCommand.NotifyCanExecuteChanged();
             ToggleWhiteoutCommand.NotifyCanExecuteChanged();
+            ToggleRedactCommand.NotifyCanExecuteChanged();
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
         }
@@ -268,6 +269,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(PrintCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleAddTextCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleRedactCommand))]
     [NotifyCanExecuteChangedFor(nameof(FitWidthCommand))]
     [NotifyCanExecuteChangedFor(nameof(FitPageCommand))]
     [NotifyPropertyChangedFor(nameof(CanShrink))]
@@ -295,6 +297,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [NotifyCanExecuteChangedFor(nameof(PrintCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleAddTextCommand))]
     [NotifyCanExecuteChangedFor(nameof(ToggleWhiteoutCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleRedactCommand))]
     private DocumentCapabilities _capabilities = DocumentCapabilities.Unprotected;
 
     // Each also waits while blocking work runs (#145): a save, an open, a change on its way.
