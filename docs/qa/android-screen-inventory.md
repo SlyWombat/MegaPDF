@@ -16,8 +16,8 @@ app can show, as a checklist to walk. Read with `android/README.md` and `TESTING
 Look at every image for: clipping, overlap, untranslated text, wrong theme,
 broken layout, a stray system dialog, the real clock instead of the demo one.
 
-`tools/megapdf146/` holds the container and driver used for the 2.0 pass;
-`docs/qa/android-qa-2.0-results.md` records what it found.
+`tools/android-qa/` holds the container and the driver used for the 2.0 pass;
+[`android-qa-2.0-results.md`](android-qa-2.0-results.md) records what it found.
 
 ---
 
