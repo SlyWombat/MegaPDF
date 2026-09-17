@@ -79,7 +79,14 @@ jobs:
           "$BIN" --self-test "$CONTAINER/tmp/fixtures"
           "$BIN" --print-check "$CONTAINER/tmp/fixtures/fixture.pdf"
 
+      # NOT on a pull request. Notarizing means `notarytool submit`, which UPLOADS THE
+      # BUILD TO APPLE, and this workflow fires on a pull request whenever its own file or
+      # either build script changes — so a one-line edit here used to send Apple a build on
+      # every push (#173 did exactly that, five times, before anyone noticed). What a pull
+      # request has to prove is the build, the sandbox and the self-test above; asking Apple
+      # is what the workflow_dispatch is for, and a tester build is always dispatched.
       - name: Notarize and staple
+        if: github.event_name != 'pull_request'
         env:
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -87,14 +94,17 @@ jobs:
         run: tools/notarize-macos-app.sh "$RUNNER_TEMP/app/MegaPDF.app"
 
       # ditto again for the download, so the stapled ticket and the signature
-      # survive the round trip to the tester's Mac.
+      # survive the round trip to the tester's Mac. Skipped with the notarization above:
+      # there is no stapled ticket to preserve on a pull request.
       - name: Package for the tester
+        if: github.event_name != 'pull_request'
         run: |
           ditto -c -k --keepParent "$RUNNER_TEMP/app/MegaPDF.app" \
             "$RUNNER_TEMP/MegaPDF-${{ inputs.rid || 'osx-arm64' }}-notarized.zip"
           ls -lh "$RUNNER_TEMP/MegaPDF-${{ inputs.rid || 'osx-arm64' }}-notarized.zip"
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: MegaPDF-notarized-${{ inputs.rid || 'osx-arm64' }}
           path: ${{ runner.temp }}/MegaPDF-${{ inputs.rid || 'osx-arm64' }}-notarized.zip
