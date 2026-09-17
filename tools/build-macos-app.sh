@@ -32,12 +32,19 @@ fi
 VERSION="$(grep -oE '<Version>[^<]+</Version>' "$PROJECT" | head -1 | sed 's/<[^>]*>//g')"
 VERSION="${VERSION:-0.1.0}"
 
+# CFBundleVersion, which App Store Connect requires to be greater than every
+# build already uploaded for this platform. It tracks <Version> by default, which
+# is enough for a first upload of a new marketing version; re-uploading the same
+# marketing version (a rejected build, a fixed entitlement) needs a higher one,
+# so MEGAPDF_BUILD overrides it: MEGAPDF_BUILD=2.0.0.1 tools/build-macos-app.sh
+BUILD="${MEGAPDF_BUILD:-$VERSION}"
+
 # The same bundle id as the iPhone app: the Mac is a platform of the one
 # App Store record (universal purchase), and Apple requires every platform in
 # such a record to share the id. com.megapdf.mac was the Mac's own id until
 # 2026-09-11 and is still registered; nothing ships under it.
 BUNDLE_ID="${MACOS_BUNDLE_ID:-com.megapdf.ios}"
-echo "building MegaPDF $VERSION for $RID"
+echo "building MegaPDF $VERSION (build $BUILD) for $RID"
 
 # PDFium must be present before publish: MegaPDF.Core.csproj copies it from
 # libs/pdfium/mac-univ when building on macOS, and silently omits it otherwise.
@@ -135,7 +142,7 @@ cat > "$APP/Contents/Info.plist" << PLIST
     <key>CFBundleIconFile</key><string>MegaPDF</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
-    <key>CFBundleVersion</key><string>$VERSION</string>
+    <key>CFBundleVersion</key><string>$BUILD</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <!-- English is the development language; French (France, the neutral fr)
          and French (Canada) are the translations (#91). This list must agree

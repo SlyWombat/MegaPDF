@@ -57,7 +57,7 @@ targets:
         # Standard OS crypto only — skips the TestFlight export-compliance prompt.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.1.0
+        MARKETING_VERSION: 2.0.0
         TARGETED_DEVICE_FAMILY: "1,2"
   MegaPDFTests:
     type: bundle.unit-test
