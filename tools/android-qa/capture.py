@@ -103,8 +103,38 @@ class Run:
         self.d.launch(wait=wait)
 
     def fresh(self, screenshot_state: str | None = None, wait: float = 4.0) -> None:
+        # Also stop the system picker: left in the foreground it shadows the app,
+        # and `am start` does not always bring ours back in front of it. One Home
+        # capture came out as the picker's search history that way.
+        self.d.shell("am force-stop com.google.android.documentsui")
         self.d.stop_app()
         self.d.launch(screenshot_state, wait=wait)
+
+    def tap_page(self, x: float, y: float, page: int = 1, settle: float = 3.0) -> None:
+        """A point in PDF points on `page`, tapped where it is on *this* screen."""
+        node = self.d.wait_for(desc=self.s.format("page_n", page))
+        left, top, right, bottom = self.d._bounds(node)
+        self.d.tap_xy(left + (x / FORM_W) * (right - left),
+                      top + ((FORM_H - y) / FORM_H) * (bottom - top), settle=settle)
+
+    def field(self, index: int) -> None:
+        """Focus the index-th text field, scrolling the dialog if it is out of reach.
+
+        At the largest text size a dialog body scrolls (#183), so its second field
+        can start below the fold — which is where the Set a password capture lost
+        it on the small phone."""
+        try:
+            node = self.d.find(klass="android.widget.EditText", index=index)
+        except NotFound:
+            self.d.scroll_down(0.25, ms=200)
+            node = self.d.wait_for(klass="android.widget.EditText", index=index)
+        left, top, right, bottom = self.d._bounds(node)
+        _, height = self.d.screen_size()
+        if bottom > height * 0.62:
+            self.d.scroll_down(0.2, ms=200)
+            node = self.d.find(klass="android.widget.EditText", index=index)
+            left, top, right, bottom = self.d._bounds(node)
+        self.d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.9)
 
 
 # --------------------------------------------------------------------------
@@ -236,10 +266,12 @@ TYPEABLE_NAME = {
 
 FORM = "MegaPDF-Test-Form.pdf"
 
-# "Include delivery and pickup" — the first drawn square on the review form, as a
-# fraction of the viewport. The page is fitted to the width on every device, so the
-# same pair works on all three.
-TICK = (0.128, 0.346)
+# The review form is US Letter, and tools/gen_review_form.py puts its first drawn
+# checkbox here, in PDF points. Given in points rather than as a share of the
+# screen because the bars above and below the page are a different share of it on
+# each device: a fraction that hit the box at 320 dpi missed it at 480.
+FORM_W, FORM_H = 612.0, 792.0
+TICK = (78.5, 570.5)
 
 
 def real_file_scenes(r: Run) -> None:
@@ -291,14 +323,14 @@ def real_file_scenes(r: Run) -> None:
         r.fresh()
         r.open_file(FORM)
         # "Include delivery and pickup" — the first drawn square on the page.
-        d.tap_fraction(TICK[0], TICK[1], settle=3.0)
+        r.tap_page(*TICK)
         r.shot("D2-viewer-dirty-ticked")
     r.scene("D2-viewer-dirty-ticked", tick_and_dirty)
 
     def unsaved_prompt():
         r.fresh()
         r.open_file(FORM)
-        d.tap_fraction(TICK[0], TICK[1], settle=3.0)
+        r.tap_page(*TICK)
         d.tap(desc=s["close_document"], settle=1.5)
         r.shot("I1-unsaved-changes")
     r.scene("I1-unsaved-changes", unsaved_prompt)
@@ -381,9 +413,9 @@ def real_file_scenes(r: Run) -> None:
         r.shot("H3-set-a-password")
         d.tap(text=s["security_set"], settle=1.5)
         r.shot("H5-password-empty")
-        d.tap(text=s["password"], settle=0.8)
+        r.field(0)
         d.type_text("one")
-        d.tap(text=s["security_confirm_password"], settle=0.8)
+        r.field(1)
         d.type_text("two")
         d.tap(text=s["security_set"], settle=1.5)
         r.shot("H6-password-mismatch")
