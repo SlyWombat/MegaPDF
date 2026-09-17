@@ -25,9 +25,21 @@ MAJOR="$(grep -E '^MAJOR=' "$PIN" | cut -d= -f2 | tr -d '[:space:]')"
 [ -n "$BUILD" ] || { echo "::error::could not read BUILD= from $PIN" >&2; exit 1; }
 echo "pinned PDFium: ${MAJOR}.x build ${BUILD} (from libs/pdfium/win-x64/VERSION)"
 
-if [ -f "$DEST/lib/libpdfium.dylib" ]; then
+# Present *and* the pinned build: this used to skip on the dylib alone, so a tree
+# that had fetched an older patch series went on using it, and the version check
+# below — the whole point of this script — never ran. What that looked like was a
+# linker error naming the symbols the newer series adds, several minutes into a
+# build, with nothing pointing at PDFium (hit on #191, after #173 bumped the
+# series from 25 to 28).
+if [ -f "$DEST/lib/libpdfium.dylib" ] && diff -q "$PIN" "$DEST/VERSION" >/dev/null 2>&1; then
     echo "already present — skipping fetch: $DEST/lib/libpdfium.dylib"
     exit 0
+fi
+if [ -f "$DEST/lib/libpdfium.dylib" ]; then
+    echo "present but not the pinned build — refetching"
+    echo "--- expected (libs/pdfium/win-x64/VERSION):"; cat "$PIN"
+    echo "--- have ($DEST/VERSION):"; cat "$DEST/VERSION" 2>/dev/null || echo "(no VERSION file)"
+    rm -rf "$DEST"
 fi
 
 TMP="$(mktemp -d)"
