@@ -1261,10 +1261,22 @@ internal static class Program
         var appName = application.Name ?? "MegaPDF";
         foreach (var wanted in new[]
                  {
-                     Strings.AboutMegaPDF, Strings.MenuServices, Strings.MenuHideApp(appName),
+                     Strings.AboutMegaPDF, Strings.MenuHideApp(appName),
                      Strings.MenuHideOthers, Strings.MenuShowAll, Strings.MenuQuitApp(appName),
                  })
             check($"the app menu carries {wanted}", appMenuHeaders.Contains(wanted));
+        // Services is the system's own, and the marker Avalonia uses to ask for it is
+        // registered when the macOS platform initialises — which the headless platform
+        // these checks run on never does. So the rule here is the one that holds
+        // either way: the item is present with a submenu for macOS to fill, or it is
+        // absent. Never present and empty, which would open on nothing. That it really
+        // does appear is checked on a Mac, through the menu bar's accessibility tree.
+        var services = appMenu?.Items.OfType<global::Avalonia.Controls.NativeMenuItem>()
+            .FirstOrDefault(i => i.Header == Strings.MenuServices);
+        check(services is null
+                  ? "no Services item, this platform having no system to fill one"
+                  : "Services is there, with a submenu for macOS to fill",
+              services is null || services.Menu is not null);
         // Hide Others is ⌥⌘H on a Mac. Avalonia's own item had ⌥⌘Q, which macOS uses
         // for Quit and Keep Windows (#191).
         var hideOthers = appMenu?.Items.OfType<global::Avalonia.Controls.NativeMenuItem>()
