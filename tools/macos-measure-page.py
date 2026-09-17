@@ -38,7 +38,10 @@ def white(x, y):
 
 
 best = None
-for y in range(150, 1000, 50):
+# Bounded by the shot's own height: this was written for the 1920x1080 recording
+# region, and on a shorter content area it walked straight off the end of the
+# pixel data with an IndexError rather than saying it could not find the page.
+for y in range(150, min(1000, h), 50):
     runs, x = [], 0
     while x < w:
         if white(x, y):
@@ -54,5 +57,7 @@ for y in range(150, 1000, 50):
 if best is None or best[1] - best[0] < 400:
     sys.exit(f"no page found in {shot}: widest white run {best}")
 left, right = best
-top = next(yy for yy in range(70, h) if white(left + 8, yy))
+top = next((yy for yy in range(70, h) if white(left + 8, yy)), None)
+if top is None:
+    sys.exit(f"no page top found in {shot} up the left margin at x={left + 8}")
 print(left, top, (right - left) / 612.0)
