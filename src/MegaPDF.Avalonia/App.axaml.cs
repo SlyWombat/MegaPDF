@@ -156,8 +156,13 @@ public partial class App : Application
                 // A run of the document's own text, found by what it says rather than by a
                 // rectangle that has to be right: a fixed one landed on the signature line,
                 // and a capture is supposed to show the feature doing its job on a sentence.
-                var markedLine = viewModel.LinesOn(0)
-                    .FirstOrDefault(l => l.Text.Contains(DemoContent.RedactedWord, StringComparison.Ordinal));
+                // The word when the document has it, and otherwise the longest line on the
+                // page: a capture run may be posed on the English demo with a French window,
+                // and a shot with nothing marked would say nothing at all.
+                var lines = viewModel.LinesOn(0);
+                var markedLine = lines
+                    .FirstOrDefault(l => l.Text.Contains(DemoContent.RedactedWord, StringComparison.Ordinal))
+                    ?? lines.OrderByDescending(l => l.Text.Length).FirstOrDefault();
                 if (markedLine is null)
                 {
                     Console.Error.WriteLine(
