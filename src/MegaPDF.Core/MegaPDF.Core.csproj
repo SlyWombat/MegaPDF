@@ -11,14 +11,16 @@
 
   <!-- PDFium native binary (BSD-3, see libs\pdfium\*\LICENSE). Flows to
        referencing projects' output. PdfiumNative.Dll is the bare name "pdfium",
-       so .NET probes for pdfium.dll on Windows and libpdfium.dylib on macOS and
-       neither needs any code change (ADR-002 fact 2, proven by 120 Core tests
-       passing on macOS in that ADR's spike).
+       so .NET probes for pdfium.dll on Windows, libpdfium.dylib on macOS and
+       libpdfium.so on Linux, and none of them needs any code change (ADR-002
+       fact 2, proven by 120 Core tests passing on macOS in that ADR's spike).
 
        Conditioned rather than unconditional: without this, a macOS build copies
-       a Windows DLL it can never load and no dylib at all. win-arm64 remains a
-       TODO. -->
-  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
+       a Windows DLL it can never load and no dylib at all. Named for Windows
+       rather than "not macOS" since #158 — a Linux build took the Windows branch
+       and copied a pdfium.dll it could no more load than the Mac could.
+       win-arm64 remains a TODO. -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <None Include="..\..\libs\pdfium\win-x64\pdfium.dll" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
@@ -34,6 +36,17 @@
     <None Include="$(PdfiumMacDylib)" Link="libpdfium.dylib" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Fetched by tools/fetch-pdfium-linux.sh, not committed, same doctrine as the
+       Mac dylib above (#158). The Exists() guard keeps a fresh clone building on
+       Linux right up until it needs to load a document. -->
+  <PropertyGroup>
+    <PdfiumLinuxSo Condition="'$(PdfiumLinuxSo)' == ''">$(MSBuildThisFileDirectory)../../libs/pdfium/linux-x64/lib/libpdfium.so</PdfiumLinuxSo>
+  </PropertyGroup>
+
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And Exists('$(PdfiumLinuxSo)')">
+    <None Include="$(PdfiumLinuxSo)" Link="libpdfium.so" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- The shared engine core (core/megapdf_core.cpp, ADR-003, #38): built from
        source by tools/build-core.* into core/build/<platform>/ (gitignored) and
        copied next to pdfium, the same way pdfium itself flows to referencing
@@ -43,10 +56,11 @@
        Tools with the C++ workload on Windows, Xcode CLT + Homebrew cmake on macOS). -->
   <PropertyGroup>
     <MegaPdfCoreDir>$(MSBuildThisFileDirectory)..\..\core\</MegaPdfCoreDir>
-    <MegaPdfCoreArtifact Condition="!$([MSBuild]::IsOSPlatform('OSX'))">$(MegaPdfCoreDir)build\win-x64\Release\megapdf_core.dll</MegaPdfCoreArtifact>
+    <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(MegaPdfCoreDir)build\win-x64\Release\megapdf_core.dll</MegaPdfCoreArtifact>
     <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(MegaPdfCoreDir)build/osx/libmegapdf_core.dylib</MegaPdfCoreArtifact>
-    <MegaPdfCoreBuildCommand Condition="!$([MSBuild]::IsOSPlatform('OSX'))">powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)..\..\tools\build-core.ps1"</MegaPdfCoreBuildCommand>
-    <MegaPdfCoreBuildCommand Condition="$([MSBuild]::IsOSPlatform('OSX'))">bash "$(MSBuildThisFileDirectory)../../tools/build-core.sh"</MegaPdfCoreBuildCommand>
+    <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(MegaPdfCoreDir)build/linux-x64/libmegapdf_core.so</MegaPdfCoreArtifact>
+    <MegaPdfCoreBuildCommand Condition="$([MSBuild]::IsOSPlatform('Windows'))">powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)..\..\tools\build-core.ps1"</MegaPdfCoreBuildCommand>
+    <MegaPdfCoreBuildCommand Condition="!$([MSBuild]::IsOSPlatform('Windows'))">bash "$(MSBuildThisFileDirectory)../../tools/build-core.sh"</MegaPdfCoreBuildCommand>
   </PropertyGroup>
 
   <Target Name="BuildMegaPdfCore" BeforeTargets="BeforeBuild"
@@ -55,11 +69,14 @@
     <Exec Command="$(MegaPdfCoreBuildCommand)" />
   </Target>
 
-  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <None Include="$(MegaPdfCoreArtifact)" Link="megapdf_core.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
     <None Include="$(MegaPdfCoreArtifact)" Link="libmegapdf_core.dylib" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <None Include="$(MegaPdfCoreArtifact)" Link="libmegapdf_core.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
