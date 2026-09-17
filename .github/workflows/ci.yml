@@ -287,6 +287,27 @@ jobs:
               raise SystemExit('::error::the window rendered almost no colours — the page did not draw')
           PYCHECK
 
+      # Fractional scaling (#158; the #146 150 % trap in Linux form). A desktop's
+      # scale reaches an X11 app through XSETTINGS, which Xvfb has no daemon for,
+      # so it is forced here the same way the capture rig would — that still
+      # exercises the layout, which is what breaks. The capture itself is scale
+      # independent by construction: the app renders its own window at its DIP
+      # size rather than letting the OS photograph the screen.
+      - name: The layout survives a 150% display scale
+        run: |
+          AVALONIA_GLOBAL_SCALE_FACTOR=1.5 xvfb-run -a -s "-screen 0 2560x1600x24" \
+            "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --window 1280x800 \
+            --screenshot "$RUNNER_TEMP/linux-150.png" "$RUNNER_TEMP/fixtures/demo.pdf" \
+            | tee "$RUNNER_TEMP/scale.log"
+          test -s "$RUNNER_TEMP/linux-150.png" || { echo "::error::nothing rendered at 150%"; exit 1; }
+          # The whole toolbar still fits: at 1.5x a 1280 DIP window is 1920 real
+          # pixels, and a layout that collapsed to overflow there would mean the
+          # toolbar is measuring pixels where it should measure DIP.
+          grep -q 'toolbar: mode=Full' "$RUNNER_TEMP/scale.log" \
+            || { echo "::error::the toolbar collapsed at 150%:"; cat "$RUNNER_TEMP/scale.log"; exit 1; }
+          AVALONIA_GLOBAL_SCALE_FACTOR=1.5 xvfb-run -a -s "-screen 0 2560x1600x24" \
+            "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --desktop-check | grep -E 'display scaling|screen '
+
       # French, on Linux, through the variable .NET does not read. This is the
       # #158 case that was broken: a French desktop with English formats.
       - name: The app runs in French
@@ -312,6 +333,7 @@ jobs:
             ${{ runner.temp }}/MegaPDF-linux-x64.tar.gz
             ${{ runner.temp }}/linux-window.png
             ${{ runner.temp }}/linux-fr-CA.png
+            ${{ runner.temp }}/linux-150.png
           if-no-files-found: error
 
       - name: Upload test results

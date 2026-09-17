@@ -501,6 +501,15 @@ public partial class App : Application
         var session = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") ?? "(unset)";
         var desktopName = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "(unset)";
         Console.WriteLine($"session: {session}, desktop: {desktopName}");
+
+        // Avalonia 11 has no Wayland backend — Avalonia.X11 is the only Linux one
+        // in the published output — so a Wayland session runs this app through
+        // XWayland, and a fractional scale there is XWayland's upscale of an
+        // integer-scaled surface rather than a crisp render (#158). Worth printing
+        // beside the scaling, because the two together explain what a blurry
+        // screenshot from a QA pass actually is.
+        if (OperatingSystem.IsLinux() && string.Equals(session, "wayland", StringComparison.OrdinalIgnoreCase))
+            Console.WriteLine("  Wayland session: this app has no Wayland backend, so it is running through XWayland");
         var font = global::Avalonia.Media.FontManager.Current.DefaultFontFamily.Name;
         Console.WriteLine($"default font family: {font}");
 
@@ -584,6 +593,15 @@ public partial class App : Application
                   !backing.StartsWith("tmpfs", StringComparison.Ordinal)
                   && !backing.StartsWith("ramfs", StringComparison.Ordinal));
         }
+
+        // Fractional scaling (#158, and the #146 150% trap). The capture path
+        // renders the window itself at its DIP size, so a screenshot is the same
+        // pixels whatever the desktop is scaled to — which is the point. What the
+        // scale does change is what a person sees, so it is reported.
+        Console.WriteLine($"display scaling: {window.RenderScaling:0.###}x "
+                          + $"(the window is {window.Bounds.Width:0}x{window.Bounds.Height:0} DIP)");
+        foreach (var screen in window.Screens?.All ?? [])
+            Console.WriteLine($"  screen {screen.Bounds.Width}x{screen.Bounds.Height} px at {screen.Scaling:0.###}x");
 
         // What the desktop reads to group the window under its launcher. The
         // .desktop file states StartupWMClass=MegaPDF, and if the window ever
