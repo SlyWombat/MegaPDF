@@ -880,4 +880,19 @@ public static partial class Strings
 
     /// <summary>Anything under a whiteout is still in the file, and another app can copy or search it. To take it out of the file, use Redact.</summary>
     public static string WhiteoutCoversOnlyBody => Get("WhiteoutCoversOnlyBody");
+
+    /// <summary>Hide {0}</summary>
+    public static string MenuHideApp(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("MenuHideApp"), arg0);
+
+    /// <summary>Hide Others</summary>
+    public static string MenuHideOthers => Get("MenuHideOthers");
+
+    /// <summary>Show All</summary>
+    public static string MenuShowAll => Get("MenuShowAll");
+
+    /// <summary>Quit {0}</summary>
+    public static string MenuQuitApp(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("MenuQuitApp"), arg0);
+
+    /// <summary>Services</summary>
+    public static string MenuServices => Get("MenuServices");
 }

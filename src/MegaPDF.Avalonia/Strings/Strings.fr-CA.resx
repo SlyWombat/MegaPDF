@@ -1098,4 +1098,24 @@
     <value>Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder.</value>
     <comment>First-use hint body (#173). #173 — new French, for francophone review</comment>
   </data>
+  <data name="MenuHideApp" xml:space="preserve">
+    <value>Masquer {0}</value>
+    <comment>FR-REVIEW #191 — copied from macOS itself, not translated here: TextEdit's Edit.loctable on macOS 26, where fr and fr-CA are the same string. macOS app menu: hides this app (⌘H). {0} is the app's name (#191)</comment>
+  </data>
+  <data name="MenuHideOthers" xml:space="preserve">
+    <value>Masquer les autres</value>
+    <comment>FR-REVIEW #191 — copied from macOS itself, not translated here: TextEdit's Edit.loctable on macOS 26, where fr and fr-CA are the same string. macOS app menu: hides every other app (⌥⌘H) (#191)</comment>
+  </data>
+  <data name="MenuShowAll" xml:space="preserve">
+    <value>Tout afficher</value>
+    <comment>FR-REVIEW #191 — copied from macOS itself, not translated here: TextEdit's Edit.loctable on macOS 26, where fr and fr-CA are the same string. macOS app menu: brings back everything hidden (#191)</comment>
+  </data>
+  <data name="MenuQuitApp" xml:space="preserve">
+    <value>Quitter {0}</value>
+    <comment>FR-REVIEW #191 — copied from macOS itself, not translated here: TextEdit's Edit.loctable on macOS 26, where fr and fr-CA are the same string. macOS app menu: quits (⌘Q). {0} is the app's name (#191)</comment>
+  </data>
+  <data name="MenuServices" xml:space="preserve">
+    <value>Services</value>
+    <comment>FR-REVIEW #191 — copied from macOS itself, not translated here: TextEdit's Edit.loctable on macOS 26, where fr and fr-CA are the same string. macOS app menu: the system's Services submenu. The same word in French (#191)</comment>
+  </data>
 </root>

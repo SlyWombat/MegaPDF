@@ -742,8 +742,8 @@ public partial class App : Application
     internal static ThirdPartyNoticesWindow? CurrentNotices => _noticesWindow;
 
     /// <summary>
-    /// Puts About MegaPDF in the first slot of the first menu, where Avalonia's
-    /// "About Avalonia" was (#176).
+    /// The whole macOS application menu: About MegaPDF, Services, Hide, Hide
+    /// Others, Show All and Quit (#176, #191).
     ///
     /// Avalonia's macOS exporter builds its own app menu — one item, opening a panel
     /// about the framework — only when the Application carries none, and it appends
@@ -753,6 +753,15 @@ public partial class App : Application
     /// Setting it any later would find the exporter already built, and the standard
     /// items would not be added a second time.
     ///
+    /// Since #191 the six below are all ours. Avalonia adds its own Services, Hide,
+    /// Hide Others, Show All and Quit to whatever menu it finds, with English titles
+    /// compiled into the framework — so a French run read "À propos de MegaPDF"
+    /// above "Hide MegaPDF", and nothing could be done about the four English words
+    /// from outside. `MacOSPlatformOptions.DisableDefaultApplicationMenuItems` in
+    /// Program.BuildAvaloniaApp stops it adding them; these replace them, with the
+    /// wording macOS itself uses (Strings.MenuHideApp and friends) and Apple's
+    /// shortcuts.
+    ///
     /// Harmless off macOS: no platform but this one exports an application menu.
     /// </summary>
     internal NativeMenu BuildAppMenu()
@@ -760,12 +769,81 @@ public partial class App : Application
         if (NativeMenu.GetMenu(this) is { } existing)
             return existing;
 
+        var appName = Name ?? "MegaPDF";
         var menu = new NativeMenu();
+
         var about = new NativeMenuItem(Strings.AboutMegaPDF);
         about.Click += (_, _) => ShowAbout();
         menu.Add(about);
+
+        if (ServicesItem() is { } services)
+        {
+            menu.Add(new NativeMenuItemSeparator());
+            menu.Add(services);
+        }
+
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(AppCommand(Strings.MenuHideApp(appName), new KeyGesture(Key.H, KeyModifiers.Meta),
+                            Platform.MacApplication.Hide));
+        // ⌥⌘H, which is what macOS binds Hide Others to. Avalonia's own item had
+        // ⌥⌘Q — the shortcut for Quit and Keep Windows — which is one more reason
+        // these four are ours now (#191).
+        menu.Add(AppCommand(Strings.MenuHideOthers, new KeyGesture(Key.H, KeyModifiers.Meta | KeyModifiers.Alt),
+                            Platform.MacApplication.HideOthers));
+        menu.Add(AppCommand(Strings.MenuShowAll, null, Platform.MacApplication.ShowAll));
+
+        menu.Add(new NativeMenuItemSeparator());
+        menu.Add(AppCommand(Strings.MenuQuitApp(appName), new KeyGesture(Key.Q, KeyModifiers.Meta), () =>
+        {
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+                desktop.TryShutdown();
+        }));
+
         NativeMenu.SetMenu(this, menu);
         return menu;
+    }
+
+    /// <summary>
+    /// The Services submenu, which the system fills in and we only have to mark.
+    ///
+    /// Avalonia marks it with an attached property, and the class that declares that
+    /// property — MacOSNativeMenuCommands — is internal to the framework, so it is
+    /// reached by name rather than by reference. It is registered well before this
+    /// runs: AvaloniaNativePlatform.Initialize binds INativeApplicationCommands to
+    /// one while the windowing subsystem is set up, which is before
+    /// Application.Initialize. If a future version ever moves it, the item is left
+    /// out rather than added — a Services menu that opens on nothing is worse than
+    /// no Services menu.
+    /// </summary>
+    private static NativeMenuItem? ServicesItem()
+    {
+        var property = AvaloniaPropertyRegistry.Instance
+            .GetRegisteredAttached(typeof(NativeMenu))
+            .FirstOrDefault(p => p.Name == "IsServicesSubmenu" && p.PropertyType == typeof(bool));
+        if (property is null)
+        {
+            Console.Error.WriteLine(
+                "::warning::the Services submenu marker is not registered; the app menu will have no Services item.");
+            return null;
+        }
+        var submenu = new NativeMenu();
+        submenu.SetValue(property, true);
+        return new NativeMenuItem(Strings.MenuServices) { Menu = submenu };
+    }
+
+    /// <summary>
+    /// An app-menu item that reaches AppKit. Nothing here runs off macOS: the menu
+    /// is only ever exported there, and the interop would have nothing to talk to.
+    /// </summary>
+    private static NativeMenuItem AppCommand(string header, KeyGesture? gesture, Action invoke)
+    {
+        var item = new NativeMenuItem(header) { Gesture = gesture };
+        item.Click += (_, _) =>
+        {
+            if (OperatingSystem.IsMacOS())
+                invoke();
+        };
+        return item;
     }
 
     /// <summary>About MegaPDF, raised rather than opened twice.</summary>

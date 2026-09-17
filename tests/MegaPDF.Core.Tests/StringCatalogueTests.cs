@@ -90,6 +90,9 @@ public class StringCatalogueTests
         // French, and "Clients" is the same word.
         ["iCloud Drive"] = "the Files app's sidebar says iCloud Drive in French too (#165)",
         ["Clients"] = "the same word in both (#165 demo recents)",
+        // #191: copied from macOS itself (TextEdit's Edit.loctable), where the French
+        // for the Services submenu is the English word.
+        ["MenuServices"] = "macOS spells the Services menu the same way in French (#191)",
     };
 
     private static readonly Regex DotNetPlaceholder = new(@"\{(\d+)(?:[:,][^}]*)?\}", RegexOptions.Compiled);

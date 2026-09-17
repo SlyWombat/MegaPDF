@@ -114,6 +114,15 @@ internal static class Program
                 DefaultFamilyName = "Helvetica Neue",
             });
 
+        // The application menu is ours, all of it (#191). Left to itself Avalonia
+        // appends Services, Hide, Hide Others, Show All and Quit to whatever app menu
+        // it finds, with English titles compiled into the framework — so a French run
+        // read "À propos de MegaPDF" above "Hide MegaPDF", and no amount of work on
+        // our side could reach those four words. App.BuildAppMenu adds them itself,
+        // with the wording macOS uses and Apple's shortcuts.
+        if (OperatingSystem.IsMacOS())
+            builder = builder.With(new MacOSPlatformOptions { DisableDefaultApplicationMenuItems = true });
+
         // A flyout is normally its own OS window, which RenderTargetBitmap cannot
         // see, so the `sign` screenshot state (#100) would capture a closed library.
         // Drawing popups inside the main window for capture runs only keeps the
@@ -1240,8 +1249,29 @@ internal static class Program
         var first = appMenu?.Items.OfType<global::Avalonia.Controls.NativeMenuItem>().FirstOrDefault();
         check($"the app menu's first item is About MegaPDF (\"{first?.Header}\")",
               first?.Header == Strings.AboutMegaPDF);
-        check("and it is the only item the app puts there, so macOS keeps Services, Hide and Quit below it",
-              appMenu?.Items.Count == 1);
+        // Since #191 the whole app menu is ours, because Avalonia's own Services, Hide,
+        // Hide Others, Show All and Quit carry English titles compiled into the
+        // framework and could not be translated from outside. Each one is checked by
+        // the string it should show, so a French run would have caught the bug this
+        // replaced: none of these headers is an English literal here.
+        var appMenuHeaders = appMenu?.Items
+            .OfType<global::Avalonia.Controls.NativeMenuItem>()
+            .Select(i => i.Header)
+            .ToList() ?? [];
+        var appName = application.Name ?? "MegaPDF";
+        foreach (var wanted in new[]
+                 {
+                     Strings.AboutMegaPDF, Strings.MenuServices, Strings.MenuHideApp(appName),
+                     Strings.MenuHideOthers, Strings.MenuShowAll, Strings.MenuQuitApp(appName),
+                 })
+            check($"the app menu carries {wanted}", appMenuHeaders.Contains(wanted));
+        // Hide Others is ⌥⌘H on a Mac. Avalonia's own item had ⌥⌘Q, which macOS uses
+        // for Quit and Keep Windows (#191).
+        var hideOthers = appMenu?.Items.OfType<global::Avalonia.Controls.NativeMenuItem>()
+            .FirstOrDefault(i => i.Header == Strings.MenuHideOthers);
+        check($"and Hide Others is on {hideOthers?.Gesture}",
+              hideOthers?.Gesture is { Key: Key.H } g
+              && g.KeyModifiers == (KeyModifiers.Meta | KeyModifiers.Alt));
 
         // 2. Choosing it opens the About window.
         (first as global::Avalonia.Controls.INativeMenuItemExporterEventsImplBridge)?.RaiseClicked();

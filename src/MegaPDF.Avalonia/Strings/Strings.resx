@@ -1083,4 +1083,24 @@
     <value>Anything under a whiteout is still in the file, and another app can copy or search it. To take it out of the file, use Redact.</value>
     <comment>First-use hint body (#173)</comment>
   </data>
+  <data name="MenuHideApp" xml:space="preserve">
+    <value>Hide {0}</value>
+    <comment>macOS app menu: hides this app (⌘H). {0} is the app's name (#191)</comment>
+  </data>
+  <data name="MenuHideOthers" xml:space="preserve">
+    <value>Hide Others</value>
+    <comment>macOS app menu: hides every other app (⌥⌘H) (#191)</comment>
+  </data>
+  <data name="MenuShowAll" xml:space="preserve">
+    <value>Show All</value>
+    <comment>macOS app menu: brings back everything hidden (#191)</comment>
+  </data>
+  <data name="MenuQuitApp" xml:space="preserve">
+    <value>Quit {0}</value>
+    <comment>macOS app menu: quits (⌘Q). {0} is the app's name (#191)</comment>
+  </data>
+  <data name="MenuServices" xml:space="preserve">
+    <value>Services</value>
+    <comment>macOS app menu: the system's Services submenu. The same word in French (#191)</comment>
+  </data>
 </root>
