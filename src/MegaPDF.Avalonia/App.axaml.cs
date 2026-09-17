@@ -434,6 +434,13 @@ public partial class App : Application
             }
         }
 
+        // Which typeface the app actually ends up in (#160). Worth printing,
+        // because the answer was a surprise: the comment in Program.cs says macOS
+        // gets San Francisco, and it never did — Avalonia resolves something else,
+        // and that something else drops the accent off every capital.
+        var resolved = global::Avalonia.Media.FontManager.Current.DefaultFontFamily.Name;
+        Console.WriteLine($"default font family: {resolved}");
+
         Console.WriteLine(failures == 0
             ? "brand-check: PASS"
             : $"::error::brand-check: {failures} token(s) unresolved");

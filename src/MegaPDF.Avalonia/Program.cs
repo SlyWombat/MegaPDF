@@ -75,22 +75,32 @@ internal static class Program
             .UsePlatformDetect()
             .LogToTrace();
 
-        // Name the macOS system UI font explicitly (#160). Left to itself, Avalonia
-        // resolves a default face on macOS that has no precomposed capital accented
-        // glyphs, and silently drops the accent: "Échap pour annuler" was drawn as
-        // "Echap pour annuler", and "À partir d'une photo" as "A partir d'une photo".
-        // Only marks that sit *above* the letter were lost — Ç survived, and every
-        // lower-case accent did too — which is why it went unnoticed for so long.
-        // ".AppleSystemUIFont" is San Francisco, so this is not a change of typeface:
-        // it is asking for the font the app already meant to use. "SF Pro" and
-        // "SF Pro Text" both fall back to the same broken default and do not fix it.
+        // Name the macOS UI font explicitly (#160). Left to itself, Avalonia resolves
+        // a face on macOS that has no precomposed capital accented glyphs and silently
+        // drops the accent: "Échap pour annuler" was drawn as "Echap pour annuler",
+        // and "À partir d'une photo" as "A partir d'une photo". Only marks *above* the
+        // letter were lost — Ç kept its cedilla and every lower-case accent was fine —
+        // which is why it went unnoticed for so long.
+        //
+        // The note below this method says macOS gets San Francisco. It never did, and
+        // asking for it by name does not help: ".AppleSystemUIFont" and ".SF NS" both
+        // draw the accented capitals correctly but mis-advance U+2026, so every "…" in
+        // the app collides with the character after it — "Password…" came out as
+        // "Password..", and the app is full of "Opening…", "Saving…", "Save As…".
+        // "SF Pro" and "SF Pro Text" just fall back to the broken default.
+        //
+        // Helvetica Neue is the one that gets both right, and it is all but what the
+        // app already draws: the default Avalonia was picking is a Helvetica, not San
+        // Francisco. `--brand-check` prints the resolved family so this is checkable
+        // rather than a claim. Genuine San Francisco would need the accent and advance
+        // bugs fixed upstream in Avalonia, not a different string here.
         //
         // global:: because this file's own namespace is MegaPDF.Avalonia, so a bare
         // Avalonia.Media here would be read as MegaPDF.Avalonia.Media.
         if (OperatingSystem.IsMacOS())
             builder = builder.With(new global::Avalonia.Media.FontManagerOptions
             {
-                DefaultFamilyName = ".AppleSystemUIFont",
+                DefaultFamilyName = "Helvetica Neue",
             });
 
         // A flyout is normally its own OS window, which RenderTargetBitmap cannot
