@@ -32,6 +32,14 @@ object Brand {
     val Accent = Blue
     val AccentPressed = TileStart
     val AccentSubtle = Color(0x210E6FD8)
+
+    /**
+     * The same §1.2 `accent.subtle` wash, flattened onto white. Material's
+     * *container* roles are composited as opaque fills — a chip's selected
+     * background, a tonal button's face — so they need the mixed value, not the
+     * alpha one.
+     */
+    val AccentSubtleOpaque = Color(0xFFDFECFA)
     val AccentOn = Color(0xFFFFFFFF)
 
     /**
@@ -76,8 +84,18 @@ private val LightColours = lightColorScheme(
     onPrimaryContainer = Brand.Ink,
     secondary = Brand.Cyan,
     onSecondary = Brand.AccentOn,
+    // The roles Material fills a *selected* chip and a tonal button from. Left
+    // unset they come from the baseline tonal palette, which is purple: the Add
+    // text size and face chips and the signature sheet's Draw, Type and Photo
+    // buttons all came out #E8DEF8, the same two-palettes-on-one-screen defect
+    // #80 set out to remove. A selected chip is a selection fill, so it takes
+    // §1.2 `accent.subtle`.
+    secondaryContainer = Brand.AccentSubtleOpaque,
+    onSecondaryContainer = Brand.Ink,
     error = Brand.Danger,
     onError = Brand.AccentOn,
+    errorContainer = Color(0xFFF7DEDC),
+    onErrorContainer = Color(0xFF410E0B),
 
     background = Color(0xFFFFFFFF),
     onBackground = Brand.Ink,
@@ -92,6 +110,12 @@ private val LightColours = lightColorScheme(
     surfaceContainerHighest = Color(0xFFE7EEF4),
     outline = Color(0xFF7A8B9C),
     outlineVariant = Color(0xFFC9D6E2),
+    // What is drawn *on* the app rather than in it: the notice pill over the page
+    // and a toolbar tooltip. Material's baseline pair is a purple-tinted charcoal;
+    // the brand already owns a dark surface and the text that goes on it.
+    inverseSurface = Brand.Ink,
+    inverseOnSurface = Brand.InkOnDark,
+    inversePrimary = Color(0xFF9CC7F5),
 )
 
 /**
@@ -105,7 +129,11 @@ private val DarkColours = darkColorScheme(
     primary = Color(0xFF4F9BEA),
     onPrimary = Color(0xFF0B1B2B),
     secondary = Brand.Cyan,
+    secondaryContainer = Color(0xFF17395C),
+    onSecondaryContainer = Brand.InkOnDark,
     error = Color(0xFFE2685E),
+    errorContainer = Color(0xFF5C1D18),
+    onErrorContainer = Color(0xFFF9DEDC),
 
     background = Color(0xFF0F1720),
     onBackground = Brand.InkOnDark,
@@ -115,6 +143,9 @@ private val DarkColours = darkColorScheme(
     onSurfaceVariant = Color(0xFFB6C4D2),
     outline = Color(0xFF7A8B9C),
     outlineVariant = Color(0xFF3A4753),
+    inverseSurface = Brand.InkOnDark,
+    inverseOnSurface = Brand.Ink,
+    inversePrimary = Brand.Accent,
 )
 
 /**
