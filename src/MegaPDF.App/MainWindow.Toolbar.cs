@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace MegaPDF.App;
@@ -247,6 +248,46 @@ public sealed partial class MainWindow
 
     /// <summary>Opens "…" for the `more` screenshot state.</summary>
     internal void OpenToolbarOverflow() => Toolbar.IsOpen = true;
+
+    /// <summary>
+    /// The More button's own tooltip stayed on screen over the menu it had just opened,
+    /// on top of the first entries and their shortcuts (#189). A tooltip belongs to a
+    /// button nobody is pointing at any more, so it is switched off while the overflow is
+    /// open and back on when it closes.
+    /// </summary>
+    private void WireOverflowTooltip()
+    {
+        Toolbar.Opening += (_, _) => SetOverflowTooltip(enabled: false);
+        Toolbar.Closed += (_, _) => SetOverflowTooltip(enabled: true);
+    }
+
+    private object? _overflowTooltip;
+
+    private void SetOverflowTooltip(bool enabled)
+    {
+        if (FindOverflowButton(Toolbar) is not { } more)
+            return;
+        if (enabled)
+        {
+            if (_overflowTooltip is not null)
+                ToolTipService.SetToolTip(more, _overflowTooltip);
+            return;
+        }
+        _overflowTooltip ??= ToolTipService.GetToolTip(more);
+        ToolTipService.SetToolTip(more, null);
+    }
+
+    private static DependencyObject? FindOverflowButton(DependencyObject node)
+    {
+        if (node is FrameworkElement { Name: "MoreButton" })
+            return node;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+        {
+            if (FindOverflowButton(VisualTreeHelper.GetChild(node, i)) is { } found)
+                return found;
+        }
+        return null;
+    }
 
     // --- Zoom menu ---
 

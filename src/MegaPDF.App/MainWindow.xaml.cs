@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
             DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
         AppWindow.Closing += OnAppWindowClosing;
         InitializePageKeyboard();
+        WireOverflowTooltip();
         InitializeToolbar();
 
         // Keyboard interaction with the selected signature (SDD §3.3):
