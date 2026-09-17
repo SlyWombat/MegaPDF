@@ -26,22 +26,8 @@ namespace MegaPDF.Avalonia.Platform;
 [SupportedOSPlatform("linux")]
 internal static class LinuxPrinter
 {
-    /// <summary>A CUPS destination: its queue name, what it calls itself, and whether it is the default.</summary>
-    internal sealed record Destination(string Name, string? Description, bool IsDefault)
-    {
-        /// <summary>What the picker shows: the description if CUPS gave one, else the queue name.</summary>
-        internal string Label => string.IsNullOrWhiteSpace(Description) ? Name : Description!;
-    }
-
-    /// <summary>What a probe or a print attempt found, in words a status bar can show.</summary>
-    internal sealed record Outcome(bool Ok, string Message);
-
-    /// <summary>
-    /// What the person chose in the print dialog: a queue name (null for the system
-    /// default) and how many copies. Declared here rather than on the window so the
-    /// view model can ask for one without knowing which view answers.
-    /// </summary>
-    internal sealed record Choice(string? Destination, int Copies);
+    // A destination, a choice and an outcome are Printing's, not this file's: the
+    // view model and the print dialog name all three, and neither is Linux code.
 
     /// <summary>True inside a Flatpak sandbox, where lp is not reachable and the portal is the route.</summary>
     internal static bool InFlatpakSandbox => File.Exists("/.flatpak-info");
@@ -54,7 +40,7 @@ internal static class LinuxPrinter
     /// Empty when there is no CUPS server, no queue, or no lpstat — all of which are
     /// states of the machine rather than faults, so none of them throws.
     /// </summary>
-    internal static IReadOnlyList<Destination> Destinations()
+    internal static IReadOnlyList<Printing.Destination> Destinations()
     {
         if (ResolveOnPath("lpstat") is not { } lpstat)
             return [];
@@ -78,7 +64,7 @@ internal static class LinuxPrinter
     /// Anything else — "no system default destination", the per-queue status lines
     /// that follow an indent, a localised trailer — is ignored rather than guessed at.
     /// </remarks>
-    internal static IReadOnlyList<Destination> ParseDestinations(string lpstatOutput)
+    internal static IReadOnlyList<Printing.Destination> ParseDestinations(string lpstatOutput)
     {
         var names = new List<string>();
         string? defaultName = null;
@@ -109,7 +95,7 @@ internal static class LinuxPrinter
             names.Insert(0, defaultName);
 
         return [.. names
-            .Select(n => new Destination(n, DescriptionOf(n), string.Equals(n, defaultName, StringComparison.Ordinal)))
+            .Select(n => new Printing.Destination(n, DescriptionOf(n), string.Equals(n, defaultName, StringComparison.Ordinal)))
             .OrderByDescending(d => d.IsDefault)
             .ThenBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase)];
     }
@@ -144,16 +130,16 @@ internal static class LinuxPrinter
     /// <param name="destination">A queue name from <see cref="Destinations"/>, or null for the system default.</param>
     /// <param name="jobTitle">What the print queue calls the job — the document's name.</param>
     /// <param name="copies">How many. One or more.</param>
-    internal static Outcome Print(string pdfPath, string? destination, string jobTitle, int copies)
+    internal static Printing.Outcome Print(string pdfPath, string? destination, string jobTitle, int copies)
     {
         if (!OperatingSystem.IsLinux())
-            return new Outcome(false, Strings.PrintingUnavailableHere);
+            return new Printing.Outcome(false, Strings.PrintingUnavailableHere);
 
         if (InFlatpakSandbox)
-            return new Outcome(false, Strings.PrintingNeedsPortal);
+            return new Printing.Outcome(false, Strings.PrintingNeedsPortal);
 
         if (ResolveOnPath("lp") is not { } lp)
-            return new Outcome(false, Strings.PrintingNeedsCups);
+            return new Printing.Outcome(false, Strings.PrintingNeedsCups);
 
         // Every value below is an argv element, never a shell word, so a queue name
         // or a document title with a space, a quote or a newline in it is data. The
@@ -179,7 +165,7 @@ internal static class LinuxPrinter
         // big document.
         var run = Run(lp, arguments, TimeSpan.FromMinutes(2));
         if (run.TimedOut)
-            return new Outcome(false, Strings.WithDetail(Strings.CouldNotPrint, Strings.PrintQueueDidNotAnswer));
+            return new Printing.Outcome(false, Strings.WithDetail(Strings.CouldNotPrint, Strings.PrintQueueDidNotAnswer));
 
         if (run.ExitCode != 0)
         {
@@ -187,10 +173,10 @@ internal static class LinuxPrinter
             // "lp: Error - The printer or class does not exist." Showing it is far
             // more use than a message of ours that says printing failed.
             var detail = FirstLine(run.Error) ?? FirstLine(run.Output) ?? $"lp exited {run.ExitCode}";
-            return new Outcome(false, Strings.WithDetail(Strings.CouldNotPrint, detail));
+            return new Printing.Outcome(false, Strings.WithDetail(Strings.CouldNotPrint, detail));
         }
 
-        return new Outcome(true, Strings.SentToPrinter);
+        return new Printing.Outcome(true, Strings.SentToPrinter);
     }
 
     /// <summary>
@@ -202,10 +188,10 @@ internal static class LinuxPrinter
     /// rather than the machine's own queues — a CI runner has no printers, so a probe
     /// that only asked the machine would pass by finding nothing and prove nothing.
     /// </summary>
-    internal static Outcome Probe()
+    internal static Printing.Outcome Probe()
     {
         if (!OperatingSystem.IsLinux())
-            return new Outcome(false, "not Linux");
+            return new Printing.Outcome(false, "not Linux");
 
         var report = new StringBuilder();
 
@@ -221,21 +207,21 @@ internal static class LinuxPrinter
         var parsed = ParseDestinations(sample);
         var names = parsed.Select(d => d.Name).ToArray();
         if (names.Length != 2 || !names.Contains("Office_Laser") || !names.Contains("printer_room"))
-            return new Outcome(false, $"lpstat parsing found [{string.Join(", ", names)}], expected the two queues");
+            return new Printing.Outcome(false, $"lpstat parsing found [{string.Join(", ", names)}], expected the two queues");
         if (parsed[0].Name != "printer_room" || !parsed[0].IsDefault)
-            return new Outcome(false, $"the system default did not lead the list (got {parsed[0].Name}, default={parsed[0].IsDefault})");
+            return new Printing.Outcome(false, $"the system default did not lead the list (got {parsed[0].Name}, default={parsed[0].IsDefault})");
         if (parsed.Count(d => d.IsDefault) != 1)
-            return new Outcome(false, "more than one destination claimed to be the default");
+            return new Printing.Outcome(false, "more than one destination claimed to be the default");
         report.Append("lpstat parsing: the default leads and both queues are found");
 
         if (InFlatpakSandbox)
         {
             report.Append("; in a Flatpak sandbox, so printing needs the portal route, which is not built yet");
-            return new Outcome(true, report.ToString());
+            return new Printing.Outcome(true, report.ToString());
         }
 
         if (ResolveOnPath("lp") is null)
-            return new Outcome(false, "lp is not on PATH — install the CUPS client tools (cups-client)");
+            return new Printing.Outcome(false, "lp is not on PATH — install the CUPS client tools (cups-client)");
         report.Append("; lp and lpstat resolve");
 
         // What the machine itself has. Reported, never asserted: a runner with no
@@ -245,7 +231,7 @@ internal static class LinuxPrinter
             ? "; this machine has no CUPS destinations (expected on a build runner)"
             : $"; this machine has {here.Count} CUPS destination(s)");
 
-        return new Outcome(true, report.ToString());
+        return new Printing.Outcome(true, report.ToString());
     }
 
     // --- Running a program, without a shell ---------------------------------

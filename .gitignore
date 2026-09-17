@@ -75,3 +75,6 @@ core/build/
 
 # Linux pdfium prebuilt for the core test target (tools/fetch-pdfium-linux.sh)
 libs/pdfium/linux-x64/
+
+# Avalonia's XAML compiler drops a scratch file per build here (#158).
+.avalonia-build-tasks/

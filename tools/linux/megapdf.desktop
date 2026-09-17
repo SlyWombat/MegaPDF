@@ -1,0 +1,37 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=MegaPDF
+GenericName=PDF Editor
+GenericName[fr]=Éditeur PDF
+GenericName[fr_CA]=Éditeur PDF
+Comment=Open. Fix. Save. Done.
+Comment[fr]=Ouvrir. Corriger. Enregistrer. Terminé.
+Comment[fr_CA]=Ouvrir. Corriger. Enregistrer. Terminé.
+# %f, not %F or %U: MegaPDF opens one document per window, and it reads a path
+# rather than a URI — %U would hand it "file:///…" on some launchers, which
+# File.Exists cannot open.
+Exec=megapdf %f
+Icon=megapdf
+Terminal=false
+# application/pdf is a standard shared-mime-info type, so there is no MIME XML to
+# install with this — declaring it here is the whole association. MegaPDF appears
+# in Open With, and becomes the default only if the person chooses it, which
+# matches the Mac bundle's LSHandlerRank=Alternate: the app offers to open a PDF,
+# it does not claim to own one.
+MimeType=application/pdf;
+# One main category only: desktop-file-validate warns that two (Office and
+# Graphics) can list the app twice in the menu. Viewer is an additional
+# category, so it costs nothing and is what puts MegaPDF under document
+# viewers where people look for it.
+Categories=Office;Viewer;
+Keywords=PDF;form;sign;signature;checkbox;fill;edit;
+Keywords[fr]=PDF;formulaire;signer;signature;case;remplir;modifier;
+Keywords[fr_CA]=PDF;formulaire;signer;signature;case;remplir;modifier;
+# Without this the window sits in the task bar as an unnamed entry beside the
+# launcher icon instead of inside it: Avalonia's X11 backend sets WM_CLASS from
+# the assembly name, which is MegaPDF, and that has to be stated here because
+# the desktop file is named megapdf.
+StartupWMClass=MegaPDF
+StartupNotify=true
+SingleMainWindow=false

@@ -1032,8 +1032,8 @@ public partial class MainWindow : Window
     /// default queue without asking, and printing to the wrong printer is the one
     /// mistake in this app that cannot be undone.
     /// </summary>
-    private async Task<Platform.LinuxPrinter.Choice?> ChoosePrinterAsync(
-        IReadOnlyList<Platform.LinuxPrinter.Destination> destinations)
+    private async Task<Platform.Printing.Choice?> ChoosePrinterAsync(
+        IReadOnlyList<Platform.Printing.Destination> destinations)
     {
         var dialog = new PrinterWindow();
         dialog.Present(ViewModel?.DocumentName ?? "", destinations);

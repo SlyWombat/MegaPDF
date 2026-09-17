@@ -92,8 +92,9 @@ internal static class MacPrinter
     /// <summary>kPDFPrintPageScaleDownToFit — fit each page to the paper.</summary>
     private const long ScaleDownToFit = 1;
 
-    /// <summary>What a probe or a print attempt found, in words a status bar can show.</summary>
-    internal sealed record Outcome(bool Ok, string Message);
+    // What a probe or a print attempt reports lives in Printing.Outcome, shared
+    // with the Linux printer: a view model that names it must not become macOS
+    // code by doing so (#158).
 
     /// <summary>
     /// Verifies the whole interop chain against a real file without printing:
@@ -105,19 +106,19 @@ internal static class MacPrinter
     /// value back and comparing it to a known-good number proves the marshalling
     /// is actually right.
     /// </summary>
-    internal static Outcome Probe(string pdfPath, int expectedPageCount)
+    internal static Printing.Outcome Probe(string pdfPath, int expectedPageCount)
     {
         if (!OperatingSystem.IsMacOS())
-            return new Outcome(false, "not macOS");
+            return new Printing.Outcome(false, "not macOS");
 
         if (!EnsureFrameworks())
-            return new Outcome(false, "AppKit or PDFKit did not load");
+            return new Printing.Outcome(false, "AppKit or PDFKit did not load");
 
         var nsUrl = objc_getClass("NSURL");
         var pdfDocument = objc_getClass("PDFDocument");
         var nsPrintInfo = objc_getClass("NSPrintInfo");
         if (nsUrl == IntPtr.Zero || pdfDocument == IntPtr.Zero || nsPrintInfo == IntPtr.Zero)
-            return new Outcome(false,
+            return new Printing.Outcome(false,
                 $"class lookup failed (NSURL={nsUrl}, PDFDocument={pdfDocument}, NSPrintInfo={nsPrintInfo})");
 
         var fileUrlWithPath = sel_registerName("fileURLWithPath:");
@@ -130,65 +131,65 @@ internal static class MacPrinter
         if (fileUrlWithPath == IntPtr.Zero || alloc == IntPtr.Zero || initWithUrl == IntPtr.Zero
             || pageCountSel == IntPtr.Zero || sharedPrintInfo == IntPtr.Zero
             || printOperationSel == IntPtr.Zero || runOperation == IntPtr.Zero)
-            return new Outcome(false, "one or more selectors did not resolve");
+            return new Printing.Outcome(false, "one or more selectors did not resolve");
 
         var pathString = NSString(pdfPath);
         if (pathString == IntPtr.Zero)
-            return new Outcome(false, "could not create an NSString for the path");
+            return new Printing.Outcome(false, "could not create an NSString for the path");
 
         var url = MsgSend_Ptr(nsUrl, fileUrlWithPath, pathString);
         if (url == IntPtr.Zero)
-            return new Outcome(false, "fileURLWithPath: returned nil");
+            return new Printing.Outcome(false, "fileURLWithPath: returned nil");
 
         var document = MsgSend_Ptr(MsgSend(pdfDocument, alloc), initWithUrl, url);
         if (document == IntPtr.Zero)
-            return new Outcome(false, "PDFDocument initWithURL: returned nil");
+            return new Printing.Outcome(false, "PDFDocument initWithURL: returned nil");
 
         var pages = MsgSend_Long(document, pageCountSel);
         if (pages != expectedPageCount)
-            return new Outcome(false,
+            return new Printing.Outcome(false,
                 $"pageCount disagreed with the engine: PDFKit says {pages}, PdfiumEngine says {expectedPageCount}");
 
-        return new Outcome(true, $"PDFKit agrees the document has {pages} page(s)");
+        return new Printing.Outcome(true, $"PDFKit agrees the document has {pages} page(s)");
     }
 
     /// <summary>
     /// Opens the system print panel for a PDF on disk and runs the operation. Must
     /// be called on the UI thread — NSPrintOperation drives AppKit.
     /// </summary>
-    internal static Outcome Print(string pdfPath)
+    internal static Printing.Outcome Print(string pdfPath)
     {
         if (!OperatingSystem.IsMacOS())
-            return new Outcome(false, Strings.PrintingUnavailableHere);
+            return new Printing.Outcome(false, Strings.PrintingUnavailableHere);
 
         if (!EnsureFrameworks())
-            return new Outcome(false, Strings.PrintComponentsNotLoaded);
+            return new Printing.Outcome(false, Strings.PrintComponentsNotLoaded);
 
         var nsUrl = objc_getClass("NSURL");
         var pdfDocument = objc_getClass("PDFDocument");
         var nsPrintInfo = objc_getClass("NSPrintInfo");
         if (nsUrl == IntPtr.Zero || pdfDocument == IntPtr.Zero || nsPrintInfo == IntPtr.Zero)
-            return new Outcome(false, Strings.PrintComponentsUnavailable);
+            return new Printing.Outcome(false, Strings.PrintComponentsUnavailable);
 
         var pathString = NSString(pdfPath);
         if (pathString == IntPtr.Zero)
-            return new Outcome(false, Strings.PrintPathNotPrepared);
+            return new Printing.Outcome(false, Strings.PrintPathNotPrepared);
 
         var url = MsgSend_Ptr(nsUrl, sel_registerName("fileURLWithPath:"), pathString);
         var document = MsgSend_Ptr(
             MsgSend(pdfDocument, sel_registerName("alloc")), sel_registerName("initWithURL:"), url);
         if (document == IntPtr.Zero)
-            return new Outcome(false, Strings.PrintDocumentNotPrepared);
+            return new Printing.Outcome(false, Strings.PrintDocumentNotPrepared);
 
         var printInfo = MsgSend(nsPrintInfo, sel_registerName("sharedPrintInfo"));
         var operation = MsgSend_PrintOp(
             document, sel_registerName("printOperationForPrintInfo:scalingMode:autoRotate:"),
             printInfo, ScaleDownToFit, true);
         if (operation == IntPtr.Zero)
-            return new Outcome(false, Strings.PrintOperationNotCreated);
+            return new Printing.Outcome(false, Strings.PrintOperationNotCreated);
 
         // Returns false when the user cancels the panel, which is not an error.
         var ran = MsgSend_Bool(operation, sel_registerName("runOperation"));
-        return new Outcome(true, ran ? Strings.SentToPrinter : Strings.PrintingCancelled);
+        return new Printing.Outcome(true, ran ? Strings.SentToPrinter : Strings.PrintingCancelled);
     }
 }

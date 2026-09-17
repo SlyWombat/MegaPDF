@@ -85,8 +85,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// and answers; null is a cancel. With nobody listening — a headless run — the
     /// system default queue is used, which is what a bare `lp` would have done.
     /// </summary>
-    internal event Func<IReadOnlyList<Platform.LinuxPrinter.Destination>,
-                      Task<Platform.LinuxPrinter.Choice?>>? PrintDestinationRequested;
+    internal event Func<IReadOnlyList<Platform.Printing.Destination>,
+                      Task<Platform.Printing.Choice?>>? PrintDestinationRequested;
     private readonly ISignatureLibrary _signatures;
     private readonly RecentFiles _recents;
     private readonly AppSettings _settings;
@@ -827,7 +827,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // dialog costs nothing — not even a copy of the document in the temp
         // directory. macOS cannot: NSPrintOperation's panel is part of the print,
         // and it needs the file to preview (#158).
-        Platform.LinuxPrinter.Choice? choice = null;
+        Platform.Printing.Choice? choice = null;
         if (OperatingSystem.IsLinux())
         {
             if (Platform.LinuxPrinter.InFlatpakSandbox)
@@ -856,7 +856,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 // Nothing is listening — a headless run. Behave as a bare `lp` would
                 // and use the system default rather than doing nothing.
-                choice = new Platform.LinuxPrinter.Choice(null, 1);
+                choice = new Platform.Printing.Choice(null, 1);
             }
         }
 
@@ -873,7 +873,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 });
             }
 
-            Platform.MacPrinter.Outcome outcome;
             if (OperatingSystem.IsLinux())
             {
                 // lp reads the file and returns once the job is queued, but it is
@@ -884,16 +883,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 using (Busy.Begin(Strings.BusyPrinting))
                 {
                     var sent = await OffUiThread(() =>
-                        Platform.LinuxPrinter.Print(temp, linux.Destination, title, linux.Copies));
-                    outcome = new Platform.MacPrinter.Outcome(sent.Ok, sent.Message);
+                    {
+                        // The guard is repeated inside the closure on purpose: the
+                        // platform compatibility analyser does not carry the outer
+                        // OperatingSystem.IsLinux() across a lambda, and silencing it
+                        // with a pragma would silence the next real mistake too.
+                        if (!OperatingSystem.IsLinux())
+                            return new Platform.Printing.Outcome(false, Strings.PrintingUnavailableHere);
+                        return Platform.LinuxPrinter.Print(temp, linux.Destination, title, linux.Copies);
+                    });
+                    Status = sent.Message;
                 }
             }
-            else
+            else if (OperatingSystem.IsMacOS())
             {
                 // NSPrintOperation drives AppKit, so the print panel runs on the UI thread.
-                outcome = Platform.MacPrinter.Print(temp);
+                Status = Platform.MacPrinter.Print(temp).Message;
             }
-            Status = outcome.Message;
         }
         catch (Exception ex)
         {

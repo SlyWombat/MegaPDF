@@ -16,7 +16,7 @@ namespace MegaPDF.Avalonia.Views;
 public partial class PrinterWindow : Window
 {
     /// <summary>What was chosen, or null when the dialog was cancelled or closed.</summary>
-    internal LinuxPrinter.Choice? Chosen { get; private set; }
+    internal Printing.Choice? Chosen { get; private set; }
 
     public PrinterWindow()
     {
@@ -25,9 +25,9 @@ public partial class PrinterWindow : Window
         CancelButton.Click += (_, _) => Close();
         PrintButton.Click += (_, _) =>
         {
-            if (PrinterBox.SelectedItem is not LinuxPrinter.Destination destination)
+            if (PrinterBox.SelectedItem is not Printing.Destination destination)
                 return;
-            Chosen = new LinuxPrinter.Choice(destination.Name, (int)(CopiesBox.Value ?? 1));
+            Chosen = new Printing.Choice(destination.Name, (int)(CopiesBox.Value ?? 1));
             Close();
         };
     }
@@ -36,12 +36,12 @@ public partial class PrinterWindow : Window
     /// Fills the dialog in. The default destination is preselected, because that is
     /// the one a bare `lp` would have used and the one people mean.
     /// </summary>
-    internal void Present(string documentName, IReadOnlyList<LinuxPrinter.Destination> destinations)
+    internal void Present(string documentName, IReadOnlyList<Printing.Destination> destinations)
     {
         DocumentText.Text = documentName;
 
         PrinterBox.ItemsSource = destinations;
-        PrinterBox.DisplayMemberBinding = new global::Avalonia.Data.Binding(nameof(LinuxPrinter.Destination.Label));
+        PrinterBox.DisplayMemberBinding = new global::Avalonia.Data.Binding(nameof(Printing.Destination.Label));
         PrinterBox.SelectedIndex = destinations.Count == 0 ? -1 : 0;
 
         var any = destinations.Count > 0;

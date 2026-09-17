@@ -468,6 +468,109 @@ public partial class App : Application
         return failures == 0 ? 0 : 1;
     }
 
+    /// <summary>
+    /// --desktop-check: what the running window actually got from the desktop
+    /// (#158) — which windowing backend, and which file-dialog implementation.
+    ///
+    /// The file dialog is the reason this exists. Avalonia picks between the XDG
+    /// desktop portal and its own fallback at runtime, silently, by asking D-Bus:
+    /// inside a Flatpak sandbox the portal is the only route that can hand back a
+    /// file the sandbox will let the app read, and outside one it is what gives
+    /// GNOME and KDE their native dialog instead of a toolkit-drawn stand-in.
+    /// Which it chose is invisible from the outside — both open a dialog and both
+    /// return a file — so nothing short of asking the TopLevel can tell a portal
+    /// run from a fallback run, and a sandboxed build that quietly fell back would
+    /// look fine until a user picked a file it could not open.
+    ///
+    /// It reports rather than demands a particular answer: a CI runner has no
+    /// portal and must legitimately fall back. What it does assert is that there
+    /// is a storage provider at all, and that it can be asked for a path.
+    /// </summary>
+    private static async Task<int> DesktopCheckAsync(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var failures = 0;
+        void Check(string what, bool ok)
+        {
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {what}");
+            if (!ok) failures++;
+        }
+
+        var window = desktop.MainWindow;
+        // X11 or Wayland, and which desktop — both change which portal answers and
+        // how scaling is reported, so a result is only readable beside them.
+        var session = Environment.GetEnvironmentVariable("XDG_SESSION_TYPE") ?? "(unset)";
+        var desktopName = Environment.GetEnvironmentVariable("XDG_CURRENT_DESKTOP") ?? "(unset)";
+        Console.WriteLine($"session: {session}, desktop: {desktopName}");
+        var font = global::Avalonia.Media.FontManager.Current.DefaultFontFamily.Name;
+        Console.WriteLine($"default font family: {font}");
+
+        Check("a window was created", window is not null);
+        if (window is null)
+        {
+            Console.WriteLine("::error::desktop-check: no window, so nothing below could be asked");
+            return 1;
+        }
+
+        var storage = window.StorageProvider;
+        Check("the window has a file-dialog provider", storage is not null);
+
+        // The type name alone is not the answer. On Linux Avalonia hands back a
+        // FallbackStorageProvider — a chain, not an implementation — and the portal
+        // client sits inside it ahead of the managed dialog when a portal answered
+        // on D-Bus. Reading only the outer name reports "no portal" on a machine
+        // that has one, which is precisely the mistake this check exists to avoid,
+        // so the chain is walked.
+        Console.WriteLine($"file dialogs: {storage?.GetType().FullName ?? "(none)"}");
+
+        // Which dialog actually opens — the XDG desktop portal or Avalonia's own —
+        // is NOT knowable from here, and the honest thing is to say so rather than
+        // to guess from a type name. On Linux Avalonia hands back a chain of
+        // factories and calls them in turn only when a dialog is opened; the portal
+        // factory returns null if no portal answers on D-Bus, and the next one is
+        // used instead. Nothing observable differs until a dialog is actually
+        // shown, which needs either a person or a portal that answers OpenFile —
+        // so confirming the portal route belongs to the QA pass on a real GNOME or
+        // KDE session, and to a Flatpak build, where it is the only route that can
+        // return a file the sandbox will let the app read (#158).
+        Console.WriteLine("  the portal-or-fallback choice is made when a dialog opens, not now — "
+                          + "confirm it on a real desktop session");
+        Console.WriteLine($"  D-Bus session bus: {(Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS") is { Length: > 0 } ? "present" : "absent")}");
+
+        if (storage is not null)
+        {
+            Check("it can open files", storage.CanOpen);
+            Check("it can save files", storage.CanSave);
+            // A provider that cannot resolve a path it was just given is one that
+            // will not be able to reopen a recent document either.
+            var probe = Path.GetTempFileName();
+            try
+            {
+                // Awaited, never .Result: the portal implementation completes on the
+                // dispatcher, so blocking the UI thread for it deadlocks — which is
+                // exactly what the first version of this check did.
+                var file = await storage.TryGetFileFromPathAsync(probe);
+                Check("and it resolves a path to a file it can hand back",
+                      file is not null && file.TryGetLocalPath() == probe);
+            }
+            catch (Exception ex)
+            {
+                Check($"and it resolves a path to a file it can hand back ({ex.GetType().Name}: {ex.Message})", false);
+            }
+            finally
+            {
+                try { File.Delete(probe); } catch (IOException) { }
+            }
+        }
+
+        // What the desktop reads to group the window under its launcher. The
+        // .desktop file states StartupWMClass=MegaPDF, and if the window ever
+        // stopped calling itself that, the taskbar entry would quietly split in two.
+        Console.WriteLine($"window title: {window.Title}");
+
+        Console.WriteLine(failures == 0 ? "desktop-check: PASS" : $"::error::desktop-check: {failures} check(s) failed");
+        return failures == 0 ? 0 : 1;
+    }
+
     /// <summary>The seven colours FluentTheme builds its control accents from.</summary>
     private static readonly string[] FluentAccentKeys =
     [
@@ -677,6 +780,29 @@ public partial class App : Application
                 if (ArgumentAfter(desktop.Args, "--theme") is "dark")
                     RequestedThemeVariant = ThemeVariant.Dark;
                 RunStory(desktop, viewModel, storyDir, ArgumentAfter(desktop.Args, "--signature"));
+            }
+
+            // --desktop-check needs a real window — the file-dialog provider is a
+            // feature of the TopLevel, not of the application — so unlike
+            // --brand-check it runs after the window has been shown.
+            if (desktop.Args?.Contains("--desktop-check") == true)
+            {
+                window.Opened += (_, _) => DispatcherTimer.RunOnce(async () =>
+                {
+                    int code;
+                    try
+                    {
+                        code = await DesktopCheckAsync(desktop);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"::error::desktop-check: {ex.GetType().Name}: {ex.Message}");
+                        code = 1;
+                    }
+                    desktop.Shutdown(code);
+                }, TimeSpan.FromSeconds(1));
+                base.OnFrameworkInitializationCompleted();
+                return;
             }
 
             var shot = ArgumentAfter(desktop.Args, "--screenshot");
