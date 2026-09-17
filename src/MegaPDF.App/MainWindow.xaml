@@ -393,6 +393,7 @@
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1"
                                 AutomationProperties.Name="{x:Bind AccessibleName}"
+                                Loaded="OnPageCanvasLoaded"
                                 Tapped="OnPageTapped"
                                 DoubleTapped="OnPageDoubleTapped"
                                 PointerPressed="OnPagePointerPressed"
@@ -484,6 +485,16 @@
                     Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                     IsOpen="{x:Bind ViewModel.IsSecurityNoticeOpen, Mode=TwoWay}"
                     Message="{x:Bind ViewModel.SecurityNotice, Mode=OneWay}"
+                    Severity="Success"
+                    IsClosable="True" />
+                <!-- What a redaction removed (#173). The view model has said this since the
+                     feature landed; on Windows nothing showed it, so a redaction finished in
+                     silence. -->
+                <InfoBar
+                    AutomationProperties.AutomationId="RedactionSummaryBar"
+                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                    IsOpen="{x:Bind ViewModel.IsRedactionSummaryOpen, Mode=TwoWay}"
+                    Message="{x:Bind ViewModel.RedactionSummaryText, Mode=OneWay}"
                     Severity="Success"
                     IsClosable="True" />
             </StackPanel>
