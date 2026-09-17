@@ -547,7 +547,7 @@ public static partial class Strings
     /// <summary>Remove content from the file</summary>
     public static string ToolbarRedactTip => Get("ToolbarRedactTip");
 
-    /// <summary>Drag across what you want removed, or select text — Esc cancels</summary>
+    /// <summary>Drag across what you want removed, select text, or press Enter on the focused item — Esc cancels</summary>
     public static string RedactHint => Get("RedactHint");
 
     /// <summary>Marked for redaction</summary>

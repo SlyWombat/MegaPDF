@@ -1625,7 +1625,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = xamlRoot,
         };
-        switch (await dialog.ShowAsync())
+        switch (await dialog.ShowOneAtATimeAsync())
         {
             case ContentDialogResult.Primary when !alreadySavingACopy:
                 // Apply first: a refusal must not open a picker for a file that will not be

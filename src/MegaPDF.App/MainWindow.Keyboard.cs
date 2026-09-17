@@ -252,6 +252,19 @@ public sealed partial class MainWindow
             return;
         }
 
+        // Redact is armed: Enter marks the focused region rather than opening it (#173).
+        // Marking was drag-only, which left redaction — a privacy feature — out of reach
+        // for anyone who does not use a pointer.
+        if (ViewModel.IsRedactMode)
+        {
+            await ViewModel.AddRedactionMarkAsync(focus.PageIndex, focus.Bounds);
+            RefreshRedactionOverlay(canvas, pageView);
+            Announce(ViewModel.RedactionMarkCount == 1
+                ? Strings.RedactMarkCountOne
+                : Strings.RedactMarkCount(ViewModel.RedactionMarkCount));
+            return;
+        }
+
         await RoutePageActivationAsync(canvas, pageView, focus.Bounds.Center);
 
         // An editor that opened announces itself by taking focus.

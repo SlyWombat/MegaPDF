@@ -805,6 +805,18 @@ public sealed partial class MainWindow : Window
 
     private const string RedactionMarkTag = "redaction-mark";
 
+    /// <summary>
+    /// A page's container is rebuilt whenever its slot is replaced — a render, a zoom step,
+    /// an edit — and the marks drawn over it go with it (#173). They are overlay, not page
+    /// content, so they are put back as each canvas arrives; without this a mark vanished
+    /// the moment the page it was on re-rendered, which on Windows was immediately.
+    /// </summary>
+    private void OnPageCanvasLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is PageCanvas canvas && canvas.DataContext is PageView pageView)
+            RefreshRedactionOverlay(canvas, pageView);
+    }
+
     private void OnPagePointerMoved(object sender, PointerRoutedEventArgs e)
     {
         if (sender is not PageCanvas canvas || canvas.DataContext is not PageView pageView)
