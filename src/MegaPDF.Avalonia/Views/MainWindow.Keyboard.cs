@@ -114,6 +114,10 @@ public partial class MainWindow
         switch (e.Key)
         {
             case Key.Tab:
+                // Onto the page: keyboard focus leaves the toolbar, so Space and Enter can
+                // only reach the region with the ring (#169).
+                if (IsToolbarControl(FocusManager?.GetFocusedElement() as Control))
+                    FocusManager?.ClearFocus();
                 vm.MoveFocus(forward: !e.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 return true;
 
