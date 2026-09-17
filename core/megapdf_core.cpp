@@ -443,8 +443,9 @@ bool FileSourceCopy(const FileSource& s, const char* path_utf8, FileSource* out)
         SetError(FPDF_ERR_FILE, "the copy could not be created");
         return false;
     }
-    // And its name goes now where the file system can (NTFS on Windows 10 1809 and later): a
-    // POSIX-style delete, as on the other platforms. Elsewhere the name lasts until the close.
+    // A POSIX-style delete where the file system has one (NTFS on Windows 10 1809 and later).
+    // The name still lasts, delete pending and unusable, until this handle closes with the
+    // document: unlike unlink(), Windows removes it only at the close.
     FILE_DISPOSITION_INFO_EX gone{};
     gone.Flags = FILE_DISPOSITION_FLAG_DELETE | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS;
     SetFileInformationByHandle(h, FileDispositionInfoEx, &gone, sizeof(gone));

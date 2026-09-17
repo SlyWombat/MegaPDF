@@ -2659,6 +2659,13 @@ void test_read_from_copy(const std::string& fixtures) {
         out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
     };
     auto utf8 = [](const fs::path& path) { return path.u8string(); };
+    // A copy's name cannot be opened once the move returns. On Windows it lingers, delete
+    // pending, until the document closes, and asking whether it exists fails with access
+    // denied: the overload that throws would abort the tests.
+    auto name_unusable = [](const fs::path& path) {
+        std::error_code e;
+        return !fs::exists(path, e);
+    };
     const auto plain = read_file(fixtures + "/fixture.pdf");
     const auto other = read_file(fixtures + "/cropped.pdf");
     const fs::path original = dir / "original.pdf";
@@ -2699,7 +2706,7 @@ void test_read_from_copy(const std::string& fixtures) {
           "read from copy: NULLs are refused");
 
     check(megapdf_read_from_copy(d, utf8(copy).c_str()) == MEGAPDF_OK, "read from copy: moves", megapdf_last_error_message());
-    check(!fs::exists(copy), "read from copy: the copy's name is gone at once");
+    check(name_unusable(copy), "read from copy: the copy's name cannot be used once the move returns");
     check(megapdf_reads_file(d, utf8(original).c_str()) == 0, "read from copy: the document no longer reads its file");
 
     // Now the original is written over where it is, shorter, as a sandboxed save would.
@@ -2719,12 +2726,16 @@ void test_read_from_copy(const std::string& fixtures) {
     check(back != nullptr && megapdf_page_count(back) == 2, "read from copy: the save is the document, not what was written");
     megapdf_close(back);
     const fs::path second = dir / "second-copy.pdf";
-    check(megapdf_read_from_copy(d, utf8(second).c_str()) == MEGAPDF_OK && !fs::exists(second), "read from copy: moving again works");
+    check(megapdf_read_from_copy(d, utf8(second).c_str()) == MEGAPDF_OK && name_unusable(second), "read from copy: moving again works");
     megapdf_close(d);
+    {
+        std::error_code e1, e2;
+        check(!fs::exists(copy, e1) && !e1 && !fs::exists(second, e2) && !e2, "read from copy: no copy is left once the document closes");
+    }
 
     megapdf_document* m = megapdf_open(plain.data(), plain.size(), nullptr);
     check(m != nullptr && megapdf_reads_file(m, utf8(original).c_str()) == 0, "read from copy: a document from memory reads no file");
-    check(megapdf_read_from_copy(m, utf8(copy).c_str()) == MEGAPDF_OK && !fs::exists(copy),
+    check(megapdf_read_from_copy(m, utf8(copy).c_str()) == MEGAPDF_OK && name_unusable(copy),
           "read from copy: a document from memory has nothing to move");
     megapdf_close(m);
 
