@@ -318,6 +318,124 @@ internal static class CoreNative
         public Rect Bounds;
     }
 
+    // Contract 8: redaction (#173) ------------------------------------------
+    //
+    // Marks are the core's own and are never written to the file, so a document saved
+    // with marks on it cannot carry them. The apps draw them in their overlay layer.
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RedactionArea
+    {
+        public int MarkId;
+        public Rect Bounds;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RedactOptions
+    {
+        public uint Colour;           // 0xRRGGBB; 0 is black, the default
+        public int LeaveAreaBare;     // 1: draw no box at all
+        public int KeepMetadata;      // 1: leave /Info and XMP alone
+        public int KeepMatchingOutline;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RedactionRefusal
+    {
+        public int PageIndex;
+        public int Reason;            // RedactReason*
+        public Rect Area;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RedactionApplied
+    {
+        public int PageIndex;
+        public Rect Marked;
+        public Rect Affected;
+    }
+
+    /// <summary>megapdf_redaction_counts: what a completed apply removed.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RedactionCounts
+    {
+        public int Areas, Pages;
+        public int Characters, TextRuns, PartialRuns, HiddenCopies;
+        public int Images, InlineImages, SoftMasks;
+        public int Paths, Shadings, FormXObjects;
+        public int Annotations, FormFields, Links;
+        public int OutlineEntries, StructureEntries, PageLabels;
+        public int MetadataFields;
+    }
+
+    public const int RedactReasonType3Font = 1;
+    public const int RedactReasonFontCannotRedraw = 2;
+    public const int RedactReasonLayout = 3;
+    public const int RedactReasonSharedForm = 4;
+    public const int RedactReasonImage = 5;
+    public const int RedactReasonAnnotation = 6;
+    public const int RedactReasonPdfium = 7;
+
+    [DllImport(Dll)]
+    public static extern int megapdf_redaction_mark(IntPtr page, ref Rect area, out int markId);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_redaction_mark_text(IntPtr page, ref Rect selection,
+        [Out] int[]? outMarkIds, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_redaction_marks(IntPtr page, [Out] RedactionArea[]? outAreas, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_redaction_move_mark(IntPtr page, int markId, ref Rect area);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_redaction_remove_mark(IntPtr page, int markId);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_redaction_mark_count(IntPtr document);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_redaction_clear(IntPtr document);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_redact_apply(IntPtr document, ref RedactOptions options, out IntPtr report);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_redaction_report_free(IntPtr report);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_redaction_report_counts(IntPtr report, out RedactionCounts counts);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_redaction_refusals(IntPtr report, [Out] RedactionRefusal[]? outRefusals,
+        nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_redaction_applied_areas(IntPtr report, [Out] RedactionApplied[]? outAreas,
+        nuint capacity);
+
+    [DllImport(Dll)]
+    private static extern nuint megapdf_redaction_refusal_message(IntPtr report, nuint index, byte[]? outBytes,
+        nuint capacity);
+
+    /// <summary>The refusal's English sentence — for logs and tests; the UI shows its own wording.</summary>
+    public static string RefusalMessage(IntPtr report, nuint index)
+    {
+        var n = (int)megapdf_redaction_refusal_message(report, index, null, 0);
+        if (n <= 1)
+            return "";
+        var bytes = new byte[n];
+        megapdf_redaction_refusal_message(report, index, bytes, (nuint)n);
+        return System.Text.Encoding.UTF8.GetString(bytes, 0, n - 1);
+    }
+
+    [DllImport(Dll)]
+    public static extern int megapdf_redaction_poisoned(IntPtr document);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_page_object_count(IntPtr page);
+
     [DllImport(Dll)]
     public static extern int megapdf_add_whiteout(IntPtr page, ref Rect bounds, out int objectIndex);
 

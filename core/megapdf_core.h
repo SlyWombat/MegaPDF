@@ -928,9 +928,13 @@ MEGAPDF_API int megapdf_redaction_mark(const megapdf_page* page, const megapdf_r
 /**
  * Marks the text the user selected: every rectangle a selection covers becomes its own
  * mark, one per line the selection spans, each grown to the glyphs it touches so a mark
- * always covers whole glyphs. `selection` is the dragged rectangle in crop space. The ids
- * come back count-then-fill; the return is how many marks were made, 0 when the selection
- * covers no text (the caller then marks the rectangle itself with megapdf_redaction_mark).
+ * always covers whole glyphs. `selection` is the dragged rectangle in crop space.
+ *
+ * NOT count-then-fill, unlike everything else here: this call MAKES the marks, so calling
+ * it a second time to size a buffer would make them twice. It returns how many it made,
+ * fills up to `capacity` of their ids, and 0 means the selection covers no text — the
+ * caller then marks the rectangle itself with megapdf_redaction_mark(). A caller whose
+ * buffer was too small reads the rest back with megapdf_redaction_marks().
  */
 MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* page, const megapdf_rect* selection,
                                                int* out_mark_ids, size_t capacity);

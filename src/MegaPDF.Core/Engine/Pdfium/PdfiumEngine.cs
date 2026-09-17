@@ -253,6 +253,9 @@ internal sealed class PdfiumDocument : IPdfDocument
     /// <summary>MEGAPDF_ERR_RESTRICTED (#131).</summary>
     private const int MegapdfErrRestricted = -6;
 
+    /// <summary>MEGAPDF_ERR_REDACT (#173): the redaction removed nothing, or could not finish.</summary>
+    private const int MegapdfErrRedact = -10;
+
     public void FlattenAllPages()
     {
         ThrowIfDisposed();
@@ -260,6 +263,117 @@ internal sealed class PdfiumDocument : IPdfDocument
         if (CoreNative.megapdf_flatten_all(_core) != 0)
             throw new InvalidOperationException("Flattening the document failed.");
     }
+
+    // Contract 8: redaction (#173) ------------------------------------------
+
+    public int RedactionMarkCount
+    {
+        get
+        {
+            ThrowIfDisposed();
+            lock (PdfiumLibrary.Lock)
+                return (int)CoreNative.megapdf_redaction_mark_count(_core);
+        }
+    }
+
+    public bool IsRedactionPoisoned
+    {
+        get
+        {
+            ThrowIfDisposed();
+            lock (PdfiumLibrary.Lock)
+                return CoreNative.megapdf_redaction_poisoned(_core) == 1;
+        }
+    }
+
+    public void ClearRedactionMarks()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+            CoreNative.megapdf_redaction_clear(_core);
+    }
+
+    public RedactionReport ApplyRedactions()
+    {
+        ThrowIfDisposed();
+        lock (PdfiumLibrary.Lock)
+        {
+            var options = new CoreNative.RedactOptions();   // the defaults: black boxes, metadata removed
+            var status = CoreNative.megapdf_redact_apply(_core, ref options, out var report);
+            if (report == IntPtr.Zero)
+            {
+                if (status == MegapdfErrRestricted)
+                    throw new DocumentRestrictedException();
+                throw new RedactionFailedException(CoreNative.LastErrorMessage());
+            }
+            try
+            {
+                CoreNative.megapdf_redaction_report_counts(report, out var raw);
+                var counts = new RedactionCounts(
+                    raw.Areas, raw.Pages,
+                    raw.Characters, raw.TextRuns, raw.PartialRuns, raw.HiddenCopies,
+                    raw.Images, raw.InlineImages, raw.SoftMasks,
+                    raw.Paths, raw.Shadings, raw.FormXObjects,
+                    raw.Annotations, raw.FormFields, raw.Links,
+                    raw.OutlineEntries, raw.StructureEntries, raw.PageLabels,
+                    raw.MetadataFields);
+
+                var refusals = new List<RedactionRefusal>();
+                var refusalCount = (int)CoreNative.megapdf_redaction_refusals(report, null, 0);
+                if (refusalCount > 0)
+                {
+                    var buffer = new CoreNative.RedactionRefusal[refusalCount];
+                    CoreNative.megapdf_redaction_refusals(report, buffer, (nuint)refusalCount);
+                    for (var i = 0; i < refusalCount; i++)
+                    {
+                        refusals.Add(new RedactionRefusal(buffer[i].PageIndex,
+                            (RedactionRefusalReason)buffer[i].Reason,
+                            new PdfRect(buffer[i].Area.Left, buffer[i].Area.Bottom,
+                                        buffer[i].Area.Right - buffer[i].Area.Left,
+                                        buffer[i].Area.Top - buffer[i].Area.Bottom),
+                            CoreNative.RefusalMessage(report, (nuint)i)));
+                    }
+                }
+
+                var affected = new List<RedactionAffectedArea>();
+                var appliedCount = (int)CoreNative.megapdf_redaction_applied_areas(report, null, 0);
+                if (appliedCount > 0)
+                {
+                    var buffer = new CoreNative.RedactionApplied[appliedCount];
+                    CoreNative.megapdf_redaction_applied_areas(report, buffer, (nuint)appliedCount);
+                    for (var i = 0; i < appliedCount; i++)
+                    {
+                        affected.Add(new RedactionAffectedArea(buffer[i].PageIndex,
+                            RectOf(buffer[i].Marked), RectOf(buffer[i].Affected)));
+                    }
+                }
+
+                // A refusal leaves the document untouched and says why; only a failure
+                // part-way through — which the rehearsal says cannot happen — poisons it.
+                if (status != 0 && CoreNative.megapdf_redaction_poisoned(_core) == 1)
+                    throw new RedactionFailedException(CoreNative.LastErrorMessage());
+                if (status == MegapdfErrRestricted)
+                    throw new DocumentRestrictedException();
+
+                return new RedactionReport
+                {
+                    Applied = status == 0,
+                    Counts = counts,
+                    Refusals = refusals,
+                    AffectedAreas = affected,
+                };
+            }
+            finally
+            {
+                CoreNative.megapdf_redaction_report_free(report);
+            }
+        }
+    }
+
+    /// <summary>A core rectangle as a PdfRect, without a page to flip it against: the
+    /// redaction report's areas are already crop space and are shown per page.</summary>
+    private static PdfRect RectOf(CoreNative.Rect r) =>
+        new(r.Left, r.Bottom, r.Right - r.Left, r.Top - r.Bottom);
 
     public IReadOnlyList<PdfImageInfo> GetImages()
     {
@@ -889,6 +1003,65 @@ internal sealed class PdfiumPage : IPdfPage
         return whiteouts;
     }
 
+
+    // Contract 8: redaction marks (#173). Nothing here touches the page: a mark is the
+    // core's own and is never written to the file, so the view draws it itself.
+
+    public int MarkForRedaction(PdfRect bounds)
+    {
+        ThrowIfDisposed();
+        var rect = ViewToCrop(bounds);
+        if (CoreNative.megapdf_redaction_mark(_core, ref rect, out var markId) != 0)
+            throw new InvalidOperationException("Could not mark the area for redaction.");
+        return markId;
+    }
+
+    public IReadOnlyList<int> MarkTextForRedaction(PdfRect selection)
+    {
+        ThrowIfDisposed();
+        var rect = ViewToCrop(selection);
+        // This call MAKES the marks, so it is not count-then-fill: asking for a size first
+        // would make them twice. One call, with room for more lines than a drag can select.
+        var buffer = new int[64];
+        var made = (int)CoreNative.megapdf_redaction_mark_text(_core, ref rect, buffer, (nuint)buffer.Length);
+        if (made == 0)
+            return [];
+        if (made <= buffer.Length)
+            return buffer.Take(made).ToList();
+        // A selection across more lines than the buffer holds: read the rest back.
+        return GetRedactionMarks().TakeLast(made).Select(m => m.MarkId).ToList();
+    }
+
+    public IReadOnlyList<RedactionMark> GetRedactionMarks()
+    {
+        ThrowIfDisposed();
+        var count = (int)CoreNative.megapdf_redaction_marks(_core, null, 0);
+        if (count == 0)
+            return [];
+        var buffer = new CoreNative.RedactionArea[count];
+        var filled = (int)CoreNative.megapdf_redaction_marks(_core, buffer, (nuint)count);
+        var marks = new List<RedactionMark>(filled);
+        for (var i = 0; i < filled; i++)
+        {
+            marks.Add(new RedactionMark(buffer[i].MarkId,
+                CropToView(buffer[i].Bounds.Left, buffer[i].Bounds.Bottom, buffer[i].Bounds.Right,
+                           buffer[i].Bounds.Top)));
+        }
+        return marks;
+    }
+
+    public bool MoveRedactionMark(int markId, PdfRect bounds)
+    {
+        ThrowIfDisposed();
+        var rect = ViewToCrop(bounds);
+        return CoreNative.megapdf_redaction_move_mark(_core, markId, ref rect) == 0;
+    }
+
+    public void RemoveRedactionMark(int markId)
+    {
+        ThrowIfDisposed();
+        CoreNative.megapdf_redaction_remove_mark(_core, markId);
+    }
 
     public int AppendTextBox(string text, double fontSize, PdfPoint topLeft,
                              string fontName = StandardTextBoxFonts.Default)

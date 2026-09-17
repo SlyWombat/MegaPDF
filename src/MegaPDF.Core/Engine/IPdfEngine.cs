@@ -59,6 +59,40 @@ public interface IPdfDocument : IDisposable
     /// </summary>
     void FlattenAllPages();
 
+    /// <summary>
+    /// How many redaction marks the whole document carries (#173) — what the save
+    /// confirmation asks before it offers "Save as a copy".
+    /// </summary>
+    int RedactionMarkCount { get; }
+
+    /// <summary>Drops every redaction mark on the document.</summary>
+    void ClearRedactionMarks();
+
+    /// <summary>
+    /// Applies every redaction mark, then drops them. Needs the modify permission
+    /// (ADR-004 decision 2): throws <see cref="DocumentRestrictedException"/> otherwise.
+    ///
+    /// It fails closed. The work is planned read-only, rehearsed on a copy of each marked
+    /// page with the #118 guard, and only then carried out. A refusal at either of the
+    /// first two stages returns a report with <see cref="RedactionReport.Applied"/> false
+    /// and leaves the document untouched, with its marks still on it. A failure part-way
+    /// through — which the rehearsal says cannot happen — throws
+    /// <see cref="RedactionFailedException"/>, and the document is poisoned: every save on
+    /// it fails from then on, so a half-redacted file can never be written.
+    ///
+    /// Applying also discards every undo handle the document holds: those keep removed
+    /// objects alive so an undo can put them back, which after a redaction is precisely
+    /// what must not happen. Callers drop their undo stacks and rewrite the recovery
+    /// journal in the same step (#145).
+    /// </summary>
+    RedactionReport ApplyRedactions();
+
+    /// <summary>
+    /// True when a redaction failed part-way and the document may no longer be saved.
+    /// It can only be closed and reopened from disk.
+    /// </summary>
+    bool IsRedactionPoisoned { get; }
+
     /// <summary>All raster images in the document, with stored and displayed sizes.</summary>
     IReadOnlyList<PdfImageInfo> GetImages();
 
@@ -223,6 +257,30 @@ public interface IPdfPage : IDisposable
 
     /// <summary>MegaPDF whiteout rectangles on this page (object index + bounds).</summary>
     IReadOnlyList<(int ObjectIndex, PdfRect Bounds)> GetWhiteouts();
+
+    /// <summary>
+    /// Marks an area for redaction (#173) and returns the mark's id. Nothing on the page
+    /// changes — a mark is the core's own and is never written to the file, so the apps
+    /// draw it in their overlay layer. Marking is free: no content regeneration, no
+    /// invalidated layout verdict.
+    /// </summary>
+    int MarkForRedaction(PdfRect bounds);
+
+    /// <summary>
+    /// Marks the text a drag selected: one mark per line the selection spans, each grown to
+    /// the glyphs it touches so a mark always covers whole glyphs. Empty when the selection
+    /// covers no text, and the caller then marks the rectangle itself.
+    /// </summary>
+    IReadOnlyList<int> MarkTextForRedaction(PdfRect selection);
+
+    /// <summary>The redaction marks on this page, in the order they were made.</summary>
+    IReadOnlyList<RedactionMark> GetRedactionMarks();
+
+    /// <summary>Moves or resizes a mark. False when the page has no such mark.</summary>
+    bool MoveRedactionMark(int markId, PdfRect bounds);
+
+    /// <summary>Removes a mark. Already gone counts as success, so an undo cannot fail.</summary>
+    void RemoveRedactionMark(int markId);
 
     /// <summary>
     /// Appends new standard-font text at the given top-left position (a "text box").
