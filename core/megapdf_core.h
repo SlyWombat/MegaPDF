@@ -491,6 +491,9 @@ MEGAPDF_API int megapdf_restyle_text_box(const megapdf_page* page, int object_in
  */
 MEGAPDF_API int megapdf_find_text_box(const megapdf_page* page, const unsigned short* id);
 
+/** How many objects the page draws. 0 for a NULL page. */
+MEGAPDF_API int megapdf_page_object_count(const megapdf_page* page);
+
 /** PDFium's object type (FPDF_PAGEOBJ_TEXT = 1, PATH = 2, IMAGE = 3, ...), or -1 for a bad index. */
 MEGAPDF_API int megapdf_object_type(const megapdf_page* page, int object_index);
 
@@ -995,6 +998,12 @@ typedef struct megapdf_redaction_counts {
     int metadata_fields;      /* /Info entries and XMP packets removed */
 } megapdf_redaction_counts;
 
+typedef struct megapdf_redaction_applied {
+    int page_index;
+    megapdf_rect marked;     /* the union of the page's marked areas */
+    megapdf_rect affected;   /* it, grown to the bounds of everything removed from the page */
+} megapdf_redaction_applied;
+
 typedef struct megapdf_redaction_report megapdf_redaction_report;
 
 /**
@@ -1036,6 +1045,21 @@ MEGAPDF_API int megapdf_redaction_report_counts(const megapdf_redaction_report* 
 /** The refusals, in page order; count-then-fill. A completed apply has none. */
 MEGAPDF_API size_t megapdf_redaction_refusals(const megapdf_redaction_report* report, megapdf_redaction_refusal* out,
                                               size_t capacity);
+
+/**
+ * What each redacted page actually lost, page by page; count-then-fill.
+ *
+ * `marked` is the union of the page's marked areas. `affected` is that grown to the bounds
+ * of everything the redaction removed from the page, which can reach past the mark: a glyph
+ * is removed when its box intersects the area, and a glyph cannot be half removed, so one
+ * straddling the edge — commonly, any glyph of rotated text, whose box is much larger than
+ * its ink — takes its part outside the mark with it. The box drawn covers the mark, not the
+ * affected area, because covering more would cover content that is still in the file, which
+ * is the whiteout mistake #173 exists to stop. So `affected` is where the page may look
+ * different, and the tests and the corpus battery judge "unchanged outside" against it.
+ */
+MEGAPDF_API size_t megapdf_redaction_applied_areas(const megapdf_redaction_report* report,
+                                                   megapdf_redaction_applied* out, size_t capacity);
 
 /**
  * A short English sentence for the refusal at `index` — what could not be removed and why.

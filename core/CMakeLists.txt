@@ -157,6 +157,23 @@ if(MEGAPDF_CORE_TESTS)
         target_link_options(megapdf_core_tests PRIVATE -fsanitize=address)
     endif()
 
+    # The #173 leak checker: the same searches the core tests run, as a tool the corpus
+    # battery drives (tools/leakcheck). Built with the tests so a change to one is a change
+    # to both.
+    add_executable(megapdf_leakcheck ${REPO}/tools/leakcheck/leakcheck.cpp)
+    target_include_directories(megapdf_leakcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/tools/leakcheck
+        ${REPO}/libs/pdfium/android/include)
+    target_link_libraries(megapdf_leakcheck PRIVATE megapdf_core ${PDFIUM_LINK})
+    add_custom_command(TARGET megapdf_leakcheck POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_leakcheck>)
+    if(APPLE)
+        set_target_properties(megapdf_leakcheck PROPERTIES BUILD_RPATH "@loader_path")
+        add_custom_command(TARGET megapdf_leakcheck POST_BUILD
+            COMMAND install_name_tool -change ./libpdfium.dylib @loader_path/libpdfium.dylib $<TARGET_FILE:megapdf_leakcheck>)
+    elseif(UNIX)
+        set_target_properties(megapdf_leakcheck PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+
     # pdfium beside the test binary, and the binary looking beside itself.
     add_custom_command(TARGET megapdf_core_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_core_tests>)
