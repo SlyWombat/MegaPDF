@@ -32,7 +32,7 @@ public partial class App : Application
         InitializeComponent();
     }
 
-    private static void LogCrash(Exception? ex, string context)
+    internal static void LogCrash(Exception? ex, string context)
     {
         try
         {

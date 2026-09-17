@@ -88,7 +88,7 @@ public sealed class PdfPrinter(Window window, Func<IPdfDocument?> getDocument, F
         catch (Exception ex)
         {
             // A page that cannot be previewed leaves its preview blank; printing reports it.
-            System.Diagnostics.Debug.WriteLine($"print preview of page {pageNumber} failed: {ex}");
+            App.LogCrash(ex, $"print preview of page {pageNumber}");
         }
     }
 
@@ -116,6 +116,9 @@ public sealed class PdfPrinter(Window window, Func<IPdfDocument?> getDocument, F
         }
         catch (Exception ex)
         {
+            // The dialog says what the person can act on; the log keeps what a developer
+            // needs, since "Something went wrong" has no thread to pull on (#146 RC).
+            App.LogCrash(ex, "print: adding pages");
             await showError(Strings.CouldNotPrintTitle, UserFacing.Describe(ex));
         }
         finally
