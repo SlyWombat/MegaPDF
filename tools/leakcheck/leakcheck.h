@@ -396,6 +396,10 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
             if (mapping == nullptr) return box;
             // The padding is in points, and crop space is points; the division takes it into
             // user space units along with the coordinates, as the core's PaintBox does.
+            // Shrinking (a negative pad) past the middle would invert the box, and the
+            // min/max below would hide that by putting it back the right way round and
+            // wider than the area. Such an area is all edge, and has no inside at all.
+            if (pad < 0.0 && (r + pad <= l - pad || t + pad <= b - pad)) return box;
             const double xs[2] = {(l - pad) / unit + crop_x, (r + pad) / unit + crop_x};
             const double ys[2] = {(b - pad) / unit + crop_y, (t + pad) / unit + crop_y};
             for (double x : xs) {
