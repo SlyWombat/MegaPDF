@@ -134,6 +134,157 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val history = EditHistory()
 
+    // --- Redaction (SDD §3.8 / F7, #173) ---
+    //
+    // A mark is the core's own and is never written to the file, so nothing here changes
+    // the document: the screen draws the marks, and applying is a separate, confirmed step
+    // taken on save.
+
+    /** The Redact tool is armed: the next drag across a page marks an area. */
+    var redactMode: Boolean by mutableStateOf(false)
+        private set
+
+    /** Every mark on the document, by page, for the overlay that draws them. */
+    var redactionMarks: Map<Int, List<com.megapdf.engine.RedactionMark>> by mutableStateOf(emptyMap())
+        private set
+
+    /** How many areas are marked: what the save confirmation asks before it offers a copy. */
+    val redactionMarkCount: Int get() = redactionMarks.values.sumOf { it.size }
+
+    /** The summary after a redaction, shown once and dismissed. */
+    var redactionSummary: String? by mutableStateOf(null)
+
+    /** Why a redaction refused, shown once and dismissed. Nothing was removed. */
+    var redactionRefusal: com.megapdf.engine.RedactionRefusal? by mutableStateOf(null)
+
+    fun toggleRedactMode() {
+        redactMode = !redactMode
+        if (redactMode) {
+            pendingSignature = null
+            isPlacingText = false
+        }
+    }
+
+    fun cancelRedactMode() {
+        redactMode = false
+    }
+
+    /**
+     * Marks the dragged area. A drag across text marks the text, grown to whole glyphs, so
+     * half a glyph is never left behind; a drag across a picture marks the rectangle.
+     * Nothing is removed, and nothing on the page changes.
+     */
+    fun markForRedaction(pageIndex: Int, rect: com.megapdf.engine.PdfRect) {
+        val doc = document ?: return
+        viewModelScope.launch {
+            doc.onPageForRedaction(pageIndex) { page ->
+                if (page.markTextForRedaction(rect) == 0) page.markForRedaction(rect)
+            }
+            refreshRedactionMarks()
+            redactMode = false
+        }
+    }
+
+    fun removeRedactionMark(pageIndex: Int, markId: Int) {
+        val doc = document ?: return
+        viewModelScope.launch {
+            doc.onPageForRedaction(pageIndex) { it.removeRedactionMark(markId) }
+            refreshRedactionMarks()
+        }
+    }
+
+    private suspend fun <T> PdfDocument.onPageForRedaction(
+        index: Int,
+        body: suspend (com.megapdf.engine.PdfPage) -> T,
+    ): T {
+        val page = openPage(index)
+        try {
+            return body(page)
+        } finally {
+            page.close()
+        }
+    }
+
+    private suspend fun refreshRedactionMarks() {
+        val doc = document ?: return
+        val byPage = mutableMapOf<Int, List<com.megapdf.engine.RedactionMark>>()
+        for (index in 0 until doc.pageCount) {
+            val marks = doc.onPageForRedaction(index) { it.redactionMarks() }
+            if (marks.isNotEmpty()) byPage[index] = marks
+        }
+        redactionMarks = byPage
+    }
+
+    /**
+     * Applies every mark. True when the document was redacted and may be saved; false when
+     * it refused — and then NOTHING was removed, the document is as it was, and the marks
+     * are still on it.
+     */
+    suspend fun applyRedactions(): Boolean {
+        val doc = document ?: return true
+        if (redactionMarkCount == 0) return true
+        val report = doc.applyRedactions()
+        if (!report.applied) {
+            redactionRefusal = report.refusals.firstOrNull()
+                ?: com.megapdf.engine.RedactionRefusal(0, com.megapdf.engine.RedactionRefusalReason.ENGINE)
+            refreshRedactionMarks()
+            return false
+        }
+        // Undo cannot put the removed content back: the core freed the objects the history
+        // was holding for exactly that.
+        history.clear()
+        canUndo = false
+        canRedo = false
+        redactionMarks = emptyMap()
+        redactionSummary = describeRedaction(report.counts)
+        renderedWidths.clear()
+        pageBitmaps.clear()
+        lastWindow?.let { (first, last, width) -> updateRenderWindow(first, last, width) }
+        return true
+    }
+
+    private fun describeRedaction(counts: com.megapdf.engine.RedactionCounts): String {
+        val context = getApplication<Application>()
+        val removed = com.megapdf.engine.RedactionSummary.removed(
+            counts,
+            plural = { kind, n -> context.getString(pluralRes(kind), n.toString()) },
+            singular = { kind -> context.getString(singularRes(kind)) },
+            nothing = context.getString(R.string.redacted_nothing),
+        )
+        return if (counts.areas == 1) context.getString(R.string.redact_summary_one, removed)
+        else context.getString(R.string.redact_summary_many, counts.areas.toString(), removed)
+    }
+
+    private fun pluralRes(kind: com.megapdf.engine.RedactionSummary.Kind) = when (kind) {
+        com.megapdf.engine.RedactionSummary.Kind.CHARACTERS -> R.string.redacted_characters
+        com.megapdf.engine.RedactionSummary.Kind.IMAGES -> R.string.redacted_images
+        com.megapdf.engine.RedactionSummary.Kind.FORM_FIELDS -> R.string.redacted_form_fields
+        com.megapdf.engine.RedactionSummary.Kind.ANNOTATIONS -> R.string.redacted_annotations
+    }
+
+    private fun singularRes(kind: com.megapdf.engine.RedactionSummary.Kind) = when (kind) {
+        com.megapdf.engine.RedactionSummary.Kind.CHARACTERS -> R.string.redacted_characters_one
+        com.megapdf.engine.RedactionSummary.Kind.IMAGES -> R.string.redacted_images_one
+        com.megapdf.engine.RedactionSummary.Kind.FORM_FIELDS -> R.string.redacted_form_fields_one
+        com.megapdf.engine.RedactionSummary.Kind.ANNOTATIONS -> R.string.redacted_annotations_one
+    }
+
+    /** What the refusal says, in the user's words rather than the engine's. */
+    fun describeRefusal(refusal: com.megapdf.engine.RedactionRefusal): String {
+        val context = getApplication<Application>()
+        val why = when (refusal.reason) {
+            com.megapdf.engine.RedactionRefusalReason.TYPE3_FONT,
+            com.megapdf.engine.RedactionRefusalReason.FONT_CANNOT_REDRAW ->
+                context.getString(R.string.redact_refused_font)
+            com.megapdf.engine.RedactionRefusalReason.FORM_XOBJECT ->
+                context.getString(R.string.redact_refused_shared)
+            com.megapdf.engine.RedactionRefusalReason.LAYOUT_GUARD ->
+                context.getString(R.string.redact_refused_layout)
+            else -> context.getString(R.string.redact_refused_other)
+        }
+        return context.getString(R.string.redact_refused_body, (refusal.pageIndex + 1).toString()) + " " + why
+    }
+
     /** Undo/redo availability (#34) — mirrored out of the history for the toolbar. */
     var canUndo: Boolean by mutableStateOf(false)
         private set

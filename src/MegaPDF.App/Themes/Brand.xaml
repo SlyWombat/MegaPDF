@@ -27,6 +27,13 @@
             <SolidColorBrush x:Key="BrandAccentOnBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="BrandFindMatchBrush" Color="#4D18B6C8" />
             <SolidColorBrush x:Key="BrandFindMatchCurrentBrush" Color="#730E6FD8" />
+            <!-- A redaction mark (#173): translucent, so what is about to be removed can
+                 still be read, over an outline in the same hue so the edge is unambiguous
+                 on a white page and on a dark scan alike. Deliberately not the find hue
+                 and not the danger red: it is neither a search result nor an error, and
+                 it becomes a black box. -->
+            <SolidColorBrush x:Key="BrandRedactionMarkBrush" Color="#3D16324F" />
+            <SolidColorBrush x:Key="BrandRedactionMarkOutlineBrush" Color="#B216324F" />
             <SolidColorBrush x:Key="BrandDangerBrush" Color="#C0362C" />
             <SolidColorBrush x:Key="BrandInkBrush" Color="#16324F" />
             <!-- Splash credit lines, over the artwork. A scrim, not a brand hue. -->
@@ -65,6 +72,8 @@
             <SolidColorBrush x:Key="BrandAccentOnBrush" Color="#0B1B2B" />
             <SolidColorBrush x:Key="BrandFindMatchBrush" Color="#6118B6C8" />
             <SolidColorBrush x:Key="BrandFindMatchCurrentBrush" Color="#804F9BEA" />
+            <SolidColorBrush x:Key="BrandRedactionMarkBrush" Color="#59F2F7FC" />
+            <SolidColorBrush x:Key="BrandRedactionMarkOutlineBrush" Color="#CCF2F7FC" />
             <SolidColorBrush x:Key="BrandDangerBrush" Color="#E2685E" />
             <SolidColorBrush x:Key="BrandInkBrush" Color="#F2F7FC" />
             <SolidColorBrush x:Key="BrandOverlayTextBrush" Color="#99FFFFFF" />

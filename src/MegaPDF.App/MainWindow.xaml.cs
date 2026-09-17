@@ -728,8 +728,7 @@ public sealed partial class MainWindow : Window
             // readable while it is being marked — a mark is something you check before you
             // apply it, and it is never written to the file at all (#173).
             Background = _dragIsRedaction
-                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                      Microsoft.UI.ColorHelper.FromArgb(0x3D, 0x16, 0x32, 0x4F))
+                ? Brand.Brush("BrandRedactionMarkBrush")
                 : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) { Opacity = 0.75 },
             BorderBrush = Brand.Brush("BrandAccentBrush"),
             BorderThickness = new Thickness(1),
@@ -790,10 +789,8 @@ public sealed partial class MainWindow : Window
             canvas.Children.Add(new Border
             {
                 Tag = RedactionMarkTag,
-                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                    Microsoft.UI.ColorHelper.FromArgb(0x3D, 0x16, 0x32, 0x4F)),
-                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                    Microsoft.UI.ColorHelper.FromArgb(0xB2, 0x16, 0x32, 0x4F)),
+                Background = Brand.Brush("BrandRedactionMarkBrush"),
+                BorderBrush = Brand.Brush("BrandRedactionMarkOutlineBrush"),
                 BorderThickness = new Thickness(1),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Top,
