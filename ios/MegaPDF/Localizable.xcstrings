@@ -2741,6 +2741,23 @@
         }
       }
     },
+    "customer named" : {
+      "comment" : "#173: what the Redact capture marks; a phrase on the demo agreement's first line",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "client nommé"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "client nommé"
+          }
+        }
+      }
+    },
     "demo" : {
       "localizations" : {
         "fr" : {

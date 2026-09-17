@@ -42,7 +42,8 @@ enum DemoContent {
     /// it worth removing. Marked by what it says rather than by a rectangle, so the shot
     /// lands on a sentence in every language.
     static var redactedWord: String {
-        forLanguage(english: "customer named", frenchCanadian: "client nommé", french: "client nommé")
+        String(localized: "customer named",
+               comment: "#173: what the Redact capture marks; a phrase on the demo agreement's first line")
     }
 
     /// Marketing "Add text" shot (#43): the name the customer would print under
