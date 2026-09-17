@@ -218,6 +218,31 @@ jobs:
       - name: The window gets what it needs from the desktop
         run: xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --desktop-check
 
+      # A brand-new account has no ~/.local/share, and the app died before its
+      # window when it found none: GetFolderPath returns "" for a directory that is
+      # not there, the user-data path became relative, and CreateDirectory hit the
+      # apphost itself (#195). Every headless diagnostic passed through it, because
+      # none of them builds a view model — so it takes a real launch to catch.
+      - name: The app starts for a user who has never run a desktop app
+        run: |
+          bare="$RUNNER_TEMP/barehome"
+          rm -rf "$bare"; mkdir -p "$bare"
+          HOME="$bare" xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --desktop-check
+          test -d "$bare/.local/share" || { echo "::error::the XDG data directory was not created"; exit 1; }
+
+      # And saves are not staged in RAM. On Fedora /tmp is a tmpfs sized at half of
+      # RAM, and staging a 2.5 GB document there is the cost #147 took out of
+      # opening one (#193). The negative is checked too, so a check that could
+      # never fail cannot pass for that reason.
+      - name: Saves are not staged on a RAM-backed filesystem
+        run: |
+          xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --desktop-check | grep -A1 '^temporary files:'
+          if TMPDIR=/dev/shm xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --desktop-check > /dev/null 2>&1; then
+            echo "::error::--desktop-check passed with its temp directory on a tmpfs, so the check proves nothing"
+            exit 1
+          fi
+          echo "staging on a tmpfs is refused, and refused for the right reason"
+
       # The UI has to be started for real. PublishSingleFile changes how the
       # runtime resolves native libraries, and libSkiaSharp and libHarfBuzzSharp
       # sit outside the apphost. Without this a build whose window cannot open

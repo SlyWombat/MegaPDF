@@ -17,6 +17,11 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // Before anything reads a setting or writes a temporary file — the first
+        // happens as the window is built, and the second before a save touches the
+        // document (#193, #195). Linux only; it returns at once anywhere else.
+        Platform.LinuxPaths.PrepareUserDirectories();
+
         // Before anything reads a string: the toolbar labels are resolved when the
         // window is built, and the diagnostics below print Strings.* too.
         ApplyLanguage(args);

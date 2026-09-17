@@ -562,6 +562,21 @@ public partial class App : Application
             }
         }
 
+        // Where a save stages its verified copy before the destination is touched.
+        // On Linux this must not be a tmpfs: staging a 2.5 GB document in RAM is the
+        // cost #147 took out of opening one, and on Fedora /tmp is a tmpfs by
+        // default (#193).
+        var temp = Path.GetTempPath();
+        Console.WriteLine($"temporary files: {temp}");
+        if (OperatingSystem.IsLinux())
+        {
+            var backing = BackingFilesystem(temp);
+            Console.WriteLine($"  backing: {backing}");
+            Check("saves are not staged on a RAM-backed filesystem",
+                  !backing.StartsWith("tmpfs", StringComparison.Ordinal)
+                  && !backing.StartsWith("ramfs", StringComparison.Ordinal));
+        }
+
         // What the desktop reads to group the window under its launcher. The
         // .desktop file states StartupWMClass=MegaPDF, and if the window ever
         // stopped calling itself that, the taskbar entry would quietly split in two.
@@ -569,6 +584,41 @@ public partial class App : Application
 
         Console.WriteLine(failures == 0 ? "desktop-check: PASS" : $"::error::desktop-check: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The filesystem type a path sits on, from /proc/self/mounts — the longest
+    /// mount point that is a prefix of it wins, which is how the kernel resolves it.
+    /// "(unknown)" rather than an exception on anything that cannot be read.
+    /// </summary>
+    private static string BackingFilesystem(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path).TrimEnd('/');
+            var best = "(unknown)";
+            var bestLength = -1;
+            foreach (var line in File.ReadLines("/proc/self/mounts"))
+            {
+                var parts = line.Split(' ');
+                if (parts.Length < 3)
+                    continue;
+                var point = parts[1].TrimEnd('/');
+                var contains = point.Length == 0
+                    || full == point
+                    || full.StartsWith(point + "/", StringComparison.Ordinal);
+                if (contains && point.Length > bestLength)
+                {
+                    bestLength = point.Length;
+                    best = $"{parts[2]} on {(point.Length == 0 ? "/" : point)}";
+                }
+            }
+            return best;
+        }
+        catch (Exception)
+        {
+            return "(unknown)";
+        }
     }
 
     /// <summary>The seven colours FluentTheme builds its control accents from.</summary>
