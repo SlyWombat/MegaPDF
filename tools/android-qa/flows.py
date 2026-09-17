@@ -178,14 +178,21 @@ class Flow:
     # --- shorthands --------------------------------------------------------
 
     def open_file(self, name: str, settle: float = 5.0) -> None:
+        self.pick(name)
+        time.sleep(settle)
+
+    def pick(self, name: str) -> None:
+        """Home to the tap on the file, and no waiting after it. Split out so a
+        caller can time the *app's* open rather than the picker's."""
         self.d.tap(text=self.s["open_pdf"])
         time.sleep(2.5)
         if not self.d.exists(text=name):
             self.d.tap(desc="Search", settle=1.5)
             self.d.type_text(name.replace(".pdf", ""))
             self.d.press("KEYCODE_ENTER", settle=3.0)
-        self.d.tap(text=name)
-        time.sleep(settle)
+        node = self.d.wait_for(text=name)
+        left, top, right, bottom = self.d._bounds(node)
+        self.d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.0)
 
     def title(self) -> str:
         for node in self.d.nodes():
@@ -454,9 +461,11 @@ def large_file_flows(f: Flow, only: list[str] | None = None) -> list[dict]:
         print(f"  -- {name}", flush=True)
         try:
             f.restart_clean()
+            # From the tap on the file to the first page drawn: the app's open, not
+            # the picker's. Timing open_file() instead measured the picker search.
+            f.pick(name)
             started = time.time()
-            f.open_file(name, settle=3.0)
-            d.wait_for(desc=s.format("page_n", 1), timeout=240)
+            d.wait_for(desc=s.format("page_n", 1), timeout=240, poll=0.2)
             row["open_seconds"] = round(time.time() - started, 2)
             row["peak_after_open_mb"] = f.peak_mb()
             d.screencap(os.path.join(f.out, f"large-{name}-open.png"))
