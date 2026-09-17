@@ -137,6 +137,33 @@ public partial class App : Application
                 }, TimeSpan.FromSeconds(1));
                 return true;
 
+            // Redact (#173): the tool armed and a line of the demo document marked, which is
+            // the state the feature has to be legible in — a translucent box you can still
+            // read through, over text you are about to remove. The mark is placed through
+            // the same call a drag makes, so the capture is of the real thing.
+            case "redact":
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state redact needs a document.");
+                    return false;
+                }
+                viewModel.ToggleRedactCommand.Execute(null);
+                if (!viewModel.IsRedactMode)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state redact: the tool did not arm.");
+                    return false;
+                }
+                // The demo document's amount line; a drag across it is what a person does.
+                viewModel.AddRedactionMark(0, new PdfRect(72, 392, 220, 16));
+                if (!viewModel.HasRedactionMarks)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state redact: nothing was marked.");
+                    return false;
+                }
+                // Armed again, so the shot shows the tool on as well as the mark placed.
+                viewModel.ToggleRedactCommand.Execute(null);
+                return true;
+
             // The busy strip under the toolbar (#145), as it shows 0.5 s into a slow save's
             // read-back. The operation is held for the life of the capture run.
             case "busy":
