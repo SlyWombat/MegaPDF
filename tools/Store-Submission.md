@@ -89,6 +89,16 @@ dotnet build src/MegaPDF.App/MegaPDF.App.csproj \
   -p:GenerateAppxPackageOnBuild=true
 ```
 
+⚠️ **Reinstalling the same version is a no-op.** `Add-AppxPackage` on a package whose
+version matches the installed one does nothing and reports success — `-ForceUpdateFromAnyVersion`
+does not change that. A whole afternoon of RC testing can then run against the previous build
+(2026-09-17, #146): remove the package first, or bump the version.
+
+```
+Get-AppxPackage ElectricRV.MegaPDF | Remove-AppxPackage
+Add-AppxPackage -Path <package>.msix
+```
+
 ⚠️ **Build the package from a clean output, never on top of an unpackaged build.** An
 unpackaged Release build (`WindowsPackageType=None`, what the dev loop and the capture
 harness run) writes `resources.pri` with the resource map named `MegaPDF`. A package built

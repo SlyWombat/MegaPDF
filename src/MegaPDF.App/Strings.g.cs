@@ -531,4 +531,13 @@ public static partial class Strings
 
     /// <summary>Remove from Recent</summary>
     public static string RemoveFromRecent => Get("RemoveFromRecent");
+
+    /// <summary>Draw a signature</summary>
+    public static string DrawSignatureName => Get("DrawSignatureName");
+
+    /// <summary>Type a signature</summary>
+    public static string TypeSignatureName => Get("TypeSignatureName");
+
+    /// <summary>Add a signature from a photo</summary>
+    public static string AddFromImageName => Get("AddFromImageName");
 }

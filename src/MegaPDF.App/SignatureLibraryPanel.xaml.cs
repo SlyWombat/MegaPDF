@@ -16,6 +16,16 @@ public sealed partial class SignatureLibraryPanel : UserControl
     public SignatureLibraryPanel()
     {
         InitializeComponent();
+        // The three add buttons carry their label in a child TextBlock, which leaves the
+        // button itself unnamed: Narrator announced "button" three times (#146 RC). The
+        // name is set here rather than through an x:Uid property path, which MRT did not
+        // apply to AutomationProperties.Name on these buttons.
+        Loaded += (_, _) =>
+        {
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(DrawSignatureButton, Strings.DrawSignatureName);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(TypeSignatureButton, Strings.TypeSignatureName);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(AddSignatureFromImageButton, Strings.AddFromImageName);
+        };
     }
 
     public MainViewModel? ViewModel

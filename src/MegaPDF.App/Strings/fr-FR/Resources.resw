@@ -792,4 +792,13 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="RemoveFromRecentItem.Text" xml:space="preserve">
     <value>Retirer des récents</value>
   </data>
+  <data name="DrawSignatureName" xml:space="preserve">
+    <value>Dessiner une signature</value>
+  </data>
+  <data name="TypeSignatureName" xml:space="preserve">
+    <value>Taper une signature</value>
+  </data>
+  <data name="AddFromImageName" xml:space="preserve">
+    <value>Ajouter une signature à partir d'une photo</value>
+  </data>
 </root>

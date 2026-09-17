@@ -828,4 +828,14 @@ Saved as {2} — ready to email.</value>
     <value>Remove from Recent</value>
     <comment>Context menu item on a recent row (#165)</comment>
   </data>
+  <data name="DrawSignatureName" xml:space="preserve">
+    <value>Draw a signature</value>
+    <comment>Narrator name for the Draw button in the signature library (#146 RC): its label is a child TextBlock, which leaves the button itself unnamed</comment>
+  </data>
+  <data name="TypeSignatureName" xml:space="preserve">
+    <value>Type a signature</value>
+  </data>
+  <data name="AddFromImageName" xml:space="preserve">
+    <value>Add a signature from a photo</value>
+  </data>
 </root>
