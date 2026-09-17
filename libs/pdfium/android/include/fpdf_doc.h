@@ -445,6 +445,69 @@ FPDF_GetPageLabel(FPDF_DOCUMENT document,
                   void* buffer,
                   unsigned long buflen);
 
+// Experimental API.
+// Remove the document's metadata: every entry of the information dictionary
+// (FPDF_GetMetaText's source), the XMP packet (/Metadata) on the catalog and on every
+// page, and any /PieceInfo private application data on the catalog or a page.
+//
+// Upstream can read metadata and never write it, so there was no way to take it out.
+// A document whose content has been redacted still carries the removed text in /Title,
+// /Keywords or an XMP packet until this is called.
+//
+// document - handle to a document.
+//
+// Returns the number of entries and packets removed, or -1 when |document| is NULL.
+FPDF_EXPORT int FPDF_CALLCONV FPDF_RemoveMetadata(FPDF_DOCUMENT document);
+
+// Experimental API.
+// Remove an outline entry and everything under it.
+//
+// The entry is unlinked from its siblings and its parent's /First and /Last, and the
+// parent's /Count is corrected. Upstream can walk bookmarks (FPDFBookmark_GetFirstChild
+// and friends) and cannot change them, so a heading that has been redacted out of the
+// page stays in the outline, where a raw byte search finds it.
+//
+// document - handle to the document.
+// bookmark - handle to the bookmark to remove. Must not be NULL, and is invalid
+//            afterwards, as is every handle to an entry beneath it.
+//
+// Returns true when the entry was found and removed.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBookmark_Remove(FPDF_DOCUMENT document,
+                                                        FPDF_BOOKMARK bookmark);
+
+// Experimental API.
+// Remove the document's page labels (the catalog's /PageLabels number tree).
+//
+// A page label prefix is free text — "Draft-", a case number, a name — so a redaction
+// has to be able to take it out. Upstream reads page labels (FPDF_GetPageLabel) and
+// cannot change them.
+//
+// document - handle to the document.
+//
+// Returns true when there were page labels to remove.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDF_RemovePageLabels(FPDF_DOCUMENT document);
+
+// Experimental API.
+// Clear every /ActualText and /Alt entry in the document's structure tree whose value
+// contains |text|, along with /E (the expansion of an abbreviation) and /TU.
+//
+// Tagged PDF repeats a page's words outside its content stream so that a screen reader
+// can say them: /ActualText replaces what the glyphs spell, /Alt describes a figure.
+// Both survive a redaction of the page itself, and both extract as plain text. Upstream
+// reads them (FPDF_StructElement_GetActualText, FPDF_StructElement_GetAltText) and
+// cannot change them.
+//
+// Only entries containing |text| are cleared, so the alternate text of content that was
+// not redacted keeps working.
+//
+// document - handle to the document.
+// text     - the string to look for, as a NUL-terminated UTF-16LE string.
+//
+// Returns the number of entries cleared, or -1 when |document| or |text| is NULL.
+FPDF_EXPORT int FPDF_CALLCONV
+FPDF_RemoveStructureTextMatching(FPDF_DOCUMENT document, FPDF_WIDESTRING text);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

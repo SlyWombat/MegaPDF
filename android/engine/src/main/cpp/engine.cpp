@@ -969,4 +969,122 @@ Java_com_megapdf_engine_PdfiumNative_nativeLastLayoutVerdict(JNIEnv* env, jobjec
     return PackLayoutVerdict(env, status, v);
 }
 
+// --- Contract 8: redaction (#173) ---
+//
+// Marks are the core's own and are never written to the file, so the app draws them and
+// nothing here touches the page. Rectangles go over packed, as everywhere else on this
+// boundary: [id, l, b, r, t] per mark, PDF points, bottom-left origin.
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeMarkForRedaction(JNIEnv*, jobject, jlong handle, jdouble left,
+                                                            jdouble bottom, jdouble right, jdouble top) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_rect area{left, bottom, right, top};
+    int id = -1;
+    return megapdf_redaction_mark(p->core, &area, &id) == MEGAPDF_OK ? id : -1;
+}
+
+// Marks the text a selection covers, one mark per line, each grown to whole glyphs.
+// Returns how many were made; 0 when the selection covers no text, and the caller then
+// marks the rectangle itself. NOT count-then-fill: this call MAKES the marks.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeMarkTextForRedaction(JNIEnv*, jobject, jlong handle, jdouble left,
+                                                                jdouble bottom, jdouble right, jdouble top) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_rect selection{left, bottom, right, top};
+    return static_cast<jint>(megapdf_redaction_mark_text(p->core, &selection, nullptr, 0));
+}
+
+JNIEXPORT jdoubleArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRedactionMarksPacked(JNIEnv* env, jobject, jlong handle) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    const size_t count = megapdf_redaction_marks(p->core, nullptr, 0);
+    std::vector<megapdf_redaction_area> areas(count);
+    if (count > 0) megapdf_redaction_marks(p->core, areas.data(), count);
+    std::vector<double> packed;
+    packed.reserve(count * 5);
+    for (const megapdf_redaction_area& a : areas) {
+        packed.push_back(a.mark_id);
+        packed.push_back(a.bounds.left);
+        packed.push_back(a.bounds.bottom);
+        packed.push_back(a.bounds.right);
+        packed.push_back(a.bounds.top);
+    }
+    jdoubleArray out = env->NewDoubleArray(static_cast<jsize>(packed.size()));
+    if (out != nullptr && !packed.empty()) {
+        env->SetDoubleArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeMoveRedactionMark(JNIEnv*, jobject, jlong handle, jint markId,
+                                                             jdouble left, jdouble bottom, jdouble right,
+                                                             jdouble top) {
+    auto* p = reinterpret_cast<Page*>(handle);
+    megapdf_rect area{left, bottom, right, top};
+    return megapdf_redaction_move_mark(p->core, markId, &area) == MEGAPDF_OK ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRemoveRedactionMark(JNIEnv*, jobject, jlong handle, jint markId) {
+    megapdf_redaction_remove_mark(reinterpret_cast<Page*>(handle)->core, markId);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRedactionMarkCount(JNIEnv*, jobject, jlong handle) {
+    return static_cast<jint>(megapdf_redaction_mark_count(reinterpret_cast<Document*>(handle)->core));
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeClearRedactionMarks(JNIEnv*, jobject, jlong handle) {
+    megapdf_redaction_clear(reinterpret_cast<Document*>(handle)->core);
+}
+
+// Applies every mark. The result goes back packed, so one call carries the whole report:
+//   [status, areas, pages, characters, textRuns, partialRuns, hiddenCopies, images,
+//    inlineImages, softMasks, paths, shadings, formXObjects, annotations, formFields,
+//    links, outlineEntries, structureEntries, pageLabels, metadataFields,
+//    refusalCount, (pageIndex, reason) per refusal...]
+// status is MEGAPDF_OK, or the core's error; a refusal removed NOTHING.
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeApplyRedactions(JNIEnv* env, jobject, jlong handle) {
+    auto* d = reinterpret_cast<Document*>(handle);
+    megapdf_redaction_report* report = nullptr;
+    const int status = megapdf_redact_apply(d->core, nullptr, &report);
+    megapdf_redaction_counts c{};
+    std::vector<jint> packed;
+    packed.push_back(status);
+    if (report != nullptr) megapdf_redaction_report_counts(report, &c);
+    const jint values[19] = {c.areas, c.pages, c.characters, c.text_runs, c.partial_runs, c.hidden_copies,
+                             c.images, c.inline_images, c.soft_masks, c.paths, c.shadings, c.form_xobjects,
+                             c.annotations, c.form_fields, c.links, c.outline_entries, c.structure_entries,
+                             c.page_labels, c.metadata_fields};
+    for (jint v : values) packed.push_back(v);
+    size_t refusals = 0;
+    if (report != nullptr) {
+        refusals = megapdf_redaction_refusals(report, nullptr, 0);
+        std::vector<megapdf_redaction_refusal> list(refusals);
+        if (refusals > 0) megapdf_redaction_refusals(report, list.data(), refusals);
+        packed.push_back(static_cast<jint>(refusals));
+        for (const megapdf_redaction_refusal& r : list) {
+            packed.push_back(r.page_index);
+            packed.push_back(r.reason);
+        }
+        megapdf_redaction_report_free(report);
+    } else {
+        packed.push_back(0);
+    }
+    jintArray out = env->NewIntArray(static_cast<jsize>(packed.size()));
+    if (out != nullptr && !packed.empty()) {
+        env->SetIntArrayRegion(out, 0, static_cast<jsize>(packed.size()), packed.data());
+    }
+    return out;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeRedactionPoisoned(JNIEnv*, jobject, jlong handle) {
+    return megapdf_redaction_poisoned(reinterpret_cast<Document*>(handle)->core) == 1 ? JNI_TRUE : JNI_FALSE;
+}
+
 }  // extern "C"

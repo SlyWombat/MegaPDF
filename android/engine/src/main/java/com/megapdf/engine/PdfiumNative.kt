@@ -110,6 +110,30 @@ internal object PdfiumNative {
     external fun nativePageRegenerationVerdictCancellable(handle: Long, cancel: Long): DoubleArray
     external fun nativePageRegenerationVerdictCached(handle: Long): DoubleArray
 
+    // Contract 8: redaction (#173). Marks are the core's own and never reach the file, so
+    // nothing here changes the page. Rectangles are PDF points, bottom-left origin.
+    external fun nativeMarkForRedaction(
+        handle: Long, left: Double, bottom: Double, right: Double, top: Double,
+    ): Int
+    /** NOT count-then-fill: this MAKES the marks, one per line, and returns how many. */
+    external fun nativeMarkTextForRedaction(
+        handle: Long, left: Double, bottom: Double, right: Double, top: Double,
+    ): Int
+    /** [id, l, b, r, t] per mark. */
+    external fun nativeRedactionMarksPacked(handle: Long): DoubleArray
+    external fun nativeMoveRedactionMark(
+        handle: Long, markId: Int, left: Double, bottom: Double, right: Double, top: Double,
+    ): Boolean
+    external fun nativeRemoveRedactionMark(handle: Long, markId: Int)
+    external fun nativeRedactionMarkCount(handle: Long): Int
+    external fun nativeClearRedactionMarks(handle: Long)
+    /** [status, 19 counts, refusalCount, (pageIndex, reason) per refusal]. */
+    external fun nativeApplyRedactions(handle: Long): IntArray
+    external fun nativeRedactionPoisoned(handle: Long): Boolean
+
+    /** MEGAPDF_ERR_REDACT: the redaction removed nothing, or could not finish (#173). */
+    const val STATUS_REDACT = -10
+
     // megapdf_status codes (megapdf_core.h) the page check returns (#145).
     const val STATUS_CANCELLED = -7
     const val STATUS_NOT_JUDGED = -8

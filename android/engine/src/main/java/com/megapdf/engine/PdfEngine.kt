@@ -200,6 +200,39 @@ class PdfDocument internal constructor(
         out.flush()
     }
 
+    // --- Redaction (#173, contract 8) ---
+
+    /**
+     * How many areas are marked for redaction across the document. A mark is the core's
+     * own and is never written to the file, so a document saved with marks on it carries
+     * none.
+     */
+    suspend fun redactionMarkCount(): Int = withContext(engine.dispatcher) {
+        if (closed) 0 else PdfiumNative.nativeRedactionMarkCount(handle)
+    }
+
+    suspend fun clearRedactionMarks(): Unit = withContext(engine.dispatcher) {
+        if (!closed) PdfiumNative.nativeClearRedactionMarks(handle)
+    }
+
+    /** True when a redaction failed part-way and the document may no longer be saved. */
+    suspend fun isRedactionPoisoned(): Boolean = withContext(engine.dispatcher) {
+        !closed && PdfiumNative.nativeRedactionPoisoned(handle)
+    }
+
+    /**
+     * Applies every mark and drops them. It fails closed: when [RedactionReport.applied] is
+     * false NOTHING was removed, the document is exactly as it was, the marks are still on
+     * it, and [RedactionReport.refusals] says which page and why.
+     *
+     * Applying also frees every undo handle the core holds, so the caller clears its own
+     * history in the same step.
+     */
+    suspend fun applyRedactions(): RedactionReport = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        RedactionReport.decode(PdfiumNative.nativeApplyRedactions(handle))
+    }
+
     /**
      * Whether this document reads the file [fd] is open on (#147); [fd] stays the caller's.
      * False for a document opened from bytes, or one already moved to a copy.
@@ -543,6 +576,51 @@ class PdfPage internal constructor(
         check(PdfiumNative.nativeAddTextBox(handle, text.trim(), fontName, fontSize, x, y, id)) {
             "failed to add text box"
         }
+    }
+
+    // --- Redaction marks (#173) ---
+
+    /**
+     * Marks an area for redaction and returns the mark's id, or -1. Nothing on the page
+     * changes: a mark is the core's own and is never written to the file, so the app draws
+     * it and marking costs no content regeneration.
+     */
+    suspend fun markForRedaction(rect: PdfRect): Int = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeMarkForRedaction(handle, rect.left, rect.bottom, rect.right, rect.top)
+    }
+
+    /**
+     * Marks the text a drag selected: one mark per line it spans, each grown to the glyphs
+     * it touches, so a mark always covers whole glyphs. Returns how many were made; 0 means
+     * the selection covers no text, and the caller then marks the rectangle itself.
+     */
+    suspend fun markTextForRedaction(rect: PdfRect): Int = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeMarkTextForRedaction(handle, rect.left, rect.bottom, rect.right, rect.top)
+    }
+
+    /** The redaction marks on this page, in the order they were made. */
+    suspend fun redactionMarks(): List<RedactionMark> = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        val packed = PdfiumNative.nativeRedactionMarksPacked(handle)
+        (0 until packed.size / 5).map { i ->
+            RedactionMark(
+                markId = packed[i * 5].toInt(),
+                rect = PdfRect(packed[i * 5 + 1], packed[i * 5 + 2], packed[i * 5 + 3], packed[i * 5 + 4]),
+            )
+        }
+    }
+
+    suspend fun moveRedactionMark(markId: Int, rect: PdfRect): Boolean = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeMoveRedactionMark(handle, markId, rect.left, rect.bottom, rect.right, rect.top)
+    }
+
+    /** Removes a mark. Already gone counts as success, so an undo cannot fail. */
+    suspend fun removeRedactionMark(markId: Int): Unit = withContext(engine.dispatcher) {
+        check(!closed) { "page is closed" }
+        PdfiumNative.nativeRemoveRedactionMark(handle, markId)
     }
 
     /** Every MegaPDF text box on this page, in page-object order. */

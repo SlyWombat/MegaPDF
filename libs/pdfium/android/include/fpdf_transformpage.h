@@ -284,6 +284,46 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_DestroyClipPath(FPDF_CLIPPATH clipPath);
 FPDF_EXPORT void FPDF_CALLCONV FPDFPage_InsertClipPath(FPDF_PAGE page,
                                                        FPDF_CLIPPATH clipPath);
 
+// Experimental API.
+// Create a new clip path from |count| rectangles making up ONE path, combined under
+// the even-odd rule when |even_odd| is true and the nonzero winding rule otherwise.
+//
+// FPDF_CreateClipPath() can only describe a single rectangle, and the paths of a clip
+// path intersect, so nothing in the API could express a region with a hole in it.
+// Subpaths of one path combine under the fill rule instead, so an even-odd path of an
+// outer rectangle followed by rectangles inside it clips to the outer one MINUS the
+// inner ones.
+//
+// Caller takes ownership of the returned FPDF_CLIPPATH. It should be freed with
+// FPDF_DestroyClipPath().
+//
+// rects    - the rectangles, in page space. Must not be NULL.
+// count    - how many there are. Must not be 0.
+// even_odd - true for the even-odd rule, false for nonzero winding.
+//
+// Returns the clip path, or NULL when |rects| is NULL or |count| is 0.
+FPDF_EXPORT FPDF_CLIPPATH FPDF_CALLCONV
+FPDF_CreateClipPathFromRects(const FS_RECTF* rects,
+                             size_t count,
+                             FPDF_BOOL even_odd);
+
+// Experimental API.
+// Give |page_object| |clip_path| in addition to whatever clip path it already has, so
+// that what it draws is confined to both.
+//
+// Upstream can read a page object's clip path with FPDFPageObj_GetClipPath and
+// transform one with FPDFPageObj_TransformClipPath, but it cannot give one.
+//
+// The clip path is in page space, which is where the content generator writes it: it is
+// emitted before the object's own matrix.
+//
+// page_object - handle to a page object. Returned by e.g. FPDFPage_GetObject().
+// clip_path   - handle to a clip path. Ownership is not taken; the path is copied.
+//
+// Returns true on success.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFPageObj_AppendClipPath(FPDF_PAGEOBJECT page_object, FPDF_CLIPPATH clip_path);
+
 #ifdef __cplusplus
 }
 #endif

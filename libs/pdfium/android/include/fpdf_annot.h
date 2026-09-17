@@ -182,6 +182,25 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFPage_RemoveAnnot(FPDF_PAGE page,
                                                          int index);
 
 // Experimental API.
+// Remove the form field |annot| is a widget of, with its value, from the document's
+// AcroForm field tree: the field dictionary leaves /AcroForm /Fields (and any /Kids array
+// it sits in), and its /V, /DV, /RV, /TU and /AP entries are cleared. A parent field left
+// with no kids is removed too.
+//
+// FPDFPage_RemoveAnnot takes the widget off its page and no more. The field dictionary
+// stays reachable from /AcroForm /Fields, so the value a redaction was meant to remove is
+// still in the saved file, and any other widget of the same field still draws it.
+//
+// The widget itself is not removed from its page: call FPDFPage_RemoveAnnot for that.
+//
+// document - handle to the document the annotation belongs to.
+// annot    - handle to a widget annotation.
+//
+// Returns true when a field was found and removed.
+FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
+FPDFDoc_RemoveFormField(FPDF_DOCUMENT document, FPDF_ANNOTATION annot);
+
+// Experimental API.
 // Get the subtype of an annotation.
 //
 //   annot  - handle to an annotation.
