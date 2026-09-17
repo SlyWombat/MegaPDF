@@ -494,8 +494,16 @@
                    Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
-                           ToolTip.Tip="{Binding Path}" />
+                <!-- The folder line only appears when another recent has the same
+                     file name (#165); otherwise the row stays one line. The full
+                     path is the tooltip and the accessible name either way. -->
+                <StackPanel ToolTip.Tip="{Binding Path}"
+                            AutomationProperties.Name="{Binding Path}">
+                  <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Text="{Binding Folder}" IsVisible="{Binding HasFolder}"
+                             TextTrimming="CharacterEllipsis"
+                             FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
+                </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>

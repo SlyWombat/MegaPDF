@@ -40,10 +40,10 @@ public partial class MainWindow : Window
 
         RecentList.SelectionChanged += async (_, _) =>
         {
-            if (RecentList.SelectedItem is not RecentEntry entry)
+            if (RecentList.SelectedItem is not MainViewModel.RecentRow row)
                 return;
             RecentList.SelectedItem = null;
-            await GuardedAsync(() => OpenRecentAsync(entry));
+            await GuardedAsync(() => OpenRecentAsync(row.Entry));
         };
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);

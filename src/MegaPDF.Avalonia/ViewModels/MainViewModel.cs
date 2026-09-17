@@ -909,15 +909,47 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // --- Recent documents (SDD §2.2 empty state) ---
 
-    public ObservableCollection<RecentEntry> Recents { get; } = [];
+    /// <summary>
+    /// One row of the empty state's recents list: the file name, the folder it is
+    /// in when that is the only thing telling it from another row, and the full
+    /// path for the tooltip and the accessible name (#165).
+    /// </summary>
+    /// <param name="Folder">
+    /// Null unless another recent shares this row's file name. Most documents from
+    /// one template or one scanner are called the same thing, so a list of six
+    /// identical rows is no list at all. Shown only when it disambiguates, so the
+    /// common case stays a single line.
+    /// </param>
+    public sealed record RecentRow(RecentEntry Entry, string Name, string? Folder)
+    {
+        public string Path => Entry.Path;
+
+        public bool HasFolder => Folder is not null;
+    }
+
+    public ObservableCollection<RecentRow> Recents { get; } = [];
 
     public bool HasRecents => Recents.Count > 0;
 
     public void LoadRecents()
     {
         Recents.Clear();
-        foreach (var entry in _recents.Entries)
-            Recents.Add(entry);
+        var entries = _recents.Entries;
+        // Case-insensitively: that is how the file systems we open from compare
+        // names, and how a person reads the list.
+        var ambiguous = entries
+            .GroupBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in entries)
+        {
+            var folder = ambiguous.Contains(entry.DisplayName)
+                ? System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(entry.Path))
+                : null;
+            Recents.Add(new RecentRow(entry, entry.DisplayName,
+                                      string.IsNullOrEmpty(folder) ? null : folder));
+        }
         OnPropertyChanged(nameof(HasRecents));
     }
 
