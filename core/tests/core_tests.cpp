@@ -3183,6 +3183,71 @@ void test_text_in_one_pass(const std::string& fixtures, const std::string& schem
     check(ms < 5000, "text in one pass: 30,000 text objects list in under 5 s", std::to_string(static_cast<int>(ms)) + " ms");
 }
 
+// #151: the guard draws images of 16 megapixels or more as stand-ins in its compare renders, so
+// a huge scan is not decoded twice per edit. What a rewrite can get wrong about an image must
+// still show: where it lands, which way up, its clip, and which image it is; and a stencil
+// mask, whose colour is the content stream's, keeps its own pixels. Each case compares a page
+// with a copy that differs in one way, as the guard compares a page before and after a rewrite.
+std::vector<unsigned char> big_image_pdf(const std::string& content, unsigned char shade, bool stencil) {
+    const int w = 4000, h = 4000;   // 16 megapixels: the stand-in threshold
+    // RunLengthDecode keeps the fixture small without zlib: grey bands, in runs of up to 128 bytes.
+    std::string data;
+    auto run = [&](unsigned char value, int count) {
+        for (; count > 0; count -= 128) {
+            const int n = count > 128 ? 128 : count;
+            data += static_cast<char>(n == 1 ? 0 : 257 - n);
+            data += static_cast<char>(value);
+        }
+    };
+    const int row_bytes = stencil ? (w + 7) / 8 : w * 3;
+    for (int y = 0; y < h; y++) {
+        for (int band = 0; band < 8; band++) {
+            const unsigned char v = stencil ? ((band + y / 500) % 2 ? 0xFF : 0x00)
+                                            : static_cast<unsigned char>((band * 30 + y / 16 + shade) & 0xFF);
+            run(v, band < 7 ? row_bytes / 8 : row_bytes - 7 * (row_bytes / 8));
+        }
+    }
+    data += static_cast<char>(128);   // EOD
+    const std::string dict = std::string("<< /Type /XObject /Subtype /Image /Width 4000 /Height 4000 ") +
+                             (stencil ? "/ImageMask true /BitsPerComponent 1" : "/ColorSpace /DeviceRGB /BitsPerComponent 8") +
+                             " /Filter /RunLengthDecode /Length " + std::to_string(data.size()) + " >>";
+    return one_page_pdf(content, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+                        "/XObject << /Im1 6 0 R >>", "", {dict + "\nstream\n" + data + "\nendstream"});
+}
+
+void test_large_image_stand_ins() {
+    struct Case {
+        const char* what;
+        std::string was, now;
+        unsigned char shade_now;
+        bool stencil, same;
+    };
+    const std::string text = "BT /F1 12 Tf 72 740 Td (Caption above the image) Tj ET ";
+    const std::string placed = text + "q 400 0 0 300 100 300 cm /Im1 Do Q";
+    const std::vector<Case> cases = {
+        {"the same page", placed, placed, 0, false, true},
+        {"the image moved by 12 pt", placed, text + "q 400 0 0 300 112 300 cm /Im1 Do Q", 0, false, false},
+        {"the image flipped", placed, text + "q 400 0 0 -300 100 600 cm /Im1 Do Q", 0, false, false},
+        {"the image clipped", placed, text + "q 100 300 200 150 re W n 400 0 0 300 100 300 cm /Im1 Do Q", 0, false, false},
+        {"another image of the same size", placed, placed, 90, false, false},
+        {"a path under the image changed", "0 0 1 rg 150 350 60 60 re f " + placed, "1 0 0 rg 150 350 60 60 re f " + placed, 0, false, false},
+        {"the same stencil mask", text + "q 0 0 1 rg 400 0 0 300 100 300 cm /Im1 Do Q", text + "q 0 0 1 rg 400 0 0 300 100 300 cm /Im1 Do Q", 0, true, true},
+        {"a stencil mask in another colour", text + "q 0 0 1 rg 400 0 0 300 100 300 cm /Im1 Do Q", text + "q 1 0 0 rg 400 0 0 300 100 300 cm /Im1 Do Q", 0, true, false},
+    };
+    for (const Case& c : cases) {
+        OpenDoc a(big_image_pdf(c.was, 0, c.stencil));
+        OpenDoc b(big_image_pdf(c.now, c.shade_now, c.stencil));
+        const std::string what = std::string("stand-ins: ") + c.what;
+        check(a.doc != nullptr && b.doc != nullptr, what + ": both pages open");
+        if (a.doc == nullptr || b.doc == nullptr) continue;
+        Page pa(a.doc, 0), pb(b.doc, 0);
+        megapdf_layout_verdict v{};
+        const int editable = megapdf_testing_compare_pages(pa.page, pb.page, &v);
+        check(editable == (c.same ? 1 : 0), what + (c.same ? " compares as unchanged" : " is seen"),
+              "cause " + std::to_string(v.cause) + ", " + std::to_string(v.changed_pixels) + " of " + std::to_string(v.total_pixels) + " px");
+    }
+}
+
 // #137: megapdf_text_editable() caches its verdict per object, and a change to the page moves
 // object indices and rewrites the page's streams. After a change every answer must be what a
 // fresh open of the saved page gives. PDFium regenerates every stream of a page (patch 5), so one
@@ -3830,6 +3895,7 @@ int main(int argc, char** argv) {
     test_far_hidden_copies(argv[1]);
     test_scaled_jpeg_render();
     test_text_in_one_pass(argv[1], argv[2]);
+    test_large_image_stand_ins();
     test_verdicts_follow_changes();
     test_layout_verdicts();
     test_page_regeneration_verdict();

@@ -22,6 +22,15 @@ typedef void (*megapdf_page_check_stage_hook)(void* context);
  */
 MEGAPDF_API void megapdf_testing_set_page_check_hook(megapdf_page_check_stage_hook hook, void* context);
 
+/**
+ * The layout guard's compare (#118) of two pages, as it judges a reopened page before and after
+ * a rewrite: the render and every text object, by megapdf_layout_verdict's budgets, with nothing
+ * marked as edited. 1 or 0 as the verdict's `editable`, MEGAPDF_ERR_ARGUMENT for a NULL argument.
+ * Like the guard, it may swap the pages' large images for stand-ins (#151): the documents are
+ * spent afterwards.
+ */
+MEGAPDF_API int megapdf_testing_compare_pages(const megapdf_page* was, const megapdf_page* now, megapdf_layout_verdict* out);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

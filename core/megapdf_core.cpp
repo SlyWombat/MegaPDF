@@ -1421,6 +1421,76 @@ void WarmFontsUnlocked(FPDF_DOCUMENT doc, int page_index, const std::function<bo
     FPDF_CloseDocument(warm);
 }
 
+// Every image object on `page` and inside its forms, depth first.
+void CollectImages(FPDF_PAGE page, FPDF_PAGEOBJECT form, std::vector<FPDF_PAGEOBJECT>* out) {
+    const int count = page != nullptr ? FPDFPage_CountObjects(page) : FPDFFormObj_CountObjects(form);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = page != nullptr ? FPDFPage_GetObject(page, i) : FPDFFormObj_GetObject(form, static_cast<unsigned long>(i));
+        if (obj == nullptr) continue;
+        const int type = FPDFPageObj_GetType(obj);
+        if (type == FPDF_PAGEOBJ_FORM) CollectImages(nullptr, obj, out);
+        else if (type == FPDF_PAGEOBJ_IMAGE) out->push_back(obj);
+    }
+}
+
+// Images of at least this many pixels are drawn as stand-ins in the guard's compare renders.
+constexpr double kStandInPixels = 16.0e6;
+
+// Swaps each large image on a reopened scratch page for a small stand-in, so the guard's two
+// compare renders do not each decode it (#151). PDFium inflates an image whole at any render
+// size and keeps no decoded image over 100 MB: a 20,000 x 15,000 px Flate image costs over a
+// second per render, however small the render. The guard compares two reopened copies of the
+// page, before and after the rewrite, and the rewrite regenerates content streams, never an
+// image's own stream, so what it can get wrong about an image is where and how the content
+// draws it: the matrix, the clip, the graphics state around it. A stand-in drawn by the same
+// content shows all of that. It is a function of the image's size and raw bytes, so the same
+// image gets the same stand-in in both copies and a swapped image a different one. Most of it
+// is transparent, so whatever the image covers still shows; its opaque frame, diagonal and
+// corner block show where it lands and which way up. Stencil masks and images under 8 bits
+// per pixel keep their pixels: their colour comes from the content stream.
+void StandInLargeImages(FPDF_PAGE page) {
+    std::vector<FPDF_PAGEOBJECT> images;
+    CollectImages(page, nullptr, &images);
+    struct Swap {
+        FPDF_PAGEOBJECT obj;
+        uint32_t seed;
+    };
+    std::vector<Swap> swaps;
+    for (FPDF_PAGEOBJECT obj : images) {
+        unsigned int w = 0, h = 0;
+        if (!FPDFImageObj_GetImagePixelSize(obj, &w, &h) || static_cast<double>(w) * h < kStandInPixels) continue;
+        FPDF_IMAGEOBJ_METADATA meta{};
+        if (!FPDFImageObj_GetImageMetadata(obj, page, &meta) || meta.bits_per_pixel < 8) continue;
+        const unsigned long length = FPDFImageObj_GetImageDataRaw(obj, nullptr, 0);
+        std::vector<unsigned char> raw(length);
+        if (length > 0 && FPDFImageObj_GetImageDataRaw(obj, raw.data(), length) != length) continue;
+        uint32_t seed = 2166136261u;   // FNV-1a
+        auto mix = [&seed](unsigned char b) { seed = (seed ^ b) * 16777619u; };
+        for (int k = 0; k < 4; k++) { mix(static_cast<unsigned char>(w >> (8 * k))); mix(static_cast<unsigned char>(h >> (8 * k))); }
+        for (unsigned char b : raw) mix(b);
+        swaps.push_back(Swap{obj, seed});
+    }
+    // Seeds first: objects sharing one image share its stand-in, which replaces it for all.
+    for (const Swap& swap : swaps) {
+        const int n = 64;
+        FPDF_BITMAP bmp = FPDFBitmap_Create(n, n, 1);
+        if (bmp == nullptr) continue;
+        const unsigned char r = static_cast<unsigned char>(swap.seed), g = static_cast<unsigned char>(swap.seed >> 8),
+                            b = static_cast<unsigned char>(swap.seed >> 16);
+        FPDFBitmap_FillRect(bmp, 0, 0, n, n, 0x00000000);
+        const unsigned long colour = 0xFF000000ul | (static_cast<unsigned long>(r) << 16) | (static_cast<unsigned long>(g) << 8) | b;
+        FPDFBitmap_FillRect(bmp, 0, 0, n, 3, colour);
+        FPDFBitmap_FillRect(bmp, 0, n - 3, n, 3, colour);
+        FPDFBitmap_FillRect(bmp, 0, 0, 3, n, colour);
+        FPDFBitmap_FillRect(bmp, n - 3, 0, 3, n, colour);
+        for (int i = 0; i < n; i++) FPDFBitmap_FillRect(bmp, i, i, 2, 1, colour);
+        FPDFBitmap_FillRect(bmp, 3, 3, 12, 12, 0xFF000000ul | (~colour & 0xFFFFFFul));   // the image's first row and column
+        FPDF_PAGE pages[1] = {page};
+        FPDFImageObj_SetBitmap(pages, 1, swap.obj, bmp);
+        FPDFBitmap_Destroy(bmp);
+    }
+}
+
 struct ScratchRun {
     float left, bottom, right, top;
     U16 text;
@@ -1561,6 +1631,8 @@ megapdf_layout_verdict CompareRewrite(FPDF_PAGE was_page, FPDF_PAGE reopened, co
     megapdf_layout_verdict v{};
     v.cause = MEGAPDF_LAYOUT_REWRITE_FAILED;
     // Rendered before the text layer is read, as the guard always has.
+    StandInLargeImages(was_page);
+    StandInLargeImages(reopened);
     bool stopped = false;
     const ScratchShot shot_was = RenderScratchPage(was_page, go_on, &stopped);
     if (stopped || (go_on != nullptr && !(*go_on)())) return v;
@@ -2005,6 +2077,13 @@ MEGAPDF_API int megapdf_page_regeneration_verdict_cached(const megapdf_page* p, 
     const auto cached = p->owner->rewrite_keeps_page.find(std::make_pair(p->index, kPageVerdictKey));
     if (cached == p->owner->rewrite_keeps_page.end()) return MEGAPDF_ERR_NOT_JUDGED;
     *out = cached->second;
+    return out->editable ? 1 : 0;
+}
+
+MEGAPDF_API int megapdf_testing_compare_pages(const megapdf_page* was, const megapdf_page* now, megapdf_layout_verdict* out) {
+    if (was == nullptr || now == nullptr || was->page == nullptr || now->page == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    *out = CompareRewrite(was->page, now->page, std::vector<PageBox>{});
     return out->editable ? 1 : 0;
 }
 
