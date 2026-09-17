@@ -15,7 +15,7 @@
             BorderBrush="{DynamicResource BrandRule}" BorderThickness="1" Padding="16,0">
       <TextBlock Name="Preview"
                  Text="{x:Static loc:Strings.TypeSignaturePreviewHint}"
-                 FontFamily="Snell Roundhand, Segoe Script, Brush Script MT, Apple Chancery"
+                 FontFamily="Snell Roundhand, Segoe Script, Brush Script MT, Apple Chancery, Z003, URW Chancery L"
                  FontSize="34"
                  Foreground="#FF202020"
                  Opacity="0.45"

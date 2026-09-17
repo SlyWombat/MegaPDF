@@ -46,12 +46,58 @@ public partial class TypeSignatureWindow : Window
 
     /// <summary>
     /// Script faces in preference order: Snell Roundhand ships with macOS, Segoe
-    /// Script with Windows; the last two are common extras. Whatever is missing is
+    /// Script with Windows; the next two are common extras. Whatever is missing is
     /// skipped, and if none exists the default face is used in italic rather than
     /// failing — the same fallback chain the preview's FontFamily declares.
+    ///
+    /// The last two are the chancery face from the URW base-35 set, under the name
+    /// it has now (Z003) and the one Debian used before (#158). No Linux
+    /// distribution ships any of the first four, so a typed signature came out in
+    /// DejaVu Sans — legible, and not a signature. The base-35 set arrives with
+    /// ghostscript, CUPS' filters and LibreOffice, so it is on a desktop Linux far
+    /// more often than not; when it is not, the italic fallback still applies.
+    /// Appended rather than inserted, so Windows and macOS match as they did before
+    /// and never reach these.
     /// </summary>
     private static readonly string[] ScriptFaces =
-        ["Snell Roundhand", "Segoe Script", "Brush Script MT", "Apple Chancery"];
+        ["Snell Roundhand", "Segoe Script", "Brush Script MT", "Apple Chancery",
+         "Z003", "URW Chancery L"];
+
+    /// <summary>
+    /// The face a typed signature is drawn in: the first of <see cref="ScriptFaces"/>
+    /// the system has, or the default in bold italic. Never null.
+    ///
+    /// Separated from <see cref="Render"/> so a diagnostic can ask what a machine
+    /// would actually use without drawing anything — on Linux none of the four is
+    /// guaranteed, and a typed signature in the body face is a real difference from
+    /// what Windows and the Mac produce, not a crash anything would notice (#158).
+    /// The caller disposes it.
+    /// </summary>
+    /// <summary>Whether the system has any of <see cref="ScriptFaces"/> at all.</summary>
+    internal static bool HasScriptFace()
+    {
+        var manager = SKFontManager.Default;
+        foreach (var face in ScriptFaces)
+            if (manager.MatchFamily(face, SKFontStyle.Bold) is { } found)
+            {
+                found.Dispose();
+                return true;
+            }
+        return false;
+    }
+
+    internal static SKTypeface ResolveScriptTypeface()
+    {
+        var manager = SKFontManager.Default;
+        foreach (var face in ScriptFaces)
+            // MatchFamily returns null for a family the system does not have. It is
+            // matchFamilyStyle underneath, not the legacy path, so it does not quietly
+            // hand back the default — which is what makes the loop meaningful.
+            if (manager.MatchFamily(face, SKFontStyle.Bold) is { } found)
+                return found;
+
+        return manager.MatchTypeface(SKTypeface.Default, SKFontStyle.BoldItalic) ?? SKTypeface.Default;
+    }
 
     /// <summary>
     /// The typed name as ink on a transparent BGRA raster, large enough to stay
@@ -60,15 +106,7 @@ public partial class TypeSignatureWindow : Window
     /// </summary>
     internal static SignatureBitmap Render(string text)
     {
-        var manager = SKFontManager.Default;
-        SKTypeface? typeface = null;
-        foreach (var face in ScriptFaces)
-        {
-            typeface = manager.MatchFamily(face, SKFontStyle.Bold);
-            if (typeface is not null)
-                break;
-        }
-        typeface ??= manager.MatchTypeface(SKTypeface.Default, SKFontStyle.BoldItalic) ?? SKTypeface.Default;
+        var typeface = ResolveScriptTypeface();
 
         using (typeface)
         using (var paint = new SKPaint

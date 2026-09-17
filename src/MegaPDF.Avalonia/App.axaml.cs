@@ -562,6 +562,14 @@ public partial class App : Application
             }
         }
 
+        // The face a typed signature would be drawn in. None of the four the app
+        // asks for ships with a Linux distribution, and the fallback is the body
+        // face in bold italic — legible, and not a signature (#158). Reported, not
+        // asserted: which script faces a machine has is the machine's business.
+        using (var script = Views.TypeSignatureWindow.ResolveScriptTypeface())
+            Console.WriteLine($"typed signatures would be drawn in: {script.FamilyName}"
+                              + $" ({(Views.TypeSignatureWindow.HasScriptFace() ? "a script face" : "NOT a script face — the body font in italic")})");
+
         // Where a save stages its verified copy before the destination is touched.
         // On Linux this must not be a tmpfs: staging a 2.5 GB document in RAM is the
         // cost #147 took out of opening one, and on Fedora /tmp is a tmpfs by
