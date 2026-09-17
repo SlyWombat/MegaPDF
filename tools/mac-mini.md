@@ -61,7 +61,7 @@ output files are for. Takes about three minutes per device.
 **iOS listing screenshots**: `tools/ios-screenshots.sh <lang> [out]` — the CI
 recipe, locally.
 
-**macOS preview video**: `tools/macos-demo-video.sh ~/app-macos/MegaPDF.app ~/captures/macos/video 1440x900 [light|dark]`
+**macOS preview video**: `tools/macos-demo-video.sh ~/app-macos/MegaPDF.app ~/captures/macos/video 1440x900 [light|dark] [en|fr-CA|fr]`
 — the app's `--story` mode renders a frame after each step (tick, tick,
 sign, print the name, find ×3, done) and ffmpeg holds each for a couple of
 seconds. Real window states, no pointer.
@@ -95,7 +95,7 @@ process …` for other apps rather than `tell application X`, which would raise
 a new consent prompt that only the KVM can answer. Never `tccutil reset`.
 
 **macOS preview video, recorded for real**: `tools/macos-record-demo.sh
-[app] [out] [light|dark]` — cliclick drives the window while screencapture
+[app] [out] [light|dark] [en|fr-CA|fr]` — cliclick drives the window while screencapture
 records 1920x1080. It measures where the page is off a screenshot and maps
 every click from PDF points, and seeds the signature library if empty. For
 dark, switch Appearance first (`tell appearance preferences to set dark mode

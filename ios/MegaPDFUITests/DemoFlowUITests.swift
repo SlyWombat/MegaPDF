@@ -36,20 +36,30 @@ final class DemoFlowUITests: XCTestCase {
         let sign, addText, find, findField, nextMatch, done, textField, add, save: String
         let signatureName = "Mega W."
         let searchTerm: String
-        let printedName = "Jane Whitfield"
+        // Varies per language since #146 §3: DemoContent.printedName is localised,
+        // so the name this test types — and then looks for on the page — has to
+        // follow, and fr-CA and fr no longer share one answer.
+        let printedName: String
 
         static func forLanguage(_ lang: String?) -> Labels {
+            // The French UI words are the same in both French listings; only the
+            // demo person differs, so the two cases share everything but that.
+            func french(printedName: String) -> Labels {
+                Labels(sign: "Signer", addText: "Ajouter du texte", find: "Rechercher dans le document",
+                       findField: "Rechercher dans le document", nextMatch: "Résultat suivant",
+                       done: "Terminé", textField: "Texte", add: "Ajouter", save: "Enregistrer",
+                       searchTerm: "location", printedName: printedName)
+            }
             switch lang {
-            case "fr-CA", "fr":
-                return Labels(sign: "Signer", addText: "Ajouter du texte", find: "Rechercher dans le document",
-                              findField: "Rechercher dans le document", nextMatch: "Résultat suivant",
-                              done: "Terminé", textField: "Texte", add: "Ajouter", save: "Enregistrer",
-                              searchTerm: "location")
+            case "fr-CA":
+                return french(printedName: "Hélène Bélanger")
+            case "fr":
+                return french(printedName: "Céline Lefèvre")
             default:
                 return Labels(sign: "Sign", addText: "Add text", find: "Find in document",
                               findField: "Find in document", nextMatch: "Next match",
                               done: "Done", textField: "Text", add: "Add", save: "Save",
-                              searchTerm: "rental")
+                              searchTerm: "rental", printedName: "Jane Whitfield")
             }
         }
     }

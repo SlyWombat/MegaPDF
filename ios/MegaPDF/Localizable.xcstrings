@@ -930,6 +930,23 @@
         }
       }
     },
+    "Jane Whitfield" : {
+      "comment" : "screenshot demo person; French captures use French names, with accents (#146 §3)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Céline Lefèvre"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hélène Bélanger"
+          }
+        }
+      }
+    },
     "MegaPDF" : {
       "shouldTranslate" : false
     },

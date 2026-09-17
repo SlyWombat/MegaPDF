@@ -119,8 +119,10 @@ public partial class App : Application
             // line says pickers=shown when it worked.
             // Placed where --story prints the name: under the demo agreement's signature
             // line (tools/gen_test_fixtures.py demo.pdf). On another document it may land on text.
+            // The name follows the capture language (#146 §3), so a French shot is
+            // French all the way through: DemoContent.
             case "textbox":
-                viewModel.AddTextBox(0, new PdfPoint(72, 405), "Jane Whitfield");
+                viewModel.AddTextBox(0, new PdfPoint(72, 405), DemoContent.PrintedName);
                 DispatcherTimer.RunOnce(() =>
                 {
                     if (viewModel.BoxesOn(0).LastOrDefault() is not { } box)
@@ -322,8 +324,8 @@ public partial class App : Application
                 if (signature is not null)
                     viewModel.PlaceSignature(0, new PdfPoint(196, 355), signature, "Mega W.");
             }),
-            ("printed-name", () => viewModel.AddTextBox(0, new PdfPoint(72, 405), "Jane Whitfield")),
-            ("find", () => { viewModel.IsFindOpen = true; viewModel.Search("rental"); }),
+            ("printed-name", () => viewModel.AddTextBox(0, new PdfPoint(72, 405), DemoContent.PrintedName)),
+            ("find", () => { viewModel.IsFindOpen = true; viewModel.Search(DemoContent.SearchTerm); }),
             ("find-next", () => viewModel.FindNextCommand.Execute(null)),
             ("find-next-2", () => viewModel.FindNextCommand.Execute(null)),
             ("done", () => viewModel.CloseFind()),

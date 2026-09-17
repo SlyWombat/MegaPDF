@@ -5,13 +5,16 @@
 # an SSH session on the capture Mac cannot hold — so the clip is a sequence
 # of real window states held for a moment each, not a pointer moving.
 #
-# Usage: tools/macos-demo-video.sh [app-bundle] [out-dir] [WxH] [theme]
+# Usage: tools/macos-demo-video.sh [app-bundle] [out-dir] [WxH] [theme] [lang]
 #   app-bundle  default artifacts/macos/MegaPDF.app (tools/build-macos-app.sh)
 #   out-dir     default artifacts/video/macos
 #   WxH         window size, default 1440x900 (a Mac App Store preview size)
 #   theme       light (default) or dark
+#   lang        en (default), fr-CA or fr — sets the app's --language and the
+#               demo agreement, so a French clip is French throughout; the name
+#               the story prints follows from it (DemoContent.cs, #146 §3)
 #
-# Writes <out-dir>/frames/<theme>/NN-step.png and <out-dir>/macos-<theme>-preview.mp4
+# Writes <out-dir>/frames/<lang>-<theme>/NN-step.png and <out-dir>/macos-<lang>-<theme>-preview.mp4
 # (30 fps, H.264, no audio, ~20 s). Needs ffmpeg and python3.
 set -euo pipefail
 
@@ -20,13 +23,22 @@ APP="${1:-$ROOT/artifacts/macos/MegaPDF.app}"
 OUT="${2:-$ROOT/artifacts/video/macos}"
 SIZE="${3:-1440x900}"
 THEME="${4:-light}"
+LANG_TAG="${5:-en}"
+case "$LANG_TAG" in
+    en)         DEMO_DOC=demo-blank.pdf ;;
+    fr-CA|fr)   DEMO_DOC=demo-fr-blank.pdf ;;
+    *) echo "unknown language '$LANG_TAG' (expected en, fr-CA or fr)" >&2; exit 2 ;;
+esac
+# One directory per language and theme, so a fresh run never mixes frames with
+# the previous language's.
+VARIANT="$LANG_TAG-$THEME"
 BIN="$APP/Contents/MacOS/MegaPDF"
 [ -x "$BIN" ] || { echo "no app at $APP — run tools/build-macos-app.sh first" >&2; exit 1; }
 
 # The app is sandboxed: the document it opens must live in its container.
 CONTAINER="$HOME/Library/Containers/com.megapdf.ios/Data"
 STAGE="$CONTAINER/tmp/story"
-mkdir -p "$STAGE" "$OUT/frames/$THEME"
+mkdir -p "$STAGE" "$OUT/frames/$VARIANT"
 python3 "$ROOT/tools/gen_test_fixtures.py" "$STAGE" >/dev/null
 cp "$ROOT/ios/MegaPDF/Resources/demo-signature.png" "$STAGE/signature.png"
 
@@ -47,9 +59,9 @@ THEME_ARGS=""
 # the same machine (the display reconfigures under it); a second attempt a few
 # seconds later has always worked.
 for attempt in 1 2 3; do
-    rm -f "$OUT/frames/$THEME"/*.png
-    if "$BIN" "$STAGE/demo-blank.pdf" --window "$SIZE" $THEME_ARGS \
-        --story "$OUT/frames/$THEME" --signature "$STAGE/signature.png"; then
+    rm -f "$OUT/frames/$VARIANT"/*.png
+    if "$BIN" "$STAGE/$DEMO_DOC" --window "$SIZE" $THEME_ARGS --language "$LANG_TAG" \
+        --story "$OUT/frames/$VARIANT" --signature "$STAGE/signature.png"; then
         break
     fi
     echo "story render failed (attempt $attempt); retrying" >&2
@@ -57,8 +69,8 @@ for attempt in 1 2 3; do
 done
 
 # Hold each state; the first and last a little longer so the clip breathes.
-LIST="$OUT/frames/$THEME/list.txt"
-python3 - "$OUT/frames/$THEME" "$LIST" <<'PY'
+LIST="$OUT/frames/$VARIANT/list.txt"
+python3 - "$OUT/frames/$VARIANT" "$LIST" <<'PY'
 import os, sys
 d, out = sys.argv[1], sys.argv[2]
 frames = sorted(f for f in os.listdir(d) if f.endswith(".png"))
@@ -68,7 +80,7 @@ with open(out, "w") as f:
         f.write(f"file '{os.path.join(d, name)}'\nduration {hold}\n")
     f.write(f"file '{os.path.join(d, frames[-1])}'\n")  # concat needs the last file twice
 PY
-CLIP="$OUT/macos-$THEME-preview.mp4"
+CLIP="$OUT/macos-$VARIANT-preview.mp4"
 # App Store Connect refuses a preview without an audio track (MOV_RESAVE_STEREO), so a silent stereo one goes in.
 ffmpeg -v error -y -f concat -safe 0 -i "$LIST" -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -vf "format=yuv420p" -r 30 -fps_mode cfr \
     -c:v libx264 -preset slow -crf 18 -c:a aac -b:a 96k -shortest -movflags +faststart "$CLIP"

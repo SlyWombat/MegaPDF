@@ -40,7 +40,15 @@ enum DemoContent {
 
     /// Marketing "Add text" shot (#43): the name the customer would print under
     /// the signature rule the demo agreement draws at y=400, and where it sits.
-    static let printedName = "Jane Whitfield"
+    ///
+    /// Localised like everything else here (#146 §3). Dave, 2026-09-15: the
+    /// French captures must not show "Jane Whitfield", and the French names
+    /// carry accents — Hélène Bélanger for fr-CA, Céline Lefèvre for fr — which
+    /// is also what proves the accented glyphs survive the face the demo picks.
+    /// `MegaPDFUITests/DemoFlowUITests.swift` varies its copy the same way.
+    static var printedName: String {
+        String(localized: "Jane Whitfield", comment: "screenshot demo person; French captures use French names, with accents (#146 §3)")
+    }
     static let printedNameX: Double = 72
     static let printedNameY: Double = 372
 

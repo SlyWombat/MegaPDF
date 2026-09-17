@@ -192,6 +192,7 @@
                 <Grid ColumnDefinitions="*,*,*">
                   <Button Name="DrawSignatureButton" Grid.Column="0"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          VerticalAlignment="Stretch"
                           Margin="0,0,4,0">
                     <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}">
                       <Path Data="{StaticResource IconSign}" Width="16" Height="16"
@@ -203,6 +204,7 @@
                   </Button>
                   <Button Name="TypeSignatureButton" Grid.Column="1"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          VerticalAlignment="Stretch"
                           Margin="4,0,4,0">
                     <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}">
                       <Path Data="{StaticResource IconText}" Width="16" Height="16"
@@ -214,6 +216,7 @@
                   </Button>
                   <Button Name="ImportSignatureButton" Grid.Column="2"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                          VerticalAlignment="Stretch"
                           Margin="4,0,0,0">
                     <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}">
                       <Path Data="{StaticResource IconPhoto}" Width="16" Height="16"
