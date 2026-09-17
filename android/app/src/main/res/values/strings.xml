@@ -229,4 +229,7 @@
     <string name="redact_mark_count">%1$s areas marked for redaction</string>
     <string name="redact_mark_count_one">1 area marked for redaction</string>
     <string name="redact_ok">OK</string>
+    <!-- #173: what the Redact capture marks. Not UI text — nobody using the app
+         ever sees it; it only poses the screenshot. -->
+    <string name="screenshot_redacted_word">customer named</string>
 </resources>

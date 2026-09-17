@@ -234,4 +234,7 @@
     <string name="redact_mark_count_one">1 zone marquée pour caviardage</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redact_ok">OK</string>
+    <!-- #173: what the Redact capture marks. Not UI text — nobody using the app
+         ever sees it; it only poses the screenshot. -->
+    <string name="screenshot_redacted_word">client nommé</string>
 </resources>

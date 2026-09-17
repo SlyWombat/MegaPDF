@@ -417,17 +417,22 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                             // The state the feature has to be legible in (#173): the tool
                             // armed, and a line of the demo document marked — a translucent
                             // box you can still read through, over text you are about to
-                            // remove. Marked through the same call a drag makes.
+                            // remove. The line is found by what it says rather than by a
+                            // rectangle that has to be right, so the shot lands on a
+                            // sentence in every language.
                             redactMode = true
-                            markForRedaction(
-                                0,
-                                com.megapdf.engine.PdfRect(72.0, 392.0, 292.0, 408.0),
-                            )
-                            // markForRedaction disarms the tool when it lands; arm it again
-                            // so the shot shows the tool on as well as the mark placed.
-                            viewModelScope.launch {
-                                kotlinx.coroutines.delay(400)
-                                redactMode = true
+                            val word = app.getString(R.string.screenshot_redacted_word)
+                            val lines = doc.onPageForRedaction(0) { it.textLines() }
+                            val line = lines.firstOrNull { it.text.contains(word) }
+                                ?: lines.maxByOrNull { it.text.length }
+                            if (line != null) {
+                                markForRedaction(0, line.rect)
+                                // markForRedaction disarms the tool when it lands; arm it
+                                // again so the shot shows the tool on as well as the mark.
+                                viewModelScope.launch {
+                                    kotlinx.coroutines.delay(400)
+                                    redactMode = true
+                                }
                             }
                         }
                         if (state == "text") {
