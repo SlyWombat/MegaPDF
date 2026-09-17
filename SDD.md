@@ -45,7 +45,7 @@ Stating what MegaPDF will *not* do is as important as what it will. Out of scope
 - PDF creation from scratch, page assembly/reordering, merging/splitting
 - OCR of scanned documents
 - Cryptographic digital signatures (PKI / certificate-based signing) — MegaPDF signatures are *graphic* signatures, which is what the target user means by "signing"
-- Redaction, commenting/review workflows, form *authoring*
+- ~~Redaction~~, commenting/review workflows, form *authoring* *(scope amendment, 2026-09-17 — redaction is in scope for 2.0 and implemented on every platform; see §3.8 and #173. It was a non-goal because MegaPDF only ever covered content, and a cover mistaken for a removal is worse than no feature at all; §3.8 exists because the engine can now really remove it.)*
 - Cloud storage integration beyond what the Windows file picker already provides (OneDrive etc. work transparently through the file system)
 - macOS/Linux desktop versions
 - ~~mobile versions~~ *(scope amendment, 2026-08-08 — mobile is now in scope with a reduced feature set; see §6)*
@@ -281,6 +281,79 @@ The scope is deliberately the minimum that does the job (P1): one text field, a 
 
 ---
 
+### 3.8 F7 — Redact *(scope amendment — 2026-09-17, #173)*
+
+**User story:** *"I have to email the lease with the tenant's number taken out. Not covered — taken out. If I white it out and they can still copy it, I have sent it."*
+
+Whiteout covers; it has never removed anything. `megapdf_add_whiteout` appends a white
+filled path over the page, and the text, images and vector content under it stay in the
+file, selectable, copyable, searchable and extractable in any other reader. That is the
+classic redaction failure — court filings, government releases — and until 2.0 MegaPDF
+made it easy to commit. Acrobat charges for the fix (Pro only) and still leaks when
+someone skips Sanitize. Free, correct redaction is a strong reason to choose MegaPDF.
+
+Redact and Whiteout both stay, and each says plainly what it is: **Redact removes.
+Whiteout covers.**
+
+#### Behavior
+
+1. **The Redact tool** sits beside Whiteout. Drag a box, or select text — a word, a line,
+   a range — and the selection becomes marks. On a phone the drag uses the loupe the
+   whiteout drag already uses.
+2. **Marks are marks.** They are translucent with an outline, so the user can still read
+   what they are about to remove; they are movable, removable and undoable; and until the
+   document is saved nothing has been removed. **A mark is never written to the file** —
+   the core owns them (§6.2 contract 8), so a document saved with marks on it cannot carry
+   them. That is the Acrobat failure made structurally impossible rather than left to a
+   rule someone has to remember.
+3. **On Save or Save As** a confirmation says *"Redaction permanently removes the marked
+   content. This can't be undone after saving."* The default action is **Save as a copy**,
+   offering `<name>-redacted.pdf`; overwrite is the second choice.
+4. **After saving**, a short summary: *"3 areas redacted: 41 characters, 1 image, 2 form
+   fields removed."*
+5. **What it looks like:** a solid box, black by default, where the content was — a plain
+   filled path, with no mark and no annotation left behind. Nothing in the saved file
+   announces that a redaction happened, because the announcement is itself a disclosure.
+6. **Permissions:** redaction changes the document, so it needs **modify** (ADR-004
+   decision 2).
+
+#### What "removed" means
+
+Nothing inside a redacted area can be recovered from the saved file by any tool. Text:
+every glyph whose box intersects the area leaves the content stream — not hidden, clipped,
+recoloured or covered — with the hidden copies drawn under it (#136). A run only partly
+covered is rewritten so the glyphs outside keep their exact positions. Images: the pixels
+inside the area are overwritten in the image data and re-encoded, whatever the image was
+(JPEG, Flate, JBIG2, CCITT, inline, soft-masked), and a shared image is copied first so
+other pages are untouched. Vector paths and shadings inside the area are removed, and ones
+crossing its edge are clipped to it. Form XObjects are recursed into, and a shared one is
+copied first. Annotations and form fields reaching into the area go whole, with their
+appearance streams and values. The save is a full rewrite and the orphaned objects are not
+written. Metadata, outline entries, structure-tree `ActualText`/`Alt` and page labels
+carrying the removed text go too, and neither the undo history nor the recovery journal
+(#145) keeps the removed content after the save.
+
+**It fails closed.** If anything intersecting an area cannot be removed safely — a Type 3
+font the rewriter cannot take apart, a shared resource that cannot be copied — apply
+refuses, names the page and the reason, and changes nothing. It never saves a
+half-redacted file silently. ADR-005 records why that is the trade and not a limitation.
+
+#### Acceptance criteria
+
+- After applying and saving, the removed strings are not found by PDFium's text
+  extraction, in any stream decompressed by `qpdf --qdf --decode-level=all`, in the raw
+  bytes as ASCII, UTF-16 or PDF hex digits, or in `/Info`, XMP, the outline or any
+  annotation (`tools/leakcheck`).
+- The pixels inside a redacted area are the redaction colour; outside the area, and
+  outside whatever a straddling glyph took with it, the page renders as it did.
+- A partly covered run keeps every surviving glyph within 0.05 pt of where it was.
+- An apply that refuses leaves the document exactly as it was, with the marks still on it.
+- A document saved with unapplied marks carries no trace of them.
+- Whiteout's tooltip and first-use hint say it covers and does not remove, and point at
+  Redact, in en, fr-CA and fr.
+
+---
+
 ## 4. Technical Architecture & UI Framework
 
 ### 4.1 Technology stack summary
@@ -470,7 +543,7 @@ tracked as GitHub issues #11–#20 (milestones *Android M1–M3*, *iOS M0*).
 
 ### 6.2 Cross-platform behavioral contracts
 
-A document edited on one platform must round-trip editable on the others. Four
+A document edited on one platform must round-trip editable on the others. These
 behaviors are contracts — a change on any platform is a breaking change everywhere:
 
 1. **Stamp identity.** Every MegaPDF-placed annotation is tagged with the custom key
@@ -538,6 +611,26 @@ behaviors are contracts — a change on any platform is a breaking change everyw
    coordinates. Adding at the reported rect alone leaves the box a descender's
    depth too high, so undo would not restore the position. Regression tests pin
    this on both mobile platforms (`movingABoxToItsOwnRectIsANoOp`).
+
+5. **Redaction marks are not page objects** *(amendment — 2026-09-17, #173)*. Every
+   other MegaPDF affordance is written into the document: a stamp is an annotation, a
+   whiteout and a text box are page objects. A redaction mark is the exception. It lives
+   in the core, on the open document (`megapdf_redaction_mark` and the list, move, remove
+   and clear calls), and is **never serialised**. Saving a document that carries marks
+   writes a document with no marks in it.
+
+   That asymmetry is the contract, and it is deliberate. The failure #173 exists to stop
+   is a file that *looks* redacted and is not; a mark written into the file would be one,
+   and would also point at where the secrets are. Making it unwritable is a property of
+   the design rather than a rule an app has to remember. Two consequences follow for every
+   platform: marks are drawn by the app, in the overlay layer where find highlights and
+   selection handles already live — the core hands over the rectangles — and marking costs
+   no `FPDFPage_GenerateContent` and invalidates no layout verdict (#137), so marking a
+   dozen words on a heavy page is free.
+
+   What *is* written is the result: after `megapdf_redact_apply`, a plain filled path
+   where the content was, carrying no mark and no annotation, indistinguishable from any
+   other filled rectangle.
 
 ---
 
