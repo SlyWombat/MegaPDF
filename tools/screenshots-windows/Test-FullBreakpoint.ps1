@@ -12,7 +12,7 @@ Send-Path $Pdf
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle
 Set-Size $h 3060 2000 0 0
 Front $h
-Click-Btn ($AE::FromHandle($h)) "FitPageButton" | Out-Null
+Click-Zoom ($AE::FromHandle($h)) "FitPageItem" | Out-Null
 Click-Btn ($AE::FromHandle($h)) "ZoomInButton" | Out-Null
 Start-Sleep -Seconds 1
 Click-InShot $h 870 978          # tick a box so Save shows its dot and Undo enables

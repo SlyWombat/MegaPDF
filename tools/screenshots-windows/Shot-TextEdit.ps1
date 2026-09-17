@@ -1,3 +1,5 @@
+﻿# English retypes "Dana Whitfield". French sets retype the accent the document is
+# missing (#146): fr-CA 'Nom : Hélène Bélanger', fr-FR 'Nom : Céline Lefèvre'; see README.
 param([int]$X = 680, [int]$Y = 755, [string]$Text = "Name: Dana Whitfield")
 . (Join-Path $PSScriptRoot "lib.ps1")
 $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1).MainWindowHandle

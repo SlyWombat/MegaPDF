@@ -31,7 +31,7 @@ the result before continuing. Paths must be **Windows** paths.
 
     # 1. launch, size the window, open the agreement
     .\Setup-Frame.ps1 -W 3060 -T 2000 -Pdf "<repo>\artifacts\store\screenshots\blank-agreement.pdf" `
-                      -Fit "FitPageButton" -ZoomIn 1 -Name probe-frame
+                      -Fit "FitPageItem" -ZoomIn 1 -Name probe-frame
 
     # 2. shot 1 — click the misspelled name, retype it (caret must be visible)
     .\Shot-TextEdit.ps1 -X 1013 -Y 735
@@ -139,10 +139,18 @@ belongs only to shot 1's story.
   setting — so `Click-Btn` takes the ids set in `MainWindow.xaml`: `OpenButton`,
   `SaveButton`, `SaveAsButton`, `ShrinkButton`, `PrintButton`, `UndoButton`,
   `RedoButton`, `SignaturesButton`, `WhiteoutButton`, `AddTextButton`,
-  `FindButton`, `ZoomInButton`, `ZoomOutButton`, `FitWidthButton`,
-  `FitPageButton`, `ViewMenuButton`, `SettingsButton`, and in the signature
-  flyout `AddSignatureFromImageButton`, `TypeSignatureButton`,
-  `DrawSignatureButton`. `BtnByName` still exists for anything else.
+  `FindButton`, `ZoomInButton`, `ZoomOutButton`, `ZoomMenuButton`, `SecurityButton`,
+  `SettingsButton`, and in the signature flyout `AddSignatureFromImageButton`,
+  `TypeSignatureButton`, `DrawSignatureButton`. `BtnByName` still exists for
+  anything else.
+- **The toolbar is one row since #144.** `FitPageButton`, `FitWidthButton` and
+  `ViewMenuButton` are gone. Zoom is `ZoomOutButton`, the `ZoomMenuButton` level
+  drop-down and `ZoomInButton`; the drop-down's menu holds `ActualSizeItem`,
+  `FitWidthItem` and `FitPageItem`, which `Click-Zoom` opens and invokes (it still
+  accepts the old `FitPageButton` name). Save as, Password (`SecurityButton`),
+  Print, Shrink, Find and Settings live in the CommandBar's **More** overflow
+  (`MoreButton`), and narrow windows push low-priority primary commands there too:
+  `Click-Btn` opens More itself when a button is not on the row.
 - **Flyout contents are not in the main window's UIA tree** (separate popup HWND),
   so flyout items are clicked by coordinate, not found by name.
 - **Flyout button names end in a real ellipsis (U+2026)** and PowerShell 5.1 reads
@@ -164,16 +172,28 @@ scripts find buttons by `AutomationId`, and `Send-Path` knows the French picker
 titles. The recipe that produced both sets, with the coordinates read off the
 French probe frame (the layout is the English one, translated):
 
-    python3 tools/screenshots-windows/gen_store_docs.py artifacts/store/screenshots/fr-CA --lang fr
+    python3 tools/screenshots-windows/gen_store_docs.py artifacts/store/screenshots/fr-CA --lang fr-CA
     $env:MEGAPDF_SHOTDIR = "<repo>\artifacts\store\screenshots\fr-CA"
-    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<shotdir>\blank-agreement.pdf" -Fit FitPageButton -ZoomIn 1 -Name probe-frame
-    .\Shot-TextEdit.ps1 -X 887 -Y 563 -Text 'Nom : Dana Whitfield'
+    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<shotdir>\blank-agreement.pdf" -Fit FitPageItem -ZoomIn 1 -Name probe-frame
+    .\Shot-TextEdit.ps1 -X 887 -Y 563 -Text 'Nom : Hélène Bélanger'     # fr-FR: 'Nom : Céline Lefèvre'
     .\Shot-Checkboxes.ps1 -X 741 -Y1 750 -Y2 807
     .\Open-SignatureFlyout.ps1                      # MegaWoman is the second row
     .\Arm-Signature.ps1 -X 1440 -Y 292 -Notches 7
     .\Place-Signature.ps1 -X 960 -Y 1105            # the click is the signature's centre
     .\Shot-AddText.ps1 -X 1420 -Y 1090 -Text '18 mars 2026'   # press Esc first if the signature is still selected
     .\Shot-Shrink.ps1 -Pdf "<shotdir>\scanned-agreement.pdf" -Out "<shotdir>\scanned-agreement - reduit.pdf"
+
+**The French customer is French, with accents (#146).** English stays Dana
+Whitfield with the "Whitfeld" typo. `gen_store_docs.py --lang fr-CA` writes
+"Nom : Hélène Belanger" and `--lang fr-FR` "Nom : Céline Lefevre", and the on-camera
+fix is the missing accent ("Bélanger", "Lefèvre"), which also shows accented
+editing. The coordinates above were read off the 2026-09-10 frame; re-read them
+before the 2.0 re-shoot. **Type the accents from a PowerShell prompt, or build the
+string from char codes** (`"Nom : H" + [char]0xE9 + "l" + [char]0xE8 + "ne B" + [char]0xE9 + "langer"`):
+text piped to `powershell.exe -Command -` from WSL arrives in the OEM code page and
+types as "H├⌐l├¿ne" (seen 2026-09-17). The inline editor underlines "Bélanger" with a
+spelling squiggle while it is open; commit with Enter before a shot that must not
+show it.
 
 Two more landmines paid for on that run: **arrow keys with nothing selected
 scroll the page**, so nudge only while the signature shows its handles; and

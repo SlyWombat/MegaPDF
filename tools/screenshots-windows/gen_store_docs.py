@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Staging documents for the Microsoft Store screenshots.
 
-Usage: python3 tools/screenshots-windows/gen_store_docs.py [outdir] [--lang fr]
+Usage: python3 tools/screenshots-windows/gen_store_docs.py [outdir] [--lang fr-CA|fr-FR]
 
---lang fr writes the same two documents in French (a Canadian rental agreement,
-so the French screenshots show French chrome over a French form, #91). The
+--lang fr-CA / fr-FR writes the same two documents in French (a rental agreement,
+so the French screenshots show French chrome over a French form, #91). "fr" alone
+means fr-CA. The customer is a French name with accents per listing language (#146):
+fr-CA Hélène Bélanger, fr-FR Céline Lefèvre, and the on-camera fix is the missing
+accent ("Belanger" -> "Bélanger", "Lefevre" -> "Lefèvre") instead of English's
+"Whitfeld" -> "Whitfield". The
 layout — every y coordinate, the box rows, the signature line — is identical,
 so the harness coordinates read off the English frame still land.
 
@@ -28,7 +32,11 @@ from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 # Default alongside the shots themselves; both are build output, not fixtures.
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-LANG = "fr" if "--lang" in sys.argv and sys.argv[sys.argv.index("--lang") + 1] == "fr" else "en"
+LANG_ARG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "en"
+if LANG_ARG not in ("en", "fr", "fr-CA", "fr-FR"):
+    sys.exit(f"unknown --lang {LANG_ARG}: use en, fr-CA or fr-FR")
+LANG = "en" if LANG_ARG == "en" else "fr"
+FR_NAME = {"fr-FR": ("Céline Lefevre", "Céline Lefèvre")}.get(LANG_ARG, ("Hélène Belanger", "Hélène Bélanger"))
 OUT = ARGS[0] if ARGS else os.path.join(REPO, "artifacts", "store", "screenshots")
 os.makedirs(OUT, exist_ok=True)
 ARIAL = "/mnt/c/Windows/Fonts/arial.ttf"
@@ -64,7 +72,7 @@ BODY_FR = [
     ("r", 11, 672, "nommé ci-dessous et couvre l'équipement loué, les options de livraison et les"),
     ("r", 11, 656, "conditions d'assurance décrites aux sections 1 à 4 du présent document."),
     ("b", 13, 620, "Client"),
-    ("r", 12, 596, "Nom : Dana Whitfeld"),
+    ("r", 12, 596, "Nom : " + FR_NAME[0]),
     ("r", 12, 576, "Période de location : du 14 au 18 mars"),
     ("b", 13, 540, "Options"),
     ("b", 13, 420, "Équipement"),
@@ -80,7 +88,7 @@ BODY_FR = [
 ]
 BOXES_FR = [(508, "Livraison et ramassage inclus"), (482, "Assurance dommages acceptée"),
             (456, "Tarif fin de semaine prolongée")]
-LABELS_FR = {"sign": "Signez au-dessus de la ligne", "date": "Date", "typo": "Whitfeld", "fixed": "Whitfield"}
+LABELS_FR = {"sign": "Signez au-dessus de la ligne", "date": "Date", "typo": FR_NAME[0], "fixed": FR_NAME[1]}
 
 BODY, BOXES, LABELS = (BODY_FR, BOXES_FR, LABELS_FR) if LANG == "fr" else (BODY_EN, BOXES_EN, LABELS_EN)
 SIG_LINE_Y = 150

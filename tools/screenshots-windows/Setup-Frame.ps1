@@ -1,4 +1,4 @@
-param([int]$W = 2800, [int]$T = 2000, [string]$Pdf = "", [int]$ZoomIn = 0, [string]$Fit = "FitPageButton", [string]$Name = "probe-width")
+param([int]$W = 2800, [int]$T = 2000, [string]$Pdf = "", [int]$ZoomIn = 0, [string]$Fit = "FitPageItem", [string]$Name = "probe-width")
 . (Join-Path $PSScriptRoot "lib.ps1")
 $p = Start-App
 if (-not $p) { Write-Host "!! app did not start"; exit 1 }
@@ -16,7 +16,7 @@ $h = $p.MainWindowHandle
     Front $h
 }
 $root = $AE::FromHandle($h)
-if ($Fit) { Click-Btn $root $Fit | Out-Null }
+if ($Fit) { Click-Zoom $root $Fit | Out-Null }
 for ($i = 0; $i -lt $ZoomIn; $i++) { Click-Btn $root "ZoomInButton" | Out-Null }
 Start-Sleep -Seconds 2
 Blur $h

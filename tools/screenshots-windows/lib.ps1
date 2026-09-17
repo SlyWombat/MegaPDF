@@ -119,10 +119,52 @@ function BtnByName($root, $name) {
     $and = New-Object System.Windows.Automation.AndCondition($c1, $c2)
     return $root.FindFirst($global:TS::Descendants, $and)
 }
+function ById($root, $id, $type) {
+    $c1 = New-Object System.Windows.Automation.PropertyCondition($global:AE::AutomationIdProperty, $id)
+    $c2 = New-Object System.Windows.Automation.PropertyCondition($global:AE::ControlTypeProperty, $type)
+    $and = New-Object System.Windows.Automation.AndCondition($c1, $c2)
+    return $root.FindFirst($global:TS::Descendants, $and)
+}
+# Since #144 the toolbar is one CommandBar row: Save as, Password, Print, Shrink, Find
+# and Settings live in its "More" overflow (the CommandBar template's MoreButton), and
+# low-priority primary commands move there too when the window is narrow. A command
+# that is not on the row is invoked by opening More first.
+function Open-More($root) {
+    $more = BtnById $root "MoreButton"
+    if (-not $more) { Write-Host "!! no More button"; return $false }
+    $more.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Start-Sleep -Milliseconds 900
+    return $true
+}
 function Click-Btn($root, $id) {
     $b = BtnById $root $id
+    if (-not $b -or $b.Current.IsOffscreen) {
+        if (Open-More $root) { $b = BtnById $root $id }
+    }
     if (-not $b) { Write-Host "!! no button with AutomationId '$id'"; return $false }
     $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Start-Sleep -Milliseconds 900
+    return $true
+}
+# Zoom is one control since #144: the level is a drop-down whose menu holds Actual size
+# (ActualSizeItem), Fit width (FitWidthItem), Fit page (FitPageItem) and the presets.
+# The old FitPageButton id is accepted and mapped, so older notes still run.
+function Click-Zoom($root, $id) {
+    if ($id -eq "FitPageButton") { $id = "FitPageItem" }
+    if ($id -eq "FitWidthButton") { $id = "FitWidthItem" }
+    $dd = ById $root "ZoomMenuButton" $global:CT::Button
+    if (-not $dd -or $dd.Current.IsOffscreen) {
+        if (Open-More $root) { $dd = ById $root "ZoomMenuButton" $global:CT::Button }
+    }
+    if (-not $dd) { Write-Host "!! no zoom menu"; return $false }
+    $ec = $null
+    if ($dd.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ec)) { $ec.Expand() }
+    else { $dd.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke() }
+    Start-Sleep -Milliseconds 900
+    $item = ById $root $id $global:CT::MenuItem
+    if (-not $item) { $item = ById $global:AE::RootElement $id $global:CT::MenuItem }
+    if (-not $item) { Write-Host "!! no zoom menu item '$id'"; [System.Windows.Forms.SendKeys]::SendWait("{ESC}"); return $false }
+    $item.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     Start-Sleep -Milliseconds 900
     return $true
 }

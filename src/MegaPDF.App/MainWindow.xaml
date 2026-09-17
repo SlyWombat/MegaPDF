@@ -150,13 +150,13 @@
                     AutomationProperties.AutomationId="ZoomMenuButton">
                     <DropDownButton.Flyout>
                         <MenuFlyout x:Name="ZoomMenu" Placement="BottomEdgeAlignedLeft" Opening="OnZoomMenuOpening">
-                            <MenuFlyoutItem x:Name="ActualSizeItem" Click="OnActualSizeClicked" KeyboardAcceleratorTextOverride="Ctrl+0">
+                            <MenuFlyoutItem x:Name="ActualSizeItem" AutomationProperties.AutomationId="ActualSizeItem" Click="OnActualSizeClicked" KeyboardAcceleratorTextOverride="Ctrl+0">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE9A8;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Name="FitWidthItem" Click="OnFitWidthClicked">
+                            <MenuFlyoutItem x:Name="FitWidthItem" AutomationProperties.AutomationId="FitWidthItem" Click="OnFitWidthClicked">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE9A6;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
-                            <MenuFlyoutItem x:Name="FitPageItem" Click="OnFitPageClicked">
+                            <MenuFlyoutItem x:Name="FitPageItem" AutomationProperties.AutomationId="FitPageItem" Click="OnFitPageClicked">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE740;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
                             <MenuFlyoutSeparator x:Name="ZoomPresetsSeparator" />
