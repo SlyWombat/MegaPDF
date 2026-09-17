@@ -1,0 +1,142 @@
+--- a/core/fpdfapi/page/cpdf_pageimagecache.cpp
++++ b/core/fpdfapi/page/cpdf_pageimagecache.cpp
+@@ -34,6 +34,52 @@
+ 
+ namespace {
+ 
++// The most a reduced copy of a huge image may take (MegaPDF): a 32-megapixel RGB
++// render at the device size, under the page cache's 100 MB limit.
++constexpr uint64_t kMaxReducedImageBytes = 96 * 1024 * 1024;
++
++// A huge image (kHugeImageSize and over) is never realized, and its size keeps it
++// over the page cache's limit, so CacheOptimization() drops it after every render and
++// the next render decodes the whole stream again: over a second for a 20,000 x 15,000
++// px Flate image, at any zoom. When the render needs far fewer pixels, keep an
++// area-averaged copy instead, at twice the device size in each direction where the
++// image has them (as JPX and DCT decoding skip levels), at most
++// kMaxReducedImageBytes, and never under the device size. IsCacheValid() already
++// compares a cached bitmap with the size a later render needs, so a larger render
++// decodes again and replaces the copy. A huge image cached whole (a render too large
++// to reduce for) is reduced the next time a smaller render finds it: its lazy DIB
++// counts as small in the cache, so it is never dropped, and every render through it
++// decodes the stream again. Returns null when there is nothing to gain.
++RetainPtr<CFX_DIBBase> ReduceHugeImage(const RetainPtr<CFX_DIBBase>& image,
++                                       const CFX_Size& required) {
++  if (!image || required.width <= 0 || required.height <= 0 ||
++      image->GetBPP() < 8) {
++    return nullptr;
++  }
++  const uint64_t width = image->GetWidth();
++  const uint64_t height = image->GetHeight();
++  const uint64_t bytes_per_pixel = image->GetBPP() / 8;
++  if (static_cast<uint64_t>(image->GetPitch()) * height < kHugeImageSize) {
++    return nullptr;
++  }
++  for (const uint64_t factor : {4u, 3u, 2u}) {  // in halves: 2x, 1.5x, 1x
++    const uint64_t dest_width =
++        std::min<uint64_t>(width, (required.width * factor + 1) / 2);
++    const uint64_t dest_height =
++        std::min<uint64_t>(height, (required.height * factor + 1) / 2);
++    if (dest_width * dest_height * 4 > width * height) {
++      return nullptr;  // not a quarter of the pixels: keep the upstream path
++    }
++    if (dest_width * dest_height * bytes_per_pixel > kMaxReducedImageBytes) {
++      continue;
++    }
++    return image->StretchTo(static_cast<int>(dest_width),
++                            static_cast<int>(dest_height),
++                            FXDIB_ResampleOptions(), nullptr);
++  }
++  return nullptr;
++}
++
+ struct CacheInfo {
+   CacheInfo(uint32_t t, RetainPtr<const CPDF_Stream> stream)
+       : time(t), pStream(std::move(stream)) {}
+@@ -185,6 +231,9 @@
+   cur_find_cache_ = it != image_cache_.end();
+   if (cur_find_cache_) {
+     cur_image_cache_entry_ = it->second.get();
++    cache_size_ -= cur_image_cache_entry_->EstimateSize();
++    cur_image_cache_entry_->ReduceCached(max_size_required);
++    cache_size_ += cur_image_cache_entry_->EstimateSize();
+   } else {
+     cur_image_cache_entry_ = std::make_unique<Entry>(std::move(pImage));
+   }
+@@ -279,6 +328,7 @@
+     return CPDF_DIB::LoadState::kSuccess;
+   }
+ 
++  max_size_required_ = max_size_required;
+   cur_bitmap_ = image_->CreateNewDIB();
+   CPDF_DIB::LoadState ret = cur_bitmap_.AsRaw<CPDF_DIB>()->StartLoadDIBBase(
+       true, pFormResources, pPageResources, bStdCS, eFamily, bLoadMask,
+@@ -319,6 +369,16 @@
+   matte_color_ = cur_bitmap_.AsRaw<CPDF_DIB>()->GetMatteColor();
+   cur_mask_ = cur_bitmap_.AsRaw<CPDF_DIB>()->DetachMask();
+   time_count_ = pPageImageCache->GetTimeCount();
++  if (cached_set_max_size_required_) {
++    if (RetainPtr<CFX_DIBBase> reduced =
++            ReduceHugeImage(cur_bitmap_, max_size_required_)) {
++      cur_bitmap_ = std::move(reduced);
++    }
++    if (RetainPtr<CFX_DIBBase> reduced =
++            ReduceHugeImage(cur_mask_, max_size_required_)) {
++      cur_mask_ = std::move(reduced);
++    }
++  }
+   if (cur_bitmap_->GetPitch() * cur_bitmap_->GetHeight() < kHugeImageSize) {
+     cached_bitmap_ = MakeCachedImage(cur_bitmap_, /*realize_hint=*/true);
+     cur_bitmap_.Reset();
+@@ -334,6 +394,30 @@
+   CalcSize();
+ }
+ 
++void CPDF_PageImageCache::Entry::ReduceCached(
++    const CFX_Size& max_size_required) {
++  if (!cached_bitmap_ || max_size_required.width == 0 ||
++      max_size_required.height == 0 || !IsCacheValid(max_size_required)) {
++    return;
++  }
++  bool reduced_any = false;
++  if (RetainPtr<CFX_DIBBase> reduced =
++          ReduceHugeImage(cached_bitmap_, max_size_required)) {
++    cached_bitmap_ = std::move(reduced);
++    reduced_any = true;
++  }
++  if (RetainPtr<CFX_DIBBase> reduced =
++          ReduceHugeImage(cached_mask_, max_size_required)) {
++    cached_mask_ = std::move(reduced);
++    reduced_any = true;
++  }
++  if (reduced_any) {
++    cached_set_max_size_required_ = true;
++    max_size_required_ = max_size_required;
++    CalcSize();
++  }
++}
++
+ void CPDF_PageImageCache::Entry::CalcSize() {
+   cache_size_ = 0;
+   if (cached_bitmap_) {
+--- a/core/fpdfapi/page/cpdf_pageimagecache.h
++++ b/core/fpdfapi/page/cpdf_pageimagecache.h
+@@ -55,6 +55,9 @@
+     ~Entry();
+ 
+     void Reset();
++    // Swaps a huge cached image for a copy reduced towards `max_size_required`
++    // when that render can use one (MegaPDF).
++    void ReduceCached(const CFX_Size& max_size_required);
+     uint32_t EstimateSize() const { return cache_size_; }
+     uint32_t GetMatteColor() const { return matte_color_; }
+     uint32_t GetTimeCount() const { return time_count_; }
+@@ -91,6 +94,8 @@
+     RetainPtr<CFX_DIBBase> cached_bitmap_;
+     RetainPtr<CFX_DIBBase> cached_mask_;
+     bool cached_set_max_size_required_ = false;
++    // The device size the load was asked for; a huge image is kept reduced towards it.
++    CFX_Size max_size_required_;
+   };
+ 
+   void ClearImageCacheEntry(const CPDF_Stream* pStream);
