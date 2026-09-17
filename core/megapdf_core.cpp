@@ -78,6 +78,15 @@ struct FileSource {
     bool open = false;
 };
 
+// A redaction mark (#173, contract 8). The core's own: never a page object, so a document
+// saved with marks on it cannot carry them, and marking costs no content regeneration.
+// `bounds` is crop space on `page_index`, as the caller gave it.
+struct RedactionMark {
+    int id;
+    int page_index;
+    megapdf_rect bounds;
+};
+
 struct megapdf_document {
     std::vector<unsigned char> bytes;   // FPDF_LoadMemDocument64 needs the buffer alive for the document's life.
     FileSource source;                  // ...or the file it is read from, for a megapdf_open_file() document.
@@ -98,6 +107,12 @@ struct megapdf_document {
     // copy that is still protected (#132). Memory only; megapdf_close() wipes it.
     std::string unlock;
     bool has_unlock = false;
+    // Contract 8 (#173). Marks live here, never in the file; ids are never reused.
+    std::vector<RedactionMark> redactions;
+    int next_redaction_id = 1;
+    // A redaction that failed halfway: the document may no longer be saved, so a
+    // half-redacted file can never be written.
+    bool redaction_poisoned = false;
 };
 
 // Page objects taken off a page and kept for undo. One object for megapdf_detach_object();
@@ -3713,3 +3728,1043 @@ MEGAPDF_API size_t megapdf_map_to_standard_font(const char* original_name, char*
 
 }  // extern "C"
 
+// --------------------------------------------------------------------------
+// Contract 8: redaction (#173, ADR-005)
+// --------------------------------------------------------------------------
+//
+// A whiteout covers; a redaction removes. Apply runs in three phases — plan, rehearse,
+// execute — so that a document is either fully redacted or not touched at all. The plan
+// is read-only and classifies everything intersecting a marked area; the rehearsal is the
+// #118 dry run on a copy of the page with the areas masked out of the compare, so the
+// guard proves nothing OUTSIDE the areas moved; execute repeats the plan on the document
+// and checks the result in process.
+//
+// Positions are the hard part. A run only partly covered is rebuilt from the character
+// origins read off the page's text layer and written back with FPDFText_SetPositions,
+// which takes offsets in TEXT space (measured: 50 text units under a matrix of scale 2
+// land 100 points apart). So `Tc`, `Tw`, `TJ` kerning and horizontal scaling are
+// reproduced by construction rather than re-derived from font widths.
+
+namespace {
+
+// A marked area in the page's own user space, which is where page objects live.
+struct Area {
+    double l, b, r, t;
+};
+
+bool Overlaps(const Area& a, double l, double b, double r, double t) {
+    return l < a.r && r > a.l && b < a.t && t > a.b;
+}
+
+bool Inside(const Area& a, double l, double b, double r, double t) {
+    return l >= a.l && r <= a.r && b >= a.b && t <= a.t;
+}
+
+bool OverlapsAny(const std::vector<Area>& areas, double l, double b, double r, double t) {
+    for (const Area& a : areas) if (Overlaps(a, l, b, r, t)) return true;
+    return false;
+}
+
+// Inside a single area. The union of two areas may cover a box neither covers alone; such
+// a box is clipped rather than removed, which removes the same ink.
+bool InsideAny(const std::vector<Area>& areas, double l, double b, double r, double t) {
+    for (const Area& a : areas) if (Inside(a, l, b, r, t)) return true;
+    return false;
+}
+
+bool ObjectOverlaps(const std::vector<Area>& areas, FPDF_PAGEOBJECT obj) {
+    float l = 0, b = 0, r = 0, t = 0;
+    return FPDFPageObj_GetBounds(obj, &l, &b, &r, &t) && OverlapsAny(areas, l, b, r, t);
+}
+
+// One character of a run as the page's text layer reports it: what it is, where its
+// origin sits and how much room it takes. All page space.
+struct CharPos {
+    unsigned int unicode;
+    double ox, oy;          // FPDFText_GetCharOrigin
+    double l, b, r, t;      // FPDFText_GetLooseCharBox: a glyph reaching into the area by
+                            // its side bearing alone still counts as covered
+    bool generated;         // PDFium's own separator, not a glyph the document draws
+};
+
+using ObjectChars = std::map<FPDF_PAGEOBJECT, std::vector<CharPos>>;
+
+// Every text object's characters, read once for the page.
+ObjectChars ReadObjectChars(FPDF_TEXTPAGE text_page) {
+    ObjectChars out;
+    if (text_page == nullptr) return out;
+    const int count = FPDFText_CountChars(text_page);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(text_page, i);
+        if (obj == nullptr) continue;
+        CharPos c{};
+        c.unicode = FPDFText_GetUnicode(text_page, i);
+        c.generated = FPDFText_IsGenerated(text_page, i) == 1;
+        FPDFText_GetCharOrigin(text_page, i, &c.ox, &c.oy);
+        FS_RECTF box{};
+        if (FPDFText_GetLooseCharBox(text_page, i, &box)) {
+            c.l = box.left; c.b = box.bottom; c.r = box.right; c.t = box.top;
+        } else {
+            double l = 0, b = 0, r = 0, t = 0;
+            FPDFText_GetCharBox(text_page, i, &l, &r, &b, &t);   // left, right, bottom, top
+            c.l = l; c.b = b; c.r = r; c.t = t;
+        }
+        out[obj].push_back(c);
+    }
+    return out;
+}
+
+// What the plan says to do with one object.
+enum class RAct { None, Remove, Rewrite };
+
+struct RObject {
+    int index = -1;
+    RAct act = RAct::None;
+    std::vector<CharPos> survivors;   // Rewrite: the glyphs that stay, in reading order
+    int removed_chars = 0;            // glyphs the area covered, for the report
+    bool hidden_copy = false;         // rebuilt from its run's survivors, shifted by (dx, dy) (#136)
+    double dx = 0, dy = 0;
+};
+
+// Whether the glyphs that stay can be drawn back in the run's own font. A Type 3 font,
+// whose glyphs are content streams rather than outlines, answers no for everything, which
+// is exactly the refusal #173 asks for; so does a subset font asked for a glyph the
+// document never used (#130, patch 0011). PDFium has no font-type accessor, so the reason
+// reported is FONT_CANNOT_REDRAW until the series gains one.
+bool SurvivorsCanBeRedrawn(FPDF_PAGEOBJECT obj, const std::vector<CharPos>& survivors) {
+    FPDF_FONT font = FPDFTextObj_GetFont(obj);
+    if (font == nullptr) return false;
+    for (const CharPos& c : survivors) {
+        const bool whitespace = c.unicode == 0x20 || c.unicode == 0x09 || c.unicode == 0xA0 ||
+                                (c.unicode >= 0x2000 && c.unicode <= 0x200B) || c.unicode == 0x202F ||
+                                c.unicode == 0x205F || c.unicode == 0x3000;
+        if (!whitespace && !FPDFFont_HasGlyph(font, c.unicode)) return false;
+    }
+    return true;
+}
+
+// The refusal the plan or the execution stopped at.
+struct Refusal {
+    int reason = 0;
+    std::string message;
+};
+
+// Plans the page: what every object intersecting `areas` needs. False, with `refusal` set,
+// when something intersecting cannot be removed safely. Nothing on the page changes.
+bool PlanPageUnlocked(FPDF_PAGE page, const std::vector<Area>& areas, std::vector<RObject>* plan,
+                      std::vector<int>* annots, Refusal* refusal) {
+    plan->clear();
+    annots->clear();
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+    ObjectChars chars;
+    try {
+        chars = ReadObjectChars(text_page);
+    } catch (...) {
+        if (text_page != nullptr) FPDFText_ClosePage(text_page);
+        throw;
+    }
+
+    const int count = FPDFPage_CountObjects(page);
+    std::vector<int> touched_runs;      // text objects the areas cover, whole or in part
+    bool ok = true;
+
+    for (int i = 0; i < count && ok; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, i);
+        if (obj == nullptr) continue;
+        const int type = FPDFPageObj_GetType(obj);
+        float l = 0, b = 0, r = 0, t = 0;
+        if (!FPDFPageObj_GetBounds(obj, &l, &b, &r, &t)) continue;
+        if (!OverlapsAny(areas, l, b, r, t)) continue;
+
+        switch (type) {
+            case FPDF_PAGEOBJ_TEXT: {
+                const auto it = chars.find(obj);
+                if (it == chars.end()) {
+                    // No characters of its own in the text layer: either a hidden copy
+                    // (#136, taken below with its run) or an object that draws nothing.
+                    // Its bounds overlap, so if it is neither it must go whole.
+                    RObject o; o.index = i; o.act = RAct::Remove;
+                    plan->push_back(o);
+                    break;
+                }
+                std::vector<CharPos> survivors;
+                int covered = 0;
+                for (const CharPos& c : it->second) {
+                    if (c.generated) continue;   // PDFium's separator, not a glyph in the file
+                    if (OverlapsAny(areas, c.l, c.b, c.r, c.t)) covered++;
+                    else survivors.push_back(c);
+                }
+                if (covered == 0) break;                    // only the bounds overlapped
+                touched_runs.push_back(i);
+                RObject o; o.index = i; o.removed_chars = covered;
+                if (survivors.empty()) {
+                    o.act = RAct::Remove;
+                } else if (!SurvivorsCanBeRedrawn(obj, survivors)) {
+                    refusal->reason = MEGAPDF_REDACT_FONT_CANNOT_REDRAW;
+                    refusal->message = "the glyphs outside the area cannot be drawn back in the run's own font";
+                    ok = false;
+                } else {
+                    o.act = RAct::Rewrite;
+                    o.survivors = std::move(survivors);
+                }
+                if (ok) plan->push_back(o);
+                break;
+            }
+            case FPDF_PAGEOBJ_IMAGE:
+                // Handled by overwriting the stored pixels; planned as a rewrite with no survivors.
+                { RObject o; o.index = i; o.act = RAct::Rewrite; plan->push_back(o); }
+                break;
+            case FPDF_PAGEOBJ_PATH:
+            case FPDF_PAGEOBJ_SHADING:
+                if (InsideAny(areas, l, b, r, t)) {
+                    RObject o; o.index = i; o.act = RAct::Remove;
+                    plan->push_back(o);
+                } else {
+                    refusal->reason = MEGAPDF_REDACT_PDFIUM;
+                    refusal->message = type == FPDF_PAGEOBJ_PATH
+                        ? "a path crosses the edge of the area and cannot be clipped to it yet"
+                        : "a shading crosses the edge of the area and cannot be clipped to it yet";
+                    ok = false;
+                }
+                break;
+            case FPDF_PAGEOBJ_FORM:
+                refusal->reason = MEGAPDF_REDACT_SHARED_FORM;
+                refusal->message = "a form XObject reaches into the area and cannot be copied and changed yet";
+                ok = false;
+                break;
+            default:
+                { RObject o; o.index = i; o.act = RAct::Remove; plan->push_back(o); }
+                break;
+        }
+    }
+
+    // The hidden copies of every touched run go with it (#136): a copy drawn for fake bold
+    // or a shadow is not a run, extracts as empty text, and would otherwise stay on the page.
+    if (ok && !touched_runs.empty()) {
+        std::vector<std::pair<int, int>> copies;
+        try {
+            copies = HiddenCopies(page, text_page, touched_runs);
+        } catch (...) {
+            if (text_page != nullptr) FPDFText_ClosePage(text_page);
+            throw;
+        }
+        for (const auto& copy : copies) {
+            // A copy already planned (its own bounds overlapped) keeps that plan.
+            bool already = false;
+            for (const RObject& o : *plan) if (o.index == copy.first) { already = true; break; }
+            if (already) continue;
+            const RObject* run = nullptr;
+            for (const RObject& o : *plan) if (o.index == copy.second) { run = &o; break; }
+            RObject o; o.index = copy.first; o.hidden_copy = true;
+            if (run == nullptr || run->act == RAct::Remove) {
+                o.act = RAct::Remove;
+            } else {
+                // Rebuilt from its run's survivors, shifted by the offset it is drawn at:
+                // the copy carries no readable characters of its own.
+                float cl = 0, cb = 0, cr = 0, ct = 0, rl = 0, rb = 0, rr = 0, rt = 0;
+                FPDF_PAGEOBJECT cobj = FPDFPage_GetObject(page, copy.first);
+                FPDF_PAGEOBJECT robj = FPDFPage_GetObject(page, copy.second);
+                if (cobj == nullptr || robj == nullptr || !FPDFPageObj_GetBounds(cobj, &cl, &cb, &cr, &ct) ||
+                    !FPDFPageObj_GetBounds(robj, &rl, &rb, &rr, &rt)) {
+                    o.act = RAct::Remove;
+                } else {
+                    o.act = RAct::Rewrite;
+                    o.survivors = run->survivors;
+                    o.removed_chars = run->removed_chars;
+                    o.hidden_copy = true;
+                    o.dx = cl - rl;
+                    o.dy = cb - rb;
+                }
+            }
+            plan->push_back(o);
+        }
+        std::sort(plan->begin(), plan->end(), [](const RObject& a, const RObject& b) { return a.index < b.index; });
+    }
+    if (text_page != nullptr) FPDFText_ClosePage(text_page);
+    if (!ok) return false;
+
+    // Annotations and form fields whose rect reaches into the area go whole.
+    const int annot_count = FPDFPage_GetAnnotCount(page);
+    for (int i = 0; i < annot_count && ok; i++) {
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(page, i);
+        if (annot == nullptr) continue;
+        FS_RECTF rect{};
+        if (FPDFAnnot_GetRect(annot, &rect) &&
+            OverlapsAny(areas, (std::min)(rect.left, rect.right), (std::min)(rect.bottom, rect.top),
+                        (std::max)(rect.left, rect.right), (std::max)(rect.bottom, rect.top))) {
+            annots->push_back(i);
+        }
+        FPDFPage_CloseAnnot(annot);
+    }
+    return ok;
+}
+
+}  // namespace
+
+
+namespace {
+
+// Draws `survivors` — the glyphs of `original` that stay — as one text object modelled on it,
+// shifted by (dx, dy) so a hidden copy is rebuilt where it was drawn (#136). The new object is
+// inserted at `object_index`; the original is removed and destroyed on success, and left
+// exactly where it was on failure.
+//
+// Positions are written with FPDFText_SetPositions, which takes TEXT-space offsets from the
+// object's origin: every glyph lands where the page's text layer said it was, so `Tc`, `Tw`,
+// `TJ` kerning and horizontal scaling survive without being re-derived from font widths.
+bool RewriteRunUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, int object_index,
+                        const std::vector<CharPos>& survivors, double dx, double dy) {
+    FPDF_PAGEOBJECT original = FPDFPage_GetObject(page, object_index);
+    if (original == nullptr || FPDFPageObj_GetType(original) != FPDF_PAGEOBJ_TEXT || survivors.empty()) return false;
+    FPDF_FONT font = FPDFTextObj_GetFont(original);
+    float size = 0;
+    FS_MATRIX m{};
+    if (font == nullptr || !FPDFTextObj_GetFontSize(original, &size) || !FPDFPageObj_GetMatrix(original, &m)) return false;
+    const double det = static_cast<double>(m.a) * m.a + static_cast<double>(m.b) * m.b;
+    if (!(det > 0)) return false;
+
+    std::vector<unsigned short> text;
+    for (const CharPos& c : survivors) {
+        if (c.unicode > 0xFFFF) return false;   // a surrogate pair cannot be positioned per code unit
+        text.push_back(static_cast<unsigned short>(c.unicode));
+    }
+    text.push_back(0);
+
+    FPDF_PAGEOBJECT fresh = FPDFPageObj_CreateTextObj(doc, font, size);
+    if (fresh == nullptr) return false;
+    if (!FPDFText_SetText(fresh, reinterpret_cast<FPDF_WIDESTRING>(text.data()))) {
+        FPDFPageObj_Destroy(fresh);
+        return false;
+    }
+    // Every later glyph at its own recorded origin, projected onto the text x axis in text space.
+    if (survivors.size() > 1) {
+        std::vector<float> positions;
+        for (size_t i = 1; i < survivors.size(); i++) {
+            const double ex = survivors[i].ox - survivors[0].ox;
+            const double ey = survivors[i].oy - survivors[0].oy;
+            positions.push_back(static_cast<float>((ex * m.a + ey * m.b) / det));
+        }
+        if (!FPDFText_SetPositions(fresh, positions.data(), positions.size())) {
+            FPDFPageObj_Destroy(fresh);
+            return false;
+        }
+    }
+    // The first glyph lands on its own origin; the rest follow from the positions above.
+    FS_MATRIX placed = m;
+    placed.e = static_cast<float>(survivors[0].ox + dx);
+    placed.f = static_cast<float>(survivors[0].oy + dy);
+    FPDFPageObj_SetMatrix(fresh, &placed);
+    unsigned int r = 0, g = 0, b = 0, a = 0;
+    if (FPDFPageObj_GetFillColor(original, &r, &g, &b, &a)) FPDFPageObj_SetFillColor(fresh, r, g, b, a);
+    if (FPDFPageObj_GetStrokeColor(original, &r, &g, &b, &a)) FPDFPageObj_SetStrokeColor(fresh, r, g, b, a);
+    float width = 0;
+    if (FPDFPageObj_GetStrokeWidth(original, &width)) FPDFPageObj_SetStrokeWidth(fresh, width);
+    const FPDF_TEXT_RENDERMODE mode = FPDFTextObj_GetTextRenderMode(original);
+    if (mode != FPDF_TEXTRENDERMODE_UNKNOWN) FPDFTextObj_SetTextRenderMode(fresh, mode);
+
+    if (!FPDFPage_RemoveObject(page, original)) {
+        FPDFPageObj_Destroy(fresh);
+        return false;
+    }
+    if (!FPDFPage_InsertObjectAtIndex(page, fresh, static_cast<size_t>(object_index))) {
+        FPDFPage_InsertObjectAtIndex(page, original, static_cast<size_t>(object_index));   // PDFium freed `fresh`
+        return false;
+    }
+    FPDFPageObj_Destroy(original);
+    return true;
+}
+
+// The redacted run reads back as exactly the glyphs that were meant to stay, each within
+// `tolerance` points of where it was. PDFium's own separator characters are ignored: a gap the
+// removal opened up makes it generate one, which is a reading aid and not a glyph in the file.
+bool RewrittenRunIsExact(FPDF_PAGE page, int object_index, const std::vector<CharPos>& survivors,
+                         double dx, double dy, double tolerance) {
+    FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, object_index);
+    if (obj == nullptr) return false;
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+    if (text_page == nullptr) return false;
+    std::vector<CharPos> got;
+    const int count = FPDFText_CountChars(text_page);
+    for (int i = 0; i < count; i++) {
+        if (FPDFText_GetTextObject(text_page, i) != obj || FPDFText_IsGenerated(text_page, i) == 1) continue;
+        CharPos c{};
+        c.unicode = FPDFText_GetUnicode(text_page, i);
+        FPDFText_GetCharOrigin(text_page, i, &c.ox, &c.oy);
+        got.push_back(c);
+    }
+    FPDFText_ClosePage(text_page);
+    if (got.size() != survivors.size()) return false;
+    for (size_t i = 0; i < got.size(); i++) {
+        if (got[i].unicode != survivors[i].unicode) return false;
+        if (std::fabs(got[i].ox - (survivors[i].ox + dx)) > tolerance) return false;
+        if (std::fabs(got[i].oy - (survivors[i].oy + dy)) > tolerance) return false;
+    }
+    return true;
+}
+
+// Overwrites the pixels of `obj`'s own image data that fall inside `areas` with `colour`
+// (0xRRGGBB), and writes the result back. FPDFImageObj_SetBitmap copies the stream rather
+// than changing it in place (measured), so an image two pages draw only changes on the page
+// that was redacted. Whatever the image was encoded as — DCTDecode, JBIG2Decode,
+// CCITTFaxDecode, Flate — comes back as Flate.
+bool RedactImageUnlocked(FPDF_PAGE page, FPDF_PAGEOBJECT obj, const std::vector<Area>& areas, unsigned int colour,
+                         int* out_pixels) {
+    FS_MATRIX m{};
+    if (!FPDFPageObj_GetMatrix(obj, &m)) return false;
+    // The image fills the unit square under its matrix; invert to land page space in it.
+    const double det = static_cast<double>(m.a) * m.d - static_cast<double>(m.b) * m.c;
+    if (std::fabs(det) < 1e-12) return false;
+
+    FPDF_BITMAP src = FPDFImageObj_GetBitmap(obj);
+    if (src == nullptr) return false;
+    const int w = FPDFBitmap_GetWidth(src), h = FPDFBitmap_GetHeight(src);
+    if (w <= 0 || h <= 0) { FPDFBitmap_Destroy(src); return false; }
+
+    FPDF_BITMAP out = FPDFBitmap_Create(w, h, 1);   // BGRA, alpha channel
+    if (out == nullptr) { FPDFBitmap_Destroy(src); return false; }
+    const int src_format = FPDFBitmap_GetFormat(src);
+    const int src_stride = FPDFBitmap_GetStride(src);
+    const auto* sp = static_cast<const unsigned char*>(FPDFBitmap_GetBuffer(src));
+    auto* dp = static_cast<unsigned char*>(FPDFBitmap_GetBuffer(out));
+    const int dst_stride = FPDFBitmap_GetStride(out);
+    const unsigned char cr = static_cast<unsigned char>((colour >> 16) & 0xFF);
+    const unsigned char cg = static_cast<unsigned char>((colour >> 8) & 0xFF);
+    const unsigned char cb = static_cast<unsigned char>(colour & 0xFF);
+    int painted = 0;
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            // The pixel's centre in the unit square, then in page space. The image's first
+            // row is its top, and the unit square's v axis points up.
+            const double u = (x + 0.5) / w, v = 1.0 - (y + 0.5) / h;
+            const double px = m.a * u + m.c * v + m.e;
+            const double py = m.b * u + m.d * v + m.f;
+            unsigned char* d = dp + static_cast<size_t>(y) * dst_stride + static_cast<size_t>(x) * 4;
+            const bool covered = OverlapsAny(areas, px, py, px, py);
+            if (covered) {
+                d[0] = cb; d[1] = cg; d[2] = cr; d[3] = 0xFF;
+                painted++;
+                continue;
+            }
+            const unsigned char* sq = sp + static_cast<size_t>(y) * src_stride;
+            switch (src_format) {
+                case FPDFBitmap_BGRA:
+                case FPDFBitmap_BGRx: {
+                    const unsigned char* s = sq + static_cast<size_t>(x) * 4;
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2];
+                    d[3] = src_format == FPDFBitmap_BGRA ? s[3] : 0xFF;
+                    break;
+                }
+                case FPDFBitmap_BGR: {
+                    const unsigned char* s = sq + static_cast<size_t>(x) * 3;
+                    d[0] = s[0]; d[1] = s[1]; d[2] = s[2]; d[3] = 0xFF;
+                    break;
+                }
+                case FPDFBitmap_Gray: {
+                    const unsigned char g = sq[x];
+                    d[0] = g; d[1] = g; d[2] = g; d[3] = 0xFF;
+                    break;
+                }
+                default:
+                    FPDFBitmap_Destroy(out);
+                    FPDFBitmap_Destroy(src);
+                    return false;
+            }
+        }
+    }
+    FPDFBitmap_Destroy(src);
+    const bool ok = painted > 0 ? FPDFImageObj_SetBitmap(&page, 1, obj, out) == 1 : true;
+    FPDFBitmap_Destroy(out);
+    if (ok && out_pixels != nullptr) *out_pixels += painted;
+    return ok;
+}
+
+// The solid box where the content was: a plain filled path, no mark, no annotation. Nothing
+// in the saved file says a redaction happened here — the mark itself would be a disclosure.
+bool DrawRedactionBoxUnlocked(FPDF_PAGE page, const Area& area, unsigned int colour) {
+    FPDF_PAGEOBJECT path = FPDFPageObj_CreateNewPath(static_cast<float>(area.l), static_cast<float>(area.b));
+    if (path == nullptr) return false;
+    FPDFPath_LineTo(path, static_cast<float>(area.r), static_cast<float>(area.b));
+    FPDFPath_LineTo(path, static_cast<float>(area.r), static_cast<float>(area.t));
+    FPDFPath_LineTo(path, static_cast<float>(area.l), static_cast<float>(area.t));
+    FPDFPath_Close(path);
+    FPDFPageObj_SetFillColor(path, (colour >> 16) & 0xFF, (colour >> 8) & 0xFF, colour & 0xFF, 0xFF);
+    FPDFPath_SetDrawMode(path, FPDF_FILLMODE_ALTERNATE, 0);
+    // Takes ownership, and frees the path itself when it cannot place it.
+    return FPDFPage_InsertObjectAtIndex(page, path, static_cast<size_t>(FPDFPage_CountObjects(page))) == 1;
+}
+
+// Carries out `plan` on `page`. Objects are taken highest index first, so every index is
+// still the object's own when it is reached. False, with `refusal` set, when a step fails;
+// the page is then half done, which only the rehearsal's scratch copy ever sees.
+bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Area>& areas,
+                         const std::vector<RObject>& plan, const std::vector<int>& annots,
+                         const megapdf_redact_options& opt, megapdf_redaction_counts* counts, Refusal* refusal) {
+    // Annotations first: removing one does not move a page object's index.
+    for (size_t k = annots.size(); k-- > 0;) {
+        if (!FPDFPage_RemoveAnnot(page, annots[k])) {
+            refusal->reason = MEGAPDF_REDACT_ANNOTATION;
+            refusal->message = "an annotation reaching into the area could not be removed";
+            return false;
+        }
+        counts->annotations++;
+    }
+    for (size_t k = plan.size(); k-- > 0;) {
+        const RObject& o = plan[k];
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, o.index);
+        if (obj == nullptr) {
+            refusal->reason = MEGAPDF_REDACT_PDFIUM;
+            refusal->message = "the page changed while the redaction was being applied";
+            return false;
+        }
+        const int type = FPDFPageObj_GetType(obj);
+        if (o.act == RAct::Remove) {
+            if (!FPDFPage_RemoveObject(page, obj)) {
+                refusal->reason = MEGAPDF_REDACT_PDFIUM;
+                refusal->message = "PDFium would not take the object off the page";
+                return false;
+            }
+            FPDFPageObj_Destroy(obj);
+            counts->characters += o.removed_chars;
+            if (type == FPDF_PAGEOBJ_TEXT && o.hidden_copy) counts->hidden_copies++;
+            else if (type == FPDF_PAGEOBJ_TEXT) counts->text_runs++;
+            else if (type == FPDF_PAGEOBJ_PATH) counts->paths++;
+            else if (type == FPDF_PAGEOBJ_SHADING) counts->shadings++;
+            else if (type == FPDF_PAGEOBJ_IMAGE) counts->images++;
+            continue;
+        }
+        if (type == FPDF_PAGEOBJ_IMAGE) {
+            int pixels = 0;
+            if (!RedactImageUnlocked(page, obj, areas, opt.colour, &pixels)) {
+                refusal->reason = MEGAPDF_REDACT_IMAGE;
+                refusal->message = "an image's stored pixels could not be read or written back";
+                return false;
+            }
+            counts->images++;
+            continue;
+        }
+        // A run only partly covered, or the hidden copy of one.
+        if (!RewriteRunUnlocked(doc, page, o.index, o.survivors, o.dx, o.dy) ||
+            !RewrittenRunIsExact(page, o.index, o.survivors, o.dx, o.dy, 0.05)) {
+            refusal->reason = MEGAPDF_REDACT_FONT_CANNOT_REDRAW;
+            refusal->message = "the glyphs outside the area could not be drawn back where they were";
+            return false;
+        }
+        counts->characters += o.hidden_copy ? 0 : o.removed_chars;
+        if (o.hidden_copy) counts->hidden_copies++;
+        else counts->partial_runs++;
+    }
+    if (!opt.leave_area_bare) {
+        for (const Area& a : areas) {
+            if (!DrawRedactionBoxUnlocked(page, a, opt.colour)) {
+                refusal->reason = MEGAPDF_REDACT_PDFIUM;
+                refusal->message = "the redaction box could not be drawn";
+                return false;
+            }
+        }
+    }
+    if (!FPDFPage_GenerateContent(page)) {
+        refusal->reason = MEGAPDF_REDACT_PDFIUM;
+        refusal->message = "PDFium could not regenerate the page's content after the redaction";
+        return false;
+    }
+    return true;
+}
+
+
+// The #118 guard, told about the areas (#173). The redaction is applied to a copy of the
+// page, saved, reopened and compared with a reopened copy of the page as it was — the same
+// stages, budgets and renders as a body-text edit, with one addition: the marked areas are
+// masked out of the render compare (they are meant to change), and the text compare pairs
+// only the runs that do not reach into an area. So what the guard proves is exactly what
+// #173 asks it to: nothing OUTSIDE the area moved.
+bool CompareRedaction(FPDF_PAGE was_page, FPDF_PAGE reopened, const std::vector<Area>& areas,
+                      megapdf_layout_verdict* out) {
+    megapdf_layout_verdict v{};
+    const ScratchShot shot_was = RenderScratchPage(was_page);
+    const ScratchShot shot_now = RenderScratchPage(reopened);
+    if (shot_was.w == 0 || shot_now.w == 0 || shot_was.w != shot_now.w || shot_was.h != shot_now.h) return false;
+
+    // 1 where a marked area covers the pixel: changes there are the redaction's own.
+    std::vector<unsigned char> masked(static_cast<size_t>(shot_was.w) * static_cast<size_t>(shot_was.h), 0);
+    for (const Area& a : areas) {
+        PaintBox(was_page, shot_was, PageBox{static_cast<float>(a.l), static_cast<float>(a.b),
+                                             static_cast<float>(a.r), static_cast<float>(a.t)},
+                 1.0f, 1, &masked);
+    }
+    int outside = 0, changed = 0;
+    for (size_t px = 0; px < masked.size(); px++) {
+        if (masked[px] != 0) continue;
+        outside++;
+        const size_t i = px * 4;
+        if (std::abs(shot_was.px[i] - shot_now.px[i]) + std::abs(shot_was.px[i + 1] - shot_now.px[i + 1]) +
+            std::abs(shot_was.px[i + 2] - shot_now.px[i + 2]) > kShotThreshold) {
+            changed++;
+        }
+    }
+    v.total_pixels = outside;
+    v.changed_pixels = changed;
+    if (changed > 0) v.where = MEGAPDF_LAYOUT_WHERE_OTHER;
+
+    // Every run that did not reach into an area must still be there, with the same text,
+    // where it was. Objects were removed, so the two pages have different run counts and the
+    // runs cannot be paired by position in the list: each is matched to the nearest run with
+    // the same text.
+    const std::vector<ScratchRun> runs_was = ScratchRuns(was_page);
+    const std::vector<ScratchRun> runs_now = ScratchRuns(reopened);
+    const double unit = FPDFPage_GetUserUnit(was_page);
+    std::vector<char> taken(runs_now.size(), 0);
+    bool text_changed = false;
+    double worst = 0;
+    for (const ScratchRun& was : runs_was) {
+        if (OverlapsAny(areas, was.left, was.bottom, was.right, was.top)) continue;   // the redaction's own
+        double best = 1e30;
+        size_t best_index = runs_now.size();
+        for (size_t j = 0; j < runs_now.size(); j++) {
+            if (taken[j] != 0 || runs_now[j].text != was.text) continue;
+            const double shift = (std::max)({std::fabs(was.left - runs_now[j].left), std::fabs(was.bottom - runs_now[j].bottom),
+                                             std::fabs(was.right - runs_now[j].right), std::fabs(was.top - runs_now[j].top)});
+            if (shift < best) { best = shift; best_index = j; }
+        }
+        if (best_index == runs_now.size()) { text_changed = true; break; }
+        taken[best_index] = 1;
+        worst = (std::max)(worst, best * unit);
+    }
+    v.max_shift_pt = worst;
+    const bool moved = worst > kRunShiftPt;
+    const bool render_kept = static_cast<size_t>(changed) * 2000 <= static_cast<size_t>(outside);   // at most 0.05%
+    v.editable = render_kept && !text_changed && !moved ? 1 : 0;
+    v.cause = text_changed ? MEGAPDF_LAYOUT_TEXT_CHANGED
+            : moved        ? MEGAPDF_LAYOUT_TEXT_MOVED
+            : !render_kept ? MEGAPDF_LAYOUT_RENDER
+                           : MEGAPDF_LAYOUT_OK;
+    *out = v;
+    return true;
+}
+
+// Inside every area, nothing readable is left: no text the page's text layer can extract,
+// and every image pixel the redaction painted reads back as the redaction colour. Run on the
+// rehearsal's reopened page and again on the document itself, so a leak is caught where it
+// can still be refused.
+bool RedactionLeftNothingUnlocked(FPDF_PAGE page, const std::vector<Area>& areas,
+                                  const megapdf_redact_options& opt, Refusal* refusal) {
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
+    if (text_page == nullptr) {
+        refusal->reason = MEGAPDF_REDACT_PDFIUM;
+        refusal->message = "the redacted page's text could not be read back";
+        return false;
+    }
+    const int count = FPDFText_CountChars(text_page);
+    for (int i = 0; i < count; i++) {
+        if (FPDFText_IsGenerated(text_page, i) == 1) continue;
+        const unsigned int u = FPDFText_GetUnicode(text_page, i);
+        if (u == 0 || u == 0x20 || u == 0x0A || u == 0x0D || u == 0x09) continue;
+        FS_RECTF box{};
+        if (!FPDFText_GetLooseCharBox(text_page, i, &box)) continue;
+        if (OverlapsAny(areas, box.left, box.bottom, box.right, box.top)) {
+            FPDFText_ClosePage(text_page);
+            refusal->reason = MEGAPDF_REDACT_LAYOUT;
+            refusal->message = "text was still readable inside the area after the redaction";
+            return false;
+        }
+    }
+    FPDFText_ClosePage(text_page);
+    (void)opt;
+    return true;
+}
+
+// Phase 2 for one page: apply the plan to a scratch copy, save it, reopen it, and judge it
+// against a reopened copy of the page as it was. Nothing on the document is touched.
+bool RehearsePageUnlocked(megapdf_document* d, int page_index, const std::vector<Area>& areas,
+                          const megapdf_redact_options& opt, Refusal* refusal) {
+    refusal->reason = MEGAPDF_REDACT_PDFIUM;
+    refusal->message = "the redaction could not be rehearsed on a copy of the page";
+    FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
+    if (scratch == nullptr) return false;
+    const int indices[1] = {page_index};
+    FPDF_PAGE page = FPDF_ImportPagesByIndex(scratch, d->doc, indices, 1, 0) ? FPDF_LoadPage(scratch, 0) : nullptr;
+    if (page == nullptr) {
+        FPDF_CloseDocument(scratch);
+        return false;
+    }
+    // Compare like with like: PDFium resolves a non-embedded font once per document against a
+    // process-wide cache, so the page is rendered once before the copies are judged (#128).
+    WarmFontsUnlocked(d->doc, page_index, nullptr, nullptr);
+
+    ScratchWriter before{};
+    before.fw.version = 1;
+    before.fw.WriteBlock = ScratchWriteBlock;
+    bool ok = FPDF_SaveAsCopy(scratch, &before.fw, 0) == 1;
+
+    megapdf_redaction_counts counts{};
+    std::vector<RObject> plan;
+    std::vector<int> annots;
+    if (ok) ok = PlanPageUnlocked(page, areas, &plan, &annots, refusal);
+    if (ok) ok = ExecutePageUnlocked(scratch, page, areas, plan, annots, opt, &counts, refusal);
+    FPDF_ClosePage(page);
+
+    ScratchWriter after{};
+    after.fw.version = 1;
+    after.fw.WriteBlock = ScratchWriteBlock;
+    if (ok) ok = FPDF_SaveAsCopy(scratch, &after.fw, 0) == 1;
+    FPDF_CloseDocument(scratch);
+    if (!ok) return false;
+
+    FPDF_DOCUMENT was = FPDF_LoadMemDocument64(before.out.data(), before.out.size(), nullptr);
+    FPDF_DOCUMENT now = FPDF_LoadMemDocument64(after.out.data(), after.out.size(), nullptr);
+    FPDF_PAGE was_page = was != nullptr ? FPDF_LoadPage(was, 0) : nullptr;
+    FPDF_PAGE now_page = now != nullptr ? FPDF_LoadPage(now, 0) : nullptr;
+    ok = was_page != nullptr && now_page != nullptr;
+    megapdf_layout_verdict verdict{};
+    if (ok) ok = CompareRedaction(was_page, now_page, areas, &verdict);
+    if (ok && verdict.editable != 1) {
+        g_last_layout = verdict;
+        refusal->reason = MEGAPDF_REDACT_LAYOUT;
+        refusal->message = verdict.cause == MEGAPDF_LAYOUT_TEXT_CHANGED
+                               ? "text outside the area would be lost or changed by the redaction"
+                           : verdict.cause == MEGAPDF_LAYOUT_TEXT_MOVED
+                               ? "text outside the area would move by more than half a point"
+                               : "the page would look different outside the area";
+        ok = false;
+    }
+    // And nothing readable may be left inside the areas of the saved, reopened page.
+    if (ok) ok = RedactionLeftNothingUnlocked(now_page, areas, opt, refusal);
+    if (now_page != nullptr) FPDF_ClosePage(now_page);
+    if (was_page != nullptr) FPDF_ClosePage(was_page);
+    if (now != nullptr) FPDF_CloseDocument(now);
+    if (was != nullptr) FPDF_CloseDocument(was);
+    return ok;
+}
+
+}  // namespace
+
+
+namespace {
+
+// The areas marked on `page_index`, in the page's own user space. `p` gives the crop
+// origin and /UserUnit the marks were recorded against.
+std::vector<Area> AreasFor(const megapdf_document* d, const megapdf_page* p, int page_index) {
+    std::vector<Area> areas;
+    for (const RedactionMark& mark : d->redactions) {
+        if (mark.page_index != page_index) continue;
+        Area a{InX(p, (std::min)(mark.bounds.left, mark.bounds.right)),
+               InY(p, (std::min)(mark.bounds.bottom, mark.bounds.top)),
+               InX(p, (std::max)(mark.bounds.left, mark.bounds.right)),
+               InY(p, (std::max)(mark.bounds.bottom, mark.bounds.top))};
+        areas.push_back(a);
+    }
+    return areas;
+}
+
+// Page indices carrying a mark, ascending.
+std::vector<int> MarkedPages(const megapdf_document* d) {
+    std::vector<int> pages;
+    for (const RedactionMark& mark : d->redactions) pages.push_back(mark.page_index);
+    std::sort(pages.begin(), pages.end());
+    pages.erase(std::unique(pages.begin(), pages.end()), pages.end());
+    return pages;
+}
+
+// A page handle for a page the caller has not opened, so the marks can be mapped into its
+// own space. The crop origin and /UserUnit are the page's, exactly as megapdf_load_page reads them.
+megapdf_page PageView(megapdf_document* d, FPDF_PAGE page, int index) {
+    megapdf_page p{};
+    p.owner = d;
+    p.page = page;
+    p.index = index;
+    ReadCropOrigin(page, &p.crop_x, &p.crop_y);
+    p.unit = FPDFPage_GetUserUnit(page);
+    if (!(p.unit > 0)) p.unit = 1.0;
+    return p;
+}
+
+}  // namespace
+
+struct megapdf_redaction_report {
+    megapdf_redaction_counts counts{};
+    std::vector<megapdf_redaction_refusal> refusals;
+    std::vector<std::string> messages;
+};
+
+extern "C" {
+
+MEGAPDF_API int megapdf_redaction_mark(const megapdf_page* p, const megapdf_rect* area, int* out_mark_id) {
+    if (p == nullptr || p->owner == nullptr || area == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (!(area->right > area->left) || !(area->top > area->bottom)) {
+        SetError(0, "a redaction mark needs a rectangle with width and height");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    megapdf_document* d = p->owner;
+    try {
+        const int id = d->next_redaction_id++;
+        d->redactions.push_back(RedactionMark{id, p->index, *area});
+        if (out_mark_id != nullptr) *out_mark_id = id;
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return MEGAPDF_ERR_MEMORY;
+    }
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* p, const megapdf_rect* selection,
+                                               int* out_mark_ids, size_t capacity) {
+    if (p == nullptr || p->owner == nullptr || selection == nullptr) return 0;
+    Guard guard(CoreLock());
+    FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
+    if (text_page == nullptr) return 0;
+    const double l = InX(p, (std::min)(selection->left, selection->right));
+    const double r = InX(p, (std::max)(selection->left, selection->right));
+    const double b = InY(p, (std::min)(selection->bottom, selection->top));
+    const double t = InY(p, (std::max)(selection->bottom, selection->top));
+
+    // One mark per line of the selection, grown to the glyphs it touches so a mark always
+    // covers whole glyphs. PDFium's rect list is exactly the selection's lines.
+    std::vector<megapdf_rect> lines;
+    const int rects = FPDFText_CountRects(text_page, 0, FPDFText_CountChars(text_page));
+    for (int i = 0; i < rects; i++) {
+        double rl = 0, rt = 0, rr = 0, rb = 0;
+        if (!FPDFText_GetRect(text_page, i, &rl, &rt, &rr, &rb)) continue;
+        if (!(rl < r && rr > l && rb < t && rt > b)) continue;
+        // Clip to the selection horizontally (a drag through half a line marks half a line),
+        // and keep the line's own height.
+        const double cl = (std::max)(rl, l), cr = (std::min)(rr, r);
+        if (!(cr > cl)) continue;
+        lines.push_back(OutRect(p, cl, rb, cr, rt));
+    }
+    if (lines.empty()) {
+        FPDFText_ClosePage(text_page);
+        return 0;
+    }
+    // Grow each line to whole glyphs: any character the line touches is covered entirely.
+    const int chars = FPDFText_CountChars(text_page);
+    for (megapdf_rect& line : lines) {
+        const double ll = InX(p, line.left), lr = InX(p, line.right);
+        const double lb = InY(p, line.bottom), lt = InY(p, line.top);
+        double gl = ll, gr = lr, gb = lb, gt = lt;
+        for (int i = 0; i < chars; i++) {
+            if (FPDFText_IsGenerated(text_page, i) == 1) continue;
+            FS_RECTF box{};
+            if (!FPDFText_GetLooseCharBox(text_page, i, &box)) continue;
+            if (!(box.left < lr && box.right > ll && box.bottom < lt && box.top > lb)) continue;
+            gl = (std::min)(gl, static_cast<double>(box.left));
+            gr = (std::max)(gr, static_cast<double>(box.right));
+            gb = (std::min)(gb, static_cast<double>(box.bottom));
+            gt = (std::max)(gt, static_cast<double>(box.top));
+        }
+        line = OutRect(p, gl, gb, gr, gt);
+    }
+    FPDFText_ClosePage(text_page);
+
+    size_t made = 0;
+    for (const megapdf_rect& line : lines) {
+        int id = 0;
+        if (megapdf_redaction_mark(p, &line, &id) != MEGAPDF_OK) break;
+        if (out_mark_ids != nullptr && made < capacity) out_mark_ids[made] = id;
+        made++;
+    }
+    return made;
+}
+
+MEGAPDF_API size_t megapdf_redaction_marks(const megapdf_page* p, megapdf_redaction_area* out, size_t capacity) {
+    if (p == nullptr || p->owner == nullptr) return 0;
+    Guard guard(CoreLock());
+    size_t found = 0;
+    for (const RedactionMark& mark : p->owner->redactions) {
+        if (mark.page_index != p->index) continue;
+        if (out != nullptr && found < capacity) {
+            out[found].mark_id = mark.id;
+            out[found].bounds = mark.bounds;
+        }
+        found++;
+    }
+    return found;
+}
+
+MEGAPDF_API int megapdf_redaction_move_mark(const megapdf_page* p, int mark_id, const megapdf_rect* area) {
+    if (p == nullptr || p->owner == nullptr || area == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    if (!(area->right > area->left) || !(area->top > area->bottom)) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    for (RedactionMark& mark : p->owner->redactions) {
+        if (mark.id == mark_id && mark.page_index == p->index) {
+            mark.bounds = *area;
+            return MEGAPDF_OK;
+        }
+    }
+    SetError(0, "the page has no such redaction mark");
+    return MEGAPDF_ERR_ARGUMENT;
+}
+
+MEGAPDF_API int megapdf_redaction_remove_mark(const megapdf_page* p, int mark_id) {
+    if (p == nullptr || p->owner == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    auto& marks = p->owner->redactions;
+    for (size_t i = 0; i < marks.size(); i++) {
+        if (marks[i].id == mark_id && marks[i].page_index == p->index) {
+            marks.erase(marks.begin() + static_cast<long>(i));
+            break;
+        }
+    }
+    return MEGAPDF_OK;   // already gone counts as success, so an undo cannot fail
+}
+
+MEGAPDF_API size_t megapdf_redaction_mark_count(const megapdf_document* d) {
+    if (d == nullptr) return 0;
+    Guard guard(CoreLock());
+    return d->redactions.size();
+}
+
+MEGAPDF_API void megapdf_redaction_clear(const megapdf_document* d) {
+    if (d == nullptr) return;
+    Guard guard(CoreLock());
+    const_cast<megapdf_document*>(d)->redactions.clear();
+}
+
+MEGAPDF_API int megapdf_redaction_poisoned(const megapdf_document* d) {
+    if (d == nullptr) return 0;
+    Guard guard(CoreLock());
+    return d->redaction_poisoned ? 1 : 0;
+}
+
+MEGAPDF_API void megapdf_redaction_report_free(megapdf_redaction_report* report) { delete report; }
+
+MEGAPDF_API int megapdf_redaction_report_counts(const megapdf_redaction_report* report, megapdf_redaction_counts* out) {
+    if (report == nullptr || out == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    *out = report->counts;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API size_t megapdf_redaction_refusals(const megapdf_redaction_report* report, megapdf_redaction_refusal* out,
+                                              size_t capacity) {
+    if (report == nullptr) return 0;
+    for (size_t i = 0; i < report->refusals.size() && i < capacity && out != nullptr; i++) out[i] = report->refusals[i];
+    return report->refusals.size();
+}
+
+MEGAPDF_API size_t megapdf_redaction_refusal_message(const megapdf_redaction_report* report, size_t index, char* out,
+                                                     size_t capacity) {
+    if (report == nullptr || index >= report->messages.size()) return 0;
+    const std::string& m = report->messages[index];
+    if (out != nullptr && capacity > m.size()) std::memcpy(out, m.c_str(), m.size() + 1);
+    return m.size() + 1;
+}
+
+MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_options* options,
+                                     megapdf_redaction_report** out_report) {
+    if (out_report != nullptr) *out_report = nullptr;
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (d->redaction_poisoned) {
+        SetError(0, "a redaction failed halfway on this document; it may no longer be saved");
+        return MEGAPDF_ERR_REDACT;
+    }
+    megapdf_redact_options opt{};
+    if (options != nullptr) opt = *options;
+    if ((OpenPermissions(d) & MEGAPDF_PERMIT_MODIFY) == 0) {
+        SetError(0, "the document's security does not allow it to be changed");
+        return MEGAPDF_ERR_RESTRICTED;
+    }
+    auto* report = new (std::nothrow) megapdf_redaction_report();
+    if (report == nullptr) return MEGAPDF_ERR_MEMORY;
+    const std::vector<int> pages = MarkedPages(d);
+    report->counts.areas = static_cast<int>(d->redactions.size());
+    report->counts.pages = static_cast<int>(pages.size());
+
+    auto refuse = [&](int page_index, const megapdf_rect& area, const Refusal& r) {
+        report->counts = megapdf_redaction_counts{};
+        report->refusals.push_back(megapdf_redaction_refusal{page_index, r.reason, area});
+        report->messages.push_back(r.message);
+        SetError(0, r.message.c_str());
+        if (out_report != nullptr) *out_report = report;
+        else delete report;
+        return MEGAPDF_ERR_REDACT;
+    };
+    // The first mark on a page, for naming the area a refusal is about.
+    auto first_area = [&](int page_index) {
+        for (const RedactionMark& m : d->redactions) if (m.page_index == page_index) return m.bounds;
+        return megapdf_rect{0, 0, 0, 0};
+    };
+
+    // Phase 1: plan, read only. A refusal here leaves the document untouched.
+    std::map<int, std::vector<RObject>> plans;
+    std::map<int, std::vector<int>> annots;
+    std::map<int, std::vector<Area>> areas_by_page;
+    for (int page_index : pages) {
+        FPDF_PAGE page = FPDF_LoadPage(d->doc, page_index);
+        if (page == nullptr) {
+            return refuse(page_index, first_area(page_index),
+                          Refusal{MEGAPDF_REDACT_PDFIUM, "the page could not be loaded"});
+        }
+        const megapdf_page view = PageView(d, page, page_index);
+        std::vector<Area> areas = AreasFor(d, &view, page_index);
+        Refusal r{};
+        std::vector<RObject> plan;
+        std::vector<int> page_annots;
+        bool ok = false;
+        try {
+            ok = PlanPageUnlocked(page, areas, &plan, &page_annots, &r);
+        } catch (...) {
+            FPDF_ClosePage(page);
+            if (out_report != nullptr) *out_report = report; else delete report;
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return MEGAPDF_ERR_MEMORY;
+        }
+        FPDF_ClosePage(page);
+        if (!ok) return refuse(page_index, first_area(page_index), r);
+        plans[page_index] = std::move(plan);
+        annots[page_index] = std::move(page_annots);
+        areas_by_page[page_index] = std::move(areas);
+    }
+
+    // Phase 2: rehearse each page on a scratch copy, and let the guard prove that nothing
+    // outside the areas moved or changed. A refusal here also leaves the document untouched.
+    for (int page_index : pages) {
+        Refusal r{};
+        if (!RehearsePageUnlocked(d, page_index, areas_by_page[page_index], opt, &r)) {
+            return refuse(page_index, first_area(page_index), r);
+        }
+    }
+
+    // Phase 3: execute on the document itself. Phase 2 says this cannot fail; if it does,
+    // the document is poisoned and can never be saved.
+    for (int page_index : pages) {
+        FPDF_PAGE page = FPDF_LoadPage(d->doc, page_index);
+        Refusal r{};
+        bool ok = page != nullptr;
+        if (ok) {
+            // Re-plan against the page as it is: phase 1 ran on a page handle of its own.
+            std::vector<RObject> plan;
+            std::vector<int> page_annots;
+            ok = PlanPageUnlocked(page, areas_by_page[page_index], &plan, &page_annots, &r) &&
+                 ExecutePageUnlocked(d->doc, page, areas_by_page[page_index], plan, page_annots, opt,
+                                     &report->counts, &r);
+            if (ok) ok = RedactionLeftNothingUnlocked(page, areas_by_page[page_index], opt, &r);
+        }
+        if (page != nullptr) FPDF_ClosePage(page);
+        ForgetVerdicts(d, page_index);
+        if (!ok) {
+            d->redaction_poisoned = true;
+            report->counts = megapdf_redaction_counts{};
+            report->refusals.push_back(megapdf_redaction_refusal{page_index, r.reason, first_area(page_index)});
+            report->messages.push_back(r.message.empty() ? "the redaction failed while it was being applied" : r.message);
+            SetError(0, "the redaction failed halfway; the document may no longer be saved");
+            if (out_report != nullptr) *out_report = report; else delete report;
+            return MEGAPDF_ERR_REDACT;
+        }
+    }
+
+    // Undo cannot be allowed to put the removed content back: every detached handle the
+    // document holds keeps page objects alive for exactly that (contract 5).
+    for (megapdf_detached* x : d->detached) {
+        for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
+        x->parts.clear();
+        x->owner = nullptr;
+    }
+    d->detached.clear();
+    d->redactions.clear();
+    if (out_report != nullptr) *out_report = report;
+    else delete report;
+    return MEGAPDF_OK;
+}
+
+}  // extern "C"

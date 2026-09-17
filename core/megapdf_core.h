@@ -67,7 +67,8 @@ enum {
     MEGAPDF_ERR_RESTRICTED = -6,  /* the document's security does not allow it; its owner password would (#131) */
     MEGAPDF_ERR_CANCELLED = -7,   /* a page check stopped early: its cancel flag was raised or its document is closing (#145) */
     MEGAPDF_ERR_NOT_JUDGED = -8,  /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
-    MEGAPDF_ERR_FILE = -9         /* a file could not be created, read or written (#147) */
+    MEGAPDF_ERR_FILE = -9,        /* a file could not be created, read or written (#147) */
+    MEGAPDF_ERR_REDACT = -10      /* a redaction could not remove everything it had to, so it removed nothing (#173) */
 };
 
 /**
@@ -895,6 +896,161 @@ MEGAPDF_API int megapdf_is_subset_font_name(const char* base_name);
  * NUL-terminated name into `out` when it fits; returns its length without the NUL.
  */
 MEGAPDF_API size_t megapdf_map_to_standard_font(const char* original_name, char* out, size_t capacity);
+
+/* --------------------------------------------------------------------------
+ * Contract 8: redaction (#173, ADR-005). A redaction removes content; a whiteout
+ * covers it. Every platform marks areas, applies them once, and shows the report.
+ *
+ * Marks are the core's own: they are never page objects and never reach the file, so
+ * a document saved with marks on it cannot carry them, and marking costs nothing —
+ * no content regeneration, no invalidated layout verdicts (#137). The apps draw the
+ * translucent box in the overlay layer where find highlights already live.
+ *
+ * Coordinates are crop space, as everywhere else.
+ * ----------------------------------------------------------------------- */
+
+typedef struct megapdf_redaction_area {
+    int mark_id;             /* stable for the mark's life; never reused by the document */
+    megapdf_rect bounds;     /* crop space */
+} megapdf_redaction_area;
+
+/**
+ * Marks `area` on the page for redaction. The mark's id comes back in `out_mark_id`
+ * (may be NULL). MEGAPDF_ERR_ARGUMENT for a NULL page or area, or an empty one (a
+ * rectangle with no width or height); MEGAPDF_ERR_MEMORY when the core cannot allocate.
+ * Nothing on the page changes.
+ */
+MEGAPDF_API int megapdf_redaction_mark(const megapdf_page* page, const megapdf_rect* area, int* out_mark_id);
+
+/**
+ * Marks the text the user selected: every rectangle a selection covers becomes its own
+ * mark, one per line the selection spans, each grown to the glyphs it touches so a mark
+ * always covers whole glyphs. `selection` is the dragged rectangle in crop space. The ids
+ * come back count-then-fill; the return is how many marks were made, 0 when the selection
+ * covers no text (the caller then marks the rectangle itself with megapdf_redaction_mark).
+ */
+MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* page, const megapdf_rect* selection,
+                                               int* out_mark_ids, size_t capacity);
+
+/** The page's marks, in the order they were made; count-then-fill. */
+MEGAPDF_API size_t megapdf_redaction_marks(const megapdf_page* page, megapdf_redaction_area* out, size_t capacity);
+
+/** Moves or resizes the mark. MEGAPDF_ERR_ARGUMENT when the page has no such mark. */
+MEGAPDF_API int megapdf_redaction_move_mark(const megapdf_page* page, int mark_id, const megapdf_rect* area);
+
+/** Removes the mark. Already gone counts as success, so an undo cannot fail. */
+MEGAPDF_API int megapdf_redaction_remove_mark(const megapdf_page* page, int mark_id);
+
+/** How many marks the whole document carries: what the save confirmation asks. */
+MEGAPDF_API size_t megapdf_redaction_mark_count(const megapdf_document* document);
+
+/** Drops every mark on the document. */
+MEGAPDF_API void megapdf_redaction_clear(const megapdf_document* document);
+
+/** Options for megapdf_redact_apply(); zero-initialise and set what differs from the defaults. */
+typedef struct megapdf_redact_options {
+    unsigned int colour;          /* 0xRRGGBB of the box drawn where the content was; 0 is black, the default */
+    int leave_area_bare;          /* 1: draw no box at all. 0 (default): a plain filled path, no annotation */
+    int keep_metadata;            /* 1: leave /Info and XMP alone. 0 (default): remove them, as a redaction implies */
+    int keep_matching_outline;    /* 1: leave outline entries alone. 0 (default): remove those carrying removed text */
+} megapdf_redact_options;
+
+/** Why megapdf_redact_apply() refused: megapdf_redaction_refusal.reason. */
+enum {
+    MEGAPDF_REDACT_TYPE3_FONT = 1,      /* a partly covered run in a Type 3 font, whose glyphs are content streams */
+    MEGAPDF_REDACT_FONT_CANNOT_REDRAW,  /* the glyphs outside the area cannot be drawn back in the run's own font (#116, #130) */
+    MEGAPDF_REDACT_LAYOUT,              /* the guard saw something outside the area move or change (#118, #128) */
+    MEGAPDF_REDACT_SHARED_FORM,         /* a form XObject more than one object draws could not be copied first */
+    MEGAPDF_REDACT_IMAGE,               /* an image's stored pixels could not be read or written back */
+    MEGAPDF_REDACT_ANNOTATION,          /* an annotation or form field could not be removed with its value */
+    MEGAPDF_REDACT_PDFIUM               /* PDFium refused a step; see the refusal's message */
+};
+
+typedef struct megapdf_redaction_refusal {
+    int page_index;
+    int reason;                  /* MEGAPDF_REDACT_* */
+    megapdf_rect area;           /* the marked area it was refused for, crop space */
+} megapdf_redaction_refusal;
+
+/** What a completed apply removed. Zero for a refused apply, which removes nothing. */
+typedef struct megapdf_redaction_counts {
+    int areas;                /* marks applied */
+    int pages;                /* pages they were on */
+    int characters;           /* glyphs removed from content streams */
+    int text_runs;            /* text objects removed whole */
+    int partial_runs;         /* text objects rewritten without their covered glyphs */
+    int hidden_copies;        /* the #136 copies removed or rewritten with them */
+    int images;               /* image objects whose stored pixels were overwritten */
+    int inline_images;
+    int soft_masks;
+    int paths;                /* path objects removed or clipped */
+    int shadings;
+    int form_xobjects;        /* forms recursed into */
+    int annotations;
+    int form_fields;
+    int links;
+    int outline_entries;
+    int structure_entries;    /* /ActualText and /Alt cleared */
+    int page_labels;
+    int metadata_fields;      /* /Info entries and XMP packets removed */
+} megapdf_redaction_counts;
+
+typedef struct megapdf_redaction_report megapdf_redaction_report;
+
+/**
+ * Applies every mark on the document, then drops them. Needs MEGAPDF_PERMIT_MODIFY
+ * (ADR-004 decision 2): MEGAPDF_ERR_RESTRICTED otherwise.
+ *
+ * It fails closed. The work runs in three phases:
+ *   1. plan — read only, over every marked page: everything intersecting is classified
+ *      remove, rewrite, clip or refuse;
+ *   2. rehearse — the #118 dry run on a copy of each marked page, with the marked areas
+ *      masked out of the render compare, so the guard proves that nothing OUTSIDE the
+ *      areas moved or changed;
+ *   3. execute — the same plan on the document, then a check in process that the areas
+ *      now extract no text and read back the redaction colour.
+ * A refusal in phase 1 or 2 returns MEGAPDF_ERR_REDACT with the document untouched and
+ * the marks still on it, and the report names every page, area and reason. A failure in
+ * phase 3 — which phase 2 says cannot happen — poisons the document: megapdf_save() and
+ * every megapdf_save_*() on it return MEGAPDF_ERR_REDACT from then on, so a half-redacted
+ * document can never be written. A poisoned document can only be closed.
+ *
+ * Apply also frees every megapdf_detached handle the document holds: those keep removed
+ * objects alive for an undo (contract 5), and after a redaction they would be the redacted
+ * content, one megapdf_restore_detached() from the page. The apps drop their undo stacks
+ * and rewrite the recovery journal in the same step (#145).
+ *
+ * `options` may be NULL for the defaults. `out_report` may be NULL; when it is not, a
+ * report comes back on success AND on a refusal, and the caller frees it with
+ * megapdf_redaction_report_free(). MEGAPDF_OK, MEGAPDF_ERR_REDACT, MEGAPDF_ERR_RESTRICTED,
+ * MEGAPDF_ERR_ARGUMENT (a NULL document) or MEGAPDF_ERR_MEMORY.
+ */
+MEGAPDF_API int megapdf_redact_apply(megapdf_document* document, const megapdf_redact_options* options,
+                                     megapdf_redaction_report** out_report);
+
+MEGAPDF_API void megapdf_redaction_report_free(megapdf_redaction_report* report);
+
+/** MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a NULL report or `out`. */
+MEGAPDF_API int megapdf_redaction_report_counts(const megapdf_redaction_report* report, megapdf_redaction_counts* out);
+
+/** The refusals, in page order; count-then-fill. A completed apply has none. */
+MEGAPDF_API size_t megapdf_redaction_refusals(const megapdf_redaction_report* report, megapdf_redaction_refusal* out,
+                                              size_t capacity);
+
+/**
+ * A short English sentence for the refusal at `index` — what could not be removed and why.
+ * UTF-8, NUL-terminated, count-then-fill in bytes including the terminator. The bindings
+ * show their own wording from the reason code; this is for logs and for the tests.
+ */
+MEGAPDF_API size_t megapdf_redaction_refusal_message(const megapdf_redaction_report* report, size_t index,
+                                                     char* out, size_t capacity);
+
+/**
+ * 1 when a redaction failed halfway on this document and it may no longer be saved.
+ * 0 otherwise, including for a document that was redacted successfully.
+ */
+MEGAPDF_API int megapdf_redaction_poisoned(const megapdf_document* document);
+
 
 #ifdef __cplusplus
 }  /* extern "C" */
