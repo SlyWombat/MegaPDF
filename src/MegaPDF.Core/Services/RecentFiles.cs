@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using System.Text.Json;
 
 namespace MegaPDF.Core.Services;
@@ -13,7 +14,19 @@ namespace MegaPDF.Core.Services;
 /// Null on Windows, which never sets it and never reads it: a path is enough there,
 /// and this round-trips through the JSON untouched.
 /// </param>
-public sealed record RecentEntry(string Path, double ScrollOffset = 0, int ZoomPercent = 100, string? Bookmark = null);
+public sealed record RecentEntry(string Path, double ScrollOffset = 0, int ZoomPercent = 100, string? Bookmark = null)
+{
+    /// <summary>
+    /// What a recents row should say: the file name, not the path (#162). A
+    /// sandboxed container path is long enough that trimming it with an ellipsis
+    /// eats the file name — the only part anyone reads — so the path belongs in a
+    /// tooltip instead, which is what the Windows template already does.
+    ///
+    /// Computed, and kept out of the JSON so recent.json stays the record it was.
+    /// </summary>
+    [JsonIgnore]
+    public string DisplayName => System.IO.Path.GetFileName(Path) is { Length: > 0 } name ? name : Path;
+}
 
 /// <summary>
 /// Most-recently-used document list (SDD §2.2 empty state). Stored per-user as JSON;

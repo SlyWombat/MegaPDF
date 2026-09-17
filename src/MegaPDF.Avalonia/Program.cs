@@ -2,6 +2,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.Media.Fonts;
 using Avalonia.LogicalTree;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
@@ -74,6 +75,18 @@ internal static class Program
         var builder = AppBuilder.Configure<App>()
             .UsePlatformDetect()
             .LogToTrace();
+
+        // Name the macOS system UI font explicitly (#160). Left to itself, Avalonia
+        // resolves a default face on macOS that has no precomposed capital accented
+        // glyphs, and silently drops the accent: "Échap pour annuler" was drawn as
+        // "Echap pour annuler", and "À partir d'une photo" as "A partir d'une photo".
+        // Only marks that sit *above* the letter were lost — Ç survived, and every
+        // lower-case accent did too — which is why it went unnoticed for so long.
+        // ".AppleSystemUIFont" is San Francisco, so this is not a change of typeface:
+        // it is asking for the font the app already meant to use. "SF Pro" and
+        // "SF Pro Text" both fall back to the same broken default and do not fix it.
+        if (OperatingSystem.IsMacOS())
+            builder = builder.With(new FontManagerOptions { DefaultFamilyName = ".AppleSystemUIFont" });
 
         // A flyout is normally its own OS window, which RenderTargetBitmap cannot
         // see, so the `sign` screenshot state (#100) would capture a closed library.

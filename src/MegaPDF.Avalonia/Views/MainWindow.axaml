@@ -183,36 +183,44 @@
                   </ItemsControl>
                 </ScrollViewer>
 
-                <!-- Three equal ways in, side by side (#100, #101). -->
+                <!-- Three equal ways in, side by side (#100, #101). The icon sits over
+                     the label, and the label wraps, because in French "À partir d'une
+                     photo" is far wider than a third of 360 and a Button clips its
+                     content rather than trimming it (#161). Same shape as the toolbar's
+                     Full step, and the same fix iOS already made for the same three
+                     buttons and the same reason. -->
                 <Grid ColumnDefinitions="*,*,*">
                   <Button Name="DrawSignatureButton" Grid.Column="0"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                           Margin="0,0,4,0">
-                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+                    <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}">
                       <Path Data="{StaticResource IconSign}" Width="16" Height="16"
                             Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                             StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-                      <TextBlock Text="{x:Static loc:Strings.SignatureDraw}" />
+                      <TextBlock Text="{x:Static loc:Strings.SignatureDraw}"
+                             TextWrapping="Wrap" TextAlignment="Center" />
                     </StackPanel>
                   </Button>
                   <Button Name="TypeSignatureButton" Grid.Column="1"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                           Margin="4,0,4,0">
-                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+                    <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}">
                       <Path Data="{StaticResource IconText}" Width="16" Height="16"
                             Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                             StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-                      <TextBlock Text="{x:Static loc:Strings.SignatureType}" />
+                      <TextBlock Text="{x:Static loc:Strings.SignatureType}"
+                             TextWrapping="Wrap" TextAlignment="Center" />
                     </StackPanel>
                   </Button>
                   <Button Name="ImportSignatureButton" Grid.Column="2"
                           HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                           Margin="4,0,0,0">
-                    <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+                    <StackPanel Orientation="Vertical" Spacing="{DynamicResource SpaceXs}">
                       <Path Data="{StaticResource IconPhoto}" Width="16" Height="16"
                             Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                             StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
-                      <TextBlock Text="{x:Static loc:Strings.SignatureFromPhoto}" />
+                      <TextBlock Text="{x:Static loc:Strings.SignatureFromPhoto}"
+                             TextWrapping="Wrap" TextAlignment="Center" />
                     </StackPanel>
                   </Button>
                 </Grid>
@@ -483,7 +491,8 @@
                    Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"
+                           ToolTip.Tip="{Binding Path}" />
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
