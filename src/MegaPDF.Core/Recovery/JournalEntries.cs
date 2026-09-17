@@ -16,6 +16,9 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(LineEditEntry), "lineEdit")]
 [JsonDerivedType(typeof(LineDeleteEntry), "lineDelete")]
 [JsonDerivedType(typeof(LineRestoreEntry), "lineRestore")]
+[JsonDerivedType(typeof(RedactionMarkAddEntry), "redactionMarkAdd")]
+[JsonDerivedType(typeof(RedactionMarkRemoveEntry), "redactionMarkRemove")]
+[JsonDerivedType(typeof(RedactionMarkMoveEntry), "redactionMarkMove")]
 [JsonDerivedType(typeof(WhiteoutAddEntry), "whiteoutAdd")]
 [JsonDerivedType(typeof(WhiteoutRemoveEntry), "whiteoutRemove")]
 [JsonDerivedType(typeof(FormTextEntry), "formText")]
@@ -58,6 +61,23 @@ public sealed record LineDeleteEntry(int PageIndex, int[] DetachIndexes) : Journ
 /// FirstIndex ≥ 0 and no FirstText, the edited run is taken off first and Restores recreates it too.
 /// </summary>
 public sealed record LineRestoreEntry(int PageIndex, int FirstIndex, string? FirstText, RestoreRun[] Restores) : JournalEntry(PageIndex);
+
+/// <summary>
+/// A redaction mark placed (#173). A mark is not content and is never written to the file,
+/// so this entry carries a rectangle and nothing else — a journal that replayed removed text
+/// would be a copy of what the redaction took out, which is the one thing it must not be.
+/// </summary>
+public sealed record RedactionMarkAddEntry(int PageIndex, double X, double Y, double Width, double Height)
+    : JournalEntry(PageIndex);
+
+/// <summary>A redaction mark removed (#173).</summary>
+public sealed record RedactionMarkRemoveEntry(int PageIndex, double X, double Y, double Width, double Height)
+    : JournalEntry(PageIndex);
+
+/// <summary>A redaction mark moved or resized (#173).</summary>
+public sealed record RedactionMarkMoveEntry(int PageIndex, int MarkId, double FromX, double FromY, double FromWidth,
+                                            double FromHeight, double ToX, double ToY, double ToWidth,
+                                            double ToHeight) : JournalEntry(PageIndex);
 
 public sealed record WhiteoutAddEntry(int PageIndex, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
 

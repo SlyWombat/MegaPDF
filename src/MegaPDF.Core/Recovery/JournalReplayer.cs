@@ -42,6 +42,47 @@ public static class JournalReplayer
                     applied++;
                     break;
 
+                // #173: a mark is not content and puts nothing on the page, so replaying one
+                // restores where the user was, not what they had removed. A journal can
+                // never replay redacted text, because it never recorded any.
+                case RedactionMarkAddEntry mark:
+                    page.MarkForRedaction(new PdfRect(mark.X, mark.Y, mark.Width, mark.Height));
+                    applied++;
+                    break;
+
+                case RedactionMarkRemoveEntry unmark:
+                {
+                    var target = new PdfRect(unmark.X, unmark.Y, unmark.Width, unmark.Height);
+                    var match = page.GetRedactionMarks()
+                        .Where(m => Math.Abs(m.Bounds.X - target.X) < 1 && Math.Abs(m.Bounds.Y - target.Y) < 1
+                                 && Math.Abs(m.Bounds.Width - target.Width) < 2
+                                 && Math.Abs(m.Bounds.Height - target.Height) < 2)
+                        .Select(m => (RedactionMark?)m)
+                        .FirstOrDefault();
+                    if (match is { } found)
+                    {
+                        page.RemoveRedactionMark(found.MarkId);
+                        applied++;
+                    }
+                    break;
+                }
+
+                case RedactionMarkMoveEntry moved:
+                {
+                    var from = new PdfRect(moved.FromX, moved.FromY, moved.FromWidth, moved.FromHeight);
+                    var match = page.GetRedactionMarks()
+                        .Where(m => Math.Abs(m.Bounds.X - from.X) < 1 && Math.Abs(m.Bounds.Y - from.Y) < 1)
+                        .Select(m => (RedactionMark?)m)
+                        .FirstOrDefault();
+                    if (match is { } found)
+                    {
+                        page.MoveRedactionMark(found.MarkId,
+                            new PdfRect(moved.ToX, moved.ToY, moved.ToWidth, moved.ToHeight));
+                        applied++;
+                    }
+                    break;
+                }
+
                 case WhiteoutAddEntry whiteout:
                     page.AppendWhiteout(new PdfRect(whiteout.X, whiteout.Y, whiteout.Width, whiteout.Height));
                     applied++;

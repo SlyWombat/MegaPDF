@@ -209,6 +209,15 @@ public partial class MainWindow : Window
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // A selected redaction mark comes off the same way anything else selected does
+        // (#173). It is checked first because a mark is not a page Selection: nothing was
+        // put on the page, so there is nothing for the selection model to hold.
+        if (e.Key is Key.Delete or Key.Back && ViewModel is { } marked && marked.RemoveSelectedRedactionMark())
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key is Key.Delete or Key.Back && ViewModel is { Selection: not null } selected)
         {
             selected.DeleteSelection();
@@ -484,10 +493,13 @@ public partial class MainWindow : Window
     /// <summary>The in-place editor, while one is open. Only ever one at a time.</summary>
     private TextBox? _inlineEditor;
 
-    /// <summary>Rubber band for the whiteout drag, and where it started.</summary>
+    /// <summary>Rubber band for the whiteout and redaction drags, and where it started.</summary>
     private Rectangle? _band;
     private Point _bandOrigin;
     private Control? _bandHost;
+
+    /// <summary>Whether the band in progress marks a redaction rather than covering.</summary>
+    private bool _bandIsRedaction;
 
     /// <summary>
     /// An editor placed where the user clicked, showing the face and size the text
@@ -799,13 +811,20 @@ public partial class MainWindow : Window
                 break;
 
             case MainViewModel.PageMode.Whiteout:
-                BeginBand(container, position, e);
+                BeginBand(container, position, e, redaction: false);
+                break;
+
+            case MainViewModel.PageMode.Redact:
+                BeginBand(container, position, e, redaction: true);
                 break;
 
             default:
                 DismissInlineEditor();
                 // A click that lands on nothing deselects, which is what every
                 // desktop app does and what makes the chrome feel like chrome.
+                // A click on a mark selects it, so ✕ or Delete can take it off again.
+                if (vm.SelectRedactionMarkAt(page.Index, pagePoint))
+                    break;
                 if (vm.Selection is not null && vm.HitTest(page.Index, pagePoint).Kind == PageHitKind.None)
                 {
                     vm.ClearSelection();
@@ -834,7 +853,7 @@ public partial class MainWindow : Window
         var shape = vm.Mode switch
         {
             MainViewModel.PageMode.AddText => StandardCursorType.Ibeam,
-            MainViewModel.PageMode.Whiteout => StandardCursorType.Cross,
+            MainViewModel.PageMode.Whiteout or MainViewModel.PageMode.Redact => StandardCursorType.Cross,
             _ when vm.IsPlacingSignature => StandardCursorType.Cross,
             _ => CursorForContent(),
         };
@@ -862,18 +881,26 @@ public partial class MainWindow : Window
 
     // --- Whiteout drag ---
 
-    private void BeginBand(Control container, Point origin, PointerPressedEventArgs e)
+    private void BeginBand(Control container, Point origin, PointerPressedEventArgs e, bool redaction)
     {
         if (container is not ContentPresenter presenter || OverlayOf(presenter) is not { } overlay)
             return;
 
         _bandOrigin = origin;
         _bandHost = container;
+        _bandIsRedaction = redaction;
+        // The band shows what the tool does before it is done: white and opaque for a
+        // cover, translucent ink for a redaction — where the text under it stays readable,
+        // because a mark is something you check before you apply it (#173).
         _band = new Rectangle
         {
-            Fill = Brushes.White,
-            Opacity = 0.75,
-            Stroke = Brushes.Gray,
+            Fill = redaction
+                ? this.FindResource("BrandRedactionMark") as IBrush ?? Brushes.SlateGray
+                : Brushes.White,
+            Opacity = redaction ? 1.0 : 0.75,
+            Stroke = redaction
+                ? this.FindResource("BrandRedactionMarkOutline") as IBrush ?? Brushes.DimGray
+                : Brushes.Gray,
             StrokeThickness = 1,
             HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
@@ -911,14 +938,18 @@ public partial class MainWindow : Window
         if (_bandHost.DataContext is PageViewModel page)
         {
             var dipToPoint = 1.0 / (PageBitmap.PointsToPixels * vm.Zoom);
-            vm.AddWhiteout(page.Index, new PdfRect(
-                _band.Margin.Left * dipToPoint, _band.Margin.Top * dipToPoint,
-                _band.Width * dipToPoint, _band.Height * dipToPoint));
+            var bounds = new PdfRect(_band.Margin.Left * dipToPoint, _band.Margin.Top * dipToPoint,
+                _band.Width * dipToPoint, _band.Height * dipToPoint);
+            if (_bandIsRedaction)
+                vm.AddRedactionMark(page.Index, bounds);
+            else
+                vm.AddWhiteout(page.Index, bounds);
         }
 
         (_band.Parent as Panel)?.Children.Remove(_band);
         _band = null;
         _bandHost = null;
+        _bandIsRedaction = false;
         e.Pointer.Capture(null);
     }
 
@@ -1448,9 +1479,42 @@ public partial class MainWindow : Window
     /// view model now builds and verifies the bytes first and opens the file only then. True
     /// when the document was saved.
     /// </remarks>
+    /// <summary>
+    /// The confirmation #173 asks for, before either save path writes anything: what
+    /// redaction does, that it cannot be undone once saved, and Save as a copy as the
+    /// default. Returns false when the user cancelled or the redaction refused — in which
+    /// case nothing has been removed and nothing must be written.
+    /// </summary>
+    private async Task<bool> ConfirmAndApplyRedactionsAsync(bool alreadySavingACopy)
+    {
+        if (ViewModel is not { } vm || !vm.HasRedactionMarks)
+            return true;
+
+        var dialog = new ConfirmRedactionWindow();
+        dialog.SetMarkCount(vm.RedactionMarkCount);
+        await dialog.ShowDialog(this);
+        switch (dialog.Choice)
+        {
+            case ConfirmRedactionWindow.Decision.Cancel:
+                return false;
+            case ConfirmRedactionWindow.Decision.SaveAsCopy when !alreadySavingACopy:
+                // Apply first: a refusal must not open a picker for a file that will not
+                // be written. Then hand the whole save over to the copy path.
+                if (!await vm.ApplyRedactionsAsync())
+                    return false;
+                await SaveAsAsync(MainViewModel.SuggestRedactedFileName(vm.DocumentName ?? ""));
+                return false;   // the copy path has saved; the caller must not save again
+            default:
+                return await vm.ApplyRedactionsAsync();
+        }
+    }
+
     private async Task<bool> SaveAsync()
     {
         if (ViewModel is not { } vm)
+            return false;
+
+        if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return false;
 
         if (_openedFile is not { } file)
@@ -1482,14 +1546,21 @@ public partial class MainWindow : Window
     /// takes — and then adopts it as the document's home, which is what "Save As"
     /// means everywhere else.
     /// </summary>
-    private async Task SaveAsAsync()
+    private async Task SaveAsAsync(string? suggestedName = null)
     {
         if (ViewModel is not { IsIdle: true } vm)
             return;
 
-        var suggested = vm.DocumentName is { } name
-            ? Strings.SuggestedCopyName(Path.GetFileNameWithoutExtension(name)) + ".pdf"
-            : Strings.DefaultDocumentName + ".pdf";
+        // Marks still on the document mean this Save As is the first time they are being
+        // applied; the confirmation offers the copy, which is what this already is.
+        if (suggestedName is null && !await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: true))
+            return;
+
+        var suggested = suggestedName is { Length: > 0 }
+            ? Path.GetFileName(suggestedName)
+            : vm.DocumentName is { } name
+                ? Strings.SuggestedCopyName(Path.GetFileNameWithoutExtension(name)) + ".pdf"
+                : Strings.DefaultDocumentName + ".pdf";
 
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {

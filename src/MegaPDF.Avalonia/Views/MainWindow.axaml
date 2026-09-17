@@ -243,12 +243,29 @@
         </ToggleButton>
         <ToggleButton Name="WhiteoutButton"
                       IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
-                      Command="{Binding ToggleWhiteoutCommand}">
+                      Command="{Binding ToggleWhiteoutCommand}"
+                      ToolTip.Tip="{x:Static loc:Strings.WhiteoutCoversOnlyBody}"
+                      AutomationProperties.HelpText="{x:Static loc:Strings.WhiteoutCoversOnlyBody}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconCover}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
             <TextBlock Classes="label" Text="{x:Static loc:Strings.Cover}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
+          </StackPanel>
+        </ToggleButton>
+        <!-- Redact sits beside Cover, because the pair is the point (#173): one covers,
+             the other removes, and each tooltip says which. -->
+        <ToggleButton Name="RedactButton"
+                      IsChecked="{Binding IsRedactMode, Mode=OneWay}"
+                      Command="{Binding ToggleRedactCommand}"
+                      ToolTip.Tip="{x:Static loc:Strings.ToolbarRedactTip}"
+                      AutomationProperties.Name="{x:Static loc:Strings.ToolbarRedact}"
+                      AutomationProperties.HelpText="{x:Static loc:Strings.ToolbarRedactTip}">
+          <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
+            <Path Data="{StaticResource IconRedact}" Width="18" Height="18"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+            <TextBlock Classes="label" Text="{x:Static loc:Strings.ToolbarRedact}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </ToggleButton>
         <!-- Contextual (#144): on the row only while Add text is armed or an added
@@ -421,6 +438,36 @@
                            TextAlignment="Center" TextWrapping="Wrap" Margin="24"
                            Foreground="{DynamicResource BrandInk}" Opacity="0.7"
                            IsHitTestVisible="False" />
+
+                <!-- Areas marked for redaction (#173). Translucent with an outline, so
+                     the user can still read what they are about to remove. Drawn over the
+                     page because a mark is NOT page content: the core keeps it and never
+                     writes it to the file, so there is nothing in the raster to draw. -->
+                <ItemsControl ItemsSource="{Binding RedactionMarks}" IsHitTestVisible="False">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <Panel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:RedactionMarkView">
+                      <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                 Margin="{Binding Margin}"
+                                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                                 Classes.selected="{Binding IsSelected}"
+                                 Fill="{DynamicResource BrandRedactionMark}"
+                                 Stroke="{DynamicResource BrandRedactionMarkOutline}"
+                                 StrokeThickness="1">
+                        <Rectangle.Styles>
+                          <Style Selector="Rectangle.selected">
+                            <Setter Property="StrokeThickness" Value="2" />
+                            <Setter Property="StrokeDashArray" Value="3,2" />
+                          </Style>
+                        </Rectangle.Styles>
+                      </Rectangle>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
                 <!-- Search hits drawn over the page rather than into it: the raster
                      never changes, so highlighting and clearing cost no re-render. -->

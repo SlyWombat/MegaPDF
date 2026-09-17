@@ -1515,11 +1515,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Select,
         AddText,
         Whiteout,
+        Redact,
     }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsAddingText))]
     [NotifyPropertyChangedFor(nameof(IsWhiteoutMode))]
+    [NotifyPropertyChangedFor(nameof(IsRedactMode))]
     [NotifyPropertyChangedFor(nameof(ModeHint))]
     [NotifyPropertyChangedFor(nameof(IsModeActive))]
     [NotifyPropertyChangedFor(nameof(IsTextStyleContext))]
@@ -1527,6 +1529,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public bool IsAddingText => Mode == PageMode.AddText;
     public bool IsWhiteoutMode => Mode == PageMode.Whiteout;
+    public bool IsRedactMode => Mode == PageMode.Redact;
     public bool IsModeActive => Mode != PageMode.Select || IsPlacingSignature;
 
     /// <summary>
@@ -1537,6 +1540,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         PageMode.AddText => Strings.ModeHintAddText,
         PageMode.Whiteout => Strings.ModeHintWhiteout,
+        PageMode.Redact => Strings.RedactHint,
         _ => IsPlacingSignature ? Strings.ModeHintPlaceSignature : "",
     };
 
@@ -1577,6 +1581,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanEditContent))]
     private void ToggleWhiteout() => SetMode(Mode == PageMode.Whiteout ? PageMode.Select : PageMode.Whiteout);
 
+    [RelayCommand(CanExecute = nameof(CanEditContent))]
+    private void ToggleRedact() => SetMode(Mode == PageMode.Redact ? PageMode.Select : PageMode.Redact);
+
     private void SetMode(PageMode mode)
     {
         // Added text needs a text-box capability, covering the document's own content
@@ -1585,6 +1592,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             PageMode.AddText => Capabilities.CanAddText,
             PageMode.Whiteout => Capabilities.CanEditContent,
+            // Redaction changes the document, so it needs modify (ADR-004 decision 2).
+            PageMode.Redact => Capabilities.CanEditContent,
             _ => true,
         };
         if (!allowed)
@@ -1837,6 +1846,193 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Apply(new AddWhiteoutOperation(_document, pageIndex, bounds), Strings.Covered);
         SetMode(PageMode.Select);
     }
+
+    // --- Redaction (SDD §3.8 / F7, #173) ---
+
+    /// <summary>
+    /// How many areas are marked across the document. The save path asks this before it
+    /// offers the confirmation, and the toolbar shows it so a mark is never forgotten.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRedactionMarks))]
+    private int _redactionMarkCount;
+
+    public bool HasRedactionMarks => RedactionMarkCount > 0;
+
+    /// <summary>The mark the user has selected, so ✕ or Delete removes the right one.</summary>
+    private (int PageIndex, int MarkId, PdfRect Bounds)? _selectedMark;
+
+    /// <summary>
+    /// Marks the dragged area (#173). Nothing is removed: a mark is a mark until the
+    /// document is saved, and it is never written to the file, so this is free and
+    /// completely undoable.
+    /// </summary>
+    public void AddRedactionMark(int pageIndex, PdfRect bounds)
+    {
+        // A stray click while the tool is armed should not mark an invisible speck.
+        if (_document is null || bounds.Width < 2 || bounds.Height < 2)
+        {
+            SetMode(PageMode.Select);
+            return;
+        }
+
+        // A drag across text marks the text, grown to whole glyphs, rather than the
+        // rectangle: it is what the user meant, and it is what stops half a glyph being
+        // left behind. A drag across a picture marks the rectangle.
+        var marked = false;
+        using (var page = _document.GetPage(pageIndex))
+        {
+            marked = page.MarkTextForRedaction(bounds).Count > 0;
+        }
+        if (!marked)
+            Apply(new MarkForRedactionOperation(_document, pageIndex, bounds), Strings.RedactMarkPlaced);
+        else
+            Status = Strings.RedactMarkPlaced;
+
+        RefreshRedactionMarks();
+        SetMode(PageMode.Select);
+    }
+
+    /// <summary>Re-reads the marks from the core onto every loaded page.</summary>
+    private void RefreshRedactionMarks()
+    {
+        if (_document is null)
+        {
+            RedactionMarkCount = 0;
+            return;
+        }
+        RedactionMarkCount = _document.RedactionMarkCount;
+        foreach (var page in Pages)
+        {
+            if (page.Image is null && page.Highlights.Count == 0 && RedactionMarkCount == 0)
+                continue;
+            using var handle = _document.GetPage(page.Index);
+            page.SetRedactionMarks(handle.GetRedactionMarks(),
+                _selectedMark?.PageIndex == page.Index ? _selectedMark.Value.MarkId : -1);
+        }
+    }
+
+    /// <summary>The mark under the point, if any — how a click selects one to remove.</summary>
+    public bool SelectRedactionMarkAt(int pageIndex, PdfPoint point)
+    {
+        if (_document is null)
+            return false;
+        using var page = _document.GetPage(pageIndex);
+        foreach (var mark in page.GetRedactionMarks())
+        {
+            if (point.X < mark.Bounds.X || point.X > mark.Bounds.X + mark.Bounds.Width ||
+                point.Y < mark.Bounds.Y || point.Y > mark.Bounds.Y + mark.Bounds.Height)
+            {
+                continue;
+            }
+            _selectedMark = (pageIndex, mark.MarkId, mark.Bounds);
+            Selection = null;
+            RefreshRedactionMarks();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Removes the selected mark. Nothing was removed from the document, so this
+    /// is a plain undoable edit.</summary>
+    public bool RemoveSelectedRedactionMark()
+    {
+        if (_document is null || _selectedMark is not { } mark)
+            return false;
+        Apply(new RemoveRedactionMarkOperation(_document, mark.PageIndex, mark.MarkId, mark.Bounds),
+              Strings.RedactMarkRemoved);
+        _selectedMark = null;
+        RefreshRedactionMarks();
+        return true;
+    }
+
+    /// <summary>What the summary says after a redaction, from the report's counts.</summary>
+    internal static string DescribeRedaction(RedactionCounts counts)
+    {
+        var removed = RedactionSummary.Removed(counts,
+            (kind, n) => kind switch
+            {
+                RedactionSummary.RedactionKind.Characters => Strings.RedactedCharacters(n),
+                RedactionSummary.RedactionKind.Images => Strings.RedactedImages(n),
+                RedactionSummary.RedactionKind.FormFields => Strings.RedactedFormFields(n),
+                _ => Strings.RedactedAnnotations(n),
+            },
+            kind => kind switch
+            {
+                RedactionSummary.RedactionKind.Characters => Strings.RedactedCharactersOne,
+                RedactionSummary.RedactionKind.Images => Strings.RedactedImagesOne,
+                RedactionSummary.RedactionKind.FormFields => Strings.RedactedFormFieldsOne,
+                _ => Strings.RedactedAnnotationsOne,
+            },
+            Strings.RedactedNothing);
+        return counts.Areas == 1 ? Strings.RedactSummaryOne(removed) : Strings.RedactSummaryMany(counts.Areas, removed);
+    }
+
+    /// <summary>
+    /// Applies every mark, and says what happened. Returns true when the document was
+    /// redacted and may be saved; false when the redaction refused, in which case NOTHING
+    /// was removed, the marks are still there, and the caller must not save.
+    /// </summary>
+    public async Task<bool> ApplyRedactionsAsync()
+    {
+        if (_document is not { } document || !HasRedactionMarks)
+            return true;
+        try
+        {
+            var report = await OffUiThread(document.ApplyRedactions);
+            if (!report.Applied)
+            {
+                var refusal = report.Refusals.Count > 0 ? report.Refusals[0] : default;
+                Status = Strings.RedactRefusedTitle + " " +
+                         Strings.RedactRefusedBody(refusal.PageIndex + 1) + " " + DescribeRefusal(refusal);
+                RefreshRedactionMarks();
+                return false;
+            }
+            // The removed content is gone, and so is every way back to it. The undo stack
+            // held the very objects the redaction freed (#173) — the core discards its
+            // handles, so an undo could not put them back even if we kept it — and the
+            // journal starts again, without the entries that led here.
+            _undoStack.Clear();
+            RaiseUndoRedo();
+            if (DocumentPath is { Length: > 0 } path)
+                _journal.MarkSaved(path);
+            _selectedMark = null;
+            RefreshRedactionMarks();
+            Status = DescribeRedaction(report.Counts);
+            return true;
+        }
+        catch (DocumentRestrictedException)
+        {
+            Status = Strings.RedactNeedsPermission;
+            return false;
+        }
+        catch (RedactionFailedException)
+        {
+            // The rehearsal says this cannot happen; if it does the document can never be
+            // saved, so the only honest thing is to say so and stop.
+            Status = Strings.RedactFailed;
+            return false;
+        }
+    }
+
+    /// <summary>The name Save as a copy offers: "lease.pdf" becomes "lease-redacted.pdf".</summary>
+    public static string SuggestRedactedFileName(string original)
+    {
+        var directory = Path.GetDirectoryName(original) ?? "";
+        var name = Path.GetFileNameWithoutExtension(original);
+        var extension = Path.GetExtension(original);
+        var suggestion = name + Strings.RedactedFileSuffix + extension;
+        return directory.Length == 0 ? suggestion : Path.Combine(directory, suggestion);
+    }
+
+    /// <summary>Why a redaction refused, in the user's words rather than the engine's.</summary>
+    internal static string DescribeRefusal(RedactionRefusal refusal) => refusal.Reason switch
+    {
+        RedactionRefusalReason.Type3Font or RedactionRefusalReason.FontCannotRedraw => Strings.RedactRefusedFont,
+        RedactionRefusalReason.FormXObject => Strings.RedactRefusedShared,
+        RedactionRefusalReason.LayoutGuard => Strings.RedactRefusedLayout,
+        _ => Strings.RedactRefusedOther,
+    };
 
     // --- Find in document (SDD §3.6 / F6) ---
 

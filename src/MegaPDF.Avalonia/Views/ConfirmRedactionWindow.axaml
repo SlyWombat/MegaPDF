@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.ConfirmRedactionWindow"
+        Title="{x:Static loc:Strings.RedactConfirmTitle}"
+        Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <!-- The confirmation #173 asks for: what redaction does, that it cannot be undone after
+       saving, and Save as a copy as the DEFAULT action. Overwriting is available and is the
+       second choice, because the safe thing should be the easy thing when the unsafe thing
+       cannot be taken back. -->
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Name="PromptText" FontWeight="SemiBold" TextWrapping="Wrap"
+               Text="{x:Static loc:Strings.RedactConfirmTitle}" />
+    <TextBlock Text="{x:Static loc:Strings.RedactConfirmBody}" TextWrapping="Wrap" Opacity="0.85" />
+    <TextBlock Name="MarkCountText" TextWrapping="Wrap" Opacity="0.7" />
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8,0,0">
+      <Button Name="OverwriteButton" Grid.Column="0"
+              Content="{x:Static loc:Strings.RedactOverwrite}" />
+      <Button Name="CancelButton" Grid.Column="2" Margin="0,0,8,0"
+              Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="SaveCopyButton" Grid.Column="3" Classes="accent"
+              Content="{x:Static loc:Strings.RedactSaveCopy}" IsDefault="True" />
+    </Grid>
+  </StackPanel>
+</Window>

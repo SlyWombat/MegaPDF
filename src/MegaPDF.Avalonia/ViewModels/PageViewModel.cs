@@ -131,6 +131,7 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
         _matchRects = rects;
         _currentMatch = currentIndex;
         RebuildHighlights();
+        RebuildRedactionMarks();
     }
 
     private void RebuildHighlights()
@@ -142,6 +143,37 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
             var r = _matchRects[i];
             Highlights.Add(new Highlight(
                 r.X * scale, r.Y * scale, r.Width * scale, r.Height * scale, i == _currentMatch));
+        }
+    }
+
+    /// <summary>
+    /// Areas marked for redaction on this page (#173), in device-independent pixels.
+    ///
+    /// Drawn over the page rather than into it, because a mark is not page content and is
+    /// never written to the file: the core keeps it, the view shows it. That also means
+    /// marking costs no re-render — the raster is untouched — so marking a dozen words on
+    /// a heavy page is instant.
+    /// </summary>
+    public ObservableCollection<RedactionMarkView> RedactionMarks { get; } = [];
+
+    private IReadOnlyList<RedactionMark> _marks = [];
+    private int _selectedMark = -1;
+
+    internal void SetRedactionMarks(IReadOnlyList<RedactionMark> marks, int selectedMarkId)
+    {
+        _marks = marks;
+        _selectedMark = selectedMarkId;
+        RebuildRedactionMarks();
+    }
+
+    private void RebuildRedactionMarks()
+    {
+        RedactionMarks.Clear();
+        var scale = PageBitmap.PointsToPixels * Zoom;
+        foreach (var mark in _marks)
+        {
+            RedactionMarks.Add(new RedactionMarkView(mark.MarkId, mark.Bounds.X * scale, mark.Bounds.Y * scale,
+                mark.Bounds.Width * scale, mark.Bounds.Height * scale, mark.MarkId == _selectedMark));
         }
     }
 
@@ -435,6 +467,17 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
 /// the rest, which is the difference between "there are 40 matches" and "you are
 /// looking at match 7".
 /// </summary>
+/// <summary>
+/// One area marked for redaction, already in device-independent pixels relative to the page
+/// surface (#173). Translucent with an outline, so the user can still read what they are
+/// about to remove — which is the whole point of marking before applying.
+/// </summary>
+public sealed record RedactionMarkView(int MarkId, double X, double Y, double Width, double Height, bool IsSelected)
+{
+    /// <summary>Positioned as a margin, for the reason <see cref="Highlight.Margin"/> gives.</summary>
+    public global::Avalonia.Thickness Margin => new(X, Y, 0, 0);
+}
+
 public sealed record Highlight(double X, double Y, double Width, double Height, bool IsCurrent)
 {
     /// <summary>
