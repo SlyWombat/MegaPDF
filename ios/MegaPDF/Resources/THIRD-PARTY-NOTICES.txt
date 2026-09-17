@@ -16,6 +16,14 @@ that follow, as required by the respective licenses.
 
 
 ========================================================================
+ Components included
+========================================================================
+
+  * Mega PDF (this application) — Apache License 2.0
+  * PDFium, and the components built into it — BSD, MIT and other licenses
+
+
+========================================================================
  Mega PDF — Apache License 2.0
 ========================================================================
 

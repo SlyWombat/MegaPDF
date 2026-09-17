@@ -16,7 +16,18 @@ that follow, as required by the respective licenses.
 
 
 ========================================================================
- Mega PDF, AndroidX / Jetpack Compose, Kotlin, Material Components — Apache License 2.0
+ Components included
+========================================================================
+
+  * Mega PDF (this application) — Apache License 2.0
+  * AndroidX and Jetpack Compose — Apache License 2.0
+  * Material Components for Android — Apache License 2.0
+  * The Kotlin standard library, kotlinx.coroutines and kotlinx.serialization — Apache License 2.0
+  * PDFium, and the components built into it — BSD, MIT and other licenses
+
+
+========================================================================
+ Mega PDF, AndroidX / Jetpack Compose, Kotlin, kotlinx.coroutines, kotlinx.serialization, Material Components — Apache License 2.0
 ========================================================================
 
 Apache License
