@@ -22,8 +22,10 @@ The driver works the real UI — dump the view hierarchy, find a node by the lab
 the app actually drew, tap the middle of it — so the flows go through the system
 document and photo pickers rather than round them.
 
-**Captures: 27 cells × ~50 screens = 1,341 images.** A cell is
-*device × language × theme*, plus a largest-text pass per language:
+**Captures: 27 cells × 50 screens, twice.** 1,347 images before the fixes, which is
+where the defects below were found, and **1,350 again afterwards — every scene in
+every cell, no failures and nothing missing.** A cell is *device × language ×
+theme*, plus a largest-text pass per language:
 3 devices × (en, fr-CA, fr-FR) × (light, dark), then the same three languages at
 `font_scale 2.0`.
 
@@ -66,16 +68,23 @@ query field a few pixels wide.
 Both checked across the whole matrix by `tools/android-qa/compare.py`, so the eye
 went where it was needed.
 
-**Dark:** the app is light-only on purpose (`ui/Brand.kt`, #40). Every screen that
-differs between a light cell and its dark twin is one where the *system* is
-drawing — the document picker, the create-document picker, the soft keyboard over
-a dialog or the find bar. **No surface of the app's own changes in dark mode**, in
+**Dark:** the app is light-only on purpose (`ui/Brand.kt`, #40). 113 of the 675
+light/dark pairs differ, and every one is a screen where the *system* is drawing —
+the document picker, the create-document picker, or the soft keyboard over a
+dialog or the find bar. **No surface of the app's own changes in dark mode**, in
 any cell. The light-only decision holds with no leakage.
 
+Three pairs differ for a reason that is neither: the viewer's zoom state, the
+tooltip, and the Opening… strip are all races the driver cannot win reliably.
+`detectTapGestures` defers a tap ~300 ms to tell it from a double tap, so a
+double tap on a loaded emulator sometimes arrives as a single tap — which, on the
+demo page, selects the signature under it instead of zooming. Both outcomes are
+the app working; they just are not the same picture.
+
 **Language:** no screen of the app's own is pixel-identical to its English twin.
-The only identical captures are the two system pickers, which stay in the device
-language because only the *app's* locale is overridden — correct, and what the
-Play listing crops out.
+The nine that are identical are all the document picker or the create-document
+picker, which stay in the device language because only the *app's* locale is
+overridden — correct, and what the Play listing crops out.
 
 The comparison is by absolute changed-pixel count, not by fraction: one swapped
 toolbar word is ~2,000 pixels, which is 0.4 % of a phone screen but 0.05 % of a
@@ -129,6 +138,25 @@ all. Driven that way, **both zoom gestures look broken and are not**. The rig
 writes to the kernel input device instead (`tools/android-qa/touch.py`), which is
 how the gestures above were actually exercised. Anyone repeating this pass should
 not report a zoom bug found with `input tap`.
+
+### Two driver bugs the second pass exposed
+
+Worth recording, because both hid a screen rather than breaking loudly, and both
+had been hiding it in the first pass too.
+
+- **The tick was given as a share of the screen.** The page is fitted to the
+  width on every device, but the bars above and below it are a different share of
+  the screen at 480 dpi than at 320 — so the tap that hit the review form's first
+  checkbox on the small phone landed beside it on the large one. The document was
+  never marked changed, so Close just closed, and **the unsaved-changes prompt was
+  never actually captured on the large phone.** Given in PDF points now and mapped
+  through the page's own bounds.
+- **A field tapped by its label.** Once the dialog bodies scroll (#183), the
+  second field of the protection dialog can start below the fold at the largest
+  text size, so the capture lost it on the small phone. The driver scrolls to it.
+
+Twelve cells were re-shot after fixing both. A green scene count is not the same
+as a right capture, which is the reason to look at the images as well as the log.
 
 ## The busy indicators
 
