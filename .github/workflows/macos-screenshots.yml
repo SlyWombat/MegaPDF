@@ -81,6 +81,24 @@ jobs:
           "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --theme dark --screenshot-state sign \
               --signature "$SIG" --screenshot "$OUT/11-dark-sign.png"
 
+          # About MegaPDF and its third-party notices (#176), in all three
+          # languages and both themes — the only screens in the app whose whole
+          # content is text, so a clipped translation shows up nowhere else. The
+          # state renders the panel to <out>-dialog.png beside the window; the
+          # window file itself is the same main window as 02 and is dropped.
+          # The app menu that leads to About is macOS's own NSMenu and no window
+          # renderer can reach it: --self-test checks that one.
+          for lang in en fr-CA fr; do
+            for theme in light dark; do
+              for state in about notices; do
+                "$APP" "$CONTAINER/tmp/fixtures/demo.pdf" --language "$lang" --theme "$theme" \
+                    --screenshot-state "$state" \
+                    --screenshot "$OUT/12-$state-$lang-$theme.png"
+                rm -f "$OUT/12-$state-$lang-$theme.png"
+              done
+            done
+          done
+
           ls -la "$OUT"
 
       - uses: actions/upload-artifact@v4
