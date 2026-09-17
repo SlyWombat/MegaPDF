@@ -2,7 +2,6 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Input;
-using Avalonia.Media.Fonts;
 using Avalonia.LogicalTree;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
@@ -85,8 +84,14 @@ internal static class Program
         // ".AppleSystemUIFont" is San Francisco, so this is not a change of typeface:
         // it is asking for the font the app already meant to use. "SF Pro" and
         // "SF Pro Text" both fall back to the same broken default and do not fix it.
+        //
+        // global:: because this file's own namespace is MegaPDF.Avalonia, so a bare
+        // Avalonia.Media here would be read as MegaPDF.Avalonia.Media.
         if (OperatingSystem.IsMacOS())
-            builder = builder.With(new FontManagerOptions { DefaultFamilyName = ".AppleSystemUIFont" });
+            builder = builder.With(new global::Avalonia.Media.FontManagerOptions
+            {
+                DefaultFamilyName = ".AppleSystemUIFont",
+            });
 
         // A flyout is normally its own OS window, which RenderTargetBitmap cannot
         // see, so the `sign` screenshot state (#100) would capture a closed library.
