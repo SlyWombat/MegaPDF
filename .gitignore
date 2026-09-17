@@ -78,3 +78,7 @@ libs/pdfium/linux-x64/
 
 # Avalonia's XAML compiler drops a scratch file per build here (#158).
 .avalonia-build-tasks/
+
+# Python bytecode from the QA rig running in its container
+__pycache__/
+*.pyc
