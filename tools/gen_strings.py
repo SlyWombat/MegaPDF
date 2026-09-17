@@ -171,6 +171,10 @@ FR_CA_TO_FR_FR = [
     ("crochet", "coche"),
     ("Crochet", "Coche"),
     ("Merci tout spécial à", "Un grand merci à"),
+    # The store-capture demo person (#146 §3): English Jane Whitfield, fr-CA
+    # Hélène Bélanger, fr-FR Céline Lefèvre. A name, not a word — but it differs between
+    # the two Frenches exactly the way the rest of this table does.
+    ("Hélène Bélanger", "Céline Lefèvre"),
     ("fin de semaine", "week-end"),
     # Not a word but a person: the demo signatory in the store captures, who has
     # a different name per listing language (#146 §3, Dave 2026-09-15). Only the
