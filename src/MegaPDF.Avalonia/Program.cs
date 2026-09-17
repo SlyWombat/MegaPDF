@@ -24,6 +24,7 @@ internal static class Program
         return args.Contains("--render-check") ? RenderCheck(args)
              : args.Contains("--self-test") ? SelfTest(args)
              : args.Contains("--print-check") ? PrintCheck(args)
+             : args.Contains("--language-check") ? LanguageCheck()
              : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
@@ -31,8 +32,11 @@ internal static class Program
     /// Which language the app runs in (#91). `--language fr-CA` wins, so a
     /// French run can be checked on an English machine; otherwise, on macOS, the
     /// language the person chose in System Settings — .NET's own default comes
-    /// from the POSIX locale, which a Dock-launched .app is not given. Anywhere
-    /// else .NET's default stands.
+    /// from the POSIX locale, which a Dock-launched .app is not given; and on
+    /// Linux the POSIX locale environment read in full, because .NET reads all of
+    /// it except LANGUAGE, which is the one a desktop sets when the display
+    /// language differs from the formats (#158). Anywhere else .NET's default
+    /// stands.
     ///
     /// Never fatal: a tag that does not parse is ignored, and the app comes up in
     /// whatever .NET picked. There is no English-only fallback to force, because
@@ -48,6 +52,8 @@ internal static class Program
                 tag = args[flag + 1];
             else if (OperatingSystem.IsMacOS())
                 tag = Platform.MacLanguage.PreferredLanguageTag();
+            else if (OperatingSystem.IsLinux())
+                tag = Platform.LinuxLanguage.PreferredLanguageTag();
 
             if (string.IsNullOrWhiteSpace(tag))
                 return;
@@ -111,6 +117,7 @@ internal static class Program
         {
             builder = builder
                 .With(new Win32PlatformOptions { OverlayPopups = true })
+                .With(new X11PlatformOptions { OverlayPopups = true })
                 .With(new AvaloniaNativePlatformOptions { OverlayPopups = true });
         }
         return builder;
@@ -185,6 +192,25 @@ internal static class Program
     /// </summary>
     private static int PrintCheck(string[] args)
     {
+        // Linux prints through CUPS' lp rather than a framework, so there is no
+        // marshalling to prove — what can be wrong is the lpstat parsing that
+        // decides which queues exist and which is the default, and whether the
+        // client tools are installed at all (#158). Checked against a fixed sample,
+        // because a build runner has no printers and a probe that only asked the
+        // machine would pass by finding nothing.
+        if (OperatingSystem.IsLinux())
+        {
+            var linux = Platform.LinuxPrinter.Probe();
+            Console.WriteLine($"print-check: {linux.Message}");
+            if (!linux.Ok)
+            {
+                Console.Error.WriteLine("::error::print-check FAILED — the CUPS printing route is not sound.");
+                return 1;
+            }
+            Console.WriteLine("print-check: PASS");
+            return 0;
+        }
+
         if (!OperatingSystem.IsMacOS())
         {
             Console.WriteLine("print-check: skipped (not macOS)");
@@ -222,6 +248,88 @@ internal static class Program
 
         Console.WriteLine("print-check: PASS");
         return 0;
+    }
+
+    /// <summary>
+    /// Headless diagnostic: which language the app would run in, and — on Linux —
+    /// that the POSIX locale environment is read the way the rest of the desktop
+    /// reads it (#91, #158).
+    ///
+    /// The Linux half is the part with rules worth asserting, and they are asserted
+    /// against a table rather than against the machine's own environment, so the
+    /// check means the same thing on a French desktop and on an English CI runner.
+    /// </summary>
+    private static int LanguageCheck()
+    {
+        Console.WriteLine($"language-check: the app would run in {CultureInfo.CurrentUICulture.Name} "
+                          + $"(formats {CultureInfo.CurrentCulture.Name})");
+
+        if (OperatingSystem.IsMacOS())
+        {
+            Console.WriteLine("language-check: System Settings says "
+                              + (Platform.MacLanguage.PreferredLanguageTag() ?? "(unreadable)"));
+            Console.WriteLine("language-check: PASS");
+            return 0;
+        }
+
+        if (!OperatingSystem.IsLinux())
+        {
+            Console.WriteLine("language-check: no platform rules to check here (.NET's own default stands)");
+            Console.WriteLine("language-check: PASS");
+            return 0;
+        }
+
+        // (what the locale environment holds, what the app must run in, why it matters)
+        (Dictionary<string, string> Variables, string? Expected, string Why)[] cases =
+        [
+            (new() { ["LANG"] = "fr_CA.UTF-8" }, "fr-CA",
+             "a plain French Canadian desktop"),
+            (new() { ["LANG"] = "fr_FR.UTF-8" }, "fr-FR",
+             "France French, which falls back to the neutral fr catalogue"),
+            (new() { ["LANG"] = "en_CA.UTF-8", ["LANGUAGE"] = "fr_CA:fr" }, "fr-CA",
+             "GNOME's display language set to French with Canadian English formats — "
+             + "the case .NET alone gets wrong, because it never reads LANGUAGE"),
+            (new() { ["LANGUAGE"] = "fr:en", ["LANG"] = "en_US.UTF-8" }, "fr",
+             "a bare language with no territory"),
+            (new() { ["LC_ALL"] = "fr_CA.UTF-8", ["LANG"] = "en_US.UTF-8" }, "fr-CA",
+             "LC_ALL outranks LANG"),
+            (new() { ["LC_MESSAGES"] = "fr_CA.UTF-8", ["LANG"] = "en_US.UTF-8" }, "fr-CA",
+             "LC_MESSAGES outranks LANG"),
+            (new() { ["LC_ALL"] = "C", ["LANGUAGE"] = "fr_CA:fr" }, null,
+             "LC_ALL=C vetoes LANGUAGE, so a script asking for stable output gets it"),
+            (new() { ["LANG"] = "POSIX" }, null,
+             "the untranslated locale asks for no translation"),
+            (new() { ["LANG"] = "fr_CA.UTF-8@euro" }, "fr-CA",
+             "a codeset and a modifier are dropped, not translated"),
+            (new(), null,
+             "an empty environment leaves .NET's own default alone"),
+        ];
+
+        var failures = 0;
+        foreach (var (variables, expected, why) in cases)
+        {
+            var got = Platform.LinuxLanguage.PreferredLanguageTag(
+                name => variables.TryGetValue(name, out var value) ? value : null);
+            var ok = string.Equals(got, expected, StringComparison.Ordinal);
+            if (!ok) failures++;
+            var shown = string.Join(" ", variables.Select(v => v.Key + "=" + v.Value));
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {why}");
+            Console.WriteLine($"          {(shown.Length == 0 ? "(nothing set)" : shown)} -> {got ?? "(.NET's default)"}"
+                              + (ok ? "" : $", expected {expected ?? "(.NET's default)"}"));
+        }
+
+        // And that every tag the table produces is a culture .NET actually has, so a
+        // pass here cannot mean "resolved to a custom culture with no resources".
+        foreach (var tag in new[] { "fr-CA", "fr", "fr-FR", "en-CA" })
+        {
+            var culture = CultureInfo.GetCultureInfo(tag);
+            var ok = !culture.Equals(CultureInfo.InvariantCulture);
+            if (!ok) failures++;
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {tag} resolves to a real culture ({culture.EnglishName})");
+        }
+
+        Console.WriteLine($"language-check: {(failures == 0 ? "PASS" : $"FAIL — {failures} check(s)")}");
+        return failures == 0 ? 0 : 1;
     }
 
     /// <summary>

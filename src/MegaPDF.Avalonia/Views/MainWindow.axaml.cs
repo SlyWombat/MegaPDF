@@ -147,6 +147,7 @@ public partial class MainWindow : Window
             vm.RenameSignatureRequested += OnRenameSignatureRequested;
             vm.DeleteSignatureRequested += OnDeleteSignatureRequested;
             vm.PageRewriteConfirmationRequested += ConfirmPageRewriteAsync;
+            vm.PrintDestinationRequested += ChoosePrinterAsync;
             vm.PropertyChanged += (_, args) =>
             {
                 // A card was clicked: placement is armed, so the library closes and
@@ -1024,6 +1025,20 @@ public partial class MainWindow : Window
         var dialog = new ConfirmPageRewriteWindow();
         await dialog.ShowDialog(this);
         return dialog.Confirmed;
+    }
+
+    /// <summary>
+    /// Which printer, and how many copies (#158). CUPS' lp would have used the
+    /// default queue without asking, and printing to the wrong printer is the one
+    /// mistake in this app that cannot be undone.
+    /// </summary>
+    private async Task<Platform.LinuxPrinter.Choice?> ChoosePrinterAsync(
+        IReadOnlyList<Platform.LinuxPrinter.Destination> destinations)
+    {
+        var dialog = new PrinterWindow();
+        dialog.Present(ViewModel?.DocumentName ?? "", destinations);
+        await dialog.ShowDialog(this);
+        return dialog.Chosen;
     }
 
     /// <summary>

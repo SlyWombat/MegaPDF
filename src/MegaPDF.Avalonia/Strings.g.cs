@@ -443,8 +443,26 @@ public static partial class Strings
     /// <summary>Could not shrink.</summary>
     public static string CouldNotShrink => Get("CouldNotShrink");
 
-    /// <summary>Printing from this build is available on macOS only.</summary>
-    public static string PrintingMacOnly => Get("PrintingMacOnly");
+    /// <summary>Printing from this build is available on macOS and Linux only.</summary>
+    public static string PrintingUnavailableHere => Get("PrintingUnavailableHere");
+
+    /// <summary>Printing needs the CUPS printing system. Install the cups-client package and try again.</summary>
+    public static string PrintingNeedsCups => Get("PrintingNeedsCups");
+
+    /// <summary>Printing from inside the sandbox is not available in this build yet.</summary>
+    public static string PrintingNeedsPortal => Get("PrintingNeedsPortal");
+
+    /// <summary>The print queue did not answer.</summary>
+    public static string PrintQueueDidNotAnswer => Get("PrintQueueDidNotAnswer");
+
+    /// <summary>No printers are set up on this computer.</summary>
+    public static string NoPrintersConfigured => Get("NoPrintersConfigured");
+
+    /// <summary>Printer</summary>
+    public static string Printer => Get("Printer");
+
+    /// <summary>Copies</summary>
+    public static string Copies => Get("Copies");
 
     /// <summary>Could not print.</summary>
     public static string CouldNotPrint => Get("CouldNotPrint");

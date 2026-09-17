@@ -159,7 +159,7 @@ internal static class MacPrinter
     internal static Outcome Print(string pdfPath)
     {
         if (!OperatingSystem.IsMacOS())
-            return new Outcome(false, Strings.PrintingMacOnly);
+            return new Outcome(false, Strings.PrintingUnavailableHere);
 
         if (!EnsureFrameworks())
             return new Outcome(false, Strings.PrintComponentsNotLoaded);

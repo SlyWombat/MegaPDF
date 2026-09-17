@@ -1,0 +1,38 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.PrinterWindow"
+        Title="{x:Static loc:Strings.Print}"
+        Width="420" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <!-- Linux printing goes through CUPS' lp, which prints to the default queue and
+       asks nothing (#158). This is the asking: which printer, and how many copies.
+       Deliberately the two questions people actually answer — paper size, duplex
+       and the rest belong to the printer's own defaults, which every Linux desktop
+       already lets you set. -->
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Name="DocumentText" FontWeight="SemiBold" TextWrapping="Wrap" />
+
+    <StackPanel Spacing="4">
+      <TextBlock Text="{x:Static loc:Strings.Printer}" />
+      <ComboBox Name="PrinterBox" HorizontalAlignment="Stretch" />
+    </StackPanel>
+
+    <StackPanel Name="CopiesPanel" Spacing="4">
+      <TextBlock Text="{x:Static loc:Strings.Copies}" />
+      <NumericUpDown Name="CopiesBox" Minimum="1" Maximum="99" Increment="1"
+                     Value="1" FormatString="0" HorizontalAlignment="Left" Width="120" />
+    </StackPanel>
+
+    <TextBlock Name="NoPrintersText" Text="{x:Static loc:Strings.NoPrintersConfigured}"
+               TextWrapping="Wrap" Opacity="0.8" IsVisible="False" />
+
+    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,8,0,0">
+      <Button Name="CancelButton" Grid.Column="1" Margin="0,0,8,0"
+              Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="PrintButton" Grid.Column="2" Classes="accent"
+              Content="{x:Static loc:Strings.Print}" IsDefault="True" />
+    </Grid>
+  </StackPanel>
+</Window>

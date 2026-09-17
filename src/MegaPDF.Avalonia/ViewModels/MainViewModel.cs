@@ -79,6 +79,14 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// would alter: the view asks, true for Continue. With nobody listening the change applies.
     /// </summary>
     public event Func<Task<bool>>? PageRewriteConfirmationRequested;
+
+    /// <summary>
+    /// Which printer, and how many copies (#158, Linux). The view shows the dialog
+    /// and answers; null is a cancel. With nobody listening — a headless run — the
+    /// system default queue is used, which is what a bare `lp` would have done.
+    /// </summary>
+    internal event Func<IReadOnlyList<Platform.LinuxPrinter.Destination>,
+                      Task<Platform.LinuxPrinter.Choice?>>? PrintDestinationRequested;
     private readonly ISignatureLibrary _signatures;
     private readonly RecentFiles _recents;
     private readonly AppSettings _settings;
@@ -806,13 +814,50 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is not { } document || Busy.IsBusy)
             return;
 
-        if (!OperatingSystem.IsMacOS())
+        if (!OperatingSystem.IsMacOS() && !OperatingSystem.IsLinux())
         {
             // Deliberately not implemented for Avalonia-on-Windows: MegaPDF.App is
             // the Windows product and already prints. A second, half-working
             // implementation would be a liability for a case that does not exist.
-            Status = Strings.PrintingMacOnly;
+            Status = Strings.PrintingUnavailableHere;
             return;
+        }
+
+        // Linux asks which printer *before* anything is written, so cancelling the
+        // dialog costs nothing — not even a copy of the document in the temp
+        // directory. macOS cannot: NSPrintOperation's panel is part of the print,
+        // and it needs the file to preview (#158).
+        Platform.LinuxPrinter.Choice? choice = null;
+        if (OperatingSystem.IsLinux())
+        {
+            if (Platform.LinuxPrinter.InFlatpakSandbox)
+            {
+                Status = Strings.PrintingNeedsPortal;
+                return;
+            }
+            if (!Platform.LinuxPrinter.IsAvailable)
+            {
+                Status = Strings.PrintingNeedsCups;
+                return;
+            }
+
+            if (PrintDestinationRequested is { } ask)
+            {
+                choice = await ask(Platform.LinuxPrinter.Destinations());
+                if (choice is null)
+                {
+                    // Cancelled at the dialog. Not an error, and the same words macOS
+                    // uses when the print panel is dismissed.
+                    Status = Strings.PrintingCancelled;
+                    return;
+                }
+            }
+            else
+            {
+                // Nothing is listening — a headless run. Behave as a bare `lp` would
+                // and use the system default rather than doing nothing.
+                choice = new Platform.LinuxPrinter.Choice(null, 1);
+            }
         }
 
         var temp = Path.Combine(Path.GetTempPath(), $"megapdf-print-{Guid.NewGuid():N}.pdf");
@@ -828,8 +873,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 });
             }
 
-            // NSPrintOperation drives AppKit, so the print panel runs on the UI thread.
-            var outcome = Platform.MacPrinter.Print(temp);
+            Platform.MacPrinter.Outcome outcome;
+            if (OperatingSystem.IsLinux())
+            {
+                // lp reads the file and returns once the job is queued, but it is
+                // still a process launch: off the UI thread, so a wedged spooler
+                // cannot freeze the window while it waits.
+                var linux = choice!;
+                var title = DocumentName ?? "MegaPDF";
+                using (Busy.Begin(Strings.BusyPrinting))
+                {
+                    var sent = await OffUiThread(() =>
+                        Platform.LinuxPrinter.Print(temp, linux.Destination, title, linux.Copies));
+                    outcome = new Platform.MacPrinter.Outcome(sent.Ok, sent.Message);
+                }
+            }
+            else
+            {
+                // NSPrintOperation drives AppKit, so the print panel runs on the UI thread.
+                outcome = Platform.MacPrinter.Print(temp);
+            }
             Status = outcome.Message;
         }
         catch (Exception ex)

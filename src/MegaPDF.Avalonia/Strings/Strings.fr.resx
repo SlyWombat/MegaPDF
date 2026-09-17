@@ -557,8 +557,28 @@
     <value>Impossible de réduire.</value>
     <comment>Technical detail follows</comment>
   </data>
-  <data name="PrintingMacOnly" xml:space="preserve">
-    <value>L'impression n'est offerte que sur macOS dans cette version.</value>
+  <data name="PrintingUnavailableHere" xml:space="preserve">
+    <value>L'impression n'est offerte que sur macOS et Linux dans cette version.</value>
+  </data>
+  <data name="PrintingNeedsCups" xml:space="preserve">
+    <value>L'impression nécessite le système d'impression CUPS. Installez le paquet cups-client, puis réessayez.</value>
+  </data>
+  <data name="PrintingNeedsPortal" xml:space="preserve">
+    <value>L'impression depuis le bac à sable n'est pas encore offerte dans cette version.</value>
+  </data>
+  <data name="PrintQueueDidNotAnswer" xml:space="preserve">
+    <value>La file d'impression n'a pas répondu.</value>
+  </data>
+  <data name="NoPrintersConfigured" xml:space="preserve">
+    <value>Aucune imprimante n'est configurée sur cet ordinateur.</value>
+  </data>
+  <data name="Printer" xml:space="preserve">
+    <value>Imprimante</value>
+    <comment>Label above the list of printers to send the document to</comment>
+  </data>
+  <data name="Copies" xml:space="preserve">
+    <value>Copies</value>
+    <comment>Label above how many copies to print</comment>
   </data>
   <data name="CouldNotPrint" xml:space="preserve">
     <value>Impossible d'imprimer.</value>
