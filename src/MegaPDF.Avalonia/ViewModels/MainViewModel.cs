@@ -982,21 +982,35 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     // --- Recent documents (SDD §2.2 empty state) ---
 
     /// <summary>
-    /// One row of the empty state's recents list: the file name, the folder it is
-    /// in when that is the only thing telling it from another row, and the full
-    /// path for the tooltip and the accessible name (#165).
+    /// One row of the empty state's recents list: the file name, and under it where
+    /// the file lives (#165).
+    ///
+    /// Every row carries its location, not only the rows whose names clash. Files
+    /// from one template or one scanner share a name, and a list that added the
+    /// folder only sometimes would rearrange itself as entries came and went — the
+    /// shared rule for this issue, which Windows and iOS follow too.
     /// </summary>
-    /// <param name="Folder">
-    /// Null unless another recent shares this row's file name. Most documents from
-    /// one template or one scanner are called the same thing, so a list of six
-    /// identical rows is no list at all. Shown only when it disambiguates, so the
-    /// common case stays a single line.
-    /// </param>
-    public sealed record RecentRow(RecentEntry Entry, string Name, string? Folder)
+    /// <param name="Name">What Finder calls the file, so ".pdf" is hidden when the
+    /// person has Finder set to hide extensions.</param>
+    /// <param name="Location">The line under the name, shortened in the middle if it
+    /// is long. Null only for a path with no folder above it at all.</param>
+    /// <param name="FullLocation">Every segment, for the help tag.</param>
+    public sealed record RecentRow(RecentEntry Entry, string Name, string? Location, string? FullLocation)
     {
         public string Path => Entry.Path;
 
-        public bool HasFolder => Folder is not null;
+        public bool HasLocation => !string.IsNullOrEmpty(Location);
+
+        /// <summary>The help tag: where the file is, in full, never a POSIX path.</summary>
+        public string Tip => FullLocation is { Length: > 0 } full ? full : Name;
+
+        /// <summary>
+        /// The name and the place together, so a screen reader can tell two rows with
+        /// the same file name apart (#2). The same sentence the Windows and iOS halves
+        /// of #165 read out.
+        /// </summary>
+        public string AccessibleName =>
+            FullLocation is { Length: > 0 } full ? Strings.RecentInLocation(Name, full) : Name;
     }
 
     public ObservableCollection<RecentRow> Recents { get; } = [];
@@ -1006,21 +1020,38 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public void LoadRecents()
     {
         Recents.Clear();
-        var entries = _recents.Entries;
-        // Case-insensitively: that is how the file systems we open from compare
-        // names, and how a person reads the list.
-        var ambiguous = entries
-            .GroupBy(e => e.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .Where(g => g.Count() > 1)
-            .Select(g => g.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var entry in entries)
+        // Finder's names for the places a document can live — localised, and the
+        // account's own name rather than a POSIX home path. Empty off macOS, where the
+        // raw folder names are all there is and all that is wanted.
+        var places = OperatingSystem.IsMacOS()
+            ? Platform.MacFileNames.Places()
+            : (IReadOnlyList<NamedFolder>)[];
+
+        var rows = _recents.Entries
+            .Select(entry => (
+                Entry: entry,
+                Name: (OperatingSystem.IsMacOS() ? Platform.MacFileNames.DisplayName(entry.Path) : null)
+                      ?? entry.DisplayName,
+                Segments: RecentLocation.Segments(entry.Path, places)))
+            .ToList();
+
+        // How far up a row has to go before it reads differently from the others with
+        // the same name. The parent folder usually does it; when it does not, the line
+        // keeps that much more of the path instead of shortening it away. Compared the
+        // way a person reads the list, not the way a byte comparison would.
+        var depths = rows
+            .GroupBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToDictionary(g => g.Key,
+                          g => RecentLocation.DistinguishingDepth(g.Select(r => r.Segments).ToList()),
+                          StringComparer.CurrentCultureIgnoreCase);
+
+        foreach (var row in rows)
         {
-            var folder = ambiguous.Contains(entry.DisplayName)
-                ? System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(entry.Path))
-                : null;
-            Recents.Add(new RecentRow(entry, entry.DisplayName,
-                                      string.IsNullOrEmpty(folder) ? null : folder));
+            var line = RecentLocation.Line(row.Segments, keepDeepest: depths[row.Name]);
+            var full = string.Join(RecentLocation.Separator, row.Segments);
+            Recents.Add(new RecentRow(row.Entry, row.Name,
+                                      string.IsNullOrEmpty(line) ? null : line,
+                                      string.IsNullOrEmpty(full) ? null : full));
         }
         OnPropertyChanged(nameof(HasRecents));
     }

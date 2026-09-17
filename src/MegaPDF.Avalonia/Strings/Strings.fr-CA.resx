@@ -1118,4 +1118,16 @@
     <value>Services</value>
     <comment>FR-REVIEW #191 — copied from macOS itself, not translated here: TextEdit's Edit.loctable on macOS 26, where fr and fr-CA are the same string. macOS app menu: the system's Services submenu. The same word in French (#191)</comment>
   </data>
+  <data name="RecentInLocation" xml:space="preserve">
+    <value>{0}, dans {1}</value>
+    <comment>Accessible name of a recent document: the file name and where it lives, so two rows with the same name can be told apart (#165, #2)</comment>
+  </data>
+  <data name="ShowInFinder" xml:space="preserve">
+    <value>Afficher dans le Finder</value>
+    <comment>FR-REVIEW #165 — Finder keeps its name in French, as macOS writes it. Context menu on a recent document: reveals the file in Finder (#165)</comment>
+  </data>
+  <data name="CouldNotShowInFinder" xml:space="preserve">
+    <value>Impossible d'afficher {0} dans le Finder.</value>
+    <comment>Status line when Show in Finder fails: the file has moved, or its volume is gone (#165)</comment>
+  </data>
 </root>

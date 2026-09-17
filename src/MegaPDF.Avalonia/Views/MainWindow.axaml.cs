@@ -1383,6 +1383,21 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Show in Finder, from a recent row's context menu (#165). Says so when Finder
+    /// will not show the file — moved, or on a volume that is no longer there —
+    /// rather than leaving a menu item that appears to do nothing.
+    /// </summary>
+    private void OnShowRecentInFinder(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is not MainViewModel.RecentRow row)
+            return;
+        if (ViewModel is null)
+            return;
+        if (!OperatingSystem.IsMacOS() || !Platform.MacFileNames.RevealInFinder(row.Path))
+            ViewModel!.Status = Strings.CouldNotShowInFinder(row.Name);
+    }
+
+    /// <summary>
     /// Reopens a document from the recents list.
     ///
     /// On macOS under the App Sandbox the stored path is not a key to anything — the

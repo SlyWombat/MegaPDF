@@ -1103,4 +1103,16 @@
     <value>Services</value>
     <comment>macOS app menu: the system's Services submenu. The same word in French (#191)</comment>
   </data>
+  <data name="RecentInLocation" xml:space="preserve">
+    <value>{0}, in {1}</value>
+    <comment>Accessible name of a recent document: the file name and where it lives, so two rows with the same name can be told apart (#165, #2)</comment>
+  </data>
+  <data name="ShowInFinder" xml:space="preserve">
+    <value>Show in Finder</value>
+    <comment>Context menu on a recent document: reveals the file in Finder (#165)</comment>
+  </data>
+  <data name="CouldNotShowInFinder" xml:space="preserve">
+    <value>Couldn't show {0} in the Finder.</value>
+    <comment>Status line when Show in Finder fails: the file has moved, or its volume is gone (#165)</comment>
+  </data>
 </root>

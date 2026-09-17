@@ -895,4 +895,13 @@ public static partial class Strings
 
     /// <summary>Services</summary>
     public static string MenuServices => Get("MenuServices");
+
+    /// <summary>{0}, in {1}</summary>
+    public static string RecentInLocation(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("RecentInLocation"), arg0, arg1);
+
+    /// <summary>Show in Finder</summary>
+    public static string ShowInFinder => Get("ShowInFinder");
+
+    /// <summary>Couldn't show {0} in the Finder.</summary>
+    public static string CouldNotShowInFinder(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("CouldNotShowInFinder"), arg0);
 }

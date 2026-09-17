@@ -541,13 +541,20 @@
                    Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <!-- The folder line only appears when another recent has the same
-                     file name (#165); otherwise the row stays one line. The full
-                     path is the tooltip and the accessible name either way. -->
-                <StackPanel ToolTip.Tip="{Binding Path}"
-                            AutomationProperties.Name="{Binding Path}">
+                <!-- Every row says where its file lives, the way Finder's path bar
+                     writes it (#165): display names joined with "›", never a POSIX
+                     path. The help tag is the location in full, for a line the row
+                     had to shorten. -->
+                <StackPanel ToolTip.Tip="{Binding Tip}"
+                            AutomationProperties.Name="{Binding AccessibleName}">
+                  <StackPanel.ContextFlyout>
+                    <MenuFlyout>
+                      <MenuItem Header="{x:Static loc:Strings.ShowInFinder}"
+                                Click="OnShowRecentInFinder" />
+                    </MenuFlyout>
+                  </StackPanel.ContextFlyout>
                   <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Text="{Binding Folder}" IsVisible="{Binding HasFolder}"
+                  <TextBlock Text="{Binding Location}" IsVisible="{Binding HasLocation}"
                              TextTrimming="CharacterEllipsis"
                              FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
                 </StackPanel>
