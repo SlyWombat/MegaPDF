@@ -359,6 +359,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     public ObservableCollection<PageView> Pages { get; } = [];
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ZoomInCommand), nameof(ZoomOutCommand))]
     [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility), nameof(IsDocumentOpen))]
     [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsTextBoxAllowed), nameof(IsPrintAllowed))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand), nameof(SecurityCommand))]
@@ -841,8 +842,11 @@ public partial class MainViewModel(Window window) : ObservableObject
     [RelayCommand(CanExecute = nameof(CanZoomOut))]
     private async Task ZoomOutAsync() => await SetZoomAsync(ZoomPercent - ZoomStep);
 
-    private bool CanZoomIn() => ZoomPercent < MaxZoom;
-    private bool CanZoomOut() => ZoomPercent > MinZoom;
+    // Zoom needs something to zoom (#170): with no document open the two buttons were the
+    // only enabled commands on the row besides Open, which a screen reader reads out as
+    // choices that do nothing.
+    private bool CanZoomIn() => IsDocumentOpen && ZoomPercent < MaxZoom;
+    private bool CanZoomOut() => IsDocumentOpen && ZoomPercent > MinZoom;
 
     private async Task SetZoomAsync(int percent)
     {
