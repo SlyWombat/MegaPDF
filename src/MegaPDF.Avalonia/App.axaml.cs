@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using System.Reflection;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
 using MegaPDF.Avalonia.Views;
@@ -807,28 +808,34 @@ public partial class App : Application
     /// <summary>
     /// The Services submenu, which the system fills in and we only have to mark.
     ///
-    /// Avalonia marks it with an attached property, and the class that declares that
-    /// property — MacOSNativeMenuCommands — is internal to the framework, so it is
-    /// reached by name rather than by reference. It is registered well before this
-    /// runs: AvaloniaNativePlatform.Initialize binds INativeApplicationCommands to
-    /// one while the windowing subsystem is set up, which is before
-    /// Application.Initialize. If a future version ever moves it, the item is left
-    /// out rather than added — a Services menu that opens on nothing is worse than
-    /// no Services menu.
+    /// This one thing is reached by reflection, and it is worth saying why. Avalonia
+    /// marks the Services submenu with an attached property declared on
+    /// MacOSNativeMenuCommands, and that class — along with the
+    /// INativeApplicationCommands it implements, which would otherwise give a handle
+    /// on it through the locator — is internal to the framework. There is no public
+    /// route to either. Asking the property registry for it by name finds nothing at
+    /// Application.Initialize, because nothing has touched the declaring type yet;
+    /// reading the field is also what runs its static constructor and registers it.
+    ///
+    /// Guarded, and worth the guard: if a later Avalonia renames or moves it, the item
+    /// is left out rather than added, because a Services menu that opens on nothing is
+    /// worse than no Services menu at all. The alternative was to drop Services from a
+    /// Mac app's first menu, which is not a trade this should make quietly.
     /// </summary>
     private static NativeMenuItem? ServicesItem()
     {
-        var property = AvaloniaPropertyRegistry.Instance
-            .GetRegisteredAttached(typeof(NativeMenu))
-            .FirstOrDefault(p => p.Name == "IsServicesSubmenu" && p.PropertyType == typeof(bool));
-        if (property is null)
+        var marker = Type.GetType("Avalonia.Native.MacOSNativeMenuCommands, Avalonia.Native")?
+            .GetField("IsServicesSubmenuProperty", BindingFlags.Public | BindingFlags.Static)?
+            .GetValue(null) as AvaloniaProperty;
+        if (marker is null)
         {
             Console.Error.WriteLine(
-                "::warning::the Services submenu marker is not registered; the app menu will have no Services item.");
+                "::warning::Avalonia no longer declares MacOSNativeMenuCommands.IsServicesSubmenuProperty, "
+                + "so the app menu has no Services item (#191).");
             return null;
         }
         var submenu = new NativeMenu();
-        submenu.SetValue(property, true);
+        submenu.SetValue(marker, true);
         return new NativeMenuItem(Strings.MenuServices) { Menu = submenu };
     }
 
