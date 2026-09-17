@@ -19,7 +19,10 @@ final class RecentsAccessibilityUITests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-screenshot", "recents"]
+        // Explicitly English: this one does assert wording, and an in-house
+        // simulator keeps whatever language the last run left it in.
+        app.launchArguments = ["-screenshot", "recents",
+                               "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
     func testEveryRecentRowAnnouncesWhereItsFileLives() {

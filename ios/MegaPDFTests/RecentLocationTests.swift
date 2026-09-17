@@ -126,20 +126,33 @@ final class RecentLocationTests: XCTestCase {
 
     // MARK: - what a screen reader hears
 
+    /// Asserted by what the label contains rather than by its English wording: iOS
+    /// CI runs this whole suite a second time under fr-CA, where it reads
+    /// "agreement.pdf, dans iCloud Drive › Smith". What has to hold in both is that
+    /// the name and the place are in there, and that a file that has gone says so.
     func testAccessibilityLabelNamesTheFileAndThePlace() {
         let entry = RecentEntry(bookmarkBase64: "Yg==", displayName: "agreement.pdf",
                                 lastOpenedEpochMs: 0,
                                 location: RecentLocation(segments: ["iCloud Drive", "Smith"]))
-        XCTAssertEqual(entry.accessibilityLabel(), "agreement.pdf, in iCloud Drive › Smith")
-        XCTAssertEqual(entry.accessibilityLabel(available: false),
-                       "agreement.pdf, not found, in iCloud Drive › Smith")
+        let label = entry.accessibilityLabel()
+        XCTAssertTrue(label.contains("agreement.pdf"), label)
+        XCTAssertTrue(label.contains("iCloud Drive › Smith"), label)
+
+        let gone = entry.accessibilityLabel(available: false)
+        XCTAssertTrue(gone.contains("agreement.pdf"), gone)
+        XCTAssertTrue(gone.contains("iCloud Drive › Smith"), gone)
+        XCTAssertNotEqual(gone, label, "a file that has gone has to sound different")
     }
 
     func testAccessibilityLabelWithoutALocationIsJustTheName() {
         let entry = RecentEntry(bookmarkBase64: "Yg==", displayName: "agreement.pdf",
                                 lastOpenedEpochMs: 0)
+        // No location, no format string: the same in every language.
         XCTAssertEqual(entry.accessibilityLabel(), "agreement.pdf")
-        XCTAssertEqual(entry.accessibilityLabel(available: false), "agreement.pdf, not found")
+
+        let gone = entry.accessibilityLabel(available: false)
+        XCTAssertTrue(gone.hasPrefix("agreement.pdf"), gone)
+        XCTAssertNotEqual(gone, "agreement.pdf", "a file that has gone has to sound different")
     }
 
     /// Two rows with the same file name have to sound different, which is the whole
