@@ -44,6 +44,27 @@ drag the round corner handle to resize, ✕ or Delete key to remove.
 
 **Whiteout** — the Whiteout button, then drag across anything (text, images, even a
 scan) to cover it with white. Click a whiteout to select it; ✕ or Delete removes it.
+Whiteout **covers**; it does not remove. What is underneath is still in the file, and
+another app can copy or search it. That is what Redact is for, and the tooltip says so.
+
+**Redact** — the Redact button, beside Whiteout, then drag across what you want *gone*,
+or drag across text to mark the words. The marked areas show translucent with an outline,
+so you can still read what you are about to remove. Click a mark to select it; ✕ or
+Delete removes it; Ctrl+Z undoes it. **Nothing is removed until you save.**
+
+Ctrl+S or Save As then asks, and offers **Save as a copy** ("…-redacted.pdf") as the
+default — redaction cannot be undone once saved. Afterwards a short summary says what
+went: "1 area redacted: 13 characters".
+
+The thing worth testing is the promise. Open the saved copy **in Edge or Acrobat**, press
+Ctrl+F and search for a word you redacted: it should not be there. Select the black box
+and copy: nothing should come out. Try it on a scan too — the pixels inside the box are
+overwritten in the picture itself, not covered.
+
+Sometimes it will refuse, say *"Nothing was removed"*, and tell you why. That is
+deliberate: if MegaPDF cannot take some of what you marked apart safely, it removes
+nothing rather than leaving some of it behind. A refusal leaves your marks in place and
+your file untouched — if you hit one, the document is worth reporting.
 
 **Add text** — the Add text button, then click anywhere (including on top of a
 whiteout), type, press Enter. The new text behaves like any other text afterwards:
@@ -89,6 +110,15 @@ Scroll through a long document; pages should appear as you reach them.
   the document doesn't embed a complete font.
 - Password-protected PDFs show an error instead of a password prompt.
 - No page add/remove/reorder, no merging — out of scope for 1.0.
+- **Redact refuses rather than half-finishes.** Some documents draw part of a page from a
+  shared block MegaPDF cannot take apart safely; marking inside one gets "Nothing was
+  removed" and an explanation. Removing nothing is the deliberate choice: a file that
+  looks redacted and is not would be worse than no feature.
+- **Redact removes whole letters.** Drag across half a word and the whole letter goes:
+  you cannot remove half a glyph, and leaving half behind would leave it recoverable. On
+  text set at an angle this reaches a little further than the box you drew.
+- A document that does not allow changes cannot be redacted — the button is disabled,
+  same as Whiteout and Add text.
 
 ## Linux (for contributors — there is nothing to install yet)
 
@@ -134,6 +164,19 @@ run against the same shared fixture PDFs. The About screen's notices formatting 
 covered by `android/app/src/test/java/com/megapdf/android/NoticeParagraphsTest.kt`.
 None of this replaces the manual pass above: nothing automated checks how the find bar
 *feels*.
+
+Redaction (#173) is checked by hunting for what it removed rather than by asking the
+engine whether it removed it. `tools/leakcheck` searches a saved file for the removed
+strings in PDFium's text extraction, in every stream `qpdf --qdf --decode-level=all`
+writes out, in the raw bytes as ASCII, UTF-16 and PDF hex digits, in `/Info`, XMP, the
+outline, every annotation and every link address, and in the pixels inside the areas. The
+core test suite runs those searches over the fixtures
+`tools/gen_redaction_fixtures.py` writes, the Mac app's `--self-test` runs the whole flow
+through the view model the window binds to, and
+`android/engine/src/androidTest/java/com/megapdf/engine/RedactionTest.kt` runs it on a
+device. `tools/stress/redaction-battery.sh` runs the same searches across a whole corpus,
+where the requirement is 0 leaks, 0 crashes, 0 hangs and no render change outside the
+areas.
 
 ## Reporting
 
