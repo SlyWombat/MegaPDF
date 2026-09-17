@@ -36,7 +36,11 @@ demo_status_bar() {
     adb shell am broadcast -a com.android.systemui.demo -e command enter || true
     adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941 || true
     adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false || true
-    adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 || true
+    # `fully true` matters: without it SystemUI draws the "no internet" exclamation
+    # over the Wi-Fi icon, because the emulator has no validated connection — and
+    # that badge was in all 24 shots of the 2026-09-17 dry run (#146).
+    adb shell am broadcast -a com.android.systemui.demo -e command network -e wifi show -e level 4 -e fully true || true
+    adb shell am broadcast -a com.android.systemui.demo -e command network -e mobile hide || true
     adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false || true
 }
 demo_status_bar
