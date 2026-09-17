@@ -38,6 +38,13 @@ enum DemoContent {
     /// The French page repeats "location" the same three times.
     static var searchTerm: String { String(localized: "rental", comment: "screenshot search term; must occur three times on the demo page") }
 
+    /// What the Redact capture marks (#173): a line of the demo agreement with something on
+    /// it worth removing. Marked by what it says rather than by a rectangle, so the shot
+    /// lands on a sentence in every language.
+    static var redactedWord: String {
+        forLanguage(english: "customer named", frenchCanadian: "client nommé", french: "client nommé")
+    }
+
     /// Marketing "Add text" shot (#43): the name the customer would print under
     /// the signature rule the demo agreement draws at y=400, and where it sits.
     ///

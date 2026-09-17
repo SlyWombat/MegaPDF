@@ -359,7 +359,7 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
-        case "viewer", "sign", "draw", "search", "text", "text-edit", "story":
+        case "viewer", "sign", "draw", "search", "text", "text-edit", "story", "redact":
             let resource = mode == "story" ? DemoContent.blankDemoResource : DemoContent.demoResource
             if let url = Bundle.main.url(forResource: resource, withExtension: "pdf"),
                let bytes = try? Data(contentsOf: url) {
@@ -369,6 +369,26 @@ final class ViewerModel: ObservableObject {
                 Task {
                     await open(source: .bytes(bytes), password: nil,
                                displayName: DemoContent.documentName, sourceURL: nil)
+                    if mode == "redact", let doc = document {
+                        // The state the feature has to be legible in (#173): the tool armed,
+                        // and a line of the demo agreement marked — a translucent box you
+                        // can still read through, over text you are about to remove. The
+                        // line is found by what it says rather than by a rectangle that has
+                        // to be right, so the shot lands on a sentence in every language.
+                        let lines = (try? await PdfEngine.shared.textLines(doc, pageIndex: 0)) ?? []
+                        let line = lines.first { $0.text.contains(DemoContent.redactedWord) }
+                            ?? lines.max { $0.text.count < $1.text.count }
+                        if let line {
+                            redactMode = true
+                            markForRedaction(pageIndex: 0, rect: line.rect)
+                            // markForRedaction disarms the tool when it lands; arm it again
+                            // so the shot shows the tool on as well as the mark placed.
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 400_000_000)
+                                redactMode = true
+                            }
+                        }
+                    }
                     if mode == "text-edit", let doc = document,
                        let line = try? await PdfEngine.shared.textLines(doc, pageIndex: 0).first {
                         // The body-text editor open on the agreement's heading, mid-correction (#113).
