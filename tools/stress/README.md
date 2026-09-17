@@ -8,6 +8,7 @@ or hang inside PDFium costs one file, not the run. Written for #92; the first
 run's numbers and the issues it produced are recorded there.
 
     MegaPDF.Stress run --root <dir> --out <private-dir> [--workers 4] [--scale 1.5]
+        [--extra-root <dir>[,<dir>]] [--tmp <dir>]
     python3 tools/stress/report.py <run-dir> [<run-dir>] --md report.md
     python3 tools/stress/reference_check.py <run-dir> <corpus-root>
 
@@ -19,6 +20,21 @@ file (`megapdf_open_file`, #147/#148), read on demand, exactly as the apps open 
 nothing here holds a document's bytes, so a file above the ~2 GB ceiling of a .NET
 array is an ordinary file to the harness and the memory figures are the engine's
 rather than the harness's own (#157).
+
+`--extra-root` adds the generated large set (`tools/gen_large_fixtures.py`) to a run
+alongside the corpus — `--extra-root ~/megapdf-large` on Linux and the Mac,
+`--extra-root D:\megapdf-large` on Windows. Those files are listed after the corpus
+and by absolute path, so `--limit` trims the corpus without trimming them away.
+
+`--tmp` says where the local copy goes. It is the size of the document, so point it
+at a real disk for a run with large files in it: the default on Linux is `/tmp`,
+which on several distributions is a tmpfs sized at half of RAM, and parking 2.5 GB
+there is 2.5 GB of memory (#193).
+
+The report's memory section gives `ws_peak_doc`, the peak working set sampled over
+one document. The worker-process figures beside it (`ws_peak`) never fall, so after
+one large file they describe that file for the rest of the run; the per-document one
+is what compares with an app opening the same document.
 
 `--phases` also accepts `edit` (not in the default set, because it changes the
 document): it retypes the first text line of page 1 through the tiered body-text

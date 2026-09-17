@@ -51,7 +51,8 @@ internal static class Program
             "usage: MegaPDF.Stress run --root <dir> --out <dir> [--workers N] [--scale S]\n" +
             "         [--phases scroll,search,zoom,save,images[,edit]] [--terms Seaman,the]\n" +
             "         [--limit N] [--filter substring] [--hang-seconds 180] [--cap-base 300] [--cap-per-page 2]\n" +
-            "       MegaPDF.Stress worker --list <files.txt> --root <dir> [--scale S] [--phases ...] [--terms ...]");
+            "         [--extra-root <dir>[,<dir>]] [--tmp <dir>]\n" +
+            "       MegaPDF.Stress worker --list <files.txt> --root <dir> [--scale S] [--phases ...] [--terms ...] [--tmp <dir>]");
         return 2;
     }
 }
@@ -404,6 +405,23 @@ internal static class Scratch
         while (source.Read(chunk, 0, chunk.Length) > 0) { }
     }
 
+    /// <summary>
+    /// A private directory for the copy of the document under test, under
+    /// <paramref name="root"/> when there is one and the system temp folder otherwise.
+    ///
+    /// Where it goes matters once a run includes the large fixtures: the copy is the size of
+    /// the document, and on Linux the system temp folder is <c>/tmp</c>, which on several
+    /// distributions is a tmpfs sized at half of RAM — parking 2.5 GB there is 2.5 GB of
+    /// memory, the same trap as #193. <c>--tmp</c> puts it on a real disk.
+    /// </summary>
+    public static string CreateDirectory(string? root)
+    {
+        if (string.IsNullOrEmpty(root))
+            return Directory.CreateTempSubdirectory("megapdf-stress-").FullName;
+        var dir = Path.Combine(Path.GetFullPath(root), $"megapdf-stress-{Environment.ProcessId}-{Guid.NewGuid():N}");
+        return Directory.CreateDirectory(dir).FullName;
+    }
+
     private static FileStream Open(string path) =>
         new(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferBytes, FileOptions.SequentialScan);
 }
@@ -429,7 +447,7 @@ internal static class Worker
 
         var stdout = Console.Out;
         var engine = new PdfiumEngine();
-        var tmpDir = Directory.CreateTempSubdirectory("megapdf-stress-").FullName;
+        var tmpDir = Scratch.CreateDirectory(opts.Get("tmp"));
         var pid = Environment.ProcessId;
 
         try
@@ -1298,7 +1316,7 @@ internal static class Tools
         // about 2 GB, and this diagnostic is most wanted on the files that pass it.
         var length = new FileInfo(file).Length;
         var fresh = new List<double>();
-        var tmpDir = Directory.CreateTempSubdirectory("megapdf-openbench-").FullName;
+        var tmpDir = Scratch.CreateDirectory(opts.Get("tmp"));
         try
         {
             for (var i = 0; i < n; i++)
@@ -1524,6 +1542,8 @@ internal static class Orchestrator
         var capPerPage = opts.Double("cap-per-page", 2);
         var limit = opts.Int("limit", int.MaxValue);
         var filter = opts.Get("filter");
+        var tmp = opts.Get("tmp");
+        var extraRoots = opts.List("extra-root", "").Select(Path.GetFullPath).ToArray();
 
         var listPath = Path.Combine(outDir, "files.txt");
         string[] files;
@@ -1541,14 +1561,24 @@ internal static class Orchestrator
                 MatchCasing = MatchCasing.CaseInsensitive,
                 AttributesToSkip = FileAttributes.Device,
             };
-            files = Directory.EnumerateFiles(root, "*.pdf", options)
+            var corpus = Directory.EnumerateFiles(root, "*.pdf", options)
                 .Select(f => Path.GetRelativePath(root, f))
                 .Where(f => filter is null || f.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(f => f, StringComparer.Ordinal)
-                .Take(limit)
-                .ToArray();
+                .Take(limit);
+            // The generated large set (tools/gen_large_fixtures.py) lives outside the corpus
+            // and is what #157 is for, so a run can take it as well as the corpus. Listed by
+            // absolute path — Path.Combine(root, x) is x when x is rooted, so a worker needs
+            // to know nothing about this — and after the corpus, so --limit trims the corpus
+            // without ever trimming away the files the run was for.
+            var extra = extraRoots.SelectMany(dir => Directory.EnumerateFiles(dir, "*.pdf", options)
+                .Where(f => filter is null || f.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.Ordinal));
+            files = corpus.Concat(extra).ToArray();
             File.WriteAllLines(listPath, files);
-            Log(outDir, $"enumerated {files.Length} PDFs under {root}");
+            Log(outDir, extraRoots.Length == 0
+                ? $"enumerated {files.Length} PDFs under {root}"
+                : $"enumerated {files.Length} PDFs under {root} and {extraRoots.Length} extra root(s)");
         }
 
         var resultsPath = Path.Combine(outDir, "results.jsonl");
@@ -1574,7 +1604,7 @@ internal static class Orchestrator
 
         File.WriteAllText(Path.Combine(outDir, "run.json"), JsonSerializer.Serialize(new
         {
-            root, started = DateTimeOffset.Now, workers, scale, phases, terms, hangSeconds, capBase, capPerPage,
+            root, extraRoots, tmp, started = DateTimeOffset.Now, workers, scale, phases, terms, hangSeconds, capBase, capPerPage,
             os = RuntimeInformation.OSDescription, arch = RuntimeInformation.OSArchitecture.ToString(),
             machine = Environment.MachineName, cpus = Environment.ProcessorCount,
             pdfium = PdfiumPin(),
@@ -1592,7 +1622,7 @@ internal static class Orchestrator
         {
             var slot = w;
             tasks.Add(Task.Run(() => WorkerLoop(slot, queue, files, root, outDir, listPath, scale, phases, terms,
-                hangSeconds, capBase, capPerPage, results, resultsLock, stats, stopFile, cts.Token)));
+                tmp, hangSeconds, capBase, capPerPage, results, resultsLock, stats, stopFile, cts.Token)));
         }
 
         var started = Stopwatch.StartNew();
@@ -1664,9 +1694,9 @@ internal static class Orchestrator
     }
 
     private static void WorkerLoop(int slot, ConcurrentQueue<int> queue, string[] files, string root, string outDir,
-                                   string listPath, double scale, string phases, string terms, int hangSeconds,
-                                   int capBase, double capPerPage, StreamWriter results, object resultsLock,
-                                   Stats stats, string stopFile, CancellationToken cancel)
+                                   string listPath, double scale, string phases, string terms, string? tmp,
+                                   int hangSeconds, int capBase, double capPerPage, StreamWriter results,
+                                   object resultsLock, Stats stats, string stopFile, CancellationToken cancel)
     {
         Process? proc = null;
         BlockingCollection<string>? lines = null;
@@ -1686,6 +1716,11 @@ internal static class Orchestrator
             };
             foreach (var a in new[] { "worker", "--list", listPath, "--root", root, "--scale", scale.ToString(System.Globalization.CultureInfo.InvariantCulture), "--phases", phases, "--terms", terms })
                 psi.ArgumentList.Add(a);
+            if (tmp is { Length: > 0 })
+            {
+                psi.ArgumentList.Add("--tmp");
+                psi.ArgumentList.Add(tmp);
+            }
             psi.Environment["DOTNET_gcServer"] = "0";
             proc = Process.Start(psi)!;
             var local = new BlockingCollection<string>();
