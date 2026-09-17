@@ -47,6 +47,7 @@ public partial class MainWindow : Window
         };
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
 
         BindShortcuts();
         WireToolbar();
@@ -180,6 +181,28 @@ public partial class MainWindow : Window
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         if (HandlePageKey(e))
+            e.Handled = true;
+    }
+
+    /// <summary>
+    /// Space's key-*up* has to be swallowed as well as its key-down (#144).
+    /// Avalonia's Button clicks on the release, and it does so whether or not it
+    /// ever saw the press — so marking the key-down handled stopped the page
+    /// region being activated twice but not the focused toolbar button being
+    /// pressed alongside it. Tab moves the page's focus ring, not keyboard focus,
+    /// so a toolbar button used from the keyboard still holds it: pressing Space
+    /// on a page region opened the More menu at the same time.
+    ///
+    /// Only while the page's focus ring is up, and never while an editor or the
+    /// find box owns the keys — the same guard <see cref="HandlePageKey"/> uses.
+    /// </summary>
+    private void OnPreviewKeyUp(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space)
+            return;
+        if (_inlineEditor is not null || FindBox.IsFocused)
+            return;
+        if (ViewModel is { IsDocumentOpen: true, PageFocus: not null })
             e.Handled = true;
     }
 
