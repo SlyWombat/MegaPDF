@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using MegaPDF.Avalonia.Rendering;
 using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
@@ -129,4 +130,8 @@ public partial class MainWindow
                 return false;
         }
     }
+
+    /// <summary>True for a control in the toolbar row (#169).</summary>
+    internal bool IsToolbarControl(Control? control) =>
+        control is not null && (control == ToolbarHost || ToolbarHost.IsVisualAncestorOf(control));
 }

@@ -753,6 +753,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // A click on the page takes keyboard focus off the toolbar (#169). Focus stayed on
+        // the last toolbar button used, so a later Space or Enter pressed it: Open, or Undo
+        // on work just done. Cleared before the click is handled, so an editor it opens
+        // still takes focus.
+        if (IsToolbarControl(FocusManager?.GetFocusedElement() as Control))
+            FocusManager?.ClearFocus();
+
         // The page surface is laid out at exactly LayoutWidth/Height, so a position
         // inside it converts straight back to page points. Same conversion the WinUI
         // app uses (72/96 divided by zoom), which is what keeps a click landing on the

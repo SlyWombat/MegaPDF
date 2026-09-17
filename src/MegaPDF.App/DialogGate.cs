@@ -21,16 +21,34 @@ internal static class DialogGate
 {
     private static readonly SemaphoreSlim Turn = new(1, 1);
 
+    /// <summary>A dialog is on screen.</summary>
+    public static bool IsShowing { get; private set; }
+
+    /// <summary>
+    /// Raised as a dialog opens and closes. The main window disables its toolbar meanwhile
+    /// (#169): the smoke layer stops the mouse, but a toolbar button that kept keyboard
+    /// focus, or UI Automation, could still press it behind the dialog.
+    /// </summary>
+    public static event Action<bool>? ShowingChanged;
+
     public static async Task<ContentDialogResult> ShowOneAtATimeAsync(this ContentDialog dialog)
     {
         await Turn.WaitAsync();
         try
         {
+            SetShowing(true);
             return await dialog.ShowAsync();
         }
         finally
         {
+            SetShowing(false);
             Turn.Release();
         }
+    }
+
+    private static void SetShowing(bool showing)
+    {
+        IsShowing = showing;
+        ShowingChanged?.Invoke(showing);
     }
 }

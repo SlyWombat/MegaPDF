@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
 namespace MegaPDF.App;
@@ -38,7 +39,88 @@ public sealed partial class MainWindow
                 UpdateFocusRing();
         };
         ViewModel.Pages.CollectionChanged += OnPagesChangedForFocus;
+
+        // #169: keyboard focus left on a toolbar button must not stay live behind work on
+        // the page, a busy state or a dialog.
+        PagesScroll.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnPagesPointerPressedForFocus), handledEventsToo: true);
+        Toolbar.LosingFocus += OnToolbarLosingFocus;
+        DialogGate.ShowingChanged += showing => Toolbar.IsEnabled = !showing;
     }
+
+    /// <summary>True for an element in the toolbar row (not its More menu, which is a popup).</summary>
+    private bool IsInToolbar(DependencyObject? element)
+    {
+        for (var node = element; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node == Toolbar)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// A click on the page takes keyboard focus off the toolbar (#169). Focus used to
+    /// stay on the last toolbar button used, so a later Space or Enter pressed that
+    /// button: after a whiteout, Space on "the page" undid it. Focus goes to the pages
+    /// scroller, programmatically so no ring is drawn and no region is picked, and only
+    /// from the toolbar: an inline editor or the find box keeps it, since taking it
+    /// would turn a click that commits an edit into commit-and-click.
+    /// </summary>
+    private void OnPagesPointerPressedForFocus(object sender, PointerRoutedEventArgs e)
+    {
+        if (_activeEditor is not null || Content.XamlRoot is not { } root || !IsInToolbar(FocusManager.GetFocusedElement(root) as DependencyObject))
+            return;
+        // After the press is handled, and after a light-dismissed menu has put focus back on its button.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (_activeEditor is null && IsInToolbar(FocusManager.GetFocusedElement(root) as DependencyObject))
+                ParkFocusOnPages();
+        });
+    }
+
+    /// <summary>
+    /// A toolbar button that loses focus because it was disabled (#145's busy state, or a
+    /// mode ending) hands it to the next tab stop in the row, which is usually Undo; Space
+    /// or Enter then undid work with nothing on screen to say Undo had focus (#169).
+    /// Focus goes to the pages instead.
+    /// </summary>
+    private void OnToolbarLosingFocus(UIElement sender, LosingFocusEventArgs args)
+    {
+        if (args.OldFocusedElement is not Control { IsEnabled: false } old || !IsInToolbar(old))
+            return;
+        if (args.NewFocusedElement is DependencyObject next && !IsInToolbar(next))
+            return;
+        _parkingFocus = true;
+        if (!args.TrySetNewFocusedElement(PagesScroll))
+            _parkingFocus = false;
+    }
+
+    private bool _parkingFocus;
+
+    private void ParkFocusOnPages()
+    {
+        _parkingFocus = true;
+        if (!PagesScroll.Focus(FocusState.Programmatic))
+            _parkingFocus = false;
+    }
+
+    /// <summary>For the `focus` screenshot state: the element that has keyboard focus, by automation id.</summary>
+    internal string FocusedAutomationId() =>
+        Content.XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused
+            ? AutomationProperties.GetAutomationId(focused) is { Length: > 0 } id ? id : focused.GetType().Name
+            : "(none)";
+
+    internal void FocusToolbarButtonForTest(string automationId)
+    {
+        foreach (var command in Toolbar.PrimaryCommands)
+        {
+            if (command is Control control && AutomationProperties.GetAutomationId(control) == automationId)
+                control.Focus(FocusState.Keyboard);
+        }
+    }
+
+    internal void ClickPagesForTest() => ParkFocusOnPages();
+    internal bool IsToolbarEnabled => Toolbar.IsEnabled;
 
     private static bool IsShiftDown() =>
         (Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift)
@@ -58,7 +140,7 @@ public sealed partial class MainWindow
     /// </summary>
     private bool HandlePageKey(VirtualKey key)
     {
-        if (!ViewModel.IsDocumentOpen || _activeEditor is not null || !IsPagesAreaFocused())
+        if (!ViewModel.IsDocumentOpen || _activeEditor is not null || !IsPagesAreaFocused() || DialogGate.IsShowing)
             return false;
 
         switch (key)
@@ -107,6 +189,12 @@ public sealed partial class MainWindow
     /// <summary>Tabbing onto the pages lands straight on a region rather than on the scroller.</summary>
     private async void OnPagesGotFocus(object sender, RoutedEventArgs e)
     {
+        // Focus parked here off the toolbar (#169) is not a Tab onto the page: pick no region.
+        if (_parkingFocus)
+        {
+            _parkingFocus = false;
+            return;
+        }
         if (e.OriginalSource != PagesScroll || PagesScroll.FocusState != FocusState.Keyboard
             || ViewModel.PageFocus is not null || !ViewModel.IsDocumentOpen)
         {

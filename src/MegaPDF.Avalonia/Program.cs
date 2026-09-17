@@ -1076,6 +1076,41 @@ internal static class Program
         global::Avalonia.Headless.HeadlessWindowExtensions.KeyPress(window, Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         global::Avalonia.Headless.HeadlessWindowExtensions.KeyRelease(window, Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         Pump();
+        // #169: keyboard focus left on a toolbar button must not stay live behind work on the
+        // page. A focused button disabled by the busy state must not hand focus to Undo, and
+        // a click on the page takes focus off the toolbar, so a later Space or Enter can't
+        // press Undo, Open or anything else behind the user's back.
+        vm.ClearPageFocus();
+        window.SignButton.Focus();
+        Pump();
+        var focusedBefore = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
+        using (vm.Busy.Begin(Strings.BusyApplying))
+            Pump();
+        Pump();
+        var focusedAfter = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
+        check($"focus on {focusedBefore?.Name} disabled while busy does not move to a toolbar button (now {focusedAfter?.Name ?? focusedAfter?.GetType().Name ?? "none"})",
+              focusedBefore == window.SignButton && !window.IsToolbarControl(focusedAfter));
+
+        window.OpenButton.Focus();
+        Pump();
+        // Just inside the page's top-left corner: on the paper, clear of anything to click.
+        if (window.PageList.ContainerFromIndex(0) is global::Avalonia.Controls.Control firstPage
+            && global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(firstPage)
+                   .OfType<global::Avalonia.Controls.Border>().FirstOrDefault(b => b.Name == "PageSurface") is { } surface
+            && surface.TranslatePoint(new Point(6, 6), window) is { } pageCorner)
+        {
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseDown(window, pageCorner, global::Avalonia.Input.MouseButton.Left);
+            global::Avalonia.Headless.HeadlessWindowExtensions.MouseUp(window, pageCorner, global::Avalonia.Input.MouseButton.Left);
+            Pump();
+            var afterClick = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
+            check($"a click on the page takes keyboard focus off Open (now {afterClick?.Name ?? afterClick?.GetType().Name ?? "none"})",
+                  !window.IsToolbarControl(afterClick));
+        }
+        else
+        {
+            check("the first page is realised for the click check", false);
+        }
+
         while (vm.CanUndo)
             vm.UndoCommand.Execute(null);
         vm.ClearPageFocus();

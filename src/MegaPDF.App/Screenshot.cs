@@ -110,10 +110,80 @@ internal static class Screenshot
                 await Task.Delay(900);
                 return state == "busy" ? vm.Busy.ShowsStrip : vm.Busy.ShowsPageSpinner;
 
+            // #169: keyboard focus on a toolbar button must not land on Undo when the button
+            // is disabled by work on the page, and the toolbar is off while a dialog is up.
+            // Needs a document; the capture is incidental, the exit code is the test.
+            case "focus":
+                return await CheckToolbarFocusAsync(window);
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;
         }
+    }
+
+    private static async Task<bool> CheckToolbarFocusAsync(MainWindow window)
+    {
+        var vm = window.ViewModel;
+        if (!vm.IsDocumentOpen)
+        {
+            Console.Error.WriteLine("--screenshot-state focus needs a document.");
+            return false;
+        }
+        var ok = true;
+        void Check(string what, bool passed)
+        {
+            Console.Error.WriteLine($"{(passed ? "PASS" : "FAIL")}: {what}");
+            ok &= passed;
+        }
+
+        // Something to undo, so Undo is enabled and is where focus would fall.
+        await vm.AddWhiteoutAsync(0, new MegaPDF.Core.Engine.PdfRect(40, 40, 30, 12));
+        await Task.Delay(500);
+
+        // A change applied while Whiteout has keyboard focus: the busy state disables it.
+        window.FocusToolbarButtonForTest("WhiteoutButton");
+        await Task.Delay(300);
+        var before = window.FocusedAutomationId();
+        await vm.AddWhiteoutAsync(0, new MegaPDF.Core.Engine.PdfRect(40, 80, 30, 12));
+        await Task.Delay(800);
+        var after = window.FocusedAutomationId();
+        Check($"focus on {before} during a change does not move to Undo (now {after})",
+              before == "WhiteoutButton" && after != "UndoButton");
+        Check($"  it goes to the pages (now {after})", after == "PagesScroll");
+
+        // Work held busy for longer than the strip's delay, with Signatures focused.
+        window.FocusToolbarButtonForTest("SignaturesButton");
+        await Task.Delay(300);
+        using (vm.Busy.Begin(Strings.BusyApplying))
+            await Task.Delay(900);
+        await Task.Delay(500);
+        after = window.FocusedAutomationId();
+        Check($"focus on Signatures while busy does not move to another toolbar button (now {after})",
+              after is not ("UndoButton" or "RedoButton" or "OpenButton" or "SaveButton"));
+
+        // A dialog: the toolbar is off while it shows, back on after.
+        window.FocusToolbarButtonForTest("OpenButton");
+        var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+        {
+            Title = "focus check",
+            CloseButtonText = Strings.OK,
+            XamlRoot = window.Content.XamlRoot,
+        };
+        var showing = dialog.ShowOneAtATimeAsync();
+        await Task.Delay(800);
+        Check("the toolbar is disabled while a dialog shows", !window.IsToolbarEnabled);
+        dialog.Hide();
+        await showing;
+        await Task.Delay(300);
+        Check("  and enabled again once it closes", window.IsToolbarEnabled);
+
+        while (vm.UndoCommand.CanExecute(null))
+        {
+            vm.UndoCommand.Execute(null);
+            await Task.Delay(300);
+        }
+        return ok;
     }
 
     /// <summary>
