@@ -1000,6 +1000,7 @@ typedef struct megapdf_redaction_counts {
     int structure_entries;    /* /ActualText and /Alt cleared */
     int page_labels;
     int metadata_fields;      /* /Info entries and XMP packets removed */
+    int attachments;          /* embedded files whose bytes carried the removed text */
 } megapdf_redaction_counts;
 
 typedef struct megapdf_redaction_applied {

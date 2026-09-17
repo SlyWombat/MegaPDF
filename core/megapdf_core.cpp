@@ -37,6 +37,7 @@
 #endif
 
 #include "fpdf_annot.h"
+#include "fpdf_attachment.h"   // an embedded file can carry removed text (#173)
 #include "fpdf_edit.h"
 #include "fpdf_formfill.h"
 #include "fpdf_ppo.h"   // FPDF_ImportPagesByIndex: the #118 dry run works on a copy of the page
@@ -4723,6 +4724,52 @@ int RemoveOutlineEntriesMatching(FPDF_DOCUMENT doc, const unsigned short* term) 
     return removed;
 }
 
+// Removes every embedded file whose bytes carry `term`, and returns how many went.
+//
+// An attachment is not on a page, so no mark can cover it, and it is not metadata, so
+// removing metadata does not touch it — but a form's data XML, a spreadsheet, an original
+// scan, all of them repeat what the pages say. The rule is the outline's: an attachment
+// that carries text the redaction removed goes with it; one that does not is left alone.
+//
+// The search is over the decoded bytes, as ASCII and as UTF-16 in both orders, because an
+// attachment is any file at all and nothing here knows its encoding.
+int RemoveAttachmentsCarrying(FPDF_DOCUMENT doc, const unsigned short* term) {
+    const size_t n = U16Length(term);
+    if (n < 4) return 0;   // too short to be anyone's secret, and too likely to match by chance
+    std::vector<unsigned char> ascii, le, be;
+    for (size_t i = 0; i < n; i++) {
+        const unsigned short c = term[i];
+        if (c < 0x80) ascii.push_back(static_cast<unsigned char>(c));
+        le.push_back(static_cast<unsigned char>(c & 0xFF));
+        le.push_back(static_cast<unsigned char>(c >> 8));
+        be.push_back(static_cast<unsigned char>(c >> 8));
+        be.push_back(static_cast<unsigned char>(c & 0xFF));
+    }
+    auto carries = [](const std::vector<unsigned char>& hay, const std::vector<unsigned char>& needle) {
+        if (needle.empty() || hay.size() < needle.size()) return false;
+        return std::search(hay.begin(), hay.end(), needle.begin(), needle.end()) != hay.end();
+    };
+
+    int removed = 0;
+    // Backwards: deleting one shifts the indices after it.
+    for (int i = FPDFDoc_GetAttachmentCount(doc) - 1; i >= 0; i--) {
+        FPDF_ATTACHMENT attachment = FPDFDoc_GetAttachment(doc, i);
+        if (attachment == nullptr) continue;
+        unsigned long length = 0;
+        if (!FPDFAttachment_GetFile(attachment, nullptr, 0, &length) || length == 0) continue;
+        // A very large attachment is not searched: it would cost more than the redaction
+        // itself, and the caller is told so through the report's count staying put.
+        if (length > (64u << 20)) continue;
+        std::vector<unsigned char> bytes(length);
+        unsigned long got = 0;
+        if (!FPDFAttachment_GetFile(attachment, bytes.data(), length, &got) || got == 0) continue;
+        bytes.resize(got);
+        if (!carries(bytes, ascii) && !carries(bytes, le) && !carries(bytes, be)) continue;
+        if (FPDFDoc_DeleteAttachment(doc, i)) removed++;
+    }
+    return removed;
+}
+
 // True when any page's label carries `term`. The labels go together or not at all: they
 // are one number tree, and a prefix is shared by a range of pages.
 bool PageLabelsCarry(FPDF_DOCUMENT doc, const unsigned short* term) {
@@ -5069,6 +5116,7 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
         }
         const int cleared = FPDF_RemoveStructureTextMatching(d->doc, reinterpret_cast<FPDF_WIDESTRING>(term.data()));
         if (cleared > 0) report->counts.structure_entries += cleared;
+        report->counts.attachments += RemoveAttachmentsCarrying(d->doc, term.data());
         if (report->counts.page_labels == 0 && PageLabelsCarry(d->doc, term.data())) {
             if (FPDF_RemovePageLabels(d->doc) == 1) report->counts.page_labels++;
         }

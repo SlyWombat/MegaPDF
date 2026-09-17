@@ -18,6 +18,7 @@
 //       render and save, so a battery run can be compared with one.
 //
 // Nothing about the document is printed beyond counts and timings: the corpus is personal.
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -30,6 +31,7 @@
 #include "leakcheck.h"
 #include "megapdf_core.h"
 #include "fpdfview.h"
+#include "fpdf_text.h"
 
 namespace {
 
@@ -74,25 +76,51 @@ const char* ReasonName(int reason) {
     }
 }
 
-// How many times `word` appears in the document's extracted text. A corpus word can only
-// stand in for a canary when the answer is 1: any other occurrence is found again after the
-// redaction because the document says it somewhere that was never marked.
+// How many times `word` appears in the document, counted EXACTLY as the leak search will
+// look for it: PDFium's page text extraction, not the core's text runs.
+//
+// The two are not the same text. A run is a page-level text object; the extraction also
+// reads what a form XObject draws. Counting runs therefore called a word unique that the
+// page says twice, and the second one — never marked, and rightly still there — was then
+// reported as a leak. A corpus document has no canary planted in it, so only a word the
+// document says exactly once can stand in for one, and "says" has to mean the same thing
+// on both sides of the question.
 int OccurrencesInText(const std::string& path, const std::string& word) {
-    megapdf_document* doc = megapdf_open_file(path.c_str(), nullptr);
+    FPDF_DOCUMENT doc = FPDF_LoadDocument(path.c_str(), nullptr);
     if (doc == nullptr) return 0;
     int found = 0;
-    for (int p = 0; p < megapdf_page_count(doc) && found < 2; p++) {
-        megapdf_page* page = megapdf_load_page(doc, p);
+    for (int p = 0; p < FPDF_GetPageCount(doc) && found < 2; p++) {
+        FPDF_PAGE page = FPDF_LoadPage(doc, p);
         if (page == nullptr) continue;
-        megapdf_text* text = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
-        for (size_t r = 0; r < megapdf_text_run_count(text); r++) {
-            const std::string run = Utf8Of(text, r);
-            for (size_t at = run.find(word); at != std::string::npos; at = run.find(word, at + 1)) found++;
+        FPDF_TEXTPAGE text = FPDFText_LoadPage(page);
+        if (text != nullptr) {
+            const int chars = FPDFText_CountChars(text);
+            std::vector<unsigned short> buf(static_cast<size_t>(chars) + 1, 0);
+            if (chars > 0) FPDFText_GetText(text, 0, chars, buf.data());
+            const std::string page_text = leakcheck::Utf16ToUtf8(buf);
+            for (size_t at = page_text.find(word); at != std::string::npos; at = page_text.find(word, at + 1)) {
+                found++;
+            }
+            FPDFText_ClosePage(text);
         }
-        megapdf_text_free(text);
-        megapdf_close_page(page);
+        FPDF_ClosePage(page);
     }
-    megapdf_close(doc);
+    FPDF_CloseDocument(doc);
+    return found;
+}
+
+// How many times `word` appears in the file's bytes, decompressed. Only a word the
+// original says exactly once can stand in for a canary in a byte search.
+int OccurrencesInBytes(const std::vector<unsigned char>& file, const std::string& word) {
+    if (word.empty() || file.size() < word.size()) return 0;
+    int found = 0;
+    auto at = file.begin();
+    while (true) {
+        at = std::search(at, file.end(), word.begin(), word.end());
+        if (at == file.end()) break;
+        if (++found >= 2) break;
+        ++at;
+    }
     return found;
 }
 
@@ -390,9 +418,25 @@ int Battery(int argc, char** argv) {
     leakcheck::PixelResult pixels;
     int leaks = 0;
     std::string canary;
+    const std::vector<unsigned char> original = leakcheck::ReadFile(in);
     for (const std::string& word : covered) {
         if (word.size() < 6) continue;
-        if (OccurrencesInText(in, word) == 1) { canary = word; break; }
+        if (OccurrencesInText(in, word) != 1) continue;
+        // And exactly once in the file's bytes: a page whose font carries no /ToUnicode
+        // extracts as something else, so a word the text layer says once can be written
+        // in several content streams the battery never marked.
+        if (OccurrencesInBytes(original, word) != 1) continue;
+        canary = word;
+        break;
+    }
+    // The canary is a word out of someone's document. With MEGAPDF_LEAKCHECK_VERBOSE it is
+    // written beside the output so a leak can be located by a follow-up tool, and it is
+    // never printed: the corpus is personal, and a log is a place words escape from.
+    if (!canary.empty() && std::getenv("MEGAPDF_LEAKCHECK_VERBOSE") != nullptr) {
+        if (FILE* f = std::fopen((outdir + "/canary.txt").c_str(), "wb")) {
+            std::fwrite(canary.data(), 1, canary.size(), f);
+            std::fclose(f);
+        }
     }
     const std::vector<leakcheck::Finding> findings =
         leakcheck::Check(out, in, canary.empty() ? std::string("\x01unmatchable") : canary, areas, 0x000000,
