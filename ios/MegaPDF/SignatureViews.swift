@@ -28,6 +28,7 @@ struct SignaturesSheet: View {
     @State private var pendingDelete: SignatureEntry?
     @State private var renaming: SignatureEntry?
     @State private var renameText = ""
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 12)]
 
@@ -169,7 +170,9 @@ struct SignaturesSheet: View {
                 Text(entry.displayName)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
+                    // A second line rather than "Mega W." becoming "Me…" at a
+                    // large text size (#167).
+                    .lineLimit(2)
                 Spacer(minLength: 0)
                 Menu {
                     cardActions(entry)
@@ -194,7 +197,14 @@ struct SignaturesSheet: View {
     }
 
     private var addRow: some View {
-        HStack(spacing: 12) {
+        // Three across stops working at an accessibility text size: a third of a
+        // phone's width cannot hold "Dessiner" at AX5, and the labels were being
+        // truncated to a single letter — "D…", "T…", "P…" — which tells you
+        // nothing about what the button does. Above those sizes the three go in a
+        // column instead, one full-width button each, icon beside the label.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
             Button { drawing = true } label: {
                 Label("Draw", systemImage: "pencil.tip")
                     .frame(maxWidth: .infinity)
@@ -212,8 +222,9 @@ struct SignaturesSheet: View {
         .controlSize(.large)
         // Icon above the label: three of these share a phone's width in French too
         // ("Dessiner" / "Taper" / "Photo"), where the default row layout hyphenated
-        // the first word.
-        .labelStyle(StackedLabelStyle())
+        // the first word. In a column there is room for the ordinary side-by-side
+        // label, so the stacked style is only for the row.
+        .labelStyle(StackedLabelStyle(stacked: !stacked))
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
@@ -352,16 +363,36 @@ struct DrawSignatureView: View {
 }
 
 /// Icon over title, for buttons that must share a narrow row (#100).
+///
+/// `stacked` is false above the accessibility text sizes, where the caller puts
+/// the buttons in a column instead and the ordinary side-by-side label fits.
 struct StackedLabelStyle: LabelStyle {
+    var stacked = true
+
     func makeBody(configuration: Configuration) -> some View {
-        VStack(spacing: 4) {
-            configuration.icon
-            configuration.title
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+        if stacked {
+            VStack(spacing: 4) {
+                configuration.icon
+                title(configuration)
+            }
+            .padding(.vertical, 2)
+        } else {
+            HStack(spacing: 8) {
+                configuration.icon
+                title(configuration)
+            }
+            .padding(.vertical, 2)
         }
-        .padding(.vertical, 2)
+    }
+
+    private func title(_ configuration: Configuration) -> some View {
+        configuration.title
+            .font(.subheadline.weight(.medium))
+            // Two lines and a lower floor, not one line at 0.8: at a large text
+            // size the old pair truncated the word away entirely (#167).
+            .lineLimit(2)
+            .minimumScaleFactor(0.5)
+            .multilineTextAlignment(.center)
     }
 }
 
@@ -516,7 +547,10 @@ struct TextBoxSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        // .large as well as .medium (#167): at an accessibility text size the
+        // Size and Font pickers fall below a half-height sheet, and with only
+        // one detent offered there is no way to pull it up to reach them.
+        .presentationDetents([.medium, .large])
     }
 }
 

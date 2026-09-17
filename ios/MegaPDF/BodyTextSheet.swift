@@ -36,7 +36,10 @@ struct BodyTextSheet: View {
             }
             .onAppear { focused = true }
         }
-        .presentationDetents([.medium])
+        // .large as well as .medium (#167), for the same reason as the add-text
+        // sheet: a half-height sheet is not enough at an accessibility text size,
+        // and one detent leaves no way to grow it.
+        .presentationDetents([.medium, .large])
     }
 }
 
