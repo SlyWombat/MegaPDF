@@ -261,8 +261,94 @@ internal sealed class MemResult
     [JsonPropertyName("ws_before")] public long WsBefore { get; set; }
     [JsonPropertyName("ws_after")] public long WsAfter { get; set; }
     [JsonPropertyName("ws_after_gc")] public long WsAfterGc { get; set; }
+    /// <summary>The worker process's peak since it started — every file it has done, not this one.</summary>
     [JsonPropertyName("ws_peak")] public long? WsPeak { get; set; }
+    /// <summary>
+    /// The highest working set seen while this document was being processed (#157), sampled
+    /// by <see cref="DocumentPeak"/>. This is the figure to compare with what an app uses for
+    /// the same document: <see cref="WsPeak"/> is a high-water mark for the worker's whole
+    /// life, so after one large file every later file reports that file's peak.
+    /// </summary>
+    [JsonPropertyName("ws_peak_doc")] public long? WsPeakDoc { get; set; }
     [JsonPropertyName("gc_heap")] public long GcHeap { get; set; }
+}
+
+/// <summary>
+/// The working set's high-water mark over one document (#157).
+///
+/// The harness used to read each file into a <c>byte[]</c> before opening it, so its memory
+/// figures included the file itself and could not be compared with an app that reads the file
+/// on demand (#147, #148). With the copy streamed, what is left to report is how much the
+/// process actually grew over the document — and <c>Process.PeakWorkingSet64</c> cannot say,
+/// because it never falls: it is the peak since the worker started, and a worker does hundreds
+/// of files.
+///
+/// So sample it. A background thread reads the working set every <see cref="IntervalMs"/> ms
+/// from its own <see cref="Process"/> handle — the caller refreshes its own, and two threads
+/// must not refresh one. Sampling costs a read of /proc/self/stat on Linux and of the process
+/// handle elsewhere.
+/// </summary>
+internal sealed class DocumentPeak : IDisposable
+{
+    private const int IntervalMs = 25;
+
+    private readonly CancellationTokenSource _stop = new();
+    private readonly Thread _thread;
+    private readonly MemResult _into;
+    private long _peak;
+
+    /// <param name="into">
+    /// Filled in on <see cref="Dispose"/>, so every way out of a document — a failed open,
+    /// a phase that throws — still reports what it had cost by then.
+    /// </param>
+    public DocumentPeak(MemResult into)
+    {
+        _into = into;
+        _thread = new Thread(Sample) { IsBackground = true, Name = "doc-peak" };
+        _thread.Start();
+    }
+
+    private void Sample()
+    {
+        using var proc = Process.GetCurrentProcess();
+        while (!_stop.IsCancellationRequested)
+        {
+            Observe(proc);
+            try { _stop.Token.WaitHandle.WaitOne(IntervalMs); }
+            catch (ObjectDisposedException) { return; }
+        }
+    }
+
+    private void Observe(Process proc)
+    {
+        long ws;
+        try
+        {
+            proc.Refresh();
+            ws = proc.WorkingSet64;
+        }
+        catch
+        {
+            // A platform that will not report it, or the process going away under us.
+            return;
+        }
+        long seen;
+        while (ws > (seen = Interlocked.Read(ref _peak)))
+        {
+            if (Interlocked.CompareExchange(ref _peak, ws, seen) == seen)
+                return;
+        }
+    }
+
+    public void Dispose()
+    {
+        _stop.Cancel();
+        _thread.Join(TimeSpan.FromSeconds(2));
+        _stop.Dispose();
+        using (var proc = Process.GetCurrentProcess())
+            Observe(proc);
+        _into.WsPeakDoc = Interlocked.Read(ref _peak);
+    }
 }
 
 internal static class Json
@@ -414,6 +500,7 @@ internal static class Worker
         var mem = new MemResult { WsBefore = proc.WorkingSet64 };
         r.Mem = mem;
         var i = r.Index;
+        using var peak = new DocumentPeak(mem);
 
         // 1. Read from wherever the corpus lives (share or local disk), then park a
         //    copy on local temp so open_ms measures parsing, not the network.

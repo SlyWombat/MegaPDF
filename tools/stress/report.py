@@ -317,7 +317,7 @@ def section_images(run, out, top):
     out.append("")
 
 
-def section_memory(run, out):
+def section_memory(run, out, top):
     out.append("### Memory\n")
     out.append("Working set of each worker process after the document is closed and the GC has run, first file "
                "versus last file it processed; a steady climb across hundreds of files is a leak.\n")
@@ -331,6 +331,37 @@ def section_memory(run, out):
         peak = [r["mem"].get("ws_peak") or 0 for r in rs]
         heap = [r["mem"].get("gc_heap") or 0 for r in rs]
         out.append(f"| {pid} | {len(rs):,} | {ws[0] / 1e6:.0f} | {ws[-1] / 1e6:.0f} | {max(ws) / 1e6:.0f} | {max(peak) / 1e6:.0f} | {max(heap) / 1e6:.0f} |")
+    out.append("")
+
+    # Per document (#157). `ws_peak` never falls, so it says what the worker's worst file
+    # cost, not what this one did; `ws_peak_doc` is sampled over the one document. The read
+    # is streamed and the open is file-backed, so neither figure includes the document's own
+    # bytes any more, and the per-document one is comparable with what an app uses for it.
+    doc_peaks = [r for r in run.results if (r.get("mem") or {}).get("ws_peak_doc")]
+    if not doc_peaks:
+        return
+    out.append("Peak working set over one document, sampled while it was being driven. The file is "
+               "read on demand and its local copy is streamed, so the document's own bytes are not "
+               "in these figures.\n")
+    out.append(PCT_HEADER)
+    out.append(pct_row("doc peak MB", [r["mem"]["ws_peak_doc"] / 1e6 for r in doc_peaks]))
+    big = [r for r in doc_peaks if r.get("bytes", 0) >= 64e6]
+    if big:
+        out.append(pct_row("doc peak MB (files > 64 MB)", [r["mem"]["ws_peak_doc"] / 1e6 for r in big]))
+        out.append(pct_row("doc peak / file size (files > 64 MB)",
+                           [r["mem"]["ws_peak_doc"] / r["bytes"] for r in big], 2, "x"))
+    out.append("")
+    largest = sorted(doc_peaks, key=lambda r: -r.get("bytes", 0))[:top]
+    out.append(f"Largest {len(largest)} documents — what each cost to open and drive:\n")
+    out.append("| doc | outcome | pages | MB | read ms | open ms | doc peak MB | peak/size |"
+               "\n|---|---|---:|---:|---:|---:|---:|---:|")
+    for r in largest:
+        pages = f"{r['pages']:,}" if r.get("pages") is not None else "—"
+        read_ms = f"{r['read_ms']:.0f}" if r.get("read_ms") is not None else "—"
+        open_ms = f"{r['open_ms']:.0f}" if r.get("open_ms") is not None else "—"
+        ratio = f"{r['mem']['ws_peak_doc'] / r['bytes']:.2f}x" if r.get("bytes") else "—"
+        out.append(f"| #{r['i']} | {r.get('outcome', '?')} | {pages} | {r.get('bytes', 0) / 1e6:,.0f} | "
+                   f"{read_ms} | {open_ms} | {r['mem']['ws_peak_doc'] / 1e6:,.0f} | {ratio} |")
     out.append("")
 
 
@@ -431,6 +462,8 @@ def section_compare(runs, out):
     row("edit failures", lambda r: sum(1 for x in r.ok() if x.get("edit") and x["edit"].get("error")))
     row("blank pages with text", lambda r: sum(len(x["scroll"].get("blank_with_text", [])) for x in r.ok() if x.get("scroll")))
     row("max worker ws MB", lambda r: max(x["mem"]["ws_after_gc"] for x in r.results if x.get("mem")) / 1e6)
+    row("max doc peak MB", lambda r: max([x["mem"]["ws_peak_doc"] for x in r.results
+                                          if (x.get("mem") or {}).get("ws_peak_doc")] or [0]) / 1e6)
     out.append("")
 
     if len(runs) == 2:
@@ -482,7 +515,7 @@ def main():
         section_zoom(run, out, args.top)
         section_save(run, out, args.top)
         section_images(run, out, args.top)
-        section_memory(run, out)
+        section_memory(run, out, args.top)
         section_errors(run, out, args.top)
     text = "\n".join(out)
     if args.md:
