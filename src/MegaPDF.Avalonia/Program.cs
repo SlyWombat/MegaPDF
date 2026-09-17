@@ -1204,6 +1204,79 @@ internal static class Program
             failures++;
         }
 
+        // --- Recent documents say where each file lives (#165) ---
+        //
+        // Every row, not only the rows whose names clash: files from one template or
+        // one scanner share a name, and a list that added the folder only sometimes
+        // would rearrange itself as entries came and went. The rule that has to hold
+        // whatever the folders are called is that a row's second line is a place, in
+        // display names, and never a path.
+        Console.WriteLine("recent documents (#165):");
+        var recentsState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-recents-{Guid.NewGuid():N}");
+        var recentsRoot = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-recentfiles-{Guid.NewGuid():N}");
+        try
+        {
+            // Two files of one name in sibling folders, and a third somewhere else.
+            var paths = new[]
+            {
+                Path.Combine(recentsRoot, "Clients", "Smith", "agreement.pdf"),
+                Path.Combine(recentsRoot, "Clients", "Jones", "agreement.pdf"),
+                Path.Combine(recentsRoot, "Scans", "receipt.pdf"),
+            };
+            foreach (var path in paths)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.Copy(Path.Combine(dir, "fixture.pdf"), path, overwrite: true);
+            }
+
+            using var vm = new MainViewModel(recentsState);
+            foreach (var path in paths)
+                vm.RememberRecent(path, null);
+
+            var rows = vm.Recents.ToList();
+            Check($"every recent is listed ({rows.Count})", rows.Count == paths.Length);
+            Check("and every one of them says where it lives",
+                  rows.All(r => r.HasLocation));
+            foreach (var row in rows)
+                Console.WriteLine($"    {row.Name} — {row.Location}");
+
+            // The whole point of the issue: the two agreements are told apart.
+            var agreements = rows.Where(r => r.Name.StartsWith("agreement", StringComparison.Ordinal)).ToList();
+            Check($"the two files called {agreements.FirstOrDefault()?.Name} have different locations",
+                  agreements.Count == 2 && agreements[0].Location != agreements[1].Location);
+            Check("  and the folder that separates them is in both lines",
+                  agreements.Any(r => r.Location?.Contains("Smith", StringComparison.Ordinal) == true)
+                  && agreements.Any(r => r.Location?.Contains("Jones", StringComparison.Ordinal) == true));
+
+            // No paths anywhere a person can see them (#162 is what happens when there are).
+            Check("no location is a path",
+                  rows.All(r => r.Location?.Contains('/') != true && r.Location?.Contains('\\') != true));
+            Check("and the help tag is the location in full, not the path either",
+                  rows.All(r => r.Tip.Contains('/') != true && r.Tip != r.Path));
+            Check("a screen reader hears the name and the place",
+                  rows.All(r => r.AccessibleName.Contains(r.Name, StringComparison.Ordinal)
+                                && r.AccessibleName.Contains(r.Location!.Split(" \u203a ")[^1], StringComparison.Ordinal)));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::recent documents: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            foreach (var path in new[] { recentsState, recentsRoot })
+            {
+                try
+                {
+                    if (Directory.Exists(path))
+                        Directory.Delete(path, recursive: true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+
         // --- About MegaPDF and the third-party notices (#176) ---
         //
         // The Mac shipped with Avalonia's "About Avalonia" in the first slot of the
