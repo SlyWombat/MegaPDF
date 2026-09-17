@@ -1291,7 +1291,7 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// The caption bar is drawn by Windows, not XAML, so it follows the Windows app mode and
-    /// stayed white over a dark window when the app's own Theme setting said Dark (#163).
+    /// stayed white over a dark window when the app's own Theme setting said Dark (#164).
     /// DWMWA_USE_IMMERSIVE_DARK_MODE puts it in step with the content's actual theme.
     /// </summary>
     private void ApplyTitleBarTheme()
