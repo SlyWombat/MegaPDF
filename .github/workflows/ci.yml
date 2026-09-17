@@ -154,6 +154,16 @@ jobs:
           done
           test -f "$RUNNER_TEMP/app/MegaPDF/share/icons/hicolor/scalable/apps/megapdf.svg"
 
+          # The licences travel with the binary or the package cannot ship (#194).
+          notices="$RUNNER_TEMP/app/MegaPDF/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt"
+          test -s "$notices" || { echo "::error::no third-party notices in the tree"; exit 1; }
+          for component in PDFium Avalonia SkiaSharp; do
+            grep -q "$component" "$notices" \
+              || { echo "::error::the notices do not mention $component"; exit 1; }
+          done
+          test -s "$RUNNER_TEMP/app/MegaPDF/share/doc/MegaPDF/LICENSE"
+          echo "notices: $(wc -l < "$notices") lines"
+
       # A single-user install, then undone. The install rewrites Exec to an
       # absolute path and registers the PDF association; both are the kind of thing
       # that works on the machine it was written on and nowhere else.

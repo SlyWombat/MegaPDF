@@ -93,17 +93,20 @@ cp -R "$ICONS" "$APP/share/icons/"
 mkdir -p "$APP/share/doc/MegaPDF"
 cp "$ROOT/LICENSE" "$APP/share/doc/MegaPDF/LICENSE"
 
-# The bundled third-party notices. tools/gen_third_party_notices.py writes one set
-# per platform and has entries for Windows, Android and iOS only — the Avalonia
-# apps, Mac included, have never had one. Warned about rather than faked from the
-# Windows set, which lists the Windows App SDK this app does not contain. No
-# channel will accept a package without it, so this is packaging's first task.
+# The bundled third-party notices, which #176 generated for the Avalonia apps
+# (tools/gen_third_party_notices.py, the "macos" entry). The set is the same one
+# Linux needs — Avalonia, SkiaSharp, HarfBuzzSharp, MicroCom, Tmds.DBus.Protocol,
+# CommunityToolkit.Mvvm, the .NET runtime and PDFium — because it is the same app
+# over the same dependencies. Required: no distribution channel accepts a package
+# without it, and several of those licences require the text to travel with the
+# binary. Failing rather than warning, because a package built without it cannot
+# ship (#194).
 NOTICES="$ROOT/src/MegaPDF.Avalonia/Assets/THIRD-PARTY-NOTICES.txt"
-if [ -f "$NOTICES" ]; then
-    cp "$NOTICES" "$APP/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt"
-else
-    echo "::warning::no third-party notices for the Avalonia apps yet — needed before any package ships"
+if [ ! -f "$NOTICES" ]; then
+    echo "::error::$NOTICES is missing — regenerate with tools/gen_third_party_notices.py" >&2
+    exit 1
 fi
+cp "$NOTICES" "$APP/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt"
 
 cp "$ROOT/tools/linux/install.sh" "$APP/install.sh"
 cp "$ROOT/tools/linux/uninstall.sh" "$APP/uninstall.sh"
