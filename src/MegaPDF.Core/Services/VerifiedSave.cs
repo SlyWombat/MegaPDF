@@ -18,6 +18,23 @@ namespace MegaPDF.Core.Services;
 ///
 /// The cost is one extra parse of a document already in memory, against a save
 /// that has just serialised the whole thing.
+///
+/// **Where the staged copy goes.** Beside the destination when the save has one
+/// (#193). It used to go in <see cref="Path.GetTempPath"/> always, which costs a
+/// second whole copy of the document on a filesystem nobody chose: on Linux that is
+/// <c>/tmp</c>, which on Fedora is a tmpfs sized at half of RAM, so saving a large
+/// document became an allocation of memory the size of the document — exactly the
+/// cost #147 and #148 took out of opening one, and it failed with 67 GB free where
+/// the person was actually saving to. The destination's own folder is a directory we
+/// are about to write the document into anyway, is on the same filesystem as the
+/// destination by definition — so <see cref="AtomicFileWriter"/>'s swap stays a
+/// rename, and stays atomic — and is where that writer already puts its own temp
+/// file. The system temp folder remains the fallback for a destination folder that
+/// cannot be written to, and remains the only choice for
+/// <see cref="ToStream(IPdfEngine, IPdfDocument, Stream, Action{SaveStage}?)"/> and
+/// <see cref="ToStagedFile"/>, which have no destination path: those are the macOS
+/// sandbox's paths, where the app is granted the file the person picked and not its
+/// folder, so it may not create a sibling of it at all.
 /// </summary>
 public static class VerifiedSave
 {
@@ -34,6 +51,10 @@ public static class VerifiedSave
     /// known good — the macOS sandbox, where opening the file for writing truncates it — holds
     /// one of these instead of the bytes in memory, so a large document never is. Disposing it
     /// deletes the file.
+    ///
+    /// This one stays in the system temp folder: the caller has a stream, not a path, so there
+    /// is no destination folder to put it beside, and under the sandbox there would be no
+    /// permission to write in one (#193).
     /// </summary>
     public sealed class StagedCopy : IDisposable
     {
@@ -91,7 +112,7 @@ public static class VerifiedSave
     public static void ToPath(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.Save, OpenLike(engine, document),
-            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage);
+            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage, path);
     }
 
     /// <summary>
@@ -113,7 +134,7 @@ public static class VerifiedSave
         string userPassword, string? ownerPassword, PdfPermissions permissions, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, target => document.SaveWithSecurity(target, userPassword, ownerPassword, permissions),
-            OpenWith(engine, userPassword), staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage);
+            OpenWith(engine, userPassword), staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage, path);
     }
 
     /// <inheritdoc cref="ToPathWithSecurity"/>
@@ -131,7 +152,7 @@ public static class VerifiedSave
     public static void ToPathWithoutSecurity(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.SaveWithoutSecurity, OpenWith(engine, null),
-            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage);
+            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage, path);
     }
 
     /// <inheritdoc cref="ToPathWithoutSecurity"/>
@@ -188,25 +209,79 @@ public static class VerifiedSave
         stagedPath => engine.Open(stagedPath, string.IsNullOrEmpty(userPassword) ? null : userPassword);
 
     /// <summary>
-    /// Where this thread stages its copy, when a test needs its own folder: the shared temp
-    /// folder is also used by tests running in parallel, so counting files there races them.
+    /// Stands in for <see cref="Path.GetTempPath"/> on this thread, when a test needs its own
+    /// folder: the shared temp folder is also used by tests running in parallel, so counting
+    /// files there races them.
+    ///
+    /// It does not override the destination's folder, which a save with a path stages in
+    /// first (#193) — so a test sees the same choice a real save makes, and the fallback is
+    /// somewhere a test can look.
     /// </summary>
     [ThreadStatic]
     internal static string? StagingDirectoryForTests;
 
+    /// <summary>
+    /// The staged file, open for writing. Created before anything is serialised into it, so
+    /// which directory a save could actually use is settled while the file is still empty.
+    /// </summary>
+    private readonly record struct StagingFile(FileStream Stream, string Path);
+
+    /// <summary>
+    /// Creates the staged file beside <paramref name="destinationPath"/> (#193), or in the
+    /// system temp folder when there is no destination path or its folder will not take the
+    /// file.
+    ///
+    /// The fallback is decided on creating an empty file, which fails because the folder is
+    /// read-only, gone, or not ours — not because there is no room, since a file of no bytes
+    /// needs none. So a full destination still fails as a full destination rather than
+    /// quietly staging somewhere else and failing later.
+    /// </summary>
+    private static StagingFile CreateStagingFile(string? destinationPath)
+    {
+        if (destinationPath is not null &&
+            Path.GetDirectoryName(Path.GetFullPath(destinationPath)) is { Length: > 0 } beside)
+        {
+            try
+            {
+                return Create(beside);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+            {
+                // Read-only media, a folder someone else owns, a quota: the save may still
+                // work — AtomicFileWriter has its own sibling to create and will say so if it
+                // cannot — and staging in the temp folder is what this did before #193.
+            }
+        }
+        return Create(StagingDirectoryForTests ?? Path.GetTempPath());
+
+        static StagingFile Create(string directory)
+        {
+            // Hidden and named like AtomicFileWriter's own temp file, because it is now in the
+            // same folder: one left behind by a crash mid-save should look like what it is.
+            var path = Path.Combine(directory, $".megapdf-verify-{Guid.NewGuid():N}.megapdf-tmp");
+            return new StagingFile(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None), path);
+        }
+    }
+
+    /// <param name="destinationPath">
+    /// Where the save is going, when it is going to a path: the staged copy is made in that
+    /// folder (#193). Null for a save through a stream the host holds open.
+    /// </param>
     private static void Stage(IPdfEngine engine, IPdfDocument document, Action<Stream> save,
-        Func<string, IPdfDocument> reopen, Action<string> write, Action<SaveStage>? onStage)
+        Func<string, IPdfDocument> reopen, Action<string> write, Action<SaveStage>? onStage,
+        string? destinationPath = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(document);
 
-        var stagingPath = Path.Combine(StagingDirectoryForTests ?? Path.GetTempPath(), $"megapdf-verify-{Guid.NewGuid():N}.pdf");
+        // A refusal (DocumentRestrictedException) or a failed write propagates as
+        // itself: nothing was produced to verify.
+        onStage?.Invoke(SaveStage.Writing);
+        var staged = CreateStagingFile(destinationPath);
+        var stagingPath = staged.Path;
         try
         {
-            // A refusal (DocumentRestrictedException) or a failed write propagates as
-            // itself: nothing was produced to verify.
-            onStage?.Invoke(SaveStage.Writing);
-            using (var staging = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            using (var staging = staged.Stream)
             {
                 save(staging);
                 staging.Flush(flushToDisk: true);
