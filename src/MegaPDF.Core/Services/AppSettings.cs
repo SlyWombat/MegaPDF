@@ -5,7 +5,8 @@ using MegaPDF.Core.Engine;
 namespace MegaPDF.Core.Services;
 
 /// <summary>
-/// User settings (SDD §4.4): plain JSON under %LOCALAPPDATA%\MegaPDF, atomic writes.
+/// User settings (SDD §4.4): plain JSON in the user-data folder
+/// (<see cref="UserDataPaths"/>), atomic writes.
 /// Deliberately tiny — settings most users never need don't earn a place here.
 /// </summary>
 public sealed class AppSettings
@@ -15,9 +16,7 @@ public sealed class AppSettings
 
     public AppSettings(string? path = null)
     {
-        _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MegaPDF", "settings.json");
+        _path = path ?? UserDataPaths.InAppFolder("settings.json");
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         _model = Load();
     }

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MegaPDF.Core.Services;
 
 namespace MegaPDF.Core.Recovery;
 
@@ -9,7 +10,8 @@ public sealed record RecoverableSession(string JournalPath, string DocumentPath,
 
 /// <summary>
 /// Crash-recovery journal (SDD §3.4): an append-only log of edit actions per open
-/// document, stored under %LOCALAPPDATA%\MegaPDF\Recovery. Each Record call appends
+/// document, stored under <c>Recovery</c> in the user-data folder
+/// (<see cref="Services.UserDataPaths"/>). Each Record call appends
 /// one JSON line and flushes, so a crash at any point loses at most the in-flight
 /// entry. MarkSaved truncates the log; EndSession removes it. A journal file that
 /// still exists with entries at scan time is a crashed session.
@@ -30,12 +32,11 @@ public sealed class RecoveryJournal : IDisposable
     private StreamWriter? _writer;
     private bool _contentIsProtected;
 
-    /// <param name="directory">Defaults to %LOCALAPPDATA%\MegaPDF\Recovery; injectable for tests.</param>
+    /// <param name="directory">Defaults to <c>Recovery</c> in the user-data folder
+    /// (<see cref="Services.UserDataPaths"/>); injectable for tests.</param>
     public RecoveryJournal(string? directory = null)
     {
-        _directory = directory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MegaPDF", "Recovery");
+        _directory = directory ?? UserDataPaths.InAppFolder("Recovery");
         Directory.CreateDirectory(_directory);
     }
 

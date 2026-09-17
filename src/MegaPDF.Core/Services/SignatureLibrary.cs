@@ -25,14 +25,12 @@ public sealed class SignatureLibrary : ISignatureLibrary
     private readonly List<SignatureEntry> _entries;
 
     /// <param name="directory">
-    /// Storage directory; defaults to %LOCALAPPDATA%\MegaPDF\Signatures (SDD §3.3).
-    /// Injectable for tests.
+    /// Storage directory; defaults to <c>Signatures</c> in the user-data folder
+    /// (<see cref="UserDataPaths"/>, SDD §3.3). Injectable for tests.
     /// </param>
     public SignatureLibrary(string? directory = null)
     {
-        _directory = directory ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MegaPDF", "Signatures");
+        _directory = directory ?? UserDataPaths.InAppFolder("Signatures");
         Directory.CreateDirectory(_directory);
         _indexPath = Path.Combine(_directory, "index.json");
         _entries = Load();

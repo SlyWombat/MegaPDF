@@ -41,7 +41,8 @@ public sealed class RecentFiles
 
     private readonly bool _pruneMissing;
 
-    /// <param name="path">Defaults to %LOCALAPPDATA%\MegaPDF\recent.json; injectable for tests.</param>
+    /// <param name="path">Defaults to <c>recent.json</c> in the user-data folder
+    /// (<see cref="UserDataPaths"/>); injectable for tests.</param>
     /// <param name="pruneMissing">
     /// Drop entries whose files have gone when the list loads. Windows passes false and
     /// shows them as unavailable instead, with a way to remove them (#165): a file that
@@ -50,9 +51,7 @@ public sealed class RecentFiles
     public RecentFiles(string? path = null, bool pruneMissing = true)
     {
         _pruneMissing = pruneMissing;
-        _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "MegaPDF", "recent.json");
+        _path = path ?? UserDataPaths.InAppFolder("recent.json");
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         _entries = Load();
     }
