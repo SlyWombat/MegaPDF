@@ -6,6 +6,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -214,7 +215,7 @@ fun SignaturesSheet(
         AlertDialog(
             onDismissRequest = { confirmDelete = null },
             title = { Text(stringResource(R.string.signature_delete_title, entry.displayName)) },
-            text = { Text(stringResource(R.string.signature_delete_body)) },
+            text = { DialogBody { Text(stringResource(R.string.signature_delete_body)) } },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = null; onDelete(entry.id) }) {
                     Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error)
@@ -229,6 +230,7 @@ fun SignaturesSheet(
     renaming?.let { entry ->
         var name by remember(entry.id) { mutableStateOf(entry.displayName) }
         AlertDialog(
+            modifier = Modifier.imePadding(),
             onDismissRequest = { renaming = null },
             title = { Text(stringResource(R.string.signature_rename_title)) },
             text = {

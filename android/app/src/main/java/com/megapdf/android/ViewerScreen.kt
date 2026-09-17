@@ -1,6 +1,7 @@
 package com.megapdf.android
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.imePadding
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -226,10 +227,11 @@ fun ViewerScreen(
         var size by remember(pendingTextTap) { mutableStateOf(pendingTextTap.fontSize) }
         var face by remember(pendingTextTap) { mutableStateOf(pendingTextTap.fontName) }
         AlertDialog(
+            modifier = Modifier.imePadding(),
             onDismissRequest = onCancelTextPlacement,
             title = { Text(stringResource(if (editing) R.string.edit_text else R.string.add_text)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DialogBody(spacing = 12) {
                     Text(
                         stringResource(
                             if (editing) R.string.edit_text_hint else R.string.add_text_hint
@@ -277,10 +279,11 @@ fun ViewerScreen(
         // font (SDD §3.1 — no formatting controls). Clearing the field removes the line.
         var typed by remember(pendingBodyEdit) { mutableStateOf(pendingBodyEdit.initialText) }
         AlertDialog(
+            modifier = Modifier.imePadding(),
             onDismissRequest = onCancelBodyEdit,
             title = { Text(stringResource(R.string.edit_text)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DialogBody(spacing = 12) {
                     Text(stringResource(R.string.body_text_hint))
                     OutlinedTextField(
                         value = typed,
@@ -371,7 +374,7 @@ fun ViewerScreen(
         AlertDialog(
             onDismissRequest = { onAnswerPageRewrite(false) },
             title = { Text(stringResource(R.string.page_rewrite_warning_title)) },
-            text = { Text(stringResource(R.string.page_rewrite_warning)) },
+            text = { DialogBody { Text(stringResource(R.string.page_rewrite_warning)) } },
             confirmButton = {
                 TextButton(onClick = { onAnswerPageRewrite(true) }) { Text(stringResource(R.string.action_continue)) }
             },
@@ -394,7 +397,7 @@ fun ViewerScreen(
         AlertDialog(
             onDismissRequest = { confirmDiscard = false },
             title = { Text(stringResource(R.string.unsaved_changes)) },
-            text = { Text(stringResource(R.string.unsaved_changes_body)) },
+            text = { DialogBody { Text(stringResource(R.string.unsaved_changes_body)) } },
             confirmButton = {
                 TextButton(onClick = { confirmDiscard = false; onSaveAndClose() }) { Text(stringResource(R.string.save)) }
             },

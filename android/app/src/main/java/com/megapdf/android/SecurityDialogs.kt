@@ -1,8 +1,7 @@
 package com.megapdf.android
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -39,10 +38,11 @@ fun UnlockDialog(
     // Keyed on the attempt, so a wrong password empties the field.
     var typed by remember(prompt.attempt) { mutableStateOf("") }
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.security_unlock_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DialogBody {
                 Text(stringResource(R.string.security_unlock_body))
                 if (discardsChanges) Text(stringResource(R.string.security_unlock_discards))
                 if (prompt.wrongPassword) {
@@ -85,7 +85,7 @@ fun DocumentPasswordDialog(
         PasswordCommandMode.RESTRICTED -> AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.security_password_title)) },
-            text = { Text(stringResource(R.string.security_password_restricted_body)) },
+            text = { DialogBody { Text(stringResource(R.string.security_password_restricted_body)) } },
             confirmButton = {
                 TextButton(onClick = onUnlock) { Text(stringResource(R.string.security_unlock_ellipsis)) }
             },
@@ -108,12 +108,13 @@ private fun NewPasswordDialog(
     // Shown once the user tries to submit, and cleared as soon as they type again.
     var problem by remember { mutableStateOf<NewPasswordProblem?>(null) }
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         title = {
             Text(stringResource(if (changing) R.string.security_password_title else R.string.security_set_title))
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            DialogBody {
                 Text(stringResource(if (changing) R.string.security_change_body else R.string.security_set_body))
                 SecretField(
                     value = typed,

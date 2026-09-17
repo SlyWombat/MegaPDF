@@ -1,6 +1,7 @@
 package com.megapdf.android
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -180,16 +181,16 @@ fun PasswordDialog(
 ) {
     var password by remember { mutableStateOf("") }
     AlertDialog(
+        modifier = Modifier.imePadding(),
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.password_required)) },
         text = {
-            Column {
+            DialogBody {
                 if (wrongPassword) {
                     Text(
                         stringResource(R.string.wrong_password),
                         color = MaterialTheme.colorScheme.error,
                     )
-                    Spacer(Modifier.height(8.dp))
                 }
                 OutlinedTextField(
                     value = password,
