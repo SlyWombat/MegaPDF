@@ -130,6 +130,39 @@ writes to the kernel input device instead (`tools/android-qa/touch.py`), which i
 how the gestures above were actually exercised. Anyone repeating this pass should
 not report a zoom bug found with `input tap`.
 
+## The busy indicators
+
+The capture matrix caught none of these, and that is the design: nothing quicker
+than half a second shows an indicator at all (`BusyState.SHOW_AFTER_MS`), and on
+this hardware opening a 10,000-page file and searching it are both under the
+threshold. It is the same note #146 already carries for the Mac — "the busy strip
+was not observed, because the operations were too fast".
+
+So `tools/android-qa/busy.py` runs against the multi-GB fixtures instead and
+shoots while the work is still going.
+
+| Indicator | Captured | From |
+|---|---|---|
+| **Opening…** / **Ouverture…** | yes | opening `huge-2_5gb.pdf` |
+| **Searching…** / **Recherche…** | yes | "lighthouse" over 10,000 pages |
+| **Saving…** / **Enregistrement…** | yes | saving a copy of `huge-2_5gb.pdf` — in the strip *and* on the Save button, with the document locked |
+| Checking the saved file… | no | the verify after a 2.5 GB write is under the two-second sampling window |
+| Checking this page… | no | the page check on 20,000 text objects finishes under 500 ms here |
+| Applying… | no | as above |
+
+The three that were caught are captured in French as well as English, so the
+localised labels are confirmed by eye and not only by the catalogue parity test.
+The three that were not are not evidence of anything missing: they are indicators
+for work this machine does faster than the threshold that hides them. The page
+spinner's own timing is covered on the JVM by `BusyStateTest` and
+`PageCheckGateTest`, which inject a clock rather than racing one.
+
+**One coverage gap worth naming:** the tap-to-place toasts (`D13d`, `D13e`) did not
+land in the captures either — a toast lives about two seconds and the capture
+settles around it are not tight enough. Their behaviour was exercised in the flow
+walk (placement armed, then a tap on the page placed the thing), and their strings
+are covered by the catalogue parity test, but there is no image of them.
+
 ## Large files
 
 All 13 fixtures from `tools/gen_large_fixtures.py`, on the 480 dp phone with a
