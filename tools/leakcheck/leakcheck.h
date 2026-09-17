@@ -173,8 +173,8 @@ inline void CheckMetadataOutlineAnnots(FPDF_DOCUMENT doc, const std::string& can
     };
     Walk::Go(doc, nullptr, canary, out, 0);
 
-    // Every annotation's strings: a field value, a link's URI, a note's contents.
-    static const char* kAnnotKeys[] = {"V", "DV", "Contents", "T", "TU", "RC", "URI", "A"};
+    // Every annotation's strings: a field value, a note's contents, a tooltip.
+    static const char* kAnnotKeys[] = {"V", "DV", "Contents", "T", "TU", "RC"};
     for (int i = 0; i < FPDF_GetPageCount(doc); i++) {
         FPDF_PAGE page = FPDF_LoadPage(doc, i);
         if (page == nullptr) continue;
@@ -189,6 +189,24 @@ inline void CheckMetadataOutlineAnnots(FPDF_DOCUMENT doc, const std::string& can
                 if (Utf16ToUtf8(buf).find(canary) != std::string::npos) {
                     out->push_back(Finding{"annotation /" + std::string(key) + " page " + std::to_string(i),
                                            "the canary is still in an annotation"});
+                }
+            }
+            // A link's address is in its ACTION, not on the annotation, which is why
+            // reading /URI off the annotation found nothing: FPDFAction_GetURIPath is where
+            // it lives, and a redacted word can certainly survive in a link address.
+            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_LINK) {
+                FPDF_LINK link = FPDFAnnot_GetLink(annot);
+                FPDF_ACTION action = link != nullptr ? FPDFLink_GetAction(link) : nullptr;
+                if (action != nullptr) {
+                    const unsigned long bytes = FPDFAction_GetURIPath(doc, action, nullptr, 0);
+                    if (bytes > 1) {
+                        std::vector<char> uri(bytes + 1, 0);
+                        FPDFAction_GetURIPath(doc, action, uri.data(), bytes);
+                        if (std::string(uri.data()).find(canary) != std::string::npos) {
+                            out->push_back(Finding{"link URI page " + std::to_string(i),
+                                                   "the canary is still in a link's address"});
+                        }
+                    }
                 }
             }
             FPDFPage_CloseAnnot(annot);

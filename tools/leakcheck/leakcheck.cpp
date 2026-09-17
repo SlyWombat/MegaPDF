@@ -109,8 +109,7 @@ int OccurrencesInText(const std::string& path, const std::string& word) {
     return found;
 }
 
-// How many times `word` appears in the file's bytes, decompressed. Only a word the
-// original says exactly once can stand in for a canary in a byte search.
+// How many times `word` appears in `file`.
 int OccurrencesInBytes(const std::vector<unsigned char>& file, const std::string& word) {
     if (word.empty() || file.size() < word.size()) return 0;
     int found = 0;
@@ -122,6 +121,30 @@ int OccurrencesInBytes(const std::vector<unsigned char>& file, const std::string
         ++at;
     }
     return found;
+}
+
+/// Whether the document says `word` in its metadata, its outline, or any annotation —
+/// everywhere a byte search can find a word the page content never wrote.
+bool SaysOutsideThePages(const std::string& path, const std::string& word) {
+    FPDF_DOCUMENT doc = FPDF_LoadDocument(path.c_str(), nullptr);
+    if (doc == nullptr) return false;
+    std::vector<leakcheck::Finding> findings;
+    leakcheck::CheckMetadataOutlineAnnots(doc, word, &findings);
+    FPDF_CloseDocument(doc);
+    return !findings.empty();
+}
+
+/// The original document's bytes with every stream decompressed — the same view the leak
+/// search takes of the redacted file, and the only fair one to count a canary in. Empty
+/// when qpdf is not on the machine, and then the byte searches are skipped rather than
+/// run against a count that cannot be trusted.
+std::vector<unsigned char> DecodedBytes(const std::string& path, const std::string& scratch) {
+    const std::string cmd = "qpdf --qdf --object-streams=disable --decode-level=all '" + path + "' '" +
+                            scratch + "' >/dev/null 2>&1";
+    std::system(cmd.c_str());
+    std::vector<unsigned char> decoded = leakcheck::ReadFile(scratch);
+    std::remove(scratch.c_str());
+    return decoded;
 }
 
 void PrintRefusals(megapdf_redaction_report* report, const char* prefix) {
@@ -418,14 +441,21 @@ int Battery(int argc, char** argv) {
     leakcheck::PixelResult pixels;
     int leaks = 0;
     std::string canary;
-    const std::vector<unsigned char> original = leakcheck::ReadFile(in);
+    const std::vector<unsigned char> original = DecodedBytes(in, outdir + "/original.qdf");
     for (const std::string& word : covered) {
         if (word.size() < 6) continue;
         if (OccurrencesInText(in, word) != 1) continue;
-        // And exactly once in the file's bytes: a page whose font carries no /ToUnicode
-        // extracts as something else, so a word the text layer says once can be written
-        // in several content streams the battery never marked.
+        // And exactly once in the ORIGINAL'S DECOMPRESSED bytes, which is the view the leak
+        // search takes of the redacted file. A page whose font carries no /ToUnicode
+        // extracts as something else, and a compressed stream says nothing to a raw search,
+        // so both of those hid a second occurrence that was then reported as a leak.
+        if (original.empty()) break;   // no qpdf: the byte searches are not sound, so skip them
         if (OccurrencesInBytes(original, word) != 1) continue;
+        // And the original must not say it outside its page content. A word drawn with an
+        // encoding the content stream does not spell literally, whose one literal
+        // occurrence is a link's URI on a part of the page no mark covered, would otherwise
+        // be reported as a leak for still being there — which it is entitled to be.
+        if (SaysOutsideThePages(in, word)) continue;
         canary = word;
         break;
     }
