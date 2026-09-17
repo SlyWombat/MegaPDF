@@ -40,8 +40,8 @@ def cells(root: str) -> dict[str, dict[str, str]]:
     return out
 
 
-def difference(a: str, b: str) -> float | None:
-    """Fraction of pixels that differ, or None if the two cannot be compared."""
+def difference(a: str, b: str) -> tuple[int, float] | None:
+    """(pixels that differ, as a fraction of the image), or None if incomparable."""
     proc = subprocess.run(
         ["compare", "-metric", "AE", "-fuzz", "1%", a, b, "null:"],
         capture_output=True)
@@ -56,7 +56,7 @@ def difference(a: str, b: str) -> float | None:
                           capture_output=True).stdout.decode().split()
     if len(size) != 2:
         return None
-    return pixels / (int(size[0]) * int(size[1]))
+    return int(pixels), pixels / (int(size[0]) * int(size[1]))
 
 
 def main() -> int:
@@ -75,9 +75,10 @@ def main() -> int:
                     report["missing"].append({"cell": dark, "scene": scene})
                     continue
                 delta = difference(path, twin)
-                if delta is not None and delta > 0.002:
+                if delta is not None and delta[1] > 0.002:
                     report["dark_differs"].append(
-                        {"cell": cell, "scene": scene, "fraction": round(delta, 5)})
+                        {"cell": cell, "scene": scene,
+                         "pixels": delta[0], "fraction": round(delta[1], 5)})
 
     for cell, scenes in sorted(found.items()):
         if "__en__" not in cell:
@@ -92,9 +93,14 @@ def main() -> int:
                     report["missing"].append({"cell": french, "scene": scene})
                     continue
                 delta = difference(path, twin)
-                if delta is not None and delta < 0.0005:
+                # An absolute count, not a fraction: one swapped toolbar word is
+                # ~2,000 pixels, which is 0.4 % of a phone screen but 0.05 % of a
+                # tablet's. A fraction threshold called nine translated tablet
+                # screens untranslated.
+                if delta is not None and delta[0] < 400:
                     report["not_translated"].append(
-                        {"cell": french, "scene": scene, "fraction": round(delta, 6)})
+                        {"cell": french, "scene": scene,
+                         "pixels": delta[0], "fraction": round(delta[1], 6)})
 
     with open(os.path.join(root, "compare.json"), "w") as handle:
         json.dump(report, handle, indent=2)
@@ -103,11 +109,12 @@ def main() -> int:
     print(f"\ndark differs from light in {len(report['dark_differs'])} screens "
           "(expected: only where the system draws)")
     for row in report["dark_differs"]:
-        print(f"  {row['cell']:34s} {row['scene']:34s} {row['fraction']:.4f}")
+        print(f"  {row['cell']:34s} {row['scene']:34s} "
+              f"{row['pixels']:>9,} px  {row['fraction']:.4f}")
     print(f"\nFrench identical to English in {len(report['not_translated'])} screens "
           "(expected: only screens with no words of ours)")
     for row in report["not_translated"]:
-        print(f"  {row['cell']:34s} {row['scene']}")
+        print(f"  {row['cell']:34s} {row['scene']:34s} {row['pixels']:>9,} px")
     print(f"\nmissing captures: {len(report['missing'])}")
     for row in report["missing"][:40]:
         print(f"  {row['cell']:34s} {row['scene']}")

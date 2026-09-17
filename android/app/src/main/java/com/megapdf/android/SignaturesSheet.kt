@@ -175,7 +175,16 @@ fun SignaturesSheet(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.draw), maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            stringResource(R.string.draw),
+                            maxLines = 1,
+                            // Clipped rather than ellipsised, "Dessiner" came out
+                            // "Dessin" at the largest text size — a different French
+                            // word, not a visibly shortened one (#146).
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
                     }
                 }
                 FilledTonalButton(
@@ -189,7 +198,16 @@ fun SignaturesSheet(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(KeyboardIcon, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.type_signature), maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            stringResource(R.string.type_signature),
+                            maxLines = 1,
+                            // Clipped rather than ellipsised, "Dessiner" came out
+                            // "Dessin" at the largest text size — a different French
+                            // word, not a visibly shortened one (#146).
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
                     }
                 }
                 FilledTonalButton(
@@ -203,7 +221,16 @@ fun SignaturesSheet(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(PhotoIcon, contentDescription = null, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.height(4.dp))
-                        Text(stringResource(R.string.add_from_photos), maxLines = 1, style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            stringResource(R.string.add_from_photos),
+                            maxLines = 1,
+                            // Clipped rather than ellipsised, "Dessiner" came out
+                            // "Dessin" at the largest text size — a different French
+                            // word, not a visibly shortened one (#146).
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
                     }
                 }
             }

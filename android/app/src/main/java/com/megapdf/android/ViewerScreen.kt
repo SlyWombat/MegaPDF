@@ -861,6 +861,13 @@ private fun SearchTopBar(
                     else -> stringResource(R.string.match_counter, currentHitIndex + 1, hitCount)
                 },
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // The top bar measures its actions first and gives the title what is
+                // left, so an unbounded counter takes the query field's room: at the
+                // largest text size "Aucun résultat" left a field a few pixels wide
+                // with the typed word invisible (#146). Capped, it is the counter that
+                // shortens and the field that survives.
+                modifier = Modifier.widthIn(max = 112.dp),
             )
             IconButton(onClick = onPrevious, enabled = hitCount > 0) {
                 Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.previous_match))
