@@ -11,6 +11,15 @@ run's numbers and the issues it produced are recorded there.
     python3 tools/stress/report.py <run-dir> [<run-dir>] --md report.md
     python3 tools/stress/reference_check.py <run-dir> <corpus-root>
 
+## Large files
+
+A run drives each document from a copy on local disk, so `open_ms` measures parsing
+rather than the network. That copy is streamed and the document is opened from its
+file (`megapdf_open_file`, #147/#148), read on demand, exactly as the apps open one:
+nothing here holds a document's bytes, so a file above the ~2 GB ceiling of a .NET
+array is an ordinary file to the harness and the memory figures are the engine's
+rather than the harness's own (#157).
+
 `--phases` also accepts `edit` (not in the default set, because it changes the
 document): it retypes the first text line of page 1 through the tiered body-text
 edit, saves, reopens and checks the new text reads back (#112). The report counts

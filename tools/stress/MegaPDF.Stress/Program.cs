@@ -275,6 +275,54 @@ internal static class Json
 }
 
 // ---------------------------------------------------------------------------
+// Scratch — the local copy of the document under test.
+// ---------------------------------------------------------------------------
+
+/// <summary>
+/// Moving a document's bytes without ever holding them (#157).
+///
+/// The harness reads each file from wherever the corpus lives and parks a copy on local
+/// disk, so <c>open_ms</c> measures parsing rather than the network. That copy used to go
+/// through a <c>byte[]</c>, which put a ceiling of about 2 GB on any file the harness could
+/// look at — the large fixtures the batteries most need are above it — and left the file's
+/// own bytes in the working set while the memory figures were taken.
+/// </summary>
+internal static class Scratch
+{
+    private const int BufferBytes = 1 << 20;
+
+    /// <summary>
+    /// Copies <paramref name="from"/> onto <paramref name="to"/> through a fixed buffer and
+    /// returns the bytes copied.
+    ///
+    /// Deliberately not <see cref="File.Copy(string, string, bool)"/>: that hands the work to
+    /// the platform, which on Linux may do it inside the kernel and, on a network share, on
+    /// the server, so what it times is not "read this file" and would not compare with the
+    /// same number from Windows or the Mac. A buffered read-and-write is the same work
+    /// everywhere and costs the buffer, not the file.
+    /// </summary>
+    public static long CopyThroughBuffer(string from, string to)
+    {
+        using var source = Open(from);
+        using var target = new FileStream(to, FileMode.Create, FileAccess.Write, FileShare.None, BufferBytes);
+        source.CopyTo(target, BufferBytes);
+        target.Flush();
+        return source.Length;
+    }
+
+    /// <summary>Reads the whole file and throws the bytes away: what reading it costs, holding none of it.</summary>
+    public static void ReadThroughBuffer(string path)
+    {
+        using var source = Open(path);
+        var chunk = new byte[BufferBytes];
+        while (source.Read(chunk, 0, chunk.Length) > 0) { }
+    }
+
+    private static FileStream Open(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferBytes, FileOptions.SequentialScan);
+}
+
+// ---------------------------------------------------------------------------
 // Worker — one file at a time, driven over stdin.
 // ---------------------------------------------------------------------------
 
@@ -369,16 +417,22 @@ internal static class Worker
 
         // 1. Read from wherever the corpus lives (share or local disk), then park a
         //    copy on local temp so open_ms measures parsing, not the network.
+        //
+        //    Streamed through a fixed buffer, never through a byte[] (#157). A .NET array
+        //    stops at about 2 GB, so the large fixtures could not be read at all — the
+        //    2.5 GB one never reached the open, which is the size where the interesting
+        //    answers are. And the file's own bytes sat in the working set while the memory
+        //    figures were taken, so they measured the harness rather than the engine.
         Heartbeat(hb, i, "read", 0);
-        var sw = Stopwatch.StartNew();
-        var bytes = File.ReadAllBytes(fullPath);
-        r.ReadMs = sw.Elapsed.TotalMilliseconds;
-        r.Bytes = bytes.LongLength;
         var local = Path.Combine(tmpDir, "doc.pdf");
-        File.WriteAllBytes(local, bytes);
-        bytes = [];
+        var sw = Stopwatch.StartNew();
+        r.Bytes = Scratch.CopyThroughBuffer(fullPath, local);
+        r.ReadMs = sw.Elapsed.TotalMilliseconds;
 
-        // 2. Open — what MainViewModel.OpenDocumentAsync does first.
+        // 2. Open — what MainViewModel.OpenDocumentAsync does first. PdfiumEngine.Open is
+        //    the file-backed route (megapdf_open_file): the core keeps the file open and
+        //    PDFium reads the parts it needs through it (#147, #148), so this is on-demand
+        //    reading, the same as the apps, and nothing here holds a copy of the document.
         Heartbeat(hb, i, "open", 0);
         IPdfDocument doc;
         sw.Restart();
@@ -1153,15 +1207,17 @@ internal static class Tools
         }
         Console.WriteLine($"open in place      : first {inPlace[0]:F2} ms, median {Median(inPlace.ToList()):F2} ms");
 
+        // Every copy below is streamed, never through a byte[] (#157): a .NET array stops at
+        // about 2 GB, and this diagnostic is most wanted on the files that pass it.
+        var length = new FileInfo(file).Length;
         var fresh = new List<double>();
-        var bytes = File.ReadAllBytes(file);
         var tmpDir = Directory.CreateTempSubdirectory("megapdf-openbench-").FullName;
         try
         {
             for (var i = 0; i < n; i++)
             {
                 var local = Path.Combine(tmpDir, $"doc{i}.pdf");
-                File.WriteAllBytes(local, bytes);
+                Scratch.CopyThroughBuffer(file, local);
                 var sw = Stopwatch.StartNew();
                 using var doc = engine.Open(local);
                 _ = doc.PageCount;
@@ -1171,7 +1227,7 @@ internal static class Tools
 
             var reread = new List<double>();
             var local2 = Path.Combine(tmpDir, "same.pdf");
-            File.WriteAllBytes(local2, bytes);
+            Scratch.CopyThroughBuffer(file, local2);
             for (var i = 0; i < n; i++)
             {
                 var sw = Stopwatch.StartNew();
@@ -1185,10 +1241,10 @@ internal static class Tools
             for (var i = 0; i < n; i++)
             {
                 var sw = Stopwatch.StartNew();
-                _ = File.ReadAllBytes(local2);
+                Scratch.ReadThroughBuffer(local2);
                 readOnly.Add(sw.Elapsed.TotalMilliseconds);
             }
-            Console.WriteLine($"File.ReadAllBytes   : first {readOnly[0]:F2} ms, median {Median(readOnly.ToList()):F2} ms ({bytes.Length:N0} bytes)");
+            Console.WriteLine($"whole-file read     : first {readOnly[0]:F2} ms, median {Median(readOnly.ToList()):F2} ms ({length:N0} bytes)");
         }
         finally
         {
