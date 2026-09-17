@@ -352,6 +352,20 @@ internal static class Program
     /// page, so 180-192 from the top; forms.pdf's "agree" widget is (100,600)-(115,615)
     /// => 177-192.
     /// </summary>
+    /// <summary>
+    /// Whether the document still says the canary, read back through a save. Used before a
+    /// redaction is applied, to prove that marking alone removes nothing (#173).
+    /// </summary>
+    private static bool DocumentSaysCanary(MainViewModel vm, string scratchPath)
+    {
+        using (var file = File.Create(scratchPath))
+            vm.SaveTo(file);
+        using var engine = new PdfiumEngine();
+        using var document = engine.Open(scratchPath);
+        using var page = document.GetPage(0);
+        return page.GetTextRuns().Any(r => r.Text.Contains("CANARY", StringComparison.Ordinal));
+    }
+
     private static int SelfTest(string[] args)
     {
         var dir = args.FirstOrDefault(a => Directory.Exists(a));
@@ -587,6 +601,75 @@ internal static class Program
         finally
         {
             if (File.Exists(editedPath)) File.Delete(editedPath);
+        }
+
+        // --- Redaction (SDD §3.8 — F7, #173) ---
+        //
+        // The whole flow, in the view model the window binds to: arm the tool, mark, check
+        // that nothing has been written yet, apply, and prove the words are gone from the
+        // saved file rather than merely invisible in it.
+        Console.WriteLine("redaction:");
+        var redactedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-redact-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            using var vm = new MainViewModel(state);
+            vm.Open(Path.Combine(dir, "text-partial-run.pdf"));
+            Check("the redaction fixture opened", vm.IsDocumentOpen);
+
+            vm.ToggleRedactCommand.Execute(null);
+            Check("the Redact tool arms", vm.IsRedactMode);
+            Check("and its hint says what a drag will do", vm.ModeHint == Strings.RedactHint);
+
+            // The canary sits in the middle of the line; the KEEP words are either side.
+            vm.AddRedactionMark(0, new PdfRect(120, 74, 150, 24));
+            Check("marking leaves placement mode", vm.Mode == MainViewModel.PageMode.Select);
+            Check("the document now carries a mark", vm.HasRedactionMarks);
+            Check("and nothing has been removed yet: the text is still there",
+                  DocumentSaysCanary(vm, redactedPath));
+
+            // A mark is not content: a document saved with one carries none.
+            using (var file = File.Create(redactedPath))
+                vm.SaveTo(file);
+            using (var engine = new PdfiumEngine())
+            using (var withMarks = engine.Open(redactedPath))
+            {
+                Check("a document saved with marks on it carries none",
+                      withMarks.RedactionMarkCount == 0);
+            }
+
+            var applied = vm.ApplyRedactionsAsync().GetAwaiter().GetResult();
+            Check("applying succeeds", applied);
+            Check("the marks are gone with it", !vm.HasRedactionMarks);
+            Check("undo cannot put the removed content back", !vm.CanUndo);
+            Check("and the summary says what went", vm.Status.Contains("redacted", StringComparison.Ordinal));
+
+            using (var file = File.Create(redactedPath))
+                vm.SaveTo(file);
+
+            // The point of the whole feature: the words are not in the file, by any reading
+            // of it. PDFium's extraction first, then the raw bytes.
+            using (var engine = new PdfiumEngine())
+            using (var reopened = engine.Open(redactedPath))
+            using (var page = reopened.GetPage(0))
+            {
+                var text = string.Join(" ", page.GetTextRuns().Select(r => r.Text));
+                Check("the canary no longer extracts", !text.Contains("CANARY", StringComparison.Ordinal));
+                Check("and the words beside it are still there",
+                      text.Contains("KEEP", StringComparison.Ordinal));
+            }
+            var bytes = File.ReadAllBytes(redactedPath);
+            var canary = System.Text.Encoding.ASCII.GetBytes("CANARY-42-XYZ");
+            Check("the canary is not in the file's bytes either",
+                  bytes.AsSpan().IndexOf(canary) < 0);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::redaction: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(redactedPath)) File.Delete(redactedPath);
         }
 
         // --- Body text editing (SDD §3.1 — F1) ---
