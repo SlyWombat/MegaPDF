@@ -38,10 +38,27 @@ components by hand-written interop. CI can prove the wiring is sound but cannot
 open a panel. Does the panel appear, does the preview look right, and does a
 printed or PDF-exported page match what is on screen?
 
-**4. Does it feel like a Mac app?** This is a judgement only a person can make.
+**4. The menu bar, and About MegaPDF.** Open the **MegaPDF** menu — the first
+menu, left of File. The first item should read **About MegaPDF**, and choosing it
+should open a small panel with the app's icon, its version, the copyright, the
+credit to Mega Woman, a link to the source, and a **Third-Party Notices…**
+button. That button opens a separate window of the open-source licences MegaPDF
+ships: it should scroll, resize, and let you select text out of it.
 
-- Are the shortcuts right? ⌘O, ⌘S, ⌘P, ⌘Z, ⌘⇧Z, ⌘F, ⌘+/−/0. **Ctrl instead of
-  ⌘ anywhere is a bug.**
+*Why it matters:* until 2.0 that first item was Avalonia's own "About Avalonia",
+naming the framework the app is built with and never MegaPDF, and the notices
+were not in the app at all — which several of those licences require. App Review
+meets this menu before anything else.
+
+While you are there: **⌘W** should close the front window and ask about unsaved
+changes, and the **Window** and **Help** menus should be present. In French,
+Services, Hide, Show All and Quit are still in English; that is the framework's
+own menu text, not ours, and it is tracked separately.
+
+**5. Does it feel like a Mac app?** This is a judgement only a person can make.
+
+- Are the shortcuts right? ⌘O, ⌘S, ⌘P, ⌘Z, ⌘⇧Z, ⌘F, ⌘W, ⌘M, ⌘+/−/0. **Ctrl
+  instead of ⌘ anywhere is a bug.**
 - Is text crisp on a retina display, at 100% and zoomed in?
 - Does scrolling feel normal — momentum, trackpad, a long document?
 - Does the app follow the system light/dark setting?

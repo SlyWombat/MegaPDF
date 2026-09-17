@@ -17,11 +17,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The vendored licence texts are copies of what each publisher ships, and the
+      # only thing standing between a copyright line and a typo is that nobody
+      # edits them. Offline: it re-hashes what is committed against the manifest
+      # tools/fetch_vendor_licenses.py wrote when it fetched them (#176).
+      - name: Check the vendored licence texts are unaltered
+        run: python3 tools/fetch_vendor_licenses.py --check
+
       - name: Regenerate and check for drift
         run: |
           python3 tools/gen_third_party_notices.py
           git diff --exit-code -- '*THIRD-PARTY-NOTICES.txt' \
             || { echo "::error::Third-party notices are stale — run tools/gen_third_party_notices.py and commit the result"; exit 1; }
+
+      # The About window's icon is pulled out of the committed .icns, so it cannot
+      # drift from the one the bundle shows in the Dock (#176).
+      - name: Regenerate the About icon, check for drift
+        run: |
+          python3 tools/gen_about_icon.py
+          git diff --exit-code -- 'src/MegaPDF.Avalonia/Assets/AppIcon.png' \
+            || { echo "::error::AppIcon.png is stale — run tools/gen_about_icon.py and commit the result"; exit 1; }
 
       # The typed string accessors are generated from the English catalogues
       # (#91); an edited .resw/.resx without a regenerated Strings.g.cs would
