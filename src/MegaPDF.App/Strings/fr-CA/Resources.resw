@@ -803,4 +803,10 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   <data name="AddFromImageName" xml:space="preserve">
     <value>Ajouter une signature à partir d'une photo</value>
   </data>
+  <data name="PageRegionDescriptionWithContent" xml:space="preserve">
+    <value>Page {0}, {1} : {2}</value>
+  </data>
+  <data name="SavedAnnouncement" xml:space="preserve">
+    <value>{0} enregistré</value>
+  </data>
 </root>

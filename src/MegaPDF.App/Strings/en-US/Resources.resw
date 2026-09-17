@@ -838,4 +838,12 @@ Saved as {2} — ready to email.</value>
   <data name="AddFromImageName" xml:space="preserve">
     <value>Add a signature from a photo</value>
   </data>
+  <data name="PageRegionDescriptionWithContent" xml:space="preserve">
+    <value>Page {0}, {1}: {2}</value>
+    <comment>{0} page number, {1} what the region is, {2} what it says (#190)</comment>
+  </data>
+  <data name="SavedAnnouncement" xml:space="preserve">
+    <value>Saved {0}</value>
+    <comment>Announced to a screen reader when a save finishes; {0} file name (#190)</comment>
+  </data>
 </root>

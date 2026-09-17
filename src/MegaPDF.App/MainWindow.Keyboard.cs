@@ -39,6 +39,7 @@ public sealed partial class MainWindow
                 UpdateFocusRing();
         };
         ViewModel.Pages.CollectionChanged += OnPagesChangedForFocus;
+        ViewModel.Announced += text => DispatcherQueue.TryEnqueue(() => Announce(text));
 
         // #169: keyboard focus left on a toolbar button must not stay live behind work on
         // the page, a busy state or a dialog.

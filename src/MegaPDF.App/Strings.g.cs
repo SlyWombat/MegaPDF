@@ -540,4 +540,10 @@ public static partial class Strings
 
     /// <summary>Add a signature from a photo</summary>
     public static string AddFromImageName => Get("AddFromImageName");
+
+    /// <summary>Page {0}, {1}: {2}</summary>
+    public static string PageRegionDescriptionWithContent(object? arg0, object? arg1, object? arg2) => string.Format(CultureInfo.CurrentCulture, Get("PageRegionDescriptionWithContent"), arg0, arg1, arg2);
+
+    /// <summary>Saved {0}</summary>
+    public static string SavedAnnouncement(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SavedAnnouncement"), arg0);
 }
