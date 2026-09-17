@@ -1,0 +1,112 @@
+--- a/public/fpdf_annot.h
++++ b/public/fpdf_annot.h
+@@ -182,6 +182,25 @@
+                                                          int index);
+ 
+ // Experimental API.
++// Remove the form field |annot| is a widget of, with its value, from the document's
++// AcroForm field tree: the field dictionary leaves /AcroForm /Fields (and any /Kids array
++// it sits in), and its /V, /DV, /RV, /TU and /AP entries are cleared. A parent field left
++// with no kids is removed too.
++//
++// FPDFPage_RemoveAnnot takes the widget off its page and no more. The field dictionary
++// stays reachable from /AcroForm /Fields, so the value a redaction was meant to remove is
++// still in the saved file, and any other widget of the same field still draws it.
++//
++// The widget itself is not removed from its page: call FPDFPage_RemoveAnnot for that.
++//
++// document - handle to the document the annotation belongs to.
++// annot    - handle to a widget annotation.
++//
++// Returns true when a field was found and removed.
++FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
++FPDFDoc_RemoveFormField(FPDF_DOCUMENT document, FPDF_ANNOTATION annot);
++
++// Experimental API.
+ // Get the subtype of an annotation.
+ //
+ //   annot  - handle to an annotation.
+--- a/fpdfsdk/fpdf_annot.cpp
++++ b/fpdfsdk/fpdf_annot.cpp
+@@ -509,6 +509,81 @@
+   return true;
+ }
+ 
++namespace {
++
++// Removes `field` from `fields`, recursing through each entry's /Kids. A parent left with
++// no kids is removed with it, so nothing is left pointing at a field that is gone.
++bool RemoveFieldFromArray(CPDF_Array* fields,
++                          const CPDF_Dictionary* field,
++                          int depth) {
++  if (!fields || !field || depth > 32) {
++    return false;
++  }
++  for (size_t i = 0; i < fields->size(); ++i) {
++    RetainPtr<CPDF_Dictionary> entry = fields->GetMutableDictAt(i);
++    if (!entry) {
++      continue;
++    }
++    if (entry.Get() == field) {
++      fields->RemoveAt(i);
++      return true;
++    }
++    RetainPtr<CPDF_Array> kids = entry->GetMutableArrayFor("Kids");
++    if (kids && RemoveFieldFromArray(kids.Get(), field, depth + 1)) {
++      if (kids->IsEmpty()) {
++        fields->RemoveAt(i);
++      }
++      return true;
++    }
++  }
++  return false;
++}
++
++}  // namespace
++
++FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
++FPDFDoc_RemoveFormField(FPDF_DOCUMENT document, FPDF_ANNOTATION annot) {
++  CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
++  CPDF_AnnotContext* context = CPDFAnnotContextFromFPDFAnnotation(annot);
++  if (!doc || !context) {
++    return false;
++  }
++  RetainPtr<CPDF_Dictionary> annot_dict = context->GetMutableAnnotDict();
++  if (!annot_dict) {
++    return false;
++  }
++
++  // A widget and its field are one dictionary when the producer merged them, and two when
++  // the field has several widgets; then the field is the nearest ancestor with an /FT.
++  RetainPtr<CPDF_Dictionary> field = annot_dict;
++  for (int depth = 0; field && !field->KeyExist("FT") && depth < 32; ++depth) {
++    field = field->GetMutableDictFor("Parent");
++  }
++  if (!field) {
++    return false;
++  }
++
++  // Clear what carries the value first: the field dictionary may still be reachable from
++  // somewhere this does not walk, and an empty one leaks nothing.
++  static const char* const kValueKeys[] = {"V", "DV", "RV", "TU", "AP"};
++  for (const char* key : kValueKeys) {
++    field->RemoveFor(key);
++  }
++  if (field.Get() != annot_dict.Get()) {
++    for (const char* key : kValueKeys) {
++      annot_dict->RemoveFor(key);
++    }
++  }
++
++  RetainPtr<CPDF_Dictionary> root = doc->GetMutableRoot();
++  RetainPtr<CPDF_Dictionary> acro_form =
++      root ? root->GetMutableDictFor("AcroForm") : nullptr;
++  RetainPtr<CPDF_Array> fields =
++      acro_form ? acro_form->GetMutableArrayFor("Fields") : nullptr;
++  RemoveFieldFromArray(fields.Get(), field.Get(), 0);
++  return true;
++}
++
+ FPDF_EXPORT FPDF_ANNOTATION_SUBTYPE FPDF_CALLCONV
+ FPDFAnnot_GetSubtype(FPDF_ANNOTATION annot) {
+   const CPDF_Dictionary* pAnnotDict = GetAnnotDictFromFPDFAnnotation(annot);

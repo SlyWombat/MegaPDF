@@ -20,13 +20,31 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(REPO ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
+# Where PDFium comes from on Linux: the committed prebuilt, or another build's staging
+# directory — a local tools/pdfium/build-pdfium.sh run, to test a patch before it is
+# released (#120). Declared before the library so its headers can be used as well as its
+# library.
+set(MEGAPDF_PDFIUM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/pdfium/linux-x64" CACHE PATH
+    "PDFium to link on Linux (include/, lib/, VERSION)")
+
 option(MEGAPDF_CORE_TESTS "Build and register the core test target (#104)" OFF)
 option(MEGAPDF_ASAN "AddressSanitizer for the core and its tests (GCC/Clang only)" OFF)
 
 add_library(megapdf_core SHARED megapdf_core.cpp megapdf_core.h)
 # One header set for every platform: the prebuilts are all the same pdfium-binaries
 # release (libs/pdfium/*/VERSION), and only the Android tree vendors the headers.
-target_include_directories(megapdf_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/libs/pdfium/android/include)
+#
+# Except when testing a patch before it is released (#120, #173): MEGAPDF_PDFIUM_DIR then
+# points at a local build's staging directory, whose headers declare what the patch adds
+# and the committed ones do not. Its include/ comes first so the build matches the library
+# it links, and the committed headers stay as the fallback.
+set(MEGAPDF_PDFIUM_INCLUDE "")
+if(DEFINED MEGAPDF_PDFIUM_DIR AND EXISTS "${MEGAPDF_PDFIUM_DIR}/include/fpdfview.h")
+    set(MEGAPDF_PDFIUM_INCLUDE ${MEGAPDF_PDFIUM_DIR}/include)
+    message(STATUS "pdfium headers: ${MEGAPDF_PDFIUM_INCLUDE} (a local build, not the committed set)")
+endif()
+set(MEGAPDF_PDFIUM_HEADERS ${MEGAPDF_PDFIUM_INCLUDE} ${REPO}/libs/pdfium/android/include)
+target_include_directories(megapdf_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MEGAPDF_PDFIUM_HEADERS})
 
 if(WIN32)
     # libs/pdfium/win-x64 vendors only pdfium.dll: no import library. It is
@@ -93,7 +111,6 @@ else()
     # Linux is the core test target's home (#104); no app ships from here.
     # MEGAPDF_PDFIUM_DIR points at another build's staging directory, such as a local
     # tools/pdfium/build-pdfium.sh run, to test a PDFium patch before it is released (#120).
-    set(MEGAPDF_PDFIUM_DIR "${REPO}/libs/pdfium/linux-x64" CACHE PATH "PDFium to link on Linux (include/, lib/, VERSION)")
     set(PDFIUM_LINUX ${MEGAPDF_PDFIUM_DIR})
     if(NOT EXISTS ${PDFIUM_LINUX}/lib/libpdfium.so)
         message(FATAL_ERROR "libs/pdfium/linux-x64 is missing (fetch the pinned pdfium-binaries linux-x64 build)")
@@ -146,7 +163,7 @@ if(MEGAPDF_CORE_TESTS)
         "The desktop engine's text runs and lines for every fixture, captured before #106 moved them into the core")
     add_executable(megapdf_core_tests tests/core_tests.cpp)
     target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/tools/leakcheck
-        ${REPO}/libs/pdfium/android/include)
+        ${MEGAPDF_PDFIUM_HEADERS})
     target_compile_definitions(megapdf_core_tests PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES}
         # Committed encrypted fixtures (#131, tools/gen_security_fixtures.sh).
         "MEGAPDF_SECURITY_FIXTURES=\"${REPO}/tests/MegaPDF.Core.Tests/Fixtures/security\""
@@ -163,7 +180,7 @@ if(MEGAPDF_CORE_TESTS)
     # to both.
     add_executable(megapdf_leakcheck ${REPO}/tools/leakcheck/leakcheck.cpp)
     target_include_directories(megapdf_leakcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/tools/leakcheck
-        ${REPO}/libs/pdfium/android/include)
+        ${MEGAPDF_PDFIUM_HEADERS})
     target_link_libraries(megapdf_leakcheck PRIVATE megapdf_core ${PDFIUM_LINK})
     add_custom_command(TARGET megapdf_leakcheck POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_leakcheck>)

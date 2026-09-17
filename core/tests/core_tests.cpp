@@ -1745,6 +1745,21 @@ void test_redaction_fixtures(const char* dir) {
         {"image-smask", {}, 0, "an image with a soft mask"},
         {"link", {}, 0, "a link annotation whose URI carries the canary"},
         {"vector-canary", {{0, 98, 684, 256, 702}}, 0, "the canary drawn as filled paths, with no text at all"},
+#if MEGAPDF_PDFIUM_PATCHES >= 28
+        // A rule and a filled band crossing the edge of the area: clipped to the page minus
+        // the area rather than removed whole, which would take what they draw outside with
+        // them (PDFium patch 0026).
+        {"vector-straddle", {{0, 100, 650, 300, 700}}, 0, "a path crossing the edge of the area"},
+        // /Info and the XMP packet (patch 0027).
+        {"metadata", {}, 0, "the canary in the document information and in XMP"},
+        // The field's value leaves the AcroForm tree with its widget (patch 0028).
+        {"form-field", {{0, 120, 688, 280, 712}}, 0, "an AcroForm field whose value is the canary"},
+#endif
+        // Not a gap in the design: PDFium's writer does not write back an edit made inside
+        // a form XObject at all, and giving a form a stream of its own is an upstream change
+        // rather than a patch (tools/pdfium/README.md). Refusing is the contract.
+        {"form-xobject", {{0, 150, 655, 350, 695}}, MEGAPDF_REDACT_SHARED_FORM,
+         "a form XObject reaching into the area"},
     };
 
     for (const RedactionCase& one : cases) {
@@ -1844,21 +1859,22 @@ void test_redaction_fixtures(const char* dir) {
 // Apply fails closed: a document it refuses is not touched, and one it cannot finish can
 // never be saved.
 void test_redaction_fails_closed(const char* dir) {
-    const std::string path = std::string(dir) + "/vector-straddle.pdf";
+    const std::string path = std::string(dir) + "/form-xobject.pdf";
     Doc doc(path);
     if (doc.doc == nullptr) {
-        check(false, "#173 vector-straddle opens", path);
+        check(false, "#173 form-xobject opens", path);
         return;
     }
-    // The rule and the band cross the edge of this area, which cannot be clipped yet.
+    // A form XObject reaches into this area. PDFium does not write back an edit made
+    // inside a form, so the redaction refuses rather than leave the content behind.
     {
         Page page(doc.doc, 0);
-        megapdf_rect r{100, 650, 300, 700};
+        megapdf_rect r{150, 655, 350, 695};
         megapdf_redaction_mark(page.page, &r, nullptr);
     }
     megapdf_redaction_report* report = nullptr;
     const int rc = megapdf_redact_apply(doc.doc, nullptr, &report);
-    check(rc == MEGAPDF_ERR_REDACT, "#173 a straddling path is refused rather than half removed");
+    check(rc == MEGAPDF_ERR_REDACT, "#173 a form XObject in the area is refused rather than half removed");
     megapdf_redaction_counts counts{};
     megapdf_redaction_report_counts(report, &counts);
     check(counts.characters == 0 && counts.text_runs == 0 && counts.paths == 0,
@@ -1873,9 +1889,15 @@ void test_redaction_fails_closed(const char* dir) {
 
     check(megapdf_redaction_mark_count(doc.doc) == 1, "#173 a refused apply leaves the marks in place");
     check(megapdf_redaction_poisoned(doc.doc) == 0, "#173 a refusal does not poison the document");
-    // And the page is untouched: the canary still extracts.
+    // And the page is untouched: it has every object it had, drawing what it drew. (The
+    // canary is inside the form XObject, which is not a text object, so the text layer is
+    // not where to look; the object count and the page's own text are.)
     {
+        Doc untouched(path);
+        Page before(untouched.doc, 0);
         Page page(doc.doc, 0);
+        check(megapdf_page_object_count(page.page) == megapdf_page_object_count(before.page),
+              "#173 a refused apply leaves every object on the page");
         megapdf_text* text = megapdf_text_load(page.page, MEGAPDF_TEXT_ALL);
         bool found = false;
         for (size_t i = 0; i < megapdf_text_run_count(text); i++) {
@@ -1884,10 +1906,10 @@ void test_redaction_fails_closed(const char* dir) {
             megapdf_text_run_string(text, i, MEGAPDF_TEXT_RUN_TEXT, u.data(), u.size());
             std::string ascii;
             for (size_t k = 0; k < n; k++) ascii += u[k] < 0x80 ? static_cast<char>(u[k]) : '?';
-            if (ascii.find("CANARY") != std::string::npos) found = true;
+            if (ascii.find("KEEP") != std::string::npos) found = true;
         }
         megapdf_text_free(text);
-        check(found, "#173 a refused apply leaves the document exactly as it was");
+        check(found, "#173 a refused apply leaves the document's text exactly as it was");
     }
 }
 

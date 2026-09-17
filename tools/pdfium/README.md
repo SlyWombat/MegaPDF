@@ -33,6 +33,9 @@ through that writer, so the apps ship a PDFium built from this patch series.
 | `0023-page-user-unit` | #150 | `FPDFPage_GetUserUnit`: a page's `/UserUnit`, the size of its user space unit in points (PDF 1.6), read from the page dictionary and 1.0 when missing or invalid. Upstream has no accessor for it, so a page drawn in 2-point units showed at half size; the core scales every coordinate and size it reports and accepts by it |
 | `0024-parser-keep-large-streams-in-file` | #147 | memory for large documents: the document's parser keeps every stream of 64 KB or more backed by the file, read when it is used, instead of copying it into memory as it is parsed (upstream copied every stream, and the document holds every object it has parsed until it closes, so measuring the pages of a 2.5 GB document at open held 2.6 GB). Measured on `huge-2_5gb.pdf`: loading all 1,000 pages 15.9 s and 2.64 GB → 1.1 s and 18 MB. Streams in a memory-backed parser (object streams, FDF) are still copied; an encrypted stream is still decrypted into memory |
 | `0025-page-image-cache-reduced-huge-images` | #151 | render speed of huge images at every zoom after the first: when a render needs at most a quarter of the pixels of an image of 60 MB or more decoded, the page's image cache keeps an area-averaged copy at twice the device size, else 1.5 times, else the device size (the first under 96 MB) instead of the whole image. Upstream never realizes such an image, so the cache held a lazy decoder and every render inflated the whole stream again: 1.0–1.7 s per render of a 20,000 x 15,000 px Flate image at any zoom. A smaller render draws from the copy and keeps it; a larger one lets it go, decodes again and keeps a new copy. Measured on `huge-image-page.pdf` (Linux x64): first render unchanged, every later render 1.0–1.7 s → 80–330 ms; peak memory 452 → 530 MB, resident about 90 MB higher while the page is open. Corpus (4,263 documents, first and last page at 1,200, 2,000, 2,800 and 4,000 px): identical at 1,200 px; at larger sizes 5 documents with scanned or printed images differ, where the copy's area averaging removes the moiré that upstream's bilinear sampling of the whole image shows on halftone screens (up to 73 levels on at most 7% of pixels), and 200 px renders stay within 4 levels |
+| `0026-pageobj-clip-path-and-rect-regions` | #173 | `FPDF_CreateClipPathFromRects` and `FPDFPageObj_AppendClipPath`: a clip path made of several rectangles combined under one fill rule, and a page object given a clip path. Upstream can read an object's clip path and transform it, never set one, and `FPDF_CreateClipPath` can only describe a single rectangle — so nothing in the API could express a region with a hole in it. A redaction clips a path or shading that crosses the edge of a marked area to "the page minus the areas" (an even-odd path of the page with the areas as inner subpaths) instead of removing it whole and taking what it draws outside with it |
+| `0027-document-remove-metadata` | #173 | `FPDF_RemoveMetadata`: every entry of `/Info`, the XMP packet (`/Metadata`) on the catalog and on every page, and any `/PieceInfo` private application data. Upstream reads metadata and never writes it, so there was no way to take it out; a redaction that leaves the account number in `/Title` has not redacted anything |
+| `0028-annot-remove-form-field` | #173 | `FPDFDoc_RemoveFormField`: the form field a widget belongs to leaves `/AcroForm /Fields` (and any `/Kids` array it sits in) with its `/V`, `/DV`, `/RV`, `/TU` and `/AP`, and a parent left with no kids goes too. `FPDFPage_RemoveAnnot` takes the widget off its page and no more, so the field dictionary stays reachable from the catalog and the value a redaction was meant to remove is still in the saved file |
 
 The #118 layout guard stays in the core regardless: every body-text edit is rehearsed on
 a copy of the page and refused if anything else would change. The patches make that
@@ -78,6 +81,20 @@ or harmless, with the evidence for it (#125, #128).
   but a caller that renders a zoomed tile with `FPDF_RenderPageBitmapWithMatrix` gets a softer
   image (at 8x zoom, up to 1.7% of a synthetic tile and 0.5% of a corpus tile differ by more than
   60). A JPEG libjpeg will not scale, such as a lossless one, is decoded at full size (0022).
+
+**Form XObjects are not editable through the writer (#173).** `FPDFFormObj_RemoveObject`
+reports success and changes nothing: it marks the page's form *object* dirty, but not the
+form's own content stream, so `CPDF_PageContentGenerator::ProcessForm`'s
+`if (form_xobject->HasDirtyStreams())` is false and the form's stream is never regenerated
+(measured: removing the only text object inside a form and saving leaves the file
+byte-for-byte as it draws). Fixing it needs more than a patch. The regeneration writes the
+form's stream where it is, and a form XObject may be drawn from more than one page's
+resources, so an edit on one page would change the other; writing to a copy means giving
+the form a stream of its own, and both `CPDF_Form::form_stream_` and
+`CPDF_PageObjectHolder::dict_` are `const` members set at construction. That is an upstream
+change, not a patch. Until it is made, redaction **refuses** a page whose form XObject
+reaches into a marked area (`MEGAPDF_REDACT_SHARED_FORM`) rather than leaving content
+behind — fail-closed, with the page and the reason named.
 
 **Guard tolerances (#128).** No change is needed. Every difference that remains on the corpus
 already sits under the per-pixel threshold (60 of 765) or the page budget (0.05% of pixels), and

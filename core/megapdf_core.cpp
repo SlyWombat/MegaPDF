@@ -44,7 +44,8 @@
 #include "fpdf_flatten.h"
 #include "fpdf_save.h"
 #include "fpdf_text.h"
-#include "fpdf_transformpage.h"  // FPDFPage_GetCropBox
+#include "fpdf_doc.h"   // FPDF_RemoveMetadata (patch 0027)
+#include "fpdf_transformpage.h"  // FPDFPage_GetCropBox; FPDF_CreateClipPathFromRects (patch 0026)
 #include "fpdfview.h"
 
 // --------------------------------------------------------------------------
@@ -3797,8 +3798,13 @@ bool ObjectOverlaps(const std::vector<Area>& areas, FPDF_PAGEOBJECT obj) {
 struct CharPos {
     unsigned int unicode;
     double ox, oy;          // FPDFText_GetCharOrigin
-    double l, b, r, t;      // FPDFText_GetLooseCharBox: a glyph reaching into the area by
-                            // its side bearing alone still counts as covered
+    // The glyph's INK, from FPDFText_GetCharBox, not the loose box. The loose box is the
+    // line's full height, ascender to descender, so a mark dragged across the bottom edge
+    // of a line would take the whole line with it — every glyph's loose box reaches down
+    // there. What a redaction has to remove is what can be seen or extracted inside the
+    // area, and that is the ink. A glyph whose ink is entirely outside the mark hides
+    // nothing inside it.
+    double l, b, r, t;
     bool generated;         // PDFium's own separator, not a glyph the document draws
 };
 
@@ -3822,13 +3828,20 @@ ObjectChars ReadObjectChars(FPDF_TEXTPAGE text_page) {
         c.unicode = FPDFText_GetUnicode(text_page, i);
         c.generated = FPDFText_IsGenerated(text_page, i) == 1;
         FPDFText_GetCharOrigin(text_page, i, &c.ox, &c.oy);
-        FS_RECTF box{};
-        if (FPDFText_GetLooseCharBox(text_page, i, &box)) {
-            c.l = box.left; c.b = box.bottom; c.r = box.right; c.t = box.top;
-        } else {
-            double l = 0, b = 0, r = 0, t = 0;
-            FPDFText_GetCharBox(text_page, i, &l, &r, &b, &t);   // left, right, bottom, top
+        double l = 0, r = 0, b = 0, t = 0;
+        if (FPDFText_GetCharBox(text_page, i, &l, &r, &b, &t) && r > l && t > b) {
             c.l = l; c.b = b; c.r = r; c.t = t;
+        } else {
+            // A character with no ink of its own — a space, or one PDFium cannot measure.
+            // Its origin stands for it, so it is never "inside" an area by itself, which is
+            // right: a space leaks nothing.
+            FS_RECTF box{};
+            if (!IsInvisibleCharacter(c.unicode) && FPDFText_GetLooseCharBox(text_page, i, &box)) {
+                c.l = box.left; c.b = box.bottom; c.r = box.right; c.t = box.top;
+            } else {
+                c.l = c.r = c.ox;
+                c.b = c.t = c.oy;
+            }
         }
         out[obj].push_back(c);
     }
@@ -3836,7 +3849,7 @@ ObjectChars ReadObjectChars(FPDF_TEXTPAGE text_page) {
 }
 
 // What the plan says to do with one object.
-enum class RAct { None, Remove, Rewrite };
+enum class RAct { None, Remove, Rewrite, Clip };
 
 struct RObject {
     int index = -1;
@@ -3936,18 +3949,15 @@ bool PlanPageUnlocked(FPDF_PAGE page, const std::vector<Area>& areas, std::vecto
                 { RObject o; o.index = i; o.act = RAct::Rewrite; plan->push_back(o); }
                 break;
             case FPDF_PAGEOBJ_PATH:
-            case FPDF_PAGEOBJ_SHADING:
-                if (InsideAny(areas, l, b, r, t)) {
-                    RObject o; o.index = i; o.act = RAct::Remove;
-                    plan->push_back(o);
-                } else {
-                    refusal->reason = MEGAPDF_REDACT_PDFIUM;
-                    refusal->message = type == FPDF_PAGEOBJ_PATH
-                        ? "a path crosses the edge of the area and cannot be clipped to it yet"
-                        : "a shading crosses the edge of the area and cannot be clipped to it yet";
-                    ok = false;
-                }
+            case FPDF_PAGEOBJ_SHADING: {
+                // Wholly covered: it goes. Crossing the edge: it is clipped to the page
+                // minus the areas, so the ink inside never reaches the page and the ink
+                // outside is untouched (PDFium patch 0026).
+                RObject o; o.index = i;
+                o.act = InsideAny(areas, l, b, r, t) ? RAct::Remove : RAct::Clip;
+                plan->push_back(o);
                 break;
+            }
             case FPDF_PAGEOBJ_FORM:
                 refusal->reason = MEGAPDF_REDACT_SHARED_FORM;
                 refusal->message = "a form XObject reaches into the area and cannot be copied and changed yet";
@@ -4223,6 +4233,35 @@ bool RedactImageUnlocked(FPDF_PAGE page, FPDF_PAGEOBJECT obj, const std::vector<
     return ok;
 }
 
+// Confines what `obj` draws to the page minus `areas`: one even-odd path whose outer
+// subpath is the page and whose inner subpaths are the marked areas, so the ink inside
+// them never reaches the page and the ink outside is untouched. A path or shading that
+// crosses the edge of an area cannot be split, and removing it whole would take what it
+// draws outside with it (PDFium patch 0026).
+bool ClipObjectOutsideAreasUnlocked(FPDF_PAGE page, FPDF_PAGEOBJECT obj, const std::vector<Area>& areas) {
+    if (areas.empty()) return true;
+    float pl = 0, pb = 0, pr = 0, pt = 0;
+    if (!FPDFPage_GetMediaBox(page, &pl, &pb, &pr, &pt)) return false;
+    // The outer rectangle must contain everything the object could draw, whatever the
+    // page boxes say; an object may reach outside the MediaBox.
+    float ol = 0, ob = 0, orr = 0, ot = 0;
+    if (FPDFPageObj_GetBounds(obj, &ol, &ob, &orr, &ot)) {
+        pl = (std::min)(pl, ol - 1); pb = (std::min)(pb, ob - 1);
+        pr = (std::max)(pr, orr + 1); pt = (std::max)(pt, ot + 1);
+    }
+    std::vector<FS_RECTF> rects;
+    rects.push_back(FS_RECTF{pl, pt, pr, pb});   // FS_RECTF is left, top, right, bottom
+    for (const Area& a : areas) {
+        rects.push_back(FS_RECTF{static_cast<float>(a.l), static_cast<float>(a.t), static_cast<float>(a.r),
+                                 static_cast<float>(a.b)});
+    }
+    FPDF_CLIPPATH clip = FPDF_CreateClipPathFromRects(rects.data(), rects.size(), 1);
+    if (clip == nullptr) return false;
+    const bool ok = FPDFPageObj_AppendClipPath(obj, clip) == 1;
+    FPDF_DestroyClipPath(clip);
+    return ok;
+}
+
 // The solid box where the content was: a plain filled path, no mark, no annotation. Nothing
 // in the saved file says a redaction happened here — the mark itself would be a disclosure.
 bool DrawRedactionBoxUnlocked(FPDF_PAGE page, const Area& area, unsigned int colour) {
@@ -4259,11 +4298,24 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
     };
     // Annotations first: removing one does not move a page object's index.
     for (size_t k = annots.size(); k-- > 0;) {
+        // A widget's value lives in the AcroForm field tree, not on the page: taking the
+        // widget off leaves the field dictionary and its /V in the file (PDFium patch 0028).
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(page, annots[k]);
+        bool was_field = false;
+        if (annot != nullptr) {
+            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) {
+                was_field = FPDFDoc_RemoveFormField(doc, annot) == 1;
+            }
+            const int subtype = FPDFAnnot_GetSubtype(annot);
+            if (subtype == FPDF_ANNOT_LINK) counts->links++;
+            FPDFPage_CloseAnnot(annot);
+        }
         if (!FPDFPage_RemoveAnnot(page, annots[k])) {
             refusal->reason = MEGAPDF_REDACT_ANNOTATION;
             refusal->message = "an annotation reaching into the area could not be removed";
             return false;
         }
+        if (was_field) counts->form_fields++;
         counts->annotations++;
     }
     for (size_t k = plan.size(); k-- > 0;) {
@@ -4289,6 +4341,18 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
             else if (type == FPDF_PAGEOBJ_PATH) counts->paths++;
             else if (type == FPDF_PAGEOBJ_SHADING) counts->shadings++;
             else if (type == FPDF_PAGEOBJ_IMAGE) counts->images++;
+            continue;
+        }
+        if (o.act == RAct::Clip) {
+            if (!ClipObjectOutsideAreasUnlocked(page, obj, areas)) {
+                refusal->reason = MEGAPDF_REDACT_PDFIUM;
+                refusal->message = type == FPDF_PAGEOBJ_SHADING
+                                       ? "a shading crossing the edge of the area could not be clipped to it"
+                                       : "a path crossing the edge of the area could not be clipped to it";
+                return false;
+            }
+            if (type == FPDF_PAGEOBJ_SHADING) counts->shadings++;
+            else counts->paths++;
             continue;
         }
         if (type == FPDF_PAGEOBJ_IMAGE) {
@@ -4416,9 +4480,10 @@ bool RedactionLeftNothingUnlocked(FPDF_PAGE page, const std::vector<Area>& areas
     for (int i = 0; i < count; i++) {
         if (FPDFText_IsGenerated(text_page, i) == 1) continue;
         if (IsInvisibleCharacter(FPDFText_GetUnicode(text_page, i))) continue;
-        FS_RECTF box{};
-        if (!FPDFText_GetLooseCharBox(text_page, i, &box)) continue;
-        if (OverlapsAny(areas, box.left, box.bottom, box.right, box.top)) {
+        // The same question the plan asked: is any of this glyph's ink inside an area?
+        double l = 0, r = 0, b = 0, t = 0;
+        if (!FPDFText_GetCharBox(text_page, i, &l, &r, &b, &t) || !(r > l && t > b)) continue;
+        if (OverlapsAny(areas, l, b, r, t)) {
             FPDFText_ClosePage(text_page);
             refusal->reason = MEGAPDF_REDACT_LAYOUT;
             refusal->message = "text was still readable inside the area after the redaction";
@@ -4835,6 +4900,14 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
 
     // Undo cannot be allowed to put the removed content back: every detached handle the
     // document holds keeps page objects alive for exactly that (contract 5).
+    // Metadata last, once every page is done: /Info, the XMP packet on the catalog and on
+    // every page, and any private application data (PDFium patch 0027). A redaction that
+    // leaves the account number in /Title has not redacted anything.
+    if (!opt.keep_metadata) {
+        const int removed = FPDF_RemoveMetadata(d->doc);
+        if (removed > 0) report->counts.metadata_fields += removed;
+    }
+
     // Undo cannot be allowed to put the removed content back. The handles stay valid — the
     // apps still discard them — but they hold nothing, and restoring one says why.
     for (megapdf_detached* x : d->detached) {
