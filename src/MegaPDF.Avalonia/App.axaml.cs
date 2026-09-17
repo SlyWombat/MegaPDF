@@ -77,15 +77,20 @@ public partial class App : Application
                 return true;
 
             // Search hits: cyan for every match, brand blue for the one you are on.
+            //
+            // The term follows the capture language, like everything else the demo puts
+            // into the document (#146 §3). It used to be the literal "equipment", which
+            // is not on the French agreement at all — so the French store set could not
+            // be taken: the capture failed and left no file behind it.
             case "find":
                 viewModel.IsFindOpen = true;
-                viewModel.Search("equipment");
+                viewModel.Search(DemoContent.SearchTerm);
                 if (viewModel.MatchCount == 0)
                 {
                     Console.Error.WriteLine(
-                        "::error::--screenshot-state find matched nothing. The fixture no "
-                        + "longer contains \"equipment\", so the capture would be an ordinary "
-                        + "document view under a name that claims otherwise.");
+                        $"::error::--screenshot-state find matched nothing. The fixture no "
+                        + $"longer contains \"{DemoContent.SearchTerm}\", so the capture would be an "
+                        + "ordinary document view under a name that claims otherwise.");
                     return false;
                 }
                 return true;

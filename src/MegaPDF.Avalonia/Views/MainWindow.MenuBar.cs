@@ -238,6 +238,18 @@ public partial class MainWindow
             if (index < 0)
                 continue;
             parent.Items[index] = wanted;
+            // Every id the swapped item answered to, not only the one it was built
+            // under: the zoom submenu is registered twice, as ZoomMenuButton and as
+            // ZoomPresets, and leaving the alias pointing at the item just taken out
+            // of the menu made MissingFromMenuBar report ZoomPresets missing on any
+            // capture with no document open.
+            foreach (var alias in _menuBarItems
+                         .Where(entry => ReferenceEquals(entry.Value, other))
+                         .Select(entry => entry.Key)
+                         .ToList())
+            {
+                _menuBarItems[alias] = wanted;
+            }
             _menuBarItems[id] = wanted;
         }
     }
