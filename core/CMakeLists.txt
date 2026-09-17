@@ -182,8 +182,6 @@ if(MEGAPDF_CORE_TESTS)
     target_include_directories(megapdf_leakcheck PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/tools/leakcheck
         ${MEGAPDF_PDFIUM_HEADERS})
     target_link_libraries(megapdf_leakcheck PRIVATE megapdf_core ${PDFIUM_LINK})
-    add_custom_command(TARGET megapdf_leakcheck POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_leakcheck>)
     if(APPLE)
         set_target_properties(megapdf_leakcheck PROPERTIES BUILD_RPATH "@loader_path")
         add_custom_command(TARGET megapdf_leakcheck POST_BUILD
@@ -192,9 +190,15 @@ if(MEGAPDF_CORE_TESTS)
         set_target_properties(megapdf_leakcheck PROPERTIES BUILD_RPATH "$ORIGIN")
     endif()
 
-    # pdfium beside the test binary, and the binary looking beside itself.
-    add_custom_command(TARGET megapdf_core_tests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_core_tests>)
+    # pdfium beside the binaries, and each binary looking beside itself. The copy is its
+    # own target because both executables want it in the same directory and link at the
+    # same time: as a POST_BUILD on each, the two copies raced on the macOS runner and one
+    # failed with "No such file or directory" against a file that was plainly there.
+    add_custom_target(megapdf_pdfium_runtime
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_core_tests>
+        COMMENT "pdfium beside the test binaries")
+    add_dependencies(megapdf_core_tests megapdf_pdfium_runtime)
+    add_dependencies(megapdf_leakcheck megapdf_pdfium_runtime)
     if(APPLE)
         set_target_properties(megapdf_core_tests PROPERTIES BUILD_RPATH "@loader_path")
         add_custom_command(TARGET megapdf_core_tests POST_BUILD

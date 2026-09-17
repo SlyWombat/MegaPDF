@@ -106,7 +106,11 @@ jobs:
         run: tools/build-linux-app.sh linux-x64 "$RUNNER_TEMP/app"
 
       - name: Generate fixtures
-        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          # The Linux self-test opens one of them, so this job needs them as the others do.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # --render-check returns before Avalonia is ever initialised, so it proves
       # the app's own libmegapdf_core.so and libpdfium.so load from beside it —
