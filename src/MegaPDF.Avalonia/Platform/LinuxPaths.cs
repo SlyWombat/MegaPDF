@@ -23,10 +23,17 @@ namespace MegaPDF.Avalonia.Platform;
 /// is on the same filesystem as the person's documents on both target
 /// distributions.
 ///
-/// **This is a mitigation, not the fix.** The fix is for a save with a destination
-/// path to stage beside that destination, which is on the right filesystem by
-/// definition; it lives in MegaPDF.Core's VerifiedSave, is shared with Windows,
-/// macOS, iOS and Android, and is tracked as #193.
+/// **The save this was written for no longer comes here.** #193 landed the real
+/// fix in MegaPDF.Core's VerifiedSave, shared with Windows, macOS, iOS and Android:
+/// a save with a destination path stages beside that destination, which is on the
+/// right filesystem by definition and does not depend on where the home directory
+/// is. On Linux that is every Save and Save As, which reach a real path and go
+/// through VerifiedSave.ToPath.
+///
+/// This stays for everything else the app writes to a temporary file — including
+/// VerifiedSave's own fallback, for a destination folder that will not take the
+/// staged copy, and ToStagedFile, which has no destination folder to be beside.
+/// None of them should land on a tmpfs sized at half of RAM either.
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static class LinuxPaths
