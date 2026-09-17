@@ -25,6 +25,18 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The About window's icon and the third-party notices (#176). Embedded in the
+         assembly, which is what survives a PublishSingleFile bundle: nothing loose
+         lands in Contents/MacOS for codesign to trip over. tools/build-macos-app.sh
+         also copies the notices into Contents/Resources — that copy is the one the
+         licences require to travel with the binary, and the one the app reads, so
+         what the window shows is what shipped. THIRD-PARTY-NOTICES.txt is generated
+         by tools/gen_third_party_notices.py and AppIcon.png by tools/gen_about_icon.py;
+         both are committed. -->
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.2.*" />
     <PackageReference Include="Avalonia.Desktop" Version="11.2.*" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.*" />

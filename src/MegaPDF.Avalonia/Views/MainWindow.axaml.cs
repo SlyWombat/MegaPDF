@@ -1235,7 +1235,7 @@ public partial class MainWindow : Window
     /// of the "Mac idioms need explicit wiring" costs ADR-002 flagged against Option
     /// B. Bound here so the gesture and the tooltip advertising it cannot disagree.
     /// </summary>
-    private static KeyModifiers CommandModifier =>
+    internal static KeyModifiers CommandModifier =>
         OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
 
     private static string CommandSymbol => OperatingSystem.IsMacOS() ? "⌘" : "Ctrl+";

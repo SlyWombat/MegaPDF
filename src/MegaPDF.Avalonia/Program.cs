@@ -999,8 +999,135 @@ internal static class Program
             failures++;
         }
 
+        // --- About MegaPDF and the third-party notices (#176) ---
+        //
+        // The Mac shipped with Avalonia's "About Avalonia" in the first slot of the
+        // first menu and no notices file anywhere in the bundle. The notices half is a
+        // licence obligation, so it is checked here as well as by
+        // tools/audit_macos_components.py at build time: this one proves the window
+        // actually shows what the bundle carries, which the build check cannot.
+        Console.WriteLine("About MegaPDF and its third-party notices (#176):");
+        try
+        {
+            CheckAboutWindow(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::About window: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// The app menu's first item, the window it opens, and the notices that window
+    /// leads to (#176). Driven through the menu item and the button rather than by
+    /// constructing the windows, because "the first thing App Review sees" is the
+    /// menu item, and a window nothing opens is no fix.
+    /// </summary>
+    private static void CheckAboutWindow(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        using var vm = new MainViewModel(state);
+        vm.Open(Path.Combine(dir, "fixture.pdf"));
+        var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+        window.Show();
+        MenuProbe.Pump();
+
+        // 1. The app menu. Avalonia builds its own — "About Avalonia", opening a panel
+        //    about the framework — only when the Application carries none of its own.
+        var application = global::Avalonia.Application.Current!;
+        var appMenu = global::Avalonia.Controls.NativeMenu.GetMenu(application);
+        var first = appMenu?.Items.OfType<global::Avalonia.Controls.NativeMenuItem>().FirstOrDefault();
+        check($"the app menu's first item is About MegaPDF (\"{first?.Header}\")",
+              first?.Header == Strings.AboutMegaPDF);
+        check("and it is the only item the app puts there, so macOS keeps Services, Hide and Quit below it",
+              appMenu?.Items.Count == 1);
+
+        // 2. Choosing it opens the About window.
+        (first as global::Avalonia.Controls.INativeMenuItemExporterEventsImplBridge)?.RaiseClicked();
+        MenuProbe.Pump();
+        var about = App.CurrentAbout;
+        check("choosing it opens About MegaPDF", about is { IsVisible: true });
+        if (about is null)
+        {
+            window.Close();
+            MenuProbe.Pump();
+            return;
+        }
+
+        // 3. What it says. The version comes from the bundle's Info.plist when there is
+        //    one, so this compares against the same source rather than a literal.
+        var texts = about.GetLogicalDescendants()
+            .OfType<global::Avalonia.Controls.TextBlock>()
+            .Select(t => t.Text ?? "")
+            .ToList();
+        check($"it shows the app's name, not the framework's ({string.Join(" / ", texts.Take(2))})",
+              texts.Contains("MegaPDF"));
+        check($"it shows the version ({AppInfo.VersionLabel})",
+              texts.Contains(AppInfo.VersionLabel) && AppInfo.VersionLabel.Any(char.IsDigit));
+        check("it shows the copyright", texts.Contains(Strings.Copyright));
+        check("it shows the credit the other three platforms carry", texts.Contains(Strings.SpecialThanks));
+        check($"it links to the source ({AppInfo.ProjectUrl})",
+              about.ProjectLink.NavigateUri?.ToString() == AppInfo.ProjectUrl);
+        check($"and its notices button is labelled \"{Strings.ThirdPartyNoticesEllipsis}\"",
+              about.NoticesButton.Content as string == Strings.ThirdPartyNoticesEllipsis);
+
+        // 4. The button opens the notices, and they are the ones that shipped.
+        about.NoticesButton.RaiseEvent(new global::Avalonia.Interactivity.RoutedEventArgs(
+            global::Avalonia.Controls.Button.ClickEvent));
+        MenuProbe.Pump();
+        var notices = App.CurrentNotices;
+        check("the notices button opens the notices window", notices is { IsVisible: true });
+        if (notices is not null)
+        {
+            // Loaded synchronously: the headless pump does not run the Task the window
+            // starts in its constructor to completion in any bounded number of frames.
+            notices.LoadNow();
+            MenuProbe.Pump();
+            var text = notices.Notices ?? "";
+            check($"which has the notices in it ({text.Length:N0} characters)", text.Length > 10_000);
+            check($"laid out as {notices.Paragraphs.ItemCount:N0} paragraphs rather than one text layout",
+                  notices.Paragraphs.ItemCount > 100 && notices.Paragraphs.IsVisible);
+            foreach (var required in new[] { "PDFium", "Avalonia", "SkiaSharp", "HarfBuzzSharp", "Apache License" })
+                check($"  naming {required}", text.Contains(required, StringComparison.Ordinal));
+
+            // The whole point of #176: the text on screen is the file in the bundle.
+            if (AppInfo.BundledNoticesPath is { } bundled)
+            {
+                check($"the text is the bundle's own {Path.GetFileName(bundled)}",
+                      text == File.ReadAllText(bundled));
+                check("  and the copy embedded in the app agrees with it",
+                      AppInfo.EmbeddedNoticesText() == text);
+            }
+            else
+            {
+                check("not running from a .app, so the embedded copy is what is shown",
+                      text == AppInfo.EmbeddedNoticesText());
+            }
+            notices.Close();
+            MenuProbe.Pump();
+        }
+        about.Close();
+        MenuProbe.Pump();
+
+        // 5. The menu bar routes the issue also asked for: ⌘W, and the two menus every
+        //    Mac app has.
+        var close = window.MenuBarItem("Close");
+        check($"File > {close?.Header} is in the menu bar, on {close?.Gesture}",
+              close is { Gesture: not null } && close.Gesture.Key == Key.W);
+        var headers = global::Avalonia.Controls.NativeMenu.GetMenu(window)?.Items
+            .OfType<global::Avalonia.Controls.NativeMenuItem>().Select(i => i.Header).ToList() ?? [];
+        check($"the menu bar is {string.Join(" / ", headers)}",
+              headers.Contains(Strings.MenuWindow) && headers.Contains(Strings.MenuHelp));
+        check("and Help reaches the notices without going through About",
+              window.MenuBarItem("Notices") is not null);
+
+        window.Close();
+        MenuProbe.Pump();
     }
 
     /// <summary>
@@ -1008,12 +1135,26 @@ internal static class Program
     /// and one where they do not, and checks what was presented rather than what was
     /// filled in: a menu can hold its items and still show none of them.
     /// </summary>
-    private static void CheckToolbarMenus(string dir, string state, Action<string, bool> check)
+    private static bool _headlessStarted;
+
+    /// <summary>
+    /// The headless platform, set up once. Avalonia allows one setup per process, and
+    /// more than one check now wants a real window (#144, #176).
+    /// </summary>
+    private static void EnsureHeadlessPlatform()
     {
+        if (_headlessStarted)
+            return;
         AppBuilder.Configure<App>()
             .UseSkia()
             .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .SetupWithoutStarting();
+        _headlessStarted = true;
+    }
+
+    private static void CheckToolbarMenus(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
 
         using var vm = new MainViewModel(state);
         vm.Open(Path.Combine(dir, "fixture.pdf"));

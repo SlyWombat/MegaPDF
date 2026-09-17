@@ -1,0 +1,43 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.AboutWindow"
+        Title="{x:Static loc:Strings.AboutMegaPDF}"
+        Width="360" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False" ShowInTaskbar="False">
+  <!-- The shape of a Mac About panel: icon, name, version, the small print, and
+       the two ways on from it. Deliberately not the Windows Settings flyout's
+       layout (#176) — the same facts, in the idiom of the platform showing them. -->
+  <StackPanel Margin="24,28,24,24" Spacing="{DynamicResource SpaceM}" HorizontalAlignment="Center">
+    <Image Name="AppIcon" Source="avares://MegaPDF/Assets/AppIcon.png"
+           Width="72" Height="72" HorizontalAlignment="Center" />
+
+    <StackPanel Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+      <TextBlock Name="AppName" Text="MegaPDF"
+                 FontSize="{DynamicResource TypeSubtitle}" FontWeight="SemiBold"
+                 HorizontalAlignment="Center" />
+      <TextBlock Name="VersionText"
+                 FontSize="{DynamicResource TypeCaption}" Opacity="0.75"
+                 HorizontalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+      <TextBlock Text="{x:Static loc:Strings.Copyright}"
+                 FontSize="{DynamicResource TypeCaption}" Opacity="0.75"
+                 TextWrapping="Wrap" TextAlignment="Center" />
+      <TextBlock Text="{x:Static loc:Strings.SpecialThanks}"
+                 FontSize="{DynamicResource TypeCaption}" Opacity="0.75"
+                 TextWrapping="Wrap" TextAlignment="Center" />
+    </StackPanel>
+
+    <HyperlinkButton Name="ProjectLink"
+                     Content="{x:Static loc:Strings.MegaPdfOnGitHub}"
+                     FontSize="{DynamicResource TypeCaption}"
+                     HorizontalAlignment="Center" Padding="4,2" />
+
+    <Button Name="NoticesButton"
+            Content="{x:Static loc:Strings.ThirdPartyNoticesEllipsis}"
+            HorizontalAlignment="Center" />
+  </StackPanel>
+</Window>

@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.ThirdPartyNoticesWindow"
+        Title="{x:Static loc:Strings.ThirdPartyNotices}"
+        Width="720" Height="560"
+        MinWidth="420" MinHeight="300"
+        WindowStartupLocation="CenterOwner">
+  <Panel>
+    <ProgressBar Name="Loading" IsIndeterminate="True"
+                 Width="200" Height="4"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+    <!-- A ListBox, not one TextBlock: the notices are about a third of a megabyte,
+         and a single text layout that size is measured on the UI thread every time
+         the window is resized. The list virtualises, so only the visible paragraphs
+         are laid out. Selection chrome is taken off the rows because the thing
+         being selected is the text inside them, not the row (#176). -->
+    <ListBox Name="Paragraphs" IsVisible="False"
+             Background="Transparent" BorderThickness="0"
+             SelectionMode="Single"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem">
+          <Setter Property="Padding" Value="16,2" />
+          <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <!-- Every state's background taken off, not just the resting one: the Fluent
+             theme paints pointerover and selected in the accent colour, and a band of
+             accent across whichever paragraph the pointer happens to rest on reads as
+             a highlight that means something. The thing being selected here is the
+             text inside the row. -->
+        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBoxItem:selected:not(:focus) /template/ ContentPresenter#PART_ContentPresenter">
+          <Setter Property="Background" Value="Transparent" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <SelectableTextBlock Text="{Binding}"
+                               FontFamily="Menlo, Consolas, monospace"
+                               FontSize="{DynamicResource TypeCaption}" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </Panel>
+</Window>

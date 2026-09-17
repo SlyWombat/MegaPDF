@@ -208,6 +208,27 @@ public partial class App : Application
                 }
                 return true;
 
+            // About MegaPDF and the licences it leads to (#176), each rendered beside
+            // the window to <out>-dialog.png. The app menu that leads to About is
+            // macOS's own NSMenu, which no window renderer can reach; that half is
+            // checked on a real screen instead.
+            case "about":
+            case "notices":
+                DispatcherTimer.RunOnce(() =>
+                {
+                    var about = ShowAbout();
+                    if (state == "about")
+                    {
+                        ScreenshotDialog = about;
+                        return;
+                    }
+                    var notices = ShowNotices(about);
+                    // Synchronously, so the capture cannot photograph the spinner.
+                    notices.LoadNow();
+                    ScreenshotDialog = notices;
+                }, TimeSpan.FromSeconds(1));
+                return true;
+
             default:
                 Console.Error.WriteLine($"::error::unknown --screenshot-state '{state}'");
                 return false;
@@ -485,6 +506,91 @@ public partial class App : Application
         SyncFluentAccent();
         // macOS switches appearance under a running app, so this is not one-shot.
         ActualThemeVariantChanged += (_, _) => SyncFluentAccent();
+        BuildAppMenu();
+    }
+
+    // --- The app menu, and the windows it opens (#176) ---
+
+    private static AboutWindow? _aboutWindow;
+    private static ThirdPartyNoticesWindow? _noticesWindow;
+
+    /// <summary>The About window while it is up, for the self-test to look at after choosing the menu item.</summary>
+    internal static AboutWindow? CurrentAbout => _aboutWindow;
+
+    /// <summary>The notices window while it is up, likewise.</summary>
+    internal static ThirdPartyNoticesWindow? CurrentNotices => _noticesWindow;
+
+    /// <summary>
+    /// Puts About MegaPDF in the first slot of the first menu, where Avalonia's
+    /// "About Avalonia" was (#176).
+    ///
+    /// Avalonia's macOS exporter builds its own app menu — one item, opening a panel
+    /// about the framework — only when the Application carries none, and it appends
+    /// Services, Hide, Show All and Quit to whichever menu it finds. The exporter runs
+    /// from AppBuilder's AfterSetup, which is after Initialize, so setting the menu
+    /// here replaces About Avalonia and keeps everything the system puts below it.
+    /// Setting it any later would find the exporter already built, and the standard
+    /// items would not be added a second time.
+    ///
+    /// Harmless off macOS: no platform but this one exports an application menu.
+    /// </summary>
+    internal NativeMenu BuildAppMenu()
+    {
+        if (NativeMenu.GetMenu(this) is { } existing)
+            return existing;
+
+        var menu = new NativeMenu();
+        var about = new NativeMenuItem(Strings.AboutMegaPDF);
+        about.Click += (_, _) => ShowAbout();
+        menu.Add(about);
+        NativeMenu.SetMenu(this, menu);
+        return menu;
+    }
+
+    /// <summary>About MegaPDF, raised rather than opened twice.</summary>
+    internal static AboutWindow ShowAbout()
+    {
+        if (_aboutWindow is { } already)
+        {
+            already.Activate();
+            return already;
+        }
+
+        var window = new AboutWindow();
+        _aboutWindow = window;
+        window.Closed += (_, _) => _aboutWindow = null;
+        Present(window);
+        return window;
+    }
+
+    /// <summary>
+    /// The third-party notices. Tracked here rather than on the About window because
+    /// the Help menu reaches them without one, and two routes to the same licences
+    /// should not put two windows of them on the screen.
+    /// </summary>
+    internal static ThirdPartyNoticesWindow ShowNotices(Window? owner = null)
+    {
+        if (_noticesWindow is { } already)
+        {
+            already.Activate();
+            return already;
+        }
+
+        var window = new ThirdPartyNoticesWindow();
+        _noticesWindow = window;
+        window.Closed += (_, _) => _noticesWindow = null;
+        Present(window, owner);
+        return window;
+    }
+
+    /// <summary>Shows a window over the main one when there is one up, else on its own.</summary>
+    private static void Present(Window window, Window? owner = null)
+    {
+        owner ??= (Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (owner is { IsVisible: true })
+            window.Show(owner);
+        else
+            window.Show();
     }
 
     public override void OnFrameworkInitializationCompleted()

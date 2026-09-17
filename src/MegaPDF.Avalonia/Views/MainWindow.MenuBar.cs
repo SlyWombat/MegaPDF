@@ -58,6 +58,24 @@ public partial class MainWindow
     /// <summary>Cmd+, is where every Mac app keeps its settings.</summary>
     private static KeyGesture OptionsGesture => Shortcut(Key.OemComma);
 
+    /// <summary>File ▸ Close. ⌘W did nothing at all before (#176).</summary>
+    private static KeyGesture CloseGesture => Shortcut(Key.W);
+
+    /// <summary>Window ▸ Minimize, the shortcut every Mac window answers.</summary>
+    private static KeyGesture MinimizeGesture => Shortcut(Key.M);
+
+    /// <summary>
+    /// The window a menu command should act on. NSApp's menu bar is the whole
+    /// application's, so ⌘W chosen while About or the notices are in front must
+    /// close that window and not the document behind it.
+    /// </summary>
+    private Window ActiveWindow()
+    {
+        var windows = (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Windows;
+        return windows?.FirstOrDefault(w => w.IsActive) ?? this;
+    }
+
     /// <summary>
     /// Called once the view model has arrived (OnDataContextChanged): the font and size
     /// submenus list its choices.
@@ -70,6 +88,12 @@ public partial class MainWindow
         var file = new NativeMenu();
         file.Items.Add(Command("OpenButton", Strings.OpenAPdfEllipsis, OpenGesture, () => true,
             () => _ = OpenDocumentAsync()));
+        // Closing already asked the right questions from the red button and ⌘Q; only
+        // the menu and keyboard routes to it were missing (#176). Close() runs the
+        // same OnClosing path, so unsaved changes are still put to the person first.
+        file.Items.Add(Command("Close", Strings.Close, CloseGesture, () => true,
+            () => ActiveWindow().Close()));
+        file.Items.Add(new NativeMenuItemSeparator());
         file.Items.Add(Command("SaveButton", Strings.Save, SaveGesture,
             () => ViewModel?.SaveCommand.CanExecute(null) == true, () => ViewModel?.SaveCommand.Execute(null)));
         file.Items.Add(Command("SaveAs", Strings.SaveAs, SaveAsGesture,
@@ -145,13 +169,33 @@ public partial class MainWindow
         _menuBarItems["ZoomPresets"] = presets;
         view.Items.Add(presets);
 
+        // Window and Help: the two menus every Mac app has and this one did not (#176).
+        // Both act on whichever window is in front, because the menu bar is the
+        // application's rather than this window's.
+        var window = new NativeMenu();
+        window.Items.Add(Command("Minimize", Strings.Minimize, MinimizeGesture, () => true,
+            () => ActiveWindow().WindowState = WindowState.Minimized));
+        window.Items.Add(Command("Zoom", Strings.Zoom, null, () => true, () =>
+        {
+            var target = ActiveWindow();
+            target.WindowState = target.WindowState == WindowState.Maximized
+                ? WindowState.Normal
+                : WindowState.Maximized;
+        }));
+
+        var help = new NativeMenu();
+        help.Items.Add(Command("Notices", Strings.ThirdPartyNoticesEllipsis, null, () => true,
+            () => App.ShowNotices()));
+
         var bar = new NativeMenu();
         bar.Items.Add(new NativeMenuItem(Strings.MenuFile) { Menu = file });
         bar.Items.Add(new NativeMenuItem(Strings.MenuEdit) { Menu = edit });
         bar.Items.Add(new NativeMenuItem(Strings.MenuView) { Menu = view });
         bar.Items.Add(new NativeMenuItem(Strings.MenuTools) { Menu = tools });
+        bar.Items.Add(new NativeMenuItem(Strings.MenuWindow) { Menu = window });
+        bar.Items.Add(new NativeMenuItem(Strings.MenuHelp) { Menu = help });
 
-        foreach (var menu in new[] { file, edit, view, tools })
+        foreach (var menu in new[] { file, edit, view, tools, window, help })
         {
             menu.NeedsUpdate += (_, _) => RefreshMenuBar();
             menu.Opening += (_, _) => RefreshMenuBar();

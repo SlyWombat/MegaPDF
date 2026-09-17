@@ -718,4 +718,46 @@ public static partial class Strings
 
     /// <summary>Page right</summary>
     public static string ScrollBarPageRight => Get("ScrollBarPageRight");
+
+    /// <summary>About MegaPDF</summary>
+    public static string AboutMegaPDF => Get("AboutMegaPDF");
+
+    /// <summary>Version {0}</summary>
+    public static string VersionOnly(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("VersionOnly"), arg0);
+
+    /// <summary>Version {0} ({1})</summary>
+    public static string VersionWithBuild(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("VersionWithBuild"), arg0, arg1);
+
+    /// <summary>Copyright © 2026 ElectricRV.ca Corporation. All rights reserved.</summary>
+    public static string Copyright => Get("Copyright");
+
+    /// <summary>Special thanks to Mega Woman.</summary>
+    public static string SpecialThanks => Get("SpecialThanks");
+
+    /// <summary>MegaPDF on GitHub</summary>
+    public static string MegaPdfOnGitHub => Get("MegaPdfOnGitHub");
+
+    /// <summary>Third-Party Notices…</summary>
+    public static string ThirdPartyNoticesEllipsis => Get("ThirdPartyNoticesEllipsis");
+
+    /// <summary>Third-party notices</summary>
+    public static string ThirdPartyNotices => Get("ThirdPartyNotices");
+
+    /// <summary>The notices file is missing from this build.</summary>
+    public static string NoticesMissing => Get("NoticesMissing");
+
+    /// <summary>Close</summary>
+    public static string Close => Get("Close");
+
+    /// <summary>Minimize</summary>
+    public static string Minimize => Get("Minimize");
+
+    /// <summary>Zoom</summary>
+    public static string Zoom => Get("Zoom");
+
+    /// <summary>Window</summary>
+    public static string MenuWindow => Get("MenuWindow");
+
+    /// <summary>Help</summary>
+    public static string MenuHelp => Get("MenuHelp");
 }

@@ -86,6 +86,19 @@ if [ ! -f "$ICON" ]; then
 fi
 cp "$ICON" "$APP/Contents/Resources/MegaPDF.icns"
 
+# Third-party notices (#176). The bundle shipped without these for months, which
+# is a licence-compliance gap rather than a polish item: Avalonia, SkiaSharp,
+# HarfBuzzSharp and PDFium all require their notices to travel with the binary.
+# Generated, never hand-written — tools/gen_third_party_notices.py builds it from
+# the vendored licence texts in libs/licenses/ and libs/pdfium/*/licenses/.
+# Copied before signing, like the icon: a resource added afterwards breaks the seal.
+NOTICES="$ROOT/src/MegaPDF.Avalonia/Assets/THIRD-PARTY-NOTICES.txt"
+if [ ! -f "$NOTICES" ]; then
+    echo "::error::$NOTICES is missing — run tools/gen_third_party_notices.py" >&2
+    exit 1
+fi
+cp "$NOTICES" "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt"
+
 # Languages (#91). The app's own strings ship inside the single-file apphost —
 # .NET 8 bundles the fr/MegaPDF.resources.dll satellite into it, so nothing
 # loose lands in Contents/MacOS for codesign to trip over. What macOS itself
@@ -324,6 +337,19 @@ codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert xml1 -o 
 
 echo "--- verify:"
 codesign --verify --deep --verbose=2 "$APP" 2>&1 | head -10 || echo "::warning::ad-hoc verification reported problems (expected until Developer ID signing lands)"
+
+# What actually shipped, against what has a notice (#176). Re-derives the component
+# list from the dependency graph rather than trusting a hand-kept list, and checks
+# the bundled notices are byte-identical to the generated ones — so a new transitive
+# package, or a stale regeneration, fails the build instead of shipping quietly.
+# deps.json is read from the build output: PublishSingleFile embeds the published
+# copy in the apphost, and the two agree (same restore, same RID).
+DEPS="$ROOT/src/MegaPDF.Avalonia/bin/Release/net8.0/$RID/MegaPDF.deps.json"
+if [ ! -f "$DEPS" ]; then
+    echo "::error::$DEPS is missing — the publish above should have written it." >&2
+    exit 1
+fi
+python3 "$ROOT/tools/audit_macos_components.py" "$DEPS" "$APP"
 
 echo "done: $APP"
 du -sh "$APP"

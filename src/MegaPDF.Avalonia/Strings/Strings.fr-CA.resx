@@ -886,4 +886,60 @@
     <value>Une page vers la droite</value>
     <comment>Accessible name of a horizontal scroll bar's track right of the thumb (#144)</comment>
   </data>
+  <data name="AboutMegaPDF" xml:space="preserve">
+    <value>À propos de MegaPDF</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). macOS app menu: the first item, and the title of the window it opens (#176)</comment>
+  </data>
+  <data name="VersionOnly" xml:space="preserve">
+    <value>Version {0}</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: the version, when the build number would only repeat it (#176)</comment>
+  </data>
+  <data name="VersionWithBuild" xml:space="preserve">
+    <value>Version {0} ({1})</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: {0} is the version, {1} the build number (#176)</comment>
+  </data>
+  <data name="Copyright" xml:space="preserve">
+    <value>© 2026 ElectricRV.ca Corporation. Tous droits réservés.</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: the copyright line, as iOS, Android and Windows show it (#176)</comment>
+  </data>
+  <data name="SpecialThanks" xml:space="preserve">
+    <value>Merci tout spécial à Mega Woman.</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: the credit the other three platforms carry. Mega Woman is a person and is never translated (#176)</comment>
+  </data>
+  <data name="MegaPdfOnGitHub" xml:space="preserve">
+    <value>MegaPDF sur GitHub</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). About window: the link to the source (#176)</comment>
+  </data>
+  <data name="ThirdPartyNoticesEllipsis" xml:space="preserve">
+    <value>Avis de tiers…</value>
+    <comment>FR-REVIEW #176 — the reviewed iOS wording, with the ellipsis macOS puts on a button that opens a window. About window: the button that opens the notices (#176)</comment>
+  </data>
+  <data name="ThirdPartyNotices" xml:space="preserve">
+    <value>Avis de tiers</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). Title of the window listing the open-source licences, and its Help menu item (#176)</comment>
+  </data>
+  <data name="NoticesMissing" xml:space="preserve">
+    <value>Le fichier des avis est absent de cette version.</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). Shown in place of the licences if the bundle has no notices file (#176)</comment>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Fermer</value>
+    <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). macOS File menu: closes the window (⌘W), and the button that dismisses the About window (#176)</comment>
+  </data>
+  <data name="Minimize" xml:space="preserve">
+    <value>Réduire</value>
+    <comment>FR-REVIEW #176 — new, not from the iOS catalogue: the wording macOS itself uses in French for this menu. macOS Window menu: sends the window to the Dock (⌘M) (#176)</comment>
+  </data>
+  <data name="Zoom" xml:space="preserve">
+    <value>Zoom</value>
+    <comment>FR-REVIEW #176 — new, not from the iOS catalogue: the wording macOS itself uses in French for this menu. macOS Window menu: the green button's behaviour. The same word in French (#176)</comment>
+  </data>
+  <data name="MenuWindow" xml:space="preserve">
+    <value>Fenêtre</value>
+    <comment>FR-REVIEW #176 — new, not from the iOS catalogue: the wording macOS itself uses in French for this menu. macOS menu bar: the Window menu, which every Mac document app has (#176)</comment>
+  </data>
+  <data name="MenuHelp" xml:space="preserve">
+    <value>Aide</value>
+    <comment>FR-REVIEW #176 — new, not from the iOS catalogue: the wording macOS itself uses in French for this menu. macOS menu bar: the Help menu (#176)</comment>
+  </data>
 </root>
