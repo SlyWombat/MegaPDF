@@ -104,4 +104,23 @@ public class RecentFilesTests : IDisposable
         recents.Add(path);
         Assert.Equal("bookmark-blob", recents.Entries[0].Bookmark);
     }
+
+    [Fact]
+    public void MissingFiles_CanBeKept_AndRemoved()
+    {
+        var a = MakePdf("a.pdf");
+        var b = MakePdf("b.pdf");
+        var recent = new RecentFiles(StorePath);
+        recent.Add(a);
+        recent.Add(b);
+        File.Delete(a);
+
+        // Windows keeps a missing file to show it as unavailable (#165).
+        var kept = new RecentFiles(StorePath, pruneMissing: false);
+        Assert.Equal([b, a], kept.All);
+        Assert.Equal([b], new RecentFiles(StorePath).All);
+
+        kept.Remove(a);
+        Assert.Equal([b], new RecentFiles(StorePath, pruneMissing: false).All);
+    }
 }

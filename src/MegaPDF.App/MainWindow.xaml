@@ -315,13 +315,40 @@
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         HorizontalAlignment="Center"
                         Margin="0,0,0,6" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.RecentDocuments}" HorizontalAlignment="Center">
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.RecentDocuments}" HorizontalAlignment="Center" MaxWidth="420">
                         <ItemsControl.ItemTemplate>
+                            <!-- Name on top, folder underneath (#165), the way Explorer and
+                                 Office list recent files: the names repeat, the folders do not. -->
                             <DataTemplate x:DataType="local:RecentDocument">
-                                <HyperlinkButton Click="OnRecentDocumentClicked" HorizontalAlignment="Center" ToolTipService.ToolTip="{x:Bind Path}">
+                                <HyperlinkButton
+                                    Click="OnRecentDocumentClicked"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Left"
+                                    ToolTipService.ToolTip="{x:Bind Path}"
+                                    AutomationProperties.Name="{x:Bind AccessibleName}">
+                                    <HyperlinkButton.ContextFlyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem
+                                                x:Uid="RemoveFromRecentItem"
+                                                Click="OnRemoveFromRecentClicked"
+                                                AutomationProperties.AutomationId="RemoveFromRecentItem" />
+                                        </MenuFlyout>
+                                    </HyperlinkButton.ContextFlyout>
                                     <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                                        <FontIcon Glyph="&#xE8A5;" FontSize="{ThemeResource TypeBody}" />
-                                        <TextBlock Text="{x:Bind Name}" />
+                                        <FontIcon
+                                            Glyph="&#xE8A5;"
+                                            FontSize="{ThemeResource TypeBody}"
+                                            VerticalAlignment="Top"
+                                            Margin="0,2,0,0"
+                                            Opacity="{x:Bind MissingOpacity}" />
+                                        <StackPanel>
+                                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" Opacity="{x:Bind MissingOpacity}" />
+                                            <TextBlock
+                                                Text="{x:Bind LocationLine}"
+                                                FontSize="{ThemeResource TypeCaption}"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
                                     </StackPanel>
                                 </HyperlinkButton>
                             </DataTemplate>

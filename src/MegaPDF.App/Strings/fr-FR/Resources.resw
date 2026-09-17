@@ -771,4 +771,25 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Impossible de restaurer vos modifications</value>
     <comment>Error dialog title when a crash-recovery replay fails (#145)</comment>
   </data>
+  <data name="RecentNotFound" xml:space="preserve">
+    <value>Introuvable</value>
+  </data>
+  <data name="RecentItemName" xml:space="preserve">
+    <value>{0}, dans {1}</value>
+  </data>
+  <data name="RecentItemMissingName" xml:space="preserve">
+    <value>{0}, dans {1}, introuvable</value>
+  </data>
+  <data name="RecentMissingTitle" xml:space="preserve">
+    <value>Impossible de trouver ce fichier</value>
+  </data>
+  <data name="RecentMissingBody" xml:space="preserve">
+    <value>« {0} » ne se trouve plus dans {1}. Le fichier a peut-être été déplacé, renommé ou supprimé.</value>
+  </data>
+  <data name="RemoveFromRecent" xml:space="preserve">
+    <value>Retirer des récents</value>
+  </data>
+  <data name="RemoveFromRecentItem.Text" xml:space="preserve">
+    <value>Retirer des récents</value>
+  </data>
 </root>

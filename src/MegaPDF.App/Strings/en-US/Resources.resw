@@ -800,4 +800,32 @@ Saved as {2} — ready to email.</value>
     <value>Couldn't restore your edits</value>
     <comment>Error dialog title when a crash-recovery replay fails (#145)</comment>
   </data>
+  <data name="RecentNotFound" xml:space="preserve">
+    <value>Not found</value>
+    <comment>Shown in place of a recent document's folder when the file has gone (#165)</comment>
+  </data>
+  <data name="RecentItemName" xml:space="preserve">
+    <value>{0}, in {1}</value>
+    <comment>Narrator name for a recent row: file name, then its folder (#165)</comment>
+  </data>
+  <data name="RecentItemMissingName" xml:space="preserve">
+    <value>{0}, in {1}, not found</value>
+    <comment>Narrator name for a recent row whose file has gone (#165)</comment>
+  </data>
+  <data name="RecentMissingTitle" xml:space="preserve">
+    <value>Can't find this file</value>
+    <comment>Dialog title when a recent document is no longer where it was (#165)</comment>
+  </data>
+  <data name="RecentMissingBody" xml:space="preserve">
+    <value>“{0}” is no longer in {1}. It may have been moved, renamed or deleted.</value>
+    <comment>Dialog body: {0} file name, {1} folder (#165)</comment>
+  </data>
+  <data name="RemoveFromRecent" xml:space="preserve">
+    <value>Remove from Recent</value>
+    <comment>Button and context menu item on a recent row (#165)</comment>
+  </data>
+  <data name="RemoveFromRecentItem.Text" xml:space="preserve">
+    <value>Remove from Recent</value>
+    <comment>Context menu item on a recent row (#165)</comment>
+  </data>
 </root>

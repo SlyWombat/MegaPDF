@@ -39,9 +39,17 @@ public sealed class RecentFiles
     private readonly string _path;
     private List<RecentEntry> _entries;
 
+    private readonly bool _pruneMissing;
+
     /// <param name="path">Defaults to %LOCALAPPDATA%\MegaPDF\recent.json; injectable for tests.</param>
-    public RecentFiles(string? path = null)
+    /// <param name="pruneMissing">
+    /// Drop entries whose files have gone when the list loads. Windows passes false and
+    /// shows them as unavailable instead, with a way to remove them (#165): a file that
+    /// silently vanishes from Recent looks like the app lost it.
+    /// </param>
+    public RecentFiles(string? path = null, bool pruneMissing = true)
     {
+        _pruneMissing = pruneMissing;
         _path = path ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "MegaPDF", "recent.json");
@@ -88,6 +96,14 @@ public sealed class RecentFiles
         Save();
     }
 
+    /// <summary>Takes a document off the list, as "Remove from Recent" does.</summary>
+    public void Remove(string documentPath)
+    {
+        var full = Path.GetFullPath(documentPath);
+        if (_entries.RemoveAll(e => string.Equals(e.Path, full, StringComparison.OrdinalIgnoreCase)) > 0)
+            Save();
+    }
+
     public RecentEntry? FindEntry(string documentPath)
     {
         var full = Path.GetFullPath(documentPath);
@@ -102,7 +118,7 @@ public sealed class RecentFiles
         try
         {
             var entries = JsonSerializer.Deserialize<List<RecentEntry>>(json) ?? [];
-            return entries.Where(e => File.Exists(e.Path)).ToList();
+            return entries.Where(e => !_pruneMissing || File.Exists(e.Path)).ToList();
         }
         catch (JsonException)
         {
@@ -110,7 +126,7 @@ public sealed class RecentFiles
             try
             {
                 var paths = JsonSerializer.Deserialize<List<string>>(json) ?? [];
-                return paths.Where(File.Exists).Select(p => new RecentEntry(p)).ToList();
+                return paths.Where(p => !_pruneMissing || File.Exists(p)).Select(p => new RecentEntry(p)).ToList();
             }
             catch (JsonException)
             {

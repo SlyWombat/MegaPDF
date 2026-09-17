@@ -1174,7 +1174,13 @@ public sealed partial class MainWindow : Window
     private async void OnRecentDocumentClicked(object sender, RoutedEventArgs e)
     {
         if (sender is HyperlinkButton { DataContext: RecentDocument recent })
-            await ViewModel.OpenDocumentAsync(recent.Path);
+            await ViewModel.OpenRecentAsync(recent);
+    }
+
+    private void OnRemoveFromRecentClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuFlyoutItem { DataContext: RecentDocument recent })
+            ViewModel.RemoveFromRecent(recent.Path);
     }
 
     // --- Settings flyout ---

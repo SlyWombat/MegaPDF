@@ -83,8 +83,25 @@ public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSo
     public string AccessibleName => Strings.SignatureCardName(Name);
 }
 
-/// <summary>A recent document shown on the empty state.</summary>
-public sealed record RecentDocument(string Name, string Path);
+/// <summary>
+/// A recent document on the empty state (#165): its name, and where it lives, so two
+/// files called "scan.pdf" can be told apart without hovering.
+/// </summary>
+/// <param name="Location">The folder, as Explorer names it: "Documents › Clients › Smith".</param>
+/// <param name="IsMissing">The file is no longer there; the row says so and offers to remove it.</param>
+public sealed record RecentDocument(string Name, string Path, string Location, bool IsMissing)
+{
+    /// <summary>Narrator reads the name and where it is, since the names repeat.</summary>
+    public string AccessibleName => IsMissing
+        ? Strings.RecentItemMissingName(Name, Location)
+        : Strings.RecentItemName(Name, Location);
+
+    /// <summary>A missing file's name and icon are dimmed, the way Explorer greys one out.</summary>
+    public double MissingOpacity => IsMissing ? 0.5 : 1.0;
+
+    /// <summary>The location line, prefixed with "Not found" when the file has gone.</summary>
+    public string LocationLine => IsMissing ? $"{Strings.RecentNotFound} · {Location}" : Location;
+}
 
 public partial class MainViewModel(Window window) : ObservableObject
 {
@@ -95,7 +112,9 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <summary>Pages already asked about in this document (#139): the warning comes once per page.</summary>
     private readonly PageRegenerationWarnings _pageWarnings = new();
     private readonly RecoveryJournal _journal = new();
-    private readonly RecentFiles _recentFiles = new();
+    // Missing files stay on the list and are shown as unavailable (#165), rather than
+    // disappearing as though the app had lost them.
+    private readonly RecentFiles _recentFiles = new(path: null, pruneMissing: false);
     private readonly AppSettings _settings = new();
 
     // --- Busy state (#145) ---
@@ -227,7 +246,8 @@ public partial class MainViewModel(Window window) : ObservableObject
         set => _settings.FlattenOnSave = value;
     }
 
-    public string? MostRecentDocument => _recentFiles.All.Count > 0 ? _recentFiles.All[0] : null;
+    /// <summary>For "Reopen last file": the newest one still on disk (#165 keeps missing ones listed).</summary>
+    public string? MostRecentDocument => _recentFiles.All.FirstOrDefault(File.Exists);
 
     // --- Per-document view state (SDD §3.4: restore last scroll position) ---
 
@@ -268,12 +288,66 @@ public partial class MainViewModel(Window window) : ObservableObject
     public Visibility RecentDocumentsVisibility =>
         !IsDocumentOpen && RecentDocuments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
+    /// <summary>
+    /// The recents list, each row with the folder it lives in (#165). Rows whose file
+    /// names clash get as much of the path as it takes to tell them apart: the folder
+    /// above, then the one above that.
+    /// </summary>
     public void LoadRecentDocuments()
     {
         RecentDocuments.Clear();
-        foreach (var path in _recentFiles.All)
-            RecentDocuments.Add(new RecentDocument(Path.GetFileName(path), path));
+        var named = ShellFolderNames.Get();
+        var paths = _recentFiles.All;
+        var segments = paths.Select(p => RecentLocation.Segments(p, named)).ToList();
+
+        foreach (var (path, index) in paths.Select((p, i) => (p, i)))
+        {
+            var name = Path.GetFileName(path);
+            // How deep this row has to go is decided among the rows that share its name.
+            var clashing = paths
+                .Select((other, i) => (Segments: segments[i], Name: Path.GetFileName(other)))
+                .Where(other => string.Equals(other.Name, name, StringComparison.CurrentCultureIgnoreCase))
+                .Select(other => other.Segments)
+                .ToList();
+            var depth = RecentLocation.DistinguishingDepth(clashing);
+            var location = RecentLocation.Line(segments[index], maxLength: 44, keepDeepest: depth);
+            RecentDocuments.Add(new RecentDocument(name, path, location, !File.Exists(path)));
+        }
         OnPropertyChanged(nameof(RecentDocumentsVisibility));
+    }
+
+    /// <summary>"Remove from Recent", and what a row whose file has gone offers.</summary>
+    public void RemoveFromRecent(string path)
+    {
+        _recentFiles.Remove(path);
+        LoadRecentDocuments();
+        OnPropertyChanged(nameof(RecentDocumentsVisibility));
+    }
+
+    /// <summary>
+    /// Opens a recent row, or — when its file has gone — says so and offers to take it off
+    /// the list (#165). Explorer and Office both ask rather than removing it silently.
+    /// </summary>
+    public async Task OpenRecentAsync(RecentDocument recent)
+    {
+        if (File.Exists(recent.Path))
+        {
+            await OpenDocumentAsync(recent.Path);
+            return;
+        }
+        if (window.Content?.XamlRoot is not { } xamlRoot)
+            return;
+        var dialog = new ContentDialog
+        {
+            Title = Strings.RecentMissingTitle,
+            Content = Strings.RecentMissingBody(recent.Name, recent.Location),
+            PrimaryButtonText = Strings.RemoveFromRecent,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
+            RemoveFromRecent(recent.Path);
     }
 
     public ObservableCollection<PageView> Pages { get; } = [];
@@ -464,6 +538,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         // unencrypted (#135). The notice above says so (ADR-004 §7).
         _journal.BeginSession(path, contentIsProtected: openedWithPassword);
         _recentFiles.Add(path);
+        _ = JumpListRecents.RecordAsync(path); // the taskbar's Recent list (#165)
         if (rememberedView is not null)
             ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
         LoadRecentDocuments();

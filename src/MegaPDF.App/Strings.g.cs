@@ -513,4 +513,22 @@ public static partial class Strings
 
     /// <summary>Couldn't restore your edits</summary>
     public static string CouldNotRestoreTitle => Get("CouldNotRestoreTitle");
+
+    /// <summary>Not found</summary>
+    public static string RecentNotFound => Get("RecentNotFound");
+
+    /// <summary>{0}, in {1}</summary>
+    public static string RecentItemName(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("RecentItemName"), arg0, arg1);
+
+    /// <summary>{0}, in {1}, not found</summary>
+    public static string RecentItemMissingName(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("RecentItemMissingName"), arg0, arg1);
+
+    /// <summary>Can't find this file</summary>
+    public static string RecentMissingTitle => Get("RecentMissingTitle");
+
+    /// <summary>“{0}” is no longer in {1}. It may have been moved, renamed or deleted.</summary>
+    public static string RecentMissingBody(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("RecentMissingBody"), arg0, arg1);
+
+    /// <summary>Remove from Recent</summary>
+    public static string RemoveFromRecent => Get("RemoveFromRecent");
 }

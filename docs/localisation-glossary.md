@@ -56,6 +56,7 @@ Conventions (OQLF, Canadian French):
 | Signature name | Nom de la signature | |
 | My signature | Ma signature | default name |
 | Remove from library | Retirer de la bibliothèque | |
+| Remove from Recent | Retirer des récents | #165 |
 | Whiteout | Correcteur | the toolbar noun |
 | Cover | Masquer | macOS verb |
 | Cover an area with whiteout | Masquer une zone avec du correcteur | |
