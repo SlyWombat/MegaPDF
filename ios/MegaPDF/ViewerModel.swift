@@ -143,6 +143,142 @@ final class ViewerModel: ObservableObject {
     private let recents = RecentsStore()
     private let signatureStore = SignatureStore()
     private let history = EditHistory()
+
+    // MARK: - Redaction (SDD §3.8 / F7, #173)
+    //
+    // A mark is the core's own and is never written to the file, so nothing here changes
+    // the document: the view draws the marks, and applying is a separate, confirmed step
+    // taken on save.
+
+    /// The Redact tool is armed: the next drag across a page marks an area.
+    @Published private(set) var redactMode = false
+
+    /// Every mark on the document, by page, for the overlay that draws them.
+    @Published private(set) var redactionMarks: [Int: [PdfRedactionMark]] = [:]
+
+    /// The summary after a redaction, shown once and dismissed.
+    @Published var redactionSummary: String?
+
+    /// Why a redaction refused, shown once and dismissed. Nothing was removed.
+    @Published var redactionRefusal: String?
+
+    /// How many areas are marked: what the save confirmation asks before it offers a copy.
+    var redactionMarkCount: Int { redactionMarks.values.reduce(0) { $0 + $1.count } }
+
+    func toggleRedactMode() {
+        redactMode.toggle()
+    }
+
+    func cancelRedactMode() { redactMode = false }
+
+    /// Marks the dragged area. A drag across text marks the text, grown to whole glyphs, so
+    /// half a glyph is never left behind; a drag across a picture marks the rectangle.
+    func markForRedaction(pageIndex: Int, rect: PdfRect) {
+        guard let doc = document else { return }
+        Task { @MainActor in
+            let engine = PdfEngine.shared
+            let madeFromText = (try? await engine.markTextForRedaction(doc, pageIndex: pageIndex, rect: rect)) ?? 0
+            if madeFromText == 0 {
+                _ = try? await engine.markForRedaction(doc, pageIndex: pageIndex, rect: rect)
+            }
+            await refreshRedactionMarks()
+            redactMode = false
+        }
+    }
+
+    func removeRedactionMark(pageIndex: Int, markId: Int) {
+        guard let doc = document else { return }
+        Task { @MainActor in
+            try? await PdfEngine.shared.removeRedactionMark(doc, pageIndex: pageIndex, markId: markId)
+            await refreshRedactionMarks()
+        }
+    }
+
+    private func refreshRedactionMarks() async {
+        guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
+        var byPage: [Int: [PdfRedactionMark]] = [:]
+        for index in 0..<pageSizes.count {
+            if let found = try? await PdfEngine.shared.redactionMarks(doc, pageIndex: index), !found.isEmpty {
+                byPage[index] = found
+            }
+        }
+        redactionMarks = byPage
+    }
+
+    /// Applies every mark. True when the document was redacted and may be saved; false when
+    /// it refused — and then NOTHING was removed and the marks are still there.
+    @discardableResult
+    func applyRedactions() async -> Bool {
+        guard let doc = document, redactionMarkCount > 0 else { return true }
+        let report = await PdfEngine.shared.applyRedactions(doc)
+        guard report.applied else {
+            redactionRefusal = Self.describeRefusal(report)
+            await refreshRedactionMarks()
+            return false
+        }
+        // Undo cannot put the removed content back: the core freed the objects the history
+        // was holding for exactly that.
+        history.clear()
+        canUndo = false
+        canRedo = false
+        redactionMarks = [:]
+        redactionSummary = Self.describeRedaction(report.counts)
+        // Every page's raster is stale once content has been removed.
+        pageImages.removeAll()
+        renderedWidths.removeAll()
+        if let window = lastWindow {
+            updateRenderWindow(first: window.0, last: window.1, widthPx: window.2)
+        }
+        return true
+    }
+
+    static func describeRedaction(_ counts: PdfRedactionCounts) -> String {
+        let removed = PdfRedactionSummary.removed(
+            counts,
+            plural: { kind, n in
+                switch kind {
+                case .characters: return String(format: String(localized: "%@ characters"), "\(n)")
+                case .images: return String(format: String(localized: "%@ images"), "\(n)")
+                case .formFields: return String(format: String(localized: "%@ form fields"), "\(n)")
+                case .annotations: return String(format: String(localized: "%@ annotations"), "\(n)")
+                }
+            },
+            singular: { kind in
+                switch kind {
+                case .characters: return String(localized: "1 character")
+                case .images: return String(localized: "1 image")
+                case .formFields: return String(localized: "1 form field")
+                case .annotations: return String(localized: "1 annotation")
+                }
+            },
+            nothing: String(localized: "nothing"))
+        return counts.areas == 1
+            ? String(format: String(localized: "1 area redacted: %@"), removed)
+            : String(format: String(localized: "%@ areas redacted: %@"), "\(counts.areas)", removed)
+    }
+
+    static func describeRefusal(_ report: PdfRedactionReport) -> String {
+        if report.needsPermission {
+            return String(localized: "This document doesn't allow changes, so it can't be redacted.")
+        }
+        let refusal = report.refusals.first
+        let why: String
+        switch refusal?.reason {
+        case .type3Font, .fontCannotRedraw:
+            why = String(localized: "The text there is in a font MegaPDF can't redraw around your marks.")
+        case .formXObject:
+            why = String(localized: "Part of that area is drawn from a shared block MegaPDF can't take apart safely.")
+        case .layoutGuard:
+            why = String(localized: "Removing it would change the page outside the areas you marked.")
+        default:
+            why = String(localized: "MegaPDF couldn't take that content apart safely.")
+        }
+        let page = (refusal?.pageIndex ?? 0) + 1
+        let body = String(format: String(localized:
+            "MegaPDF couldn't remove everything you marked on page %@, so it removed nothing and left the file as it was."),
+            "\(page)")
+        return body + " " + why
+    }
     private(set) var document: PdfDocument?
 
     /// Feedback while the app works (#145): what is running, and the indicators for it. Views

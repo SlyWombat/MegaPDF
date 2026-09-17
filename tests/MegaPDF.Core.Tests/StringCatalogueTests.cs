@@ -43,6 +43,7 @@ public class StringCatalogueTests
         ["LanguageFrench.Text"] = "same",
         ["LanguageFrenchFrance.Text"] = "same",
         ["OK"] = "OK is OK",
+        ["redact_ok"] = "OK is OK on Android too (#173)",
         // #173: the summary counts. "image" and "annotation" are the same word in both,
         // and a count in front of one does not change that.
         ["RedactedImages"] = "\"{0} images\" is the same in both (#173)",

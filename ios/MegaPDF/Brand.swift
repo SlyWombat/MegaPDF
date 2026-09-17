@@ -24,6 +24,13 @@ enum Brand {
     static let findMatch = Color("BrandFindMatch")
     static let findMatchCurrent = Color("BrandFindMatchCurrent")
 
+    // A redaction mark (#173): translucent, so what is about to be removed can still be
+    // read, over an outline in the same hue so the edge is unambiguous on a white page and
+    // on a dark scan alike. Deliberately not the find hue and not the danger red: it is
+    // neither a search result nor an error, and it becomes a black box.
+    static let redactionMark = Color("BrandRedactionMark")
+    static let redactionMarkOutline = Color("BrandRedactionMarkOutline")
+
     static let danger = Color("BrandDanger")
 
     /// The wall the page sits on. A neutral shade rather than a brand hue —

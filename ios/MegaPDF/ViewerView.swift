@@ -21,6 +21,10 @@ struct ViewerView: View {
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
     @State private var aboutOpen = false
+    /// The rubber band a redaction drag is drawing; nil the rest of the time (#173).
+    @State private var redactBand: RedactBand?
+    /// The redaction confirmation is up: marks are on the document and a save was asked for.
+    @State private var redactConfirm: RedactSaveChoice?
     @Environment(\.displayScale) private var displayScale
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -121,10 +125,16 @@ struct ViewerView: View {
                 .disabled(model.fileCommandsBlocked)
             }
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button(saveLabel) { model.save() }
+                Button(saveLabel) {
+                    // Marks on the document mean the question comes first (#173): nothing
+                    // is written until it has been answered.
+                    if model.redactionMarkCount > 0 { redactConfirm = .overwrite } else { model.save() }
+                }
                     .disabled(!model.isDirty || model.isSaving || model.fileCommandsBlocked)
                 Menu {
-                    Button("Save a copy", action: onSaveCopy)
+                    Button("Save a copy") {
+                        if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
+                    }
                         .disabled(model.isSaving || model.fileCommandsBlocked)
                     Button("Password…", action: model.showPasswordCommand)
                         .disabled(!model.canUsePasswordCommand || model.fileCommandsBlocked)
@@ -150,6 +160,18 @@ struct ViewerView: View {
                     toolLabel("Add text", systemImage: "character.textbox")
                 }
                 .disabled(!model.capabilities.canAddText || model.fileCommandsBlocked)
+                // Redact with the creating tools (#173). The phone has no Whiteout —
+                // mobile's set is fill, check, sign, find, add text — so this arrives on
+                // its own, and its label says what it does: it removes.
+                Button { model.toggleRedactMode() } label: {
+                    toolLabel("Redact", systemImage: model.redactMode
+                        ? "rectangle.fill.badge.xmark" : "rectangle.badge.xmark")
+                }
+                .disabled(!model.capabilities.canEditContent || model.fileCommandsBlocked)
+                .accessibilityLabel("Redact")
+                .accessibilityHint("Remove content from the file")
+                .accessibilityAddTraits(model.redactMode ? .isSelected : [])
+                .accessibilityIdentifier("viewerRedact")
                 Button {
                     if searchOpen { closeSearch() } else { searchOpen = true }
                 } label: {
@@ -169,6 +191,40 @@ struct ViewerView: View {
         }
         .sheet(isPresented: $aboutOpen) {
             AboutView()
+        }
+        // The confirmation #173 asks for, before either save path writes anything: what
+        // redaction does, that it cannot be undone once saved, and Save a copy as the
+        // DEFAULT action — the reversible choice, because the other cannot be taken back.
+        .confirmationDialog(
+            "Remove the marked content?",
+            isPresented: Binding(get: { redactConfirm != nil },
+                                 set: { if !$0 { redactConfirm = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Save as a copy") {
+                redactConfirm = nil
+                Task { if await model.applyRedactions() { onSaveCopy() } }
+            }
+            Button("Overwrite the original") {
+                redactConfirm = nil
+                Task { if await model.applyRedactions() { model.save() } }
+            }
+            Button("Cancel", role: .cancel) { redactConfirm = nil }
+        } message: {
+            Text("Redaction permanently removes the marked content. This can't be undone after saving.")
+        }
+        .alert("", isPresented: Binding(get: { model.redactionSummary != nil },
+                                        set: { if !$0 { model.redactionSummary = nil } })) {
+            Button("OK", role: .cancel) { model.redactionSummary = nil }
+        } message: {
+            Text(model.redactionSummary ?? "")
+        }
+        .alert("Nothing was removed",
+               isPresented: Binding(get: { model.redactionRefusal != nil },
+                                    set: { if !$0 { model.redactionRefusal = nil } })) {
+            Button("OK", role: .cancel) { model.redactionRefusal = nil }
+        } message: {
+            Text(model.redactionRefusal ?? "")
         }
         .sheet(isPresented: $signaturesOpen) {
             SignaturesSheet(
@@ -398,6 +454,36 @@ struct ViewerView: View {
                         .id(matchAnchorID)
                 }
             }
+            // Areas marked for redaction (#173), drawn OVER the page: a mark is never
+            // written to the file, so there is nothing in the raster to draw, and marking
+            // costs no re-render. Translucent with an outline, so what is about to be
+            // removed can still be read — the reason marking and applying are two steps.
+            if let marks = model.redactionMarks[index], !marks.isEmpty {
+                let scaleX = width / size.width
+                let scaleY = height / size.height
+                ForEach(marks) { mark in
+                    Rectangle()
+                        .fill(Brand.redactionMark)
+                        .overlay(Rectangle().stroke(Brand.redactionMarkOutline, lineWidth: 1))
+                        .frame(width: CGFloat(mark.rect.right - mark.rect.left) * scaleX,
+                               height: CGFloat(mark.rect.top - mark.rect.bottom) * scaleY)
+                        .offset(x: CGFloat(mark.rect.left) * scaleX,
+                                y: CGFloat(Double(size.height) - mark.rect.top) * scaleY)
+                        .onTapGesture { model.removeRedactionMark(pageIndex: index, markId: mark.markId) }
+                        .accessibilityLabel("Marked for redaction")
+                        .accessibilityHint("Double tap to remove this mark")
+                }
+            }
+            if model.redactMode, let band = redactBand, band.pageIndex == index {
+                Rectangle()
+                    .fill(Brand.redactionMark)
+                    .overlay(Rectangle().stroke(Brand.redactionMarkOutline, lineWidth: 1))
+                    .frame(width: abs(band.current.x - band.origin.x),
+                           height: abs(band.current.y - band.origin.y))
+                    .offset(x: min(band.origin.x, band.current.x),
+                            y: min(band.origin.y, band.current.y))
+                    .allowsHitTesting(false)
+            }
             if let stamp = model.selectedStamp, stamp.pageIndex == index {
                 SelectionOverlay(
                     rect: stamp.rect,
@@ -430,6 +516,37 @@ struct ViewerView: View {
         }
         .frame(width: width, height: height)
         .clipped()
+        // While Redact is armed a drag marks an area instead of scrolling (#173). The
+        // gesture is attached only when the tool is on, so the scroll view keeps its
+        // scrolling the rest of the time — and `minimumDistance` keeps a tap a tap.
+        .simultaneousGesture(
+            model.redactMode
+                ? DragGesture(minimumDistance: 8)
+                    .onChanged { value in
+                        if redactBand?.pageIndex == index {
+                            redactBand?.current = value.location
+                        } else {
+                            redactBand = RedactBand(pageIndex: index,
+                                                    origin: value.startLocation,
+                                                    current: value.location)
+                        }
+                    }
+                    .onEnded { value in
+                        redactBand = nil
+                        let left = min(value.startLocation.x, value.location.x) / width
+                        let right = max(value.startLocation.x, value.location.x) / width
+                        let top = min(value.startLocation.y, value.location.y) / height
+                        let bottom = max(value.startLocation.y, value.location.y) / height
+                        guard right - left > 0.005, bottom - top > 0.005 else { return }
+                        model.markForRedaction(
+                            pageIndex: index,
+                            rect: PdfRect(left: Double(left) * size.width,
+                                          bottom: Double(1 - bottom) * size.height,
+                                          right: Double(right) * size.width,
+                                          top: Double(1 - top) * size.height))
+                    }
+                : nil
+        )
         // Double-tap zoom is checked first; a lone tap (deferred briefly by
         // the exclusivity) dispatches to the model — as on Android.
         .gesture(
@@ -526,3 +643,13 @@ struct ToolbarLabelStyle: LabelStyle {
         }
     }
 }
+
+/// The rubber band while a redaction drag is in progress, in the page view's own points.
+struct RedactBand: Equatable {
+    let pageIndex: Int
+    var origin: CGPoint
+    var current: CGPoint
+}
+
+/// Which save the redaction confirmation was raised from (#173).
+enum RedactSaveChoice { case overwrite, copy }
