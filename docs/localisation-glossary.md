@@ -168,6 +168,17 @@ Conventions (OQLF, Canadian French):
 | Tap the page where the signature should go | Touchez la page à l'endroit où placer la signature | mobile |
 | Signature added | Signature ajoutée | |
 | Signature {0} | Signature {0} | default mobile name, persisted |
+| Redact | Caviarder | #173. The verb Termium and the Quebec public service use for removing content from a document; "expurger" is the alternative and is less specific. **For francophone review.** |
+| Redaction | Caviardage | #173 |
+| Marked for redaction | Marqué pour caviardage | #173 |
+| Remove content from the file | Retirer du contenu du fichier | #173. "Retirer" (take out), not "supprimer" (delete), because the point is that it leaves the file |
+| Cover an area — this doesn't remove what's under it | Masquer une zone : ce qui est dessous n'est pas retiré | #173. The whiteout tooltip, reworded so the tool says what it does |
+| Whiteout covers — it doesn't remove | Le correcteur masque, il ne retire rien | #173 first-use hint |
+| Save as a copy | Enregistrer une copie | #173 |
+| Overwrite the original | Remplacer l'original | #173 |
+| -redacted | -caviarde | #173 file-name suffix; no accent, because it is a file name |
+| {0} areas redacted: {1} | {0} zones caviardées : {1} | #173 summary after saving |
+| Nothing was removed | Rien n'a été retiré | #173, when a redaction fails closed |
 
 ## Français (France)
 

@@ -182,4 +182,48 @@
     <string name="screenshot_text">Jane Whitfield</string>
     <string name="screenshot_edited_heading">Equipment Rental Agreement (2026)</string>
     <string name="screenshot_signature_name">Mega W.</string>
+    <!-- Toolbar (#173): label -->
+    <string name="redact">Redact</string>
+    <!-- Toolbar (#173): tooltip -->
+    <string name="redact_tip">Remove content from the file</string>
+    <!-- Status hint while the Redact tool is armed (#173) -->
+    <string name="redact_hint">Drag across what you want removed, or select text — Esc cancels</string>
+    <!-- Screen-reader name of a mark on the page (#173) -->
+    <string name="redact_mark_name">Marked for redaction</string>
+    <!-- Announced after a mark is placed (#173) -->
+    <string name="redact_mark_placed">Marked for redaction.</string>
+    <string name="redact_mark_removed">Mark removed.</string>
+    <!-- Confirmation before a redaction is applied on save (#173) -->
+    <string name="redact_confirm_title">Remove the marked content?</string>
+    <!-- Confirmation body (#173) — the wording #173 specifies -->
+    <string name="redact_confirm_body">Redaction permanently removes the marked content. This can\'t be undone after saving.</string>
+    <!-- The default action of the redaction confirmation (#173) -->
+    <string name="redact_save_copy">Save as a copy</string>
+    <string name="redact_overwrite">Overwrite the original</string>
+    <!-- Appended to the file name offered by Save as a copy (#173); no accents — it is a file name -->
+    <string name="redacted_file_suffix">-redacted</string>
+    <!-- Shown after saving (#173); {0} is a list such as "41 characters, 1 image" -->
+    <string name="redact_summary_one">1 area redacted: %1$s</string>
+    <string name="redact_summary_many">%1$s areas redacted: %2$s</string>
+    <string name="redacted_characters">%1$s characters</string>
+    <string name="redacted_characters_one">1 character</string>
+    <string name="redacted_images">%1$s images</string>
+    <string name="redacted_images_one">1 image</string>
+    <string name="redacted_form_fields">%1$s form fields</string>
+    <string name="redacted_form_fields_one">1 form field</string>
+    <string name="redacted_annotations">%1$s annotations</string>
+    <string name="redacted_annotations_one">1 annotation</string>
+    <!-- The summary's list when a redaction removed no countable content (#173) -->
+    <string name="redacted_nothing">nothing</string>
+    <!-- Shown when a redaction fails closed (#173) -->
+    <string name="redact_refused_title">Nothing was removed</string>
+    <!-- Refusal body (#173); {0} is a page number -->
+    <string name="redact_refused_body">MegaPDF couldn\'t remove everything you marked on page %1$s, so it removed nothing and left the file as it was.</string>
+    <string name="redact_refused_font">The text there is in a font MegaPDF can\'t redraw around your marks.</string>
+    <string name="redact_refused_shared">Part of that area is drawn from a shared block MegaPDF can\'t take apart safely.</string>
+    <string name="redact_refused_layout">Removing it would change the page outside the areas you marked.</string>
+    <string name="redact_refused_other">MegaPDF couldn\'t take that content apart safely.</string>
+    <string name="redact_needs_permission">This document doesn\'t allow changes, so it can\'t be redacted.</string>
+    <!-- The fail-closed case the rehearsal says cannot happen (#173) -->
+    <string name="redact_failed">The redaction couldn\'t be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</string>
 </resources>

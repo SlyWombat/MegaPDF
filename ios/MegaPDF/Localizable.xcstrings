@@ -33,6 +33,120 @@
         }
       }
     },
+    "-redacted" : {
+      "comment" : "Appended to the file name offered by Save as a copy (#173); no accents — it is a file name",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "-caviarde"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "-caviarde"
+          }
+        }
+      }
+    },
+    "1 annotation" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 annotation"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 annotation"
+          }
+        }
+      }
+    },
+    "1 area marked for redaction" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 zone marquée pour caviardage"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 zone marquée pour caviardage"
+          }
+        }
+      }
+    },
+    "1 area redacted: {0}" : {
+      "comment" : "Shown after saving (#173); {0} is a list such as \"41 characters, 1 image\"",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 zone caviardée : {0}"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 zone caviardée : {0}"
+          }
+        }
+      }
+    },
+    "1 character" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 caractère"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 caractère"
+          }
+        }
+      }
+    },
+    "1 form field" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 champ de formulaire"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 champ de formulaire"
+          }
+        }
+      }
+    },
+    "1 image" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 image"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 image"
+          }
+        }
+      }
+    },
     "About" : {
       "localizations" : {
         "fr" : {
@@ -125,6 +239,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tout le monde pourra ouvrir ce document sans mot de passe."
+          }
+        }
+      }
+    },
+    "Anything under a whiteout is still in the file, and another app can copy or search it. To take it out of the file, use Redact." : {
+      "comment" : "First-use hint body (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder."
           }
         }
       }
@@ -785,6 +916,23 @@
         }
       }
     },
+    "Drag across what you want removed, or select text — Esc cancels" : {
+      "comment" : "Status hint while the Redact tool is armed (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler"
+          }
+        }
+      }
+    },
     "Draw" : {
       "localizations" : {
         "fr" : {
@@ -947,8 +1095,91 @@
         }
       }
     },
+    "Mark removed." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marque retirée."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marque retirée."
+          }
+        }
+      }
+    },
+    "Marked for redaction" : {
+      "comment" : "Screen-reader name of a mark on the page (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marqué pour caviardage"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marqué pour caviardage"
+          }
+        }
+      }
+    },
+    "Marked for redaction." : {
+      "comment" : "Announced after a mark is placed (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marqué pour caviardage."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marqué pour caviardage."
+          }
+        }
+      }
+    },
     "MegaPDF" : {
       "shouldTranslate" : false
+    },
+    "MegaPDF couldn't remove everything you marked on page {0}, so it removed nothing and left the file as it was." : {
+      "comment" : "Refusal body (#173); {0} is a page number",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF n'a pas pu tout retirer à la page {0} ; rien n'a été retiré et le fichier est resté intact."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF n'a pas pu tout retirer à la page {0}; rien n'a été retiré et le fichier est resté intact."
+          }
+        }
+      }
+    },
+    "MegaPDF couldn't take that content apart safely." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF n'a pas pu décomposer ce contenu sans risque."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MegaPDF n'a pas pu décomposer ce contenu sans risque."
+          }
+        }
+      }
     },
     "MegaPDF on GitHub" : {
       "localizations" : {
@@ -1062,6 +1293,23 @@
         }
       }
     },
+    "Nothing was removed" : {
+      "comment" : "Shown when a redaction fails closed (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rien n'a été retiré"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rien n'a été retiré"
+          }
+        }
+      }
+    },
     "OK" : {
       "localizations" : {
         "fr" : {
@@ -1142,6 +1390,22 @@
         }
       }
     },
+    "Overwrite the original" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remplacer l'original"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remplacer l'original"
+          }
+        }
+      }
+    },
     "Owner password" : {
       "localizations" : {
         "fr" : {
@@ -1170,6 +1434,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Page %lld"
+          }
+        }
+      }
+    },
+    "Part of that area is drawn from a shared block MegaPDF can't take apart safely." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une partie de cette zone provient d'un bloc partagé que MegaPDF ne peut pas décomposer sans risque."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Une partie de cette zone provient d'un bloc partagé que MegaPDF ne peut pas décomposer sans risque."
           }
         }
       }
@@ -1366,6 +1646,40 @@
         }
       }
     },
+    "Redact" : {
+      "comment" : "Toolbar (#173): label",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caviarder"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Caviarder"
+          }
+        }
+      }
+    },
+    "Redaction permanently removes the marked content. This can't be undone after saving." : {
+      "comment" : "Confirmation body (#173) — the wording #173 specifies",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le caviardage retire définitivement le contenu marqué. Impossible d'annuler après l'enregistrement."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le caviardage retire définitivement le contenu marqué. Impossible d'annuler après l'enregistrement."
+          }
+        }
+      }
+    },
     "Redo" : {
       "localizations" : {
         "fr" : {
@@ -1394,6 +1708,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retirer"
+          }
+        }
+      }
+    },
+    "Remove content from the file" : {
+      "comment" : "Toolbar (#173): tooltip",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer du contenu du fichier"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer du contenu du fichier"
+          }
+        }
+      }
+    },
+    "Remove the marked content?" : {
+      "comment" : "Confirmation before a redaction is applied on save (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer le contenu marqué ?"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer le contenu marqué?"
+          }
+        }
+      }
+    },
+    "Removing it would change the page outside the areas you marked." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le retrait modifierait la page en dehors des zones marquées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le retrait modifierait la page en dehors des zones marquées."
           }
         }
       }
@@ -1463,6 +1827,23 @@
       }
     },
     "Save a copy" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer une copie"
+          }
+        }
+      }
+    },
+    "Save as a copy" : {
+      "comment" : "The default action of the redaction confirmation (#173)",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
@@ -1894,6 +2275,39 @@
         }
       }
     },
+    "The redaction couldn't be finished, and this file can no longer be saved. Close it and open it again — nothing was written." : {
+      "comment" : "The fail-closed case the rehearsal says cannot happen (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit."
+          }
+        }
+      }
+    },
+    "The text there is in a font MegaPDF can't redraw around your marks." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le texte à cet endroit utilise une police que MegaPDF ne peut pas redessiner autour de vos marques."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le texte à cet endroit utilise une police que MegaPDF ne peut pas redessiner autour de vos marques."
+          }
+        }
+      }
+    },
     "Third-party notices" : {
       "localizations" : {
         "fr" : {
@@ -1954,6 +2368,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Cette action est irréversible."
+          }
+        }
+      }
+    },
+    "This document doesn't allow changes, so it can't be redacted." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document n'autorise pas les modifications ; il ne peut pas être caviardé."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document n'autorise pas les modifications; il ne peut pas être caviardé."
           }
         }
       }
@@ -2278,6 +2708,23 @@
         }
       }
     },
+    "Whiteout covers — it doesn't remove" : {
+      "comment" : "First-use hint on the Whiteout tool (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le correcteur masque, il ne retire rien"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le correcteur masque, il ne retire rien"
+          }
+        }
+      }
+    },
     "Your name, as a signature" : {
       "localizations" : {
         "fr" : {
@@ -2310,6 +2757,23 @@
         }
       }
     },
+    "nothing" : {
+      "comment" : "The summary's list when a redaction removed no countable content (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rien"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "rien"
+          }
+        }
+      }
+    },
     "rental" : {
       "localizations" : {
         "fr" : {
@@ -2322,6 +2786,103 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "location"
+          }
+        }
+      }
+    },
+    "{0} annotations" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} annotations"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} annotations"
+          }
+        }
+      }
+    },
+    "{0} areas marked for redaction" : {
+      "comment" : "Screen-reader summary of the page's marks (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} zones marquées pour caviardage"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} zones marquées pour caviardage"
+          }
+        }
+      }
+    },
+    "{0} areas redacted: {1}" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} zones caviardées : {1}"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} zones caviardées : {1}"
+          }
+        }
+      }
+    },
+    "{0} characters" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} caractères"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} caractères"
+          }
+        }
+      }
+    },
+    "{0} form fields" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} champs de formulaire"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} champs de formulaire"
+          }
+        }
+      }
+    },
+    "{0} images" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} images"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{0} images"
           }
         }
       }

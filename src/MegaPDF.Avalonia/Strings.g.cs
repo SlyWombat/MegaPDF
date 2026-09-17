@@ -206,7 +206,7 @@ public static partial class Strings
     /// <summary>Click where the new text should go — Esc cancels</summary>
     public static string ModeHintAddText => Get("ModeHintAddText");
 
-    /// <summary>Drag over what you want to cover — Esc cancels</summary>
+    /// <summary>Drag over what you want to cover — Esc cancels. Covering doesn't remove; Redact does</summary>
     public static string ModeHintWhiteout => Get("ModeHintWhiteout");
 
     /// <summary>Click where the signature should go — Esc cancels</summary>
@@ -778,4 +778,106 @@ public static partial class Strings
 
     /// <summary>Help</summary>
     public static string MenuHelp => Get("MenuHelp");
+
+    /// <summary>Redact</summary>
+    public static string ToolbarRedact => Get("ToolbarRedact");
+
+    /// <summary>Remove content from the file</summary>
+    public static string ToolbarRedactTip => Get("ToolbarRedactTip");
+
+    /// <summary>Drag across what you want removed, or select text — Esc cancels</summary>
+    public static string RedactHint => Get("RedactHint");
+
+    /// <summary>Marked for redaction</summary>
+    public static string RedactMarkName => Get("RedactMarkName");
+
+    /// <summary>{0} areas marked for redaction</summary>
+    public static string RedactMarkCount(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactMarkCount"), arg0);
+
+    /// <summary>1 area marked for redaction</summary>
+    public static string RedactMarkCountOne => Get("RedactMarkCountOne");
+
+    /// <summary>Marked for redaction.</summary>
+    public static string RedactMarkPlaced => Get("RedactMarkPlaced");
+
+    /// <summary>Mark removed.</summary>
+    public static string RedactMarkRemoved => Get("RedactMarkRemoved");
+
+    /// <summary>Remove the marked content?</summary>
+    public static string RedactConfirmTitle => Get("RedactConfirmTitle");
+
+    /// <summary>Redaction permanently removes the marked content. This can't be undone after saving.</summary>
+    public static string RedactConfirmBody => Get("RedactConfirmBody");
+
+    /// <summary>Save as a copy</summary>
+    public static string RedactSaveCopy => Get("RedactSaveCopy");
+
+    /// <summary>Overwrite the original</summary>
+    public static string RedactOverwrite => Get("RedactOverwrite");
+
+    /// <summary>-redacted</summary>
+    public static string RedactedFileSuffix => Get("RedactedFileSuffix");
+
+    /// <summary>1 area redacted: {0}</summary>
+    public static string RedactSummaryOne(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactSummaryOne"), arg0);
+
+    /// <summary>{0} areas redacted: {1}</summary>
+    public static string RedactSummaryMany(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("RedactSummaryMany"), arg0, arg1);
+
+    /// <summary>{0} characters</summary>
+    public static string RedactedCharacters(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactedCharacters"), arg0);
+
+    /// <summary>1 character</summary>
+    public static string RedactedCharactersOne => Get("RedactedCharactersOne");
+
+    /// <summary>{0} images</summary>
+    public static string RedactedImages(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactedImages"), arg0);
+
+    /// <summary>1 image</summary>
+    public static string RedactedImagesOne => Get("RedactedImagesOne");
+
+    /// <summary>{0} form fields</summary>
+    public static string RedactedFormFields(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactedFormFields"), arg0);
+
+    /// <summary>1 form field</summary>
+    public static string RedactedFormFieldsOne => Get("RedactedFormFieldsOne");
+
+    /// <summary>{0} annotations</summary>
+    public static string RedactedAnnotations(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactedAnnotations"), arg0);
+
+    /// <summary>1 annotation</summary>
+    public static string RedactedAnnotationsOne => Get("RedactedAnnotationsOne");
+
+    /// <summary>nothing</summary>
+    public static string RedactedNothing => Get("RedactedNothing");
+
+    /// <summary>Nothing was removed</summary>
+    public static string RedactRefusedTitle => Get("RedactRefusedTitle");
+
+    /// <summary>MegaPDF couldn't remove everything you marked on page {0}, so it removed nothing and left the file as it was.</summary>
+    public static string RedactRefusedBody(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("RedactRefusedBody"), arg0);
+
+    /// <summary>The text there is in a font MegaPDF can't redraw around your marks.</summary>
+    public static string RedactRefusedFont => Get("RedactRefusedFont");
+
+    /// <summary>Part of that area is drawn from a shared block MegaPDF can't take apart safely.</summary>
+    public static string RedactRefusedShared => Get("RedactRefusedShared");
+
+    /// <summary>Removing it would change the page outside the areas you marked.</summary>
+    public static string RedactRefusedLayout => Get("RedactRefusedLayout");
+
+    /// <summary>MegaPDF couldn't take that content apart safely.</summary>
+    public static string RedactRefusedOther => Get("RedactRefusedOther");
+
+    /// <summary>This document doesn't allow changes, so it can't be redacted.</summary>
+    public static string RedactNeedsPermission => Get("RedactNeedsPermission");
+
+    /// <summary>The redaction couldn't be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</summary>
+    public static string RedactFailed => Get("RedactFailed");
+
+    /// <summary>Whiteout covers — it doesn't remove</summary>
+    public static string WhiteoutCoversOnlyTitle => Get("WhiteoutCoversOnlyTitle");
+
+    /// <summary>Anything under a whiteout is still in the file, and another app can copy or search it. To take it out of the file, use Redact.</summary>
+    public static string WhiteoutCoversOnlyBody => Get("WhiteoutCoversOnlyBody");
 }

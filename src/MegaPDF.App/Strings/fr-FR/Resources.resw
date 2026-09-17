@@ -228,7 +228,7 @@
     <value>Cliquez sur la page pour placer « {0} »</value>
   </data>
   <data name="WhiteoutHint" xml:space="preserve">
-    <value>Glissez sur la zone à masquer. Échap pour annuler</value>
+    <value>Glissez sur la zone à masquer. Échap pour annuler. Masquer ne retire rien : Caviarder le fait</value>
   </data>
   <data name="TextBoxHint" xml:space="preserve">
     <value>Cliquez à l'endroit où placer le nouveau texte. Échap pour annuler</value>
@@ -664,7 +664,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>Windows toolbar (#144): label</comment>
   </data>
   <data name="ToolbarWhiteoutTip" xml:space="preserve">
-    <value>Masquer une zone avec du correcteur</value>
+    <value>Masquer une zone : ce qui est dessous n'est pas retiré</value>
     <comment>Windows toolbar (#144): tooltip</comment>
   </data>
   <data name="ToolbarAddText" xml:space="preserve">
@@ -800,5 +800,141 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   </data>
   <data name="AddFromImageName" xml:space="preserve">
     <value>Ajouter une signature à partir d'une photo</value>
+  </data>
+  <data name="ToolbarRedact" xml:space="preserve">
+    <value>Caviarder</value>
+    <comment>Toolbar (#173): label. #173 — new French, for francophone review</comment>
+  </data>
+  <data name="ToolbarRedactTip" xml:space="preserve">
+    <value>Retirer du contenu du fichier</value>
+    <comment>Toolbar (#173): tooltip. #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactHint" xml:space="preserve">
+    <value>Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler</value>
+    <comment>Status hint while the Redact tool is armed (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkName" xml:space="preserve">
+    <value>Marqué pour caviardage</value>
+    <comment>Screen-reader name of a mark on the page (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkCount" xml:space="preserve">
+    <value>{0} zones marquées pour caviardage</value>
+    <comment>Screen-reader summary of the page's marks (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkCountOne" xml:space="preserve">
+    <value>1 zone marquée pour caviardage</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkPlaced" xml:space="preserve">
+    <value>Marqué pour caviardage.</value>
+    <comment>Announced after a mark is placed (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkRemoved" xml:space="preserve">
+    <value>Marque retirée.</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactConfirmTitle" xml:space="preserve">
+    <value>Retirer le contenu marqué ?</value>
+    <comment>Confirmation before a redaction is applied on save (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactConfirmBody" xml:space="preserve">
+    <value>Le caviardage retire définitivement le contenu marqué. Impossible d'annuler après l'enregistrement.</value>
+    <comment>Confirmation body (#173) — the wording #173 specifies. #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactSaveCopy" xml:space="preserve">
+    <value>Enregistrer une copie</value>
+    <comment>The default action of the redaction confirmation (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactOverwrite" xml:space="preserve">
+    <value>Remplacer l'original</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedFileSuffix" xml:space="preserve">
+    <value>-caviarde</value>
+    <comment>Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactSummaryOne" xml:space="preserve">
+    <value>1 zone caviardée : {0}</value>
+    <comment>Shown after saving (#173); {0} is a list such as "41 characters, 1 image". #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactSummaryMany" xml:space="preserve">
+    <value>{0} zones caviardées : {1}</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedCharacters" xml:space="preserve">
+    <value>{0} caractères</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedCharactersOne" xml:space="preserve">
+    <value>1 caractère</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedImages" xml:space="preserve">
+    <value>{0} images</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedImagesOne" xml:space="preserve">
+    <value>1 image</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedFormFields" xml:space="preserve">
+    <value>{0} champs de formulaire</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedFormFieldsOne" xml:space="preserve">
+    <value>1 champ de formulaire</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedAnnotations" xml:space="preserve">
+    <value>{0} annotations</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedAnnotationsOne" xml:space="preserve">
+    <value>1 annotation</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactedNothing" xml:space="preserve">
+    <value>rien</value>
+    <comment>The summary's list when a redaction removed no countable content (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactRefusedTitle" xml:space="preserve">
+    <value>Rien n'a été retiré</value>
+    <comment>Shown when a redaction fails closed (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactRefusedBody" xml:space="preserve">
+    <value>MegaPDF n'a pas pu tout retirer à la page {0} ; rien n'a été retiré et le fichier est resté intact.</value>
+    <comment>Refusal body (#173); {0} is a page number. #173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactRefusedFont" xml:space="preserve">
+    <value>Le texte à cet endroit utilise une police que MegaPDF ne peut pas redessiner autour de vos marques.</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactRefusedShared" xml:space="preserve">
+    <value>Une partie de cette zone provient d'un bloc partagé que MegaPDF ne peut pas décomposer sans risque.</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactRefusedLayout" xml:space="preserve">
+    <value>Le retrait modifierait la page en dehors des zones marquées.</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactRefusedOther" xml:space="preserve">
+    <value>MegaPDF n'a pas pu décomposer ce contenu sans risque.</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactNeedsPermission" xml:space="preserve">
+    <value>Ce document n'autorise pas les modifications ; il ne peut pas être caviardé.</value>
+    <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactFailed" xml:space="preserve">
+    <value>Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit.</value>
+    <comment>The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="WhiteoutCoversOnlyTitle" xml:space="preserve">
+    <value>Le correcteur masque, il ne retire rien</value>
+    <comment>First-use hint on the Whiteout tool (#173). #173 — new French, for francophone review</comment>
+  </data>
+  <data name="WhiteoutCoversOnlyBody" xml:space="preserve">
+    <value>Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder.</value>
+    <comment>First-use hint body (#173). #173 — new French, for francophone review</comment>
   </data>
 </root>

@@ -292,7 +292,7 @@
     <value>Click where the new text should go — Esc cancels</value>
   </data>
   <data name="ModeHintWhiteout" xml:space="preserve">
-    <value>Drag over what you want to cover — Esc cancels</value>
+    <value>Drag over what you want to cover — Esc cancels. Covering doesn't remove; Redact does</value>
   </data>
   <data name="ModeHintPlaceSignature" xml:space="preserve">
     <value>Click where the signature should go — Esc cancels</value>
@@ -963,5 +963,124 @@
   <data name="MenuHelp" xml:space="preserve">
     <value>Help</value>
     <comment>macOS menu bar: the Help menu (#176)</comment>
+  </data>
+  <data name="ToolbarRedact" xml:space="preserve">
+    <value>Redact</value>
+    <comment>Toolbar (#173): label</comment>
+  </data>
+  <data name="ToolbarRedactTip" xml:space="preserve">
+    <value>Remove content from the file</value>
+    <comment>Toolbar (#173): tooltip</comment>
+  </data>
+  <data name="RedactHint" xml:space="preserve">
+    <value>Drag across what you want removed, or select text — Esc cancels</value>
+    <comment>Status hint while the Redact tool is armed (#173)</comment>
+  </data>
+  <data name="RedactMarkName" xml:space="preserve">
+    <value>Marked for redaction</value>
+    <comment>Screen-reader name of a mark on the page (#173)</comment>
+  </data>
+  <data name="RedactMarkCount" xml:space="preserve">
+    <value>{0} areas marked for redaction</value>
+    <comment>Screen-reader summary of the page's marks (#173)</comment>
+  </data>
+  <data name="RedactMarkCountOne" xml:space="preserve">
+    <value>1 area marked for redaction</value>
+  </data>
+  <data name="RedactMarkPlaced" xml:space="preserve">
+    <value>Marked for redaction.</value>
+    <comment>Announced after a mark is placed (#173)</comment>
+  </data>
+  <data name="RedactMarkRemoved" xml:space="preserve">
+    <value>Mark removed.</value>
+  </data>
+  <data name="RedactConfirmTitle" xml:space="preserve">
+    <value>Remove the marked content?</value>
+    <comment>Confirmation before a redaction is applied on save (#173)</comment>
+  </data>
+  <data name="RedactConfirmBody" xml:space="preserve">
+    <value>Redaction permanently removes the marked content. This can't be undone after saving.</value>
+    <comment>Confirmation body (#173) — the wording #173 specifies</comment>
+  </data>
+  <data name="RedactSaveCopy" xml:space="preserve">
+    <value>Save as a copy</value>
+    <comment>The default action of the redaction confirmation (#173)</comment>
+  </data>
+  <data name="RedactOverwrite" xml:space="preserve">
+    <value>Overwrite the original</value>
+  </data>
+  <data name="RedactedFileSuffix" xml:space="preserve">
+    <value>-redacted</value>
+    <comment>Appended to the file name offered by Save as a copy (#173); no accents — it is a file name</comment>
+  </data>
+  <data name="RedactSummaryOne" xml:space="preserve">
+    <value>1 area redacted: {0}</value>
+    <comment>Shown after saving (#173); {0} is a list such as "41 characters, 1 image"</comment>
+  </data>
+  <data name="RedactSummaryMany" xml:space="preserve">
+    <value>{0} areas redacted: {1}</value>
+  </data>
+  <data name="RedactedCharacters" xml:space="preserve">
+    <value>{0} characters</value>
+  </data>
+  <data name="RedactedCharactersOne" xml:space="preserve">
+    <value>1 character</value>
+  </data>
+  <data name="RedactedImages" xml:space="preserve">
+    <value>{0} images</value>
+  </data>
+  <data name="RedactedImagesOne" xml:space="preserve">
+    <value>1 image</value>
+  </data>
+  <data name="RedactedFormFields" xml:space="preserve">
+    <value>{0} form fields</value>
+  </data>
+  <data name="RedactedFormFieldsOne" xml:space="preserve">
+    <value>1 form field</value>
+  </data>
+  <data name="RedactedAnnotations" xml:space="preserve">
+    <value>{0} annotations</value>
+  </data>
+  <data name="RedactedAnnotationsOne" xml:space="preserve">
+    <value>1 annotation</value>
+  </data>
+  <data name="RedactedNothing" xml:space="preserve">
+    <value>nothing</value>
+    <comment>The summary's list when a redaction removed no countable content (#173)</comment>
+  </data>
+  <data name="RedactRefusedTitle" xml:space="preserve">
+    <value>Nothing was removed</value>
+    <comment>Shown when a redaction fails closed (#173)</comment>
+  </data>
+  <data name="RedactRefusedBody" xml:space="preserve">
+    <value>MegaPDF couldn't remove everything you marked on page {0}, so it removed nothing and left the file as it was.</value>
+    <comment>Refusal body (#173); {0} is a page number</comment>
+  </data>
+  <data name="RedactRefusedFont" xml:space="preserve">
+    <value>The text there is in a font MegaPDF can't redraw around your marks.</value>
+  </data>
+  <data name="RedactRefusedShared" xml:space="preserve">
+    <value>Part of that area is drawn from a shared block MegaPDF can't take apart safely.</value>
+  </data>
+  <data name="RedactRefusedLayout" xml:space="preserve">
+    <value>Removing it would change the page outside the areas you marked.</value>
+  </data>
+  <data name="RedactRefusedOther" xml:space="preserve">
+    <value>MegaPDF couldn't take that content apart safely.</value>
+  </data>
+  <data name="RedactNeedsPermission" xml:space="preserve">
+    <value>This document doesn't allow changes, so it can't be redacted.</value>
+  </data>
+  <data name="RedactFailed" xml:space="preserve">
+    <value>The redaction couldn't be finished, and this file can no longer be saved. Close it and open it again — nothing was written.</value>
+    <comment>The fail-closed case the rehearsal says cannot happen (#173)</comment>
+  </data>
+  <data name="WhiteoutCoversOnlyTitle" xml:space="preserve">
+    <value>Whiteout covers — it doesn't remove</value>
+    <comment>First-use hint on the Whiteout tool (#173)</comment>
+  </data>
+  <data name="WhiteoutCoversOnlyBody" xml:space="preserve">
+    <value>Anything under a whiteout is still in the file, and another app can copy or search it. To take it out of the file, use Redact.</value>
+    <comment>First-use hint body (#173)</comment>
   </data>
 </root>

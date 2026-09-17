@@ -169,4 +169,64 @@
     <string name="search_failed">Impossible de rechercher dans ce document.</string>
     <string name="edit_failed">Impossible d\'effectuer cette modification.</string>
     <string name="signature_move_failed">Impossible de déplacer cette signature</string>
+    <!-- Toolbar (#173): label. #173 — new French, for francophone review -->
+    <string name="redact">Caviarder</string>
+    <!-- Toolbar (#173): tooltip. #173 — new French, for francophone review -->
+    <string name="redact_tip">Retirer du contenu du fichier</string>
+    <!-- Status hint while the Redact tool is armed (#173). #173 — new French, for francophone review -->
+    <string name="redact_hint">Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler</string>
+    <!-- Screen-reader name of a mark on the page (#173). #173 — new French, for francophone review -->
+    <string name="redact_mark_name">Marqué pour caviardage</string>
+    <!-- Announced after a mark is placed (#173). #173 — new French, for francophone review -->
+    <string name="redact_mark_placed">Marqué pour caviardage.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_mark_removed">Marque retirée.</string>
+    <!-- Confirmation before a redaction is applied on save (#173). #173 — new French, for francophone review -->
+    <string name="redact_confirm_title">Retirer le contenu marqué?</string>
+    <!-- Confirmation body (#173) — the wording #173 specifies. #173 — new French, for francophone review -->
+    <string name="redact_confirm_body">Le caviardage retire définitivement le contenu marqué. Impossible d\'annuler après l\'enregistrement.</string>
+    <!-- The default action of the redaction confirmation (#173). #173 — new French, for francophone review -->
+    <string name="redact_save_copy">Enregistrer une copie</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_overwrite">Remplacer l\'original</string>
+    <!-- Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review -->
+    <string name="redacted_file_suffix">-caviarde</string>
+    <!-- Shown after saving (#173); {0} is a list such as "41 characters, 1 image". #173 — new French, for francophone review -->
+    <string name="redact_summary_one">1 zone caviardée : %1$s</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_summary_many">%1$s zones caviardées : %2$s</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_characters">%1$s caractères</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_characters_one">1 caractère</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_images">%1$s images</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_images_one">1 image</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_form_fields">%1$s champs de formulaire</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_form_fields_one">1 champ de formulaire</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_annotations">%1$s annotations</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redacted_annotations_one">1 annotation</string>
+    <!-- The summary's list when a redaction removed no countable content (#173). #173 — new French, for francophone review -->
+    <string name="redacted_nothing">rien</string>
+    <!-- Shown when a redaction fails closed (#173). #173 — new French, for francophone review -->
+    <string name="redact_refused_title">Rien n\'a été retiré</string>
+    <!-- Refusal body (#173); {0} is a page number. #173 — new French, for francophone review -->
+    <string name="redact_refused_body">MegaPDF n\'a pas pu tout retirer à la page %1$s; rien n\'a été retiré et le fichier est resté intact.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_refused_font">Le texte à cet endroit utilise une police que MegaPDF ne peut pas redessiner autour de vos marques.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_refused_shared">Une partie de cette zone provient d\'un bloc partagé que MegaPDF ne peut pas décomposer sans risque.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_refused_layout">Le retrait modifierait la page en dehors des zones marquées.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_refused_other">MegaPDF n\'a pas pu décomposer ce contenu sans risque.</string>
+    <!-- #173 — new French, for francophone review -->
+    <string name="redact_needs_permission">Ce document n\'autorise pas les modifications; il ne peut pas être caviardé.</string>
+    <!-- The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review -->
+    <string name="redact_failed">Le caviardage n\'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n\'a été écrit.</string>
 </resources>
