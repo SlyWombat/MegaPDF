@@ -136,13 +136,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 zone caviardée : {0}"
+            "value" : "1 zone caviardée : {0}"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 zone caviardée : {0}"
+            "value" : "1 zone caviardée : {0}"
           }
         }
       }
@@ -1115,13 +1115,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fichiers n'a pas pu afficher cet emplacement."
+            "value" : "Impossible d'afficher cet emplacement dans Fichiers."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Fichiers n'a pas pu afficher cet emplacement."
+            "value" : "Impossible d'afficher cet emplacement dans Fichiers."
           }
         }
       }
@@ -2489,13 +2489,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit."
+            "value" : "Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit."
+            "value" : "Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit."
           }
         }
       }
@@ -3069,13 +3069,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{0} zones caviardées : {1}"
+            "value" : "{0} zones caviardées : {1}"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{0} zones caviardées : {1}"
+            "value" : "{0} zones caviardées : {1}"
           }
         }
       }

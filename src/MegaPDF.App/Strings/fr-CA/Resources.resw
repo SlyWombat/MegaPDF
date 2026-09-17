@@ -144,7 +144,7 @@
     <value>La police de ce document n'est pas disponible; une police semblable a été utilisée.</value>
   </data>
   <data name="ScannedHintBar.Message" xml:space="preserve">
-    <value>Cette page est une image numérisée : son texte est une image et ne peut pas être modifié.</value>
+    <value>Cette page est une image numérisée&#160;: son texte est une image et ne peut pas être modifié.</value>
   </data>
   <data name="DefaultAppBar.Message" xml:space="preserve">
     <value>Faire de MegaPDF votre application PDF?</value>
@@ -201,7 +201,7 @@
 
   <!-- ===== Manifeste ===== -->
   <data name="AppDescription" xml:space="preserve">
-    <value>Un éditeur PDF léger : ouvrir, corriger, enregistrer, terminé.</value>
+    <value>Un éditeur PDF léger&#160;: ouvrir, corriger, enregistrer, terminé.</value>
   </data>
   <data name="PdfFileTypeName" xml:space="preserve">
     <value>Document PDF</value>
@@ -230,7 +230,7 @@
     <value>Cliquez sur la page pour placer « {0} »</value>
   </data>
   <data name="WhiteoutHint" xml:space="preserve">
-    <value>Glissez sur la zone à masquer. Échap pour annuler. Masquer ne retire rien : Caviarder le fait</value>
+    <value>Glissez sur la zone à masquer. Échap pour annuler. Masquer ne retire rien&#160;: Caviarder le fait</value>
   </data>
   <data name="TextBoxHint" xml:space="preserve">
     <value>Cliquez à l'endroit où placer le nouveau texte. Échap pour annuler</value>
@@ -285,7 +285,7 @@
     <value>Copie réduite enregistrée</value>
   </data>
   <data name="SmallerCopySavedBody" xml:space="preserve">
-    <value>Avant : {0:F1} Mo, après : {1:F1} Mo.
+    <value>Avant&#160;: {0:F1} Mo, après&#160;: {1:F1} Mo.
 
 Enregistrée sous {2}, prête pour le courriel.</value>
   </data>
@@ -473,7 +473,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <value>Ce texte fait partie d'une image numérisée et ne peut pas être modifié. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
   </data>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
-    <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page : le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
+    <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page&#160;: le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
   </data>
   <data name="ErrorLayoutRenderWouldChange" xml:space="preserve">
     <value>Cette ligne ne peut pas être modifiée sans changer l'apparence d'autres parties de la page. Masquez-la avec du correcteur et ajoutez un nouveau texte.</value>
@@ -666,7 +666,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <comment>Windows toolbar (#144): label</comment>
   </data>
   <data name="ToolbarWhiteoutTip" xml:space="preserve">
-    <value>Masquer une zone : ce qui est dessous n'est pas retiré</value>
+    <value>Masquer une zone&#160;: ce qui est dessous n'est pas retiré</value>
     <comment>Windows toolbar (#144): tooltip</comment>
   </data>
   <data name="ToolbarAddText" xml:space="preserve">
@@ -856,11 +856,11 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <comment>Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactSummaryOne" xml:space="preserve">
-    <value>1 zone caviardée : {0}</value>
+    <value>1 zone caviardée&#160;: {0}</value>
     <comment>Shown after saving (#173); {0} is a list such as "41 characters, 1 image". #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactSummaryMany" xml:space="preserve">
-    <value>{0} zones caviardées : {1}</value>
+    <value>{0} zones caviardées&#160;: {1}</value>
     <comment>#173 — new French, for francophone review</comment>
   </data>
   <data name="RedactedCharacters" xml:space="preserve">
@@ -928,7 +928,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <comment>#173 — new French, for francophone review</comment>
   </data>
   <data name="RedactFailed" xml:space="preserve">
-    <value>Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit.</value>
+    <value>Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le&#160;: rien n'a été écrit.</value>
     <comment>The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="WhiteoutCoversOnlyTitle" xml:space="preserve">
@@ -940,7 +940,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <comment>First-use hint body (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="PageRegionDescriptionWithContent" xml:space="preserve">
-    <value>Page {0}, {1} : {2}</value>
+    <value>Page {0}, {1}&#160;: {2}</value>
   </data>
   <data name="SavedAnnouncement" xml:space="preserve">
     <value>{0} enregistré</value>

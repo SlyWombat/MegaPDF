@@ -179,6 +179,27 @@ Conventions (OQLF, Canadian French):
 | -redacted | -caviarde | #173 file-name suffix; no accent, because it is a file name |
 | {0} areas redacted: {1} | {0} zones caviardées : {1} | #173 summary after saving |
 | Nothing was removed | Rien n'a été retiré | #173, when a redaction fails closed |
+| About MegaPDF | À propos de MegaPDF | #176, macOS app menu and the window it opens; the Mac spells the product MegaPDF, the Windows About says Mega PDF |
+| Version {0} ({1}) | Version {0} ({1}) | #176; the build number only appears once it differs from the version |
+| Third-Party Notices… | Avis de tiers… | #176, the button that opens the notices window |
+| The notices file is missing from this build. | Le fichier des avis est absent de cette version. | #176 |
+| Window | Fenêtre | #176, macOS menu bar |
+| Help | Aide | #176, macOS menu bar |
+| Minimize | Réduire | #176, macOS Window menu; the same word as Shrink, as in macOS itself |
+| Zoom | Zoom | #176, macOS Window menu; the same word in French |
+| Hide {0} | Masquer {0} | #191, macOS app menu. These five are macOS's own words, copied from TextEdit's Edit.loctable rather than translated — fr and fr-CA are identical there |
+| Hide Others | Masquer les autres | #191 |
+| Show All | Tout afficher | #191 |
+| Quit {0} | Quitter {0} | #191 |
+| Services | Services | #191, the system's submenu; the same word in French |
+| Show in Finder | Afficher dans le Finder | #165, macOS context menu on a recent document. Apple's own wording (Migration.loctable) |
+| Show in Files | Afficher dans Fichiers | #165, iOS context menu. **For francophone review** — not confirmed against an Apple catalogue |
+| {0}, in {1} | {0}, dans {1} | #165, the accessible name of a recent document: the file name and where it lives |
+| Not found · {0} | Introuvable · {0} | #165, a recent document that is no longer where it was |
+| iCloud Drive | iCloud Drive | #165; the Files app's sidebar says iCloud Drive in French too |
+| On My iPhone / On My iPad | Sur mon iPhone / Sur mon iPad | #165, where a recent file lives |
+| Downloads | Téléchargements | #165; on macOS the folder's name comes from the system (displayNameAtPath:), not from here |
+| Couldn't show {0} in the Finder. | Impossible d'afficher {0} dans le Finder. | #165 |
 
 ## Français (France)
 

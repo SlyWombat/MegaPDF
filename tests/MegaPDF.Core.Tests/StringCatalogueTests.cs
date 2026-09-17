@@ -171,6 +171,54 @@ public class StringCatalogueTests
         AssertParity($"iOS {localization}", en, fr, ApplePlaceholder);
     }
 
+    // --- Typography the glossary settles (docs/localisation-glossary.md) ---
+
+    /// <summary>
+    /// French puts a non-breaking space before a colon, never a plain one.
+    ///
+    /// Canada's rule is ":" alone; France adds "?", "!" and ";", which
+    /// tools/gen_strings.py applies when it derives the France catalogues — so this
+    /// checks the one mark both spell the same way, on every French catalogue, in the
+    /// place a translator writes it rather than where a script could add it.
+    ///
+    /// Not a nicety: a plain space lets a line break fall between the word and its
+    /// colon. It was wrong in 43 strings across all four platforms until #146's
+    /// French audit, and nothing but this would have noticed it coming back.
+    /// </summary>
+    [Fact]
+    public void FrenchPutsANonBreakingSpaceBeforeAColon()
+    {
+        var offenders = new List<string>();
+        void Check(string label, Dictionary<string, string> values)
+        {
+            foreach (var (key, value) in values)
+            {
+                // A format specifier's colon is not punctuation: "{0:F1}" is a number,
+                // and it never has a space in front of the colon anyway.
+                var prose = Placeholders.Replace(value, "");
+                if (prose.Contains(" :", StringComparison.Ordinal))
+                    offenders.Add($"{label} {key}: {value}");
+            }
+        }
+
+        foreach (var language in new[] { "fr-CA", "fr-FR" })
+            Check($"Windows {language}", ResxValues($"src/MegaPDF.App/Strings/{language}/Resources.resw"));
+        foreach (var culture in new[] { "fr-CA", "fr" })
+            Check($"macOS {culture}", ResxValues($"src/MegaPDF.Avalonia/Strings/Strings.{culture}.resx"));
+        foreach (var folder in new[] { "values-fr-rCA", "values-fr" })
+            Check($"Android {folder}", AndroidValues($"android/app/src/main/res/{folder}/strings.xml"));
+        foreach (var localization in new[] { "fr-CA", "fr" })
+            Check($"iOS {localization}", IosValues(localization));
+
+        Assert.True(offenders.Count == 0,
+            "French wants U+00A0 before a colon, not a plain space (docs/localisation-glossary.md):\n"
+            + string.Join("\n", offenders));
+    }
+
+    /// <summary>Anything a catalogue substitutes into, in any of the four dialects of placeholder.</summary>
+    private static readonly Regex Placeholders =
+        new(@"\{[^}]*\}|%(\d+\$)?(lld|ld|[sd@])", RegexOptions.Compiled);
+
     // --- The exemption list must not rot ---
 
     [Fact]
@@ -196,6 +244,25 @@ public class StringCatalogueTests
     }
 
     // --- helpers ---
+
+    /// <summary>One localization's values out of the iOS string catalog.</summary>
+    private static Dictionary<string, string> IosValues(string localization)
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ios/MegaPDF/Localizable.xcstrings")));
+        var values = new Dictionary<string, string>();
+        foreach (var entry in doc.RootElement.GetProperty("strings").EnumerateObject())
+        {
+            if (entry.Value.TryGetProperty("localizations", out var locs)
+                && locs.TryGetProperty(localization, out var localized)
+                && localized.GetProperty("stringUnit") is var unit
+                && unit.GetProperty("state").GetString() == "translated")
+            {
+                values[entry.Name] = unit.GetProperty("value").GetString() ?? "";
+            }
+        }
+        return values;
+    }
+
 
     private static void AssertParity(string platform, Dictionary<string, string> en, Dictionary<string, string> fr, Regex placeholder)
     {

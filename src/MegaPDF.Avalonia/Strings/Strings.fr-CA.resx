@@ -290,7 +290,7 @@
     <value>Cliquez à l'endroit où placer le nouveau texte — Échap pour annuler</value>
   </data>
   <data name="ModeHintWhiteout" xml:space="preserve">
-    <value>Glissez sur ce que vous voulez masquer. Échap pour annuler. Masquer ne retire rien : Caviarder le fait</value>
+    <value>Glissez sur ce que vous voulez masquer. Échap pour annuler. Masquer ne retire rien&#160;: Caviarder le fait</value>
   </data>
   <data name="ModeHintPlaceSignature" xml:space="preserve">
     <value>Cliquez à l'endroit où placer la signature — Échap pour annuler</value>
@@ -1015,11 +1015,11 @@
     <comment>Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactSummaryOne" xml:space="preserve">
-    <value>1 zone caviardée : {0}</value>
+    <value>1 zone caviardée&#160;: {0}</value>
     <comment>Shown after saving (#173); {0} is a list such as "41 characters, 1 image". #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactSummaryMany" xml:space="preserve">
-    <value>{0} zones caviardées : {1}</value>
+    <value>{0} zones caviardées&#160;: {1}</value>
     <comment>#173 — new French, for francophone review</comment>
   </data>
   <data name="RedactedCharacters" xml:space="preserve">
@@ -1087,7 +1087,7 @@
     <comment>#173 — new French, for francophone review</comment>
   </data>
   <data name="RedactFailed" xml:space="preserve">
-    <value>Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n'a été écrit.</value>
+    <value>Le caviardage n'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le&#160;: rien n'a été écrit.</value>
     <comment>The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="WhiteoutCoversOnlyTitle" xml:space="preserve">

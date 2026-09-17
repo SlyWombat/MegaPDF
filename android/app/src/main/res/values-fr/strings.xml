@@ -191,9 +191,9 @@
     <!-- Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review -->
     <string name="redacted_file_suffix">-caviarde</string>
     <!-- Shown after saving (#173); {0} is a list such as "41 characters, 1 image". #173 — new French, for francophone review -->
-    <string name="redact_summary_one">1 zone caviardée : %1$s</string>
+    <string name="redact_summary_one">1 zone caviardée&#160;: %1$s</string>
     <!-- #173 — new French, for francophone review -->
-    <string name="redact_summary_many">%1$s zones caviardées : %2$s</string>
+    <string name="redact_summary_many">%1$s zones caviardées&#160;: %2$s</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redacted_characters">%1$s caractères</string>
     <!-- #173 — new French, for francophone review -->
@@ -227,7 +227,7 @@
     <!-- #173 — new French, for francophone review -->
     <string name="redact_needs_permission">Ce document n\'autorise pas les modifications ; il ne peut pas être caviardé.</string>
     <!-- The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review -->
-    <string name="redact_failed">Le caviardage n\'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le : rien n\'a été écrit.</string>
+    <string name="redact_failed">Le caviardage n\'a pas pu être terminé et ce fichier ne peut plus être enregistré. Fermez-le et rouvrez-le&#160;: rien n\'a été écrit.</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redact_mark_count">%1$s zones marquées pour caviardage</string>
     <!-- #173 — new French, for francophone review -->
