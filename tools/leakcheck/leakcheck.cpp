@@ -142,9 +142,12 @@ std::vector<unsigned char> DecodedBytes(const std::string& path, const std::stri
     const std::string cmd = "qpdf --qdf --object-streams=disable --decode-level=all '" + path + "' '" +
                             scratch + "' >/dev/null 2>&1";
     std::system(cmd.c_str());
-    std::vector<unsigned char> decoded = leakcheck::ReadFile(scratch);
+    const std::vector<unsigned char> written = leakcheck::ReadFile(scratch);
     std::remove(scratch.c_str());
-    return decoded;
+    // Without qpdf's own comments: a word this count says the original uses once becomes the
+    // canary, and `%% Page 2` would otherwise make "Page 2" look like a word the document
+    // never says (its one real use invisible among qpdf's) or say it twice.
+    return leakcheck::WithoutQpdfComments(written);
 }
 
 void PrintRefusals(megapdf_redaction_report* report, const char* prefix) {

@@ -32,6 +32,7 @@
 #include "fpdf_annot.h"
 #include "fpdf_doc.h"
 #include "fpdf_edit.h"
+#include "fpdf_transformpage.h"
 #include "fpdf_text.h"
 #include "fpdfview.h"
 
@@ -233,6 +234,35 @@ inline void CheckRawBytes(const std::vector<unsigned char>& file, const std::str
 // with each stream's filters applied, so a canary hidden in a Flate content stream, an
 // image, a font or an object stream shows up as plain bytes. Returns false when qpdf is not
 // on the machine, which the caller reports as a skipped check rather than a pass.
+// qpdf annotates a --qdf file with comments of its own: the page a section belongs to, and
+// the object numbers the file had before it was rewritten. Those are qpdf's words about the
+// document, not the document's, and searching them reported a redaction that covered the
+// words "Page 2" as a leak. Drop them before searching, matching only the forms qpdf emits
+// and only at the start of a line, so decoded stream bytes that happen to contain "%%"
+// survive untouched.
+inline std::vector<unsigned char> WithoutQpdfComments(const std::vector<unsigned char>& qdf) {
+    static const char* const kComments[] = {"%% Original object ID:", "%% Contents for page ", "%% Page ", "%QDF-"};
+    std::vector<unsigned char> out;
+    out.reserve(qdf.size());
+    size_t i = 0;
+    while (i < qdf.size()) {
+        size_t eol = i;
+        while (eol < qdf.size() && qdf[eol] != '\n') eol++;
+        bool is_comment = false;
+        for (const char* prefix : kComments) {
+            const size_t n = std::strlen(prefix);
+            if (eol - i >= n && std::memcmp(&qdf[i], prefix, n) == 0) {
+                is_comment = true;
+                break;
+            }
+        }
+        if (!is_comment) out.insert(out.end(), qdf.begin() + static_cast<long>(i),
+                                    qdf.begin() + static_cast<long>((std::min)(eol + 1, qdf.size())));
+        i = eol + 1;
+    }
+    return out;
+}
+
 inline bool CheckDecodedStreams(const std::string& pdf_path, const std::string& scratch_path,
                                 const std::string& canary, std::vector<Finding>* out) {
     const std::string cmd = "qpdf --qdf --object-streams=disable --decode-level=all '" + pdf_path + "' '" +
@@ -241,11 +271,12 @@ inline bool CheckDecodedStreams(const std::string& pdf_path, const std::string& 
     // either way. Rather than decode an exit status portably, the result is judged by what
     // was written: nothing means qpdf is not on this machine, or would not read the file.
     std::system(cmd.c_str());
-    const std::vector<unsigned char> decoded = ReadFile(scratch_path);
-    if (decoded.empty()) {
+    const std::vector<unsigned char> written = ReadFile(scratch_path);
+    if (written.empty()) {
         std::remove(scratch_path.c_str());
         return false;
     }
+    const std::vector<unsigned char> decoded = WithoutQpdfComments(written);
     for (const auto& form : Forms(canary)) {
         if (Contains(decoded, form.second.data(), form.second.size())) {
             out->push_back(Finding{"qpdf-decoded " + form.first, "the canary is in a decompressed stream"});
@@ -342,11 +373,31 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
         // Mapping pixels back by hand treated a rotated page's 792 x 612 render as though
         // it were its 612 x 792 content, and compared the wrong regions entirely.
         FPDF_PAGE mapping = FPDF_LoadPage(redacted, i);
+        // An area arrives in crop space — user space less the CropBox origin, times the
+        // page's /UserUnit (#150) — because that is the space the core's API speaks.
+        // FPDF_PageToDevice speaks page space. Most pages make the two the same and hid the
+        // difference; a page whose CropBox is [0 382.1 612.1 1224.1] does not, and its mask
+        // landed 382 points down the page, so the redaction's own box counted as a change
+        // outside itself. Convert exactly as the core's InX/InY do.
+        double unit = 1.0;
+        double crop_x = 0.0, crop_y = 0.0;
+        if (mapping != nullptr) {
+            unit = FPDFPage_GetUserUnit(mapping);
+            if (!(unit > 0.0)) unit = 1.0;
+            float cl = 0, cb = 0, cr2 = 0, ct = 0;
+            if (FPDFPage_GetCropBox(mapping, &cl, &cb, &cr2, &ct) && cr2 > cl && ct > cb) {
+                crop_x = cl;
+                crop_y = cb;
+            }
+        }
         struct DeviceBox { int left, top, right, bottom; bool valid; };
         auto to_device = [&](double l, double b, double r, double t, double pad) -> DeviceBox {
             DeviceBox box{w, h, -1, -1, false};
             if (mapping == nullptr) return box;
-            const double xs[2] = {l - pad, r + pad}, ys[2] = {b - pad, t + pad};
+            // The padding is in points, and crop space is points; the division takes it into
+            // user space units along with the coordinates, as the core's PaintBox does.
+            const double xs[2] = {(l - pad) / unit + crop_x, (r + pad) / unit + crop_x};
+            const double ys[2] = {(b - pad) / unit + crop_y, (t + pad) / unit + crop_y};
             for (double x : xs) {
                 for (double y : ys) {
                     int dx = 0, dy = 0;
