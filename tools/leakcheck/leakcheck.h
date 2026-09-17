@@ -264,9 +264,9 @@ struct PixelResult {
     long long inside_wrong = 0;
     long long outside = 0;
     long long outside_changed = 0;
-    // Where the changed pixels outside the areas are, in crop space: a box tells a drifted
-    // glyph from an edge the whole way round, without anything about the document leaving
-    // the machine.
+    // Where the changed pixels outside the areas are, in the render's own device pixels: a
+    // box tells a drifted glyph from an edge the whole way round, without anything about the
+    // document leaving the machine.
     double changed_left = 0, changed_bottom = 0, changed_right = 0, changed_top = 0;
     int changed_page = -1;          // the page with the worst fraction of changed pixels
     int pages_with_areas = 0;       // pages the redaction marked
@@ -328,29 +328,61 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
             }
         }
         long long page_outside = 0, page_changed = 0;
-        const double scale = dpi / 72.0;
         const unsigned char cr = static_cast<unsigned char>((colour >> 16) & 0xFF);
         const unsigned char cg = static_cast<unsigned char>((colour >> 8) & 0xFF);
         const unsigned char cb = static_cast<unsigned char>(colour & 0xFF);
+
+        // The areas are projected INTO device space, once per page, rather than every pixel
+        // being projected out of it. FPDF_PageToDevice does what PDFium's own render does —
+        // /Rotate included, which a page renders by and a page's content does not live in.
+        // Mapping pixels back by hand treated a rotated page's 792 x 612 render as though
+        // it were its 612 x 792 content, and compared the wrong regions entirely.
+        FPDF_PAGE mapping = FPDF_LoadPage(redacted, i);
+        struct DeviceBox { int left, top, right, bottom; bool valid; };
+        auto to_device = [&](double l, double b, double r, double t, double pad) -> DeviceBox {
+            DeviceBox box{w, h, -1, -1, false};
+            if (mapping == nullptr) return box;
+            const double xs[2] = {l - pad, r + pad}, ys[2] = {b - pad, t + pad};
+            for (double x : xs) {
+                for (double y : ys) {
+                    int dx = 0, dy = 0;
+                    if (!FPDF_PageToDevice(mapping, 0, 0, w, h, 0, x, y, &dx, &dy)) return box;
+                    box.left = std::min(box.left, dx);
+                    box.right = std::max(box.right, dx);
+                    box.top = std::min(box.top, dy);
+                    box.bottom = std::max(box.bottom, dy);
+                    box.valid = true;
+                }
+            }
+            return box;
+        };
+        std::vector<DeviceBox> inside_boxes, edge_boxes;
+        for (const Area& a : page_areas) {
+            inside_boxes.push_back(to_device(a.left, a.bottom, a.right, a.top, -kEdgePt));
+            edge_boxes.push_back(to_device(a.left, a.bottom, a.right, a.top, kEdgePt));
+            if (a.has_affected()) {
+                edge_boxes.push_back(to_device(a.affected_left, a.affected_bottom, a.affected_right,
+                                               a.affected_top, kEdgePt));
+            }
+        }
+        if (mapping != nullptr) FPDF_ClosePage(mapping);
+
+        auto covers = [](const DeviceBox& box, int x, int y) {
+            return box.valid && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+        };
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                // Device to crop space: y is flipped.
-                const double px = (x + 0.5) / scale;
-                const double py = (h - y - 0.5) / scale;
                 // The box's own edge is antialiased, so a band of kEdgePt points either side
                 // of every boundary counts as neither inside nor outside: a pixel there is
-                // the edge being drawn, not content leaking or content lost.
+                // the edge being drawn, not content leaking or content lost. The same band
+                // covers where a straddling glyph took its own outside part with it.
                 bool inside = false, near_edge = false;
-                for (const Area& a : page_areas) {
-                    if (px > a.left + kEdgePt && px < a.right - kEdgePt && py > a.bottom + kEdgePt &&
-                        py < a.top - kEdgePt) {
-                        inside = true;
-                    } else if (px > a.left - kEdgePt && px < a.right + kEdgePt && py > a.bottom - kEdgePt &&
-                               py < a.top + kEdgePt) {
-                        near_edge = true;
-                    } else if (a.has_affected() && px > a.affected_left - kEdgePt && px < a.affected_right + kEdgePt &&
-                               py > a.affected_bottom - kEdgePt && py < a.affected_top + kEdgePt) {
-                        near_edge = true;   // where a straddling glyph took its own outside part with it
+                for (const DeviceBox& box : inside_boxes) {
+                    if (covers(box, x, y)) inside = true;
+                }
+                if (!inside) {
+                    for (const DeviceBox& box : edge_boxes) {
+                        if (covers(box, x, y)) near_edge = true;
                     }
                 }
                 if (near_edge && !inside) continue;
@@ -367,13 +399,13 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
                     if (std::abs(now[k] - was[k]) + std::abs(now[k + 1] - was[k + 1]) +
                         std::abs(now[k + 2] - was[k + 2]) > 60) {
                         if (result->outside_changed == 0) {
-                            result->changed_left = result->changed_right = px;
-                            result->changed_bottom = result->changed_top = py;
+                            result->changed_left = result->changed_right = x;
+                            result->changed_bottom = result->changed_top = y;
                         } else {
-                            result->changed_left = (std::min)(result->changed_left, px);
-                            result->changed_right = (std::max)(result->changed_right, px);
-                            result->changed_bottom = (std::min)(result->changed_bottom, py);
-                            result->changed_top = (std::max)(result->changed_top, py);
+                            result->changed_left = (std::min)(result->changed_left, static_cast<double>(x));
+                            result->changed_right = (std::max)(result->changed_right, static_cast<double>(x));
+                            result->changed_bottom = (std::min)(result->changed_bottom, static_cast<double>(y));
+                            result->changed_top = (std::max)(result->changed_top, static_cast<double>(y));
                         }
                         result->outside_changed++;
                         page_changed++;
