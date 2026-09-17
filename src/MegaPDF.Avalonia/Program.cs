@@ -1249,15 +1249,40 @@ internal static class Program
         // page. A focused button disabled by the busy state must not hand focus to Undo, and
         // a click on the page takes focus off the toolbar, so a later Space or Enter can't
         // press Undo, Open or anything else behind the user's back.
+        // Two waits, because this check kept failing on its own setup on GitHub's macOS
+        // runners and never on the house Mac (#176, found while adding the About checks
+        // below). Neither weakens what it asserts.
+        //
+        // The Space above opened the in-place line editor and the Escape that closes it is
+        // applied on the dispatcher, not there and then; the editor's TextBox was still
+        // holding the focus this check is about to set. And Sign is disabled while the view
+        // model is busy — the zoom changes earlier can leave a page still rasterising — so
+        // Focus() on it would quietly do nothing and leave focus nowhere at all.
+        // Pump *and* sleep: Pump only runs the dispatcher's queue, and the work that
+        // keeps the view model busy here — a page rasterising after the zoom changes
+        // above — runs on a thread pool thread, so spinning the queue alone never
+        // reaches it. A tenth of a second is plenty on the house Mac; two seconds is
+        // the ceiling for a loaded runner.
+        for (var i = 0; i < 400 && (window.FocusManager?.GetFocusedElement() is global::Avalonia.Controls.TextBox
+                                    || !vm.IsIdle); i++)
+        {
+            Pump();
+            Thread.Sleep(5);
+        }
         vm.ClearPageFocus();
         window.SignButton.Focus();
         Pump();
+        check($"Sign can take keyboard focus to begin with (enabled={window.SignButton.IsEnabled}, "
+              + $"visible={window.SignButton.IsVisible}, CanSign={vm.CanSign}, idle={vm.IsIdle})",
+              window.FocusManager?.GetFocusedElement() == window.SignButton);
         var focusedBefore = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
         using (vm.Busy.Begin(Strings.BusyApplying))
             Pump();
         Pump();
         var focusedAfter = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
-        check($"focus on {focusedBefore?.Name} disabled while busy does not move to a toolbar button (now {focusedAfter?.Name ?? focusedAfter?.GetType().Name ?? "none"})",
+        static string Describe(global::Avalonia.Controls.Control? c) =>
+            c is null ? "none" : string.IsNullOrEmpty(c.Name) ? c.GetType().Name : c.Name;
+        check($"focus on {Describe(focusedBefore)} disabled while busy does not move to a toolbar button (now {Describe(focusedAfter)})",
               focusedBefore == window.SignButton && !window.IsToolbarControl(focusedAfter));
 
         window.OpenButton.Focus();
