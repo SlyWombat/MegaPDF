@@ -43,6 +43,18 @@ adb -s "$SERIAL" shell settings put global sysui_demo_allowed 1
 adb -s "$SERIAL" shell settings put secure show_ime_with_hard_keyboard 0
 adb -s "$SERIAL" shell svc power stayon true || true
 adb -s "$SERIAL" shell wm dismiss-keyguard || true
+# Keep the keyboard's stylus onboarding sheet off the screen: it covers the app,
+# and the emulator's touchscreen is enough to make the system offer it.
+adb -s "$SERIAL" shell settings put secure stylus_handwriting_enabled 0 || true
+adb -s "$SERIAL" shell settings put secure stylus_handwriting_default_value 0 || true
+adb -s "$SERIAL" shell settings put secure show_ime_with_hard_keyboard 0 || true
+
+# Root adbd: touch.py writes to /dev/input for the gestures `input` cannot make,
+# and flows.py reads VmHWM out of /proc for the peak-memory figures. Both need it.
+adb -s "$SERIAL" root >/dev/null 2>&1 || true
+sleep 4
+adb -s "$SERIAL" wait-for-device
+adb -s "$SERIAL" shell svc power stayon true || true
 
 echo "$AVD ready on $SERIAL"
 adb -s "$SERIAL" shell wm size

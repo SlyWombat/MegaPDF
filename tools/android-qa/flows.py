@@ -36,6 +36,15 @@ SUBTITLE = (160.0, 699.0)                                      # "Sunrise Tool R
 SIGN_SPOT = (170.0, 330.0)                                     # above the rule
 TEXT_SPOT = (330.0, 330.0)
 
+# A copy of the review form, so the destructive steps (Save over it, set and
+# remove protection) do not consume the fixture itself.
+FORM = "qa-form.pdf"
+
+# Test data, and the only two secrets this rig has. Both are throwaway strings
+# for one emulator run; nothing real is ever typed into a QA device.
+SECRET = "qa-secret-146"
+WRONG = "not-the-right-one"
+
 
 class Flow:
     def __init__(self, device: Device, strings: Strings, out: str):
@@ -59,6 +68,13 @@ class Flow:
             record["ok"] = False
             record["error"] = f"{type(exc).__name__}: {exc}"
             print(f"  ! {name}: {record['error']}", flush=True)
+            try:
+                # Before recovering, not after: Back on the viewer is Close, so a
+                # shot taken afterwards shows Home whatever actually went wrong.
+                record["failure_shot"] = os.path.basename(self.d.screencap(
+                    os.path.join(self.out, f"{len(self.steps):02d}-{name}--FAILED.png")))
+            except Exception:
+                pass
             self.recover()
         record["seconds"] = round(time.time() - started, 2)
         peak = self.peak_mb()
@@ -76,13 +92,45 @@ class Flow:
               f"{'  peak ' + str(peak) + ' MB' if peak else ''}", flush=True)
 
     def recover(self) -> None:
-        """Back out of a sheet, a dialog or a system picker so the next step starts
-        somewhere known. Force-stopping would leave a picker in the foreground."""
-        for _ in range(3):
+        """Dismiss whatever is over the viewer, without closing the document.
+
+        Back on the viewer itself *is* Close, so this presses it only while
+        something is on top — a dialog, the signature sheet or a system picker —
+        and stops as soon as the bare viewer or Home is showing."""
+        self.d.dismiss_ime_promo()
+        for _ in range(4):
             try:
-                self.d.back(settle=0.5)
+                if self.at_home() or self.at_bare_viewer():
+                    return
+                self.d.back(settle=0.8)
             except Exception:
-                pass
+                return
+
+    def at_home(self) -> bool:
+        return self.d.exists(text=self.s["open_pdf"])
+
+    def at_bare_viewer(self, name: str | None = None) -> bool:
+        """The viewer with nothing over it: a page, the toolbar, and no text field.
+
+        With `name`, also that it is *that* document — Save a copy leaves the copy
+        open, so "a document is open" is not the same as "the right one is"."""
+        nodes = self.d.nodes()
+        if name is not None and not any(
+                (n.get("text") or "").lstrip("\u2022 ").startswith(name) for n in nodes):
+            return False
+        has_page = any((n.get("content-desc") or "").startswith(
+            self.s.format("page_n", 1).split()[0]) for n in nodes)
+        overlay = any(n.get("class") == "android.widget.EditText" for n in nodes) \
+            or any((n.get("text") or "") == self.s["cancel"] for n in nodes)
+        return has_page and not overlay
+
+    def ensure_viewer(self, name: str) -> None:
+        """Whatever the last step left behind, be in the viewer on `name` again."""
+        self.recover()
+        if self.at_bare_viewer(name):
+            return
+        self.restart_clean()
+        self.open_file(name)
 
     def note(self, name: str, text: str) -> None:
         self.steps.append({"step": name, "ok": True, "note": text})
@@ -100,6 +148,25 @@ class Flow:
     def page_bounds(self, index: int = 1) -> tuple[int, int, int, int]:
         node = self.d.wait_for(desc=self.s.format("page_n", index))
         return self.d._bounds(node)
+
+    def type_into(self, index: int, value: str) -> None:
+        """Type into the index-th text field, aiming at where it is *now*.
+
+        The soft keyboard moves a dialog up as it opens, so a second field tapped
+        at coordinates read before the keyboard appeared lands on the first one —
+        which is how both halves of one secret once went into the same box."""
+        node = self.d.find(klass="android.widget.EditText", index=index)
+        left, top, right, bottom = self.d._bounds(node)
+        self.d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.9)
+        self.d.type_text(value)
+
+    def clear_field(self, index: int = 0, presses: int = 64) -> None:
+        node = self.d.find(klass="android.widget.EditText", index=index)
+        left, top, right, bottom = self.d._bounds(node)
+        self.d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.9)
+        self.d.press("KEYCODE_MOVE_END", settle=0.3)
+        self.d.shell("; ".join(["input keyevent KEYCODE_DEL"] * presses))
+        time.sleep(0.5)
 
     def tap_page(self, x: float, y: float, page: int = 1, settle: float = 2.0) -> None:
         """A point in PDF points on `page`, tapped where it actually is on screen."""
@@ -142,14 +209,14 @@ def edit_flows(f: Flow) -> None:
     d, s = f.d, f.s
 
     f.step("01-open-review-form", lambda: (
-        f.restart_clean(), f.open_file("qa-form.pdf"), f.title())[-1])
+        f.restart_clean(), f.open_file(FORM), f.title())[-1])
 
     def scroll():
         d.scroll_down(0.5)
         d.scroll_down(0.5)
         d.swipe(*_up(d))
         return "scrolled down twice and back"
-    f.step("02-scroll", scroll)
+    f.step("02-scroll", lambda body=scroll: (f.ensure_viewer(FORM), body())[1])
 
     def zoom():
         # A zoomed page is wider than the display, and uiautomator clips a node's
@@ -158,19 +225,23 @@ def edit_flows(f: Flow) -> None:
         d.double_tap_fraction(0.5, 0.45)
         zoomed = d.adb("exec-out", "screencap -p", binary=True)
         d.screencap(os.path.join(f.out, "03a-zoomed.png"))
-        assert zoomed != before, "double-tap did not change the page"
+        assert zoomed != before, "double-tap did not zoom the page"
         d.double_tap_fraction(0.5, 0.45)
+        back = d.adb("exec-out", "screencap -p", binary=True)
+        assert back == before, "a second double-tap did not come back to 1x"
         d.pinch_out()
         d.screencap(os.path.join(f.out, "03b-pinched.png"))
         pinched = d.adb("exec-out", "screencap -p", binary=True)
-        return ("double-tap changed the view; pinch "
-                f"{'changed' if pinched != zoomed else 'did NOT change'} it")
-    f.step("03-zoom", zoom)
+        assert pinched != before, "pinch did not zoom the page"
+        d.pinch_in()
+        return "double-tap 1x -> 2x -> 1x, and pinch zooms; both at real touch events"
+    f.step("03-zoom", lambda body=zoom: (f.ensure_viewer(FORM), body())[1])
 
     def find():
-        d.tap(desc=s["search"], settle=2.0)
+        d.tap(desc=s["search"], settle=2.5)
         d.type_text("insurance")
-        time.sleep(3.5)
+        time.sleep(6.0)
+        d.screencap(os.path.join(f.out, "04a-search-hits.png"))
         counter = _counter(d)
         assert counter, "no match counter"
         d.tap(desc=s["next_match"], settle=1.5)
@@ -178,7 +249,7 @@ def edit_flows(f: Flow) -> None:
         after = _counter(d)
         d.tap(desc=s["close_search"], settle=1.5)
         return f"'insurance' -> {counter}, after two Next -> {after}"
-    f.step("04-find", find)
+    f.step("04-find", lambda body=find: (f.ensure_viewer(FORM), body())[1])
 
     def tick():
         for x, y in SQUARES:
@@ -187,7 +258,7 @@ def edit_flows(f: Flow) -> None:
             f.tap_page(x, y, settle=2.5)
         assert f.is_dirty(), "the document is not marked changed"
         return "3 drawn squares and 2 form widgets ticked"
-    f.step("05-tick", tick)
+    f.step("05-tick", lambda body=tick: (f.ensure_viewer(FORM), body())[1])
 
     def sign():
         d.tap(desc=s["sign"], settle=2.0)
@@ -197,12 +268,14 @@ def edit_flows(f: Flow) -> None:
         d.screencap(os.path.join(f.out, "06a-typed-signature.png"))
         d.tap(text=s["type_signature_add"], settle=2.5)
         # Back on the sheet: the new card arms placement.
-        card = d.wait_for(contains=s.format("signature_default_name", 1))
+        # "<name>. Tap to place, long-press for options." — match the part that is
+        # not the name, so it does not matter what the library called this one.
+        card = d.wait_for(contains=s.format("signature_card_a11y", "").strip(". "))
         left, top, right, bottom = d._bounds(card)
         d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=1.5)
         f.tap_page(*SIGN_SPOT, settle=4.0)
         return "typed a signature and placed it above the rule"
-    f.step("06-sign", sign)
+    f.step("06-sign", lambda body=sign: (f.ensure_viewer(FORM), body())[1])
 
     def move_and_resize():
         f.tap_page(*SIGN_SPOT, settle=2.0)          # select it
@@ -210,35 +283,29 @@ def edit_flows(f: Flow) -> None:
         d.swipe(int((left + right) / 2), int((top + bottom) * 0.55),
                 int((left + right) / 2) + 40, int((top + bottom) * 0.55) + 30, 500, settle=3.0)
         return "dragged the placed signature"
-    f.step("07-move-signature", move_and_resize)
+    f.step("07-move-signature", lambda body=move_and_resize: (f.ensure_viewer(FORM), body())[1])
 
     def add_text():
-        d.back(settle=1.0)                           # drop the selection
+        # Back on the viewer is Close, so drop the selection by tapping bare page.
+        f.tap_page(480.0, 620.0, settle=1.5)
         d.tap(desc=s["add_text"], settle=1.5)
         f.tap_page(*TEXT_SPOT, settle=2.0)
         d.type_text(NAME[s.lang])
         time.sleep(0.8)
         d.tap(text=s["add"], settle=4.0)
         return f"added '{NAME[s.lang]}'"
-    f.step("08-add-text", add_text)
+    f.step("08-add-text", lambda body=add_text: (f.ensure_viewer(FORM), body())[1])
 
     def edit_body_text():
         f.tap_page(*SUBTITLE, settle=3.0)
         d.wait_for(text=s["body_text_hint"], timeout=12)
-        field = d.find(klass="android.widget.EditText")
-        left, top, right, bottom = d._bounds(field)
-        d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.8)
-        for _ in range(60):
-            d.shell("input keyevent KEYCODE_FORWARD_DEL")
-        d.press("KEYCODE_MOVE_END", settle=0.3)
-        for _ in range(60):
-            d.shell("input keyevent KEYCODE_DEL")
+        f.clear_field()
         d.type_text("Sunrise Tool Rental - office copy")
         time.sleep(0.8)
         d.screencap(os.path.join(f.out, "09a-body-edit-dialog.png"))
         d.tap(text=s["save"], settle=5.0)
         return "retyped the document's own subtitle line"
-    f.step("09-edit-document-text", edit_body_text)
+    f.step("09-edit-document-text", lambda body=edit_body_text: (f.ensure_viewer(FORM), body())[1])
 
     def undo_redo():
         before = f.page_bounds()
@@ -248,28 +315,24 @@ def edit_flows(f: Flow) -> None:
         for _ in range(3):
             d.tap(desc=s["redo"], settle=2.5)
         return f"3 undo, 3 redo (page bounds {before})"
-    f.step("10-undo-redo", undo_redo)
+    f.step("10-undo-redo", lambda body=undo_redo: (f.ensure_viewer(FORM), body())[1])
 
     def save():
         assert f.is_dirty(), "nothing to save"
         d.tap(text=s["save"], settle=8.0)
         assert not f.is_dirty(), "still marked changed after Save"
         return "saved back over the opened file"
-    f.step("11-save", save)
+    f.step("11-save", lambda body=save: (f.ensure_viewer(FORM), body())[1])
 
     def save_as():
         d.tap(desc=s["more_options"], settle=1.0)
         d.tap(text=s["save_a_copy"], settle=3.0)
         d.screencap(os.path.join(f.out, "12a-create-document.png"))
-        field = d.find(klass="android.widget.EditText")
-        left, top, right, bottom = d._bounds(field)
-        d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.8)
-        for _ in range(48):
-            d.shell("input keyevent KEYCODE_DEL")
+        f.clear_field()
         d.type_text("qa-form-copy.pdf")
         d.tap(contains="SAVE", settle=6.0)
         return "saved a copy as qa-form-copy.pdf"
-    f.step("12-save-a-copy", save_as)
+    f.step("12-save-a-copy", lambda body=save_as: (f.ensure_viewer(FORM), body())[1])
 
 
 def protection_flows(f: Flow) -> None:
@@ -278,49 +341,45 @@ def protection_flows(f: Flow) -> None:
     def set_protection():
         d.tap(desc=s["more_options"], settle=1.0)
         d.tap(text=s["security_password_menu"], settle=2.0)
-        fields = [n for n in d.nodes() if n.get("class") == "android.widget.EditText"]
-        assert len(fields) == 2, f"{len(fields)} fields in the set dialog"
-        for node in fields:
-            left, top, right, bottom = d._bounds(node)
-            d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.6)
-            d.type_text("qa-secret-146")
-        d.tap(text=s["security_set"], settle=10.0)
+        f.type_into(0, SECRET)
+        f.type_into(1, SECRET)
+        d.screencap(os.path.join(f.out, "13a-set-dialog-filled.png"))
+        d.tap(text=s["security_set"], settle=12.0)
+        assert not d.exists(text=s["security_password_mismatch"]), \
+            "the two halves did not go into two fields"
+        d.wait_for(desc=s.format("page_n", 1), timeout=30)
         return "protection set; the document saved itself"
-    f.step("13-set-protection", set_protection)
+    f.step("13-set-protection", lambda body=set_protection: (f.ensure_viewer(FORM), body())[1])
 
     def reopen_protected():
         d.tap(desc=s["close_document"], settle=2.0)
-        f.open_file("qa-form.pdf", settle=4.0)
+        f.open_file(FORM, settle=4.0)
         d.wait_for(text=s["password_required"], timeout=15)
-        d.type_text("wrong-one")
+        d.type_text(WRONG)
         d.tap(text=s["open"], settle=4.0)
         rejected = d.exists(text=s["wrong_password"])
         d.screencap(os.path.join(f.out, "14a-rejected.png"))
-        field = d.find(klass="android.widget.EditText")
-        left, top, right, bottom = d._bounds(field)
-        d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.6)
-        for _ in range(24):
-            d.shell("input keyevent KEYCODE_DEL")
-        d.type_text("qa-secret-146")
+        f.clear_field()
+        d.type_text(SECRET)
         d.tap(text=s["open"], settle=6.0)
         d.wait_for(desc=s.format("page_n", 1), timeout=20)
         return f"wrong one rejected ({rejected}), right one opened it"
-    f.step("14-reopen-protected", reopen_protected)
+    f.step("14-reopen-protected", lambda: (f.ensure_viewer(FORM), reopen_protected())[1])
 
     def remove_protection():
         d.tap(desc=s["more_options"], settle=1.0)
         d.tap(text=s["security_password_menu"], settle=2.0)
         d.tap(text=s["security_remove"], settle=10.0)
         return "protection removed; the document saved itself"
-    f.step("15-remove-protection", remove_protection)
+    f.step("15-remove-protection", lambda body=remove_protection: (f.ensure_viewer(FORM), body())[1])
 
     def reopen_unprotected():
         d.tap(desc=s["close_document"], settle=2.0)
-        f.open_file("qa-form.pdf", settle=5.0)
+        f.open_file(FORM, settle=5.0)
         assert not d.exists(text=s["password_required"]), "still asks for a password"
         d.wait_for(desc=s.format("page_n", 1), timeout=20)
         return "opens with no prompt"
-    f.step("16-reopen-unprotected", reopen_unprotected)
+    f.step("16-reopen-unprotected", lambda: (f.ensure_viewer(FORM), reopen_unprotected())[1])
 
 
 def close_and_kill_flows(f: Flow) -> None:
@@ -338,10 +397,10 @@ def close_and_kill_flows(f: Flow) -> None:
         d.tap(text=s["discard"], settle=3.0)
         assert d.exists(text=s["open_pdf"]), "Discard did not return to Home"
         return "Save / Cancel / Discard all on one row; Cancel keeps the change"
-    f.step("17-close-with-unsaved-changes", close_with_changes)
+    f.step("17-close-with-unsaved-changes", lambda: (f.ensure_viewer(FORM), close_with_changes())[1])
 
     def killed():
-        f.open_file("qa-form.pdf", settle=5.0)
+        f.open_file(FORM, settle=5.0)
         f.tap_page(*SQUARES[1], settle=3.0)
         assert f.is_dirty(), "the tick did not mark the document changed"
         size_before = d.shell("stat -c %s /sdcard/Download/qa-form.pdf").strip()
@@ -429,11 +488,7 @@ def large_file_flows(f: Flow, only: list[str] | None = None) -> list[dict]:
                 started = time.time()
                 d.tap(desc=s["more_options"], settle=1.0)
                 d.tap(text=s["save_a_copy"], settle=4.0)
-                field = d.find(klass="android.widget.EditText")
-                left, top, right, bottom = d._bounds(field)
-                d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.8)
-                for _ in range(60):
-                    d.shell("input keyevent KEYCODE_DEL")
+                f.clear_field()
                 d.type_text("qa-" + name)
                 d.tap(contains="SAVE", settle=5.0)
                 for _ in range(60):
@@ -490,6 +545,7 @@ def main() -> int:
     d.set_app_locale(args.lang)
     d.set_dark_mode(False)
     d.set_font_scale(1.0)
+    d.shell("rm -f /sdcard/Download/qa-form*.pdf")
     d.shell("cp /sdcard/Download/MegaPDF-Test-Form.pdf /sdcard/Download/qa-form.pdf")
     d.shell("content call --uri content://media/external/file --method scan_file "
             "--arg /sdcard/Download/qa-form.pdf")

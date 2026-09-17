@@ -18,6 +18,8 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 
+from touch import Touch
+
 PACKAGE = "ca.electricrv.megapdf"
 ACTIVITY = f"{PACKAGE}/com.megapdf.android.MainActivity"
 
@@ -33,6 +35,8 @@ class NotFound(RuntimeError):
 class Device:
     def __init__(self, serial: str = "emulator-5554"):
         self.serial = serial
+        # Real kernel touch events, for the gestures `input` cannot make.
+        self.touch = Touch(self)
 
     # --- plumbing ----------------------------------------------------------
 
@@ -195,6 +199,30 @@ class Device:
             time.sleep(poll)
         raise last or NotFound(str(kw))
 
+    # The keyboard's stylus onboarding sheet, which the emulator's touchscreen is
+    # enough to trigger and which covers whatever is under it. boot.sh turns the
+    # feature off; this is the belt to that pair of braces.
+    IME_PROMOS = ("Try out your stylus", "Essayez votre stylet",
+                  "Essaie ton stylet")
+
+    def dismiss_ime_promo(self) -> bool:
+        """True if a keyboard promo was on screen and has been dismissed."""
+        try:
+            root = self.dump()
+        except AdbError:
+            return False
+        if not any((n.get("text") or "") in self.IME_PROMOS for n in root.iter("node")):
+            return False
+        for _ in range(3):
+            self.press("KEYCODE_BACK", settle=0.8)
+            try:
+                root = self.dump()
+            except AdbError:
+                return True
+            if not any((n.get("text") or "") in self.IME_PROMOS for n in root.iter("node")):
+                return True
+        return True
+
     # --- input -------------------------------------------------------------
 
     def tap_xy(self, x: int, y: int, settle: float = 0.8) -> None:
@@ -254,20 +282,23 @@ class Device:
         w, h = self.screen_size()
         self.swipe(w // 2, int(h * 0.75), w // 2, int(h * (0.75 - fraction)), ms)
 
-    def pinch_out(self, ms: int = 400) -> None:
-        """Two fingers apart — the emulator's only way to zoom the page."""
-        w, h = self.screen_size()
-        cx, cy = w // 2, h // 2
-        self.shell(
-            f"input swipe {cx - 40} {cy} {cx - int(w * 0.35)} {cy} {ms} &"
-            f" input swipe {cx + 40} {cy} {cx + int(w * 0.35)} {cy} {ms}")
-        time.sleep(1.2)
+    # Zoom needs real touch events. Two `input tap` calls are two JVM launches,
+    # which never land inside the 300 ms double-tap window, and `input` has one
+    # pointer, so it cannot pinch at all. See touch.py.
 
-    def double_tap_fraction(self, fx: float, fy: float) -> None:
+    def pinch_out(self, fy: float = 0.45, settle: float = 1.5) -> None:
         w, h = self.screen_size()
-        x, y = int(w * fx), int(h * fy)
-        self.shell(f"input tap {x} {y}; input tap {x} {y}")
-        time.sleep(1.2)
+        self.touch.pinch(w * 0.5, h * fy, from_gap=w * 0.17, to_gap=w * 0.8,
+                         steps=20, settle=settle)
+
+    def pinch_in(self, fy: float = 0.45, settle: float = 1.5) -> None:
+        w, h = self.screen_size()
+        self.touch.pinch(w * 0.5, h * fy, from_gap=w * 0.8, to_gap=w * 0.17,
+                         steps=20, settle=settle)
+
+    def double_tap_fraction(self, fx: float, fy: float, settle: float = 1.5) -> None:
+        w, h = self.screen_size()
+        self.touch.double_tap(w * fx, h * fy, settle=settle)
 
     # --- capture -----------------------------------------------------------
 

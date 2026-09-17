@@ -34,6 +34,7 @@ class Run:
         self.results: list[dict] = []
 
     def shot(self, name: str) -> str:
+        self.d.dismiss_ime_promo()
         self.d.demo_status_bar()
         path = os.path.join(self.out, f"{self.prefix}__{name}.png")
         self.d.screencap(path)
@@ -74,6 +75,12 @@ class Run:
 
     def open_file(self, display_name: str, settle: float = 4.0) -> None:
         """Home -> the system picker -> that file."""
+        self.pick(display_name)
+        time.sleep(settle)
+
+    def pick(self, display_name: str) -> None:
+        """Everything up to and including the tap on the file, and no waiting after
+        it — a busy state only exists in the moment right after."""
         self.d.tap(text=self.s["open_pdf"])
         time.sleep(2.5)
         if not self.d.exists(text=display_name):
@@ -82,8 +89,9 @@ class Run:
             self.d.tap(desc="Search", settle=1.5)
             self.d.type_text(display_name.replace(".pdf", ""))
             self.d.press("KEYCODE_ENTER", settle=2.5)
-        self.d.tap(text=display_name)
-        time.sleep(settle)
+        node = self.d.wait_for(text=display_name)
+        left, top, right, bottom = self.d._bounds(node)
+        self.d.tap_xy((left + right) // 2, (top + bottom) // 2, settle=0.0)
 
     def reset_app(self, wait: float = 3.0) -> None:
         """`pm clear` for a genuine first run — and then the per-app locale again,
@@ -389,9 +397,7 @@ def busy_scenes(r: Run) -> None:
 
     def opening():
         r.fresh()
-        d.tap(text=s["open_pdf"])
-        time.sleep(2.5)
-        d.tap(text="deep-10000.pdf", settle=0.0)
+        r.pick("deep-10000.pdf")
         time.sleep(0.9)
         r.shot("D11a-busy-opening")
         time.sleep(20)
