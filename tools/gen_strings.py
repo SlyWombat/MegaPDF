@@ -172,6 +172,10 @@ FR_CA_TO_FR_FR = [
     ("Crochet", "Coche"),
     ("Merci tout spécial à", "Un grand merci à"),
     ("fin de semaine", "week-end"),
+    # Not a word but a person: the demo signatory in the store captures, who has
+    # a different name per listing language (#146 §3, Dave 2026-09-15). Only the
+    # iOS catalogue carries it; the Mac reads its copy from DemoContent.cs.
+    ("Hélène Bélanger", "Céline Lefèvre"),
     ("Français (Canada)", "Français (Canada)"),  # language names never change
 ]
 
