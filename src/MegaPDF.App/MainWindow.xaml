@@ -105,6 +105,12 @@
             <AppBarButton x:Name="WhiteoutButton" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></AppBarButton.Icon>
             </AppBarButton>
+            <!-- Redact beside Whiteout, because the pair is the point (#173): one covers,
+                 the other removes, and each tooltip says which. Glyph E7BA is the "block
+                 out" mark; it overflows before Whiteout does, not after. -->
+            <AppBarButton x:Name="RedactButton" Click="OnRedactModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
+                <AppBarButton.Icon><FontIcon Glyph="&#xE7BA;" /></AppBarButton.Icon>
+            </AppBarButton>
             <!-- Contextual (#144): shown while Add text is armed, or an added text box is
                  selected or being edited. No formatting UI for the document's own text
                  or form fields (SDD §3.1): their formatting is inherited. -->

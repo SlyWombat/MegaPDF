@@ -65,6 +65,7 @@ public sealed partial class MainWindow
         SetLabels(SignaturesToolbarButton, Strings.ToolbarSignatures, Strings.ToolbarSignaturesTip);
         SetLabels(AddTextButton, Strings.ToolbarAddText, Strings.ToolbarAddTextTip);
         SetLabels(WhiteoutButton, Strings.ToolbarWhiteout, Strings.ToolbarWhiteoutTip);
+        SetLabels(RedactButton, Strings.ToolbarRedact, Strings.ToolbarRedactTip);
         SetLabels(UndoButton, Strings.ToolbarUndo, Strings.ToolbarUndoTip);
         SetLabels(RedoButton, Strings.ToolbarRedo, Strings.ToolbarRedoTip);
         SetLabels(ZoomOutButton, Strings.ToolbarZoomOut, Strings.ToolbarZoomOutTip);

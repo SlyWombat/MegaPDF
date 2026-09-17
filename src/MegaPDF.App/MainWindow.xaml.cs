@@ -53,7 +53,8 @@ public sealed partial class MainWindow : Window
             {
                 // Esc cancels any placement mode first.
                 if (args.Key == VirtualKey.Escape && _activeEditor is null
-                    && (ViewModel.PendingSignature is not null || ViewModel.IsWhiteoutMode || ViewModel.IsTextBoxMode))
+                    && (ViewModel.PendingSignature is not null || ViewModel.IsWhiteoutMode || ViewModel.IsTextBoxMode
+                        || ViewModel.IsRedactMode))
                 {
                     args.Handled = true;
                     ViewModel.CancelPlacementModes();
@@ -697,17 +698,24 @@ public sealed partial class MainWindow : Window
     private FrameworkElement? _hoverOverlay;
     private PageCanvas? _hoverCanvas;
 
-    // --- Whiteout drag placement ---
+    // --- Whiteout and redaction drag placement ---
 
     private bool _suppressNextTap;
     private PageCanvas? _whiteoutCanvas;
     private Border? _whiteoutPreview;
     private Windows.Foundation.Point _whiteoutStart;
 
+    /// <summary>Whether the drag in progress marks a redaction rather than covering (#173).</summary>
+    private bool _dragIsRedaction;
+
     private void OnPagePointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        if (!ViewModel.IsWhiteoutMode || ViewModel.Busy.IsBusy || sender is not PageCanvas canvas)
+        if ((!ViewModel.IsWhiteoutMode && !ViewModel.IsRedactMode) || ViewModel.Busy.IsBusy ||
+            sender is not PageCanvas canvas)
+        {
             return;
+        }
+        _dragIsRedaction = ViewModel.IsRedactMode;
         _whiteoutCanvas = canvas;
         _whiteoutStart = e.GetCurrentPoint(canvas).Position;
         _whiteoutPreview = new Border
@@ -715,7 +723,14 @@ public sealed partial class MainWindow : Window
             // White because whiteout covers the page with paper. Not a theme
             // colour: it must stay white when the app is dark, or the preview
             // would show something the saved PDF will not contain.
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) { Opacity = 0.75 },
+            //
+            // A redaction band is the opposite: translucent ink, so the text under it stays
+            // readable while it is being marked — a mark is something you check before you
+            // apply it, and it is never written to the file at all (#173).
+            Background = _dragIsRedaction
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                      Microsoft.UI.ColorHelper.FromArgb(0x3D, 0x16, 0x32, 0x4F))
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White) { Opacity = 0.75 },
             BorderBrush = Brand.Brush("BrandAccentBrush"),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -749,8 +764,48 @@ public sealed partial class MainWindow : Window
             Math.Min(_whiteoutStart.Y, end.Y) * toPoint,
             Math.Abs(end.X - _whiteoutStart.X) * toPoint,
             Math.Abs(end.Y - _whiteoutStart.Y) * toPoint);
+        if (_dragIsRedaction)
+        {
+            _dragIsRedaction = false;
+            await ViewModel.AddRedactionMarkAsync(pageView.Index, rect);
+            RefreshRedactionOverlay(canvas, pageView);
+            return;
+        }
         await ViewModel.AddWhiteoutAsync(pageView.Index, rect);
     }
+
+    /// <summary>
+    /// Draws the page's redaction marks over the raster (#173). Over, not into: a mark is
+    /// never written to the file, so there is nothing in the page image to draw, and
+    /// marking costs no re-render.
+    /// </summary>
+    private void RefreshRedactionOverlay(PageCanvas canvas, PageView pageView)
+    {
+        foreach (var stale in canvas.Children.OfType<Border>().Where(b => b.Tag as string == RedactionMarkTag).ToList())
+            canvas.Children.Remove(stale);
+
+        var scale = 96.0 / 72 * ViewModel.ZoomFactor;
+        foreach (var mark in ViewModel.RedactionMarksOn(pageView.Index))
+        {
+            canvas.Children.Add(new Border
+            {
+                Tag = RedactionMarkTag,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.ColorHelper.FromArgb(0x3D, 0x16, 0x32, 0x4F)),
+                BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.ColorHelper.FromArgb(0xB2, 0x16, 0x32, 0x4F)),
+                BorderThickness = new Thickness(1),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(mark.Bounds.X * scale, mark.Bounds.Y * scale, 0, 0),
+                Width = mark.Bounds.Width * scale,
+                Height = mark.Bounds.Height * scale,
+                IsHitTestVisible = false,
+            });
+        }
+    }
+
+    private const string RedactionMarkTag = "redaction-mark";
 
     private void OnPagePointerMoved(object sender, PointerRoutedEventArgs e)
     {
@@ -791,7 +846,7 @@ public sealed partial class MainWindow : Window
         }
 
         canvas.SetCursorShape(
-            ViewModel.PendingSignature is not null || ViewModel.IsWhiteoutMode
+            ViewModel.PendingSignature is not null || ViewModel.IsWhiteoutMode || ViewModel.IsRedactMode
                 ? Microsoft.UI.Input.InputSystemCursorShape.Cross
             : ViewModel.IsTextBoxMode
                 ? Microsoft.UI.Input.InputSystemCursorShape.IBeam
@@ -1389,6 +1444,9 @@ public sealed partial class MainWindow : Window
 
     private void OnWhiteoutModeClicked(object sender, RoutedEventArgs e) =>
         ViewModel.StartWhiteoutMode();
+
+    private void OnRedactModeClicked(object sender, RoutedEventArgs e) =>
+        ViewModel.StartRedactMode();
 
     private void OnTextBoxModeClicked(object sender, RoutedEventArgs e) =>
         ViewModel.StartTextBoxMode();

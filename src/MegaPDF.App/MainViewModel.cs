@@ -1115,12 +1115,19 @@ public partial class MainViewModel(Window window) : ObservableObject
     [NotifyPropertyChangedFor(nameof(PlacementHintVisibility), nameof(PlacementHint))]
     private bool _isTextBoxMode;
 
+    /// <summary>The Redact tool is armed (#173): the next drag marks rather than covers.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlacementHintVisibility), nameof(PlacementHint))]
+    private bool _isRedactMode;
+
     public Visibility PlacementHintVisibility =>
-        PendingSignature is not null || IsWhiteoutMode || IsTextBoxMode ? Visibility.Visible : Visibility.Collapsed;
+        PendingSignature is not null || IsWhiteoutMode || IsTextBoxMode || IsRedactMode
+            ? Visibility.Visible : Visibility.Collapsed;
 
     public string PlacementHint =>
         PendingSignature is not null ? Strings.PlaceSignatureHint(PendingSignature.Name)
         : IsWhiteoutMode ? Strings.WhiteoutHint
+        : IsRedactMode ? Strings.RedactHint
         : IsTextBoxMode ? Strings.TextBoxHint
         : "";
 
@@ -1136,6 +1143,24 @@ public partial class MainViewModel(Window window) : ObservableObject
         CancelPlacementModes();
         IsWhiteoutMode = true;
         PreparePageCheck(CurrentPage - 1); // a tool armed: its page's #139 check starts now (#145)
+    }
+
+    /// <summary>
+    /// Arms the Redact tool (#173). Redaction changes the document, so it needs the modify
+    /// permission, exactly as covering does (ADR-004 decision 2).
+    /// </summary>
+    public void StartRedactMode()
+    {
+        if (Busy.IsBusy)
+            return;
+        if (!Capabilities.CanEditContent)
+        {
+            IsRestrictedNoticeOpen = true;
+            return;
+        }
+        CancelPlacementModes();
+        IsRedactMode = true;
+        PreparePageCheck(CurrentPage - 1);
     }
 
     public void StartTextBoxMode()
@@ -1157,6 +1182,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         PendingSignature = null;
         IsWhiteoutMode = false;
         IsTextBoxMode = false;
+        IsRedactMode = false;
     }
 
     public async Task AddWhiteoutAsync(int pageIndex, PdfRect bounds)
@@ -1171,6 +1197,79 @@ public partial class MainViewModel(Window window) : ObservableObject
         if (_document is null)
             return;
         await DoEditAsync(new RemoveWhiteoutOperation(_document, pageIndex, objectIndex, bounds));
+    }
+
+    // --- Redaction (SDD §3.8 / F7, #173) ---
+
+    /// <summary>
+    /// How many areas are marked across the document: what the save path asks before it
+    /// offers the confirmation.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRedactionMarks))]
+    private int _redactionMarkCount;
+
+    public bool HasRedactionMarks => RedactionMarkCount > 0;
+
+    private (int PageIndex, int MarkId, PdfRect Bounds)? _selectedRedactionMark;
+
+    /// <summary>
+    /// Marks the dragged area (#173). Nothing is removed and nothing on the page changes: a
+    /// mark is the core's own and is never written to the file.
+    /// </summary>
+    public async Task AddRedactionMarkAsync(int pageIndex, PdfRect bounds)
+    {
+        if (_document is null || bounds.Width < 4 || bounds.Height < 4)
+            return;
+        // A drag across text marks the text, grown to whole glyphs; a drag across a picture
+        // marks the rectangle.
+        var marked = false;
+        using (var page = _document.GetPage(pageIndex))
+            marked = page.MarkTextForRedaction(bounds).Count > 0;
+        if (!marked)
+            await DoEditAsync(new MarkForRedactionOperation(_document, pageIndex, bounds));
+        RefreshRedactionMarks();
+    }
+
+    /// <summary>The marks on a page, for the overlay that draws them.</summary>
+    public IReadOnlyList<RedactionMark> RedactionMarksOn(int pageIndex)
+    {
+        if (_document is null)
+            return [];
+        using var page = _document.GetPage(pageIndex);
+        return page.GetRedactionMarks();
+    }
+
+    public void RefreshRedactionMarks() =>
+        RedactionMarkCount = _document?.RedactionMarkCount ?? 0;
+
+    /// <summary>Selects the mark under the point, so ✕ or Delete removes the right one.</summary>
+    public bool SelectRedactionMarkAt(int pageIndex, PdfPoint point)
+    {
+        if (_document is null)
+            return false;
+        using var page = _document.GetPage(pageIndex);
+        foreach (var mark in page.GetRedactionMarks())
+        {
+            if (point.X < mark.Bounds.X || point.X > mark.Bounds.X + mark.Bounds.Width ||
+                point.Y < mark.Bounds.Y || point.Y > mark.Bounds.Y + mark.Bounds.Height)
+            {
+                continue;
+            }
+            _selectedRedactionMark = (pageIndex, mark.MarkId, mark.Bounds);
+            return true;
+        }
+        return false;
+    }
+
+    public async Task<bool> RemoveSelectedRedactionMarkAsync()
+    {
+        if (_document is null || _selectedRedactionMark is not { } mark)
+            return false;
+        await DoEditAsync(new RemoveRedactionMarkOperation(_document, mark.PageIndex, mark.MarkId, mark.Bounds));
+        _selectedRedactionMark = null;
+        RefreshRedactionMarks();
+        return true;
     }
 
     /// <summary>
@@ -1496,10 +1595,147 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     private bool CanSave() => IsDocumentOpen && !Busy.IsBusy;
 
+    /// <summary>
+    /// The confirmation #173 asks for, before either save path writes anything: what
+    /// redaction does, that it cannot be undone once saved, and Save as a copy as the
+    /// DEFAULT action. Returns false when the user cancelled or the redaction refused, in
+    /// which case nothing was removed and nothing must be written.
+    /// </summary>
+    private async Task<bool> ConfirmAndApplyRedactionsAsync(bool alreadySavingACopy)
+    {
+        if (_document is null || !HasRedactionMarks || window.Content?.XamlRoot is not { } xamlRoot)
+            return true;
+
+        var dialog = new ContentDialog
+        {
+            Title = Strings.RedactConfirmTitle,
+            Content = Strings.RedactConfirmBody + "\n\n" +
+                      (RedactionMarkCount == 1 ? Strings.RedactMarkCountOne : Strings.RedactMarkCount(RedactionMarkCount)),
+            // Save as a copy is primary because redaction cannot be taken back once saved:
+            // the reversible choice should be the one Enter lands on.
+            PrimaryButtonText = alreadySavingACopy ? Strings.Save : Strings.RedactSaveCopy,
+            SecondaryButtonText = alreadySavingACopy ? null : Strings.RedactOverwrite,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        switch (await dialog.ShowAsync())
+        {
+            case ContentDialogResult.Primary when !alreadySavingACopy:
+                // Apply first: a refusal must not open a picker for a file that will not be
+                // written. Then hand the whole save over to the copy path.
+                if (!await ApplyRedactionsAsync())
+                    return false;
+                await SaveAsCommand.ExecuteAsync(null);
+                return false;   // the copy path has saved; the caller must not save again
+            case ContentDialogResult.Primary:
+            case ContentDialogResult.Secondary:
+                return await ApplyRedactionsAsync();
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Applies every mark and says what happened. True when the document was redacted and
+    /// may be saved; false when the redaction refused, and then NOTHING was removed.
+    /// </summary>
+    public async Task<bool> ApplyRedactionsAsync()
+    {
+        if (_document is not { } document || !HasRedactionMarks)
+            return true;
+        try
+        {
+            RedactionReport report;
+            using (Busy.Begin(Strings.BusyApplying))
+                report = await Task.Run(document.ApplyRedactions);
+            if (!report.Applied)
+            {
+                var refusal = report.Refusals.Count > 0 ? report.Refusals[0] : default;
+                await ShowErrorAsync(Strings.RedactRefusedTitle,
+                    Strings.RedactRefusedBody(refusal.PageIndex + 1) + "\n\n" + DescribeRefusal(refusal));
+                RefreshRedactionMarks();
+                return false;
+            }
+            // The removed content is gone, and so is every way back to it: the undo stack
+            // held the very objects the redaction freed (#173), and the journal starts again.
+            _undoStack.Clear();
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+            _selectedRedactionMark = null;
+            RefreshRedactionMarks();
+            await RefreshPagesAfterRedactionAsync();
+            RedactionSummaryText = DescribeRedaction(report.Counts);
+            IsRedactionSummaryOpen = true;
+            return true;
+        }
+        catch (DocumentRestrictedException)
+        {
+            await ShowErrorAsync(Strings.RedactRefusedTitle, Strings.RedactNeedsPermission);
+            return false;
+        }
+        catch (RedactionFailedException)
+        {
+            await ShowErrorAsync(Strings.RedactRefusedTitle, Strings.RedactFailed);
+            return false;
+        }
+    }
+
+    /// <summary>Every page's raster is stale once content has been removed.</summary>
+    private async Task RefreshPagesAfterRedactionAsync()
+    {
+        _keyboardMaps.Clear();
+        for (var i = 0; i < Pages.Count; i++)
+        {
+            if (Pages[i].Source is not null)
+                Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+        }
+        await UpdateViewportAsync(_viewFirst, _viewLast);
+    }
+
+    /// <summary>The summary after saving, e.g. "3 areas redacted: 41 characters, 1 image".</summary>
+    [ObservableProperty]
+    private string _redactionSummaryText = "";
+
+    [ObservableProperty]
+    private bool _isRedactionSummaryOpen;
+
+    internal static string DescribeRedaction(RedactionCounts counts)
+    {
+        var removed = RedactionSummary.Removed(counts,
+            (kind, n) => kind switch
+            {
+                RedactionSummary.RedactionKind.Characters => Strings.RedactedCharacters(n),
+                RedactionSummary.RedactionKind.Images => Strings.RedactedImages(n),
+                RedactionSummary.RedactionKind.FormFields => Strings.RedactedFormFields(n),
+                _ => Strings.RedactedAnnotations(n),
+            },
+            kind => kind switch
+            {
+                RedactionSummary.RedactionKind.Characters => Strings.RedactedCharactersOne,
+                RedactionSummary.RedactionKind.Images => Strings.RedactedImagesOne,
+                RedactionSummary.RedactionKind.FormFields => Strings.RedactedFormFieldsOne,
+                _ => Strings.RedactedAnnotationsOne,
+            },
+            Strings.RedactedNothing);
+        return counts.Areas == 1 ? Strings.RedactSummaryOne(removed) : Strings.RedactSummaryMany(counts.Areas, removed);
+    }
+
+    internal static string DescribeRefusal(RedactionRefusal refusal) => refusal.Reason switch
+    {
+        RedactionRefusalReason.Type3Font or RedactionRefusalReason.FontCannotRedraw => Strings.RedactRefusedFont,
+        RedactionRefusalReason.FormXObject => Strings.RedactRefusedShared,
+        RedactionRefusalReason.LayoutGuard => Strings.RedactRefusedLayout,
+        _ => Strings.RedactRefusedOther,
+    };
+
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task SaveAsync()
     {
         if (_document is null || DocumentPath is null || Busy.IsBusy)
+            return;
+
+        if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return;
 
         var document = _document;
@@ -1561,9 +1797,17 @@ public partial class MainViewModel(Window window) : ObservableObject
         if (_document is null || DocumentPath is null)
             return;
 
+        // Marks still on the document mean this Save As is the first time they are applied;
+        // the confirmation then offers the copy, which is what this already is.
+        var wasRedacted = HasRedactionMarks;
+        if (wasRedacted && !await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: true))
+            return;
+
         var picker = new FileSavePicker();
         picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
-        picker.SuggestedFileName = Strings.EditedFileName(Path.GetFileNameWithoutExtension(DocumentPath));
+        picker.SuggestedFileName = wasRedacted || RedactionSummaryText.Length > 0
+            ? Path.GetFileNameWithoutExtension(DocumentPath) + Strings.RedactedFileSuffix
+            : Strings.EditedFileName(Path.GetFileNameWithoutExtension(DocumentPath));
         WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
 
         var file = await picker.PickSaveFileAsync();
