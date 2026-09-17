@@ -1109,9 +1109,15 @@ internal static class Program
         // a click on the page takes focus off the toolbar, so a later Space or Enter can't
         // press Undo, Open or anything else behind the user's back.
         vm.ClearPageFocus();
-        window.SignButton.Focus();
-        Pump();
-        var focusedBefore = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
+        global::Avalonia.Controls.Control? focusedBefore = null;
+        for (var attempt = 0; attempt < 3 && focusedBefore != window.SignButton; attempt++)
+        {
+            // Focus occasionally does not land on the first pump in the headless platform,
+            // and a check that cannot set itself up must not fail the run (seen on arm64).
+            window.SignButton.Focus();
+            Pump();
+            focusedBefore = window.FocusManager?.GetFocusedElement() as global::Avalonia.Controls.Control;
+        }
         using (vm.Busy.Begin(Strings.BusyApplying))
             Pump();
         Pump();
