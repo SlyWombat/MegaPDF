@@ -28,10 +28,13 @@ fi
 rm -f "$DESKTOP_DIR/megapdf.desktop"
 
 # Only the files this app installed, by name. Removing the size directories
-# would take every other application's icons with them.
-find "$ICON_DIR" -name 'megapdf.png' -o -name 'megapdf.svg' 2>/dev/null | while read -r icon; do
-    rm -f "$icon"
-done
+# would take every other application's icons with them. Guarded: with
+# `set -o pipefail`, a find over a directory that is not there fails the whole
+# script, and an uninstall that stops half way is worse than one that finds
+# nothing to do.
+if [ -d "$ICON_DIR" ]; then
+    find "$ICON_DIR" \( -name 'megapdf.png' -o -name 'megapdf.svg' \) -delete
+fi
 
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true

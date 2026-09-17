@@ -49,6 +49,232 @@ jobs:
             'ios/MegaPDF/Localizable.xcstrings' \
             || { echo "::error::Generated strings are stale — run 'python3 tools/gen_strings.py fr-fr' and commit the result"; exit 1; }
 
+  # The Linux app (#158). Here rather than in a workflow of its own, and here
+  # rather than in macos-app.yml, because "on every push" is what this workflow
+  # means and what a platform at the same bar as the others needs; macos-app.yml
+  # runs on pull requests and dispatch only.
+  #
+  # Everything below runs with no display except the four steps that say
+  # otherwise. That is not an economy: --self-test drives the real view model and
+  # the #144 toolbar menus through Avalonia's headless platform, so the expensive
+  # part of the coverage costs no X server at all.
+  linux-app:
+    name: Linux app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # cups-client is what --print-check probes for, and what the app shells out
+      # to when someone prints; desktop-file-utils validates the .desktop entry.
+      # Neither is on the runner image.
+      - name: Printing and desktop tools
+        run: sudo apt-get install -y -qq cups-client desktop-file-utils xvfb
+
+      # A shell script committed without its executable bit fails with "Permission
+      # denied" only on the runner that uses it. The macOS workflow learned this
+      # twice; the Linux scripts are checked here for the same reason.
+      - name: Scripts are executable
+        run: |
+          bad=$(git ls-files -s tools/*.sh tools/linux/*.sh | grep -v '^100755' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::these scripts are committed without the executable bit:"
+            echo "$bad"
+            echo "fix with: git update-index --chmod=+x <path>"
+            exit 1
+          fi
+          echo "all tools/*.sh and tools/linux/*.sh are executable"
+
+      # The Core project would run this itself, but a separate step makes a native
+      # build failure legible instead of buried in MSBuild output (#38, ADR-003).
+      - name: Build the shared engine core (libmegapdf_core.so)
+        run: |
+          tools/fetch-pdfium-linux.sh
+          tools/build-core.sh
+
+      - name: Core tests on Linux
+        run: |
+          dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release \
+            --logger "console;verbosity=minimal" \
+            --logger "trx;LogFileName=linux-core.trx"
+
+      - name: Build the app
+        run: tools/build-linux-app.sh linux-x64 "$RUNNER_TEMP/app"
+
+      - name: Generate fixtures
+        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+
+      # --render-check returns before Avalonia is ever initialised, so it proves
+      # the app's own libmegapdf_core.so and libpdfium.so load from beside it —
+      # and nothing more. It is the step that catches a publish which quietly
+      # shipped no engine.
+      - name: The engine loads from beside the app
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --render-check "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+      # Editing, verified in the built tree: tick a checkbox, save, reopen, undo,
+      # place a signature, walk the toolbar with the keyboard. Clicking is the one
+      # thing CI cannot do, so this drives the real view model's click routing and
+      # checks through a fresh engine open of the saved file. The same check the
+      # macOS bundle runs, which is what makes "parity" a claim with evidence.
+      - name: Fill-check-sign self-test
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
+
+      # Printing is CUPS through lp. What can be wrong is the lpstat parsing that
+      # decides which queues exist and which is the default — checked against a
+      # fixed sample, because a runner has no printers and a probe that only asked
+      # the machine would pass by finding nothing.
+      - name: The CUPS printing route is sound
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --print-check "$RUNNER_TEMP/fixtures/fixture.pdf"
+
+      # fr-CA and fr on a Linux desktop (#91). .NET never reads LANGUAGE, which is
+      # the variable GNOME sets when the display language differs from the formats,
+      # so the precedence is ours and is asserted against a table.
+      - name: The POSIX locale environment is read correctly
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --language-check
+
+      - name: The desktop entry is valid
+        run: |
+          desktop-file-validate "$RUNNER_TEMP/app/MegaPDF/share/applications/megapdf.desktop"
+          echo "icons shipped:"
+          find "$RUNNER_TEMP/app/MegaPDF/share/icons" -type f | sort
+          # Every hicolor size the entry promises. A theme missing 16 and 24 leaves
+          # the title bar and the Open With menu upscaling a 48, which looks like a
+          # blurry icon rather than a broken build.
+          for size in 16 22 24 32 48 64 128 256 512; do
+            f="$RUNNER_TEMP/app/MegaPDF/share/icons/hicolor/${size}x${size}/apps/megapdf.png"
+            test -f "$f" || { echo "::error::no ${size}x${size} icon"; exit 1; }
+          done
+          test -f "$RUNNER_TEMP/app/MegaPDF/share/icons/hicolor/scalable/apps/megapdf.svg"
+
+      # A single-user install, then undone. The install rewrites Exec to an
+      # absolute path and registers the PDF association; both are the kind of thing
+      # that works on the machine it was written on and nowhere else.
+      - name: Install and uninstall for one user
+        run: |
+          fake="$RUNNER_TEMP/fakehome"
+          mkdir -p "$fake"
+          ( cd "$RUNNER_TEMP/app/MegaPDF" && HOME="$fake" ./install.sh )
+
+          entry="$fake/.local/share/applications/megapdf.desktop"
+          test -f "$entry" || { echo "::error::no desktop entry was installed"; exit 1; }
+          desktop-file-validate "$entry"
+          grep -q "^Exec=$fake/.local/lib/megapdf/MegaPDF %f$" "$entry" \
+            || { echo "::error::Exec was not rewritten to the installed path:"; grep '^Exec=' "$entry"; exit 1; }
+          grep -q '^application/pdf=megapdf.desktop$' "$fake/.config/mimeapps.list" \
+            || { echo "::error::application/pdf was not associated"; cat "$fake/.config/mimeapps.list"; exit 1; }
+          test -f "$fake/.local/share/icons/hicolor/48x48/apps/megapdf.png" \
+            || { echo "::error::no icons were installed"; exit 1; }
+          # The installed copy has to work, not just exist.
+          "$fake/.local/bin/megapdf" --render-check "$RUNNER_TEMP/fixtures/stamped.pdf"
+
+          # Stand in for a signature library and settings the person spent time on.
+          # The diagnostics above never create one — only actually using the app does
+          # — so without this the "your data survives" check below would pass by
+          # asserting about a directory that was never there.
+          mkdir -p "$fake/.local/share/MegaPDF/Signatures"
+          echo 'a signature someone spent ten minutes photographing' \
+            > "$fake/.local/share/MegaPDF/Signatures/index.json"
+
+          ( cd "$RUNNER_TEMP/app/MegaPDF" && HOME="$fake" ./uninstall.sh )
+          test ! -e "$entry" || { echo "::error::the desktop entry survived the uninstall"; exit 1; }
+          test ! -e "$fake/.local/lib/megapdf" || { echo "::error::the app tree survived the uninstall"; exit 1; }
+          test ! -e "$fake/.local/bin/megapdf" || { echo "::error::the megapdf command survived the uninstall"; exit 1; }
+          test ! -e "$fake/.local/share/icons/hicolor/48x48/apps/megapdf.png" \
+            || { echo "::error::the icons survived the uninstall"; exit 1; }
+          # And the person's own data did NOT go with it.
+          test -s "$fake/.local/share/MegaPDF/Signatures/index.json" \
+            || { echo "::error::uninstall removed the signature library and settings"; exit 1; }
+          echo "install and uninstall: PASS"
+
+      # The design tokens are looked up by name at runtime and a name that does not
+      # resolve fails silently — Brand.Brush hands back a transparent brush, so the
+      # selection border and focus ring stop being drawn while every other check
+      # still passes. Needs a display: this initialises Avalonia for real.
+      - name: Design tokens resolve
+        run: xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --brand-check
+
+      # What the running window got from the desktop: the file-dialog provider and
+      # a path round-trip through it. Reports rather than asserts which dialog will
+      # open — that choice is made when one is shown (#158).
+      - name: The window gets what it needs from the desktop
+        run: xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --desktop-check
+
+      # The UI has to be started for real. PublishSingleFile changes how the
+      # runtime resolves native libraries, and libSkiaSharp and libHarfBuzzSharp
+      # sit outside the apphost. Without this a build whose window cannot open
+      # would pass every check above.
+      - name: The UI actually starts
+        run: |
+          xvfb-run -a -s "-screen 0 1440x900x24" \
+            "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --window 1440x900 \
+            --screenshot "$RUNNER_TEMP/linux-window.png" "$RUNNER_TEMP/fixtures/demo.pdf"
+          test -s "$RUNNER_TEMP/linux-window.png" || { echo "::error::the window rendered nothing"; exit 1; }
+          # A window that opened but drew an empty page would still write a file.
+          python3 - "$RUNNER_TEMP/linux-window.png" <<'PYCHECK'
+          import struct, sys, zlib
+          data = open(sys.argv[1], 'rb').read()
+          pos, idat, w, h = 8, b'', 0, 0
+          while pos < len(data):
+              ln = struct.unpack('>I', data[pos:pos+4])[0]
+              kind = data[pos+4:pos+8]
+              if kind == b'IHDR':
+                  w, h = struct.unpack('>II', data[pos+8:pos+16])
+              elif kind == b'IDAT':
+                  idat += data[pos+8:pos+8+ln]
+              elif kind == b'IEND':
+                  break
+              pos += 12 + ln
+          raw = zlib.decompress(idat)
+          colours = {raw[i:i+3] for i in range(1, min(len(raw), 4_000_000), 97)}
+          print(f'window {w}x{h}, {len(colours)} sampled colours')
+          if w < 1000 or h < 600:
+              raise SystemExit(f'::error::the window came back {w}x{h}, not the size it was asked for')
+          if len(colours) < 8:
+              raise SystemExit('::error::the window rendered almost no colours — the page did not draw')
+          PYCHECK
+
+      # French, on Linux, through the variable .NET does not read. This is the
+      # #158 case that was broken: a French desktop with English formats.
+      - name: The app runs in French
+        run: |
+          LANG=en_CA.UTF-8 LANGUAGE=fr_CA:fr xvfb-run -a -s "-screen 0 1100x760x24" \
+            "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --window 1100x760 \
+            --screenshot "$RUNNER_TEMP/linux-fr-CA.png" "$RUNNER_TEMP/fixtures/demo-fr.pdf"
+          test -s "$RUNNER_TEMP/linux-fr-CA.png" || { echo "::error::no French window was rendered"; exit 1; }
+          LANG=en_CA.UTF-8 LANGUAGE=fr_CA:fr "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --language-check \
+            | tee "$RUNNER_TEMP/fr.log"
+          grep -q 'would run in fr-CA' "$RUNNER_TEMP/fr.log" \
+            || { echo "::error::LANGUAGE=fr_CA:fr did not put the app in French"; exit 1; }
+
+      - name: Package
+        run: |
+          tar -C "$RUNNER_TEMP/app" -czf "$RUNNER_TEMP/MegaPDF-linux-x64.tar.gz" MegaPDF
+          ls -lh "$RUNNER_TEMP/MegaPDF-linux-x64.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-linux-x64
+          path: |
+            ${{ runner.temp }}/MegaPDF-linux-x64.tar.gz
+            ${{ runner.temp }}/linux-window.png
+            ${{ runner.temp }}/linux-fr-CA.png
+          if-no-files-found: error
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-results
+          path: '**/TestResults/*.trx'
+
   build-and-test:
     runs-on: windows-latest
     steps:
