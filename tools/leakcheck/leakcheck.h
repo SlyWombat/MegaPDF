@@ -14,6 +14,10 @@
 //   5. the pixels inside the areas, which must be the redaction colour
 //
 // Header-only and dependency-free apart from PDFium and, for check 2, the qpdf binary.
+//
+// (std::min) and (std::max) in parentheses throughout: core/tests/core_tests.cpp includes
+// this after PDFium's headers, which pull in <windef.h> on Windows, and that defines min
+// and max as macros. The core does the same for the same reason.
 #ifndef MEGAPDF_LEAKCHECK_H
 #define MEGAPDF_LEAKCHECK_H
 
@@ -347,10 +351,10 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
                 for (double y : ys) {
                     int dx = 0, dy = 0;
                     if (!FPDF_PageToDevice(mapping, 0, 0, w, h, 0, x, y, &dx, &dy)) return box;
-                    box.left = std::min(box.left, dx);
-                    box.right = std::max(box.right, dx);
-                    box.top = std::min(box.top, dy);
-                    box.bottom = std::max(box.bottom, dy);
+                    box.left = (std::min)(box.left, dx);
+                    box.right = (std::max)(box.right, dx);
+                    box.top = (std::min)(box.top, dy);
+                    box.bottom = (std::max)(box.bottom, dy);
                     box.valid = true;
                 }
             }
