@@ -23,6 +23,22 @@ Microsoft Store has four listing languages (`en-US`, `en-CA`, `fr-CA`, `fr-FR`);
 the English block is pasted into both English listings. The Apple and Play
 listings have three (`en-CA` / `en`, `fr-CA`, `fr-FR`).
 
+## For the francophone reviewer
+
+Beyond the register, three things to settle:
+
+- **The Play bullets are shorter than the English**, because 500 characters in
+  French buys fewer words. "Huge PDFs open straight away, and pages full of
+  pictures draw far faster" became only *Les PDF très volumineux s'ouvrent tout
+  de suite* — the picture-heavy pages, one of 2.0's most visible improvements,
+  are dropped. Is that the right thing to lose?
+- **Store consoles sometimes normalise pasted text**, so the narrow
+  non-breaking spaces `fix_french_spacing.py` puts before `:` `;` `?` `!` are
+  worth one last look in the console itself, after pasting.
+- **"Enregistrer une copie" vs "Enregistrer sous"** — the app says the first;
+  the notes follow the app rather than the platform convention. Confirm that is
+  what you want in copy people read before they install.
+
 ## What each store's notes are the delta from
 
 The stores are not all at the same public version, so "what's new" is a

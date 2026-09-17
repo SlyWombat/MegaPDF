@@ -21,7 +21,11 @@ HERE = Path(__file__).resolve().parent
 NBSP = " "
 
 # The heading that starts each language's section, and the punctuation that takes
-# a non-breaking space before it in that language.
+# a non-breaking space before it in that language. Everything *not* in a
+# language's list takes no space at all there, which is the other half of the
+# rule and the half that is easy to get wrong: Quebec writes "1.7; la 2.0" while
+# France writes "1.7 ; la 2.0".
+ALL_PUNCTUATION = ":?!;"
 RULES = {
     "Français (Canada)": ":",
     "Français (France)": ":?!;",
@@ -33,11 +37,14 @@ PLAIN = re.compile(r"(\n```\n)(.*?)(\n```)", re.S)
 
 
 def space_before(text: str, punctuation: str) -> str:
-    """One U+00A0 before each of `punctuation`, where a space belongs at all."""
-    for mark in punctuation:
-        # Only between a word and the mark — never inside "9:41", "::" or a URL.
-        text = re.sub(rf"(?<=[^\s{NBSP}\d]) ?(?={re.escape(mark)}(?:\s|$))",
-                      NBSP, text)
+    """U+00A0 before each of `punctuation`, and no space before the others."""
+    for mark in ALL_PUNCTUATION:
+        wanted = NBSP if mark in punctuation else ""
+        # A digit before a colon is a clock or a ratio ("9:41"), never a sentence,
+        # so ":" alone refuses to follow one. The others may: "rendues à 1.7 ;".
+        preceding = rf"[^\s{NBSP}\d]" if mark == ":" else rf"[^\s{NBSP}]"
+        text = re.sub(rf"(?<={preceding})[ {NBSP}]?(?={re.escape(mark)}(?:\s|$))",
+                      wanted, text)
     return text
 
 

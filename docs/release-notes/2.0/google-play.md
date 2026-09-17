@@ -16,13 +16,13 @@ form** follows each block for the GitHub release body, which has no limit.
 
 ## English (Canada) — `en-CA`
 
-**Release notes** [500] (462)
+**Release notes** [500] (452)
 
 ```
 MegaPDF speaks French, and does a great deal more.
 
 • Correct the document's own text — tap a line and retype it
-• Type a name to make a signature, and a signature library you can rename
+• Type a name to make a signature, and rename the ones you keep
 • Open password-protected PDFs, and set, change or remove a password
 • One row of tools along the bottom, file commands under More
 • The app says what it is doing: opening, saving, searching, applying
@@ -51,13 +51,13 @@ Very large PDFs. A 2.5 GB, thousand-page file used to be out of reach; it now op
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (455)
+**Notes de version** [500] (459)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Tapez un nom pour créer une signature, et renommez votre bibliothèque
+• Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
 • L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
@@ -67,7 +67,7 @@ MegaPDF parle français, et fait bien plus encore.
 **Version longue** (corps de la publication GitHub)
 
 ```
-Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7, alors la 2.0 apporte aussi tout ce qu'il y avait entre les deux.
+Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
 
 Le français. L'application suit la langue de votre appareil; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
 
@@ -86,13 +86,13 @@ Les PDF très volumineux. Un fichier de 2,5 Go et mille pages était hors de por
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (455)
+**Notes de version** [500] (459)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Tapez un nom pour créer une signature, et renommez votre bibliothèque
+• Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
 • L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
@@ -102,7 +102,7 @@ MegaPDF parle français, et fait bien plus encore.
 **Version longue** (corps de la publication GitHub)
 
 ```
-Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7, alors la 2.0 apporte aussi tout ce qu'il y avait entre les deux.
+Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7 ; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
 
 Le français. L'application suit la langue de votre appareil ; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
 
