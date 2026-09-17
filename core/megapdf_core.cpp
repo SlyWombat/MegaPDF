@@ -133,6 +133,9 @@ struct megapdf_detached {
     // Its bounds when the edit made it: how the undo knows the object it takes off is the edit.
     // (A page reloaded between the edit and its undo holds new objects, so the pointer cannot.)
     float edited_left = 0, edited_bottom = 0, edited_right = 0, edited_top = 0;
+    // A redaction has been applied since this was detached, and the objects it held are
+    // gone (#173): restoring them would put removed content back on the page.
+    bool spent_by_redaction = false;
 };
 
 struct megapdf_page {
@@ -3005,6 +3008,12 @@ MEGAPDF_API megapdf_detached* megapdf_detach_text_runs(const megapdf_page* p, co
 MEGAPDF_API int megapdf_restore_detached(const megapdf_page* p, megapdf_detached* x) {
     if (p == nullptr || x == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (x->spent_by_redaction) {
+        // The objects are freed, not merely unreachable: putting them back is what a
+        // redaction has to make impossible (#173). The handle stays valid to discard.
+        SetError(0, "a redaction has been applied; this undo would put removed content back");
+        return MEGAPDF_ERR_REDACT;
+    }
     if ((x->owner != nullptr && p->owner != x->owner) || (x->page_index >= 0 && p->index != x->page_index)) {
         SetError(0, "the detached objects belong to another page");
         return MEGAPDF_ERR_ARGUMENT;
@@ -4826,10 +4835,14 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
 
     // Undo cannot be allowed to put the removed content back: every detached handle the
     // document holds keeps page objects alive for exactly that (contract 5).
+    // Undo cannot be allowed to put the removed content back. The handles stay valid — the
+    // apps still discard them — but they hold nothing, and restoring one says why.
     for (megapdf_detached* x : d->detached) {
         for (const auto& part : x->parts) FPDFPageObj_Destroy(part.object);
         x->parts.clear();
+        x->edited_index = -1;
         x->owner = nullptr;
+        x->spent_by_redaction = true;
     }
     d->detached.clear();
     d->redactions.clear();

@@ -13,6 +13,8 @@ on:
       - 'tools/fetch-pdfium-mac.sh'
       - 'libs/pdfium/RELEASE'
       - 'tools/gen_test_fixtures.py'
+      - 'tools/gen_redaction_fixtures.py'
+      - 'tools/leakcheck/**'
       - 'tests/MegaPDF.Core.Tests/Fixtures/**'
       - '.github/workflows/core-tests.yml'
   pull_request:
@@ -22,6 +24,8 @@ on:
       - 'tools/fetch-pdfium-mac.sh'
       - 'libs/pdfium/RELEASE'
       - 'tools/gen_test_fixtures.py'
+      - 'tools/gen_redaction_fixtures.py'
+      - 'tools/leakcheck/**'
       - 'tests/MegaPDF.Core.Tests/Fixtures/**'
       - '.github/workflows/core-tests.yml'
   workflow_dispatch:
@@ -62,7 +66,10 @@ jobs:
 
       - name: Generate fixtures
         shell: bash
-        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
 
       - name: Configure
         shell: bash

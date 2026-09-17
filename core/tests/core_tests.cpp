@@ -59,6 +59,9 @@
 #include "fpdf_edit.h"
 #include "fpdf_text.h"
 #include "fpdfview.h"
+// The #173 leak hunt, shared with tools/leakcheck so the suite and the corpus battery
+// can never disagree about what counts as a leak.
+#include "leakcheck.h"
 
 // How many MegaPDF patches the linked PDFium carries (core/CMakeLists.txt reads VERSION).
 #ifndef MEGAPDF_PDFIUM_PATCHES
@@ -1603,6 +1606,321 @@ void test_text_editing(const std::string& fixtures) {
         std::vector<unsigned char> edited;
         check(megapdf_save(d.doc, collect, &edited) == MEGAPDF_OK, "the retyped text boxes save");
         keep_saved("text-editing", edited);
+    }
+}
+
+
+// --------------------------------------------------------------------------
+// #173: redaction. Every fixture from tools/gen_redaction_fixtures.py is marked,
+// applied, saved and then hunted through by the same leak checker the corpus battery
+// runs (tools/leakcheck/leakcheck.h), so the suite and the battery can never disagree
+// about what counts as a leak.
+// --------------------------------------------------------------------------
+
+// What a fixture is expected to do. A refusal is as much a contract as a clean pass:
+// apply fails closed, and the reason it gives is what the UI shows.
+struct RedactionCase {
+    const char* fixture;
+    // The areas to mark, crop space, "page:left,bottom,right,top". Empty means "wherever
+    // the canary is drawn", found with the core's own search.
+    std::vector<std::tuple<int, double, double, double, double>> areas;
+    int expect_reason;        // 0 for a clean apply, else MEGAPDF_REDACT_*
+    const char* note;
+};
+
+std::vector<leakcheck::Area> redaction_areas_from_search(megapdf_document* doc, const char* canary) {
+    std::vector<leakcheck::Area> out;
+    auto term = utf16(canary);
+    for (int p = 0; p < megapdf_page_count(doc); p++) {
+        Page page(doc, p);
+        if (page.page == nullptr) continue;
+        const size_t n = megapdf_search_page(page.page, term.data(), nullptr, 0);
+        std::vector<double> packed(n);
+        if (n > 0) megapdf_search_page(page.page, term.data(), packed.data(), n);
+        size_t i = 0;
+        while (i < packed.size()) {
+            const size_t rects = static_cast<size_t>(packed[i++]);
+            for (size_t r = 0; r < rects && i + 4 <= packed.size(); r++, i += 4) {
+                out.push_back(leakcheck::Area{p, packed[i], packed[i + 1], packed[i + 2], packed[i + 3]});
+            }
+        }
+        const int objects = megapdf_page_object_count(page.page);
+        for (int o = 0; o < objects; o++) {
+            if (megapdf_object_type(page.page, o) != FPDF_PAGEOBJ_IMAGE) continue;
+            megapdf_rect b{};
+            if (megapdf_object_bounds(page.page, o, &b) == MEGAPDF_OK) {
+                out.push_back(leakcheck::Area{p, b.left, b.bottom, b.right, b.top});
+            }
+        }
+    }
+    return out;
+}
+
+void test_redaction_marks(const char* dir) {
+    const std::string path = std::string(dir) + "/text-partial-run.pdf";
+    Doc doc(path);
+    check(doc.doc != nullptr, "#173 fixtures are present", path);
+    if (doc.doc == nullptr) return;
+    Page page(doc.doc, 0);
+
+    check(megapdf_redaction_mark_count(doc.doc) == 0, "a fresh document has no redaction marks");
+    megapdf_rect area{100, 690, 200, 720};
+    int first = 0, second = 0;
+    check(megapdf_redaction_mark(page.page, &area, &first) == MEGAPDF_OK, "a mark is placed");
+    megapdf_rect other{210, 690, 260, 720};
+    check(megapdf_redaction_mark(page.page, &other, &second) == MEGAPDF_OK, "a second mark is placed");
+    check(first != second && first > 0 && second > 0, "marks get their own ids");
+    check(megapdf_redaction_mark_count(doc.doc) == 2, "the document counts both marks");
+
+    megapdf_redaction_area got[4]{};
+    check(megapdf_redaction_marks(page.page, got, 4) == 2, "the page lists both marks");
+    check(close_to(got[0].bounds.left, 100, 0.01) && close_to(got[1].bounds.left, 210, 0.01),
+          "the marks come back as they were given");
+
+    // An empty rectangle is not a mark.
+    megapdf_rect empty{100, 700, 100, 700};
+    check(megapdf_redaction_mark(page.page, &empty, nullptr) == MEGAPDF_ERR_ARGUMENT,
+          "a rectangle with no width or height is refused");
+
+    megapdf_rect moved{120, 695, 180, 715};
+    check(megapdf_redaction_move_mark(page.page, first, &moved) == MEGAPDF_OK, "a mark moves");
+    check(megapdf_redaction_move_mark(page.page, 9999, &moved) == MEGAPDF_ERR_ARGUMENT,
+          "moving a mark that is not there is refused");
+    check(megapdf_redaction_remove_mark(page.page, first) == MEGAPDF_OK, "a mark is removed");
+    check(megapdf_redaction_remove_mark(page.page, first) == MEGAPDF_OK,
+          "removing a mark that is already gone counts as success, so an undo cannot fail");
+    check(megapdf_redaction_mark_count(doc.doc) == 1, "one mark is left");
+
+    // Marks are the core's own: saving a document that carries them must not write them,
+    // which is the Acrobat failure #173 names.
+    std::vector<unsigned char> saved;
+    auto write = [](void* ctx, const void* data, size_t size) {
+        auto* out = static_cast<std::vector<unsigned char>*>(ctx);
+        const auto* p = static_cast<const unsigned char*>(data);
+        out->insert(out->end(), p, p + size);
+        return 1;
+    };
+    check(megapdf_save(doc.doc, write, &saved) == MEGAPDF_OK, "a document with marks still saves");
+    keep_saved("redaction-marks", saved);
+    {
+        megapdf_document* again = megapdf_open(saved.data(), saved.size(), nullptr);
+        check(again != nullptr, "the saved document reopens");
+        check(megapdf_redaction_mark_count(again) == 0,
+              "a saved document carries no marks — an unapplied mark can never ship");
+        megapdf_close(again);
+    }
+
+    megapdf_redaction_clear(doc.doc);
+    check(megapdf_redaction_mark_count(doc.doc) == 0, "clearing drops every mark");
+
+    // Text selection marks whole glyphs.
+    megapdf_rect selection{130, 698, 180, 712};
+    int ids[8]{};
+    const size_t made = megapdf_redaction_mark_text(page.page, &selection, ids, 8);
+    check(made >= 1, "a text selection makes at least one mark");
+    if (made >= 1) {
+        megapdf_redaction_area marks[8]{};
+        megapdf_redaction_marks(page.page, marks, 8);
+        check(marks[0].bounds.left <= 130.0 && marks[0].bounds.right >= 180.0,
+              "a selection mark grows to the glyphs it touches");
+    }
+    megapdf_redaction_clear(doc.doc);
+}
+
+void test_redaction_fixtures(const char* dir) {
+    // The canary every fixture hides, and the KEEP word that must survive beside it.
+    const char* canary = "CANARY-42-XYZ";
+    const std::vector<RedactionCase> cases = {
+        {"text-partial-run", {}, 0, "a run covered in the middle is rewritten around the area"},
+        {"text-run-boundary", {}, 0, "a word split across two text objects"},
+        {"text-rotated", {}, 0, "rotated text, whose glyph boxes reach well past their ink"},
+        {"text-actualtext", {}, 0, "an /ActualText span"},
+        {"text-doubled", {}, 0, "the #136 hidden copy drawn for fake bold"},
+        {"image-flate", {}, 0, "Flate pixels"},
+        {"image-jpeg", {}, 0, "a baseline JPEG, re-encoded as Flate"},
+        {"image-ccitt", {}, 0, "a CCITT Group 4 scan"},
+        {"image-jbig2", {}, 0, "a JBIG2 generic region"},
+        {"image-inline", {}, 0, "an inline image"},
+        {"image-shared", {}, 0, "one image drawn on two pages"},
+        {"image-smask", {}, 0, "an image with a soft mask"},
+        {"link", {}, 0, "a link annotation whose URI carries the canary"},
+        {"vector-canary", {{0, 98, 684, 256, 702}}, 0, "the canary drawn as filled paths, with no text at all"},
+    };
+
+    for (const RedactionCase& one : cases) {
+        const std::string path = std::string(dir) + "/" + one.fixture + ".pdf";
+        const std::string what = std::string("#173 ") + one.fixture;
+        Doc doc(path);
+        if (doc.doc == nullptr) {
+            check(false, what + ": the fixture opens", path);
+            continue;
+        }
+        std::vector<leakcheck::Area> areas;
+        if (one.areas.empty()) {
+            areas = redaction_areas_from_search(doc.doc, canary);
+        } else {
+            for (const auto& a : one.areas) {
+                areas.push_back(leakcheck::Area{std::get<0>(a), std::get<1>(a), std::get<2>(a), std::get<3>(a),
+                                                std::get<4>(a)});
+            }
+        }
+        check(!areas.empty(), what + ": there is something to redact");
+        for (const leakcheck::Area& a : areas) {
+            Page page(doc.doc, a.page_index);
+            megapdf_rect r{a.left, a.bottom, a.right, a.top};
+            megapdf_redaction_mark(page.page, &r, nullptr);
+        }
+
+        megapdf_redaction_report* report = nullptr;
+        const int rc = megapdf_redact_apply(doc.doc, nullptr, &report);
+        if (one.expect_reason != 0) {
+            check(rc == MEGAPDF_ERR_REDACT, what + ": apply refuses", one.note);
+            megapdf_redaction_refusal refusal{};
+            check(megapdf_redaction_refusals(report, &refusal, 1) >= 1 && refusal.reason == one.expect_reason,
+                  what + ": the refusal names the reason", std::to_string(refusal.reason));
+            megapdf_redaction_report_free(report);
+            continue;
+        }
+        check(rc == MEGAPDF_OK, what + ": apply succeeds", megapdf_last_error_message());
+        if (rc != MEGAPDF_OK) {
+            if (report != nullptr) {
+                std::vector<char> msg(megapdf_redaction_refusal_message(report, 0, nullptr, 0) + 1, 0);
+                megapdf_redaction_refusal_message(report, 0, msg.data(), msg.size());
+                std::fprintf(stderr, "       refusal: %s\n", msg.data());
+                megapdf_redaction_report_free(report);
+            }
+            continue;
+        }
+        check(megapdf_redaction_mark_count(doc.doc) == 0, what + ": applying drops the marks");
+        check(megapdf_redaction_poisoned(doc.doc) == 0, what + ": a completed redaction does not poison the document");
+
+        // Where the page may look different: the mark grown to whatever straddling glyph
+        // came off with it.
+        const size_t applied_count = megapdf_redaction_applied_areas(report, nullptr, 0);
+        std::vector<megapdf_redaction_applied> applied(applied_count);
+        if (applied_count > 0) megapdf_redaction_applied_areas(report, applied.data(), applied_count);
+        for (leakcheck::Area& a : areas) {
+            for (const megapdf_redaction_applied& one_area : applied) {
+                if (one_area.page_index != a.page_index) continue;
+                a.affected_left = one_area.affected.left;
+                a.affected_bottom = one_area.affected.bottom;
+                a.affected_right = one_area.affected.right;
+                a.affected_top = one_area.affected.top;
+            }
+        }
+        megapdf_redaction_report_free(report);
+
+        std::vector<unsigned char> saved;
+        auto write = [](void* ctx, const void* data, size_t size) {
+            auto* out = static_cast<std::vector<unsigned char>*>(ctx);
+            const auto* p = static_cast<const unsigned char*>(data);
+            out->insert(out->end(), p, p + size);
+            return 1;
+        };
+        check(megapdf_save(doc.doc, write, &saved) == MEGAPDF_OK, what + ": the redacted document saves");
+        keep_saved("redaction", saved);
+
+        // The leak hunt runs on files, so the saved bytes go to a scratch path.
+        const std::filesystem::path scratch =
+            std::filesystem::temp_directory_path() / (std::string("megapdf-173-") + one.fixture + ".pdf");
+        {
+            std::ofstream out(scratch, std::ios::binary);
+            out.write(reinterpret_cast<const char*>(saved.data()), static_cast<std::streamsize>(saved.size()));
+        }
+        bool qpdf_ran = false;
+        leakcheck::PixelResult pixels;
+        const std::vector<leakcheck::Finding> findings =
+            leakcheck::Check(scratch.string(), path, canary, areas, 0x000000, &qpdf_ran, &pixels);
+        for (const leakcheck::Finding& f : findings) {
+            check(false, what + ": nothing of the canary is left", f.where + " — " + f.detail);
+        }
+        if (findings.empty()) {
+            check(pixels.inside > 0, what + ": the areas have pixels to judge");
+        }
+        std::filesystem::remove(scratch);
+    }
+}
+
+// Apply fails closed: a document it refuses is not touched, and one it cannot finish can
+// never be saved.
+void test_redaction_fails_closed(const char* dir) {
+    const std::string path = std::string(dir) + "/vector-straddle.pdf";
+    Doc doc(path);
+    if (doc.doc == nullptr) {
+        check(false, "#173 vector-straddle opens", path);
+        return;
+    }
+    // The rule and the band cross the edge of this area, which cannot be clipped yet.
+    {
+        Page page(doc.doc, 0);
+        megapdf_rect r{100, 650, 300, 700};
+        megapdf_redaction_mark(page.page, &r, nullptr);
+    }
+    megapdf_redaction_report* report = nullptr;
+    const int rc = megapdf_redact_apply(doc.doc, nullptr, &report);
+    check(rc == MEGAPDF_ERR_REDACT, "#173 a straddling path is refused rather than half removed");
+    megapdf_redaction_counts counts{};
+    megapdf_redaction_report_counts(report, &counts);
+    check(counts.characters == 0 && counts.text_runs == 0 && counts.paths == 0,
+          "#173 a refused apply reports removing nothing");
+    megapdf_redaction_refusal refusal{};
+    check(megapdf_redaction_refusals(report, &refusal, 1) == 1 && refusal.page_index == 0,
+          "#173 the refusal names the page");
+    std::vector<char> msg(megapdf_redaction_refusal_message(report, 0, nullptr, 0) + 1, 0);
+    check(megapdf_redaction_refusal_message(report, 0, msg.data(), msg.size()) > 1,
+          "#173 the refusal explains itself");
+    megapdf_redaction_report_free(report);
+
+    check(megapdf_redaction_mark_count(doc.doc) == 1, "#173 a refused apply leaves the marks in place");
+    check(megapdf_redaction_poisoned(doc.doc) == 0, "#173 a refusal does not poison the document");
+    // And the page is untouched: the canary still extracts.
+    {
+        Page page(doc.doc, 0);
+        megapdf_text* text = megapdf_text_load(page.page, MEGAPDF_TEXT_ALL);
+        bool found = false;
+        for (size_t i = 0; i < megapdf_text_run_count(text); i++) {
+            const size_t n = megapdf_text_run_string(text, i, MEGAPDF_TEXT_RUN_TEXT, nullptr, 0);
+            std::vector<unsigned short> u(n + 1, 0);
+            megapdf_text_run_string(text, i, MEGAPDF_TEXT_RUN_TEXT, u.data(), u.size());
+            std::string ascii;
+            for (size_t k = 0; k < n; k++) ascii += u[k] < 0x80 ? static_cast<char>(u[k]) : '?';
+            if (ascii.find("CANARY") != std::string::npos) found = true;
+        }
+        megapdf_text_free(text);
+        check(found, "#173 a refused apply leaves the document exactly as it was");
+    }
+}
+
+// Undo cannot put redacted content back: apply frees every detached handle the document
+// holds, because those keep removed objects alive for exactly that (contract 5).
+void test_redaction_clears_undo(const char* dir) {
+    const std::string path = std::string(dir) + "/text-partial-run.pdf";
+    Doc doc(path);
+    if (doc.doc == nullptr) return;
+    megapdf_detached* detached = nullptr;
+    {
+        Page page(doc.doc, 0);
+        // Add a text box and detach it, so the document holds an undo handle.
+        auto id = utf16("redaction-undo");
+        auto text = utf16("undo me");
+        int index = -1;
+        check(megapdf_add_text_box(page.page, -1, text.data(), "Helvetica", 12, 72, 400, id.data(), &index) ==
+                  MEGAPDF_OK,
+              "#173 a text box is added before the redaction");
+        detached = megapdf_detach_object(page.page, index);
+        check(detached != nullptr, "#173 the box is detached, so the document holds an undo handle");
+        megapdf_rect r{100, 690, 200, 720};
+        megapdf_redaction_mark(page.page, &r, nullptr);
+    }
+    megapdf_redaction_report* report = nullptr;
+    const int rc = megapdf_redact_apply(doc.doc, nullptr, &report);
+    check(rc == MEGAPDF_OK, "#173 apply succeeds with an undo handle outstanding", megapdf_last_error_message());
+    megapdf_redaction_report_free(report);
+    {
+        Page page(doc.doc, 0);
+        check(megapdf_restore_detached(page.page, detached) == MEGAPDF_ERR_REDACT,
+              "#173 an undo handle from before the redaction can no longer be restored");
+        megapdf_discard_detached(detached);
     }
 }
 
@@ -4262,6 +4580,10 @@ int main(int argc, char** argv) {
     test_page_regeneration_verdict();
     test_page_check_cancel_and_concurrency();
     test_user_unit(argv[1]);
+    test_redaction_marks(argv[1]);
+    test_redaction_fixtures(argv[1]);
+    test_redaction_fails_closed(argv[1]);
+    test_redaction_clears_undo(argv[1]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

@@ -184,14 +184,13 @@ def gen_image_shared():
 
 
 def gen_image_ccitt():
-    """The same pixels as a 1-bit scan. A real Group 4 stream is what a fax-coded scan
-    carries; the core reads it through PDFium, which decodes it to the same 1 bpc bitmap
-    as this Flate-coded one, and the redaction path is the same. `--ccitt` on a machine
-    with an encoder writes the Group 4 form."""
+    """A real CCITT Group 4 scan: what a fax-coded page carries, and one of the encodings
+    a redaction has to re-encode as Flate."""
     w, h, rows = raster(CANARY)
     return _image_page(stream(b"/Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray "
-                              b"/BitsPerComponent 1 /Filter /FlateDecode" % (w, h),
-                              zlib.compress(bilevel_bytes(rows), 9)))
+                              b"/BitsPerComponent 1 /Filter /CCITTFaxDecode "
+                              b"/DecodeParms << /K -1 /Columns %d /Rows %d >>" % (w, h, w, h),
+                              _g4_encode(rows, w)))
 
 
 def gen_image_smask():
@@ -487,119 +486,170 @@ def _jpeg_grey(w, h, pixels):
     return bytes(out)
 
 
-class _MQEncoder:
-    """The MQ arithmetic coder of JBIG2 (ISO/IEC 14492 Annex E)."""
-    QE = [
-        (0x5601, 1, 1, 1), (0x3401, 2, 6, 0), (0x1801, 3, 9, 0), (0x0AC1, 4, 12, 0), (0x0521, 5, 29, 0),
-        (0x0221, 38, 33, 0), (0x5601, 7, 6, 1), (0x5401, 8, 14, 0), (0x4801, 9, 14, 0), (0x3801, 10, 14, 0),
-        (0x3001, 11, 17, 0), (0x2401, 12, 18, 0), (0x1C01, 13, 20, 0), (0x1601, 29, 21, 0), (0x5601, 15, 14, 1),
-        (0x5401, 16, 14, 0), (0x5101, 17, 15, 0), (0x4801, 18, 16, 0), (0x3801, 19, 17, 0), (0x3401, 20, 18, 0),
-        (0x3001, 21, 19, 0), (0x2801, 22, 19, 0), (0x2401, 23, 20, 0), (0x2201, 24, 21, 0), (0x1C01, 25, 22, 0),
-        (0x1801, 26, 23, 0), (0x1601, 27, 24, 0), (0x1401, 28, 25, 0), (0x1201, 29, 26, 0), (0x1101, 30, 27, 0),
-        (0x0AC1, 31, 28, 0), (0x09C1, 32, 29, 0), (0x08A1, 33, 30, 0), (0x0521, 34, 31, 0), (0x0441, 35, 32, 0),
-        (0x02A1, 36, 33, 0), (0x0221, 37, 34, 0), (0x0141, 38, 35, 0), (0x0111, 39, 36, 0), (0x0085, 40, 37, 0),
-        (0x0049, 41, 38, 0), (0x0025, 42, 39, 0), (0x0015, 43, 40, 0), (0x0009, 44, 41, 0), (0x0005, 45, 42, 0),
-        (0x0001, 45, 43, 0), (0x5601, 46, 46, 0)]
+# --------------------------------------------------------------------------
+# CCITT Group 4 (ITU-T T.6), which two fixtures need: the CCITTFaxDecode scan, and the
+# JBIG2 generic region, whose MMR coding IS Group 4. One coder, both fixtures, and both
+# genuinely encoded rather than relabelled.
+# --------------------------------------------------------------------------
 
+# Terminating codes, runs 0-63: (bits, length).
+_WHITE_TERM = [
+    (0x35, 8), (0x07, 6), (0x07, 4), (0x08, 4), (0x0B, 4), (0x0C, 4), (0x0E, 4), (0x0F, 4),
+    (0x13, 5), (0x14, 5), (0x07, 5), (0x08, 5), (0x08, 6), (0x03, 6), (0x34, 6), (0x35, 6),
+    (0x2A, 6), (0x2B, 6), (0x27, 7), (0x0C, 7), (0x08, 7), (0x17, 7), (0x03, 7), (0x04, 7),
+    (0x28, 7), (0x2B, 7), (0x13, 7), (0x24, 7), (0x18, 7), (0x02, 8), (0x03, 8), (0x1A, 8),
+    (0x1B, 8), (0x12, 8), (0x13, 8), (0x14, 8), (0x15, 8), (0x16, 8), (0x17, 8), (0x28, 8),
+    (0x29, 8), (0x2A, 8), (0x2B, 8), (0x2C, 8), (0x2D, 8), (0x04, 8), (0x05, 8), (0x0A, 8),
+    (0x0B, 8), (0x52, 8), (0x53, 8), (0x54, 8), (0x55, 8), (0x24, 8), (0x25, 8), (0x58, 8),
+    (0x59, 8), (0x5A, 8), (0x5B, 8), (0x4A, 8), (0x4B, 8), (0x32, 8), (0x33, 8), (0x34, 8)]
+# Make-up codes, runs 64, 128, ... 1728.
+_WHITE_MAKEUP = [
+    (0x1B, 5), (0x12, 5), (0x17, 6), (0x37, 7), (0x36, 8), (0x37, 8), (0x64, 8), (0x65, 8),
+    (0x68, 8), (0x67, 8), (0xCC, 9), (0xCD, 9), (0xD2, 9), (0xD3, 9), (0xD4, 9), (0xD5, 9),
+    (0xD6, 9), (0xD7, 9), (0xD8, 9), (0xD9, 9), (0xDA, 9), (0xDB, 9), (0x98, 9), (0x99, 9),
+    (0x9A, 9), (0x18, 6), (0x9B, 9)]
+_BLACK_TERM = [
+    (0x37, 10), (0x02, 3), (0x03, 2), (0x02, 2), (0x03, 3), (0x03, 4), (0x02, 4), (0x03, 5),
+    (0x05, 6), (0x04, 6), (0x04, 7), (0x05, 7), (0x07, 7), (0x04, 8), (0x07, 8), (0x18, 9),
+    (0x17, 10), (0x18, 10), (0x08, 10), (0x67, 11), (0x68, 11), (0x6C, 11), (0x37, 11), (0x28, 11),
+    (0x17, 11), (0x18, 11), (0xCA, 12), (0xCB, 12), (0xCC, 12), (0xCD, 12), (0x68, 12), (0x69, 12),
+    (0x6A, 12), (0x6B, 12), (0xD2, 12), (0xD3, 12), (0xD4, 12), (0xD5, 12), (0xD6, 12), (0xD7, 12),
+    (0x6C, 12), (0x6D, 12), (0xDA, 12), (0xDB, 12), (0x54, 12), (0x55, 12), (0x56, 12), (0x57, 12),
+    (0x64, 12), (0x65, 12), (0x52, 12), (0x53, 12), (0x24, 12), (0x37, 12), (0x38, 12), (0x27, 12),
+    (0x28, 12), (0x58, 12), (0x59, 12), (0x2B, 12), (0x2C, 12), (0x5A, 12), (0x66, 12), (0x67, 12)]
+_BLACK_MAKEUP = [
+    (0x0F, 10), (0xC8, 12), (0xC9, 12), (0x5B, 12), (0x33, 12), (0x34, 12), (0x35, 12), (0x6C, 13),
+    (0x6D, 13), (0x4A, 13), (0x4B, 13), (0x4C, 13), (0x4D, 13), (0x72, 13), (0x73, 13), (0x74, 13),
+    (0x75, 13), (0x76, 13), (0x77, 13), (0x52, 13), (0x53, 13), (0x54, 13), (0x55, 13), (0x5A, 13),
+    (0x5B, 13), (0x64, 13), (0x65, 13)]
+# Extended make-up codes, 1792 upward, shared by both colours.
+_EXT_MAKEUP = [
+    (0x08, 11), (0x0C, 11), (0x0D, 11), (0x12, 12), (0x13, 12), (0x14, 12), (0x15, 12), (0x16, 12),
+    (0x17, 12), (0x1C, 12), (0x1D, 12), (0x1E, 12), (0x1F, 12)]
+
+
+class _G4Writer:
     def __init__(self):
-        self.a = 0x8000
-        self.c = 0
-        self.ct = 12
-        self.b = []          # the output bytes, so the carry can reach the one before
-        self.first = True
+        self.out = bytearray()
+        self.acc = 0
+        self.n = 0
 
-    def _byteout(self):
-        if self.b and self.b[-1] == 0xFF:
-            self.b.append((self.c >> 20) & 0xFF)
-            self.c &= 0xFFFFF
-            self.ct = 7
-            return
-        if self.c > 0xFFFFFFF:
-            if self.b:
-                self.b[-1] = (self.b[-1] + 1) & 0xFF
-            self.c &= 0xFFFFFFF
-            if self.b and self.b[-1] == 0xFF:
-                self.b.append((self.c >> 20) & 0xFF)
-                self.c &= 0xFFFFF
-                self.ct = 7
-                return
-        self.b.append((self.c >> 19) & 0xFF)
-        self.c &= 0x7FFFF
-        self.ct = 8
-
-    def encode(self, cx, mps, ctx, d):
-        i = cx[ctx]
-        qe, nmps, nlps, switch = self.QE[i]
-        if d == mps[ctx]:
-            self.a -= qe
-            if self.a & 0x8000:
-                return
-            if self.a < qe:
-                self.a = qe
-            else:
-                self.c += qe
-            cx[ctx] = nmps
-        else:
-            self.a -= qe
-            if self.a < qe:
-                self.c += qe
-            else:
-                self.a = qe
-            if switch:
-                mps[ctx] = 1 - mps[ctx]
-            cx[ctx] = nlps
-        while True:
-            self.a = (self.a << 1) & 0xFFFF
-            self.c <<= 1
-            self.ct -= 1
-            if self.ct == 0:
-                self._byteout()
-            if self.a & 0x8000:
-                break
+    def write(self, code, length):
+        for i in range(length - 1, -1, -1):
+            self.acc = (self.acc << 1) | ((code >> i) & 1)
+            self.n += 1
+            if self.n == 8:
+                self.out.append(self.acc & 0xFF)
+                self.acc, self.n = 0, 0
 
     def flush(self):
-        temp = self.c + self.a
-        self.c |= 0xFFFF
-        if self.c >= temp:
-            self.c -= 0x8000
-        self.c <<= self.ct
-        self._byteout()
-        self.c <<= self.ct
-        self._byteout()
-        out = bytearray(self.b)
-        out += b"\xFF\xAC"
-        return bytes(out)
+        if self.n:
+            self.out.append((self.acc << (8 - self.n)) & 0xFF)
+            self.acc, self.n = 0, 0
+        return bytes(self.out)
+
+
+def _write_run(w, length, white):
+    term = _WHITE_TERM if white else _BLACK_TERM
+    makeup = _WHITE_MAKEUP if white else _BLACK_MAKEUP
+    while length >= 2624:
+        w.write(*_EXT_MAKEUP[-1])       # 2560
+        length -= 2560
+    if length >= 1792:
+        index = (length - 1792) // 64
+        w.write(*_EXT_MAKEUP[index])
+        length -= 1792 + index * 64
+    elif length >= 64:
+        index = length // 64 - 1
+        w.write(*makeup[index])
+        length -= (index + 1) * 64
+    w.write(*term[length])
+
+
+def _changing(row, start, colour, width):
+    """The first pixel at or after `start` whose colour differs from the pixel before it,
+    with the run beginning in `colour`. T.6's b1/b2 hunt, written plainly."""
+    i = start
+    if i < 0:
+        i = 0
+    prev = colour
+    while i < width:
+        if row[i] != prev:
+            return i
+        i += 1
+    return width
+
+
+def _g4_encode(rows, width):
+    """ITU-T T.6 two-dimensional coding of `rows` (1 = black), with no EOFB."""
+    w = _G4Writer()
+    reference = [0] * width          # an imaginary all-white line above the first
+    for row in rows:
+        a0 = -1
+        colour = 0                   # the colour of the run starting at a0; 0 is white
+        while a0 < width:
+            # a1: the next change in the coding line, after a0, from `colour`.
+            a1 = a0 + 1 if a0 >= 0 else 0
+            while a1 < width and row[a1] == colour:
+                a1 += 1
+            # b1: the first change in the reference line right of a0, of the opposite
+            # colour to `colour`; b2 the next change after it.
+            b1 = a0 + 1 if a0 >= 0 else 0
+            while True:
+                while b1 < width and reference[b1] == (reference[b1 - 1] if b1 > 0 else 0):
+                    b1 += 1
+                if b1 >= width or reference[b1] != colour:
+                    break
+                b1 += 1
+            b2 = b1 + 1
+            while b2 < width and reference[b2] == (reference[b2 - 1] if b2 > 0 else 0):
+                b2 += 1
+
+            if b2 < a1:
+                w.write(0x1, 4)                      # pass mode: 0001
+                a0 = b2
+                continue
+            delta = a1 - b1
+            if -3 <= delta <= 3:
+                w.write(*_VERTICAL[delta + 3])
+                a0 = a1
+                colour ^= 1
+                continue
+            # Horizontal mode: 001 then two runs, a0a1 and a1a2.
+            a2 = a1 + 1
+            while a2 < width and row[a2] != colour:
+                a2 += 1
+            w.write(0x1, 3)
+            start = a0 if a0 >= 0 else 0
+            _write_run(w, a1 - start, colour == 0)
+            _write_run(w, a2 - a1, colour != 0)
+            a0 = a2
+        reference = row
+    return w.flush()
+
+
+# Vertical mode codes for a1 - b1 of -3..3.
+_VERTICAL = [(0x02, 7), (0x02, 6), (0x02, 3), (0x1, 1), (0x03, 3), (0x03, 6), (0x03, 7)]
+
+
+def _segment(number, type_, data):
+    """A JBIG2 segment: number, flags (the type, with a one-byte page association), an empty
+    referred-to list, the page it belongs to, the length, then the data."""
+    return struct.pack(">I", number) + bytes([type_, 0x00, 1]) + struct.pack(">I", len(data)) + data
 
 
 def _jbig2_generic(w, h, rows):
-    """An embedded-stream JBIG2 immediate generic region, MMR off, template 0, TPGDON
-    off. PDF's JBIG2Decode takes the segment stream without a JBIG2 file header."""
-    enc = _MQEncoder()
-    cx = [0] * (1 << 16)
-    mps = [0] * (1 << 16)
+    """An embedded-stream JBIG2 immediate generic region coded with MMR, which is Group 4.
+    PDF's JBIG2Decode takes the segment stream with no JBIG2 file header.
 
-    def pixel(x, y):
-        if x < 0 or x >= w or y < 0:
-            return 0
-        return 1 if rows[y][x] else 0
-
-    for y in range(h):
-        for x in range(w):
-            # The GB template 0 context, in the bit order the spec builds it.
-            ctx = (pixel(x - 1, y) | pixel(x - 2, y) << 1 | pixel(x - 3, y) << 2 | pixel(x - 4, y) << 3 |
-                   pixel(x + 2, y - 1) << 4 | pixel(x + 1, y - 1) << 5 | pixel(x, y - 1) << 6 |
-                   pixel(x - 1, y - 1) << 7 | pixel(x - 2, y - 1) << 8 |
-                   pixel(x + 1, y - 2) << 9 | pixel(x, y - 2) << 10 | pixel(x - 1, y - 2) << 11)
-            enc.encode(cx, mps, ctx, 1 if rows[y][x] else 0)
-    data = enc.flush()
-
-    region = struct.pack(">IIIIB", w, h, 0, 0, 0)                        # region segment info
-    region += bytes([0])                                                  # flags: MMR 0, template 0
-    region += bytes([0x03, 0xFD, 0x02, 0xFE, 0x02, 0xFE, 0xF8, 0xFD])     # the template 0 AT pixels
-    region += data
-    # Segment header: number 0, type 38 (immediate generic region), page association 1.
-    header = struct.pack(">I", 0) + bytes([38, 0x00, 1]) + struct.pack(">I", len(region))
-    return header + region
+    The page information segment is not optional in practice: without it the region is
+    composited onto a page whose default pixel PDFium leaves set, and the whole image
+    decodes black."""
+    page = struct.pack(">IIII", w, h, 0, 0) + bytes([0x01]) + struct.pack(">H", 0)
+    region = struct.pack(">IIIIB", w, h, 0, 0, 0)   # region segment info: size, position, comb op
+    region += bytes([0x01])                          # generic region flags: MMR on
+    region += _g4_encode(rows, w)
+    return _segment(0, 48, page) + _segment(1, 38, region)
 
 
 FIXTURES = (
