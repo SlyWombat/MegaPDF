@@ -258,8 +258,17 @@ public sealed partial class MainWindow
     /// </summary>
     private void WireOverflowTooltip()
     {
-        Toolbar.Opening += (_, _) => SetOverflowTooltip(enabled: false);
-        Toolbar.Closed += (_, _) => SetOverflowTooltip(enabled: true);
+        Toolbar.Opening += (_, _) => OnOverflowToggled(open: true);
+        Toolbar.Closed += (_, _) => OnOverflowToggled(open: false);
+    }
+
+    private void OnOverflowToggled(bool open)
+    {
+        SetOverflowTooltip(enabled: !open);
+        // WinUI renames the overflow button "Less app bar" while its menu is open, which is
+        // what a screen reader then reads (#170). Ours says what it does.
+        if (FindOverflowButton(Toolbar) is { } more)
+            AutomationProperties.SetName(more, open ? Strings.CloseMoreOptions : Strings.MoreOptions);
     }
 
     private object? _overflowTooltip;

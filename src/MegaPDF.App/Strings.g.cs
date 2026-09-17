@@ -648,4 +648,10 @@ public static partial class Strings
 
     /// <summary>Saved {0}</summary>
     public static string SavedAnnouncement(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SavedAnnouncement"), arg0);
+
+    /// <summary>More options</summary>
+    public static string MoreOptions => Get("MoreOptions");
+
+    /// <summary>Close more options</summary>
+    public static string CloseMoreOptions => Get("CloseMoreOptions");
 }

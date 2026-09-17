@@ -965,4 +965,12 @@ Saved as {2} — ready to email.</value>
     <value>Saved {0}</value>
     <comment>Announced to a screen reader when a save finishes; {0} file name (#190)</comment>
   </data>
+  <data name="MoreOptions" xml:space="preserve">
+    <value>More options</value>
+    <comment>Narrator name for the toolbar overflow button when its menu is closed (#170)</comment>
+  </data>
+  <data name="CloseMoreOptions" xml:space="preserve">
+    <value>Close more options</value>
+    <comment>Narrator name for the same button while its menu is open; WinUI's own name is "Less app bar" (#170)</comment>
+  </data>
 </root>

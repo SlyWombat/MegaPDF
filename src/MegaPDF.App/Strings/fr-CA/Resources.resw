@@ -945,4 +945,10 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   <data name="SavedAnnouncement" xml:space="preserve">
     <value>{0} enregistré</value>
   </data>
+  <data name="MoreOptions" xml:space="preserve">
+    <value>Plus d'options</value>
+  </data>
+  <data name="CloseMoreOptions" xml:space="preserve">
+    <value>Fermer les options supplémentaires</value>
+  </data>
 </root>
