@@ -52,6 +52,9 @@ public class StringCatalogueTests
         ["RegionPage"] = "\"Page\" is the same word",
         ["SignatureDefaultName"] = "\"Signature\" is the same word",
         ["WindowTitleFormat"] = "\"{0} — MegaPDF\" carries no words of its own",
+        ["VersionOnly"] = "\"Version {0}\" — the word is the same, as iOS's \"Version %@\" already is (#176)",
+        ["VersionWithBuild"] = "\"Version {0} ({1})\" — same (#176)",
+        ["Zoom"] = "the Window menu item macOS itself calls Zoom in French (#176)",
         // Android
         ["document"] = "file name stem",
         ["page_n"] = "\"Page %1$d\"",
