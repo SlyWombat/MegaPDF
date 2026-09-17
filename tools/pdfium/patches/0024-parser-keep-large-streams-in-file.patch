@@ -1,0 +1,53 @@
+--- a/core/fpdfapi/parser/cpdf_parser.cpp
++++ b/core/fpdfapi/parser/cpdf_parser.cpp
+@@ -206,6 +206,7 @@
+ 
+   syntax_ = std::make_unique<CPDF_SyntaxParser>(std::move(validator),
+                                                 header_offset.value());
++  syntax_->SetKeepLargeStreamsInFile(true);
+   return ParseFileVersion();
+ }
+ 
+--- a/core/fpdfapi/parser/cpdf_syntax_parser.cpp
++++ b/core/fpdfapi/parser/cpdf_syntax_parser.cpp
+@@ -852,7 +852,15 @@
+   }
+ 
+   RetainPtr<CPDF_Stream> stream;
+-  if (substream) {
++  if (substream && keep_large_streams_in_file_ &&
++      substream->GetSize() >= kMinStreamSizeKeptInFile) {
++    // The document's parser reads from the document's file, which outlives
++    // every object the document holds: the stream reads its data from there
++    // when it is used, so a large document costs what it uses rather than
++    // everything it has parsed.
++    stream = pdfium::MakeRetain<CPDF_Stream>(std::move(substream),
++                                             std::move(dict));
++  } else if (substream) {
+     // It is unclear from CPDF_SyntaxParser's perspective what object
+     // `substream` is ultimately holding references to. To avoid unexpectedly
+     // changing object lifetimes by handing `substream` to `stream`, make a
+--- a/core/fpdfapi/parser/cpdf_syntax_parser.h
++++ b/core/fpdfapi/parser/cpdf_syntax_parser.h
+@@ -51,6 +51,13 @@
+     read_buffer_size_ = read_buffer_size;
+   }
+ 
++  // MegaPDF: streams of at least kMinStreamSizeKeptInFile bytes are read from
++  // the file when they are used, instead of being copied into memory as they
++  // are parsed. Only for a parser whose file lives as long as the objects it
++  // makes: the document's own parser.
++  static constexpr FX_FILESIZE kMinStreamSizeKeptInFile = 64 * 1024;
++  void SetKeepLargeStreamsInFile(bool keep) { keep_large_streams_in_file_ = keep; }
++
+   FX_FILESIZE GetPos() const { return pos_; }
+   void SetPos(FX_FILESIZE pos);
+ 
+@@ -128,6 +135,7 @@
+   FX_FILESIZE buf_offset_ = 0;
+   uint32_t word_size_ = 0;
+   uint32_t read_buffer_size_ = CPDF_Stream::kFileBufSize;
++  bool keep_large_streams_in_file_ = false;
+   std::array<uint8_t, 257> word_buffer_ = {};
+ 
+   // The syntax parser records traversed trailer end byte offsets here.
