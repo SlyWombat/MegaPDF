@@ -32,9 +32,12 @@ struct ContentView: View {
             case let .home(recents, error):
                 HomeView(
                     recents: recents,
+                    unavailableRecentIDs: model.unavailableRecentIDs,
                     error: error,
                     onOpen: model.openPicked,
-                    onRecent: model.openRecent
+                    onRecent: model.openRecent,
+                    onRemoveRecent: { model.removeRecent(id: $0.id) },
+                    onShowInFiles: model.showRecentInFiles
                 )
 
             case .loading:

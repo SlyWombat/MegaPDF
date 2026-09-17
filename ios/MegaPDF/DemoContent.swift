@@ -68,16 +68,59 @@ enum DemoContent {
         return UIImage(data: data)?.cgImage
     }
 
+    /// Somewhere believable for a demo document to live (#165). Localised like the
+    /// rest of the demo content: a French capture reads "Téléchargements", because
+    /// that is what the Files app would have called the folder.
+    static var iCloudDrive: String { String(localized: "iCloud Drive") }
+    static var downloadsFolder: String {
+        String(localized: "Downloads", comment: "#165: demo recents; the Files app's Downloads folder")
+    }
+    static var clientFolder: String {
+        String(localized: "Clients", comment: "#165: demo recents; a folder of client paperwork")
+    }
+    static var archiveFolder: String {
+        String(localized: "Archive", comment: "#165: demo recents; a folder of older paperwork")
+    }
+
     static func demoRecents() -> [RecentEntry] {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let day: Int64 = 86_400_000
         return [
-            (documentName, now - day / 2),
-            (String(localized: "Field Trip Permission.pdf"), now - 2 * day),
-            (String(localized: "Insurance Claim Form.pdf"), now - 6 * day),
-        ].map { name, at in
+            (documentName, now - day / 2, [iCloudDrive, clientFolder]),
+            (String(localized: "Field Trip Permission.pdf"), now - 2 * day,
+             [RecentLocation.deviceName(), downloadsFolder]),
+            (String(localized: "Insurance Claim Form.pdf"), now - 6 * day, [iCloudDrive]),
+        ].map { name, at, segments in
             RecentEntry(bookmarkBase64: Data(name.utf8).base64EncodedString(),
-                        displayName: name, lastOpenedEpochMs: at)
+                        displayName: name, lastOpenedEpochMs: at,
+                        location: RecentLocation(segments: segments))
         }
+    }
+
+    /// `-screenshot recents`: one file name from four places, one of them gone.
+    ///
+    /// The whole of #165 on a single screen — four rows nobody could have told apart
+    /// before, and the greyed-out one the Files app would show for a file that has
+    /// moved. Made up rather than real, because no simulator has an iCloud account or
+    /// a second file provider, and because a capture has to look the same every time
+    /// it is taken.
+    static func recentsScenario() -> (entries: [RecentEntry], unavailable: Set<String>) {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let day: Int64 = 86_400_000
+        // Surnames are not translated; the folders around them are.
+        let places: [(segments: [String], at: Int64)] = [
+            ([iCloudDrive, "Smith"], now - day / 4),
+            ([iCloudDrive, "Jones"], now - day),
+            ([RecentLocation.deviceName(), downloadsFolder], now - 3 * day),
+            ([iCloudDrive, archiveFolder], now - 9 * day),
+        ]
+        let entries = places.enumerated().map { index, place in
+            RecentEntry(bookmarkBase64: Data("recents-\(index)".utf8).base64EncodedString(),
+                        displayName: documentName,
+                        lastOpenedEpochMs: place.at,
+                        location: RecentLocation(segments: place.segments))
+        }
+        // The last one has moved since it was opened.
+        return (entries, Set(entries.suffix(1).map(\.id)))
     }
 }

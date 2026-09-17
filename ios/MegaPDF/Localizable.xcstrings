@@ -1,6 +1,54 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@, in %@" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, dans %@"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, dans %@"
+          }
+        }
+      }
+    },
+    "%@, not found" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, introuvable"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, introuvable"
+          }
+        }
+      }
+    },
+    "%@, not found, in %@" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, introuvable, dans %@"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, introuvable, dans %@"
+          }
+        }
+      }
+    },
     "%@, signature" : {
       "localizations" : {
         "fr" : {
@@ -276,6 +324,22 @@
         }
       }
     },
+    "Archive" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archives"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Archives"
+          }
+        }
+      }
+    },
     "Cancel" : {
       "localizations" : {
         "fr" : {
@@ -400,6 +464,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Effacer"
+          }
+        }
+      }
+    },
+    "Clients" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clients"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clients"
           }
         }
       }
@@ -916,6 +996,22 @@
         }
       }
     },
+    "Downloads" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléchargements"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Téléchargements"
+          }
+        }
+      }
+    },
     "Drag across what you want removed, or select text — Esc cancels" : {
       "comment" : "Status hint while the Redact tool is armed (#173)",
       "localizations" : {
@@ -1010,6 +1106,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Autorisation de sortie scolaire.pdf"
+          }
+        }
+      }
+    },
+    "Files couldn't show that location." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fichiers n'a pas pu afficher cet emplacement."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fichiers n'a pas pu afficher cet emplacement."
           }
         }
       }
@@ -1293,6 +1405,38 @@
         }
       }
     },
+    "Not found" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introuvable"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introuvable"
+          }
+        }
+      }
+    },
+    "Not found · %@" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introuvable · %@"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Introuvable · %@"
+          }
+        }
+      }
+    },
     "Nothing was removed" : {
       "comment" : "Shown when a redaction fails closed (#173)",
       "localizations" : {
@@ -1322,6 +1466,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "OK"
+          }
+        }
+      }
+    },
+    "On My iPad" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur mon iPad"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur mon iPad"
+          }
+        }
+      }
+    },
+    "On My iPhone" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur mon iPhone"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur mon iPhone"
           }
         }
       }
@@ -1729,6 +1905,22 @@
         }
       }
     },
+    "Remove from Recents" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer des récents"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer des récents"
+          }
+        }
+      }
+    },
     "Remove the marked content?" : {
       "comment" : "Confirmation before a redaction is applied on save (#173)",
       "localizations" : {
@@ -1967,6 +2159,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Définir un mot de passe"
+          }
+        }
+      }
+    },
+    "Show in Files" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher dans Fichiers"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Afficher dans Fichiers"
           }
         }
       }
@@ -2770,6 +2978,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "demo-fr"
+          }
+        }
+      }
+    },
+    "iCloud Drive" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Drive"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Drive"
           }
         }
       }

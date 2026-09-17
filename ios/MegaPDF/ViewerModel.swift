@@ -331,6 +331,7 @@ final class ViewerModel: ObservableObject {
 
     init() {
         state = .home(recents: recents.load(), error: nil)
+        refreshRecents()
         signatures = signatureStore.load()
         applyScreenshotModeIfNeeded()
         applyUITestDocumentIfNeeded()
@@ -359,6 +360,11 @@ final class ViewerModel: ObservableObject {
         switch mode {
         case "home":
             state = .home(recents: DemoContent.demoRecents(), error: nil)
+        // The #165 evidence shot: one file name from four places, one of them gone.
+        case "recents":
+            let scenario = DemoContent.recentsScenario()
+            unavailableRecentIDs = scenario.unavailable
+            state = .home(recents: scenario.entries, error: nil)
         case "viewer", "sign", "draw", "search", "text", "text-edit", "story", "redact":
             let resource = mode == "story" ? DemoContent.blankDemoResource : DemoContent.demoResource
             if let url = Bundle.main.url(forResource: resource, withExtension: "pdf"),
@@ -444,11 +450,132 @@ final class ViewerModel: ObservableObject {
                 resolvingBookmarkData: bookmark, options: [],
                 relativeTo: nil, bookmarkDataIsStale: &stale)
             else {
-                recents.remove(id: entry.id)
+                // Kept, not dropped (#165): the row greys out the way the Files app greys
+                // out an item that is not there, and its menu offers Remove from Recents.
+                // A file on a cloud drive or an external disk comes back, and a list that
+                // deleted the entry would have thrown away the way back to it.
+                unavailableRecentIDs.insert(entry.id)
                 toHome(String(localized: "That file is no longer accessible. Pick it again to reopen it."))
                 return
             }
             openPicked(url: url)
+        }
+    }
+
+    // MARK: - recents (#165)
+
+    /// Entries whose file is no longer where it was, so their rows grey out.
+    ///
+    /// Held here rather than stored: a file comes back when a drive is plugged in or
+    /// an iCloud download finishes, and a list that remembered "gone" would be wrong
+    /// the moment it did.
+    @Published private(set) var unavailableRecentIDs: Set<String> = []
+
+    private var recentsRefresh: Task<Void, Never>?
+
+    /// What one pass over the stored entries found.
+    private struct RecentsScan: Sendable {
+        var unavailable: Set<String> = []
+        /// Locations for the entries stored before #165, which have none.
+        var filled: [String: RecentLocation] = [:]
+    }
+
+    /// Fills in the locations of entries written before #165, and marks the ones
+    /// whose file has gone.
+    ///
+    /// Deliberately after the list is already on screen, and off the main actor: this
+    /// resolves bookmarks, and resolving ten of them — some of them cloud files — is
+    /// not work to do while a view is being laid out. That is the whole reason the
+    /// location is recorded at open time instead. Each entry is written back once, so
+    /// the next launch has nothing to do.
+    func refreshRecents() {
+        // A screenshot launch shows made-up recents, which are in no store and must
+        // not be replaced by what is.
+        guard DemoContent.requestedState == nil else { return }
+        recentsRefresh?.cancel()
+        let entries = recents.load()
+        guard !entries.isEmpty else {
+            unavailableRecentIDs = []
+            return
+        }
+        let device = RecentLocation.deviceName()
+        recentsRefresh = Task { [weak self] in
+            let scan = await Task.detached(priority: .utility) {
+                ViewerModel.scanRecents(entries, deviceName: device)
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            self.unavailableRecentIDs = scan.unavailable
+            guard !scan.filled.isEmpty else { return }
+            for (id, location) in scan.filled {
+                self.recents.setLocation(location, id: id)
+            }
+            if case let .home(_, error) = self.state {
+                self.state = .home(recents: self.recents.load(), error: error)
+            }
+        }
+    }
+
+    /// The file-system half of `refreshRecents`, off the main actor.
+    private nonisolated static func scanRecents(_ entries: [RecentEntry],
+                                                deviceName: String) -> RecentsScan {
+        var scan = RecentsScan()
+        for entry in entries {
+            if Task.isCancelled { return scan }
+            var stale = false
+            guard let bookmark = entry.bookmarkData,
+                  let url = try? URL(resolvingBookmarkData: bookmark, options: [],
+                                     relativeTo: nil, bookmarkDataIsStale: &stale)
+            else {
+                scan.unavailable.insert(entry.id)
+                continue
+            }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            if !FileManager.default.fileExists(atPath: url.path) {
+                scan.unavailable.insert(entry.id)
+            }
+            if entry.location == nil, let location = RecentLocation.of(url, deviceName: deviceName) {
+                scan.filled[entry.id] = location
+            }
+        }
+        return scan
+    }
+
+    /// Takes a row off the list, from its context menu.
+    func removeRecent(id: String) {
+        let updated = recents.remove(id: id)
+        unavailableRecentIDs.remove(id)
+        if case let .home(_, error) = state {
+            state = .home(recents: updated, error: error)
+        }
+    }
+
+    /// Reveals a recent document in the Files app, from its context menu (#165).
+    ///
+    /// `shareddocuments:` is how the Files app is asked to reveal a path. It is a URL
+    /// scheme rather than any private interface, and it is not declared in
+    /// `LSApplicationQueriesSchemes`, so `canOpenURL` cannot be asked in advance and
+    /// the answer comes back from `open` instead — the spec for this asks for the
+    /// item "where the system supports it", and a place the system will not reveal
+    /// says so rather than doing nothing.
+    func showRecentInFiles(_ entry: RecentEntry) {
+        guard let bookmark = entry.bookmarkData else { return }
+        var stale = false
+        guard let url = try? URL(resolvingBookmarkData: bookmark, options: [],
+                                 relativeTo: nil, bookmarkDataIsStale: &stale),
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else {
+            unavailableRecentIDs.insert(entry.id)
+            statusMessage = String(localized: "That file is no longer accessible. Pick it again to reopen it.")
+            return
+        }
+        components.scheme = "shareddocuments"
+        guard let filesURL = components.url else { return }
+        UIApplication.shared.open(filesURL, options: [:]) { [weak self] opened in
+            guard !opened else { return }
+            self?.statusMessage = String(
+                localized: "Files couldn't show that location.",
+                comment: "#165: the Files app refused to reveal a recent document")
         }
     }
 
@@ -493,10 +620,19 @@ final class ViewerModel: ObservableObject {
             }
             if let sourceURL,
                let bookmark = try? sourceURL.bookmarkData() {
+                // Where the file lives, recorded now while the app holds the URL and the
+                // right to read around it (#165). Off the main actor: it stats the parent
+                // folder, and for a cloud file that is a round trip.
+                let device = RecentLocation.deviceName()
+                let location = await Task.detached(priority: .utility) {
+                    RecentLocation.of(sourceURL, deviceName: device)
+                }.value
                 recents.add(RecentEntry(
                     bookmarkBase64: bookmark.base64EncodedString(),
                     displayName: displayName,
-                    lastOpenedEpochMs: Int64(Date().timeIntervalSince1970 * 1000)))
+                    lastOpenedEpochMs: Int64(Date().timeIntervalSince1970 * 1000),
+                    location: location))
+                unavailableRecentIDs.remove(bookmark.base64EncodedString())
             }
             state = .viewing(displayName: displayName, pageSizes: sizes)
             // A restricted open says so, and where the owner password goes (ADR-004 §3).
@@ -1669,10 +1805,12 @@ final class ViewerModel: ObservableObject {
         guard !closeBlocked else { return }
         closeCurrent()
         state = .home(recents: recents.load(), error: nil)
+        refreshRecents()
     }
 
     private func toHome(_ error: String) {
         state = .home(recents: recents.load(), error: error)
+        refreshRecents()
     }
 
     private func closeCurrent() {

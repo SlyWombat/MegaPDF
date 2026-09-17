@@ -85,6 +85,11 @@ public class StringCatalogueTests
         ["Signature %lld"] = "same",
         ["Signatures"] = "same word",
         ["Version %@"] = "same",
+        // #165: where a recent document lives. Apple's own French spells these two
+        // exactly as English does — the Files app's sidebar reads "iCloud Drive" in
+        // French, and "Clients" is the same word.
+        ["iCloud Drive"] = "the Files app's sidebar says iCloud Drive in French too (#165)",
+        ["Clients"] = "the same word in both (#165 demo recents)",
     };
 
     private static readonly Regex DotNetPlaceholder = new(@"\{(\d+)(?:[:,][^}]*)?\}", RegexOptions.Compiled);
