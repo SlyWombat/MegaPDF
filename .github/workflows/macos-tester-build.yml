@@ -66,6 +66,8 @@ jobs:
           BIN="$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF"
           CONTAINER="$HOME/Library/Containers/com.megapdf.ios/Data"
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
 
           "$BIN" > "$RUNNER_TEMP/first-launch.log" 2>&1 &
           PID=$!; sleep 8; kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true

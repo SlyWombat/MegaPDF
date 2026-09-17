@@ -81,6 +81,8 @@ jobs:
           CONTAINER="$HOME/Library/Containers/com.megapdf.ios/Data"
 
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
 
           # First launch materialises the container.
           "$BIN" > "$RUNNER_TEMP/first-launch.log" 2>&1 &

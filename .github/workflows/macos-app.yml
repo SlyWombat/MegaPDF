@@ -68,6 +68,8 @@ jobs:
         shell: bash
         run: |
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           dotnet run --project src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release --no-build -- \
             --self-test "$RUNNER_TEMP/fixtures"
 
@@ -97,6 +99,8 @@ jobs:
       - name: Engine loads inside the bundle
         run: |
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
             "$RUNNER_TEMP/fixtures/stamped.pdf"
 
@@ -333,6 +337,8 @@ jobs:
         continue-on-error: true
         run: |
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # The #173 redaction fixtures land in the same directory; the names do not clash.
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           if "$RUNNER_TEMP/sandboxed/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
                "$RUNNER_TEMP/fixtures/stamped.pdf"; then
             echo "::warning::render-check SUCCEEDED — the sandbox is not restricting file reads."
