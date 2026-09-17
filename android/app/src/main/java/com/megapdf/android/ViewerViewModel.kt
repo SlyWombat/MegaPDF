@@ -373,7 +373,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var renderJob: Job? = null
     private val renderedWidths = HashMap<Int, Int>()
-    private var lastWindow: Triple<Int, Int, Int>? = null
+    private var lastWindow: RenderWindow? = null
 
     /** Unsaved changes, and D3 of #145: a save marks saved only if nothing changed while it ran. */
     private val dirty = DirtyTracker()
@@ -640,6 +640,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Puts [opened] on screen in place of whatever was open. */
     private fun show(opened: OpenedDocument, uri: Uri) {
+        // The window the page list last asked for, before closeCurrent() forgets it.
+        // A document replaced in place — a password set, changed or removed, or an
+        // owner-password unlock — leaves the list with nothing to report: same range,
+        // same page sizes, same width. So it never calls back, and every bitmap has
+        // just been thrown away. See RenderWindow (#146).
+        val previousWindow = lastWindow
         closeCurrent()
         attach(opened.doc, opened.security)
         currentUri = uri
@@ -651,6 +657,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             RecentEntry(uri.toString(), name, System.currentTimeMillis())
         )
         uiState = ViewerUiState.Viewing(name, opened.pageSizes)
+        previousWindow?.clampedTo(opened.pageSizes.size)?.let {
+            updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx)
+        }
         // ADR-004 decision 3: a restricted open says so; the menu offers the owner password.
         if (capabilities.isRestricted) showNotice(str(R.string.security_restricted_notice))
     }
@@ -676,7 +685,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun updateRenderWindow(firstVisible: Int, lastVisible: Int, targetWidthPx: Int) {
         val state = uiState as? ViewerUiState.Viewing ?: return
         val doc = document ?: return
-        lastWindow = Triple(firstVisible, lastVisible, targetWidthPx)
+        lastWindow = RenderWindow(firstVisible, lastVisible, targetWidthPx)
         val window = (firstVisible - RENDER_MARGIN).coerceAtLeast(0)..
             (lastVisible + RENDER_MARGIN).coerceAtMost(state.pageSizes.size - 1)
 
@@ -1391,7 +1400,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private fun markEditedAndRerender(pageIndex: Int) {
         dirty.markEdited()
         renderedWidths.remove(pageIndex)
-        lastWindow?.let { (first, last, width) -> updateRenderWindow(first, last, width) }
+        lastWindow?.let { updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx) }
     }
 
     /**
