@@ -238,6 +238,9 @@ inline bool CheckDecodedStreams(const std::string& pdf_path, const std::string& 
 // How far the redaction box's antialiased edge reaches, in points.
 constexpr double kEdgePt = 2.0;
 
+// The #118 guard's page budget: a change under this share of a page's pixels is accepted.
+constexpr double kRenderBudget = 0.0005;
+
 struct PixelResult {
     long long inside = 0;
     long long inside_wrong = 0;
@@ -247,6 +250,14 @@ struct PixelResult {
     // glyph from an edge the whole way round, without anything about the document leaving
     // the machine.
     double changed_left = 0, changed_bottom = 0, changed_right = 0, changed_top = 0;
+    int changed_page = -1;          // the page with the worst fraction of changed pixels
+    int pages_with_areas = 0;       // pages the redaction marked
+    // The worst page's share of changed pixels outside the areas. The core's #118 guard
+    // accepts a change under 0.05% of a page — anti-aliasing at rewritten coordinates, and
+    // the colour a codec shifts by when an image is re-encoded (tools/pdfium/README.md
+    // "Known limits"). This is judged by the same budget, per page, so the checker and the
+    // guard cannot disagree about what "unchanged outside" means.
+    double worst_page_fraction = 0.0;
 };
 
 inline bool RenderPage(FPDF_PAGE page, int dpi, std::vector<unsigned char>* out, int* w, int* h) {
@@ -257,7 +268,11 @@ inline bool RenderPage(FPDF_PAGE page, int dpi, std::vector<unsigned char>* out,
     FPDF_BITMAP bmp = FPDFBitmap_Create(*w, *h, 0);
     if (bmp == nullptr) return false;
     FPDFBitmap_FillRect(bmp, 0, 0, *w, *h, 0xFFFFFFFF);
-    FPDF_RenderPageBitmap(bmp, page, 0, 0, *w, *h, 0, FPDF_ANNOT);
+    // Annotations are drawn, as a reader draws them: a redaction that removes a widget or
+    // a link has to leave the page looking right with them on. MEGAPDF_LEAKCHECK_NO_ANNOT
+    // turns them off, which is how a difference is told from an annotation that went.
+    static const bool annots = std::getenv("MEGAPDF_LEAKCHECK_NO_ANNOT") == nullptr;
+    FPDF_RenderPageBitmap(bmp, page, 0, 0, *w, *h, 0, annots ? FPDF_ANNOT : 0);
     const auto* px = static_cast<const unsigned char*>(FPDFBitmap_GetBuffer(bmp));
     const int stride = FPDFBitmap_GetStride(bmp);
     out->assign(static_cast<size_t>(*w) * static_cast<size_t>(*h) * 4, 0);
@@ -274,6 +289,7 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
     for (int i = 0; i < FPDF_GetPageCount(redacted); i++) {
         std::vector<Area> page_areas;
         for (const Area& a : areas) if (a.page_index == i) page_areas.push_back(a);
+        if (!page_areas.empty()) result->pages_with_areas++;
 
         FPDF_PAGE page = FPDF_LoadPage(redacted, i);
         if (page == nullptr) continue;
@@ -293,6 +309,7 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
                 FPDF_ClosePage(before);
             }
         }
+        long long page_outside = 0, page_changed = 0;
         const double scale = dpi / 72.0;
         const unsigned char cr = static_cast<unsigned char>((colour >> 16) & 0xFF);
         const unsigned char cg = static_cast<unsigned char>((colour >> 8) & 0xFF);
@@ -328,6 +345,7 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
                     }
                 } else if (have_original) {
                     result->outside++;
+                    page_outside++;
                     if (std::abs(now[k] - was[k]) + std::abs(now[k + 1] - was[k + 1]) +
                         std::abs(now[k + 2] - was[k + 2]) > 60) {
                         if (result->outside_changed == 0) {
@@ -340,8 +358,16 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
                             result->changed_top = (std::max)(result->changed_top, py);
                         }
                         result->outside_changed++;
+                        page_changed++;
                     }
                 }
+            }
+        }
+        if (page_outside > 0) {
+            const double fraction = static_cast<double>(page_changed) / static_cast<double>(page_outside);
+            if (fraction > result->worst_page_fraction) {
+                result->worst_page_fraction = fraction;
+                result->changed_page = i;
             }
         }
     }
@@ -350,10 +376,12 @@ inline bool CheckPixels(FPDF_DOCUMENT redacted, FPDF_DOCUMENT original, const st
                                std::to_string(result->inside_wrong) + " of " + std::to_string(result->inside) +
                                    " are not the redaction colour"});
     }
-    if (result->outside_changed > 0) {
+    // Over the guard's budget on some page: a change the redaction is not entitled to.
+    if (result->worst_page_fraction > kRenderBudget) {
         out->push_back(Finding{"pixels outside the area",
                                std::to_string(result->outside_changed) + " of " + std::to_string(result->outside) +
-                                   " changed"});
+                                   " changed; worst page " + std::to_string(result->changed_page) + " at " +
+                                   std::to_string(result->worst_page_fraction * 100.0) + "%"});
     }
     return true;
 }

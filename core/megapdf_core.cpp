@@ -3882,8 +3882,39 @@ struct Refusal {
 
 // Plans the page: what every object intersecting `areas` needs. False, with `refusal` set,
 // when something intersecting cannot be removed safely. Nothing on the page changes.
+// The words a redaction took off a page, as whole runs of characters between the gaps it
+// made. The outline, the page labels and a tagged document's structure tree all repeat a
+// page's text outside its content stream, and only a string can find them there (#173).
+std::vector<U16> RemovedWords(const std::vector<RObject>& plan, const ObjectChars& chars, FPDF_PAGE page) {
+    std::vector<U16> words;
+    for (const RObject& o : *(&plan)) {
+        if (o.hidden_copy) continue;   // the same characters as its run, already taken
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(page, o.index);
+        const auto it = chars.find(obj);
+        if (it == chars.end()) continue;
+        // Everything the run had, less what stayed: the survivors are a subsequence, so
+        // walking both together gives the removed stretches.
+        size_t kept = 0;
+        U16 current;
+        for (const CharPos& c : it->second) {
+            if (c.generated) continue;
+            const bool stays = kept < o.survivors.size() && o.survivors[kept].ox == c.ox &&
+                               o.survivors[kept].oy == c.oy && o.survivors[kept].unicode == c.unicode;
+            if (stays) {
+                kept++;
+                if (current.size() >= 4) words.push_back(current);
+                current.clear();
+            } else if (c.unicode > 0 && c.unicode <= 0xFFFF) {
+                current.push_back(static_cast<unsigned short>(c.unicode));
+            }
+        }
+        if (current.size() >= 4) words.push_back(current);
+    }
+    return words;
+}
+
 bool PlanPageUnlocked(FPDF_PAGE page, const std::vector<Area>& areas, std::vector<RObject>* plan,
-                      std::vector<int>* annots, Refusal* refusal) {
+                      std::vector<int>* annots, Refusal* refusal, std::vector<U16>* out_removed_words = nullptr) {
     plan->clear();
     annots->clear();
     FPDF_TEXTPAGE text_page = FPDFText_LoadPage(page);
@@ -4025,6 +4056,13 @@ bool PlanPageUnlocked(FPDF_PAGE page, const std::vector<Area>& areas, std::vecto
         std::sort(plan->begin(), plan->end(), [](const RObject& a, const RObject& b) { return a.index < b.index; });
     }
     (void)claimed_copies;
+    if (ok && out_removed_words != nullptr) {
+        try {
+            *out_removed_words = RemovedWords(*plan, chars, page);
+        } catch (...) {
+            out_removed_words->clear();
+        }
+    }
     if (text_page != nullptr) FPDFText_ClosePage(text_page);
     if (!ok) return false;
 
@@ -4401,17 +4439,28 @@ bool ExecutePageUnlocked(FPDF_DOCUMENT doc, FPDF_PAGE page, const std::vector<Ar
 // only the runs that do not reach into an area. So what the guard proves is exactly what
 // #173 asks it to: nothing OUTSIDE the area moved.
 bool CompareRedaction(FPDF_PAGE was_page, FPDF_PAGE reopened, const std::vector<Area>& areas,
-                      megapdf_layout_verdict* out) {
+                      const Area& affected, megapdf_layout_verdict* out) {
     megapdf_layout_verdict v{};
     const ScratchShot shot_was = RenderScratchPage(was_page);
     const ScratchShot shot_now = RenderScratchPage(reopened);
     if (shot_was.w == 0 || shot_now.w == 0 || shot_was.w != shot_now.w || shot_was.h != shot_now.h) return false;
 
-    // 1 where a marked area covers the pixel: changes there are the redaction's own.
+    // 1 where the redaction is allowed to have changed the page: the marked areas, and the
+    // bounds of everything it removed. A glyph cannot be half removed, so one straddling the
+    // edge of an area takes its outside part with it; the box covers the mark, not that
+    // overhang, so those pixels change and are not a fault. What the guard is here to catch
+    // is a change somewhere ELSE — another line moving, an image resampling, a colour
+    // shifting — and that is every pixel outside this mask.
     std::vector<unsigned char> masked(static_cast<size_t>(shot_was.w) * static_cast<size_t>(shot_was.h), 0);
     for (const Area& a : areas) {
         PaintBox(was_page, shot_was, PageBox{static_cast<float>(a.l), static_cast<float>(a.b),
                                              static_cast<float>(a.r), static_cast<float>(a.t)},
+                 1.0f, 1, &masked);
+    }
+    if (affected.r > affected.l && affected.t > affected.b) {
+        PaintBox(was_page, shot_was,
+                 PageBox{static_cast<float>(affected.l), static_cast<float>(affected.b),
+                         static_cast<float>(affected.r), static_cast<float>(affected.t)},
                  1.0f, 1, &masked);
     }
     int outside = 0, changed = 0;
@@ -4438,8 +4487,10 @@ bool CompareRedaction(FPDF_PAGE was_page, FPDF_PAGE reopened, const std::vector<
     std::vector<char> taken(runs_now.size(), 0);
     bool text_changed = false;
     double worst = 0;
+    const bool have_affected = affected.r > affected.l && affected.t > affected.b;
     for (const ScratchRun& was : runs_was) {
         if (OverlapsAny(areas, was.left, was.bottom, was.right, was.top)) continue;   // the redaction's own
+        if (have_affected && Overlaps(affected, was.left, was.bottom, was.right, was.top)) continue;
         double best = 1e30;
         size_t best_index = runs_now.size();
         for (size_t j = 0; j < runs_now.size(); j++) {
@@ -4495,36 +4546,61 @@ bool RedactionLeftNothingUnlocked(FPDF_PAGE page, const std::vector<Area>& areas
     return true;
 }
 
-// Phase 2 for one page: apply the plan to a scratch copy, save it, reopen it, and judge it
-// against a reopened copy of the page as it was. Nothing on the document is touched.
-bool RehearsePageUnlocked(megapdf_document* d, int page_index, const std::vector<Area>& areas,
-                          const megapdf_redact_options& opt, Refusal* refusal) {
+// Phase 2: rehearse the WHOLE redaction on a scratch copy of every marked page, and let
+// the guard judge each page against the copy of it before the redaction.
+//
+// Every marked page at once, not one at a time. A page-at-a-time rehearsal works on a
+// one-page document and therefore cannot see anything a redaction on one page does to
+// another — a resource the two share, a name the writer reuses across them. The corpus
+// found exactly that: three pages redacted together changed a logo that none of the three
+// redacted alone. Importing all of them into one scratch document reproduces whatever they
+// do to each other, and the guard sees it before the document itself is touched.
+//
+// `affected_by_page` comes back filled in, so the caller reports where each page may look
+// different without doing the work twice.
+bool RehearseUnlocked(megapdf_document* d, const std::vector<int>& pages,
+                      const std::map<int, std::vector<Area>>& areas_by_page, const megapdf_redact_options& opt,
+                      std::map<int, Area>* affected_by_page, int* out_page, Refusal* refusal) {
+    *out_page = pages.empty() ? 0 : pages.front();
     refusal->reason = MEGAPDF_REDACT_PDFIUM;
-    refusal->message = "the redaction could not be rehearsed on a copy of the page";
+    refusal->message = "the redaction could not be rehearsed on a copy of the pages";
+    if (pages.empty()) return true;
+
     FPDF_DOCUMENT scratch = FPDF_CreateNewDocument();
     if (scratch == nullptr) return false;
-    const int indices[1] = {page_index};
-    FPDF_PAGE page = FPDF_ImportPagesByIndex(scratch, d->doc, indices, 1, 0) ? FPDF_LoadPage(scratch, 0) : nullptr;
-    if (page == nullptr) {
+    if (!FPDF_ImportPagesByIndex(scratch, d->doc, pages.data(), static_cast<unsigned long>(pages.size()), 0)) {
         FPDF_CloseDocument(scratch);
         return false;
     }
-    // Compare like with like: PDFium resolves a non-embedded font once per document against a
-    // process-wide cache, so the page is rendered once before the copies are judged (#128).
-    WarmFontsUnlocked(d->doc, page_index, nullptr, nullptr);
+    // Compare like with like: PDFium resolves a non-embedded font once per document against
+    // a process-wide cache, so every page is rendered once before the copies are judged (#128).
+    for (int page_index : pages) WarmFontsUnlocked(d->doc, page_index, nullptr, nullptr);
 
     ScratchWriter before{};
     before.fw.version = 1;
     before.fw.WriteBlock = ScratchWriteBlock;
     bool ok = FPDF_SaveAsCopy(scratch, &before.fw, 0) == 1;
 
-    megapdf_redaction_counts counts{};
-    std::vector<RObject> plan;
-    std::vector<int> annots;
-    if (ok) ok = PlanPageUnlocked(page, areas, &plan, &annots, refusal);
-    if (ok) ok = ExecutePageUnlocked(scratch, page, areas, plan, annots, opt, &counts, refusal);
-
-    FPDF_ClosePage(page);
+    for (size_t k = 0; ok && k < pages.size(); k++) {
+        const std::vector<Area>& areas = areas_by_page.at(pages[k]);
+        FPDF_PAGE page = FPDF_LoadPage(scratch, static_cast<int>(k));
+        if (page == nullptr) { ok = false; break; }
+        Area affected{1e30, 1e30, -1e30, -1e30};
+        for (const Area& a : areas) {
+            affected.l = (std::min)(affected.l, a.l);
+            affected.b = (std::min)(affected.b, a.b);
+            affected.r = (std::max)(affected.r, a.r);
+            affected.t = (std::max)(affected.t, a.t);
+        }
+        megapdf_redaction_counts counts{};
+        std::vector<RObject> plan;
+        std::vector<int> annots;
+        ok = PlanPageUnlocked(page, areas, &plan, &annots, refusal) &&
+             ExecutePageUnlocked(scratch, page, areas, plan, annots, opt, &counts, refusal, &affected);
+        FPDF_ClosePage(page);
+        if (!ok) { *out_page = pages[k]; break; }
+        (*affected_by_page)[pages[k]] = affected;
+    }
 
     ScratchWriter after{};
     after.fw.version = 1;
@@ -4535,34 +4611,40 @@ bool RehearsePageUnlocked(megapdf_document* d, int page_index, const std::vector
 
     FPDF_DOCUMENT was = FPDF_LoadMemDocument64(before.out.data(), before.out.size(), nullptr);
     FPDF_DOCUMENT now = FPDF_LoadMemDocument64(after.out.data(), after.out.size(), nullptr);
-    FPDF_PAGE was_page = was != nullptr ? FPDF_LoadPage(was, 0) : nullptr;
-    FPDF_PAGE now_page = now != nullptr ? FPDF_LoadPage(now, 0) : nullptr;
-    ok = was_page != nullptr && now_page != nullptr;
-    megapdf_layout_verdict verdict{};
-    if (ok) ok = CompareRedaction(was_page, now_page, areas, &verdict);
-    if (ok && verdict.editable != 1) {
-        g_last_layout = verdict;
-        refusal->reason = MEGAPDF_REDACT_LAYOUT;
-        refusal->message = verdict.cause == MEGAPDF_LAYOUT_TEXT_CHANGED
-                               ? "text outside the area would be lost or changed by the redaction"
-                           : verdict.cause == MEGAPDF_LAYOUT_TEXT_MOVED
-                               ? "text outside the area would move by more than half a point"
-                               : "the page would look different outside the area";
-        ok = false;
+    ok = was != nullptr && now != nullptr;
+    for (size_t k = 0; ok && k < pages.size(); k++) {
+        FPDF_PAGE was_page = FPDF_LoadPage(was, static_cast<int>(k));
+        FPDF_PAGE now_page = FPDF_LoadPage(now, static_cast<int>(k));
+        megapdf_layout_verdict verdict{};
+        const std::vector<Area>& areas = areas_by_page.at(pages[k]);
+        const auto affected = affected_by_page->find(pages[k]);
+        ok = was_page != nullptr && now_page != nullptr &&
+             CompareRedaction(was_page, now_page, areas,
+                              affected != affected_by_page->end() ? affected->second : Area{0, 0, -1, -1}, &verdict);
+        if (ok && verdict.editable != 1) {
+            g_last_layout = verdict;
+            *out_page = pages[k];
+            refusal->reason = MEGAPDF_REDACT_LAYOUT;
+            refusal->message = verdict.cause == MEGAPDF_LAYOUT_TEXT_CHANGED
+                                   ? "text outside the area would be lost or changed by the redaction"
+                               : verdict.cause == MEGAPDF_LAYOUT_TEXT_MOVED
+                                   ? "text outside the area would move by more than half a point"
+                                   : "the page would look different outside the area";
+            ok = false;
+        }
+        // And nothing readable may be left inside the areas of the saved, reopened page.
+        if (ok) {
+            ok = RedactionLeftNothingUnlocked(now_page, areas, opt, refusal);
+            if (!ok) *out_page = pages[k];
+        }
+        if (now_page != nullptr) FPDF_ClosePage(now_page);
+        if (was_page != nullptr) FPDF_ClosePage(was_page);
     }
-    // And nothing readable may be left inside the areas of the saved, reopened page.
-    if (ok) ok = RedactionLeftNothingUnlocked(now_page, areas, opt, refusal);
-    if (now_page != nullptr) FPDF_ClosePage(now_page);
-    if (was_page != nullptr) FPDF_ClosePage(was_page);
     if (now != nullptr) FPDF_CloseDocument(now);
     if (was != nullptr) FPDF_CloseDocument(was);
     return ok;
 }
 
-}  // namespace
-
-
-namespace {
 
 // The areas marked on `page_index`, in the page's own user space. `p` gives the crop
 // origin and /UserUnit the marks were recorded against.
@@ -4599,6 +4681,66 @@ megapdf_page PageView(megapdf_document* d, FPDF_PAGE page, int index) {
     p.unit = FPDFPage_GetUserUnit(page);
     if (!(p.unit > 0)) p.unit = 1.0;
     return p;
+}
+
+// True when the string `term` reads as part of any outline entry's title.
+bool TitleCarries(FPDF_BOOKMARK bookmark, const unsigned short* term) {
+    const unsigned long bytes = FPDFBookmark_GetTitle(bookmark, nullptr, 0);
+    if (bytes <= 2) return false;
+    std::vector<unsigned short> title(bytes / 2 + 1, 0);
+    FPDFBookmark_GetTitle(bookmark, title.data(), bytes);
+    const size_t n = U16Length(term);
+    if (n == 0) return false;
+    for (size_t i = 0; i + n <= title.size(); i++) {
+        size_t k = 0;
+        while (k < n && title[i + k] == term[k]) k++;
+        if (k == n) return true;
+    }
+    return false;
+}
+
+// Removes every outline entry whose title carries `term`, with its subtree (PDFium patch
+// 0027). The walk collects first and removes after: removing an entry invalidates the
+// handles either side of it.
+int RemoveOutlineEntriesMatching(FPDF_DOCUMENT doc, const unsigned short* term) {
+    std::vector<FPDF_BOOKMARK> doomed;
+    std::vector<FPDF_BOOKMARK> level;
+    level.push_back(nullptr);   // the root's children
+    int depth = 0;
+    while (!level.empty() && depth++ < 32) {
+        std::vector<FPDF_BOOKMARK> next;
+        for (FPDF_BOOKMARK parent : level) {
+            for (FPDF_BOOKMARK b = FPDFBookmark_GetFirstChild(doc, parent); b != nullptr;
+                 b = FPDFBookmark_GetNextSibling(doc, b)) {
+                if (TitleCarries(b, term)) doomed.push_back(b);
+                else next.push_back(b);   // a removed entry takes its subtree with it
+            }
+        }
+        level = std::move(next);
+    }
+    int removed = 0;
+    for (FPDF_BOOKMARK b : doomed) if (FPDFBookmark_Remove(doc, b) == 1) removed++;
+    return removed;
+}
+
+// True when any page's label carries `term`. The labels go together or not at all: they
+// are one number tree, and a prefix is shared by a range of pages.
+bool PageLabelsCarry(FPDF_DOCUMENT doc, const unsigned short* term) {
+    const size_t n = U16Length(term);
+    if (n == 0) return false;
+    const int pages = FPDF_GetPageCount(doc);
+    for (int i = 0; i < pages; i++) {
+        const unsigned long bytes = FPDF_GetPageLabel(doc, i, nullptr, 0);
+        if (bytes <= 2) continue;
+        std::vector<unsigned short> label(bytes / 2 + 1, 0);
+        FPDF_GetPageLabel(doc, i, label.data(), bytes);
+        for (size_t k = 0; k + n <= label.size(); k++) {
+            size_t j = 0;
+            while (j < n && label[k + j] == term[j]) j++;
+            if (j == n) return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -4847,17 +4989,21 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
         areas_by_page[page_index] = std::move(areas);
     }
 
-    // Phase 2: rehearse each page on a scratch copy, and let the guard prove that nothing
-    // outside the areas moved or changed. A refusal here also leaves the document untouched.
-    for (int page_index : pages) {
+    // Phase 2: rehearse the whole redaction on a scratch copy of every marked page, so that
+    // what one page's redaction does to another is seen before the document is touched. A
+    // refusal here also leaves the document untouched.
+    std::map<int, Area> affected_by_page;
+    {
         Refusal r{};
-        if (!RehearsePageUnlocked(d, page_index, areas_by_page[page_index], opt, &r)) {
-            return refuse(page_index, first_area(page_index), r);
+        int at_page = 0;
+        if (!RehearseUnlocked(d, pages, areas_by_page, opt, &affected_by_page, &at_page, &r)) {
+            return refuse(at_page, first_area(at_page), r);
         }
     }
 
     // Phase 3: execute on the document itself. Phase 2 says this cannot fail; if it does,
     // the document is poisoned and can never be saved.
+    std::vector<U16> removed_words;   // what the document-level sweep below hunts for
     for (int page_index : pages) {
         FPDF_PAGE page = FPDF_LoadPage(d->doc, page_index);
         Refusal r{};
@@ -4874,9 +5020,16 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
                 affected.t = (std::max)(affected.t, a.t);
             }
             const Area marked = affected;
-            ok = PlanPageUnlocked(page, areas_by_page[page_index], &plan, &page_annots, &r) &&
+            std::vector<U16> words;
+            ok = PlanPageUnlocked(page, areas_by_page[page_index], &plan, &page_annots, &r, &words) &&
                  ExecutePageUnlocked(d->doc, page, areas_by_page[page_index], plan, page_annots, opt,
                                      &report->counts, &r, &affected);
+            if (ok) {
+                try {
+                    removed_words.insert(removed_words.end(), words.begin(), words.end());
+                } catch (...) {
+                }
+            }
             if (ok) {
                 const megapdf_page view = PageView(d, page, page_index);
                 report->applied.push_back(megapdf_redaction_applied{
@@ -4900,12 +5053,25 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
 
     // Undo cannot be allowed to put the removed content back: every detached handle the
     // document holds keeps page objects alive for exactly that (contract 5).
-    // Metadata last, once every page is done: /Info, the XMP packet on the catalog and on
-    // every page, and any private application data (PDFium patch 0027). A redaction that
-    // leaves the account number in /Title has not redacted anything.
+    // The places the text hides where a redaction of the page content cannot reach
+    // (PDFium patch 0027). Metadata goes wholesale; an outline entry, a page label or a
+    // structure-tree /ActualText goes only when it carries text the redaction removed,
+    // so what was not redacted keeps its heading and its screen-reader wording.
     if (!opt.keep_metadata) {
         const int removed = FPDF_RemoveMetadata(d->doc);
         if (removed > 0) report->counts.metadata_fields += removed;
+    }
+    for (const U16& word : removed_words) {
+        std::vector<unsigned short> term(word.begin(), word.end());
+        term.push_back(0);
+        if (!opt.keep_matching_outline) {
+            report->counts.outline_entries += RemoveOutlineEntriesMatching(d->doc, term.data());
+        }
+        const int cleared = FPDF_RemoveStructureTextMatching(d->doc, reinterpret_cast<FPDF_WIDESTRING>(term.data()));
+        if (cleared > 0) report->counts.structure_entries += cleared;
+        if (report->counts.page_labels == 0 && PageLabelsCarry(d->doc, term.data())) {
+            if (FPDF_RemovePageLabels(d->doc) == 1) report->counts.page_labels++;
+        }
     }
 
     // Undo cannot be allowed to put the removed content back. The handles stay valid — the

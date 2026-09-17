@@ -1,0 +1,268 @@
+--- a/public/fpdf_doc.h
++++ b/public/fpdf_doc.h
+@@ -445,6 +445,69 @@
+                   void* buffer,
+                   unsigned long buflen);
+ 
++// Experimental API.
++// Remove the document's metadata: every entry of the information dictionary
++// (FPDF_GetMetaText's source), the XMP packet (/Metadata) on the catalog and on every
++// page, and any /PieceInfo private application data on the catalog or a page.
++//
++// Upstream can read metadata and never write it, so there was no way to take it out.
++// A document whose content has been redacted still carries the removed text in /Title,
++// /Keywords or an XMP packet until this is called.
++//
++// document - handle to a document.
++//
++// Returns the number of entries and packets removed, or -1 when |document| is NULL.
++FPDF_EXPORT int FPDF_CALLCONV FPDF_RemoveMetadata(FPDF_DOCUMENT document);
++
++// Experimental API.
++// Remove an outline entry and everything under it.
++//
++// The entry is unlinked from its siblings and its parent's /First and /Last, and the
++// parent's /Count is corrected. Upstream can walk bookmarks (FPDFBookmark_GetFirstChild
++// and friends) and cannot change them, so a heading that has been redacted out of the
++// page stays in the outline, where a raw byte search finds it.
++//
++// document - handle to the document.
++// bookmark - handle to the bookmark to remove. Must not be NULL, and is invalid
++//            afterwards, as is every handle to an entry beneath it.
++//
++// Returns true when the entry was found and removed.
++FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBookmark_Remove(FPDF_DOCUMENT document,
++                                                        FPDF_BOOKMARK bookmark);
++
++// Experimental API.
++// Remove the document's page labels (the catalog's /PageLabels number tree).
++//
++// A page label prefix is free text — "Draft-", a case number, a name — so a redaction
++// has to be able to take it out. Upstream reads page labels (FPDF_GetPageLabel) and
++// cannot change them.
++//
++// document - handle to the document.
++//
++// Returns true when there were page labels to remove.
++FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
++FPDF_RemovePageLabels(FPDF_DOCUMENT document);
++
++// Experimental API.
++// Clear every /ActualText and /Alt entry in the document's structure tree whose value
++// contains |text|, along with /E (the expansion of an abbreviation) and /TU.
++//
++// Tagged PDF repeats a page's words outside its content stream so that a screen reader
++// can say them: /ActualText replaces what the glyphs spell, /Alt describes a figure.
++// Both survive a redaction of the page itself, and both extract as plain text. Upstream
++// reads them (FPDF_StructElement_GetActualText, FPDF_StructElement_GetAltText) and
++// cannot change them.
++//
++// Only entries containing |text| are cleared, so the alternate text of content that was
++// not redacted keeps working.
++//
++// document - handle to the document.
++// text     - the string to look for, as a NUL-terminated UTF-16LE string.
++//
++// Returns the number of entries cleared, or -1 when |document| or |text| is NULL.
++FPDF_EXPORT int FPDF_CALLCONV
++FPDF_RemoveStructureTextMatching(FPDF_DOCUMENT document, FPDF_WIDESTRING text);
++
+ #ifdef __cplusplus
+ }  // extern "C"
+ #endif  // __cplusplus
+--- a/fpdfsdk/fpdf_doc.cpp
++++ b/fpdfsdk/fpdf_doc.cpp
+@@ -18,6 +18,7 @@
+ #include "core/fpdfapi/parser/cpdf_dictionary.h"
+ #include "core/fpdfapi/parser/cpdf_document.h"
+ #include "core/fpdfapi/parser/cpdf_number.h"
++#include "core/fpdfapi/parser/cpdf_reference.h"
+ #include "core/fpdfapi/parser/cpdf_string.h"
+ #include "core/fpdfapi/parser/fpdf_parser_decode.h"
+ #include "core/fpdfdoc/cpdf_aaction.h"
+@@ -584,6 +585,185 @@
+       UNSAFE_BUFFERS(SpanFromFPDFApiArgs(buffer, buflen)));
+ }
+ 
++namespace {
++
++// Unlinks `entry` from the doubly linked list of its siblings and from its parent's
++// /First and /Last, and corrects the parent's /Count. The subtree beneath it goes with it,
++// because nothing points at it any more and the writer drops what it cannot reach.
++bool UnlinkBookmark(CPDF_Document* doc, const RetainPtr<CPDF_Dictionary>& entry) {
++  RetainPtr<CPDF_Dictionary> parent = entry->GetMutableDictFor("Parent");
++  RetainPtr<CPDF_Dictionary> prev = entry->GetMutableDictFor("Prev");
++  RetainPtr<CPDF_Dictionary> next = entry->GetMutableDictFor("Next");
++
++  if (prev) {
++    if (next) {
++      prev->SetNewFor<CPDF_Reference>("Next", doc, next->GetObjNum());
++    } else {
++      prev->RemoveFor("Next");
++    }
++  }
++  if (next) {
++    if (prev) {
++      next->SetNewFor<CPDF_Reference>("Prev", doc, prev->GetObjNum());
++    } else {
++      next->RemoveFor("Prev");
++    }
++  }
++  if (parent) {
++    if (parent->GetDictFor("First") == entry.Get()) {
++      if (next) {
++        parent->SetNewFor<CPDF_Reference>("First", doc, next->GetObjNum());
++      } else {
++        parent->RemoveFor("First");
++      }
++    }
++    if (parent->GetDictFor("Last") == entry.Get()) {
++      if (prev) {
++        parent->SetNewFor<CPDF_Reference>("Last", doc, prev->GetObjNum());
++      } else {
++        parent->RemoveFor("Last");
++      }
++    }
++    // /Count is the number of open entries below, negative when the entry is closed.
++    const int count = parent->GetIntegerFor("Count");
++    if (count > 0) {
++      parent->SetNewFor<CPDF_Number>("Count", count - 1);
++    } else if (count < 0) {
++      parent->SetNewFor<CPDF_Number>("Count", count + 1);
++    }
++  }
++  entry->RemoveFor("Parent");
++  entry->RemoveFor("Prev");
++  entry->RemoveFor("Next");
++  entry->RemoveFor("First");
++  entry->RemoveFor("Last");
++  entry->RemoveFor("Title");
++  return true;
++}
++
++// Clears the text-bearing keys of `element` and its children when they carry `text`.
++int ClearStructureText(const RetainPtr<CPDF_Dictionary>& element,
++                       const WideString& text,
++                       int depth) {
++  if (!element || depth > 64) {
++    return 0;
++  }
++  int cleared = 0;
++  static const char* const kTextKeys[] = {"ActualText", "Alt", "E", "TU"};
++  for (const char* key : kTextKeys) {
++    RetainPtr<const CPDF_Object> value = element->GetObjectFor(key);
++    if (!value || !value->IsString()) {
++      continue;
++    }
++    if (value->GetUnicodeText().Contains(text.AsStringView())) {
++      element->RemoveFor(key);
++      ++cleared;
++    }
++  }
++  RetainPtr<CPDF_Array> kids = element->GetMutableArrayFor("K");
++  if (kids) {
++    for (size_t i = 0; i < kids->size(); ++i) {
++      cleared += ClearStructureText(kids->GetMutableDictAt(i), text, depth + 1);
++    }
++  } else {
++    cleared += ClearStructureText(element->GetMutableDictFor("K"), text, depth + 1);
++  }
++  return cleared;
++}
++
++}  // namespace
++
++FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBookmark_Remove(FPDF_DOCUMENT document,
++                                                        FPDF_BOOKMARK bookmark) {
++  CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
++  CPDF_Dictionary* entry = CPDFDictionaryFromFPDFBookmark(bookmark);
++  if (!doc || !entry) {
++    return false;
++  }
++  return UnlinkBookmark(doc, pdfium::WrapRetain(entry));
++}
++
++FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
++FPDF_RemovePageLabels(FPDF_DOCUMENT document) {
++  CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
++  if (!doc) {
++    return false;
++  }
++  RetainPtr<CPDF_Dictionary> root = doc->GetMutableRoot();
++  return root && root->RemoveFor("PageLabels");
++}
++
++FPDF_EXPORT int FPDF_CALLCONV
++FPDF_RemoveStructureTextMatching(FPDF_DOCUMENT document, FPDF_WIDESTRING text) {
++  CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
++  if (!doc || !text) {
++    return -1;
++  }
++  const WideString needle = WideStringFromFPDFWideString(text);
++  if (needle.IsEmpty()) {
++    return 0;
++  }
++  RetainPtr<CPDF_Dictionary> root = doc->GetMutableRoot();
++  RetainPtr<CPDF_Dictionary> tree = root ? root->GetMutableDictFor("StructTreeRoot") : nullptr;
++  if (!tree) {
++    return 0;
++  }
++  return ClearStructureText(tree, needle, 0);
++}
++
++FPDF_EXPORT int FPDF_CALLCONV FPDF_RemoveMetadata(FPDF_DOCUMENT document) {
++  CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
++  if (!doc) {
++    return -1;
++  }
++
++  int removed = 0;
++  RetainPtr<CPDF_Dictionary> info = doc->GetInfo();
++  if (info) {
++    // The dictionary itself is left in place and emptied: the trailer's /Info reference is
++    // the parser's, not ours to unpick, and an empty dictionary carries nothing.
++    //
++    // The keys are collected first and the locker released before anything is removed: a
++    // CPDF_Dictionary CHECKs that it is not modified while one is alive.
++    std::vector<ByteString> keys;
++    {
++      CPDF_DictionaryLocker locker(info);
++      for (const auto& it : locker) {
++        keys.push_back(it.first);
++      }
++    }
++    for (const ByteString& key : keys) {
++      info->RemoveFor(key.AsStringView());
++      ++removed;
++    }
++  }
++
++  RetainPtr<CPDF_Dictionary> root = doc->GetMutableRoot();
++  if (root) {
++    if (root->RemoveFor("Metadata")) {
++      ++removed;
++    }
++    if (root->RemoveFor("PieceInfo")) {
++      ++removed;
++    }
++  }
++
++  const int pages = doc->GetPageCount();
++  for (int i = 0; i < pages; ++i) {
++    RetainPtr<CPDF_Dictionary> page = doc->GetMutablePageDictionary(i);
++    if (!page) {
++      continue;
++    }
++    if (page->RemoveFor("Metadata")) {
++      ++removed;
++    }
++    if (page->RemoveFor("PieceInfo")) {
++      ++removed;
++    }
++  }
++  return removed;
++}
++
+ FPDF_EXPORT unsigned long FPDF_CALLCONV
+ FPDF_GetPageLabel(FPDF_DOCUMENT document,
+                   int page_index,

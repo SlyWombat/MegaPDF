@@ -29,6 +29,7 @@
 
 #include "leakcheck.h"
 #include "megapdf_core.h"
+#include "fpdfview.h"
 
 namespace {
 
@@ -71,6 +72,28 @@ const char* ReasonName(int reason) {
         case MEGAPDF_REDACT_PDFIUM: return "pdfium";
         default: return "unknown";
     }
+}
+
+// How many times `word` appears in the document's extracted text. A corpus word can only
+// stand in for a canary when the answer is 1: any other occurrence is found again after the
+// redaction because the document says it somewhere that was never marked.
+int OccurrencesInText(const std::string& path, const std::string& word) {
+    megapdf_document* doc = megapdf_open_file(path.c_str(), nullptr);
+    if (doc == nullptr) return 0;
+    int found = 0;
+    for (int p = 0; p < megapdf_page_count(doc) && found < 2; p++) {
+        megapdf_page* page = megapdf_load_page(doc, p);
+        if (page == nullptr) continue;
+        megapdf_text* text = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
+        for (size_t r = 0; r < megapdf_text_run_count(text); r++) {
+            const std::string run = Utf8Of(text, r);
+            for (size_t at = run.find(word); at != std::string::npos; at = run.find(word, at + 1)) found++;
+        }
+        megapdf_text_free(text);
+        megapdf_close_page(page);
+    }
+    megapdf_close(doc);
+    return found;
 }
 
 void PrintRefusals(megapdf_redaction_report* report, const char* prefix) {
@@ -290,6 +313,30 @@ int Battery(int argc, char** argv) {
             if (rc != MEGAPDF_OK) {
                 result.refused = 1;
                 PrintRefusals(report, "refusal: ");
+            } else {
+                // Where the page may look different: the marks grown to what a straddling
+                // glyph took with it. The render check is judged against that, exactly as
+                // the core's own guard is.
+                const size_t n = megapdf_redaction_applied_areas(report, nullptr, 0);
+                std::vector<megapdf_redaction_applied> applied(n);
+                if (n > 0) megapdf_redaction_applied_areas(report, applied.data(), n);
+                for (leakcheck::Area& a : areas) {
+                    for (const megapdf_redaction_applied& one : applied) {
+                        if (one.page_index != a.page_index) continue;
+                        a.affected_left = one.affected.left;
+                        a.affected_bottom = one.affected.bottom;
+                        a.affected_right = one.affected.right;
+                        a.affected_top = one.affected.top;
+                    }
+                }
+                if (std::getenv("MEGAPDF_LEAKCHECK_VERBOSE") != nullptr) {
+                    for (const megapdf_redaction_applied& one : applied) {
+                        std::printf("  page %d marked [%.0f %.0f %.0f %.0f] affected [%.0f %.0f %.0f %.0f]\n",
+                                    one.page_index, one.marked.left, one.marked.bottom, one.marked.right,
+                                    one.marked.top, one.affected.left, one.affected.bottom, one.affected.right,
+                                    one.affected.top);
+                    }
+                }
             }
             megapdf_redaction_report_free(report);
         }
@@ -302,8 +349,25 @@ int Battery(int argc, char** argv) {
     result.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
 
     if (baseline) {
-        std::printf("result=baseline pages=%d seconds=%.3f bytes=%zu\n", result.pages, result.seconds,
-                    sink.bytes.size());
+        // A baseline run redacts nothing, so it times the open, render and save alone — and
+        // it renders the saved copy against the original with no areas at all, which is the
+        // only way to tell what SAVING changes from what REDACTING changes. A save
+        // regenerates content and can normalise a form field's appearance; that difference
+        // belongs to the save, and a battery run must not be blamed for it.
+        leakcheck::PixelResult pixels;
+        std::vector<leakcheck::Finding> findings;
+        if (saved) {
+            FPDF_DOCUMENT after = FPDF_LoadDocument(out.c_str(), nullptr);
+            FPDF_DOCUMENT before = FPDF_LoadDocument(in.c_str(), nullptr);
+            if (after != nullptr) {
+                leakcheck::CheckPixels(after, before, {}, 0x000000, 72, &pixels, &findings);
+            }
+            if (before != nullptr) FPDF_CloseDocument(before);
+            if (after != nullptr) FPDF_CloseDocument(after);
+        }
+        std::printf("result=baseline pages=%d seconds=%.3f bytes=%zu worst_page=%d worst_pct=%.4f\n",
+                    result.pages, result.seconds, sink.bytes.size(), pixels.changed_page,
+                    pixels.worst_page_fraction * 100.0);
         return 0;
     }
     if (rc != MEGAPDF_OK) {
@@ -315,28 +379,39 @@ int Battery(int argc, char** argv) {
         return 2;
     }
     // Nothing the areas covered may still extract, and the pixels must be right.
+    //
+    // A corpus document has no canary planted in it, so the word a random area covered has
+    // to serve as one — and only a word the document says exactly ONCE can. Any other is
+    // found again in the file because the document says it somewhere that was never marked,
+    // which is not a leak. `unique_canary` is the first such word, or empty when the sampled
+    // pages offered none; then the string searches are skipped and the in-area checks (the
+    // core's own, plus the pixels below) are what judge the document.
     bool qpdf_ran = false;
     leakcheck::PixelResult pixels;
     int leaks = 0;
+    std::string canary;
     for (const std::string& word : covered) {
-        if (word.size() < 4) continue;
-        const std::vector<leakcheck::Finding> f =
-            leakcheck::Check(out, in, word, areas, 0x000000, &qpdf_ran, &pixels);
-        for (const leakcheck::Finding& one : f) {
-            // The pixel findings are reported once, below, not per covered word.
-            if (one.where.rfind("pixels", 0) == 0) continue;
-            leaks++;
-            std::printf("leak: %s\n", one.where.c_str());
-        }
-        break;   // one word is enough to exercise every search; the rest only cost time
+        if (word.size() < 6) continue;
+        if (OccurrencesInText(in, word) == 1) { canary = word; break; }
+    }
+    const std::vector<leakcheck::Finding> findings =
+        leakcheck::Check(out, in, canary.empty() ? std::string("\x01unmatchable") : canary, areas, 0x000000,
+                         &qpdf_ran, &pixels);
+    for (const leakcheck::Finding& one : findings) {
+        // The pixel findings are reported once, below, not as string leaks.
+        if (one.where.rfind("pixels", 0) == 0) continue;
+        leaks++;
+        std::printf("leak: %s\n", one.where.c_str());
     }
     result.leaks = leaks;
     result.inside_wrong = pixels.inside_wrong;
-    result.outside_changed = pixels.outside_changed;
+    result.outside_changed = pixels.worst_page_fraction > leakcheck::kRenderBudget ? pixels.outside_changed : 0;
     std::printf("result=ok pages=%d areas=%d leaks=%d inside_wrong=%lld outside_changed=%lld seconds=%.3f bytes=%zu "
-                "qpdf=%d\n",
+                "qpdf=%d canary=%d worst_page=%d worst_pct=%.4f changed_box=[%.0f %.0f %.0f %.0f]\n",
                 result.pages, result.areas, result.leaks, result.inside_wrong, result.outside_changed, result.seconds,
-                sink.bytes.size(), qpdf_ran ? 1 : 0);
+                sink.bytes.size(), qpdf_ran ? 1 : 0, canary.empty() ? 0 : 1, pixels.changed_page,
+                pixels.worst_page_fraction * 100.0, pixels.changed_left,
+                pixels.changed_bottom, pixels.changed_right, pixels.changed_top);
     return result.leaks == 0 && result.outside_changed == 0 ? 0 : 1;
 }
 
