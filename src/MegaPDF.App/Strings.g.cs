@@ -642,4 +642,10 @@ public static partial class Strings
 
     /// <summary>Anything under a whiteout is still in the file, and another app can copy or search it. To take it out of the file, use Redact.</summary>
     public static string WhiteoutCoversOnlyBody => Get("WhiteoutCoversOnlyBody");
+
+    /// <summary>Page {0}, {1}: {2}</summary>
+    public static string PageRegionDescriptionWithContent(object? arg0, object? arg1, object? arg2) => string.Format(CultureInfo.CurrentCulture, Get("PageRegionDescriptionWithContent"), arg0, arg1, arg2);
+
+    /// <summary>Saved {0}</summary>
+    public static string SavedAnnouncement(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SavedAnnouncement"), arg0);
 }
