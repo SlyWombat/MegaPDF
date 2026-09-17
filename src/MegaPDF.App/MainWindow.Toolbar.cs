@@ -250,7 +250,8 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// The More button's own tooltip stayed on screen over the menu it had just opened,
-    /// on top of the first entries and their shortcuts (#189). A tooltip belongs to a
+    /// where it covered the first entries and their keyboard shortcuts.
+    /// (#189). A tooltip belongs to a
     /// button nobody is pointing at any more, so it is switched off while the overflow is
     /// open and back on when it closes.
     /// </summary>
