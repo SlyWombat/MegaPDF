@@ -45,14 +45,26 @@ cp -R "$HERE/share/icons/hicolor/." "$ICON_DIR/"
 
 # These caches are what make the entry appear without logging out. Each is
 # best-effort: a desktop that has none of them reads the directories directly.
+# update-desktop-database is also what puts MegaPDF in a PDF's Open With menu,
+# by writing megapdf.desktop under application/pdf in mimeinfo.cache.
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t "$ICON_DIR" 2>/dev/null || true
-command -v xdg-mime >/dev/null 2>&1 && xdg-mime default megapdf.desktop application/pdf 2>/dev/null || true
+
+# Deliberately NOT `xdg-mime default megapdf.desktop application/pdf`. Installing
+# an app is not the same as asking for every PDF on the machine, and an installer
+# that quietly takes the association away from whatever was handling it is the
+# behaviour people uninstall software over. The Mac bundle says the same thing in
+# its own words — LSHandlerRank=Alternate — and MegaPDF appears in Open With
+# either way. Choosing it is the person's to do:
+#     xdg-mime default megapdf.desktop application/pdf
 
 echo "installed:"
 echo "  $LIBDIR/MegaPDF"
 echo "  $BINDIR/megapdf"
 echo "  $DESKTOP_DIR/megapdf.desktop"
+echo
+echo "MegaPDF now offers itself in a PDF's Open With menu. To make it the one that"
+echo "opens PDFs by default:  xdg-mime default megapdf.desktop application/pdf"
 case ":$PATH:" in
     *":$BINDIR:"*) ;;
     *) echo "note: $BINDIR is not on your PATH, so the 'megapdf' command will not be found there." ;;

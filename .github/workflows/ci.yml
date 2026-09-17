@@ -168,8 +168,19 @@ jobs:
           desktop-file-validate "$entry"
           grep -q "^Exec=$fake/.local/lib/megapdf/MegaPDF %f$" "$entry" \
             || { echo "::error::Exec was not rewritten to the installed path:"; grep '^Exec=' "$entry"; exit 1; }
-          grep -q '^application/pdf=megapdf.desktop$' "$fake/.config/mimeapps.list" \
-            || { echo "::error::application/pdf was not associated"; cat "$fake/.config/mimeapps.list"; exit 1; }
+          # In the Open With menu for a PDF — which is update-desktop-database
+          # writing the entry under application/pdf in mimeinfo.cache. NOT the
+          # default handler: install.sh deliberately does not take the association,
+          # so a check for that would be asserting the wrong behaviour.
+          cache="$fake/.local/share/applications/mimeinfo.cache"
+          test -f "$cache" || { echo "::error::update-desktop-database wrote no mimeinfo.cache"; exit 1; }
+          grep -q '^application/pdf=.*megapdf\.desktop' "$cache" \
+            || { echo "::error::MegaPDF is not offered for application/pdf"; cat "$cache"; exit 1; }
+          if [ -f "$fake/.config/mimeapps.list" ] \
+             && grep -q '^application/pdf=megapdf.desktop$' "$fake/.config/mimeapps.list"; then
+            echo "::error::install.sh made MegaPDF the default PDF handler; it must only offer itself"
+            exit 1
+          fi
           test -f "$fake/.local/share/icons/hicolor/48x48/apps/megapdf.png" \
             || { echo "::error::no icons were installed"; exit 1; }
           # The installed copy has to work, not just exist.
