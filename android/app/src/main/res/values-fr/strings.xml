@@ -42,6 +42,7 @@
     <string name="open_failed_code">Impossible d\'ouvrir ce fichier (erreur %1$d).</string>
     <string name="open_unsupported_security">Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</string>
     <string name="open_too_large">Ce fichier est trop volumineux pour que MegaPDF puisse l\'ouvrir.</string>
+    <string name="open_not_found">Ce fichier ne se trouve plus à cet emplacement.</string>
     <string name="open_access_revoked">L\'accès à ce fichier a été révoqué. Sélectionnez-le de nouveau pour le rouvrir.</string>
     <string name="document">Document</string>
 
@@ -149,11 +150,24 @@
     <string name="signature_image_unreadable">Impossible de lire l\'image de cette signature</string>
     <string name="signature_remove_failed">Impossible de retirer cette signature</string>
 
+    <string name="location_downloads">Téléchargements</string>
+    <!-- Documents récents\u00a0: où se trouve chacun, et quoi faire d\'une ligne (#165) -->
+    <string name="recent_location_unknown">Emplacement inconnu</string>
+    <string name="recent_not_found">Introuvable</string>
+    <string name="recent_row_a11y">%1$s, dans %2$s</string>
+    <string name="recent_row_a11y_no_location">%1$s</string>
+    <string name="recent_row_a11y_not_found">%1$s, introuvable</string>
+    <string name="recent_open">Ouvrir</string>
+    <string name="recent_remove">Retirer des récents</string>
+    <string name="recent_options">Options pour %1$s</string>
     <!-- Mode capture d\'écran (#91) -->
     <string name="screenshot_demo_asset">demo-fr.pdf</string>
     <string name="screenshot_document_name">Contrat de location.pdf</string>
     <string name="screenshot_recent_2">Autorisation de sortie scolaire.pdf</string>
     <string name="screenshot_recent_3">Formulaire de réclamation d\'assurance.pdf</string>
+    <string name="screenshot_location_1">Téléchargements</string>
+    <string name="screenshot_location_2">Drive › Autorisations</string>
+    <string name="screenshot_location_3">Stockage interne</string>
     <string name="screenshot_search_term">location</string>
     <string name="screenshot_text">Céline Lefèvre</string>
     <string name="screenshot_edited_heading">Contrat de location d\'équipement (2026)</string>

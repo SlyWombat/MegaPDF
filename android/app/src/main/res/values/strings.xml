@@ -48,6 +48,7 @@
     <!-- A security handler PDFium doesn't support, e.g. certificate security (#131). -->
     <string name="open_unsupported_security">This PDF uses a kind of protection MegaPDF can\'t open.</string>
     <string name="open_too_large">This file is too large for MegaPDF to open.</string>
+    <string name="open_not_found">That file isn\'t at that location any more.</string>
     <string name="open_access_revoked">Access to this file was revoked. Pick it again to reopen it.</string>
     <!-- Display name when the provider gives none. -->
     <string name="document">Document</string>
@@ -170,6 +171,19 @@
     <string name="edit_failed">Couldn\'t make that change.</string>
     <string name="signature_move_failed">Couldn\'t move this signature</string>
 
+    <!-- The Downloads root. Its provider's app label is "Local storage" on some
+         builds, so this root is named here rather than read off the package (#165). -->
+    <string name="location_downloads">Downloads</string>
+    <!-- Recent documents: where each one lives, and what to do with a row (#165) -->
+    <string name="recent_location_unknown">Location unknown</string>
+    <string name="recent_not_found">Not found</string>
+    <!-- Row accessible name: "agreement.pdf, in Internal storage \u203a Documents". -->
+    <string name="recent_row_a11y">%1$s, in %2$s</string>
+    <string name="recent_row_a11y_no_location">%1$s</string>
+    <string name="recent_row_a11y_not_found">%1$s, not found</string>
+    <string name="recent_open">Open</string>
+    <string name="recent_remove">Remove from Recents</string>
+    <string name="recent_options">Options for %1$s</string>
     <!-- Screenshot mode (the "screenshot <state>" launch extra): marketing content that
          follows the app language, so a French run shows a French agreement (#91).
          The asset names a bundled PDF; the recents are file names on the home
@@ -178,6 +192,9 @@
     <string name="screenshot_document_name">Rental Agreement.pdf</string>
     <string name="screenshot_recent_2">Field Trip Permission.pdf</string>
     <string name="screenshot_recent_3">Insurance Claim Form.pdf</string>
+    <string name="screenshot_location_1">Downloads</string>
+    <string name="screenshot_location_2">Drive › Permission slips</string>
+    <string name="screenshot_location_3">Internal storage</string>
     <string name="screenshot_search_term">rental</string>
     <string name="screenshot_text">Jane Whitfield</string>
     <string name="screenshot_edited_heading">Equipment Rental Agreement (2026)</string>

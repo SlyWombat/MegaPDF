@@ -82,7 +82,7 @@ val TEXT_SIZES = listOf(8.0, 10.0, 12.0, 14.0, 18.0, 24.0)
 const val DEFAULT_FONT_SIZE = 12.0
 
 sealed interface ViewerUiState {
-    data class Home(val recents: List<RecentEntry>, val error: String? = null) : ViewerUiState
+    data class Home(val recents: List<RecentRow>, val error: String? = null) : ViewerUiState
     data object Loading : ViewerUiState
     data class PasswordNeeded(val uri: Uri, val wrongPassword: Boolean) : ViewerUiState
     data class Viewing(val displayName: String, val pageSizes: List<PageSize>) : ViewerUiState
@@ -381,9 +381,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 val now = System.currentTimeMillis()
                 val day = 86_400_000L
                 uiState = ViewerUiState.Home(listOf(
-                    RecentEntry("demo://1", app.getString(R.string.screenshot_document_name), now - day / 2),
-                    RecentEntry("demo://2", app.getString(R.string.screenshot_recent_2), now - 2 * day),
-                    RecentEntry("demo://3", app.getString(R.string.screenshot_recent_3), now - 6 * day),
+                    RecentRow(RecentEntry("demo://1", app.getString(R.string.screenshot_document_name),
+                        now - day / 2, listOf(app.getString(R.string.screenshot_location_1)))),
+                    RecentRow(RecentEntry("demo://2", app.getString(R.string.screenshot_recent_2),
+                        now - 2 * day, app.getString(R.string.screenshot_location_2).split(" › "))),
+                    RecentRow(RecentEntry("demo://3", app.getString(R.string.screenshot_recent_3),
+                        now - 6 * day, listOf(app.getString(R.string.screenshot_location_3)))),
                 ), null)
             }
             "viewer", "sign", "draw", "search", "text", "text-edit", "redact" -> {
@@ -538,7 +541,17 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    var uiState: ViewerUiState by mutableStateOf(ViewerUiState.Home(recentsStore.load()))
+    /**
+     * URIs an open has already proved gone, so their rows stay marked between
+     * loads (#165). Cleared when the entry is opened again, or removed.
+     *
+     * Declared above [uiState] on purpose: [uiState] is initialised from
+     * [recentRows], which reads this — and a property declared after it is still
+     * null at that moment, which crashed the app on launch.
+     */
+    private val unavailableChecked = mutableSetOf<String>()
+
+    var uiState: ViewerUiState by mutableStateOf(ViewerUiState.Home(recentRows()))
         private set
 
     /** Rendered page bitmaps, keyed by page index; observed by the page list UI. */
@@ -700,7 +713,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         } catch (e: PdfLoadException) {
             // ADR-004 decision 8: protection PDFium can't open is neither corrupt nor a wrong password.
             ViewerUiState.Home(
-                recentsStore.load(),
+                recentRows(),
                 when {
                     e.isUnsupportedSecurity -> str(R.string.open_unsupported_security)
                     e.isTooLarge -> str(R.string.open_too_large)
@@ -708,14 +721,23 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 },
             )
         } catch (_: SecurityException) {
-            recentsStore.remove(uri.toString())
-            ViewerUiState.Home(recentsStore.load(), str(R.string.open_access_revoked))
+            // #165: the row stays, marked unavailable, with Remove behind a long
+            // press. Dropping it silently was the old behaviour and left people
+            // wondering where the file in their list had gone.
+            unavailableChecked += uri.toString()
+            ViewerUiState.Home(recentRows(), str(R.string.open_access_revoked))
+        } catch (_: java.io.FileNotFoundException) {
+            // The grant is still good; the file behind it is not — moved, renamed or
+            // deleted since. Nothing on this side can see that until the open tries,
+            // so this is where the row learns it (#165).
+            unavailableChecked += uri.toString()
+            ViewerUiState.Home(recentRows(), str(R.string.open_not_found))
         } catch (_: Exception) {
-            ViewerUiState.Home(recentsStore.load(), str(R.string.open_failed))
+            ViewerUiState.Home(recentRows(), str(R.string.open_failed))
         } catch (_: OutOfMemoryError) {
             // Read on demand, a document no longer needs its size in memory (#147); one that
             // still runs out while its pages are measured is too big for this device.
-            ViewerUiState.Home(recentsStore.load(), str(R.string.open_too_large))
+            ViewerUiState.Home(recentRows(), str(R.string.open_too_large))
         }
         // A security save reopens its file from the viewer (#131); if that fails, the document
         // still open no longer matches the file, so it goes too. From home this is a no-op.
@@ -825,9 +847,15 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         documentReadsUri = if (opened.readsUri) uri else null
         val name = queryDisplayName(uri)
         persistReadPermission(uri)
-        // The uri and name only: whatever password opened it stays with the open document.
+        // The uri, the name and where it lives (#165) — asked once, here, because the
+        // list must not query a provider per row while it draws. Never a password:
+        // whatever opened it stays with the open document.
+        unavailableChecked -= uri.toString()
         recentsStore.add(
-            RecentEntry(uri.toString(), name, System.currentTimeMillis())
+            RecentEntry(
+                uri.toString(), name, System.currentTimeMillis(),
+                DocumentLocations.segmentsFor(getApplication(), uri), uri.authority,
+            )
         )
         uiState = ViewerUiState.Viewing(name, opened.pageSizes)
         previousWindow?.clampedTo(opened.pageSizes.size)?.let {
@@ -1619,7 +1647,13 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     currentUri = uri
                     persistReadPermission(uri)
                     val name = queryDisplayName(uri)
-                    recentsStore.add(RecentEntry(uri.toString(), name, System.currentTimeMillis()))
+                    unavailableChecked -= uri.toString()
+                    recentsStore.add(
+                        RecentEntry(
+                            uri.toString(), name, System.currentTimeMillis(),
+                            DocumentLocations.segmentsFor(getApplication(), uri), uri.authority,
+                        )
+                    )
                     (uiState as? ViewerUiState.Viewing)?.let {
                         uiState = it.copy(displayName = name)
                     }
@@ -1850,11 +1884,21 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openRecent(entry: RecentEntry) = openUri(Uri.parse(entry.uri))
 
+    /** Takes a document off the recents list, without touching the file (#165). */
+    fun removeRecent(entry: RecentEntry) {
+        unavailableChecked -= entry.uri
+        recentsStore.remove(entry.uri)
+        val state = uiState
+        if (state is ViewerUiState.Home) {
+            uiState = ViewerUiState.Home(recentRows(), state.error)
+        }
+    }
+
     fun closeDocument() {
         // #145: never out of a document while its save or password change is still writing it.
         if (busy.locksDocument) return
         closeCurrent()
-        uiState = ViewerUiState.Home(recentsStore.load())
+        uiState = ViewerUiState.Home(recentRows())
     }
 
     private fun closeCurrent() {
@@ -1920,6 +1964,38 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         } catch (_: SecurityException) {
             // Not a persistable grant (e.g. some third-party providers); recents
             // will just round-trip through the picker for this document.
+        }
+    }
+
+    /**
+     * The recents list, with each row marked openable or not (#165).
+     *
+     * Availability comes from one call, not one per row: the system already knows
+     * every URI we hold a persisted grant for, so a content URI missing from that
+     * set has had its permission revoked — the provider was uninstalled, the SD
+     * card came out, the user cleared the grant. Anything that is not a content
+     * URI is the demo, and is left alone.
+     *
+     * A file *deleted* while the grant survives cannot be seen from here without a
+     * query per row, so that one is found at open time and the row is marked then.
+     */
+    private fun recentRows(): List<RecentRow> {
+        val granted: Set<String> = try {
+            getApplication<Application>().contentResolver.persistedUriPermissions
+                .map { it.uri.toString() }
+                .toSet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+        return recentsStore.load().map { entry ->
+            val available = when {
+                // The demo's rows, which are not documents at all.
+                !entry.uri.startsWith("content://") -> true
+                // An open has already proved this one gone.
+                entry.uri in unavailableChecked -> false
+                else -> entry.uri in granted
+            }
+            RecentRow(entry, available)
         }
     }
 

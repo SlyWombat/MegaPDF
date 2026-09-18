@@ -101,6 +101,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
             error = state.error,
             onOpenClick = { openDocument.launch(arrayOf("application/pdf")) },
             onRecentClick = viewModel::openRecent,
+            onRemoveRecent = viewModel::removeRecent,
         )
 
         is ViewerUiState.Loading -> LoadingScreen(viewModel.busy.document)
