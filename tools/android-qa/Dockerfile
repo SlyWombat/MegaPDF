@@ -46,10 +46,18 @@ RUN sdkmanager --install \
 
 # Emulator side. API 36 is what targetSdk 36 actually ships against; API 34 is the
 # fallback if a 36 image misbehaves headless.
+#
+# API 33 `default` is not a spare: it is the image the **Android Screenshots**
+# workflow runs on (`api-level: 33`, and reactivecircus/android-emulator-runner
+# defaults `target` to `default`), so it is the only one that produces the pixels
+# the Play gate set is actually shot from. It used to be installed by hand into a
+# running container, which meant the store captures were reproducible only until
+# that container was removed (#146).
 RUN sdkmanager --install \
         "emulator" \
         "system-images;android-36;google_apis;x86_64" \
         "system-images;android-34;google_apis;x86_64" \
+        "system-images;android-33;default;x86_64" \
     > /dev/null
 
 RUN yes | sdkmanager --licenses > /dev/null 2>&1 || true
