@@ -117,7 +117,21 @@ else()
     endif()
     set(PDFIUM_LINK ${PDFIUM_LINUX}/lib/libpdfium.so)
     set(PDFIUM_RUNTIME ${PDFIUM_LINK})
-    set_target_properties(megapdf_core PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+    # BUILD_WITH_INSTALL_RPATH, as the macOS branch above does, and for the same reason:
+    # without it CMake appends the directory of every absolute library it links to the
+    # build rpath by itself, so what shipped was
+    # "$ORIGIN:/wherever/this/was/built/libs/pdfium/linux-x64/lib" — the builder's own
+    # filesystem layout, embedded in the binary every Linux package carries (found by
+    # lintian, #158). Harmless where that path does not exist, which is every machine but
+    # the one that built it; on a machine where it did exist it would load that libpdfium
+    # ahead of the patched one beside the app, which is the single thing this runpath is
+    # here to prevent. Nothing loads the core from the build tree without pdfium beside
+    # it: the test binaries get their own copy (megapdf_pdfium_runtime, below) and every
+    # consumer copies the two together.
+    set_target_properties(megapdf_core PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE)
 endif()
 
 target_link_libraries(megapdf_core PRIVATE ${PDFIUM_LINK})
