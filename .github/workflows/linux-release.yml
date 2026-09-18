@@ -1,0 +1,160 @@
+# The Linux tag build (#254 A3): the release tarball a Flathub manifest fetches, its
+# checksum, and the generated manifest — plus the proof that the manifest builds from
+# the tarball this run has just made.
+#
+# Tag a commit `v2.0.0` (the tag the desktop releases in this repository already use)
+# and the artefacts are attached to that release. `workflow_dispatch` does everything
+# except the attaching, which is how this was written and dry-run before any tag
+# existed: run it on a branch and read the summary.
+#
+# NOTHING HERE SUBMITS ANYTHING TO FLATHUB. The manifest is an artefact; opening the
+# pull request against flathub/flathub is a person's step and is listed in
+# tools/Linux-Packaging.md.
+name: Linux release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  # The tag path cannot be rehearsed on a pull request, so everything up to it is
+  # rehearsed instead, whenever any of the pieces change.
+  pull_request:
+    paths:
+      - '.github/workflows/linux-release.yml'
+      - 'tools/linux/make-release-tarball.sh'
+      - 'tools/linux/make-flathub-manifest.sh'
+      - 'tools/linux/build-flathub-flatpak.sh'
+      - 'tools/linux/flatpak/**'
+      - 'tools/build-linux-app.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  tarball:
+    name: Release tarball and Flathub manifest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder appstream \
+            desktop-file-utils librsvg2-common xvfb dbus
+
+      - name: Build the shared engine core and the app
+        run: tools/build-linux-app.sh linux-x64 artifacts/linux
+
+      # The tarball, and the check that the metainfo's newest <release> is this version
+      # with a date that is not months old. A listing whose history stops at the
+      # previous version is wrong in a way nobody sees for years.
+      - name: The release tarball and its checksum
+        run: tools/linux/make-release-tarball.sh artifacts/linux/MegaPDF artifacts/release
+
+      # Two manifests from one template: the one a Flathub pull request would contain,
+      # naming the release URL, and the same thing pointed at the file on disk so this
+      # run can build it before anything is published.
+      - name: The Flathub manifest
+        run: |
+          set -e
+          TARBALL=$(ls artifacts/release/megapdf-linux-x64-*.tar.gz)
+          tools/linux/make-flathub-manifest.sh "$TARBALL" \
+            artifacts/release/ca.electricrv.MegaPDF.yml
+          tools/linux/make-flathub-manifest.sh "$TARBALL" --local \
+            artifacts/release/ca.electricrv.MegaPDF.local.yml
+
+      - name: The freedesktop runtime the manifest names
+        run: |
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          runtime=$(grep -E "^runtime-version:" artifacts/release/ca.electricrv.MegaPDF.yml | tr -d "' " | cut -d: -f2)
+          flatpak install -y --noninteractive --user flathub \
+            "org.freedesktop.Platform//$runtime" "org.freedesktop.Sdk//$runtime"
+
+      # The point of the whole job: the manifest Flathub will run, built from the
+      # artefact this run produced. Not the local manifest, which reads paths that only
+      # exist in this repository.
+      - name: Build the Flatpak from the manifest, from the tarball
+        run: tools/linux/build-flathub-flatpak.sh artifacts/release/ca.electricrv.MegaPDF.local.yml artifacts/flathub
+
+      - name: Generate fixtures
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
+
+      # A bundle that exists proves nothing: this installs it and drives the app inside
+      # the sandbox, which is the same check ci.yml runs against the locally built one.
+      - name: Install it and run the app inside its sandbox
+        run: tools/linux/check-flatpak.sh artifacts/flathub/ca.electricrv.MegaPDF.flatpak "$RUNNER_TEMP/fixtures"
+
+      - name: Flathub's linter, on the manifest that would be submitted
+        run: |
+          flatpak install -y --noninteractive --user flathub org.flatpak.Builder
+          flatpak run --command=flatpak-builder-lint org.flatpak.Builder \
+            manifest artifacts/release/ca.electricrv.MegaPDF.yml
+
+      - name: What this run produced
+        run: |
+          {
+            echo "### Linux release artefacts"
+            echo
+            echo '```'
+            ls -l artifacts/release
+            echo '```'
+            echo
+            echo "**sha256**: \`$(cut -d' ' -f1 artifacts/release/*.sha256)\`"
+            echo
+            echo "The \`sources:\` block of the manifest a Flathub pull request would carry:"
+            echo
+            echo '```yaml'
+            sed -n '/^ *sources:/,$p' artifacts/release/ca.electricrv.MegaPDF.yml
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-linux-release
+          path: |
+            artifacts/release/megapdf-linux-x64-*.tar.gz
+            artifacts/release/megapdf-linux-x64-*.tar.gz.sha256
+            artifacts/release/ca.electricrv.MegaPDF.yml
+            artifacts/flathub/ca.electricrv.MegaPDF.flatpak
+          if-no-files-found: error
+
+  # A job of its own, so the write permission exists only on a tag run and never on
+  # the pull-request rehearsal above. It builds nothing: it attaches what that job
+  # already made, and that this workflow already installed and ran.
+  publish:
+    name: Attach to the release
+    needs: tarball
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MegaPDF-linux-release
+          path: artifacts
+
+      # Neither creates a tag nor touches any other release. `--verify-tag` refuses a
+      # tag that is not already pushed, and the release is only created when it is not
+      # there — the macOS and Windows builds may well have made it first.
+      - name: Attach the tarball and its checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          TAG="$GITHUB_REF_NAME"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --verify-tag --title "MegaPDF $TAG" \
+              --notes "See docs/release-notes/. The Linux tarball below is what the Flathub manifest fetches; its sha256 is beside it."
+          gh release upload "$TAG" \
+            artifacts/release/megapdf-linux-x64-*.tar.gz \
+            artifacts/release/megapdf-linux-x64-*.tar.gz.sha256 \
+            --clobber

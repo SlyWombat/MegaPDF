@@ -1,0 +1,68 @@
+# The manifest as Flathub would build it (#254 A3). NOT SUBMITTED ANYWHERE.
+#
+# This is a template, not a manifest: tools/linux/make-flathub-manifest.sh fills in the
+# @SOURCE@ line with a release tarball's URL and sha256 (or, for a dry run, its path),
+# because neither exists until the tag build has made one. The generated file is what a
+# pull request against flathub/flathub would contain.
+#
+# How it differs from ../ca.electricrv.MegaPDF.yml, which is the same app built here:
+#
+#   * one `sources:` entry, an archive fetched by URL and checksum, instead of a local
+#     directory and three loose files. Flathub builds from its own repository and can
+#     reach nothing of ours except by URL;
+#   * the build commands read `flatpak/…` rather than the top of the context, because
+#     the tarball carries the launcher, the desktop entry and the metainfo inside it —
+#     one source and one checksum, so there is nothing to keep in step by hand.
+#
+# Everything else — the runtime, the permissions, where the tree is installed, and why
+# nothing is stripped — is identical on purpose, and tools/linux/check-flatpak.sh drives
+# the result of either.
+app-id: ca.electricrv.MegaPDF
+
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+
+command: megapdf
+
+# Identical to the local manifest. See it for why each of these three is here and why
+# --filesystem, --share=network and --socket=cups are not.
+finish-args:
+  - --socket=x11
+  - --share=ipc
+  - --device=dri
+
+modules:
+  - name: megapdf
+    buildsystem: simple
+    # The tree in the tarball was published with DebugType=none and carries two native
+    # libraries that were built and tested exactly as they are. Stripping libpdfium.so
+    # here would ship a binary that is not the one the corpus batteries ran against.
+    build-options:
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      # In one piece under /app/lib: a self-contained .NET publish whose apphost finds
+      # libmegapdf_core.so and libpdfium.so beside itself.
+      - install -d /app/lib/megapdf
+      - cp -a bin/. /app/lib/megapdf/
+      - install -Dm755 flatpak/megapdf.sh /app/bin/megapdf
+
+      - install -Dm644 flatpak/ca.electricrv.MegaPDF.desktop /app/share/applications/ca.electricrv.MegaPDF.desktop
+      - install -Dm644 flatpak/ca.electricrv.MegaPDF.metainfo.xml /app/share/metainfo/ca.electricrv.MegaPDF.metainfo.xml
+      - |
+        set -e
+        for size in 16x16 22x22 24x24 32x32 48x48 64x64 128x128 256x256 512x512; do
+            install -Dm644 "share/icons/hicolor/$size/apps/megapdf.png" \
+                "/app/share/icons/hicolor/$size/apps/ca.electricrv.MegaPDF.png"
+        done
+        install -Dm644 share/icons/hicolor/scalable/apps/megapdf.svg \
+            /app/share/icons/hicolor/scalable/apps/ca.electricrv.MegaPDF.svg
+
+      # Twice, deliberately: beside the binary where nothing can prune it, and under
+      # share/doc where the convention says to look (#194).
+      - install -Dm644 share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt /app/lib/megapdf/THIRD-PARTY-NOTICES.txt
+      - install -Dm644 share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt /app/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt
+      - install -Dm644 share/doc/MegaPDF/LICENSE /app/share/doc/MegaPDF/LICENSE
+    sources:
+@SOURCE@

@@ -24,6 +24,10 @@ runs again in CI on every push.
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | the AppStream data a software centre shows. |
 | `tools/linux/store-captures.sh` | the six listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
 | `tools/linux/check-metainfo.sh` | the listing, through both the tools a Flathub reviewer runs: `appstreamcli validate` and `flatpak-builder-lint`. In CI on every push. |
+| `tools/linux/make-release-tarball.sh` | `megapdf-linux-x64-<ver>.tar.gz` and its sha256 — the archive the Flathub manifest fetches. |
+| `tools/linux/flatpak/flathub/…yml.in` | the manifest as Flathub would build it, with the `sources:` block left to be filled in. |
+| `tools/linux/make-flathub-manifest.sh` | fills it in, from a tarball's URL and checksum (or its path, for a dry run). |
+| `tools/linux/build-flathub-flatpak.sh` | builds *that* manifest, so the one Flathub runs is the one that has been run. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
@@ -42,6 +46,18 @@ tools/linux/build-flatpak.sh             # -> artifacts/flatpak/ca.electricrv.Me
 tools/linux/check-flatpak.sh             # installs it, runs the app in the sandbox
 
 tools/linux/check-metainfo.sh            # the listing, through both validators
+```
+
+And the release side of it — what the tag build does, by hand:
+
+```sh
+tools/linux/make-release-tarball.sh                      # -> artifacts/release/megapdf-linux-x64-<ver>.tar.gz
+T=artifacts/release/megapdf-linux-x64-*.tar.gz
+tools/linux/make-flathub-manifest.sh $T                  # the manifest for the Flathub PR
+tools/linux/make-flathub-manifest.sh $T --local \
+    artifacts/release/local.yml                          # the same, pointed at the file
+tools/linux/build-flathub-flatpak.sh artifacts/release/local.yml
+tools/linux/check-flatpak.sh artifacts/flathub/ca.electricrv.MegaPDF.flatpak artifacts/fixtures
 ```
 
 `check-metainfo.sh` needs Flathub's own linter, which is a flatpak:
@@ -251,11 +267,26 @@ following can be decided here.
    **2.0.0's date is the day the packaging and the 2.0 copy were finished, not a release
    date.** Both the version and the date have to be right when 2.0 is tagged; the tag
    build is where that is checked, so it is not left to whoever remembers.
-6. **Which branch.** Flathub builds from a manifest in its own repository. This one
-   installs a prebuilt tree, which Flathub accepts for a project whose source is public —
-   MegaPDF is Apache-2.0 — but it means the manifest there fetches a release tarball from
-   a URL with a checksum, rather than the local directory this one uses. That is a small
-   edit to the `sources:` block and a step in the release process to publish the tarball.
+6. **Which manifest — written, and built from.** Flathub builds from a manifest in its
+   own repository, which can reach nothing of ours except by URL. That manifest is
+   generated rather than kept as a second copy to drift:
+   `tools/linux/flatpak/flathub/ca.electricrv.MegaPDF.yml.in` is the template, and
+   `tools/linux/make-flathub-manifest.sh` fills its one `sources:` entry in from a
+   release tarball's URL and sha256.
+
+   **One source and one checksum**, because the tarball carries the launcher, the desktop
+   entry and the metainfo inside it under `flatpak/`. A manifest with four sources is
+   four things to get right at release time and four things to notice when one is stale;
+   this way, what Flathub builds is provably the listing this repository reviewed.
+
+   The tag build (`.github/workflows/linux-release.yml`) makes the tarball, generates
+   both the real manifest and a copy pointed at the file on disk, **builds the Flatpak
+   from that copy**, and runs `check-flatpak.sh` against the result — so the manifest a
+   reviewer will run is one that has been run. On a tag it attaches the tarball and its
+   checksum to that release; `workflow_dispatch` does everything except the attaching.
+
+   What is still a person's step: **opening the pull request against `flathub/flathub`**
+   with the generated manifest. Nothing here does that, and nothing here pushes a tag.
 
 ## Before a Flathub submission: what is needed from the code
 
