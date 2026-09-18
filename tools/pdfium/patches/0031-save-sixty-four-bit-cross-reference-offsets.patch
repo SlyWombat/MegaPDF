@@ -1,0 +1,235 @@
+--- a/core/fpdfapi/edit/cpdf_creator.cpp
++++ b/core/fpdfapi/edit/cpdf_creator.cpp
+@@ -112,12 +112,44 @@
+   return true;
+ }
+ 
+-bool OutputIndex(IFX_ArchiveStream* archive, FX_FILESIZE offset) {
+-  return archive->WriteByte(static_cast<uint8_t>(offset >> 24)) &&
+-         archive->WriteByte(static_cast<uint8_t>(offset >> 16)) &&
+-         archive->WriteByte(static_cast<uint8_t>(offset >> 8)) &&
+-         archive->WriteByte(static_cast<uint8_t>(offset)) &&
+-         archive->WriteByte(0);
++// A classic cross-reference entry is exactly 20 bytes, of which the offset is exactly ten
++// digits (PDF 1.7, 7.5.4 "Cross-Reference Table"). `object_offsets_` holds FX_FILESIZE,
++// and "%010d" formatted the low 32 bits of it as a signed int, so in a file over 2 GiB
++// every object past that point was listed at a negative offset -- including, in a real
++// 2.68 GB file, the document catalog, which no reader could then find (#267).
++//
++// Ten digits cannot express an offset of 10^10 or more, in any format string: such a file
++// has no valid classic table, so the save is refused rather than written unreadable.
++constexpr FX_FILESIZE kMaxClassicXRefOffset = 9999999999;
++
++bool WriteXRefEntry(IFX_ArchiveStream* archive, FX_FILESIZE offset) {
++  if (offset < 0 || offset > kMaxClassicXRefOffset) {
++    return false;
++  }
++  return archive->WriteString(
++      ByteString::Format("%010lld 00000 n\r\n", static_cast<long long>(offset))
++          .AsStringView());
++}
++
++// The width in bytes of a cross-reference stream's offset field (the second entry of
++// /W). Four while every offset fits in four bytes, which is every file under 4 GiB and so
++// every file this writer produced before, whose bytes do not change (#267).
++int XRefStreamOffsetWidth(FX_FILESIZE max_offset) {
++  int width = 4;
++  while (width < 8 &&
++         max_offset >= (static_cast<FX_FILESIZE>(1) << (8 * width))) {
++    width++;
++  }
++  return width;
++}
++
++bool OutputIndex(IFX_ArchiveStream* archive, FX_FILESIZE offset, int width) {
++  for (int shift = 8 * (width - 1); shift >= 0; shift -= 8) {
++    if (!archive->WriteByte(static_cast<uint8_t>((offset >> shift) & 0xff))) {
++      return false;
++    }
++  }
++  return archive->WriteByte(0);
+ }
+ 
+ }  // namespace
+@@ -413,8 +445,7 @@
+       }
+ 
+       while (i < j) {
+-        str = ByteString::Format("%010d 00000 n\r\n", object_offsets_[i++]);
+-        if (!archive_->WriteString(str.AsStringView())) {
++        if (!WriteXRefEntry(archive_.get(), object_offsets_[i++])) {
+           return Stage::kInvalid;
+         }
+       }
+@@ -454,8 +485,7 @@
+ 
+       while (i < j) {
+         objnum = new_obj_num_array_[i++];
+-        str = ByteString::Format("%010d 00000 n\r\n", object_offsets_[objnum]);
+-        if (!archive_->WriteString(str.AsStringView())) {
++        if (!WriteXRefEntry(archive_.get(), object_offsets_[objnum])) {
+           return Stage::kInvalid;
+         }
+       }
+@@ -469,13 +499,23 @@
+   DCHECK(stage_ >= Stage::kWriteTrailerAndFinish90);
+ 
+   bool bXRefStream = is_incremental_ && parser_->IsXRefStream();
++  // The object number the cross-reference stream itself takes, decided once: the object
++  // header below, the /Index the stream must list itself in, and /Size all have to agree
++  // about it -- the same trap #246 fell into with the encryption dictionary. Past every
++  // number the document has and past anything stage 2 wrote (an inline encryption
++  // dictionary moves `last_obj_num_`), so it can collide with neither.
++  const uint32_t xref_stream_obj_num =
++      std::max(last_obj_num_, document_->GetLastObjNum()) + 1;
+   if (!bXRefStream) {
+     if (!archive_->WriteString("trailer\r\n<<")) {
+       return Stage::kInvalid;
+     }
+   } else {
+-    if (!archive_->WriteDWord(document_->GetLastObjNum() + 1) ||
+-        !archive_->WriteString(" 0 obj <<")) {
++    // /Type /XRef, which ISO 32000-1 table 17 requires of a cross-reference stream and
++    // upstream never wrote: the loop below copies the parser's combined trailer and skips
++    // "Type" by name, so nothing put it back (#267).
++    if (!archive_->WriteDWord(xref_stream_obj_num) ||
++        !archive_->WriteString(" 0 obj <</Type /XRef")) {
+       return Stage::kInvalid;
+     }
+   }
+@@ -531,8 +571,11 @@
+     }
+   }
+ 
++  // One past the highest object number the file actually holds, which for the stream
++  // form is the stream itself.
+   if (!archive_->WriteString("/Size ") ||
+-      !archive_->WriteDWord(last_obj_num_ + (bXRefStream ? 2 : 1))) {
++      !archive_->WriteDWord(bXRefStream ? xref_stream_obj_num + 1
++                                        : last_obj_num_ + 1)) {
+     return Stage::kInvalid;
+   }
+   if (is_incremental_) {
+@@ -554,55 +597,74 @@
+       return Stage::kInvalid;
+     }
+   } else {
+-    if (!archive_->WriteString("/W[0 4 1]/Index[")) {
+-      return Stage::kInvalid;
+-    }
+-    if (is_incremental_ && parser_ && parser_->GetLastXRefOffset() == 0) {
+-      uint32_t i = 0;
+-      for (i = 0; i < last_obj_num_; i++) {
+-        if (!pdfium::Contains(object_offsets_, i)) {
+-          continue;
+-        }
+-        if (!archive_->WriteDWord(i) || !archive_->WriteString(" 1 ")) {
+-          return Stage::kInvalid;
++    // The entries this cross-reference stream will carry, walked before anything is
++    // written: the width of its offset field and its /Length both depend on the largest
++    // offset among them, and /W and /Length are written before the stream data (#267).
++    const bool from_object_offsets =
++        is_incremental_ && parser_ && parser_->GetLastXRefOffset() == 0;
++    auto for_each_entry = [&](auto&& fn) {
++      if (from_object_offsets) {
++        for (uint32_t i = 0; i < last_obj_num_; i++) {
++          auto it = object_offsets_.find(i);
++          if (it != object_offsets_.end()) {
++            fn(i, it->second);
++          }
+         }
+-      }
+-      if (!archive_->WriteString("]/Length ") ||
+-          !archive_->WriteDWord(last_obj_num_ * 5) ||
+-          !archive_->WriteString(">>stream\r\n")) {
+-        return Stage::kInvalid;
+-      }
+-      for (i = 0; i < last_obj_num_; i++) {
+-        auto it = object_offsets_.find(i);
+-        if (it == object_offsets_.end()) {
+-          continue;
+-        }
+-        if (!OutputIndex(archive_.get(), it->second)) {
+-          return Stage::kInvalid;
+-        }
+-      }
+-    } else {
+-      int count = fxcrt::CollectionSize<int>(new_obj_num_array_);
+-      int i = 0;
+-      for (i = 0; i < count; i++) {
+-        if (!archive_->WriteDWord(new_obj_num_array_[i]) ||
+-            !archive_->WriteString(" 1 ")) {
+-          return Stage::kInvalid;
+-        }
+-      }
+-      if (!archive_->WriteString("]/Length ") ||
+-          !archive_->WriteDWord(count * 5) ||
+-          !archive_->WriteString(">>stream\r\n")) {
+-        return Stage::kInvalid;
+-      }
+-      for (i = 0; i < count; ++i) {
+-        if (!OutputIndex(archive_.get(),
+-                         object_offsets_[new_obj_num_array_[i]])) {
+-          return Stage::kInvalid;
+-        }
+-      }
+-    }
+-    if (!archive_->WriteString("\r\nendstream")) {
++      } else {
++        for (uint32_t objnum : new_obj_num_array_) {
++          auto it = object_offsets_.find(objnum);
++          fn(objnum, it == object_offsets_.end() ? 0 : it->second);
++        }
++      }
++      // And the stream itself, at the offset startxref is about to name. Upstream left it
++      // out, so a reader was told /Size and shown nothing that high; qpdf reports the
++      // file's object count as wrong (#267). Its number is above every other one here, so
++      // the /Index stays in ascending order.
++      fn(xref_stream_obj_num, xref_start_);
++    };
++
++    uint32_t entry_count = 0;
++    FX_FILESIZE max_offset = 0;
++    for_each_entry([&](uint32_t, FX_FILESIZE offset) {
++      entry_count++;
++      max_offset = std::max(max_offset, offset);
++    });
++    const int offset_width = XRefStreamOffsetWidth(max_offset);
++
++    if (!archive_->WriteString("/W[0 ") ||
++        !archive_->WriteDWord(static_cast<uint32_t>(offset_width)) ||
++        !archive_->WriteString(" 1]/Index[")) {
++      return Stage::kInvalid;
++    }
++    bool written = true;
++    for_each_entry([&](uint32_t objnum, FX_FILESIZE) {
++      written = written && archive_->WriteDWord(objnum) &&
++                archive_->WriteString(" 1 ");
++    });
++    if (!written) {
++      return Stage::kInvalid;
++    }
++    // The true size of the stream data. Upstream declared `last_obj_num_ * 5` on the
++    // branch above, which counts every object number and not the entries actually
++    // written, so /Length overstated the stream whenever any number was absent -- object
++    // 0 always is (#267).
++    if (!archive_->WriteString("]/Length ") ||
++        !archive_->WriteDWord(entry_count *
++                              static_cast<uint32_t>(offset_width + 1)) ||
++        !archive_->WriteString(">>stream\r\n")) {
++      return Stage::kInvalid;
++    }
++    for_each_entry([&](uint32_t, FX_FILESIZE offset) {
++      written = written && OutputIndex(archive_.get(), offset, offset_width);
++    });
++    if (!written) {
++      return Stage::kInvalid;
++    }
++    // ... and endobj, which upstream never wrote either: it went from "endstream"
++    // straight to "startxref", leaving the cross-reference stream an unterminated
++    // indirect object. qpdf calls such a file damaged and rebuilds its table; so does
++    // every other strict reader (#267).
++    if (!archive_->WriteString("\r\nendstream\r\nendobj")) {
+       return Stage::kInvalid;
+     }
+   }

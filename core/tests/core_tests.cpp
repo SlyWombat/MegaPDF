@@ -28,6 +28,7 @@
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -58,6 +59,7 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include "fpdf_edit.h"
+#include "fpdf_save.h"   // FPDF_INCREMENTAL: the one save shape the core does not expose (#267)
 #include "fpdf_text.h"
 #include "fpdfview.h"
 // The #173 leak hunt, shared with tools/leakcheck so the suite and the corpus battery
@@ -4794,6 +4796,520 @@ void test_protect_names_the_dictionary_it_wrote(const std::string& fixtures) {
     }
 }
 
+// --------------------------------------------------------------------------
+// #267: what a saved file's cross-reference table says about where its objects are.
+//
+// Every reader but MegaPDF trusts that table. PDFium's own parser does not -- it
+// rebuilds one that does not add up -- which is why a 2.68 GB file saved through the
+// core reopened happily here and told poppler to reconstruct, on a document big enough
+// that reconstruction had not finished after twenty minutes. Two writers were wrong:
+// the classic table formatted an FX_FILESIZE through "%d", so every offset past 2 GiB
+// came out negative, and the cross-reference stream wrote a four-byte offset field, so
+// every offset past 4 GiB wrapped. PDFium patch 0031 fixes both.
+//
+// The walk below is the stranger's walk: startxref, the section it names, the sections
+// its /Prev chains to, and for every in-use entry, "is this offset a number a reader can
+// use, and does it land on the object it names?".
+
+// A saved file read at 64-bit offsets, without holding it in memory: these files are
+// bigger than any buffer the suite is willing to allocate.
+class SavedFile {
+  public:
+    explicit SavedFile(const std::string& path) : in_(path, std::ios::binary) {
+        if (in_) {
+            in_.seekg(0, std::ios::end);
+            size_ = static_cast<long long>(in_.tellg());
+        }
+    }
+    long long size() const { return size_; }
+    std::string at(long long offset, size_t len) {
+        if (offset < 0 || offset >= size_ || len == 0) return std::string();
+        in_.clear();
+        in_.seekg(static_cast<std::streamoff>(offset));
+        std::string buf(len, '\0');
+        in_.read(&buf[0], static_cast<std::streamsize>(len));
+        buf.resize(static_cast<size_t>(in_.gcount()));
+        return buf;
+    }
+
+  private:
+    std::ifstream in_;
+    long long size_ = 0;
+};
+
+struct XRefRead {
+    bool parsed = false;
+    std::string form;                 // "table", "stream", or both down the /Prev chain
+    long long entries = 0;            // in-use entries read
+    long long negative = 0;           // offsets written as a negative number
+    long long misplaced = 0;          // offsets that do not land on "<num> 0 obj"
+    long long max_offset = 0;
+    int newest_offset_field = 0;      // /W's offset width in the newest stream section
+    long long declared_length = -1;   // that section's /Length ...
+    long long actual_length = -1;     // ... and the bytes actually between stream/endstream
+    bool typed_xref = false;          // it says /Type /XRef, as table 17 requires
+    bool ends_the_object = false;     // "endstream" is followed by "endobj"
+    bool indexes_itself = false;      // it carries an entry for its own object number
+    int sections = 0;
+    int undecodable = 0;              // sections behind a filter this walk will not decode
+    std::string trouble;
+};
+
+long long dict_int(const std::string& dict, const char* key) {
+    const size_t at = dict.find(key);
+    if (at == std::string::npos) return -1;
+    return std::strtoll(dict.c_str() + at + std::strlen(key), nullptr, 10);
+}
+
+// The object an offset claims to be at is at it: "<num> 0 obj", and nothing before it.
+bool lands_on_object(SavedFile& f, long long offset, unsigned long long objnum) {
+    const std::string want = std::to_string(objnum) + " 0 obj";
+    const std::string there = f.at(offset, want.size());
+    return there == want;
+}
+
+void read_classic_section(SavedFile& f, const std::string& sect, XRefRead& r, long long* prev) {
+    if (r.form.find("table") == std::string::npos) r.form += (r.form.empty() ? "" : "+") + std::string("table");
+    std::istringstream in(sect);
+    std::string word;
+    in >> word;   // "xref"
+    while (in >> word) {
+        if (word == "trailer") break;
+        const long long start = std::strtoll(word.c_str(), nullptr, 10);
+        long long count = 0;
+        if (!(in >> count)) { r.trouble = "a subsection header with no count"; return; }
+        for (long long k = 0; k < count; k++) {
+            std::string off, gen, kind;
+            if (!(in >> off >> gen >> kind)) { r.trouble = "the table ends inside a subsection"; return; }
+            if (kind != "n") continue;
+            r.entries++;
+            // The bug's own signature: a ten-digit field that reads "-1610552185".
+            if (off.find('-') != std::string::npos) { r.negative++; continue; }
+            const long long offset = std::strtoll(off.c_str(), nullptr, 10);
+            r.max_offset = std::max(r.max_offset, offset);
+            if (!lands_on_object(f, offset, static_cast<unsigned long long>(start + k))) r.misplaced++;
+        }
+    }
+    const size_t t = sect.find("trailer");
+    *prev = (t == std::string::npos) ? -1 : dict_int(sect.substr(t), "/Prev");
+}
+
+void read_stream_section(SavedFile& f, const std::string& sect, XRefRead& r, long long* prev) {
+    const size_t ds = sect.find("<<");
+    const size_t st = sect.find("stream", ds == std::string::npos ? 0 : ds);
+    if (ds == std::string::npos || st == std::string::npos) {
+        r.trouble = "startxref names neither a table nor a cross-reference stream";
+        return;
+    }
+    if (r.form.find("stream") == std::string::npos) r.form += (r.form.empty() ? "" : "+") + std::string("stream");
+    const std::string dict = sect.substr(ds, st - ds);
+    // The stream's own object number, off the "N 0 obj" the startxref pointed at.
+    const long long self = std::strtoll(sect.c_str(), nullptr, 10);
+    const bool newest = r.declared_length < 0;
+    if (newest) {
+        r.typed_xref = dict.find("/XRef") != std::string::npos;
+        const size_t es = sect.find("endstream", st + 6);
+        if (es != std::string::npos) {
+            size_t after = es + 9;
+            while (after < sect.size() && (sect[after] == '\r' || sect[after] == '\n')) after++;
+            r.ends_the_object = sect.compare(after, 6, "endobj") == 0;
+        }
+    }
+    *prev = dict_int(dict, "/Prev");
+    // Another writer's compressed cross-reference stream (qpdf's, say). Not this writer's
+    // output, and decoding it is not what this test is for: counted, and the chain stops.
+    if (dict.find("/Filter") != std::string::npos) { r.undecodable++; *prev = -1; return; }
+
+    int w[3] = {0, 0, 0};
+    const size_t wat = dict.find("/W");
+    if (wat == std::string::npos) { r.trouble = "a cross-reference stream with no /W"; return; }
+    {
+        std::istringstream win(dict.substr(dict.find('[', wat) + 1));
+        win >> w[0] >> w[1] >> w[2];
+    }
+    if (w[1] <= 0 || w[1] > 8 || w[0] < 0 || w[0] > 4 || w[2] < 0 || w[2] > 4) {
+        r.trouble = "a cross-reference stream with an unusable /W";
+        return;
+    }
+    if (r.newest_offset_field == 0) r.newest_offset_field = w[1];
+
+    const long long length = dict_int(dict, "/Length");
+    size_t p = st + 6;
+    if (p < sect.size() && sect[p] == '\r') p++;
+    if (p < sect.size() && sect[p] == '\n') p++;
+    const size_t end = sect.find("endstream", p);
+    if (r.declared_length < 0) {
+        r.declared_length = length;
+        // The gap between "stream" and "endstream", less the end-of-line the writer puts
+        // between them. Every entry this writer emits ends on its zero generation byte, so
+        // a trailing 0x0a or 0x0d in the gap is that separator and not data.
+        long long gap = end == std::string::npos ? -1 : static_cast<long long>(end - p);
+        while (gap > 0 && (sect[p + static_cast<size_t>(gap) - 1] == '\n' || sect[p + static_cast<size_t>(gap) - 1] == '\r')) gap--;
+        r.actual_length = gap;
+    }
+    if (length < 0 || static_cast<size_t>(length) > sect.size() - p) {
+        r.trouble = "a cross-reference stream whose /Length is not in the file";
+        return;
+    }
+    const std::string data = sect.substr(p, static_cast<size_t>(length));
+
+    // /Index [start count start count ...]; absent means one run of /Size from 0.
+    std::vector<std::pair<long long, long long>> runs;
+    const size_t iat = dict.find("/Index");
+    const size_t iopen = iat == std::string::npos ? std::string::npos : dict.find('[', iat);
+    const size_t iclose = iopen == std::string::npos ? std::string::npos : dict.find(']', iopen);
+    if (iclose != std::string::npos) {
+        std::istringstream iin(dict.substr(iopen + 1, iclose - iopen - 1));
+        long long s = 0, c = 0;
+        while (iin >> s >> c) runs.emplace_back(s, c);
+    } else {
+        runs.emplace_back(0, dict_int(dict, "/Size"));
+    }
+
+    const size_t stride = static_cast<size_t>(w[0] + w[1] + w[2]);
+    size_t at = 0;
+    auto field = [&](size_t from, int width) {
+        unsigned long long v = 0;
+        for (int b = 0; b < width; b++) v = (v << 8) | static_cast<unsigned char>(data[from + b]);
+        return v;
+    };
+    for (const auto& run : runs) {
+        for (long long k = 0; k < run.second; k++, at += stride) {
+            if (at + stride > data.size()) { r.trouble = "the cross-reference stream is shorter than its /Index"; return; }
+            const unsigned long long type = w[0] == 0 ? 1 : field(at, w[0]);
+            if (type != 1) continue;   // free, or living in an object stream
+            r.entries++;
+            const long long objnum = run.first + k;
+            const unsigned long long offset = field(at + w[0], w[1]);
+            r.max_offset = std::max<long long>(r.max_offset, static_cast<long long>(offset));
+            if (newest && objnum == self) r.indexes_itself = true;
+            if (!lands_on_object(f, static_cast<long long>(offset), static_cast<unsigned long long>(objnum))) r.misplaced++;
+        }
+    }
+}
+
+XRefRead read_xref(const std::string& path) {
+    XRefRead r;
+    SavedFile f(path);
+    if (f.size() <= 0) { r.trouble = "the file is empty or will not open"; return r; }
+
+    const long long look = std::min<long long>(f.size(), 2048);
+    const std::string tail = f.at(f.size() - look, static_cast<size_t>(look));
+    const size_t sx = tail.rfind("startxref");
+    if (sx == std::string::npos) { r.trouble = "no startxref in the last 2 KB"; return r; }
+    long long next = std::strtoll(tail.c_str() + sx + 9, nullptr, 10);
+
+    std::set<long long> seen;
+    while (next >= 0 && next < f.size() && seen.insert(next).second && seen.size() < 64) {
+        // A section and its trailer sit at the end of the revision that wrote them, so
+        // this is kilobytes even in a 5 GB file; the cap is there for a malformed one.
+        const long long room = std::min<long long>(f.size() - next, 64LL << 20);
+        const std::string sect = f.at(next, static_cast<size_t>(room));
+        r.sections++;
+        long long prev = -1;
+        if (sect.compare(0, 4, "xref") == 0) {
+            read_classic_section(f, sect, r, &prev);
+        } else {
+            read_stream_section(f, sect, r, &prev);
+        }
+        if (!r.trouble.empty()) return r;
+        next = prev;
+    }
+    r.parsed = true;
+    return r;
+}
+
+// Every in-use entry, in one line of assertions, named for the file it came from.
+void check_xref(const std::string& what, const XRefRead& x, long long past = 0) {
+    check(x.parsed, what + ": its cross-reference reads end to end", x.trouble);
+    check(x.entries > 0, what + ": it has in-use entries", std::to_string(x.entries));
+    check(x.negative == 0, what + ": no entry is a negative offset (#267)",
+          std::to_string(x.negative) + " of " + std::to_string(x.entries) + " negative");
+    check(x.misplaced == 0, what + ": every entry lands on the \"N 0 obj\" it names (#267)",
+          std::to_string(x.misplaced) + " of " + std::to_string(x.entries) + " misplaced");
+    if (past > 0) {
+        check(x.max_offset >= past, what + ": and its entries really do reach past the line being tested",
+              "highest offset " + std::to_string(x.max_offset));
+    }
+}
+
+// A saved file written straight to disk: these are gigabytes, so nothing here collects
+// them in a vector the way collect() does.
+struct FileSink {
+    FILE* fp = nullptr;
+    long long written = 0;
+    explicit FileSink(const std::string& path) : fp(std::fopen(path.c_str(), "wb")) {}
+    ~FileSink() { if (fp != nullptr) std::fclose(fp); }
+    void close() { if (fp != nullptr) { std::fclose(fp); fp = nullptr; } }
+};
+
+int to_file(void* ctx, const void* data, size_t size) {
+    auto* sink = static_cast<FileSink*>(ctx);
+    if (sink->fp == nullptr) return 0;
+    if (std::fwrite(data, 1, size, sink->fp) != size) return 0;
+    sink->written += static_cast<long long>(size);
+    return 1;
+}
+
+// PDFium's own FPDF_FILEWRITE, for the one save shape the core does not expose: an
+// incremental one, which is the only way this writer ever reaches its cross-reference
+// *stream* branch (`is_incremental_ && parser_->IsXRefStream()`).
+struct IncrementalWriter {
+    FPDF_FILEWRITE fw{};
+    FileSink sink;
+    explicit IncrementalWriter(const std::string& path) : sink(path) {
+        fw.version = 1;
+        fw.WriteBlock = [](FPDF_FILEWRITE* self, const void* data, unsigned long size) -> int {
+            return to_file(&reinterpret_cast<IncrementalWriter*>(self)->sink, data, size);
+        };
+    }
+};
+
+// A five-object document whose cross-reference is a *stream*, not a table -- the shape
+// PDFium only writes back when it saves incrementally. Uncompressed, /W [1 4 2], so the
+// bytes are readable in a hex dump when this test fails.
+std::vector<unsigned char> xref_stream_pdf() {
+    std::string pdf = "%PDF-1.5\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) {
+        offsets.push_back(pdf.size());
+        pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>");
+    const std::string content = "BT /F1 24 Tf 72 700 Td (Cross-reference stream) Tj ET";
+    add("<< /Length " + std::to_string(content.size()) + " >>\nstream\n" + content + "\nendstream");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+    const size_t xref = pdf.size();
+    const size_t self = offsets.size() + 1;            // the stream indexes itself
+    std::string data;
+    auto entry = [&](unsigned char type, unsigned long long off, unsigned gen) {
+        data.push_back(static_cast<char>(type));
+        for (int b = 3; b >= 0; b--) data.push_back(static_cast<char>((off >> (8 * b)) & 0xff));
+        data.push_back(static_cast<char>((gen >> 8) & 0xff));
+        data.push_back(static_cast<char>(gen & 0xff));
+    };
+    entry(0, 0, 65535);
+    for (size_t off : offsets) entry(1, off, 0);
+    entry(1, xref, 0);
+    pdf += std::to_string(self) + " 0 obj\n<< /Type /XRef /Size " + std::to_string(self + 1) +
+           " /W [1 4 2] /Root 1 0 R /Length " + std::to_string(data.size()) + " >>\nstream\n" + data +
+           "\nendstream\nendobj\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+// The always-on half of #267: the writer's two cross-reference forms, on documents small
+// enough for every CI runner. It proves the shapes -- entries that parse, that are
+// non-negative, that land on their object, and a stream whose /Length is the length of
+// the stream -- on every push. The offsets here are small; the half that needs real
+// offsets past 2 and 4 GiB is test_large_file_xref(), below.
+void test_xref_entries_are_findable(const std::string& fixtures) {
+    std::filesystem::path tmp = std::filesystem::temp_directory_path() / "megapdf-267-xref";
+    std::error_code ec;
+    std::filesystem::create_directories(tmp, ec);
+
+    // The classic table, through the core's own save, over the fixtures CI already has.
+    for (const char* name : {"fixture.pdf", "forms.pdf", "textbox.pdf", "unused-tail.pdf"}) {
+        const auto bytes = read_file(fixtures + "/" + name);
+        if (bytes.empty()) continue;
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, std::string("xref shapes: ") + name + " opens");
+        if (d == nullptr) continue;
+        const std::string out = (tmp / (std::string("classic-") + name)).string();
+        FileSink sink(out);
+        const int rc = megapdf_save(d, to_file, &sink);
+        sink.close();
+        megapdf_close(d);
+        check(rc == MEGAPDF_OK, std::string("xref shapes: ") + name + " saves", megapdf_last_error_message());
+        if (rc != MEGAPDF_OK) continue;
+        const XRefRead x = read_xref(out);
+        check(x.form == "table", std::string("xref shapes: ") + name + " saves a classic table", x.form);
+        check_xref(std::string("xref shapes: ") + name, x);
+        std::filesystem::remove(out, ec);
+    }
+
+    // The cross-reference stream. Only an incremental save reaches it, and nothing in the
+    // core's API asks for one, so this goes through PDFium directly.
+    const auto source = xref_stream_pdf();
+    {
+        // It really is a stream, before anything is saved: otherwise this would quietly
+        // test the classic branch twice.
+        const std::string in = (tmp / "xref-stream-source.pdf").string();
+        std::ofstream(in, std::ios::binary).write(reinterpret_cast<const char*>(source.data()),
+                                                  static_cast<std::streamsize>(source.size()));
+        const XRefRead x0 = read_xref(in);
+        check(x0.form == "stream", "xref shapes: the incremental source has a cross-reference stream", x0.form);
+        check_xref("xref shapes: the incremental source", x0);
+        std::filesystem::remove(in, ec);
+    }
+    FPDF_DOCUMENT doc = FPDF_LoadMemDocument(source.data(), static_cast<int>(source.size()), nullptr);
+    check(doc != nullptr, "xref shapes: PDFium opens the cross-reference-stream document");
+    if (doc != nullptr) {
+        // Something for the incremental revision to carry.
+        FPDF_PAGE page = FPDF_LoadPage(doc, 0);
+        if (page != nullptr) {
+            FPDF_PAGEOBJECT box = FPDFPageObj_CreateNewRect(72, 100, 200, 60);
+            FPDFPageObj_SetFillColor(box, 20, 90, 180, 255);
+            FPDFPage_InsertObject(page, box);
+            FPDFPage_GenerateContent(page);
+            FPDF_ClosePage(page);
+        }
+        const std::string out = (tmp / "incremental-xref-stream.pdf").string();
+        IncrementalWriter w(out);
+        const bool saved = FPDF_SaveAsCopy(doc, &w.fw, FPDF_INCREMENTAL) == 1;
+        w.sink.close();
+        FPDF_CloseDocument(doc);
+        check(saved, "xref shapes: it saves incrementally");
+        if (saved) {
+            const XRefRead x = read_xref(out);
+            check(x.form.find("stream") != std::string::npos,
+                  "xref shapes: the incremental revision is a cross-reference stream too", x.form);
+            check_xref("xref shapes: the incremental revision", x);
+            // The /Length fix that rode along with the widening: upstream declared
+            // `last_obj_num_ * 5` on one branch, counting numbers rather than entries.
+            check(x.declared_length >= 0 && x.declared_length == x.actual_length,
+                  "xref shapes: the stream's /Length is the length of the stream (#267)",
+                  std::to_string(x.declared_length) + " declared, " + std::to_string(x.actual_length) + " written");
+            check(x.newest_offset_field == 4,
+                  "xref shapes: a small file still uses a four-byte offset field, as it always did",
+                  "/W offset width " + std::to_string(x.newest_offset_field));
+            // Three things upstream never wrote, each of which on its own made every
+            // incremental save of a cross-reference-stream document a file qpdf calls
+            // damaged and rebuilds the table of. Found while making the stream form work
+            // past 4 GiB, fixed in the same patch, and unlike the offsets themselves each
+            // shows on a five-object document (#267).
+            check(x.typed_xref, "xref shapes: the cross-reference stream says /Type /XRef (#267)");
+            check(x.ends_the_object, "xref shapes: and is closed with endobj (#267)");
+            check(x.indexes_itself,
+                  "xref shapes: and carries an entry for itself, so /Size names an object a reader can see (#267)");
+            std::filesystem::remove(out, ec);
+        }
+    }
+    std::filesystem::remove_all(tmp, ec);
+}
+
+// The half that needs a file bigger than 4 GiB. Those are generated, not committed
+// (tools/gen_large_fixtures.py, and tools/make_xref_stream.py for the second shape), so
+// this runs where they exist and says loudly where they do not.
+//
+//   MEGAPDF_LARGE_FIXTURES=<dir>  holding huge-4_5gb.pdf, and optionally
+//                                 huge-4_5gb-xrefstream.pdf
+//   MEGAPDF_LARGE_SCRATCH=<dir>   where the multi-GB copies go; the fixtures dir by default
+void test_large_file_xref() {
+    const char* dir = std::getenv("MEGAPDF_LARGE_FIXTURES");
+    if (dir == nullptr || *dir == 0) {
+        std::printf("large-file xref: skipped -- set MEGAPDF_LARGE_FIXTURES to a directory holding "
+                    "huge-4_5gb.pdf (tools/gen_large_fixtures.py) to run it (#267)\n");
+        return;
+    }
+    const char* scratch_env = std::getenv("MEGAPDF_LARGE_SCRATCH");
+    const std::filesystem::path scratch = (scratch_env != nullptr && *scratch_env != 0) ? scratch_env : dir;
+    std::error_code ec;
+
+    struct Case {
+        const char* file;
+        const char* form;      // the cross-reference form the save is expected to write
+        bool incremental;
+        long long past;        // the offset line this case is here to cross
+    };
+    const Case cases[] = {
+        // The file #267 was found on: 2.68 GB, 1,000 pages, a classic table, every offset
+        // in its second half past the signed 32-bit line.
+        {"huge-2_5gb.pdf", "table", false, 2LL << 30},
+        {"huge-4_5gb.pdf", "table", false, 4LL << 30},
+        {"huge-4_5gb-xrefstream.pdf", "stream", true, 4LL << 30},
+    };
+
+    for (const Case& c : cases) {
+        const std::string in = std::string(dir) + "/" + c.file;
+        if (!std::filesystem::exists(in, ec)) {
+            std::printf("large-file xref: skipped %s -- not in %s\n", c.file, dir);
+            continue;
+        }
+        const long long in_size = static_cast<long long>(std::filesystem::file_size(in, ec));
+        // A full save is the size of its source. An incremental one is that again on top:
+        // upstream's InitNewObjNumOffsets() treats every object the document has parsed as
+        // new, so the revision it appends repeats the body. Refusing beats filling a shared
+        // disk -- this is gigabytes either way.
+        const auto space = std::filesystem::space(scratch, ec);
+        const long long need = (c.incremental ? 2 * in_size : in_size) + (1LL << 30);
+        if (ec || static_cast<long long>(space.available) < need) {
+            std::printf("large-file xref: skipped %s -- %lld GiB free under %s, %lld GiB needed\n",
+                        c.file, static_cast<long long>(space.available) >> 30,
+                        scratch.string().c_str(), need >> 30);
+            continue;
+        }
+
+        const std::string out = (scratch / (std::string("saved-") + c.file)).string();
+        const auto started = std::chrono::steady_clock::now();
+        bool saved = false;
+        long long written = 0;
+
+        if (!c.incremental) {
+            // The core's own route, and the one the 2.68 GB file in #267 took: open the
+            // file (never a 5 GB byte array -- #148), edit a heading, save.
+            megapdf_document* d = megapdf_open_file(in.c_str(), nullptr);
+            check(d != nullptr, std::string("large-file xref: ") + c.file + " opens from the file",
+                  megapdf_last_error_message());
+            if (d == nullptr) continue;
+            check(megapdf_page_count(d) > 100, std::string("large-file xref: ") + c.file + " has its pages",
+                  std::to_string(megapdf_page_count(d)));
+            FileSink sink(out);
+            saved = megapdf_save(d, to_file, &sink) == MEGAPDF_OK;
+            written = sink.written;
+            sink.close();
+            megapdf_close(d);
+            check(saved, std::string("large-file xref: ") + c.file + " saves", megapdf_last_error_message());
+        } else {
+            FPDF_DOCUMENT doc = FPDF_LoadDocument(in.c_str(), nullptr);
+            check(doc != nullptr, std::string("large-file xref: ") + c.file + " opens in PDFium");
+            if (doc == nullptr) continue;
+            FPDF_PAGE page = FPDF_LoadPage(doc, 0);
+            if (page != nullptr) {
+                FPDF_PAGEOBJECT box = FPDFPageObj_CreateNewRect(72, 100, 200, 60);
+                FPDFPageObj_SetFillColor(box, 20, 90, 180, 255);
+                FPDFPage_InsertObject(page, box);
+                FPDFPage_GenerateContent(page);
+                FPDF_ClosePage(page);
+            }
+            IncrementalWriter w(out);
+            saved = FPDF_SaveAsCopy(doc, &w.fw, FPDF_INCREMENTAL) == 1;
+            written = w.sink.written;
+            w.sink.close();
+            FPDF_CloseDocument(doc);
+            check(saved, std::string("large-file xref: ") + c.file + " saves incrementally");
+        }
+        const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+
+        if (saved) {
+            check(written > c.past, std::string("large-file xref: ") + c.file + " wrote a file past " +
+                      std::to_string(c.past >> 30) + " GiB",
+                  std::to_string(written >> 20) + " MB");
+            const XRefRead x = read_xref(out);
+            check(x.form.find(c.form) != std::string::npos,
+                  std::string("large-file xref: ") + c.file + " saves a cross-reference " + c.form, x.form);
+            check_xref(std::string("large-file xref: ") + c.file, x, c.past);
+            const std::string width = x.newest_offset_field == 0
+                                          ? std::string()
+                                          : ", /W offset width " + std::to_string(x.newest_offset_field);
+            std::printf("large-file xref: %s -> %lld MB in %.0f s, %s, %lld entries, highest offset %lld%s\n",
+                        c.file, written >> 20, secs, x.form.c_str(), x.entries, x.max_offset, width.c_str());
+            if (x.newest_offset_field != 0) {
+                check(x.newest_offset_field >= 5,
+                      std::string("large-file xref: ") + c.file +
+                          ": the stream's offset field widened past four bytes (#267)",
+                      "/W offset width " + std::to_string(x.newest_offset_field));
+            }
+        }
+        // The disk is shared. Nothing this size outlives the case that wrote it, unless
+        // the run asked for it back.
+        if (std::getenv("MEGAPDF_LARGE_KEEP") == nullptr) std::filesystem::remove(out, ec);
+    }
+}
+
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -4841,6 +5357,8 @@ int main(int argc, char** argv) {
     test_redaction_fixtures(argv[1]);
     test_redaction_fails_closed(argv[1]);
     test_redaction_clears_undo(argv[1]);
+    test_xref_entries_are_findable(argv[1]);
+    test_large_file_xref();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
