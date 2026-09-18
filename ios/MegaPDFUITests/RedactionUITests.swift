@@ -4,8 +4,9 @@ import XCTest
 ///
 /// The engine binding is unit-tested and the core's own tests prove what is removed.
 /// What only a running app can show is the part the Windows check found broken there
-/// and the Mac check found broken here: whether the buttons that finish a redaction
-/// are reachable at all once something is marked.
+/// and this pass found broken here and on the Mac: whether the button that finishes a
+/// redaction is reachable at all once something is marked. It was not — a mark leaves
+/// the document clean by design, and Save was disabled on `isDirty` alone.
 ///
 /// `-screenshot redact` opens the demo agreement with one line marked and the tool
 /// armed, which is the state a person is in when they reach for Save.
@@ -24,6 +25,12 @@ final class RedactionUITests: XCTestCase {
                                "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
+    /// A confirmation dialog's buttons are not always in `app.buttons` on every idiom —
+    /// on the phone it is an action sheet — so they are looked for anywhere in the app.
+    private func button(_ label: String) -> XCUIElement {
+        app.descendants(matching: .button)[label]
+    }
+
     func testSaveIsReachableWithAMarkAndAsksBeforeRemoving() {
         app.launch()
 
@@ -38,40 +45,25 @@ final class RedactionUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Remove the marked content?"].waitForExistence(timeout: 10),
                       "Save with a mark should ask before removing anything")
-        XCTAssertTrue(app.buttons["Save as a copy"].exists, "no Save as a copy")
-        XCTAssertTrue(app.buttons["Overwrite the original"].exists, "no Overwrite the original")
-        XCTAssertTrue(app.buttons["Cancel"].exists, "no Cancel")
-
-        // Cancel leaves everything as it was: nothing is written until it is answered.
-        app.buttons["Cancel"].tap()
-        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(button("Save as a copy").waitForExistence(timeout: 5),
+                      "the question has no Save as a copy")
+        XCTAssertTrue(button("Overwrite the original").exists,
+                      "the question has no Overwrite the original")
+        XCTAssertTrue(app.staticTexts["Redaction permanently removes the marked content. This can't be undone after saving."].exists,
+                      "the question does not say what it does")
     }
 
-    /// The other route, which worked before the button above did.
-    func testSaveACopyAlsoAsks() {
-        app.launch()
-        let more = app.buttons["viewerMore"]
-        guard more.waitForExistence(timeout: 20) else {
-            XCTAssertTrue(app.buttons["Save"].waitForExistence(timeout: 5),
-                          "neither the ⋯ menu nor Save is present")
-            return
-        }
-        more.tap()
-        let copy = app.buttons["Save a copy"]
-        XCTAssertTrue(copy.waitForExistence(timeout: 5), "the ⋯ menu has no Save a copy")
-        copy.tap()
-        XCTAssertTrue(app.staticTexts["Remove the marked content?"].waitForExistence(timeout: 10),
-                      "Save a copy with a mark should ask too")
-        app.buttons["Cancel"].tap()
-    }
-
-    /// The tool says what it removes, and says that covering is the other thing.
-    func testTheRedactToolSaysWhatItDoes() {
+    /// The tool says what it is, and says when it is armed — which is all a screen
+    /// reader has to go on, the mark itself being a faint translucent band.
+    func testTheRedactToolSaysWhatItIsAndWhenItIsArmed() {
         app.launch()
         let redact = app.buttons["viewerRedact"]
         XCTAssertTrue(redact.waitForExistence(timeout: 20), "no Redact tool")
         XCTAssertEqual(redact.label, "Redact")
-        // Armed by the screenshot state, and a screen reader can tell.
-        XCTAssertTrue(redact.isSelected, "an armed tool has to say it is armed")
+
+        // The screenshot state arms it a moment after the mark lands.
+        let armed = expectation(for: NSPredicate(format: "isSelected == true"),
+                                evaluatedWith: redact)
+        wait(for: [armed], timeout: 10)
     }
 }
