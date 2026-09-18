@@ -112,6 +112,10 @@ public partial class MainWindow
         // as checkboxes they announce on or off (#144).
         AutomationProperties.SetControlTypeOverride(AddTextButton, AutomationControlType.CheckBox);
         AutomationProperties.SetControlTypeOverride(WhiteoutButton, AutomationControlType.CheckBox);
+        // Redact arrived after #144 and was never added here, which is the whole of why a
+        // screen reader could not tell whether it was armed: identical XAML to the two
+        // above, and the override is not in the XAML (#173).
+        AutomationProperties.SetControlTypeOverride(RedactButton, AutomationControlType.CheckBox);
 
         // Built afresh and filled before they show, on every click: see OpenToolbarMenu.
         MoreButton.Click += (_, _) => OpenToolbarMenu(MoreButton, PlacementMode.BottomEdgeAlignedRight, MoreMenuEntries());

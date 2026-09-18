@@ -451,9 +451,13 @@
                   </ItemsControl.ItemsPanel>
                   <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:RedactionMarkView">
+                      <!-- Named, so a screen reader finds a mark on the page instead of
+                           hearing the status line once and then nothing (#173). Android
+                           and iOS have carried this name since the feature landed. -->
                       <Rectangle Width="{Binding Width}" Height="{Binding Height}"
                                  Margin="{Binding Margin}"
                                  HorizontalAlignment="Left" VerticalAlignment="Top"
+                                 AutomationProperties.Name="{x:Static loc:Strings.RedactMarkName}"
                                  Classes.selected="{Binding IsSelected}"
                                  Fill="{DynamicResource BrandRedactionMark}"
                                  Stroke="{DynamicResource BrandRedactionMarkOutline}"

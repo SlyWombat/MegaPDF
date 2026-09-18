@@ -1678,7 +1678,10 @@ internal static class Program
         // toggles and the page's scroll bars.
         check("each face in the font picker is named by its label, not the record",
               vm.TextFontChoices.All(f => f.ToString() == f.Label));
-        foreach (var toggle in new global::Avalonia.Controls.Button[] { window.AddTextButton, window.WhiteoutButton })
+        // Redact is here because it was not, and that is how it shipped announcing
+        // nothing about being armed (#173).
+        foreach (var toggle in new global::Avalonia.Controls.Button[]
+                 { window.AddTextButton, window.WhiteoutButton, window.RedactButton })
         {
             var peer = global::Avalonia.Automation.Peers.ControlAutomationPeer.CreatePeerForElement(toggle);
             check($"{peer.GetName()} is exposed as a checkbox ({peer.GetAutomationControlType()})",
