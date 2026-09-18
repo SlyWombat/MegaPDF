@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Builds a .deb of MegaPDF from a tree that tools/build-linux-app.sh has already
+# produced (#158) — the portable format, for GitHub Releases.
+#
+#     tools/build-linux-app.sh linux-x64 artifacts/linux
+#     tools/linux/build-deb.sh [tree-dir] [out-dir]
+#
+# A .deb rather than an AppImage: dpkg-deb --build needs no privileges, no FUSE and no
+# tool that is not already on a build machine, where appimagetool needs all three. It
+# is also what someone who has just downloaded a file from a Releases page will double
+# click. The Flatpak is the one with the sandbox and the store; this is the one that
+# installs on a machine.
+#
+# NOT a Debian-archive package. It installs the self-contained tree under /opt, which
+# a package in Debian proper would not do — see tools/Linux-Packaging.md for the
+# lintian tags that follow from that and why each is the right answer here.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TREE="${1:-$ROOT/artifacts/linux/MegaPDF}"
+OUT="${2:-$ROOT/artifacts/deb}"
+
+PKG=megapdf
+OPTDIR=/opt/MegaPDF
+
+[ -d "$TREE/bin" ] || { echo "::error::no app tree at $TREE — run tools/build-linux-app.sh first" >&2; exit 1; }
+VERSION="$(cat "$TREE/VERSION" 2>/dev/null || echo 0.1.0)"
+ARCH=amd64
+
+STAGE="$OUT/$PKG-$VERSION"
+rm -rf "$STAGE"
+mkdir -p "$STAGE/DEBIAN" "$STAGE$OPTDIR" "$STAGE/usr/bin" \
+         "$STAGE/usr/share/applications" "$STAGE/usr/share/doc/$PKG"
+
+echo "building $PKG $VERSION ($ARCH) from $TREE"
+
+# --- the payload ----------------------------------------------------------------
+# The published tree goes in one piece: the apphost finds libmegapdf_core.so and
+# libpdfium.so beside itself, so splitting it into /usr/lib and /usr/bin the way a
+# distribution package would is the one thing that breaks it.
+cp -a "$TREE/bin/." "$STAGE$OPTDIR/"
+ln -sf "$OPTDIR/MegaPDF" "$STAGE/usr/bin/megapdf"
+
+# An absolute Exec, for the reason tools/linux/install.sh gives: a desktop entry is
+# launched by the session, whose PATH is not always the login shell's, and an entry
+# whose Exec cannot be resolved fails with no message at all.
+sed "s|^Exec=megapdf |Exec=$OPTDIR/MegaPDF |" \
+    "$ROOT/tools/linux/megapdf.desktop" > "$STAGE/usr/share/applications/$PKG.desktop"
+
+cp -R "$TREE/share/icons/hicolor" "$STAGE/usr/share/icons/" 2>/dev/null \
+    || { mkdir -p "$STAGE/usr/share/icons"; cp -R "$TREE/share/icons/hicolor" "$STAGE/usr/share/icons/"; }
+
+# Several of these licences require the text to travel with the binary, and no channel
+# accepts a package without it (#194). Refused rather than warned about.
+[ -s "$TREE/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt" ] \
+    || { echo "::error::the tree has no THIRD-PARTY-NOTICES.txt — build-linux-app.sh should have refused (#194)" >&2; exit 1; }
+
+# Beside the binary, not only in /usr/share/doc. Debian and Ubuntu ship dpkg
+# configurations that throw that directory away — every Docker image of either does,
+# through path-exclude=/usr/share/doc/* in /etc/dpkg/dpkg.cfg.d/excludes, and so do
+# minimal installs — and the notices were duly discarded on install when this package
+# put them there alone. /opt is not excluded by anything. The copy under /usr/share/doc
+# stays for whoever looks where the convention says to look; `copyright` survives the
+# exclusion because the same configurations path-include it.
+cp "$TREE/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt" "$STAGE$OPTDIR/THIRD-PARTY-NOTICES.txt"
+cp "$TREE/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt" "$STAGE/usr/share/doc/$PKG/"
+cp "$TREE/share/doc/MegaPDF/LICENSE" "$STAGE/usr/share/doc/$PKG/copyright"
+
+# --- control --------------------------------------------------------------------
+# The dependencies are the ones the app loads at run time, which objdump cannot see:
+# .NET dlopens ICU and Avalonia.X11 dlopens the X libraries, so neither appears in any
+# NEEDED entry. Established by installing this package in a bare container and running
+# it — a missing libicu is a FailFast at the first CultureInfo, with a message about
+# installing libicu and nothing about MegaPDF.
+#
+# The libicu alternatives run from Ubuntu 22.04 to the current Debian: the soname is
+# versioned and every release ships a different one, so naming just one would make the
+# package refuse to install on every other release.
+{
+    echo "Package: $PKG"
+    echo "Version: $VERSION"
+    echo "Architecture: $ARCH"
+    echo "Maintainer: Electric RV <noreply@electricrv.ca>"
+    echo "Section: text"
+    echo "Priority: optional"
+    echo "Homepage: https://electricrv.ca/megapdf/"
+    echo "Depends: libc6 (>= 2.35), libgcc-s1, libstdc++6, zlib1g, libfontconfig1, libfreetype6," \
+         "libx11-6, libice6, libsm6, libxext6, libxi6, libxrandr2, libxcursor1," \
+         "libicu76 | libicu74 | libicu72 | libicu71 | libicu70"
+    # Neither is needed to start, and a hard dependency on either would keep MegaPDF
+    # off a machine that simply does not print or sign.
+    echo "Recommends: cups-client"
+    echo "Suggests: fonts-urw-base35"
+    echo "Description: Fill, check and sign PDFs"
+    echo " MegaPDF does the one job most people actually have with a PDF: someone sent"
+    echo " you a form, and you need to send it back filled in, checked off and signed."
+    echo " ."
+    echo " It checks real form fields and plain printed squares alike, types on any"
+    echo " line in a face that matches the form, retypes the document's own text, places"
+    echo " a drawn or photographed signature, and verifies every document before it"
+    echo " touches your original, so a failed save cannot corrupt the file you were sent."
+    echo " ."
+    echo " No account, no subscription and no network connection of any kind."
+} > "$STAGE/DEBIAN/control"
+
+# Refreshing the caches is what puts the app in the menu and its icon on the file; both
+# are best-effort, because a container or a chroot has neither database.
+cat > "$STAGE/DEBIAN/postinst" <<'POSTINST'
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+    gtk-update-icon-cache -qf /usr/share/icons/hicolor 2>/dev/null || true
+fi
+exit 0
+POSTINST
+
+cat > "$STAGE/DEBIAN/postrm" <<'POSTRM'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+    gtk-update-icon-cache -qf /usr/share/icons/hicolor 2>/dev/null || true
+fi
+exit 0
+POSTRM
+chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
+
+# Nothing in the tree is a config file, and dpkg must not treat the engine as one.
+find "$STAGE$OPTDIR" -type f -name '*.so' -exec chmod 644 {} +
+chmod 755 "$STAGE$OPTDIR/MegaPDF"
+
+DEB="$OUT/${PKG}_${VERSION}_${ARCH}.deb"
+rm -f "$DEB"
+# xz over the default: the payload is ninety megabytes of mostly-compressible IL and
+# native code, and a Releases download is the one place the size is felt.
+dpkg-deb --root-owner-group -Zxz --build "$STAGE" "$DEB" >/dev/null
+
+echo "built: $DEB"
+du -h "$DEB" | cut -f1 | sed 's/^/  size  /'
+dpkg-deb --info "$DEB" | sed -n '2,6p'
