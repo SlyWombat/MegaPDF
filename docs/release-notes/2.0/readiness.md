@@ -1,7 +1,8 @@
 # MegaPDF 2.0 — release readiness, audited against main (#146)
 
-Audited at `b1df4296`'s tree on 2026-09-18, re-checking the 03:00 EDT audit of `a639467`,
-and updated at 07:35 EDT for **Dave's decisions of 07:15 EDT** (§3). Every claim below was
+Audited at `73670fb`'s tree on 2026-09-18, re-checking the 03:00 EDT audit of `a639467`,
+updated at 07:35 EDT for **Dave's decisions of 07:15 EDT** (§3), and again at 08:35 EDT
+for what landed with #243, #245 and Dave's 08:00 EDT call on #173. Every claim below was
 checked against the repository rather than taken from a comment: each SHA resolved and
 tested for ancestry of `main`, each `#N` queried for its real state, each artefact stat'd
 in the tree, and CI read per workflow.
@@ -9,9 +10,10 @@ in the tree, and CI read per workflow.
 **Verdict: 2.0 is not ready to submit, and nothing is blocked by anything unknown — and
 the open product calls are no longer open.** The engineering is done and the QA passes are
 done on all five platforms. The version bump has merged, the listing copy has been
-re-read, and **five of the six store capture sets are shot from 2.0.0 builds and
-gate-clean**. What is left is one capture set, two fixes already in progress, the rename on
-Windows, the store builds, the preview videos, and five things only Dave can do.
+re-read, and **all six store capture sets are now shot from 2.0.0 builds and
+gate-clean**, the Microsoft one included. What is left is one Android pose, the preview
+videos, two fixes already in progress, the store builds, and five things only Dave can
+do.
 
 ---
 
@@ -38,9 +40,9 @@ For the record, this is what the previous audit's five discrepancies turned into
 
 | | Engineering | §1b QA pass | Store captures | Tests | Outstanding |
 |---|---|---|---|---|---|
-| **Windows** | merged | done — inventory, captures (en/fr-CA/fr-FR × light/dark × 1280/1000/800/480 + 200 %), all flows on the installed package, plus an RC sweep on 2026-09-18 | **the one set not yet shot from 2.0.0.** The 2.0.0.0 MSIX is built and installed on the machine that holds the set; the `microsoft` gate profile has never met a real set | CI green on main; Core tests 276/276 and `ctest` 1/1 on Windows | the capture set, and **WACK at 2.0.0.0 — one elevated click** |
+| **Windows** | merged, **and renamed to MegaPDF** (`36ebfd3`) | done — inventory, captures (en/fr-CA/fr-FR × light/dark × 1280/1000/800/480 + 200 %), all flows on the installed package, plus an RC sweep on 2026-09-18 | **done (`149e17b`): 15 images from the installed 2.0.0.0 package built from the rename, title bars reading `— MegaPDF`, gate-clean in all three languages** | CI green on main; Core tests 276/276 and `ctest` 1/1 on Windows | **WACK at 2.0.0.0 — one elevated click**, the package rebuilt from `8a77b8c` |
 | **macOS** | merged | done (PR #159) — inventory, 117 captures, every flow incl. protection and `kill -9` recovery; re-walked in the 2026-09-18 RC sweep | **18 images at 1440×900, from a 2.0.0 build — gate-clean**, and read image by image first | `macOS app` green on the PR run whose head is main's head | **no 200 % / Retina set** — no HiDPI display, and `--scale 2` misplaces every page overlay (measured, and the capture now refuses). Covered by Dave's 2026-09-16 Retina call |
-| **iOS** | merged | done (PR #159) — inventory, 159 captures incl. AX5; RC sweep 2026-09-18 | **36 listing images (1320×2868, 2064×2752) plus 30 review shots, from a 2.0.0 build — gate-clean** | iOS CI green on main | **#172 moved to 2.1** (Dave, 2026-09-18) — 2.0 ships the iPhone layout on the iPad, which ticks §1b's "findings filed" box |
+| **iOS** | merged | done (PR #159) — inventory, 159 captures incl. AX5; RC sweep 2026-09-18 | **36 listing images (1320×2868, 2064×2752) plus 30 review shots, from a 2.0.0 build — gate-clean** | iOS CI green on main | **#172 moved to 2.1** (Dave, 2026-09-18) — 2.0 ships the iPhone layout on the iPad, which ticks §1b's "findings filed" box. Minor: the Redact hint string in `Localizable.xcstrings` is not rendered anywhere in Swift, so iOS carries the same dead string Android has just shed |
 | **Android** | merged | done (PR #182) — inventory, 1,347 captures over 27 cells, **and the same set again after the fixes**, 18/18 flows, all 13 large fixtures; RC sweep 2026-09-18 added a redaction flow group the rig had never had | **phone 24 at 1080×2400 and tablet 24 at 1600×2560, from the 2.0.0 APK — both gate-clean.** One pose (`redact`) needs re-shooting: #173's Save fix makes Save live and blue where it was grey | Android CI green on main | the Play Console's two questions (9:20 aspect ratio, whether there is a tablet slot); the app module still has no `androidTest` harness |
 | **Linux** | merged | done — inventory, 234 captures, 18 integration checks, a battery matching Windows and Mac | not a store yet; the QA set is where #237 was found | CI green on main (`Linux app`, `Linux packages`) | **#158 open by design** — ships after the others. Printing in the sandbox landed 2026-09-18; the portal file dialog, recents across a restart and one real print still need a GNOME session |
 
@@ -53,20 +55,28 @@ For the record, this is what the previous audit's five discrepancies turned into
    go-ahead** rather than on any separate permission.
    - **Windows:** `MegaPDF.App_2.0.0.0_x64.msix` is built from `edd68ec` with the #166
      clean-output recipe and installed; About reads 2.0.0 and the resource map is right.
-     **WACK has not run at 2.0.0.0**, and will be raised by the Windows agent *after* the
-     rename lands, so it runs against the package that ships. `appcert` needs elevation
-     and the UAC prompt was cancelled twice at 23:41 EDT on the 17th with nobody at the
-     console. One approval, about half an hour. The 2.0 candidate at 1.7.0.0 already
+     **WACK has not run at 2.0.0.0.** The rename has landed, so the package has been
+     rebuilt from `8a77b8c` and WACK is raised and waiting against the build that ships.
+     `appcert` needs elevation and the UAC prompt was cancelled twice at 23:41 EDT on the
+     17th with nobody at the console. One approval, about half an hour. The 2.0 candidate at 1.7.0.0 already
      passed overall, with only the two known optional FAILs — both Windows App SDK noise.
    - **Mac:** `macOS App Store package` has only ever run on pull requests, which validate
      the signing chain and deliberately do not deliver.
    - **iOS and Android:** `ios-release` and `android-release` fire only on `ios-v*` /
      `android-v*`. Last runs were 2026-09-11 and 2026-08-29, both before 2.0's work.
 2. **§3, the rest of the capture gate.**
-   - **The Microsoft Store set**, which is the one set not shot from a 2.0.0 build. It
-     lives on the Windows machine; §5 of `capture-gate-report.md` has the command. Expect
-     the slot sizes and pose names to want a line each in `tools/capture-gate/stores.py` —
-     that profile is written from a runbook and has never met a real set.
+   - ~~The Microsoft Store set.~~ **Done** (`149e17b`): 15 images shot 07:14–07:22 EDT
+     from the installed 2.0.0.0 package built from the rename, gate-clean in all three
+     languages. The `microsoft` profile had never met a real set and flagged all 15 — and
+     every flag was the profile rather than an image: the slot size, a 2 px border over
+     the wallpaper, the title-bar icon's blue, Mica hiding the toolbar's edge, and the
+     title bar being read as the zoom row. Each fix was a measurement and each was
+     re-proved against a planted defect, so a clipped word, an accent selection box and a
+     spelling squiggle are all still caught. Written up in `capture-gate-report.md` §5.
+     Two re-shoots on the way, neither the app's fault: a desktop-sharing banner carrying
+     an email address landed over fr-FR, and Spotlight rotated the wallpaper so Mica took
+     its colour. Windows alone had still been posing "Dana" — the English demo person is
+     Jane Whitfield there now too.
    - **The preview videos** (iPhone, iPad, Mac) — not started. The recording scripts take
      a language now, so a French clip is French throughout.
    - **One Android pose**, `redact`, for the reason in the table above.
@@ -85,11 +95,17 @@ For the record, this is what the previous audit's five discrepancies turned into
      there. Found on the Mac in the §1b pass; Windows does not reproduce it.
    - **#237** (`megapdf-237`) — Linux's 480×360 minimum window, fixed at the declared
      minimum rather than by raising it. Not a 2.0 blocker; Linux ships after the others.
-4. **The rename to `MegaPDF` on Windows**, and the notices generator with it. It lands
-   after the Microsoft gate set is shot, which is the one place these two pieces of work
-   cross: **if the spaced name is legible anywhere in that set — the title bar is the
-   likely place — it has to be re-shot against the renamed build.** Worth checking rather
-   than assuming.
+4. ~~The rename to `MegaPDF` on Windows.~~ **Done** (`36ebfd3`), and the crossing point
+   this document flagged was handled rather than missed: the Microsoft set was shot *from*
+   the renamed build and its title bars read `— MegaPDF`. The notices on all four
+   platforms, the privacy policy and the Windows listing copy moved with it. **One thing
+   deliberately left spaced:** `Package.appxmanifest`'s `DisplayName` (twice) and tile
+   `ShortName` stay "Mega PDF", because the Store checks the manifest against the reserved
+   Partner Center name and "MegaPDF" was taken — so Start and Settings ▸ Apps keep showing
+   the spaced form until Dave changes the reservation. A trap caught on the way:
+   `gen_listing_copy.py` had never been given `c1b0a4a`'s Apple 2.3.10 fix, so re-running
+   it would have put "MegaPDF for Windows and Android" back into the App Store
+   description; the generator is fixed.
 
 ### Dave's decisions, 2026-09-18 (about 07:15 EDT)
 
@@ -120,9 +136,9 @@ Five things, now that the decisions above are taken.
    against.
 3. **The Partner Center name change**, at submission. The reserved Windows Store name is
    Dave's to change; the code side is in hand.
-4. **One elevated click on GPD-DAVE** so WACK can run. The Windows agent raises it after
-   the naming change lands, so it runs against the package that ships rather than one that
-   still says "Mega PDF".
+4. **One elevated click on GPD-DAVE** so WACK can run. The rename has landed, the package
+   is rebuilt from `8a77b8c`, and **WACK is raised and waiting on the prompt** — so this is
+   now a single click rather than a piece of work.
 5. **The go-ahead itself.** Release hold since 2026-09-14 — and now the single gate on all
    four store builds, since `ios-release` and `android-release` fire only on a version tag
    and tagging is a release action.
@@ -130,9 +146,13 @@ Five things, now that the decisions above are taken.
 **No longer waiting on anyone**, and moved off this list by the decisions above: the app's
 name, #172, the identical French sets, #237, the leftover encryption dictionary (now
 #241), and #186. Two further items gate nothing and belong on their own issues rather than
-here: **#145's** P2/P3 remainder, and **#173's** unwired Android `redact_hint` /
-`redact_tip` — whose *wording* is separately one of the ten Fable errors being fixed now,
-so the two are best settled together there.
+here — with one exception now pulled forward. **#173 is closed**: Dave decided at 08:00
+EDT that Android gets no hint strip, the armed state being announced is what a screen
+reader needs, and the two dead strings are removed (`73670fb`). **#145 keeps its P2/P3
+remainder, except for one item Dave pulled into 2.0** — on Windows, launching with a file
+skips the crash-recovery offer (`App.xaml.cs:78-79` returns before
+`OfferCrashRecoveryAsync()` on `:82`), so a crash followed by double-clicking a PDF never
+offers to restore. The Windows agent is fixing it now.
 
 ### The independent French read — #242, findings only
 
@@ -154,8 +174,17 @@ e-mail* table never contracts the article; the long notes carry "texte contourn�
 `redact_hint` promises an Esc key on phones, an English defect the French inherited.
 Every block was recounted: all counts exact, all inside their limits, Play fr at 489/500.
 
-**The ten are being fixed now. The 19 *should* and 23 *taste* items wait for the human
-reviewer**, and fixes are applied from both reads together.
+**The ten are fixed and on main** — #245, fast-forwarded at 08:15 EDT after CI went green
+on the rebased head `08c3865`: the fr-FR derivation contracts « au courriel » to
+« à l'e-mail » (`5043f6d`), the phones' Redact hint stops promising an Esc key (`01ba248`),
+the store copy loses the iOS whiteout claim and gains its blank line with
+`fix_french_spacing.py` re-run and the France Play idiom removed (`3965654`), and three
+words in the long notes are corrected (`08c3865`). Every block recounted and equal to its
+stated count: App Store 1760 / 2100 / 2100 of 4000; Mac 2402 / 2886 / 2886 of 4000;
+Microsoft 1483 / 1479 / 1479 of 1500; Play 495 / 489 / 489 of 500. `gen_strings.py fr-fr`,
+`gen_listing_copy.py` and `fix_french_spacing.py --check` all leave the tree clean.
+**The 19 *should* and 23 *taste* items are untouched and wait for the human reviewer**;
+#242 stays open as the record and marks each fixed row with its SHA.
 
 ### Deliberately deferred — recorded, not forgotten
 
@@ -166,9 +195,10 @@ reviewer**, and fixes are applied from both reads together.
 - **Parked:** #2 keyboard accessibility.
 - **Accepted:** #186 (Android find bar and three-button prompt at the largest text size)
   — closed as *not planned*, so the decision was taken.
-- **Open and not a blocker:** #226 (a stray "Ctrl+F" chip after the first … menu of a
-  Windows session is dismissed by clicking the page) — characterised, two fixes tried and
-  reverted.
+- **#226 fixed and closed** (`8a77b8c`): the stray "Ctrl+F" chip was WinUI's own
+  accelerator tooltip for `RootGrid`, whose `KeyboardAcceleratorPlacementMode` was never
+  `Hidden`. Verified gone on a reinstalled package through UI Automation, with Ctrl+F
+  still opening Find.
 - **Not blocking by standing decision:** #1, #3, #4, #5, #6, #9, #29, #33, #98, #129.
 
 ## 4. Risks worth knowing before "go"
@@ -234,11 +264,12 @@ to need a second pass.
   was installed on the machine that built it; no WACK report at that version, no `.pkg`,
   no processed TestFlight or Play build was found. I looked; absence of evidence is what I
   am reporting.
-- **Anything needing a device or a person**: the 200 % Mac
-  captures (no HiDPI display on the capture Mac), the Play Console's aspect ratio and
-  tablet slot, WACK's one elevated click, Linux's portal file dialog and one real print,
-  VoiceOver and Narrator beyond the scripted checks, and the register of the French.
-- **The Microsoft Store capture set**, which is on the Windows machine and is being shot
-  there; and **the preview videos**, which have not been cut.
+- **Anything needing a device or a person**: the 200 % Mac captures (no HiDPI display on
+  the capture Mac), the Play Console's aspect ratio and tablet slot, WACK's one elevated
+  click, Linux's portal file dialog and one real print, VoiceOver and Narrator beyond the
+  scripted checks, and the register of the French.
+- **The preview videos**, which have not been cut, and **the Android `redact` pose**, which
+  is the one capture still to be re-shot. The Microsoft set is no longer on this list: it
+  was shot on 2026-09-18 and is gate-clean.
 - **Whether the captures are good enough to list.** They are measured and they were read;
   whether each set sells the app is §3's last question and only Dave can answer it.
