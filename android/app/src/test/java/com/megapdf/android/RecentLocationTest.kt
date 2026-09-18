@@ -162,6 +162,25 @@ class RecentLocationTest {
             RecentLocation.localised(emptyList(), RecentLocation.DOWNLOADS, "Téléchargements"))
     }
 
+    // --- the root re-asked for in the language the app is in now -------------
+
+    @Test
+    fun `the root is replaced and the folders are left alone`() {
+        assertEquals(
+            listOf("Stockage interne", "Documents", "Clients"),
+            RecentLocation.withRoot(
+                listOf("Internal shared storage", "Documents", "Clients"), "Stockage interne"))
+    }
+
+    @Test
+    fun `an unresolvable root leaves what was recorded`() {
+        // A stale root still says where the file is; a blank one says nothing (#165).
+        val recorded = listOf("Local storage", "Documents")
+        assertEquals(recorded, RecentLocation.withRoot(recorded, null))
+        assertEquals(recorded, RecentLocation.withRoot(recorded, "   "))
+        assertEquals(emptyList<String>(), RecentLocation.withRoot(emptyList(), "Downloads"))
+    }
+
     @Test
     fun `the formatter never emits a path separator of its own`() {
         assertTrue(RecentLocation.format(deep, maxSegments = 3).none { it == '/' || it == '\\' })

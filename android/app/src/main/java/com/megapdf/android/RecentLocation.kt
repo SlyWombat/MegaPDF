@@ -87,6 +87,20 @@ object RecentLocation {
         else segments
 
     /**
+     * [segments] with its root replaced by [root], which is the same name asked for
+     * again in the language the app is in now (#165).
+     *
+     * Nothing changes when the root cannot be resolved: what was recorded at open
+     * time is still the truth about where the file is, just possibly in the wrong
+     * language, and that beats a row with no location at all.
+     */
+    fun withRoot(segments: List<String>, root: String?): List<String> {
+        val name = root?.trim().orEmpty()
+        if (name.isEmpty() || segments.isEmpty()) return segments
+        return listOf(name) + segments.drop(1)
+    }
+
+    /**
      * [segments] as one line, shortened to at most [maxSegments] by dropping from
      * the middle.
      *

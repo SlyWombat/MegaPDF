@@ -2014,6 +2014,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         } catch (_: Exception) {
             emptySet()
         }
+        val app = getApplication<Application>()
         return recentsStore.load().map { entry ->
             val available = when {
                 // The demo's rows, which are not documents at all.
@@ -2022,7 +2023,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 entry.uri in unavailableChecked -> false
                 else -> entry.uri in granted
             }
-            RecentRow(entry, available)
+            // The root's name is asked for again here rather than trusted from the
+            // store: it is the system's word or another app's, both of which follow
+            // the app's language, and one recorded in French showed up in an English
+            // session (#165). Once per load of the list, not once per row drawn.
+            val root = if (entry.location.isEmpty()) null else try {
+                DocumentLocations.rootNameFor(app, Uri.parse(entry.uri))
+            } catch (_: Exception) {
+                null
+            }
+            RecentRow(entry.copy(location = RecentLocation.withRoot(entry.location, root)), available)
         }
     }
 

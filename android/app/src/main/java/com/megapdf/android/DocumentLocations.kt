@@ -75,12 +75,27 @@ object DocumentLocations {
     /** Where [uri] lives, outermost first, or empty if Android will not say. */
     fun segmentsFor(context: Context, uri: Uri): List<String> {
         val authority = uri.authority
-        val documentId = try {
-            DocumentsContract.getDocumentId(uri)
-        } catch (_: Exception) {
-            null   // not a document URI at all — the demo, or a plain file
-        }
+        val documentId = documentId(uri)
         return RecentLocation.segments(authority, documentId, rootName(context, authority, documentId))
+    }
+
+    /**
+     * What to call [uri]'s root **now**.
+     *
+     * A root's name is a word of the system's or of another app's, and both follow
+     * the language the app is running in. Resolved once at open time it freezes:
+     * a file opened in French read "Stockage local" in an English session, which
+     * the RC sweep caught. The folders keep whatever they are called on disk —
+     * "Clients" is "Clients" in every language — so only the root is re-asked
+     * (#165).
+     */
+    fun rootNameFor(context: Context, uri: Uri): String? =
+        rootName(context, uri.authority, documentId(uri))
+
+    private fun documentId(uri: Uri): String? = try {
+        DocumentsContract.getDocumentId(uri)
+    } catch (_: Exception) {
+        null   // not a document URI at all — the demo, or a plain file
     }
 
     private fun rootName(context: Context, authority: String?, documentId: String?): String? =
