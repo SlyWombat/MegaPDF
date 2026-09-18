@@ -208,7 +208,16 @@ if(MEGAPDF_CORE_TESTS)
     # own target because both executables want it in the same directory and link at the
     # same time: as a POST_BUILD on each, the two copies raced on the macOS runner and one
     # failed with "No such file or directory" against a file that was plainly there.
+    # make_directory first (#220). `cmake -E copy_if_different <file> <dir>` where the
+    # directory does not exist writes a *file* with that name, and with a multi-config
+    # generator — Visual Studio's, which is what Windows uses — the destination is
+    # build/Release, which this target runs before anything has created: the test binary
+    # that would create it is the one that depends on *us*. The result was a file called
+    # `Release` where a directory belongs, and MSB3191 on every build after that until it
+    # was deleted by hand. Single-config generators never saw it, because there
+    # TARGET_FILE_DIR is the build root.
     add_custom_target(megapdf_pdfium_runtime
+        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:megapdf_core_tests>
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_core_tests>
         COMMENT "pdfium beside the test binaries")
     add_dependencies(megapdf_core_tests megapdf_pdfium_runtime)
