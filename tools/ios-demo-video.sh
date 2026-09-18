@@ -5,7 +5,11 @@
 #
 # Usage: tools/ios-demo-video.sh [lang] [device-name] [label] [out-dir]
 #   lang         en (default), fr-CA or fr — the catalogue, as in ios-screenshots.yml
-#   device-name  a simulator name, default "iPhone 17 Pro Max" (the 6.9" listing size)
+#   device-name  a regex matched against the available simulator names, as in
+#                ios-screenshots.sh; default "iPhone .*Pro Max" (the 6.9" listing
+#                size). A regex rather than an exact name because Xcode renames
+#                these every year — "iPad Pro 13-inch (M4)" is "(M5)" under
+#                Xcode 26.6, and an exact name simply stopped finding it.
 #   label        file stem, default iphone-6_9
 #   out-dir      default artifacts/video/ios/<lang>
 #
@@ -18,7 +22,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LANG_TAG="${1:-en}"
-DEVICE="${2:-iPhone 17 Pro Max}"
+DEVICE="${2:-iPhone .*Pro Max}"
 LABEL="${3:-iphone-6_9}"
 OUT="${4:-$ROOT/artifacts/video/ios/$LANG_TAG}"
 DD="${DERIVED_DATA:-$HOME/dd-ios}"
@@ -29,14 +33,33 @@ if [ "${TRIM_ONLY:-0}" != 1 ]; then
 cd "$ROOT/ios"
 [ -d Vendor/pdfium.xcframework ] || bash scripts/fetch-pdfium.sh
 xcodegen generate >/dev/null
+
+# Resolve the device before the build, and build for that udid: the pattern is
+# a regex, which -destination name= would take literally.
+PICKED=$(xcrun simctl list devices available -j | python3 -c "
+import json, re, sys
+devs = json.load(sys.stdin)['devices']
+for v in devs.values():
+    for d in v:
+        if re.search(sys.argv[1], d['name']):
+            print(d['udid'] + '|' + d['name']); sys.exit(0)
+sys.exit(1)" "$DEVICE") || { echo "no simulator matches '$DEVICE'" >&2; exit 1; }
+UDID="${PICKED%%|*}"
+echo "recording $LABEL ($LANG_TAG) on ${PICKED##*|}"
+
 xcodebuild build-for-testing -project MegaPDF.xcodeproj -scheme MegaPDFDemo \
-    -destination "platform=iOS Simulator,name=$DEVICE" -derivedDataPath "$DD" \
+    -destination "id=$UDID" -derivedDataPath "$DD" \
     CODE_SIGNING_ALLOWED=NO -quiet 2>&1 | grep -v "ld: warning" || true
 
-UDID=$(xcrun simctl list devices available -j | python3 -c "
-import json, sys
-devs = json.load(sys.stdin)['devices']
-print(next(d['udid'] for v in devs.values() for d in v if d['name'] == sys.argv[1]))" "$DEVICE")
+# The version comes out of the built artefact, never out of project.yml: a
+# cached Vendor/ or stale derived data is exactly what leaves a previous
+# build sitting where the new one is assumed to be (#146 §3).
+BUILT="$DD/Build/Products/Debug-iphonesimulator/MegaPDF.app"
+[ -d "$BUILT" ] || { echo "no built app at $BUILT" >&2; exit 1; }
+printf 'app under test: %s %s, built %s\n' \
+    "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$BUILT/Info.plist")" \
+    "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$BUILT/Info.plist")" \
+    "$(date -r "$BUILT/MegaPDF" '+%Y-%m-%d %H:%M')"
 xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true   # settle a device still going down
 sleep 5
 xcrun simctl boot "$UDID" 2>/dev/null || true
