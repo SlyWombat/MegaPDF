@@ -19,9 +19,11 @@ namespace MegaPDF.Avalonia.Platform;
 /// a segfault. MegaPDF asks for the destination itself (Views/PrinterWindow), which
 /// is the part <c>lp</c> alone would otherwise skip.
 ///
-/// **Flatpak.** A sandboxed build has no <c>lp</c> and must go through the portal
-/// instead; <see cref="Print"/> says so rather than failing obscurely. That route
-/// is packaging work and is not built yet (#158).
+/// **Flatpak.** A sandboxed build has no <c>lp</c> and goes through
+/// <see cref="PortalPrinter"/> instead — the desktop's own print dialog, over
+/// D-Bus, with a file descriptor rather than a path (#158). This file stays the
+/// CUPS route and says so when it is asked to print inside a sandbox, where the
+/// caller should have taken the portal branch.
 /// </summary>
 [SupportedOSPlatform("linux")]
 internal static class LinuxPrinter
@@ -216,9 +218,27 @@ internal static class LinuxPrinter
 
         if (InFlatpakSandbox)
         {
-            report.Append("; in a Flatpak sandbox, so printing needs the portal route, which is not built yet");
-            return new Printing.Outcome(true, report.ToString());
+            // Inside the sandbox the CUPS route is not the route, so what is worth
+            // reporting is whether the desktop offers the portal that is: asked
+            // for, not assumed, because a backend can implement FileChooser and
+            // not Print.
+            var version = PortalPrinter.VersionAsync(TimeSpan.FromSeconds(5))
+                                       .GetAwaiter().GetResult();
+            report.Append(version is null
+                ? "; in a Flatpak sandbox, and this session offers no "
+                  + "org.freedesktop.portal.Print — printing has no route here"
+                : $"; in a Flatpak sandbox, printing through "
+                  + $"org.freedesktop.portal.Print version {version}");
+            return new Printing.Outcome(version is not null, report.ToString());
         }
+
+        // Outside the sandbox the portal is not needed, but whether it is there is
+        // worth knowing: it is the same desktop the Flatpak build will meet.
+        var outside = PortalPrinter.VersionAsync(TimeSpan.FromSeconds(5))
+                                   .GetAwaiter().GetResult();
+        report.Append(outside is null
+            ? "; no print portal on this session (not needed outside a sandbox)"
+            : $"; org.freedesktop.portal.Print version {outside} is also available");
 
         if (ResolveOnPath("lp") is null)
             return new Printing.Outcome(false, "lp is not on PATH — install the CUPS client tools (cups-client)");

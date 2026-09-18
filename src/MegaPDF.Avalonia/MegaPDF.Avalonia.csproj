@@ -48,6 +48,11 @@
          and [RelayCommand] attributes mean the same thing on both sides when the
          extraction in ADR-002 happens. -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <!-- Already in the tree through Avalonia.FreeDesktop, and named here because
+         Platform/PortalPrinter.cs talks D-Bus to org.freedesktop.portal.Print
+         directly (#158). Pinned to the version Avalonia 11.2 brings, so the two
+         cannot drift apart without somebody noticing. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.20.0" />
     <!-- Pinned to the exact version Avalonia.Skia resolves. A floating reference
          that drifts ahead gives two SkiaSharp versions wanting different
          libSkiaSharp ABIs in one bundle, and that fails at runtime on macOS rather

@@ -830,14 +830,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // dialog costs nothing — not even a copy of the document in the temp
         // directory. macOS cannot: NSPrintOperation's panel is part of the print,
         // and it needs the file to preview (#158).
+        // Inside a Flatpak the desktop's portal owns the dialog: it lists the
+        // printers, it takes the copies, it prints. Asking our own question first
+        // would be asking the same question twice, so the app goes straight to
+        // writing the document and hands it over (#158).
+        var throughPortal = OperatingSystem.IsLinux()
+                            && Platform.LinuxPrinter.InFlatpakSandbox;
+
         Platform.Printing.Choice? choice = null;
-        if (OperatingSystem.IsLinux())
+        if (OperatingSystem.IsLinux() && !throughPortal)
         {
-            if (Platform.LinuxPrinter.InFlatpakSandbox)
-            {
-                Status = Strings.PrintingNeedsPortal;
-                return;
-            }
             if (!Platform.LinuxPrinter.IsAvailable)
             {
                 Status = Strings.PrintingNeedsCups;
@@ -876,7 +878,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 });
             }
 
-            if (OperatingSystem.IsLinux())
+            if (throughPortal)
+            {
+                // The portal answers when its dialog has been used, so this await
+                // is as long as the person takes. The busy strip stays up, which
+                // is honest: the document is being printed.
+                var title = DocumentName ?? "MegaPDF";
+                using (Busy.Begin(Strings.BusyPrinting))
+                {
+                    var sent = await Platform.PortalPrinter.PrintAsync(
+                        temp, title, TimeSpan.FromMinutes(10));
+                    Status = sent.Message;
+                }
+            }
+            else if (OperatingSystem.IsLinux())
             {
                 // lp reads the file and returns once the job is queued, but it is
                 // still a process launch: off the UI thread, so a wedged spooler

@@ -568,7 +568,7 @@
     <value>Printing needs the CUPS printing system. Install the cups-client package and try again.</value>
   </data>
   <data name="PrintingNeedsPortal" xml:space="preserve">
-    <value>Printing from inside the sandbox is not available in this build yet.</value>
+    <value>Printing needs the desktop's print portal, and this session does not provide one.</value>
   </data>
   <data name="PrintQueueDidNotAnswer" xml:space="preserve">
     <value>The print queue did not answer.</value>

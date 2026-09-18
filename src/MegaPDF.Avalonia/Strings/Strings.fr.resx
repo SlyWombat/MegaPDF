@@ -564,7 +564,7 @@
     <value>L'impression nécessite le système d'impression CUPS. Installez le paquet cups-client, puis réessayez.</value>
   </data>
   <data name="PrintingNeedsPortal" xml:space="preserve">
-    <value>L'impression depuis le bac à sable n'est pas encore offerte dans cette version.</value>
+    <value>L'impression nécessite le portail d'impression du bureau, et cette session n'en offre aucun.</value>
   </data>
   <data name="PrintQueueDidNotAnswer" xml:space="preserve">
     <value>La file d'impression n'a pas répondu.</value>

@@ -28,6 +28,7 @@ internal static class Program
 
         return args.Contains("--render-check") ? RenderCheck(args)
              : args.Contains("--self-test") ? SelfTest(args)
+             : args.Contains("--portal-print-check") ? PortalPrintCheck(args)
              : args.Contains("--print-check") ? PrintCheck(args)
              : args.Contains("--language-check") ? LanguageCheck()
              : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
@@ -204,6 +205,75 @@ internal static class Program
     ///
     /// It stops before runOperation — the modal panel is the one part CI cannot reach.
     /// </summary>
+    /// <summary>
+    /// Hands a real PDF to <c>org.freedesktop.portal.Print</c> and reports how far
+    /// the conversation got (#158). The route it exercises is the one a Flatpak
+    /// build takes, and it is the only way to check that route from a terminal:
+    /// the portal owns the dialog, so a person is the last step.
+    ///
+    /// Three outcomes, and all three are useful:
+    ///
+    /// * **no portal** — this session offers no Print interface. Nothing to test.
+    /// * **accepted** — the portal took the file descriptor and opened its dialog,
+    ///   and nobody answered it inside the timeout. Everything the app is
+    ///   responsible for worked.
+    /// * **answered** — somebody used the dialog. 0 printed, 1 cancelled.
+    ///
+    /// `--seconds N` sets how long to wait for an answer; the default is short,
+    /// because unattended there will not be one.
+    /// </summary>
+    private static int PortalPrintCheck(string[] args)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            Console.WriteLine("portal-print-check: skipped (not Linux)");
+            return 0;
+        }
+
+        var version = Platform.PortalPrinter.VersionAsync(TimeSpan.FromSeconds(5))
+                                            .GetAwaiter().GetResult();
+        Console.WriteLine(version is null
+            ? "portal-print-check: no org.freedesktop.portal.Print on this session"
+            : $"portal-print-check: org.freedesktop.portal.Print version {version}");
+        if (version is null)
+            return 1;
+
+        var path = args.FirstOrDefault(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
+        if (path is null || !File.Exists(path))
+        {
+            Console.WriteLine("portal-print-check: PASS (portal present; pass a .pdf to hand one over)");
+            return 0;
+        }
+
+        var seconds = 8;
+        var index = Array.IndexOf(args, "--seconds");
+        if (index >= 0 && index + 1 < args.Length && int.TryParse(args[index + 1], out var given))
+            seconds = Math.Clamp(given, 1, 600);
+
+        var (outcome, stage) = Platform.PortalPrinter
+            .HandOverAsync(path, Path.GetFileName(path), TimeSpan.FromSeconds(seconds))
+            .GetAwaiter().GetResult();
+        Console.WriteLine($"portal-print-check: stage={stage} — {outcome.Message}");
+        switch (stage)
+        {
+            case Platform.PortalStage.Accepted:
+                Console.WriteLine("portal-print-check: PASS — the portal took the "
+                                  + "file descriptor and opened its dialog. The "
+                                  + "dialog is the desktop's, so an unattended run "
+                                  + "ends here by design.");
+                return 0;
+            case Platform.PortalStage.Answered:
+                Console.WriteLine(outcome.Ok
+                    ? "portal-print-check: PASS — printed."
+                    : "portal-print-check: PASS — the dialog was answered without printing.");
+                return 0;
+            default:
+                Console.Error.WriteLine("::error::portal-print-check FAILED — the "
+                                        + "portal did not take the document.");
+                return 1;
+        }
+    }
+
     private static int PrintCheck(string[] args)
     {
         // Linux prints through CUPS' lp rather than a framework, so there is no
@@ -1344,6 +1414,28 @@ internal static class Program
         {
             Console.Error.WriteLine($"::error::About window: {ex.GetType().Name}: {ex.Message}");
             failures++;
+        }
+
+        // --- the print portal's request path (#158) ---
+        //
+        // A Flatpak build prints by handing the desktop a file descriptor and
+        // then listening for one signal, on a path it has to *predict*: the
+        // sender's unique name with the colon dropped and the dots turned into
+        // underscores, then the token. Predict it wrong and the print appears
+        // to hang for ever, which is the least debuggable failure in the whole
+        // route — and it needs no bus to check.
+        if (OperatingSystem.IsLinux())
+        {
+            Console.WriteLine("The print portal's request path (#158):");
+            Check("a unique name becomes a path element",
+                  Platform.PortalPrinter.RequestPath(":1.10", "megapdf_abc")
+                  == "/org/freedesktop/portal/desktop/request/1_10/megapdf_abc");
+            Check("  every dot, not just the first",
+                  Platform.PortalPrinter.RequestPath(":1.2.3", "t")
+                  == "/org/freedesktop/portal/desktop/request/1_2_3/t");
+            Check("  and a name that arrives without its colon is left alone",
+                  Platform.PortalPrinter.RequestPath("1.10", "t")
+                  == "/org/freedesktop/portal/desktop/request/1_10/t");
         }
 
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");

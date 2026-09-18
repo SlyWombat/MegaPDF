@@ -39,9 +39,15 @@ command: megapdf
 #              handle, and handles do not survive a restart.
 #   --share=network. MegaPDF makes no network connection. Leaving it out is what
 #              makes "no network access" true in the listing rather than a claim.
-#   --socket=cups / --filesystem=/run/cups. Printing is CUPS through `lp`, which is
-#              not in the sandbox at all; the app detects /.flatpak-info and says so.
-#              org.freedesktop.portal.Print is the fix and is not written yet (#158).
+#   --socket=cups / --filesystem=/run/cups. Printing inside the sandbox goes
+#              through org.freedesktop.portal.Print instead: the app hands the
+#              desktop a file descriptor and the desktop prints it, with its own
+#              dialog and its own printers (Platform/PortalPrinter.cs, #158).
+#              Talking to org.freedesktop.portal.Desktop is allowed in every
+#              Flatpak, so this route needs nothing added here — which is the
+#              point of it. `--print-check` inside the sandbox reports which
+#              version of the portal the session offers, and
+#              `--portal-print-check <file.pdf>` hands one over.
 finish-args:
   - --socket=x11
   - --share=ipc

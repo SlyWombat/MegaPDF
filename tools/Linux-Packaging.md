@@ -197,11 +197,28 @@ following can be decided here.
 
 ## Before a Flathub submission: what is needed from the code
 
-1. **Printing has no portal route.** `LinuxPrinter` shells out to `lp`, which does not
-   exist inside the sandbox. The app detects `/.flatpak-info` and says so rather than
-   failing obscurely — `--print-check` inside the sandbox reports exactly that — but
-   "printing does not work in the Flatpak" is not a thing to ship. `org.freedesktop.portal.Print`
-   is real work and wants its own issue.
+1. **Printing goes through the portal inside the sandbox** (`Platform/PortalPrinter.cs`).
+   `LinuxPrinter` still shells out to `lp` outside it; inside, the app hands
+   `org.freedesktop.portal.Print` a file descriptor and the desktop shows its own print
+   dialog. Nothing is added to `finish-args` for it — every Flatpak may talk to
+   `org.freedesktop.portal.Desktop` — and the app's own printer dialog is skipped there,
+   because two dialogs asking the same question is worse than one.
+
+   **What has been proved, and where it stops.** In a container with a session bus and a
+   real `xdg-desktop-portal` behind `xdg-desktop-portal-gtk`: the app reads the Print
+   interface's version (1), hands over a PDF, the portal takes the descriptor and opens
+   its dialog titled after the job, and the app receives the `Response` signal on exactly
+   the path it predicted. What a machine cannot do is *use* that dialog — choose a
+   printer and press Print — so the one outcome never yet seen from a terminal is a
+   successful print, response `0`. Run it by hand once on a desktop with a printer:
+
+   ```
+   flatpak run ca.electricrv.MegaPDF --print-check                 # which portal is there
+   flatpak run ca.electricrv.MegaPDF --portal-print-check doc.pdf  # hand one over
+   ```
+
+   `--portal-print-check` prints the stage it reached: `Accepted` means the portal took
+   the document and the dialog is open, which is everything the app is responsible for.
 2. **The file-dialog portal has to be confirmed by hand.** Avalonia chains the XDG portal
    ahead of its own fallback, but which one it picks is only observable when a dialog
    opens, and no headless check can tell them apart. One GNOME session, one Open, one
