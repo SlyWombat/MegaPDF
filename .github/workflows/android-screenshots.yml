@@ -2,10 +2,12 @@ name: Android Screenshots
 
 # Manual: captures Play Store phone screenshots from an emulator using the
 # app's `--es screenshot <state>` launch extra
-# (home / viewer / search / sign / draw / text), once per listing language
-# (#91): en, fr-CA and fr-FR each get their own artifact.
+# (home / viewer / search / sign / draw / text / text-edit / redact), once per
+# listing language (#91): en, fr-CA and fr-FR each get their own artifact.
 # Download the artifact; tools/play_submit.py-style API upload puts them on
 # the listing.
+# What has to be true of the images before they go anywhere, and how to shoot
+# the same set by hand: docs/qa/android-store-captures.md.
 on:
   workflow_dispatch:
 
