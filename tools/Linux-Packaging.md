@@ -209,12 +209,13 @@ following can be decided here.
    one of them: run today, validation fails with eighteen `screenshot-image-not-found`
    warnings, and passes with `--no-net`. Two things have to happen first, in this order:
 
-   - `website/deploy.py` has to learn to walk subdirectories. It uploads the files at the
-     top of `website/megapdf/` and, with `--privacy`, those in `privacy/` — nothing else.
-     `screenshots/linux/` is three levels down and would not be uploaded at all
-     (#254 B6, where the deploy tooling is being worked on).
+   - `website/deploy.py` has to upload them, which it now does: it walks subdirectories
+     as of #254 B6, so `screenshots/linux/` goes up with the rest of the page. It did not
+     when these captures were staged, and would have uploaded nothing at all.
    - Then the site has to actually be deployed, which is Dave's call under the release
-     hold (#146). The exact check afterwards, from any machine:
+     hold (#146). `deploy.py --dry-run` lists what would go where without contacting
+     anything; the eighteen screenshots should be in that list. The exact check
+     afterwards, from any machine:
 
      ```sh
      for l in en fr-CA fr-FR; do for s in 01-viewer 02-text 03-search 04-sign 05-redact 06-home; do
