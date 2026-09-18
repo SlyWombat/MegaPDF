@@ -1568,8 +1568,15 @@ public partial class MainWindow : Window
 
         // Marks still on the document mean this Save As is the first time they are being
         // applied; the confirmation offers the copy, which is what this already is.
+        var applyingMarks = suggestedName is null && vm.HasRedactionMarks;
         if (suggestedName is null && !await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: true))
             return;
+
+        // …and then it is a redacted copy, so it is named like one. The Save route already
+        // passes this name in; arriving by Save As used to fall through to "<name> copy",
+        // which says nothing about what was taken out of it (#173).
+        if (applyingMarks && vm.DocumentName is { } redacted)
+            suggestedName = MainViewModel.SuggestRedactedFileName(redacted);
 
         var suggested = suggestedName is { Length: > 0 }
             ? Path.GetFileName(suggestedName)

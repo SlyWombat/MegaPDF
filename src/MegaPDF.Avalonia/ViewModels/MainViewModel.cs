@@ -1900,6 +1900,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRedactionMarks))]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     private int _redactionMarkCount;
 
     public bool HasRedactionMarks => RedactionMarkCount > 0;
@@ -2550,7 +2551,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 page.Rerender(DpiScale);
     }
 
-    private bool CanSave() => IsDocumentOpen && IsDirty && !Busy.IsBusy;
+    /// <summary>
+    /// Marks count, even though they are not a change to the document (#173).
+    ///
+    /// A mark deliberately leaves the document clean — nothing is written until a save
+    /// is confirmed — so IsDirty alone left Save greyed out with areas marked, Cmd+S
+    /// doing nothing, and the confirmation reachable only through Save As. Windows
+    /// raises it from Ctrl+S, and the person who marks something and presses Cmd+S
+    /// deserves the same answer.
+    /// </summary>
+    private bool CanSave() => IsDocumentOpen && (IsDirty || HasRedactionMarks) && !Busy.IsBusy;
 
     /// <summary>Raised when the view should perform a save; the view owns the file handle.</summary>
     public event Action? SaveRequested;
