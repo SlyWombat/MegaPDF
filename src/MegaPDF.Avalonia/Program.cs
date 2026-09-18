@@ -1435,6 +1435,25 @@ internal static class Program
             failures++;
         }
 
+        // --- a launch with a file, after a crash (#145, #153) ---
+        //
+        // The order these two happen in is the whole bug, and it is not visible to any
+        // view-model check: the window is what sequences them. Opening the launched file
+        // first meant the recovery offer never appeared — and when that file was the
+        // crashed document, opening it began a new journal session over its own journal,
+        // which truncates. The edits went for good. Driven in a real window on the
+        // headless platform, with the two dialogs answered rather than shown.
+        Console.WriteLine("a launch with a file, after a crash (#145, #153):");
+        try
+        {
+            CheckLaunchAfterCrash(dir, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::launch after a crash: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- the print portal's request path (#158) ---
         //
         // A Flatpak build prints by handing the desktop a file descriptor and
@@ -1459,6 +1478,209 @@ internal static class Program
 
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// What a launch with a file does when a crashed session is waiting (#145, #153),
+    /// in a real window on the headless platform.
+    ///
+    /// The four rows of the #249 table, which Windows already answers: the launched file
+    /// is the crashed document and it is restored, the same and discarded, a different
+    /// document restored, and no crash at all. Then the macOS order on top — the Finder
+    /// open arrives as an Apple Event that can land after the window has opened, which is
+    /// the half of this that #153 is about.
+    ///
+    /// Every row asserts the same first thing: nothing was open when the offer was made.
+    /// That is the ordering, and it is also what keeps the journal intact — opening the
+    /// crashed document first would have begun a new session over its journal, and
+    /// BeginSession truncates.
+    /// </summary>
+    private static void CheckLaunchAfterCrash(string dir, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var crashed = Path.Combine(dir, "forms.pdf");
+        var other = Path.Combine(dir, "fixture.pdf");
+        // The "agree" widget, in top-left page space: (100,600)-(115,615) on a 792-tall
+        // page, so 177-192 from the top — the same coordinates the AcroForm check uses.
+        var agree = new PdfPoint(107, 184);
+
+        // Launched with the crashed document, and restored.
+        Launch(crashed, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Restore, late: false,
+               (window, vm, openAtOffer, session) =>
+        {
+            check("  nothing was open when recovery was offered", openAtOffer == false);
+            check($"  the journal still held its edit ({session?.EntryCount} entries)", session?.EntryCount == 1);
+            check("  the crashed document is open", SamePath(vm.DocumentPath, crashed));
+            check("  with the recovered tick back on the page",
+                  vm.HitTest(0, agree).Field is { IsChecked: true });
+            check("  and unsaved, so the tick is not on disk yet", vm.IsDirty);
+            // Opening it a second time would have asked to save the edits just recovered,
+            // or replaced them with the file from disk.
+            check("  it was not opened a second time", window.OpenedFromSystemCount == 0);
+        });
+
+        // Launched with the crashed document, and discarded.
+        Launch(crashed, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Discard, late: false,
+               (window, vm, openAtOffer, _) =>
+        {
+            check("  nothing was open when recovery was offered", openAtOffer == false);
+            check("  the launched document is open", SamePath(vm.DocumentPath, crashed));
+            check("  clean: the discarded edit is not on the page",
+                  vm.HitTest(0, agree).Field is { IsChecked: false });
+            check("  and it was opened once, after the offer", window.OpenedFromSystemCount == 1);
+        });
+
+        // Launched with a different document, and the crashed one restored. Both survive:
+        // the open asks about the recovered document's unsaved changes (D5).
+        Launch(other, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Restore, late: false,
+               (window, vm, openAtOffer, _) =>
+        {
+            check("  nothing was open when recovery was offered", openAtOffer == false);
+            check("  the launched document ends up open", SamePath(vm.DocumentPath, other));
+            check("  and the recovered one was asked about first, not dropped",
+                  window.UnsavedChangesAsked == 1);
+        });
+
+        // Decide later: the journal is left alone and the launched file still opens.
+        Launch(crashed, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Later, late: false,
+               (window, vm, openAtOffer, _) =>
+        {
+            check("  nothing was open when 'Decide later' was offered", openAtOffer == false);
+            check("  the launched document is open", SamePath(vm.DocumentPath, crashed));
+            check("  and it was opened once, after the offer", window.OpenedFromSystemCount == 1);
+        });
+
+        // No crash: the launched file opens exactly as it always did, with no offer and
+        // no wait — which is every launch but the rare one.
+        Launch(other, withCrashOf: null, answer: Views.RecoveryWindow.Decision.Later, late: false,
+               (window, vm, openAtOffer, _) =>
+        {
+            check("  no crash: nothing was offered", openAtOffer is null);
+            check("  and the launched document is open", SamePath(vm.DocumentPath, other));
+        });
+
+        // A capture run: a journal an earlier run of the rig left behind is not the
+        // person's work, and there is nobody to answer a modal (#153).
+        Launch(other, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Restore, late: false,
+               (window, vm, openAtOffer, _) =>
+        {
+            check("  a capture run is not offered recovery", openAtOffer is null);
+            check("  and the document it was launched with opens", SamePath(vm.DocumentPath, other));
+        }, capture: true);
+
+        // The macOS order (#153): the document is handed over *after* the window has
+        // opened, as a cold-launch Apple Event is. Without the wait the offer would go up
+        // first and the document would open behind it, which is the bug rather than a fix.
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        Launch(crashed, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Restore, late: true,
+               (window, vm, openAtOffer, session) =>
+        {
+            elapsed.Stop();
+            check("  handed over late: nothing was open when recovery was offered", openAtOffer == false);
+            check($"  the journal still held its edit ({session?.EntryCount} entries)", session?.EntryCount == 1);
+            check("  the crashed document is open with its recovered tick",
+                  SamePath(vm.DocumentPath, crashed) && vm.HitTest(0, agree).Field is { IsChecked: true });
+            check("  it was not opened a second time", window.OpenedFromSystemCount == 0);
+            // The wait ends when the document arrives, not when the clock runs out. The
+            // grace below is five seconds and the hand-over is at about a tenth of one.
+            check($"  and the wait ended on arrival, not on the clock ({elapsed.ElapsedMilliseconds} ms)",
+                  elapsed.Elapsed < LateHandOverGrace);
+        });
+    }
+
+    /// <summary>The grace the late-hand-over row runs with: long enough that ending early is visible.</summary>
+    private static readonly TimeSpan LateHandOverGrace = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// One launch: a crashed journal on disk if asked for, a window, a document handed
+    /// over, and the two dialogs answered instead of shown — a headless run has no
+    /// message loop and would hang on a modal rather than answer it.
+    /// </summary>
+    private static void Launch(string launched, string? withCrashOf, Views.RecoveryWindow.Decision answer,
+                               bool late,
+                               Action<Views.MainWindow, MainViewModel, bool?, Core.Recovery.RecoverableSession?> assert,
+                               bool capture = false)
+    {
+        // Its own state directory, wiped afterwards: these runs write recovery journals
+        // and recents, and none of that belongs in the real per-user files.
+        var state = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-launch-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(state);
+        try
+        {
+            if (withCrashOf is { } document)
+            {
+                using var journal = new Core.Recovery.RecoveryJournal(Path.Combine(state, "Recovery"));
+                journal.BeginSession(document);
+                journal.Record(new Core.Recovery.CheckToggleEntry(0, "agree"));
+                // Disposed without EndSession: the journal stays behind, as after a kill.
+            }
+
+            using var vm = new MainViewModel(state);
+            var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+
+            // Read at the moment of the offer, not after the run: whether a document was
+            // open *then* is the thing under test. Null when nothing was ever offered.
+            bool? openAtOffer = null;
+            Core.Recovery.RecoverableSession? offered = null;
+            window.AnswerRecoveryForTest = session =>
+            {
+                openAtOffer = vm.IsDocumentOpen;
+                offered = session;
+                return answer;
+            };
+            window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
+            window.SkipRecoveryOffer = capture;
+
+            Views.MainWindow.WaitsForHandedOverDocument = late;
+            Views.MainWindow.HandedOverDocumentGrace = LateHandOverGrace;
+            try
+            {
+                if (!late)
+                    window.OpenFromSystem(launched);
+                window.Show();
+                if (late)
+                {
+                    // As macOS delivers a cold launch's Apple Event: after the window.
+                    PumpFor(TimeSpan.FromMilliseconds(100));
+                    window.OpenFromSystem(launched);
+                }
+                PumpUntil(() => window.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(30));
+                assert(window, vm, openAtOffer, offered);
+            }
+            finally
+            {
+                Views.MainWindow.WaitsForHandedOverDocument = OperatingSystem.IsMacOS();
+                Views.MainWindow.HandedOverDocumentGrace = TimeSpan.FromMilliseconds(750);
+                window.SkipCloseConfirmation();
+                window.Close();
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(state, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    private static bool SamePath(string? actual, string expected) =>
+        actual is not null && Core.Recovery.LaunchedDocument.SameFile(actual, expected);
+
+    /// <summary>Runs the dispatcher until the condition holds, or gives up. Real time passes: the view model's work is on a thread pool.</summary>
+    private static void PumpUntil(Func<bool> done, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!done() && DateTime.UtcNow < deadline)
+        {
+            global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(5);
+        }
+        global::Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void PumpFor(TimeSpan span)
+    {
+        var deadline = DateTime.UtcNow + span;
+        PumpUntil(() => DateTime.UtcNow >= deadline, span + TimeSpan.FromSeconds(1));
     }
 
     /// <summary>

@@ -27,6 +27,14 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// The arguments that mean "a rig is driving this, not a person". Only the ones that
+    /// reach a window: --brand-check shuts down before there is one, and --render-check,
+    /// --print-check, --language-check and --self-test never start Avalonia at all.
+    /// </summary>
+    private static bool IsAutomationArgument(string argument) =>
+        argument is "--screenshot" or "--screenshot-state" or "--story" or "--desktop-check";
+
+    /// <summary>
     /// Drives the app into a state worth photographing, for --screenshot.
     ///
     /// The three states captured before this — empty, document open, form — have
@@ -1010,6 +1018,14 @@ public partial class App : Application
                 : new MainViewModel();
             var window = new MainWindow { DataContext = viewModel };
             desktop.MainWindow = window;
+
+            // A capture or diagnostic run is nobody's session, so it is never offered
+            // crash recovery (#145): there is nobody to answer, and the journal the offer
+            // would name was left by an earlier run of the rig. #153 watched that happen —
+            // a `--story` run's journal prompting on every later launch. Said out loud
+            // now, because the offer comes before the launched document rather than after
+            // it, so it is no longer stood down by a document already being open.
+            window.SkipRecoveryOffer = desktop.Args?.Any(IsAutomationArgument) == true;
 
             // Opening a PDF from Finder (#143): a double-click, a drop on the Dock
             // icon, Open With. macOS sends these as an Apple Event, not as arguments,

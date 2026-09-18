@@ -14,6 +14,7 @@ using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Viewing;
 using MegaPDF.Core.Engine;
+using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.Views;
@@ -274,8 +275,7 @@ public partial class MainWindow : Window
         PageScroller.ScrollChanged += (_, _) => UpdateViewport();
         PageScroller.SizeChanged += (_, _) => UpdateViewport();
 
-        _isOpen = true;
-        _ = OpenPendingThenOfferRecoveryAsync();
+        LaunchSequence = RunLaunchSequenceAsync();
     }
 
     /// <summary>The size the window opens at, screen permitting (#143).</summary>
@@ -309,13 +309,31 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- Documents handed over by the OS (#143) ---
+    // --- Documents handed over by the OS (#143), and the launch sequence (#145, #153) ---
 
-    /// <summary>True once OnOpened has run; before that a handed-over document waits.</summary>
-    private bool _isOpen;
+    /// <summary>
+    /// True once the launch sequence is over. Until then a document the OS hands over
+    /// waits, so the crash-recovery offer is never overtaken by it (#145).
+    /// </summary>
+    private bool _launchSettled;
 
-    /// <summary>A document the OS handed over before the window was open.</summary>
+    /// <summary>A document the OS handed over while the launch sequence was still running.</summary>
     private Func<Task>? _pendingOpen;
+
+    /// <summary>
+    /// Its path, kept beside the closure: what the launch sequence needs to tell the
+    /// crashed document from a different one (<see cref="LaunchedDocument"/>).
+    /// </summary>
+    private string? _pendingOpenPath;
+
+    /// <summary>Completed when one arrives, so the wait below ends on arrival rather than on the clock.</summary>
+    private TaskCompletionSource? _handedOverDocumentArrived;
+
+    /// <summary>
+    /// The launch sequence, for the self-test to wait on. Already completed until
+    /// <see cref="OnOpened"/> starts the real one.
+    /// </summary>
+    internal Task LaunchSequence { get; private set; } = Task.CompletedTask;
 
     /// <summary>
     /// Opens a document from Finder: a double-click, a PDF dropped on the Dock icon,
@@ -324,10 +342,11 @@ public partial class MainWindow : Window
     /// Avalonia surfaces them as IActivatableLifetime.Activated (App wires that up).
     /// The storage file, not just its path, is kept so Save can write back through it.
     /// </summary>
-    public void OpenFromSystem(IStorageFile file) => OpenWhenReady(() => OpenStorageFileAsync(file));
+    public void OpenFromSystem(IStorageFile file) =>
+        OpenWhenReady(file.TryGetLocalPath(), () => OpenStorageFileAsync(file));
 
     /// <summary>A PDF path from the command line (the Windows file association, `open --args`).</summary>
-    public void OpenFromSystem(string path) => OpenWhenReady(async () =>
+    public void OpenFromSystem(string path) => OpenWhenReady(path, async () =>
     {
         // Asked for as a storage file for the same reason as above; without one
         // Save would have nothing to write through.
@@ -337,20 +356,26 @@ public partial class MainWindow : Window
             await vm.OpenAsync(path);
     });
 
-    private void OpenWhenReady(Func<Task> open)
+    private void OpenWhenReady(string? path, Func<Task> open)
     {
-        if (!_isOpen)
+        if (!_launchSettled)
         {
             // One window shows one document, so the last one handed over wins.
             _pendingOpen = open;
+            _pendingOpenPath = path;
+            _handedOverDocumentArrived?.TrySetResult();
             return;
         }
         _ = RunOpenAsync(open);
         Activate();
     }
 
+    /// <summary>How many documents handed over by the OS were actually opened, for the self-test.</summary>
+    internal int OpenedFromSystemCount { get; private set; }
+
     private async Task RunOpenAsync(Func<Task> open)
     {
+        OpenedFromSystemCount++;
         try
         {
             await open();
@@ -363,17 +388,114 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// The handed-over document first, then the recovery offer — which only asks when
-    /// nothing is open, so it must not run before the document has had its chance.
+    /// The crash-recovery offer first, then the document the app was launched with (#145).
+    ///
+    /// It used to be the other way round, and deliberately so: the offer only asks when
+    /// nothing is open, so opening first was how a file the person chose in Finder was
+    /// kept clear of a prompt about some other document. It did not work — the Finder
+    /// open arrives as an Apple Event that can land after the window, so the prompt went
+    /// up anyway and landed on top of the document (#153) — and it cost far more than it
+    /// bought: after a crash, a double-click or "Open with" never offered recovery at
+    /// all, and when the file was the crashed document itself, opening it began a new
+    /// journal session over that document's own journal. BeginSession truncates, so the
+    /// unsaved edits went for good. Windows had the same bug and was fixed first (#249).
+    ///
+    /// Offering before anything opens keeps the original promise — the offer is never a
+    /// prompt over the document the person asked for, because that document is not open
+    /// yet — and it is what a Mac does at launch anyway: restore state first, then take
+    /// the documents. The launched file opens afterwards unless the restore has already
+    /// opened that same document, decided by what is open rather than by the answer
+    /// (<see cref="LaunchedDocument.NeedsOpening"/>).
     /// </summary>
-    private async Task OpenPendingThenOfferRecoveryAsync()
+    private async Task RunLaunchSequenceAsync()
     {
-        if (_pendingOpen is { } open)
+        try
         {
-            _pendingOpen = null;
-            await RunOpenAsync(open);
+            await OfferRecoveryOnLaunchAsync();
         }
-        await OfferRecoveryAsync();
+        catch (Exception ex)
+        {
+            // The launched file still gets its chance below: a recovery offer that
+            // failed must not also cost the person the document they double-clicked.
+            if (ViewModel is { } vm)
+                vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
+        }
+
+        var open = _pendingOpen;
+        var path = _pendingOpenPath;
+        _pendingOpen = null;
+        _pendingOpenPath = null;
+        // From here a handed-over document opens straight away. Nothing is awaited
+        // between reading the pending open and this line, so an activation cannot land
+        // in the gap and be dropped.
+        _launchSettled = true;
+
+        if (open is null)
+            return;
+        // A path the OS would not give us (a document handed over out of a virtual
+        // location) cannot be compared, so it is opened: the open asks about unsaved
+        // changes rather than losing them.
+        if (path is null || LaunchedDocument.NeedsOpening(path, ViewModel?.DocumentPath))
+            await RunOpenAsync(open);
+    }
+
+    /// <summary>
+    /// Whether the launch sequence waits a moment for a document the OS may still be
+    /// about to hand over.
+    ///
+    /// True on macOS, where a Finder open is an Apple Event that on a cold launch is
+    /// delivered after the window has opened, so the app does not yet know which file it
+    /// was launched with. Windows and Linux pass the path in argv, which App reads before
+    /// the window exists, so there is nothing to wait for and the offer is not delayed.
+    /// Settable so the self-test can drive both orders on one machine.
+    /// </summary>
+    internal static bool WaitsForHandedOverDocument { get; set; } = OperatingSystem.IsMacOS();
+
+    /// <summary>
+    /// How long that wait lasts. Long enough for an Apple Event that is already on its
+    /// way, short enough not to read as a slow launch — and only ever paid when there is
+    /// a crashed session to ask about.
+    /// </summary>
+    internal static TimeSpan HandedOverDocumentGrace { get; set; } = TimeSpan.FromMilliseconds(750);
+
+    /// <summary>
+    /// Set for a capture or diagnostic run (App reads the arguments): those are never
+    /// offered recovery. Nobody is there to answer, and the journal the offer would name
+    /// was left by an earlier run of the rig rather than by a person — #153 watched
+    /// exactly that happen, a `--story` run's journal prompting on every later launch.
+    /// It used to be covered by accident, the document opening first and the offer
+    /// standing down for it; with the offer ahead of the document it has to be said.
+    /// </summary>
+    internal bool SkipRecoveryOffer { get; set; }
+
+    private async Task OfferRecoveryOnLaunchAsync()
+    {
+        if (SkipRecoveryOffer || ViewModel is not { } vm)
+            return;
+
+        // The ordinary case — no crashed session — costs nothing: no wait, no dialog,
+        // and the launched document opens as immediately as it always did.
+        var sessions = vm.FindRecoverableSessions();
+        if (sessions.Count == 0)
+            return;
+
+        if (WaitsForHandedOverDocument && _pendingOpen is null)
+            await WaitForHandedOverDocumentAsync();
+
+        await OfferRecoveryAsync(sessions[0]);
+    }
+
+    private async Task WaitForHandedOverDocumentAsync()
+    {
+        _handedOverDocumentArrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            await Task.WhenAny(_handedOverDocumentArrived.Task, Task.Delay(HandedOverDocumentGrace));
+        }
+        finally
+        {
+            _handedOverDocumentArrived = null;
+        }
     }
 
     protected override void OnClosed(EventArgs e)
@@ -464,10 +586,8 @@ public partial class MainWindow : Window
         if (!vm.IsDirty)
             return true;
 
-        var dialog = new UnsavedChangesWindow();
-        dialog.SetDocument(vm.DocumentName ?? "");
-        await dialog.ShowDialog(this);
-        switch (dialog.Choice)
+        var choice = await AskAboutUnsavedChangesAsync(vm);
+        switch (choice)
         {
             case UnsavedChangesWindow.Decision.Save:
                 return await SaveAsync() && !vm.IsDirty;
@@ -477,6 +597,27 @@ public partial class MainWindow : Window
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Save, Don't Save or Cancel. Substituted by the headless self-test for the same
+    /// reason as <see cref="AnswerRecoveryForTest"/>.
+    /// </summary>
+    internal Func<UnsavedChangesWindow.Decision>? AnswerUnsavedChangesForTest { get; set; }
+
+    /// <summary>How many times the question was put, for the self-test.</summary>
+    internal int UnsavedChangesAsked { get; private set; }
+
+    private async Task<UnsavedChangesWindow.Decision> AskAboutUnsavedChangesAsync(MainViewModel vm)
+    {
+        UnsavedChangesAsked++;
+        if (AnswerUnsavedChangesForTest is { } answer)
+            return answer();
+
+        var dialog = new UnsavedChangesWindow();
+        dialog.SetDocument(vm.DocumentName ?? "");
+        await dialog.ShowDialog(this);
+        return dialog.Choice;
     }
 
     /// <summary>For the `unsaved` screenshot state: the question, shown beside the window rather than modal.</summary>
@@ -742,24 +883,18 @@ public partial class MainWindow : Window
     ///
     /// Asked rather than done: silently reopening a document and replaying edits
     /// onto it is startling, and the person may have abandoned those changes on
-    /// purpose. Only asked when a document is not already open, so a file opened
-    /// from Finder is never pushed aside by a prompt.
+    /// purpose. Asked at launch, before the document the app was launched with is
+    /// opened (<see cref="RunLaunchSequenceAsync"/>), so it is never a prompt on top of
+    /// the file the person asked Finder for (#153) and never arrives after that file has
+    /// truncated the very journal it is offering (#145).
     /// </summary>
-    private async Task OfferRecoveryAsync()
+    private async Task OfferRecoveryAsync(RecoverableSession session)
     {
         if (ViewModel is not { IsDocumentOpen: false } vm)
             return;
 
-        var sessions = vm.FindRecoverableSessions();
-        if (sessions.Count == 0)
-            return;
-
-        var session = sessions[0];
-        var dialog = new RecoveryWindow();
-        dialog.SetSession(Path.GetFileName(session.DocumentPath), session.EntryCount, session.LastWriteUtc);
-        await dialog.ShowDialog(this);
-
-        switch (dialog.Choice)
+        var choice = await AskAboutRecoveryAsync(session);
+        switch (choice)
         {
             case RecoveryWindow.Decision.Restore:
                 await vm.RestoreSessionAsync(session);
@@ -768,6 +903,23 @@ public partial class MainWindow : Window
                 vm.DiscardSession(session);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Restore, Discard or Decide later. Substituted by the headless self-test, which has
+    /// no message loop and would hang on a modal rather than answer it.
+    /// </summary>
+    internal Func<RecoverableSession, RecoveryWindow.Decision>? AnswerRecoveryForTest { get; set; }
+
+    private async Task<RecoveryWindow.Decision> AskAboutRecoveryAsync(RecoverableSession session)
+    {
+        if (AnswerRecoveryForTest is { } answer)
+            return answer(session);
+
+        var dialog = new RecoveryWindow();
+        dialog.SetSession(Path.GetFileName(session.DocumentPath), session.EntryCount, session.LastWriteUtc);
+        await dialog.ShowDialog(this);
+        return dialog.Choice;
     }
 
     // --- Clicking the page (SDD §3.2) ---
