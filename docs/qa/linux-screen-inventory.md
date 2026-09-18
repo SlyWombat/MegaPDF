@@ -268,23 +268,65 @@ the sandbox:
 The packaging runbook and the Flatpak manifest both used to say handles did not survive a
 restart. They do; both have been corrected.
 
-## 10. What the second desktop is for
+## 10. The second desktop
 
-GNOME and KDE were both run, as **mutter** and **kwin_x11** under Xvfb with dbus and
-`xdg-desktop-portal` — real window managers and the real portal, not `gnome-shell` or
-`plasmashell`, which want systemd, logind and a seat. Window management, decorations,
-placement, focus, fonts, theming and the portal are genuine; a desktop's own panel,
-overview and file dialog *chrome* are not there to be tested.
+### KDE: a whole Plasma session (#254 A5)
 
-Under each: the window is mapped and managed, `WM_CLASS` is `MegaPDF.MegaPDF` — which is
-what `StartupWMClass=MegaPDF` in the desktop entry claims, so the running window sits
-inside the launcher icon rather than beside it — the app reports the right desktop,
-`--self-test` and `--render-check` pass, and a document renders.
+```sh
+tools/linux/qa/kde-smoke.sh artifacts/linux/MegaPDF
+```
 
-**What this does not cover:** the GNOME and KDE *file dialogs* as a person sees them,
-the shell's own presentation of the app, and anything that needs a pointer. Those want
-a real desktop session on a real machine, and the rows marked **hands** above are the
-list to walk when there is one.
+This section used to say that `gnome-shell` and `plasmashell` both "want systemd, logind
+and a seat", so only the window managers were run. Half of that is right. **GNOME Shell
+46.0 aborts** in `background.js` on its first call to `org.freedesktop.login1`, which a
+container has no systemd-logind to answer, and there is no way round it short of running
+systemd as PID 1. **`startplasma-x11` simply comes up**, with no systemd at all:
+
+```
+    kwin_x11       running
+    plasmashell    running
+    kded5          running
+    ksmserver      running
+    window manager: KWin
+    the shell's own windows:
+        0x01e00015 -1 plasmashell.plasmashell  Desktop @ QRect(0,0 1920x1200) — Plasma
+        0x01e0001b -1 plasmashell.plasmashell  Plasma
+```
+
+So the KDE pass is now the whole desktop — the shell that draws the panel and the
+wallpaper, the compositor that places the window, `kded5`, `ksmserver`, and
+`xdg-desktop-portal-kde` answering for the file dialogs. Run 2026-09-18, all green:
+
+| | |
+|---|---|
+| `--self-test` | PASS — fill, check, sign, save, reopen |
+| `--render-check` | PASS — `demo.pdf`, page 1 → 816×1056 px |
+| `--language-check` | PASS — `LANGUAGE=fr_CA` read through the POSIX chain |
+| `--print-check` | PASS — `org.freedesktop.portal.Print` version 2 is on this session's bus |
+| the window | `WM_CLASS` `"MegaPDF", "MegaPDF"`, title `Rental Agreement.pdf — MegaPDF`, 1280×800 **placed by kwin at (320, 206)** on a 1920×1200 screen |
+| the toolbar | `mode=Full, pickers=absent, height=49 DIP`, one row |
+| the menu bar | PASS — all 22 toolbar, More and zoom-menu commands present |
+| the file dialogs | `OpenFile` and `SaveFile` on the bus, handed to `org.freedesktop.impl.portal.FileChooser`, and the dialog is a window of `xdg-desktop-portal-kde` titled `Open a PDF — Portal` |
+
+The placement line is the one thing a window manager alone would not have proved: a real
+Plasma session centred the window on the screen, rather than leaving it at the origin.
+
+### GNOME: the window manager and the portal, not the shell
+
+`mutter --x11` with `xdg-desktop-portal` and its GTK backend, as before. The same checks
+pass, and §9.4 has the file-dialog evidence and a screenshot of the GTK portal's own
+chooser over MegaPDF's window. What is missing is gnome-shell itself, for the reason
+above.
+
+Because the app renders its own window to a bitmap, **a capture cannot depend on which
+desktop is running**: the GNOME and KDE screenshot sets are identical by construction.
+What the second desktop is for is everything around the window, which is what the table
+above measures.
+
+**What this still does not cover:** picking a file in the dialog and seeing the app open
+what came back, gnome-shell's own presentation of the app, and anything else needing a
+pointer on a real screen. The rows marked **hands** above are the list to walk when there
+is one.
 
 ## 11. The battery
 

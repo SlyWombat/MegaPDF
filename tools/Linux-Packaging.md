@@ -28,7 +28,7 @@ runs again in CI on every push.
 | `tools/linux/flatpak/flathub/…yml.in` | the manifest as Flathub would build it, with the `sources:` block left to be filled in. |
 | `tools/linux/make-flathub-manifest.sh` | fills it in, from a tarball's URL and checksum (or its path, for a dry run). |
 | `tools/linux/build-flathub-flatpak.sh` | builds *that* manifest, so the one Flathub runs is the one that has been run. |
-| `tools/linux/qa/` | the desktop-session rigs: a headless session with a named portal backend, the file-dialog check, and the recent-document check inside and outside the sandbox. |
+| `tools/linux/qa/` | the desktop-session rigs: a headless session with a named portal backend, the file-dialog check, the recent-document check inside and outside the sandbox, and the KDE pass in a whole Plasma session. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
