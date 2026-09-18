@@ -1476,6 +1476,26 @@ internal static class Program
                   == "/org/freedesktop/portal/desktop/request/1_10/t");
         }
 
+        // --- Close and Quit from the keyboard, on Linux (#158) ---
+        //
+        // Linux only, and not because the check is awkward elsewhere: the bindings
+        // themselves are Linux-only, because macOS answers ⌘W and ⌘Q through its real
+        // menu bar and Windows has neither convention. Keeping the block inside the
+        // same guard is what leaves the Mac's run exactly as many checks as before.
+        if (OperatingSystem.IsLinux())
+        {
+            Console.WriteLine("Close and Quit from the keyboard (#158):");
+            try
+            {
+                CheckLinuxCloseAndQuit(dir, state, Check);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"::error::Close and Quit: {ex.GetType().Name}: {ex.Message}");
+                failures++;
+            }
+        }
+
         Console.WriteLine(failures == 0 ? "self-test: PASS" : $"::error::self-test: {failures} check(s) failed");
         return failures == 0 ? 0 : 1;
     }
@@ -1836,6 +1856,141 @@ internal static class Program
     /// The headless platform, set up once. Avalonia allows one setup per process, and
     /// more than one check now wants a real window (#144, #176).
     /// </summary>
+    /// <summary>
+    /// Ctrl+W and Ctrl+Q on Linux (#158), driven in a real window on the headless
+    /// platform.
+    ///
+    /// What has to be proved is not that a key runs a command — it is that both keys
+    /// go through the same question the window's close button asks, because the
+    /// 2026-09-18 RC pass found them going through nothing at all (#146). So the
+    /// changed document is driven as well as the clean one, and Cancel is checked for
+    /// what it leaves behind rather than for having been offered.
+    ///
+    /// Quit stops at <c>MainWindow.RequestQuit</c> here: this platform is set up with
+    /// <c>SetupWithoutStarting</c>, so there is no application lifetime to call
+    /// <c>TryShutdown</c> on. That the raised ShutdownRequested then puts the question
+    /// is App.axaml.cs's, and is what the Xvfb rig in docs/qa drives end to end.
+    /// </summary>
+    private static void CheckLinuxCloseAndQuit(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixture = Path.Combine(dir, "fixture.pdf");
+        // The drawn checkbox the first check in this file clicks: one click, one changed
+        // document, and no dialog in the way of getting there.
+        var tick = new PdfPoint(78, 186);
+
+        // A window per scenario: closing one disposes its view model (MainWindow.OnClosed),
+        // so none of them can be reused afterwards.
+        (MainViewModel Vm, Views.MainWindow Window) Open()
+        {
+            var vm = new MainViewModel(state);
+            vm.Open(fixture);
+            var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+            window.Show();
+            MenuProbe.Pump();
+            return (vm, window);
+        }
+
+        static void Press(Views.MainWindow window, Key key, PhysicalKey physical, string text)
+        {
+            HeadlessWindowExtensions.KeyPress(window, key, RawInputModifiers.Control, physical, text);
+            // The key-down is allowed to close the window, and Ctrl+W on a clean
+            // document does exactly that. The platform window goes with it, so there is
+            // nothing left to deliver the release to — which is the pass, not a fault.
+            if (window.IsVisible)
+                HeadlessWindowExtensions.KeyRelease(window, key, RawInputModifiers.Control, physical, text);
+            MenuProbe.Pump();
+        }
+
+        // 1. The bindings are on the window at all — the RC pass's finding was that
+        //    Close existed only as a NativeMenuItem gesture nothing on X11 hosts.
+        {
+            var (vm, window) = Open();
+            var bound = window.KeyBindings
+                .Select(b => b.Gesture)
+                .Where(g => g is not null && g.KeyModifiers == KeyModifiers.Control)
+                .Select(g => g!.Key)
+                .ToHashSet();
+            check($"Ctrl+W and Ctrl+Q are window key bindings ({window.KeyBindings.Count} bindings in all)",
+                  bound.Contains(Key.W) && bound.Contains(Key.Q));
+            // Deliberate: minimizing is the window manager's on GNOME and KDE, not the
+            // application's, so the Mac's ⌘M is not mirrored here.
+            check("  and Ctrl+M is not, because minimizing is the desktop's on GNOME and KDE",
+                  !bound.Contains(Key.M));
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            vm.Dispose();
+        }
+
+        // 2. A clean document: Ctrl+W closes the window and asks nothing.
+        {
+            var (vm, window) = Open();
+            check("a clean document: nothing is changed before Ctrl+W", vm.IsDocumentOpen && !vm.IsDirty);
+            Press(window, Key.W, PhysicalKey.W, "w");
+            PumpUntil(() => !window.IsVisible, TimeSpan.FromSeconds(5));
+            check($"  Ctrl+W closes the window, asking nothing ({window.UnsavedChangesAsked} question(s) put)",
+                  !window.IsVisible && window.UnsavedChangesAsked == 0);
+            vm.Dispose();
+        }
+
+        // 3. A changed document: Ctrl+W asks, and Cancel keeps the document.
+        {
+            var (vm, window) = Open();
+            vm.HandlePageClick(0, tick);
+            MenuProbe.Pump();
+            check("a changed document: the tick made it dirty", vm.IsDirty);
+
+            window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Cancel;
+            Press(window, Key.W, PhysicalKey.W, "w");
+            PumpUntil(() => window.UnsavedChangesAsked > 0, TimeSpan.FromSeconds(5));
+            MenuProbe.Pump();
+            check($"  Ctrl+W puts the unsaved-changes question ({window.UnsavedChangesAsked} time(s))",
+                  window.UnsavedChangesAsked == 1);
+            check("  and Cancel keeps the window, the document and the change",
+                  window.IsVisible && vm.IsDocumentOpen && vm.IsDirty);
+
+            // The same window, answered the other way: Don't Save lets the close through.
+            window.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
+            Press(window, Key.W, PhysicalKey.W, "w");
+            PumpUntil(() => !window.IsVisible, TimeSpan.FromSeconds(5));
+            check($"  asked again on the next Ctrl+W ({window.UnsavedChangesAsked} in all), Don't Save closes it",
+                  window.UnsavedChangesAsked == 2 && !window.IsVisible);
+            vm.Dispose();
+        }
+
+        // 4. Ctrl+Q reaches the application's own quit, on both a clean and a changed
+        //    document — and asks for it rather than closing the window behind its back,
+        //    which is what makes App's ShutdownRequested handler the one place the
+        //    question is put.
+        foreach (var dirty in new[] { false, true })
+        {
+            var (vm, window) = Open();
+            if (dirty)
+            {
+                vm.HandlePageClick(0, tick);
+                MenuProbe.Pump();
+            }
+            var asked = 0;
+            window.QuitForTest = () => asked++;
+            Press(window, Key.Q, PhysicalKey.Q, "q");
+            PumpUntil(() => asked > 0, TimeSpan.FromSeconds(5));
+            check($"Ctrl+Q with {(dirty ? "a changed" : "a clean")} document asks the application to quit ({asked})",
+                  asked == 1);
+            check("  the window is still the app's to close, not closed under it",
+                  window.IsVisible);
+            // The condition App's ShutdownRequested handler branches on, which is what
+            // decides whether the quit stops to ask.
+            check($"  and it would {(dirty ? "" : "not ")}stop to ask first",
+                  window.NeedsConfirmationBeforeClose == dirty);
+            window.SkipCloseConfirmation();
+            window.Close();
+            MenuProbe.Pump();
+            vm.Dispose();
+        }
+    }
+
     private static void EnsureHeadlessPlatform()
     {
         if (_headlessStarted)

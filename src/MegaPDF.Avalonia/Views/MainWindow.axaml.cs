@@ -546,6 +546,31 @@ public partial class MainWindow : Window
             desktop.Shutdown();
     }
 
+    /// <summary>
+    /// Asks the application to quit — Ctrl+Q on Linux (#158), and exactly what the Mac's
+    /// Quit item calls. <c>TryShutdown</c> rather than <c>Shutdown</c> is the whole point:
+    /// it raises ShutdownRequested, which is where the unsaved-changes question is put
+    /// (App.axaml.cs). <c>Shutdown</c> would quit without asking anybody anything.
+    /// </summary>
+    internal void RequestQuit()
+    {
+        if (QuitForTest is { } quit)
+        {
+            quit();
+            return;
+        }
+        if (global::Avalonia.Application.Current?.ApplicationLifetime
+            is global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.TryShutdown();
+    }
+
+    /// <summary>
+    /// Substituted by the headless self-test, which is set up with
+    /// <c>SetupWithoutStarting</c> and so has no application lifetime to shut down —
+    /// the same reason <see cref="AnswerUnsavedChangesForTest"/> exists.
+    /// </summary>
+    internal Action? QuitForTest { get; set; }
+
     /// <summary>Waits for a save in progress, then asks about unsaved changes. True when closing may go ahead.</summary>
     private async Task<bool> ConfirmCloseAsync()
     {
@@ -1468,6 +1493,8 @@ public partial class MainWindow : Window
         // its own affordance once open, and the menu bar lists it.
         Bind(null, FindGesture, Strings.FindInDocument, OpenFind);
 
+        BindLinuxWindowShortcuts();
+
         void Bind(Button? button, KeyGesture gesture, string description, Action invoke)
         {
             KeyBindings.Add(new KeyBinding
@@ -1481,6 +1508,47 @@ public partial class MainWindow : Window
             var shiftLabel = gesture.KeyModifiers.HasFlag(KeyModifiers.Shift) ? (OperatingSystem.IsMacOS() ? "⇧" : "Shift+") : "";
             ToolTip.SetTip(button, $"{description} ({CommandSymbol}{shiftLabel}{KeyLabel(gesture.Key)})");
         }
+    }
+
+    /// <summary>
+    /// Close and Quit from the keyboard, on Linux only (#158).
+    ///
+    /// Every other shortcut in <see cref="BindShortcuts"/> reaches Linux because the
+    /// command also has a toolbar button or a window binding. Close does not: it lives
+    /// only as a <c>NativeMenuItem</c> gesture in MainWindow.MenuBar.cs, and
+    /// MainWindow.axaml carries no <c>NativeMenuBar</c>, so on X11 nothing hosts the
+    /// menu and the gesture is built and never heard. Quit has no item at all off
+    /// macOS. Measured in the 2026-09-18 RC pass (#146): Ctrl+W and Ctrl+Q left a
+    /// changed document open with no prompt.
+    ///
+    /// GNOME's HIG and KDE's KStandardShortcut both give Ctrl+W to closing the window
+    /// and Ctrl+Q to quitting the application, so the Linux build answers both.
+    ///
+    /// Linux only, deliberately. macOS already answers ⌘W and ⌘Q through the real
+    /// menu bar — a window binding there would be a second route to the same command,
+    /// and on the Mac the menu's key equivalent answers first, so the pair would
+    /// disagree about which one ran. Windows has neither convention and is untouched.
+    ///
+    /// Minimize (⌘M) is **not** mirrored. It is a Mac convention; on GNOME and KDE
+    /// minimizing is the window manager's, not the application's (Super+H, Alt+F3),
+    /// and an app that took Ctrl+M would be taking a key its desktop has not given it.
+    ///
+    /// Both routes ask what the window's close button asks. Ctrl+W is
+    /// <see cref="Window.Close()"/>, which runs OnClosing → NeedsConfirmationBeforeClose
+    /// → Save / Don't Save / Cancel. Ctrl+Q is <see cref="RequestQuit"/>, which is what
+    /// the Mac's Quit item does, and the same ShutdownRequested handler puts the same
+    /// question (App.axaml.cs).
+    /// </summary>
+    private void BindLinuxWindowShortcuts()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        // Whichever window has the keys is the one that closes: a window's key binding
+        // only fires while that window is focused, so this is `this`. About and the
+        // notices answer Ctrl+W themselves, for the same reason.
+        KeyBindings.Add(new KeyBinding { Gesture = CloseGesture, Command = new RelayCommand(() => Close()) });
+        KeyBindings.Add(new KeyBinding { Gesture = QuitGesture, Command = new RelayCommand(RequestQuit) });
     }
 
     private static string KeyLabel(Key key) => key switch

@@ -61,6 +61,13 @@ public partial class MainWindow
     /// <summary>File ▸ Close. ⌘W did nothing at all before (#176).</summary>
     private static KeyGesture CloseGesture => Shortcut(Key.W);
 
+    /// <summary>
+    /// Quit. No menu item carries it: on macOS the application menu's Quit is the
+    /// system's own (App.axaml.cs), so this exists for the Linux window binding alone
+    /// — GNOME's HIG and KDE's KStandardShortcut both name Ctrl+Q (#158).
+    /// </summary>
+    private static KeyGesture QuitGesture => Shortcut(Key.Q);
+
     /// <summary>Window ▸ Minimize, the shortcut every Mac window answers.</summary>
     private static KeyGesture MinimizeGesture => Shortcut(Key.M);
 
