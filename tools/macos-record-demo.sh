@@ -177,9 +177,12 @@ python3 -c "import sys; sys.exit(0 if $TAKE < $CEILING - 2 else 1)" || {
 }
 
 DEMO="$OUT/macos-$LANG_TAG-$THEME-recorded-demo.mp4"
-# -t rather than -to: with -ss as an input option the two mean different
-# things, and a duration is the one that is unambiguous.
-ffmpeg -v error -y -ss 1.5 -t "$(python3 -c "print(round($TAKE - 1.5, 2))")" -i "$RAW" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$DEMO"
+# -t after -i, deliberately. screencapture writes a variable-rate movie — 253
+# frames over ninety seconds, because it only stores a frame when the screen
+# changes — and before -i, -t is an input option that on such a file cuts three
+# and a half seconds late (measured: 36.87 s where 33.12 s was asked for).
+# After -i it is an output duration and lands exactly.
+ffmpeg -v error -y -ss 1.5 -i "$RAW" -t "$(python3 -c "print(round($TAKE - 1.5, 2))")" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$DEMO"
 DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$DEMO")
 FACTOR=$(python3 -c "print(min(1.0, 29.5 / float('$DUR')))")
 PREVIEW="$OUT/macos-$LANG_TAG-$THEME-recorded-preview.mp4"
