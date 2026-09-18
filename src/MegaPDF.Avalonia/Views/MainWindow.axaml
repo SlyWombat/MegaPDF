@@ -371,15 +371,45 @@
     </Border>
 
     <!-- Find bar (SDD §3.6). Hidden until asked for, so it costs nothing until it
-         is wanted, and Escape closes it. -->
-    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsFindOpen}"
+         is wanted, and Escape closes it.
+
+         The row narrows with the window rather than running off it (#237). At the
+         window's 480 DIP minimum the bar used to lay out at its natural width: Done
+         was off the right edge in every language and the counter was cut mid-word in
+         French, so the only way out of find was the keyboard. MainWindow.FindBar.cs
+         measures the row the way the toolbar measures its own and sheds detail in the
+         same order — first Previous and Next give up their words for a chevron each,
+         then the box narrows, then the counter trims. Done is measured first and never
+         gives up anything, because it is the way out.
+
+         Each of the two buttons carries both its word and its glyph and shows one of
+         them; the accessible name and the tooltip are the word either way
+         (WireFindBar), so nothing is lost to a screen reader at the narrow step. -->
+    <Border Name="FindBarHost" DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsFindOpen}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
-      <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
+      <StackPanel Name="FindBarItems" Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
         <TextBox Name="FindBox" Width="260" Watermark="{x:Static loc:Strings.FindInDocument}" />
-        <Button Name="FindPreviousButton" Content="{x:Static loc:Strings.Previous}" Command="{Binding FindPreviousCommand}" />
-        <Button Name="FindNextButton" Content="{x:Static loc:Strings.Next}" Command="{Binding FindNextCommand}" />
-        <TextBlock Text="{Binding MatchSummary}" VerticalAlignment="Center" Opacity="0.8" />
+        <Button Name="FindPreviousButton" Command="{Binding FindPreviousCommand}">
+          <Panel>
+            <TextBlock Name="FindPreviousLabel" Text="{x:Static loc:Strings.Previous}" />
+            <Path Name="FindPreviousGlyph" IsVisible="False"
+                  Data="{StaticResource IconChevronUp}" Width="14" Height="14"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+          </Panel>
+        </Button>
+        <Button Name="FindNextButton" Command="{Binding FindNextCommand}">
+          <Panel>
+            <TextBlock Name="FindNextLabel" Text="{x:Static loc:Strings.Next}" />
+            <Path Name="FindNextGlyph" IsVisible="False"
+                  Data="{StaticResource IconChevronDown}" Width="14" Height="14"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
+                  StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
+          </Panel>
+        </Button>
+        <TextBlock Name="FindMatchSummary" Text="{Binding MatchSummary}" VerticalAlignment="Center"
+                   Opacity="0.8" TextTrimming="CharacterEllipsis" />
         <Button Name="CloseFindButton" Content="{x:Static loc:Strings.Done}" />
       </StackPanel>
     </Border>

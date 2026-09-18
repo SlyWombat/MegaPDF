@@ -1187,6 +1187,8 @@ public partial class MainWindow : Window
         };
 
         CloseFindButton.Click += (_, _) => CloseFind();
+
+        WireFindBar();
     }
 
     /// <summary>Search off the UI thread (#145); a failure lands in the status line.</summary>
