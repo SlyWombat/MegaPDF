@@ -1,0 +1,56 @@
+--- a/core/fpdfapi/edit/cpdf_creator.h
++++ b/core/fpdfapi/edit/cpdf_creator.h
+@@ -86,9 +86,15 @@
+ 
+   void RemoveSecurity();
+   bool ApplyNewSecurity();
++  bool IsRemovedEncryptDict(uint32_t objnum) const;
+ 
+   CPDF_CryptoHandler* GetCryptoHandler();
+ 
++  // The object number of the encryption dictionary RemoveSecurity() dropped, so
++  // the body does not write it out again. 0 when the document had none, or its
++  // dictionary was inline and so had no object number of its own.
++  uint32_t removed_encrypt_obj_num_ = 0;
++
+   // What SetSecurity() asked for; applied by Create().
+   bool set_security_ = false;
+   ByteString security_user_;
+--- a/core/fpdfapi/edit/cpdf_creator.cpp
++++ b/core/fpdfapi/edit/cpdf_creator.cpp
+@@ -188,6 +188,9 @@
+     if (!pdfium::Contains(objects_with_refs, objnum)) {
+       continue;
+     }
++    if (IsRemovedEncryptDict(objnum)) {
++      continue;
++    }
+     if (!WriteOldIndirectObject(objnum)) {
+       return false;
+     }
+@@ -761,10 +764,25 @@
+ void CPDF_Creator::RemoveSecurity() {
+   security_handler_.Reset();
+   security_changed_ = true;
++  // Clearing `encrypt_dict_` stops the copy being enciphered and keeps /Encrypt out
++  // of the trailer, but it does not stop the body writing the dictionary out. The
++  // body writes every object in GetObjectsWithReferences(), whose walk starts at the
++  // *parser's* trailer -- the one the file was read with, which still says
++  // /Encrypt N 0 R. So object N stayed reachable and was copied verbatim into the
++  // plain file, an orphan carrying /O, /U, /OE, /UE, /Perms and the old /P (#241).
++  // Remember its number and leave it out.
++  if (encrypt_dict_) {
++    removed_encrypt_obj_num_ = encrypt_dict_->GetObjNum();
++  }
+   encrypt_dict_ = nullptr;
+   new_encrypt_dict_.Reset();
+ }
+ 
++// Object numbers start at 1, so 0 means there is nothing to leave out.
++bool CPDF_Creator::IsRemovedEncryptDict(uint32_t objnum) const {
++  return removed_encrypt_obj_num_ != 0 && objnum == removed_encrypt_obj_num_;
++}
++
+ CPDF_CryptoHandler* CPDF_Creator::GetCryptoHandler() {
+   return security_handler_ ? security_handler_->GetCryptoHandler() : nullptr;
+ }

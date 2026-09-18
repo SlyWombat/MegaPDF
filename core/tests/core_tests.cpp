@@ -4561,6 +4561,146 @@ void test_user_unit(const std::string& fixtures) {
     megapdf_close(again);
 }
 
+// #241: "Remove protection" must write a plain file. No /Encrypt, nothing of the
+// security handler left anywhere in it, strings and streams in the clear -- and nothing
+// a reader can see changed by the removal. The fixtures are the six handlers over
+// secure-source.pdf (tools/gen_security_fixtures.sh): two pages of text, a filled text
+// field, a checked checkbox, a red square and a sticky note.
+//
+// Until PDFium patch 0029 the trailer was clean and the bytes were in the clear, but the
+// encryption dictionary itself survived in the body as an orphan object, carrying /O,
+// /U, /OE, /UE, /Perms and the old /P. CI runs qpdf --check and --show-encryption over
+// everything keep_saved() writes; these asserts are the part that does not need qpdf.
+
+// A page as a reader sees it: its text, its fields, its annotations and its pixels.
+struct PageShot {
+    std::vector<RunShot> runs;
+    std::vector<FieldShot> fields;
+    StampList stamps;
+    std::vector<unsigned char> px;
+};
+
+std::vector<PageShot> page_shots(megapdf_document* doc) {
+    std::vector<PageShot> out;
+    for (int i = 0; i < megapdf_page_count(doc); i++) {
+        Page p(doc, i);
+        if (p.page == nullptr) break;
+        out.push_back(PageShot{run_shots(p.page), field_shots(p.page), stamps_of(p.page), render_page(p.page)});
+    }
+    return out;
+}
+
+// The bytes with every space and line break dropped, so a dictionary PDFium wrote over
+// several lines is still found by a plain substring search.
+std::string squeezed(const std::vector<unsigned char>& bytes) {
+    std::string out;
+    out.reserve(bytes.size());
+    for (unsigned char c : bytes)
+        if (c != ' ' && c != '\r' && c != '\n' && c != '\t') out.push_back(static_cast<char>(c));
+    return out;
+}
+
+void test_remove_protection() {
+    const std::string dir = MEGAPDF_SECURITY_FIXTURES;
+    struct Protected {
+        const char* file;
+        int revision;
+        const char* user;   // null when the document has no user credential
+        const char* owner;
+        bool restricts;     // an open that is not the owner's may not remove the security
+    };
+    // tools/gen_security_fixtures.sh. Every credential here is test data.
+    const Protected matrix[] = {
+        {"remove-rc4-40.pdf", 2, "u-remove-40", "o-remove-40", false},
+        {"remove-rc4-128.pdf", 3, "u-remove-128", "o-remove-128", false},
+        {"remove-aes-128.pdf", 4, "u-remove-a128", "o-remove-a128", false},
+        {"remove-aes-256.pdf", 6, "u-remove-a256", "o-remove-a256", false},
+        {"remove-owner-only.pdf", 6, nullptr, "o-remove-owner", true},
+        {"remove-user-owner.pdf", 6, "u-remove-both", "o-remove-both", true},
+    };
+
+    for (const Protected& f : matrix) {
+        const std::string name = f.file;
+        const auto bytes = read_file(dir + "/" + f.file);
+
+        // An open that is not the owner's sees the restrictions and may not remove them.
+        if (f.restricts) {
+            megapdf_document* limited = megapdf_open(bytes.data(), bytes.size(), f.user);
+            check(limited != nullptr, name + ": it opens without the owner credential",
+                  megapdf_last_error_message());
+            if (limited != nullptr) {
+                megapdf_security s{};
+                check(megapdf_security_info(limited, &s) == MEGAPDF_OK && s.encrypted == 1 && s.full_access == 0,
+                      name + ": that open is restricted", std::to_string(s.permissions));
+                std::vector<unsigned char> refused;
+                check(megapdf_save_without_security(limited, collect, &refused) == MEGAPDF_ERR_RESTRICTED,
+                      name + ": it will not remove the protection without the owner credential");
+                megapdf_close(limited);
+            }
+        }
+
+        megapdf_document* owner = megapdf_open(bytes.data(), bytes.size(), f.owner);
+        check(owner != nullptr, name + ": the owner credential opens it", megapdf_last_error_message());
+        if (owner == nullptr) continue;
+        megapdf_security before{};
+        check(megapdf_security_info(owner, &before) == MEGAPDF_OK && before.encrypted == 1 &&
+                  before.revision == f.revision && before.full_access == 1,
+              name + ": protected at the revision it was written with, opened with full access",
+              std::to_string(before.revision));
+
+        const std::vector<PageShot> was = page_shots(owner);
+        check(was.size() == 2, name + ": two pages before", std::to_string(was.size()));
+
+        std::vector<unsigned char> plain;
+        check(megapdf_save_without_security(owner, collect, &plain) == MEGAPDF_OK,
+              name + ": the owner removes the protection", megapdf_last_error_message());
+        keep_saved("remove-protection", plain);
+        megapdf_close(owner);
+        if (plain.empty()) continue;
+
+        // The file itself: no /Encrypt anywhere, and no security handler dictionary left
+        // in the body either -- the orphan #241 was about.
+        const std::string flat = squeezed(plain);
+        check(flat.find("/Encrypt") == std::string::npos, name + ": the plain copy has no /Encrypt");
+        check(flat.find("/Filter/Standard") == std::string::npos,
+              name + ": the plain copy has no security handler dictionary");
+        check(flat.find("/Perms") == std::string::npos && flat.find("/StdCF") == std::string::npos,
+              name + ": and none of its entries");
+
+        // It opens with no credential at all, and may do everything.
+        megapdf_document* after = megapdf_open(plain.data(), plain.size(), nullptr);
+        check(after != nullptr, name + ": the plain copy opens with no credential",
+              std::to_string(megapdf_last_error()));
+        if (after == nullptr) continue;
+        megapdf_security now{};
+        check(megapdf_security_info(after, &now) == MEGAPDF_OK && now.encrypted == 0 && now.revision == -1 &&
+                  now.full_access == 1 && now.permissions == MEGAPDF_PERMIT_ALL,
+              name + ": it reports no security and full access", std::to_string(now.permissions));
+
+        // And nothing a reader can see has moved.
+        const std::vector<PageShot> is = page_shots(after);
+        check(is.size() == was.size(), name + ": the page count is unchanged",
+              std::to_string(was.size()) + " -> " + std::to_string(is.size()));
+        for (size_t i = 0; i < is.size() && i < was.size(); i++) {
+            const std::string where = name + ", page " + std::to_string(i + 1);
+            check(same_runs(was[i].runs, is[i].runs, 0.01), where + ": the page content is unchanged",
+                  std::to_string(was[i].runs.size()) + " -> " + std::to_string(is[i].runs.size()) + " runs");
+            check(same_fields(was[i].fields, is[i].fields), where + ": the form fields are unchanged",
+                  std::to_string(was[i].fields.size()) + " -> " + std::to_string(is[i].fields.size()) + " fields");
+            check(same_stamps(was[i].stamps, is[i].stamps), where + ": the annotations are unchanged",
+                  std::to_string(was[i].stamps.ids.size()) + " -> " + std::to_string(is[i].stamps.ids.size()));
+            check(was[i].px == is[i].px, where + ": it renders the same");
+        }
+        // The fixture really does carry all three, or the comparisons above prove nothing.
+        if (!is.empty())
+            check(is[0].fields.size() == 2 && is[0].stamps.ids.size() == 2 && !is[0].runs.empty(),
+                  name + ": page 1 has its text, both fields and both annotations",
+                  std::to_string(is[0].fields.size()) + " fields, " + std::to_string(is[0].stamps.ids.size()) +
+                      " annotations, " + std::to_string(is[0].runs.size()) + " runs");
+        megapdf_close(after);
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -4582,6 +4722,7 @@ int main(int argc, char** argv) {
     test_save_flatten_images(argv[1]);
     test_protected_save(argv[1]);
     test_security(argv[1]);
+    test_remove_protection();
     test_subset_font_glyphs();
     test_cid_font_glyphs();
     test_render();

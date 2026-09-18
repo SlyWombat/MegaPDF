@@ -21,10 +21,26 @@
 #
 # owner-only.pdf allows nothing to a plain open: no printing, modifying, copying,
 # annotating, form filling or assembly.
+#
+# The remove-*.pdf family is the same six handlers over secure-source.pdf, the
+# fixture with two pages of text, a filled text field, a checked checkbox and two
+# annotations (#241). Removing protection from each must write a plain file that
+# still draws, fills and annotates exactly the same.
+#
+# | file                    | handler         | user           | owner            | restricts |
+# |-------------------------|-----------------|----------------|------------------|-----------|
+# | remove-rc4-40.pdf       | R2, RC4 40-bit  | u-remove-40    | o-remove-40      | nothing   |
+# | remove-rc4-128.pdf      | R3, RC4 128-bit | u-remove-128   | o-remove-128     | nothing   |
+# | remove-aes-128.pdf      | R4, AES-128     | u-remove-a128  | o-remove-a128    | nothing   |
+# | remove-aes-256.pdf      | R6, AES-256     | u-remove-a256  | o-remove-a256    | nothing   |
+# | remove-owner-only.pdf   | R6, no user     | (none)         | o-remove-owner   | all       |
+# | remove-user-owner.pdf   | R6, both        | u-remove-both  | o-remove-both    | all       |
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="${1:?usage: tools/gen_security_fixtures.sh <directory written by tools/gen_test_fixtures.py>}/fixture.pdf"
+FIXTURES="${1:?usage: tools/gen_security_fixtures.sh <directory written by tools/gen_test_fixtures.py>}"
+SRC="$FIXTURES/fixture.pdf"
+RICH="$FIXTURES/secure-source.pdf"
 OUT="$ROOT/tests/MegaPDF.Core.Tests/Fixtures/security"
 mkdir -p "$OUT"
 
@@ -40,6 +56,17 @@ fixture() {
     echo "wrote $name.pdf"
 }
 
+# The same, over the richer source the removal is checked against (#241).
+rich_fixture() {
+    local name=$1
+    shift
+    printf '%s\n' "$@" "--" "$RICH" "$OUT/$name.pdf" > "$ARGS"
+    qpdf @"$ARGS"
+    echo "wrote $name.pdf"
+}
+
+deny_everything=(--print=none --modify=none --extract=n --annotate=n --form=n --assemble=n)
+
 fixture rc4-40            --allow-weak-crypto --encrypt u-rc4-40 o-rc4-40 40
 fixture rc4-128           --allow-weak-crypto --encrypt u-rc4-128 o-rc4-128 128 --use-aes=n
 fixture aes-128           --encrypt u-aes-128 o-aes-128 128 --use-aes=y
@@ -49,3 +76,10 @@ fixture owner-only        --encrypt --user-password= --owner-password=o-restrict
 fixture nonascii-aes-256  --encrypt clé-été o-nonascii 256
 fixture nonascii-rc4-128  --allow-weak-crypto --encrypt clé o-nonascii-rc4 128 --use-aes=n
 fixture metadata-clear    --encrypt u-meta o-meta 256 --cleartext-metadata
+
+rich_fixture remove-rc4-40      --allow-weak-crypto --encrypt u-remove-40 o-remove-40 40
+rich_fixture remove-rc4-128     --allow-weak-crypto --encrypt u-remove-128 o-remove-128 128 --use-aes=n
+rich_fixture remove-aes-128     --encrypt u-remove-a128 o-remove-a128 128 --use-aes=y
+rich_fixture remove-aes-256     --encrypt u-remove-a256 o-remove-a256 256
+rich_fixture remove-owner-only  --encrypt "" o-remove-owner 256 "${deny_everything[@]}"
+rich_fixture remove-user-owner  --encrypt u-remove-both o-remove-both 256 "${deny_everything[@]}"

@@ -78,12 +78,34 @@ well as by PDFium itself.
    than jstrings, because JNI's modified UTF-8 encodes characters outside the BMP
    differently.
 
+10. **"Remove protection" writes a plain file** (#241, Dave's direction 2026-09-18): no
+    `/Encrypt`, strings and streams in the clear, and nothing of the security handler
+    anywhere in the file — not even as an object nothing points at.
+
+    Until PDFium patch 0029 the trailer was clean and the bytes really were in the clear,
+    but the encryption dictionary itself survived in the body as an orphan object with its
+    `/O`, `/U`, `/OE`, `/UE`, `/Perms` and the old `/P`. That is the credential verifier
+    material, in a file the user asked to have protection removed from: the original
+    password could still be attacked offline from it. Upstream cleared `encrypt_dict_`,
+    which governs the trailer, but the body is written from the objects reachable from the
+    *parser's* trailer, and that one still named the dictionary.
+
+    The core test `test_remove_protection` removes protection from each of the six
+    handlers over a fixture with two pages of text, a filled text field, a checked
+    checkbox and two annotations, and asserts the copy carries no `/Encrypt`, no
+    `/Filter /Standard`, no `/Perms` and no `/StdCF`, and that every page's text, fields,
+    annotations and pixels are exactly what they were. CI then has qpdf and pdftotext —
+    readers that are not PDFium — confirm each copy is not encrypted and still readable.
+
 ## Consequences
 
-- The apps need MegaPDF's PDFium from patch 0010 on (`libs/pdfium/RELEASE`).
+- The apps need MegaPDF's PDFium from patch 0010 on, and from patch 0029 on for the
+  removal to be complete (`libs/pdfium/RELEASE`).
 - Every handler from RC4-40 to AES-256, an owner-only restricted document, non-ASCII
   passwords and cleartext metadata are committed fixtures (`tests/MegaPDF.Core.Tests/Fixtures/security`),
   exercised by the core tests on every CI OS and by the desktop tests; the phone tests use
-  the owner-only fixture and a copy saved with new security.
+  the owner-only fixture and a copy saved with new security. The `remove-*.pdf` family is
+  the same six handlers over `secure-source.pdf`, the fixture with fields and annotations
+  that #241's removal test compares against.
 - The stress harness counts protected documents as their own outcome, and can open them
   from a private unlock list.

@@ -57,7 +57,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build qpdf; else brew install ninja; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build qpdf poppler-utils; else brew install ninja; fi
 
       - name: Fetch the pinned PDFium prebuilt
         if: matrix.fetch != ''
@@ -126,3 +126,29 @@ jobs:
           echo "qpdf --check: $files files, $ok ok, $warned with warnings, $failed with errors, $skipped skipped (need a password to open)"
           if [ "$files" -eq 0 ]; then echo "::error::the core tests kept no saved documents"; exit 1; fi
           [ "$failed" -eq 0 ]
+
+      # #241: what "Remove protection" wrote must be a plain file to a reader that is not
+      # PDFium. qpdf must say it is not encrypted, and pdftotext must read the fixture's
+      # text out of it without being given anything. The core test checks the bytes; this
+      # checks that two other readers agree.
+      - name: the copies with protection removed are plain
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          files=0
+          for f in "$RUNNER_TEMP"/saved/remove-protection-*.pdf; do
+            [ -e "$f" ] || continue
+            files=$((files + 1))
+            name=$(basename "$f")
+            enc=$(qpdf --show-encryption "$f" 2>&1)
+            if [ "$enc" != "File is not encrypted" ]; then
+              echo "::error title=still encrypted::$name: $enc"
+              exit 1
+            fi
+            if ! pdftotext "$f" - | grep -q "MegaPDF protection fixture"; then
+              echo "::error title=a second reader cannot read it::$name"
+              exit 1
+            fi
+          done
+          if [ "$files" -eq 0 ]; then echo "::error::no copies with protection removed were kept"; exit 1; fi
+          echo "$files copies with protection removed: not encrypted, and readable by qpdf and pdftotext"

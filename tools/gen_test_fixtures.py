@@ -17,6 +17,10 @@ Writes:
                 appearance stream. Used by the iOS PDFKit spike (ADR-001)
                 and future cross-platform interop tests.
 
+  secure-source.pdf - the document tools/gen_security_fixtures.sh encrypts six
+                ways for #241: two pages of text, a filled text field "fullname"
+                and a checked checkbox "agree", and a red square and a sticky note
+                carrying MegaPDF_Ids. Removing protection must leave all of it alone.
   cropped.pdf - CropBox [0 100 612 700] on a 612x792 MediaBox (#28/#30): the
                 offset that makes user-space and rendered coordinates disagree.
   userunit.pdf - /UserUnit 2 with a CropBox offset (#150): cropped.pdf drawn in
@@ -649,6 +653,76 @@ def gen_encrypted(unlock_text="u123"):
     return bytes(out)
 
 
+def gen_secure_source():
+    """The document the #241 protection fixtures are made from.
+
+    Removing protection must leave everything a reader can see exactly as it was, so
+    this one fixture carries all three of the things the removal is checked against:
+    page content (two pages of text), form fields (a filled text field and a checked
+    checkbox) and annotations (a square and a sticky note, each with a MegaPDF_Id so
+    the core's stamp contract lists them). tools/gen_security_fixtures.sh encrypts it
+    six ways.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    c1 = add(stream(
+        b"", b"BT /F1 24 Tf 72 720 Td (MegaPDF protection fixture - page 1) Tj ET\n"
+             b"BT /F1 12 Tf 72 680 Td (Removing protection must change none of this.) Tj ET\n"
+             b"1 w 0.13 0.13 0.13 RG 72 640 12 12 re S\n"))
+    c2 = add(stream(
+        b"", b"BT /F1 24 Tf 72 720 Td (MegaPDF protection fixture - page 2) Tj ET\n"
+             b"BT /F1 12 Tf 72 680 Td (A second page, so the page tree is exercised too.) Tj ET\n"))
+    ap_text = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 1 0 R >> >>",
+        b"0.13 0.13 0.13 RG 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Ada Lovelace) Tj ET\n"))
+    ap_yes = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 15 15]",
+        b"0.13 0.13 0.13 RG 1 w 0.5 0.5 14 14 re S 1.6 w 3 3 m 12 12 l S 3 12 m 12 3 l S\n"))
+    ap_off = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 15 15]",
+        b"0.13 0.13 0.13 RG 1 w 0.5 0.5 14 14 re S\n"))
+    ap_square = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 100 50]",
+        b"1 0 0 RG 3 w 1.5 1.5 97 47 re S\n"))
+    ap_note = add(stream(
+        b"/Type /XObject /Subtype /Form /BBox [0 0 20 20]",
+        b"0.95 0.80 0.20 rg 1 1 18 18 re f 0.13 0.13 0.13 RG 1 w 1 1 18 18 re S\n"))
+
+    pages_num = len(objs) + 7
+    text_field = len(objs) + 3
+    checkbox = len(objs) + 4
+    square = len(objs) + 5
+    note = len(objs) + 6
+    page1 = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+                b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R "
+                b"/Annots [%d 0 R %d 0 R %d 0 R %d 0 R] >>"
+                % (pages_num, font, c1, text_field, checkbox, square, note))
+    page2 = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+                b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+                % (pages_num, font, c2))
+    t = add(b"<< /Type /Annot /Subtype /Widget /FT /Tx /T (fullname) /V (Ada Lovelace) "
+            b"/DA (/Helv 12 Tf 0 g) /Rect [100 560 300 580] /F 4 /P %d 0 R "
+            b"/AP << /N %d 0 R >> >>" % (page1, ap_text))
+    c = add(b"<< /Type /Annot /Subtype /Widget /FT /Btn /T (agree) /V /Yes /AS /Yes "
+            b"/Rect [100 520 115 535] /F 4 /P %d 0 R "
+            b"/AP << /N << /Yes %d 0 R /Off %d 0 R >> >> >>" % (page1, ap_yes, ap_off))
+    s_ = add(b"<< /Type /Annot /Subtype /Square /Rect [72 420 172 470] /C [1 0 0] "
+             b"/BS << /W 3 >> /F 4 /P %d 0 R /MegaPDF_Id (note:square) "
+             b"/AP << /N %d 0 R >> >>" % (page1, ap_square))
+    n_ = add(b"<< /Type /Annot /Subtype /Text /Rect [520 695 540 715] /Contents (A sticky note) "
+             b"/Name /Comment /F 4 /P %d 0 R /MegaPDF_Id (note:text) "
+             b"/AP << /N %d 0 R >> >>" % (page1, ap_note))
+    assert (t, c, s_, n_) == (text_field, checkbox, square, note)
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R %d 0 R] /Count 2 >>" % (page1, page2))
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R /AcroForm << /Fields [%d 0 R %d 0 R] "
+        b"/DA (/Helv 12 Tf 0 g) /DR << /Font << /Helv %d 0 R >> >> >> >>"
+        % (pages, text_field, checkbox, font))
+    return build(objs)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
@@ -664,7 +738,8 @@ def main():
                        ("doubled.pdf", gen_doubled()),
                        ("doubled-far.pdf", gen_doubled_far()),
                        ("softmask.pdf", gen_softmask()),
-                       ("encrypted.pdf", gen_encrypted())):
+                       ("encrypted.pdf", gen_encrypted()),
+                       ("secure-source.pdf", gen_secure_source())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)
