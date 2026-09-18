@@ -154,8 +154,12 @@ def container_checks(info: dict, device: str | None) -> list[tuple[str, str, str
 def cut(clip: str, out_dir: str, device: str, interval: float) -> int:
     """One still every `interval` seconds, named for the video profile."""
     os.makedirs(out_dir, exist_ok=True)
+    # This device's stills only. Both of a language's clips land in one folder,
+    # because the gate reads a language set and tells the two apart by the name
+    # — so clearing the folder would throw away the iPad's stills when the
+    # iPhone's are cut.
     for stale in os.listdir(out_dir):
-        if stale.endswith(".png"):
+        if stale.startswith(f"{device}-") and stale.endswith(".png"):
             os.remove(os.path.join(out_dir, stale))
     pattern = os.path.join(out_dir, f"{device}-t%03d.png")
     subprocess.run(
@@ -164,7 +168,8 @@ def cut(clip: str, out_dir: str, device: str, interval: float) -> int:
         ["ffmpeg", "-v", "error", "-y", "-i", clip,
          "-vf", f"fps=1/{interval}", "-start_number", "0", pattern],
         check=True)
-    return len([f for f in os.listdir(out_dir) if f.endswith(".png")])
+    return len([f for f in os.listdir(out_dir)
+                if f.startswith(f"{device}-") and f.endswith(".png")])
 
 
 def main(argv=None) -> int:
