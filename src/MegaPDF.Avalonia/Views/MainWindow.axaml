@@ -416,7 +416,7 @@
 
     <!-- Status bar. One line, plain words: SDD §2.2 wants the app to say what
          happened without a dialog. -->
-    <Border DockPanel.Dock="Bottom" Padding="8,8" BorderThickness="0,1,0,0"
+    <Border Name="StatusBarHost" DockPanel.Dock="Bottom" Padding="8,8" BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <DockPanel>
         <TextBlock DockPanel.Dock="Right" Text="{Binding PageIndicator}"
@@ -574,7 +574,8 @@
         <Grid HorizontalAlignment="Center" VerticalAlignment="Center"
               MaxWidth="420" RowDefinitions="Auto,*">
           <StackPanel Grid.Row="0" Spacing="{DynamicResource SpaceL}">
-            <TextBlock Text="MegaPDF" FontSize="{DynamicResource TypeTitle}" FontWeight="SemiBold"
+            <TextBlock Name="EmptyStateTitle" Text="MegaPDF"
+                       FontSize="{DynamicResource TypeTitle}" FontWeight="SemiBold"
                        HorizontalAlignment="Center" />
             <!-- TextAlignment as well as HorizontalAlignment: the first centres the block,
                  the second centres the lines in it. The French tagline wraps at every

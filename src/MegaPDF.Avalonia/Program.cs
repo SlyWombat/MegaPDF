@@ -1,5 +1,7 @@
 using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.LogicalTree;
@@ -1325,6 +1327,23 @@ internal static class Program
             failures++;
         }
 
+        // --- The window at its declared minimum (#237) ---
+        //
+        // 480×360 is a size the app offers, so it is a size the app has to draw. It
+        // did not: the find bar ran off the right edge and the empty state ran under
+        // the status line. Checked in all three languages, in a real window, because
+        // the words are what decides whether the row fits.
+        Console.WriteLine("the window at its 480x360 minimum (#237):");
+        try
+        {
+            CheckMinimumWindow(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::minimum window: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Recent documents say where each file lives (#165) ---
         //
         // Every row, not only the rows whose names clash: files from one template or
@@ -1604,6 +1623,135 @@ internal static class Program
             .UseHeadless(new global::Avalonia.Headless.AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
             .SetupWithoutStarting();
         _headlessStarted = true;
+    }
+
+    /// <summary>
+    /// The two screens that used to lay out past the frame at the window's declared
+    /// minimum (#237): the find bar and the empty state, at 480×360, in all three
+    /// languages — English lost the least and French the most, because "Précédent" and
+    /// "Suivant" are wider than "Previous" and "Next".
+    ///
+    /// Measured in a real window on the headless platform, because the defect was
+    /// invisible to every view-model check in this file: the commands all worked, and
+    /// Done was simply painted where nobody could click it.
+    /// </summary>
+    private static void CheckMinimumWindow(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var ui = CultureInfo.CurrentUICulture;
+        var formats = CultureInfo.CurrentCulture;
+        // The minimum the window declares, which is the size this is all about
+        // (MainWindow.axaml:10). Read from the window rather than written out again,
+        // so raising the minimum one day does not leave a check quietly asserting the
+        // old one.
+        try
+        {
+            foreach (var tag in new[] { "en", "fr-CA", "fr-FR" })
+            {
+                var culture = CultureInfo.GetCultureInfo(tag);
+                CultureInfo.DefaultThreadCurrentUICulture = culture;
+                CultureInfo.DefaultThreadCurrentCulture = culture;
+                CultureInfo.CurrentUICulture = culture;
+                CultureInfo.CurrentCulture = culture;
+
+                using var vm = new MainViewModel(state);
+                var window = new Views.MainWindow { DataContext = vm };
+                window.Width = window.MinWidth;
+                window.Height = window.MinHeight;
+                window.Show();
+                Pump();
+
+                // --- The empty state, with recents to show ---
+                //
+                // The list used to run on under the status line and off the bottom
+                // edge, and its scrollbar track with it.
+                foreach (var name in new[] { "fixture.pdf", "demo.pdf", "stamped.pdf" })
+                {
+                    var path = Path.Combine(dir, name);
+                    if (File.Exists(path))
+                        vm.RememberRecent(path, null);
+                }
+                Pump();
+                check($"[{tag}] at {window.Width:F0}×{window.Height:F0} the empty state shows its recents ({vm.Recents.Count})",
+                      vm.ShowEmptyState && vm.HasRecents && window.RecentList.IsVisible);
+
+                // Both ends of the block, in the window's own coordinates. Not the
+                // empty-state container's own bounds: those are the rectangle it was
+                // given, which is inside the viewport whatever the children do — the
+                // whole defect was children drawn outside it.
+                var toolbarBottom = Bottom(window.ToolbarHost, window);
+                var statusTop = Top(window.StatusBarHost, window);
+                var titleTop = Top(window.EmptyStateTitle, window);
+                check($"  starting below the toolbar (title from {titleTop:F0} DIP, toolbar ends at {toolbarBottom:F0})",
+                      titleTop >= toolbarBottom - 0.5);
+                var listBottom = Bottom(window.RecentList, window);
+                check($"  and the recents list ending above the status line, scrollbar track and all "
+                      + $"(list to {listBottom:F0} DIP, status line from {statusTop:F0})",
+                      listBottom <= statusTop + 0.5);
+                check($"  and the list still scrolls rather than being cut to nothing ({window.RecentList.Bounds.Height:F0} DIP tall)",
+                      window.RecentList.Bounds.Height > 0);
+
+                // --- The find bar ---
+                //
+                // Done used to be off the right edge in every language, which left no
+                // way at all to close find without the keyboard.
+                // The demo agreement in the running language, so the counter reads a
+                // count rather than "Not found" — the two are different widths and the
+                // row has to hold either.
+                var demo = new[] { tag.StartsWith("fr", StringComparison.Ordinal) ? "demo-fr.pdf" : "demo.pdf", "fixture.pdf" }
+                    .Select(name => Path.Combine(dir, name)).First(File.Exists);
+                vm.Open(demo);
+                Pump();
+                // Opened the way --screenshot-state find opens it: the view model's flag
+                // and the real box, because the box is what the typing path fills.
+                vm.IsFindOpen = true;
+                window.FindBox.Text = DemoContent.SearchTerm;
+                vm.Search(DemoContent.SearchTerm);
+                Pump();
+                check($"[{tag}] at {window.Width:F0} DIP the find bar fits ({window.DescribeFindBar()})",
+                      window.FindBarRightEdge(window.CloseFindButton)
+                          <= window.FindBarHost.Bounds.Width - window.FindBarHost.Padding.Right + 0.5);
+                check("  with Previous and Next still there, as chevrons",
+                      window.FindPreviousButton.IsVisible && window.FindNextButton.IsVisible
+                      && window.FindPreviousGlyph.IsVisible && window.FindNextGlyph.IsVisible);
+                check("  and their words still read out, though they are not showing",
+                      AutomationProperties.GetName(window.FindPreviousButton) == Strings.Previous
+                      && AutomationProperties.GetName(window.FindNextButton) == Strings.Next);
+                check("  and hovering one says which it is",
+                      ToolTip.GetTip(window.FindPreviousButton) as string == Strings.Previous
+                      && ToolTip.GetTip(window.FindNextButton) as string == Strings.Next);
+                check($"  and the counter is not cut mid-word (\"{vm.MatchSummary}\")",
+                      double.IsInfinity(window.FindMatchSummary.MaxWidth)
+                      || window.FindMatchSummary.MaxWidth >= window.FindMatchSummary.DesiredSize.Width);
+
+                // Wide again, and the words come back: the narrow step is a step, not a
+                // one-way door.
+                window.Width = 1280;
+                Pump();
+                check("  the words come back when the window is widened again",
+                      window.FindPreviousLabel.IsVisible && window.FindNextLabel.IsVisible
+                      && ToolTip.GetTip(window.FindPreviousButton) is null);
+
+                window.Close();
+                Pump();
+            }
+        }
+        finally
+        {
+            CultureInfo.DefaultThreadCurrentUICulture = ui;
+            CultureInfo.DefaultThreadCurrentCulture = formats;
+            CultureInfo.CurrentUICulture = ui;
+            CultureInfo.CurrentCulture = formats;
+        }
+
+        static double Top(Control control, Visual root) =>
+            control.TranslatePoint(new Point(0, 0), root)?.Y ?? double.NaN;
+
+        static double Bottom(Control control, Visual root) =>
+            control.TranslatePoint(new Point(0, control.Bounds.Height), root)?.Y ?? double.NaN;
+
+        static void Pump() => MenuProbe.Pump();
     }
 
     private static void CheckToolbarMenus(string dir, string state, Action<string, bool> check)
