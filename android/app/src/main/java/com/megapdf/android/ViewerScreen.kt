@@ -73,7 +73,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
@@ -527,7 +529,7 @@ fun ViewerScreen(
                         icon = ToolbarIcons.Redact,
                         label = stringResource(R.string.redact),
                         enabled = capabilities.canEditContent && !toolsDisabled,
-                        selected = redactMode,
+                        armed = redactMode,
                         onClick = onToggleRedact,
                     )
                     ToolbarAction(
@@ -872,8 +874,22 @@ private fun ToolbarAction(
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
-    selected: Boolean = false,
+    /** A mode's on/off state, or null for a button that does something once. */
+    armed: Boolean? = null,
 ) {
+    // A tool that can be armed says which it is, in words as well as in ink (#173).
+    // The fill below is the whole visual difference, and it reached the accessibility
+    // tree as nothing at all: armed and not armed produced byte-identical nodes, so a
+    // screen reader was told "Redact" either way — the same gap the Mac and iOS passes
+    // found, and the one this issue is open for. stateDescription is what TalkBack
+    // reads out after the label, and it is set here rather than left to `selected`
+    // because "on"/"off" is what a tool is, where "selected" is what a list row is.
+    val on = stringResource(R.string.tool_on)
+    val off = stringResource(R.string.tool_off)
+    val state = if (armed == null) Modifier else Modifier.semantics {
+        selected = armed
+        stateDescription = if (armed) on else off
+    }
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(label) } },
@@ -881,12 +897,14 @@ private fun ToolbarAction(
     ) {
         // An armed tool says so: a mode with no visible affordance is a mode people get
         // stuck in (SDD §2.2). FilledIconButton is Material 3's "this is on".
-        if (selected) {
-            androidx.compose.material3.FilledIconButton(onClick = onClick, enabled = enabled) {
+        if (armed == true) {
+            androidx.compose.material3.FilledIconButton(
+                onClick = onClick, enabled = enabled, modifier = state,
+            ) {
                 Icon(icon, contentDescription = label)
             }
         } else {
-            IconButton(onClick = onClick, enabled = enabled) {
+            IconButton(onClick = onClick, enabled = enabled, modifier = state) {
                 Icon(icon, contentDescription = label)
             }
         }
@@ -1015,7 +1033,16 @@ private fun RedactionMarkOverlay(
     marks: List<com.megapdf.engine.RedactionMark>,
     pageSize: PageSize,
 ) {
-    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+    // The marks had no accessible presence at all: a Canvas draws pixels and publishes
+    // no node, so a screen reader could hear "Marked for redaction." once and then find
+    // nothing on the page (#173, the same fault as the Mac's). The count rather than one
+    // node per mark, because "2 areas marked for redaction" is what someone needs to
+    // know before saving — which is also the wording the confirmation uses.
+    val description = if (marks.size == 1) stringResource(R.string.redact_mark_count_one)
+                      else stringResource(R.string.redact_mark_count, marks.size)
+    androidx.compose.foundation.Canvas(
+        Modifier.fillMaxSize().semantics { contentDescription = description },
+    ) {
         val sx = size.width / pageSize.widthPoints.toFloat()
         val sy = size.height / pageSize.heightPoints.toFloat()
         for (mark in marks) {

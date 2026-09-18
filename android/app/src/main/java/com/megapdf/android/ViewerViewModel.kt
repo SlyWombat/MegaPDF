@@ -182,6 +182,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             }
             refreshRedactionMarks()
             redactMode = false
+            // Say that it landed (#173). A mark is a faint translucent band and the tool
+            // disarms itself once it is placed, so with nothing said there is no
+            // confirmation at all — and for a screen reader there was nothing to find.
+            // The Mac pass found the same silence; there the string existed and was
+            // overwritten, here it existed and was never used.
+            statusMessage = str(R.string.redact_mark_placed)
         }
     }
 
@@ -190,6 +196,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             doc.onPageForRedaction(pageIndex) { it.removeRedactionMark(markId) }
             refreshRedactionMarks()
+            statusMessage = str(R.string.redact_mark_removed)
         }
     }
 

@@ -183,6 +183,8 @@
     <string name="signature_move_failed">Impossible de déplacer cette signature</string>
     <!-- Toolbar (#173): label. #173 — new French, for francophone review -->
     <string name="redact">Caviarder</string>
+    <string name="tool_on">Activé</string>
+    <string name="tool_off">Désactivé</string>
     <!-- Toolbar (#173): tooltip. #173 — new French, for francophone review -->
     <string name="redact_tip">Retirer du contenu du fichier</string>
     <!-- Status hint while the Redact tool is armed (#173). #173 — new French, for francophone review -->

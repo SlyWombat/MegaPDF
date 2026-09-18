@@ -200,6 +200,10 @@
     <string name="screenshot_signature_name">Mega W.</string>
     <!-- Toolbar (#173): label -->
     <string name="redact">Redact</string>
+    <!-- What TalkBack reads after a tool's name, so an armed mode is audible and
+         not only visible (#173) -->
+    <string name="tool_on">On</string>
+    <string name="tool_off">Off</string>
     <!-- Toolbar (#173): tooltip -->
     <string name="redact_tip">Remove content from the file</string>
     <!-- Status hint while the Redact tool is armed (#173) -->
