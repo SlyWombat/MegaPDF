@@ -1012,19 +1012,19 @@
         }
       }
     },
-    "Drag across what you want removed, or select text — Esc cancels" : {
+    "Drag across what you want removed, or select text" : {
       "comment" : "Status hint while the Redact tool is armed (#173)",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler"
+            "value" : "Glissez sur ce qui doit être retiré, ou sélectionnez du texte"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler"
+            "value" : "Glissez sur ce qui doit être retiré, ou sélectionnez du texte"
           }
         }
       }
