@@ -56,6 +56,15 @@ WX=0; WY=60
 click() { cliclick "c:$1,$2"; }
 key()   { cliclick "kp:$1"; }
 type_() { cliclick "t:$1"; }
+# Anything with an accent in it goes through the pasteboard, because neither way
+# of synthesising keystrokes gets it right. `cliclick t:` drops the non-ASCII
+# characters — the first French clips typed "Hlne Blanger" and "Cline Lefvre",
+# which is the one thing #146 §3 says these captures have to prove. AppleScript's
+# `keystroke` is worse: it types the base letter and lets the mark fall on the
+# wrong one, giving "Halane Balanger". Pasting lands "Hélène Bélanger" exactly.
+# The cost is that the name appears at once instead of being typed on camera.
+# (The pasteboard belongs to the automation account; nothing else reads it.)
+paste_() { printf '%s' "$1" | pbcopy; cliclick kd:cmd t:v ku:cmd; }
 
 # Fixtures inside the app's container (it is sandboxed when Store-signed; the
 # ad-hoc build reads anywhere, but keep one convention).
@@ -155,7 +164,7 @@ key esc; sleep 2.0                                     # drop the selection
 click "$ADDTEXT_X" "$BTN_Y"; sleep 1.2                 # Add text
 measure_page                                           # the mode banner moved the page
 click "$(pagex 72)" "$(pagey 350)"; sleep 1.2          # printed name, clear of the "Sign above the line" label
-type_ "$DEMO_NAME"; sleep 1.2
+paste_ "$DEMO_NAME"; sleep 1.2
 key return; sleep 2.2
 cliclick kd:cmd t:f ku:cmd; sleep 1.2                  # Find
 type_ "$DEMO_FIND"; sleep 2.0
