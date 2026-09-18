@@ -111,13 +111,40 @@ public sealed partial class MainWindow
             ? AutomationProperties.GetAutomationId(focused) is { Length: > 0 } id ? id : focused.GetType().Name
             : "(none)";
 
-    internal void FocusToolbarButtonForTest(string automationId)
+    /// <summary>
+    /// Gives a named toolbar button keyboard focus, for the focus self-check. False when the
+    /// button is not on the bar at this width -- a narrow window moves commands into the
+    /// overflow, where nothing can be focused (#222); the caller picks another one.
+    /// </summary>
+    internal bool FocusToolbarButtonForTest(string automationId)
     {
         foreach (var command in Toolbar.PrimaryCommands)
         {
             if (command is Control control && AutomationProperties.GetAutomationId(control) == automationId)
-                control.Focus(FocusState.Keyboard);
+            {
+                if (command is AppBarButton { IsInOverflow: true } or AppBarElementContainer { IsInOverflow: true })
+                    return false;
+                return control.Focus(FocusState.Keyboard);
+            }
         }
+        return false;
+    }
+
+    /// <summary>The automation id of a toolbar button that is on the bar, enabled and focusable
+    /// at this width, starting with the caller's preference (#222).</summary>
+    internal string? FocusAnyToolbarButtonForTest(params string[] preferred)
+    {
+        foreach (var id in preferred)
+            if (FocusToolbarButtonForTest(id))
+                return id;
+        foreach (var command in Toolbar.PrimaryCommands)
+        {
+            if (command is AppBarButton { IsInOverflow: false, IsEnabled: true } button
+                && AutomationProperties.GetAutomationId(button) is { Length: > 0 } id
+                && button.Focus(FocusState.Keyboard))
+                return id;
+        }
+        return null;
     }
 
     internal void ClickPagesForTest() => ParkFocusOnPages();

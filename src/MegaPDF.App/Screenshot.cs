@@ -141,19 +141,21 @@ internal static class Screenshot
         await vm.AddWhiteoutAsync(0, new MegaPDF.Core.Engine.PdfRect(40, 40, 30, 12));
         await Task.Delay(500);
 
-        // A change applied while Whiteout has keyboard focus: the busy state disables it.
-        window.FocusToolbarButtonForTest("WhiteoutButton");
+        // A change applied while a toolbar button has keyboard focus: the busy state disables
+        // it. Whiteout for preference, but a narrow window has moved it into the overflow,
+        // where nothing can be focused -- take whatever is on the bar instead (#222).
+        var focused = window.FocusAnyToolbarButtonForTest("WhiteoutButton", "SignaturesButton", "OpenButton");
         await Task.Delay(300);
         var before = window.FocusedAutomationId();
         await vm.AddWhiteoutAsync(0, new MegaPDF.Core.Engine.PdfRect(40, 80, 30, 12));
         await Task.Delay(800);
         var after = window.FocusedAutomationId();
         Check($"focus on {before} during a change does not move to Undo (now {after})",
-              before == "WhiteoutButton" && after != "UndoButton");
+              before == focused && focused is not null && after != "UndoButton");
         Check($"  it goes to the pages (now {after})", after == "PagesScroll");
 
-        // Work held busy for longer than the strip's delay, with Signatures focused.
-        window.FocusToolbarButtonForTest("SignaturesButton");
+        // Work held busy for longer than the strip's delay, with a toolbar button focused.
+        window.FocusAnyToolbarButtonForTest("SignaturesButton", "OpenButton");
         await Task.Delay(300);
         using (vm.Busy.Begin(Strings.BusyApplying))
             await Task.Delay(900);
@@ -163,7 +165,7 @@ internal static class Screenshot
               after is not ("UndoButton" or "RedoButton" or "OpenButton" or "SaveButton"));
 
         // A dialog: the toolbar is off while it shows, back on after.
-        window.FocusToolbarButtonForTest("OpenButton");
+        window.FocusAnyToolbarButtonForTest("OpenButton");
         var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
         {
             Title = "focus check",
