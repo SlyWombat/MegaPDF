@@ -87,7 +87,7 @@ the second desktop is for is everything around the window — see §10.
 Command key is **Ctrl** (`Shortcut(...)`, `MainWindow.MenuBar.cs:42`); Redo is **Ctrl+Y**
 off macOS, not Ctrl+Shift+Z.
 
-## 4. Toolbar layout steps
+## 4. Toolbar and find-bar layout steps
 
 | # | Width | What the toolbar does | Seen |
 |---|---|---|---|
@@ -96,6 +96,15 @@ off macOS, not Ctrl+Shift+Z.
 | 4.3 | 800 | labels gone, icons only; zoom fits to 94 % | ✅ |
 | 4.4 | 480 (minimum) | icons only and commands moved into More; Open never leaves | ✅ |
 | 4.5 | the font and size pickers, while a text box is selected | they take a place in the row down to 800 | ✅ |
+
+The find bar sheds detail on the same principle, measured in the running language
+(`MainWindow.FindBar.cs`, #237). Done is measured first and never gives anything up —
+it is the only pointer-driven way out of find.
+
+| # | Width | What the find bar does | Seen |
+|---|---|---|---|
+| 4.6 | 1280 / 1000 / 800 | **Previous** and **Next** spelled out, the box at 260 | ✅ |
+| 4.7 | 480 (minimum) | the two buttons become a chevron each, keeping their word as their accessible name and their tooltip; the box narrows to what is left (243 in English, 214 in French); the counter reads in full | ✅ |
 
 ## 5. Modes and their banners
 
@@ -243,6 +252,16 @@ view model directly leaves the capture showing an empty-looking field beside "1 
    `HorizontalAlignment` was set, not `TextAlignment`. In English the sentence fits on
    one line at every width. In French it wraps at every width including the default
    1280, and its second line sat flush left under a centred title and a centred button.
+4. **At 480×360 the find bar and the empty state laid out past the frame** — found by
+   `tools/capture-gate` over this pass's own captures, filed as #237 and fixed there.
+   The find bar was laid out at its natural width, so **Done** was off the right edge in
+   every language (a sliver of it showing in English, none of it in French) and the
+   French counter was cut mid-word — `1 su`. The empty state's recents ran on *under*
+   the status line and off the bottom edge, scrollbar track and all, because the list
+   was in a stack that took its own height rather than the viewport's. Both are the
+   same shape of bug: a row whose content was allowed to exceed the row. The re-shot
+   set changes only the twelve 480 captures; every capture at 800, 1000 and 1280 is
+   byte-for-byte what it was.
 
 ## 13. Things that look like defects but are not
 
