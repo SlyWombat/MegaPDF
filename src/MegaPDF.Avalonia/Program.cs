@@ -646,6 +646,22 @@ internal static class Program
                       withMarks.RedactionMarkCount == 0);
             }
 
+            // The keyboard route (#173). Marking used to need a drag, so a person with
+            // no pointer could arm Redact and then do nothing with it; on Windows the
+            // same Enter opened the text editor instead. Checked here rather than in a
+            // window because it is the view model that decides what activation means.
+            vm.ClearPageFocus();
+            vm.MoveFocus(forward: true);
+            var focusBefore = vm.PageFocus;
+            var marksBefore = vm.RedactionMarkCount;
+            vm.ToggleRedactCommand.Execute(null);
+            Check("Redact arms again for the keyboard check", vm.IsRedactMode);
+            vm.ActivateFocus();
+            Check($"Enter on the focused {focusBefore?.Kind} region marks it "
+                  + $"({marksBefore} -> {vm.RedactionMarkCount} marks)",
+                  focusBefore is not null && vm.RedactionMarkCount > marksBefore);
+            Check("  and marking leaves the tool, as a drag does", !vm.IsRedactMode);
+
             var applied = vm.ApplyRedactionsAsync().GetAwaiter().GetResult();
             Check("applying succeeds", applied);
             Check("the marks are gone with it", !vm.HasRedactionMarks);

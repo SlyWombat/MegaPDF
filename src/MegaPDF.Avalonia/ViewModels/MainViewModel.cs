@@ -1250,6 +1250,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (PageFocus is not { } focus)
             return;
 
+        // Redact armed: the focused region is exactly what a drag would have covered,
+        // so Enter marks it rather than opening whatever is under it (#173). Without
+        // this the tool is drag-only — and a tool that needs a pointer is no tool at
+        // all for someone who has none. The same gap the Windows real-window check
+        // found; HandlePageClick below would open the line editor instead.
+        if (Mode == PageMode.Redact)
+        {
+            AddRedactionMark(focus.PageIndex, focus.Bounds);
+            return;
+        }
+
         // Routed through the same handler a click uses, aimed at the region's
         // centre, so the keyboard can never diverge from the mouse.
         HandlePageClick(focus.PageIndex,
