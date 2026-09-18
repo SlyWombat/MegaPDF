@@ -26,7 +26,6 @@ struct ViewerView: View {
     /// The redaction confirmation is up: marks are on the document and a save was asked for.
     @State private var redactConfirm: RedactSaveChoice?
     @Environment(\.displayScale) private var displayScale
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
 
@@ -341,12 +340,19 @@ struct ViewerView: View {
         }
     }
 
-    /// A bottom-toolbar label (#144): icons alone on an iPhone; a regular-width window
-    /// (iPad) has the room to name them. Styled here rather than on the whole view so
-    /// the sheets the viewer presents keep their own label layout.
+    /// A bottom-toolbar label (#144).
+    ///
+    /// The title is here for assistive technology, not for the screen: a Label inside a
+    /// SwiftUI toolbar item renders icon-only on iOS 26 whatever style it is given, and
+    /// wherever it is placed. Measured twice on an iPad Pro 13" (#172) — forcing the old
+    /// `showsTitle: true`, and again with the built-in `.labelStyle(.titleAndIcon)` —
+    /// and the bar came back identical to the iPhone's both times; the same Label put in
+    /// the navigation bar lost its title too. So the size-class read this used to do was
+    /// never going to reach the screen, and asking for a style here would only be a line
+    /// that reads like a feature. Titles on the iPad need the tools to stop being
+    /// toolbar items; that is on #172.
     private func toolLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
-            .labelStyle(ToolbarLabelStyle(showsTitle: horizontalSizeClass == .regular))
     }
 
     // MARK: - search (#26)
@@ -641,21 +647,6 @@ struct OpeningView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-/// The viewer toolbar's labels (#144): the icon alone where space is tight, icon and
-/// title side by side where it is not. Either way the title stays the button's
-/// accessibility label, so VoiceOver reads "Sign", never "signature".
-struct ToolbarLabelStyle: LabelStyle {
-    let showsTitle: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        if showsTitle {
-            Label(configuration).labelStyle(.titleAndIcon)
-        } else {
-            Label(configuration).labelStyle(.iconOnly)
-        }
     }
 }
 
