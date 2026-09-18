@@ -1046,17 +1046,18 @@
       }
     },
     "Draw your signature" : {
+      "comment" : "Title of the signature drawing sheet. The French is one word on purpose: beside Annuler / Effacer / Enregistrer the iPhone leaves room for about eleven characters, and both \"Dessinez votre signature\" and \"Votre signature\" truncated in a listing image (#146 §3)",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dessinez votre signature"
+            "value" : "Signature"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dessinez votre signature"
+            "value" : "Signature"
           }
         }
       }
