@@ -29,6 +29,7 @@ open /tmp/gate/sheet-mac.html
 | `--store ios` | `tools/ios-screenshots.sh` output — add `--only /listing` to leave the review set out |
 | `--store play` | `android/scripts/capture-screenshots.sh` output, and the 27-cell QA matrix |
 | `--store linux` | the Linux QA rig's `shots-gnome/` |
+| `--store video` | the stills `tools/preview-gate.py` cuts out of an app preview, **one language at a time** |
 
 Useful flags:
 
@@ -78,6 +79,29 @@ whether it passed — a note you can disagree with beats a tick you cannot.
 | `siblings` | the same pose in another language is the same layout, the same status bar and the same amount of accent |
 | `chrome` | within one language, the status bar does not vary, and nothing modal is dimming one shot |
 | `certified` | with `--against`, how much this image differs from the one that was signed off |
+
+### Preview videos
+
+`tools/preview-gate.py` checks the clip itself — the slot size, App Store
+Connect's 15-30 s, the constant 30 fps, H.264, and the silent audio track the
+upload is refused without — and then cuts it into one still per second, named
+so that `--store video` reads them as a set. A clip is the one capture nobody
+can read at a glance; twenty-odd stills on a contact sheet can be read.
+
+Run it **one language at a time**. A clip is time-compressed to fit 30 s from
+however long its own take ran, and the takes are not the same length, so still
+12 of the English clip and still 12 of the French one are not the same moment.
+Run per language and the cross-language checks stand down and say so.
+
+The stills are H.264 frames, not screenshots, and that costs the status-bar
+comparison its sensitivity: the quantiser smears the bar's flat grey over a
+dozen values and the ringing along the clock reads as ink. On the 2.0 English
+iPhone preview that moved up to 14.2 % of the band between two frames with
+nothing in the bar, against 12.6 % for a planted badge — the check could not
+tell them apart. The `video` profile therefore sets `ink_tolerance: 16`, which
+widens each background tone: the same clean frames fall to 3.9-4.6 % and the
+badge rises to 24.6 %. Every other profile leaves it at 0, so no set that was
+already signed off is measured any differently.
 
 **Three verdicts, and `skip` is the important one.** `pass` means measured and
 right. `flag` means measured and questionable. `skip` means *not measured*, and

@@ -159,10 +159,10 @@ def cut(clip: str, out_dir: str, device: str, interval: float) -> int:
             os.remove(os.path.join(out_dir, stale))
     pattern = os.path.join(out_dir, f"{device}-t%03d.png")
     subprocess.run(
-        # -vsync 0 with fps= would renumber from the first kept frame; the
-        # default (cfr) is what makes still N the Nth interval of the clip.
+        # Numbered from zero, so the file name is the second of the clip it
+        # was taken at: t000 is the opening frame, t012 is twelve seconds in.
         ["ffmpeg", "-v", "error", "-y", "-i", clip,
-         "-vf", f"fps=1/{interval}", "-fps_mode", "passthrough", pattern],
+         "-vf", f"fps=1/{interval}", "-start_number", "0", pattern],
         check=True)
     return len([f for f in os.listdir(out_dir) if f.endswith(".png")])
 

@@ -232,6 +232,15 @@ STORES: dict[str, dict] = {
         # frames are the window's content, which has none.
         "status_band": {"height_frac": 0.045,
                         "by_device": {"ipad-13": 0.019, "mac": 0}},
+        # A still out of an H.264 clip has no flat areas: the quantiser smears
+        # the bar's grey over a dozen values and the ringing along the clock
+        # reads as ink. Measured on the 2.0 English iPhone preview, that moved
+        # up to 14.2 % of the band between two frames with nothing in the bar,
+        # while a planted badge moved 12.6 % — the check could not tell them
+        # apart at all. Widening each background tone by 16 puts the same clean
+        # frames at 3.9-4.6 % and the badge at 24.6 %. Zero everywhere else, so
+        # no shot set already signed off is measured differently.
+        "ink_tolerance": 16,
         "notes": "tools/preview-gate.py, one still per second of the clip "
                  "that goes to App Store Connect.",
     },

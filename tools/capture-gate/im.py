@@ -223,7 +223,8 @@ def blocks(profile: list[float], threshold: float = 0.01,
     return out
 
 
-def ink_mask(raster: Raster, background: set[int] | None = None) -> bytes:
+def ink_mask(raster: Raster, background: set[int] | None = None,
+             tolerance: int = 0) -> bytes:
     """The raster as one byte per pixel: 1 where there is ink, 0 where there is
     not.
 
@@ -231,9 +232,23 @@ def ink_mask(raster: Raster, background: set[int] | None = None) -> bytes:
     across screens: the same clock, signal and battery are drawn over a white
     list on one screen and a grey toolbar on the next, and only the ink is the
     same in both.
+
+    `tolerance` widens each background tone to the range around it. A
+    screenshot is flat — the bar is two or three exact values — and the default
+    of 0 is right for one. A still pulled out of an H.264 clip is not: the
+    quantiser smears every flat area over a dozen neighbouring values, each too
+    thin a share to be read as background, and the ringing along the clock and
+    the battery then counts as ink. Measured on a 2.0 preview frame, that
+    ringing moved 14 % of the band while a planted status-bar badge moved
+    12.6 %, so at tolerance 0 the check cannot tell them apart. At 16 the same
+    frames sit at 3.9-4.6 % and the badge at 24.6 %.
     """
     if background is None:
         background = background_values(raster, min_share=0.02)
+    if tolerance:
+        background = {v for value in background
+                      for v in range(max(0, value - tolerance),
+                                     min(256, value + tolerance + 1))}
     table = bytes(0 if v in background else 1 for v in range(256))
     return raster.data.translate(table)
 

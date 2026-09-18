@@ -67,11 +67,15 @@ class Shot:
             device, spec_band.get("height_frac"))
         w, h = self.size
         if band:
+            # Flat on a screenshot, smeared on a still cut out of a clip: the
+            # video profile widens each background tone so that H.264 ringing
+            # along the clock does not read as ink (im.ink_mask).
+            tolerance = profile.get("ink_tolerance", 0)
             crop = im.gray_box(path, (0, 0, w, max(1, int(h * band))))
-            self.status_ink = im.ink_mask(crop)
+            self.status_ink = im.ink_mask(crop, tolerance=tolerance)
             right = im.gray_box(path, (int(w * 0.6), 0, w - int(w * 0.6),
                                        max(1, int(h * band))))
-            self.status_right = im.ink_mask(right)
+            self.status_right = im.ink_mask(right, tolerance=tolerance)
             # Which flat tone the bar is drawn on. The clock and the battery
             # are the same ink over a white list and over a grey toolbar, but
             # their antialiasing is not, so only bars on the same background
