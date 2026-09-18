@@ -147,6 +147,15 @@ lines in the manifest.
   published output, so a Wayland session runs through XWayland. Adding the socket would
   advertise support that is not there.
 
+**Keyboard: Ctrl+W closes and Ctrl+Q quits, on Linux and nowhere else.** GNOME's HIG
+and KDE's `KStandardShortcut` both name those two, and the Linux build answers them
+(`BindLinuxWindowShortcuts`, #158) through the same unsaved-changes question the
+window's close button asks. They are guarded by `OperatingSystem.IsLinux()`: macOS gets
+⌘W and ⌘Q from its real menu bar, and a second route there would only disagree with it.
+**Ctrl+M does not minimize** — on both desktops that belongs to the window manager, not
+to the application. The full list is in `docs/qa/linux-screen-inventory.md` §3.1, and
+`tools/linux/qa/kde-smoke.sh` presses both keys in a Plasma session.
+
 **The published tree goes in one piece** under `/app/lib/megapdf` (Flatpak) and
 `/opt/MegaPDF` (`.deb`). The apphost finds `libmegapdf_core.so` and `libpdfium.so`
 beside itself; splitting it the way a distribution package would is the one thing that

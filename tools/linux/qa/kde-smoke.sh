@@ -141,6 +141,59 @@ wait $APP_PID
 check $?
 grep -E '^(screenshot|toolbar|menu bar):' "$OUT/window.log" | sed 's/^/    /'
 
+step "Ctrl+W and Ctrl+Q, the desktop's own Close and Quit (#158)"
+# KDE's KStandardShortcut gives Ctrl+W to closing the window and Ctrl+Q to quitting,
+# and until #158 the Linux build answered neither: Close lived only as a NativeMenuItem
+# gesture and nothing on X11 hosts that menu.
+#
+# What this step proves is that the keys reach a real application window under Plasma,
+# and that a clean document closes with nothing asked. The changed-document legs — the
+# prompt, Cancel keeping the document, Don't Save closing it — need a tick on the page
+# and so a pointer; they are proved by --self-test, which this script has already run in
+# this session, and by the Xvfb rig in docs/qa/linux-screen-inventory.md §3.1.
+#
+# XTEST, not XSendEvent: activate the window, then a bare `xdotool key`. `--window`
+# synthesises an event with send_event set, which Avalonia's X11 backend drops.
+for probe in "Ctrl+W:ctrl+w" "Ctrl+Q:ctrl+q"; do
+    label=${probe%%:*}; keys=${probe##*:}
+    timeout 120 "$APP" --window 1280x800 "$DOC" >"$OUT/close-$keys.log" 2>&1 &
+    KEY_PID=$!
+    WIN3=
+    for _ in $(seq 1 60); do
+        WIN3=$(wmctrl -l -x 2>/dev/null | awk '/MegaPDF\.MegaPDF/ {print $1}' | tail -1)
+        [ -n "$WIN3" ] && break
+        sleep 0.5
+    done
+    if [ -z "$WIN3" ]; then
+        echo "    $label: no window appeared"
+        fails=$((fails + 1))
+        kill $KEY_PID 2>/dev/null
+        continue
+    fi
+    sleep 5
+    title=$(xdotool getwindowname "$WIN3" 2>/dev/null)
+    xdotool windowactivate --sync "$WIN3" 2>/dev/null
+    sleep 1
+    xdotool key --clearmodifiers "$keys"
+    for _ in $(seq 1 24); do
+        kill -0 $KEY_PID 2>/dev/null || break
+        sleep 0.5
+    done
+    left=$(wmctrl -l -x 2>/dev/null | grep -c 'MegaPDF\.MegaPDF')
+    if kill -0 $KEY_PID 2>/dev/null; then
+        echo "    $label on \"$title\": the app is still up after 12 s ($left window(s)) — the key reached nothing"
+        fails=$((fails + 1))
+        kill -9 $KEY_PID 2>/dev/null
+    elif [ "$left" -ne 0 ]; then
+        echo "    $label on \"$title\": the process went but $left window(s) remain"
+        fails=$((fails + 1))
+    else
+        echo "    $label on \"$title\": window and process gone, nothing asked"
+    fi
+    wait $KEY_PID 2>/dev/null
+    sleep 1
+done
+
 step "the file dialogs, in this session, with KDE's portal backend answering"
 # The same observation as #254 A4(a), made again under the other desktop: a portal
 # dialog is a method call on the bus, and Avalonia's own fallback makes none.

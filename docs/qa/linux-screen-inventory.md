@@ -57,7 +57,7 @@ the second desktop is for is everything around the window — see §10.
 
 | # | Dialog | Buttons | How to reach it | Posed by | Seen |
 |---|---|---|---|---|---|
-| 2.1 | **Unsaved changes** — "Do you want to save the changes made to the document "{0}"?" | Don't Save / Cancel / **Save** | edit, then close the window (**not** Ctrl+W or Ctrl+Q — see the note under §3) | `--screenshot-state unsaved` → `<out>-dialog.png` | ✅ |
+| 2.1 | **Unsaved changes** — "Do you want to save the changes made to the document "{0}"?" | Don't Save / Cancel / **Save** | edit, then close the window — the close button, **Ctrl+W** or **Ctrl+Q**; all three ask (see §3.1) | `--screenshot-state unsaved` → `<out>-dialog.png` | ✅ |
 | 2.2 | **Restore unsaved work** (recovery) | Discard them / Decide later / **Restore** | kill the app mid-edit, relaunch | real window | journal verified, §9 |
 | 2.3 | **Key needed** to open a protected file | Cancel / **Open** | open a user-protected PDF | real window | hands |
 | 2.4 | **Unlock document** (owner credential) — same window, relabelled | Cancel / **Unlock** | **Unlock…** in the restricted banner | real window | hands |
@@ -84,23 +84,50 @@ the second desktop is for is everything around the window — see §10.
 | 3.5 | Signature card ⋯ — Rename…, Delete… | | hands |
 | 3.6 | Recent item context menu — Show in file manager | | hands |
 
-Command key is **Ctrl** (`Shortcut(...)`, `MainWindow.MenuBar.cs:42`); Redo is **Ctrl+Y**
-off macOS, not Ctrl+Shift+Z.
+**`NativeMenu` has no host on X11, so none of it is on screen.** `SDD.md`
+§"Command surface" says the app has no menu bar, and on Linux it does not:
+`MainWindow.axaml` carries no `NativeMenuBar`, so `NativeMenu.SetMenu` builds a
+structure that `--self-test` can walk and that nothing draws. Every command in it is
+still reachable, because each one also has a toolbar button or an entry in
+`Window.KeyBindings` — see §3.1.
 
-**`NativeMenu` has no host on X11, so none of it is on screen and neither are the
-two shortcuts that live only in it.** `SDD.md` §"Command surface" says the app has
-no menu bar, and on Linux it does not: `MainWindow.axaml` carries no
-`NativeMenuBar`, so `NativeMenu.SetMenu` builds a structure that `--self-test` can
-walk and that nothing draws. Every command that also has a toolbar button or an
-entry in `Window.KeyBindings` (`MainWindow.axaml.cs:1447-1469` — Open, Save, Save
-As, Print, Undo, Redo, zoom in/out, Actual size, Options, Find) is reachable
-anyway. **Close (Ctrl+W) and Minimize (Ctrl+M) are not**: they exist only as
-`NativeMenuItem` gestures, so on Linux they do nothing. Measured in the
-2026-09-18 RC pass: Ctrl+W and Ctrl+Q leave a changed document open with no
-prompt, while the window manager's close button raises **Unsaved changes** with
-Don't Save / Cancel / Save as it should — so nothing can be lost, and the Windows
-app has no Ctrl+W either. Only macOS has one, because there the `NativeMenu` *is*
-the menu bar.
+## 3.1 Keyboard shortcuts
+
+The command key is **Ctrl** (`Shortcut(...)`, `MainWindow.MenuBar.cs:42`). Two of
+these follow the desktop rather than the Mac: **Redo is Ctrl+Y**, not Ctrl+Shift+Z,
+and **Ctrl+M does nothing**, because on GNOME and KDE minimizing belongs to the
+window manager and not to the application.
+
+| Shortcut | Command | Bound by | Seen |
+|---|---|---|---|
+| Ctrl+O | Open a PDF… | `BindShortcuts` | ✅ §10 |
+| Ctrl+S | Save | `BindShortcuts` | ✅ self-test |
+| Ctrl+Shift+S | Save As… | `BindShortcuts` | ✅ §10 |
+| Ctrl+P | Print | `BindShortcuts` | ✅ |
+| Ctrl+Z / Ctrl+Y | Undo / Redo | `BindShortcuts` | ✅ self-test |
+| Ctrl+F | Find in document | `BindShortcuts` | ✅ |
+| Ctrl+`+` / Ctrl+`-` / Ctrl+`0` | Zoom in / out / Actual size | `BindShortcuts` | ✅ self-test |
+| Ctrl+`,` | Options | `BindShortcuts` | ✅ |
+| **Ctrl+W** | **Close the window** | `BindLinuxWindowShortcuts`, Linux only | ✅ |
+| **Ctrl+Q** | **Quit MegaPDF** | `BindLinuxWindowShortcuts`, Linux only | ✅ |
+| Esc | leave a mode, the find bar, or the page focus ring | `OnKeyDown` | ✅ |
+| Tab / Shift+Tab, Enter, Space | walk and activate the page's regions (#2) | `HandlePageKey` | ✅ 5.6 |
+
+**Ctrl+W and Ctrl+Q ask before they lose anything.** Both go through the same
+question the window's close button asks: Ctrl+W is `Close()`, which runs
+`OnClosing` → `NeedsConfirmationBeforeClose` → **Unsaved changes** (2.1), and
+Ctrl+Q is `TryShutdown()`, whose `ShutdownRequested` puts the same question.
+Cancel keeps the window, the document and the change.
+
+They are **Linux-only**, on purpose (#158). macOS answers ⌘W and ⌘Q through its
+real menu bar — where the `NativeMenu` *is* the menu bar — and the Windows app is a
+different app with neither convention.
+
+The 2026-09-18 RC pass measured both doing nothing at all, because Close lived only
+as a `NativeMenuItem` gesture and Quit had no gesture off macOS; the
+2026-09-18 Close/Quit pass measured them in a real window under mutter and under a
+whole Plasma session, on a clean and on a changed document, in each case with the
+prompt, with Cancel, and with Don't Save.
 
 ## 4. Toolbar and find-bar layout steps
 
