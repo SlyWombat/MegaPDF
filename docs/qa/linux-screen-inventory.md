@@ -224,7 +224,10 @@ Outcomes `{'ok': 4263, 'format': 62, 'encrypted': 12}` on the shared documents, 
 
 ## 12. Defects this pass found
 
-All three are fixed on the branch that carries this file.
+1 and 3 are fixed on the branch that carries this file. 2 was found here and fixed on
+main by the #146 store-capture work while this pass was running, with a better fix than
+the one this branch had written: theirs also fills the find box, because searching the
+view model directly leaves the capture showing an empty-looking field beside "1 of 3".
 
 1. **The `.deb`'s icons were installed outside any icon theme.** Every size landed at
    `/usr/share/icons/48x48/apps/megapdf.png`, with no `hicolor` between. No icon theme
@@ -234,7 +237,8 @@ All three are fixed on the branch that carries this file.
 2. **The find screen could not be posed in French.** `--screenshot-state find` searched
    for the literal `"equipment"`; the French demo agreement says `"équipement"`. The
    check refused to write a shot that would have claimed to show something it did not,
-   so the screen had never been photographed in French **on any platform**.
+   so the screen had never been photographed in French **on any platform**. Fixed on
+   main by #146, which had reached the same wall from the store-capture side.
 3. **The empty state's tagline was left-aligned the moment it wrapped.** Only
    `HorizontalAlignment` was set, not `TextAlignment`. In English the sentence fits on
    one line at every width. In French it wraps at every width including the default
