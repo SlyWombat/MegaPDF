@@ -84,6 +84,12 @@ public partial class App : Application
             // be taken: the capture failed and left no file behind it.
             case "find":
                 viewModel.IsFindOpen = true;
+                // Into the box as well as into the view model. The find field is a plain
+                // TextBox that the typing path fills; searching the view model directly
+                // left the capture showing a watermark — an empty-looking field beside
+                // "1 of 3", which is the sort of thing a store screenshot must not say.
+                if (window is not null)
+                    window.FindBox.Text = DemoContent.SearchTerm;
                 viewModel.Search(DemoContent.SearchTerm);
                 if (viewModel.MatchCount == 0)
                 {
