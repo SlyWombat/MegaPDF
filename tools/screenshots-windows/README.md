@@ -243,7 +243,10 @@ scroll the page**, so nudge only while the signature shows its handles; and
 Add-text click after `Place-Signature` needs an Esc in between, or it does
 nothing and the placement banner stays up. Park the pointer *off the window*
 (`SetCursorPos(2556, 900)` on this display) before a shot; parking inside the
-window can leave a "Ctrl+F" accelerator tip painted over the page.
+window could leave a "Ctrl+F" accelerator tip painted over the page. That tip was
+the app's bug, not the harness's: the window's shortcuts gave their host grid a
+tooltip (#226, fixed in 2.0). Parking off the window is still the habit, because
+it keeps any hover state out of the frame.
 
 ## Privacy — this is not optional
 

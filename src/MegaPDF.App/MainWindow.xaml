@@ -8,7 +8,12 @@
         <MicaBackdrop />
     </Window.SystemBackdrop>
 
-    <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged">
+    <!-- KeyboardAcceleratorPlacementMode="Hidden": every shortcut hangs off this grid
+         (Ctrl+F below, the rest from InitializeAccelerators), and left on Auto WinUI gives
+         the grid a tooltip of its first one. That was the stray "Ctrl+F" chip (#226): it
+         surfaced when the pointer rested over the window and could outlive the More menu.
+         The toolbar tooltips already name each shortcut, in the app's language. -->
+    <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged" KeyboardAcceleratorPlacementMode="Hidden">
         <Grid.Resources>
             <!-- The keyboard focus ring on a page region (SDD §2.2, #2; MainWindow.Keyboard.cs).
                  The system focus-visual pair, so a high-contrast theme swaps in its own
