@@ -80,14 +80,14 @@ jobs:
       # twice; the Linux scripts are checked here for the same reason.
       - name: Scripts are executable
         run: |
-          bad=$(git ls-files -s tools/*.sh tools/linux/*.sh | grep -v '^100755' || true)
+          bad=$(git ls-files -s tools/*.sh tools/linux/*.sh tools/linux/flatpak/*.sh | grep -v '^100755' || true)
           if [ -n "$bad" ]; then
             echo "::error::these scripts are committed without the executable bit:"
             echo "$bad"
             echo "fix with: git update-index --chmod=+x <path>"
             exit 1
           fi
-          echo "all tools/*.sh and tools/linux/*.sh are executable"
+          echo "all tools/*.sh, tools/linux/*.sh and tools/linux/flatpak/*.sh are executable"
 
       # The Core project would run this itself, but a separate step makes a native
       # build failure legible instead of buried in MSBuild output (#38, ADR-003).
@@ -346,6 +346,105 @@ jobs:
         with:
           name: linux-test-results
           path: '**/TestResults/*.trx'
+
+  # Both Linux packages, built from what the job above published and checked by
+  # installing them and running the app out of them (#158). Separate from `linux-app`
+  # rather than more steps on the end of it, because it wants tools that job does not
+  # (flatpak-builder, dpkg-dev) and because "the app works" and "the package works" are
+  # different claims — a package can bundle a working app and still lose its notices,
+  # its engine or its dependencies.
+  #
+  # Nothing here submits, uploads or publishes anything. It builds a bundle and a .deb,
+  # proves the app inside each one works, and attaches them to the run.
+  #
+  # On every push, including the Flatpak, which costs about four minutes of runtime
+  # download. If that becomes the longest thing in CI, gate the Flatpak steps on
+  # `github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')`
+  # and keep the .deb here — that is the cheap half and it catches most of what breaks.
+  linux-package:
+    name: Linux packages
+    runs-on: ubuntu-latest
+    needs: linux-app
+    steps:
+      - uses: actions/checkout@v4
+
+      # librsvg2-common is not optional and its absence is not obvious: flatpak-builder
+      # runs `appstreamcli compose` from the runner, not from inside the sandbox, and
+      # that reads the scalable icon through gdk-pixbuf. Without the SVG loader the
+      # build fails at its last step with "Unrecognized image file format", naming a
+      # file that is a perfectly good SVG.
+      - name: Packaging tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq flatpak flatpak-builder appstream \
+            desktop-file-utils dpkg-dev lintian librsvg2-common xvfb dbus
+
+      # The tree the job above built and published, rather than a second publish: the
+      # package must wrap the artefact that was tested, not one that merely came from
+      # the same commit.
+      - uses: actions/download-artifact@v4
+        with:
+          name: MegaPDF-linux-x64
+          path: ${{ runner.temp }}/artifact
+
+      - name: Unpack the tree that was tested
+        run: |
+          mkdir -p "$RUNNER_TEMP/app"
+          tar -C "$RUNNER_TEMP/app" -xzf "$RUNNER_TEMP/artifact/MegaPDF-linux-x64.tar.gz"
+          test -x "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF"
+
+      - name: Generate fixtures
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
+
+      # --- the .deb -------------------------------------------------------------
+
+      - name: Build the .deb
+        run: tools/linux/build-deb.sh "$RUNNER_TEMP/app/MegaPDF" "$RUNNER_TEMP/deb"
+
+      # Installed for real, with apt resolving the dependencies the way a person's
+      # would. .NET dlopens ICU and Avalonia.X11 dlopens the X libraries, so a
+      # dependency the control file forgot is invisible to every other check there is.
+      - name: Install the .deb and run the app out of it
+        run: sudo tools/linux/check-deb.sh "$(ls "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb)" "$RUNNER_TEMP/fixtures"
+
+      # Reported, not enforced. Most of what it says follows from this being a bundled
+      # third-party package rather than one for the Debian archive — see
+      # tools/Linux-Packaging.md, which answers each tag. It is here because the one
+      # time it had something real to say (a build path in the shipped runpath), nothing
+      # else in CI would have noticed.
+      - name: What lintian makes of it
+        continue-on-error: true
+        run: lintian --tag-display-limit 0 "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb
+
+      # --- the Flatpak ----------------------------------------------------------
+
+      - name: The freedesktop runtime the manifest names
+        run: |
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          runtime=$(grep -E '^runtime-version:' tools/linux/flatpak/*.yml | head -1 | tr -d "' " | cut -d: -f2)
+          echo "runtime-version from the manifest: $runtime"
+          flatpak install -y --noninteractive --user flathub \
+            "org.freedesktop.Platform//$runtime" "org.freedesktop.Sdk//$runtime"
+
+      - name: Build the Flatpak
+        run: tools/linux/build-flatpak.sh "$RUNNER_TEMP/app/MegaPDF" "$RUNNER_TEMP/flatpak"
+
+      # The bundle existing proves nothing. This installs it and drives the app inside
+      # the sandbox: the engine loads, ICU comes from the runtime, a real window opens
+      # under Xvfb and draws a document, and the person's home is not readable from
+      # inside — which is the permission set the manifest is asserting.
+      - name: Install the Flatpak and run the app inside its sandbox
+        run: tools/linux/check-flatpak.sh "$RUNNER_TEMP/flatpak/ca.electricrv.MegaPDF.flatpak" "$RUNNER_TEMP/fixtures"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-linux-packages
+          path: |
+            ${{ runner.temp }}/deb/megapdf_*_amd64.deb
+            ${{ runner.temp }}/flatpak/ca.electricrv.MegaPDF.flatpak
+          if-no-files-found: error
 
   build-and-test:
     runs-on: windows-latest
