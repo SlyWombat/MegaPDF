@@ -196,6 +196,11 @@ def section_scroll(run, out, top):
     out.append(f"Blank renders: {blank:,} pages came back entirely white; {sum(len(b) for _, b in bwt):,} of those "
                f"have extractable text on them (a candidate rendering defect) across {len(bwt):,} documents"
                + (": " + ", ".join(f"#{i} p{','.join(str(p + 1) for p in b[:5])}" for i, b in bwt[:top]) if bwt else "") + ".")
+    capped = [(r["i"], r["scroll"]["capped_pages"]) for r in ok if r["scroll"].get("capped_pages")]
+    if capped:
+        out.append(f"Capped renders: {sum(len(c) for _, c in capped):,} pages across {len(capped):,} documents are past the "
+                   f"render limits at their natural size, so they were rendered smaller, exactly as the apps do (#93): "
+                   + ", ".join(f"#{i} p{','.join(str(p + 1) for p in c[:5])}" for i, c in capped[:top]) + ".")
     fields = sum(r["scroll"].get("fields", 0) for r in ok)
     squares = sum(r["scroll"].get("squares", 0) for r in ok)
     lines = sum(r["scroll"].get("lines", 0) for r in ok)

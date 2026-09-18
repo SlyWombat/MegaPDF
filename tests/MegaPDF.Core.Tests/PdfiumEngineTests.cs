@@ -1,6 +1,7 @@
 using System.Text;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Viewing;
 using Xunit;
 
 namespace MegaPDF.Core.Tests;
@@ -26,6 +27,27 @@ public class PdfiumEngineTests : IDisposable
         using var page = doc.GetPage(0);
         Assert.Equal(612, page.Width, 1);
         Assert.Equal(792, page.Height, 1);
+    }
+
+    /// <summary>
+    /// The refusal the viewers rely on: anything past <see cref="RenderLimits"/> is rejected
+    /// rather than attempted. It used to be checked only by accident, as three stress fixtures
+    /// that came back "partial" in every run because the harness asked for their natural size
+    /// (#209). The harness fits its renders now, so the refusal needs a test of its own.
+    /// </summary>
+    [Fact]
+    public void Render_PastTheLimits_IsRefused()
+    {
+        using var doc = _engine.Open(WriteSamplePdf());
+        using var page = doc.GetPage(0);
+
+        var tooWide = RenderLimits.MaxSidePixels + 1;
+        var ex = Assert.Throws<InvalidOperationException>(() => page.Render(tooWide, 1000));
+        Assert.Contains("RenderLimits", ex.Message);
+
+        // And the size RenderLimits hands back for the same request is one the engine takes.
+        var (w, h) = RenderLimits.Fit(tooWide, 1000);
+        Assert.Equal(w * h * 4, page.Render(w, h).Bgra.Length);
     }
 
     [Fact]

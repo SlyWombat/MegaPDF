@@ -136,6 +136,10 @@ internal sealed class ScrollResult
     [JsonPropertyName("max_px")] public long MaxPixels { get; set; }
     [JsonPropertyName("blank_pages")] public List<int> BlankPages { get; set; } = [];
     [JsonPropertyName("blank_with_text")] public List<int> BlankWithText { get; set; } = [];
+    /// <summary>Pages whose natural size is past the render limits, so the raster is
+    /// smaller than the page (#209). The apps do the same; recorded so a shrunk render
+    /// is never mistaken for a full one.</summary>
+    [JsonPropertyName("capped_pages")] public List<int> CappedPages { get; set; } = [];
     [JsonPropertyName("text_chars")] public long TextChars { get; set; }
     [JsonPropertyName("lines")] public int Lines { get; set; }
     [JsonPropertyName("fields")] public int Fields { get; set; }
@@ -700,8 +704,17 @@ internal static class Worker
         {
             Heartbeat(hb, index, "scroll", p);
             using var page = doc.GetPage(p);
-            var pw = Math.Max(1, (int)(page.Width * PointsToPixels * scale));
-            var ph = Math.Max(1, (int)(page.Height * PointsToPixels * scale));
+            // Fit the request the way both viewers do (#93). Asking for the natural size of
+            // a 19200 px poster is a request the engine refuses and no app ever makes, and
+            // the refusal came back as a scroll failure on the widest fixtures in every run
+            // (#209) -- the pages most worth exercising were the ones never rendered.
+            var idealWidth = page.Width * PointsToPixels * scale;
+            var idealHeight = page.Height * PointsToPixels * scale;
+            var (fitWidth, fitHeight) = RenderLimits.Fit(idealWidth, idealHeight);
+            var pw = Math.Max(1, fitWidth);
+            var ph = Math.Max(1, fitHeight);
+            if (RenderLimits.IsCapped(idealWidth, idealHeight))
+                res.CappedPages.Add(p);
             sw.Restart();
             var rendered = page.Render(pw, ph);
             res.RenderMs[p] = (int)sw.ElapsedMilliseconds;

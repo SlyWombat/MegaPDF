@@ -31,6 +31,13 @@ at a real disk for a run with large files in it: the default on Linux is `/tmp`,
 which on several distributions is a tmpfs sized at half of RAM, and parking 2.5 GB
 there is 2.5 GB of memory (#193).
 
+The scroll and zoom phases fit every render through `RenderLimits`, exactly as both
+viewers do (#93), and the report names the pages that came back capped. Asking the
+engine for the natural size of a 19,200 px poster is a request it refuses and no app
+ever makes, and that refusal used to come back as a scroll failure on the three widest
+fixtures in every run (#209) — the pages most worth exercising were the ones never
+rendered. The refusal itself has its own test in `PdfiumEngineTests`.
+
 The report's memory section gives `ws_peak_doc`, the peak working set sampled over
 one document. The worker-process figures beside it (`ws_peak`) never fall, so after
 one large file they describe that file for the rest of the run; the per-document one
