@@ -49,6 +49,25 @@ demo_status_bar
 sleep 5
 demo_status_bar
 
+# On a large screen the launcher draws a taskbar across the bottom of every app,
+# carrying whatever the device happens to have pinned — on the QA tablet that was
+# Chrome, Photos, the emulator's own app and a camera — with the navigation buttons
+# beside them. None of it is ours and all of it was in the frame. Disabling the
+# launcher for the run removes the taskbar and the buttons together, and the app's
+# own bottom bar then runs to the edge exactly as it does on a phone.
+#
+# Put back on the way out, however this exits: a device with no launcher has no Home
+# to return to. Harmless on a phone, where there is no taskbar to remove — the
+# captures come out byte-identical either way (#146).
+LAUNCHER=com.android.launcher3
+restore_launcher() {
+    adb shell pm enable "$LAUNCHER" > /dev/null 2>&1 || true
+}
+if adb shell pm disable-user --user 0 "$LAUNCHER" > /dev/null 2>&1; then
+    trap restore_launcher EXIT INT TERM
+    sleep 3
+fi
+
 OUT="/tmp/shots/$LANG_TAG"
 mkdir -p "$OUT"
 for state in home viewer search sign draw text text-edit redact; do
