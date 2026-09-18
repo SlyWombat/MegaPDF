@@ -94,7 +94,10 @@ class Shot:
         flats = [v for v, count in enumerate(hist) if count >= floor]
         self.top_tone = max(flats) if flats else im.modal(top)
         spec = profile.get("toolbar")
-        self.toolbar_end = im.top_band(path, spec["depth"]) if spec else None
+        # Where the toolbar's background runs on into the canvas (Mica on
+        # Windows), there is no edge to find and the profile gives the depth.
+        self.toolbar_end = (None if not spec else spec["depth"] if spec.get("fixed")
+                            else im.top_band(path, spec["depth"]))
 
     @property
     def pose_id(self):

@@ -48,7 +48,7 @@ BODY_EN = [
     ("r", 11, 672, "below, covering the rental equipment, delivery options, and insurance terms"),
     ("r", 11, 656, "described in sections 1 through 4 of this document."),
     ("b", 13, 620, "Customer"),
-    ("r", 12, 596, "Name: Dana Whitfeld"),
+    ("r", 12, 596, "Name: Jane Whitfeld"),
     ("r", 12, 576, "Rental period: March 14 to March 18"),
     ("b", 13, 540, "Options"),
     ("b", 13, 420, "Equipment"),

@@ -1,4 +1,4 @@
-# Mega PDF — Store listing copy (paste into Partner Center)
+# MegaPDF — Store listing copy (paste into Partner Center)
 
 **Everything meant for pasting is in a fenced code block.** Copy from inside the
 block only — no `>`, `-` or `1.` prefixes, since Partner Center takes those
@@ -27,7 +27,7 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-Mega PDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
+MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
@@ -43,7 +43,7 @@ Also included, because real documents need them: find any word with Ctrl+F (ever
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
-Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
+MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
 **App features** — one line per box, nine boxes
@@ -95,7 +95,7 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-Mega PDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
+MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
@@ -111,7 +111,7 @@ Also included, because real documents need them: find any word with Ctrl+F (ever
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
-Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
+MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
 **App features** — one line per box, nine boxes
@@ -161,7 +161,7 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
+MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
@@ -177,7 +177,7 @@ Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot av
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
-Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
+MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
 **App features** — one line per box, nine boxes
@@ -227,7 +227,7 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
+MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
@@ -243,7 +243,7 @@ Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot av
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
-Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
+MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
 **App features** — one line per box, nine boxes
@@ -328,7 +328,7 @@ ever needed. Partner Center lists the sizes it accepts on the page itself —
 check there before assuming 300×300 is the only one.
 
 ## Screenshots
-`artifacts/store/screenshots/` (2482×1541, well over the 1366×768 minimum; at
+`artifacts/store/screenshots/<lang>/` (2482×1541, well over the 1366×768 minimum; at
 least one required, up to nine allowed). Upload all five in this order, one
 caption each:
 
@@ -340,14 +340,10 @@ caption each:
 | `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
 | `05-add-text.png` | Type on a blank line, in the size and face that matches the form. |
 
-The English five were re-taken 2026-09-13 on GPD-DAVE from the unpackaged
-Release build of main (the rig's `MEGAPDF_EXE` mode, see its README) after the
-signature picker redesign (#100); shot 4 came from the installed Store 1.7.0
-package because the unpackaged build's file pickers do not open. The French sets
-are still the 2026-09-09/10 captures: none of the five scenes changed, and the
-unpackaged build cannot switch its XAML chrome to French (no package identity,
-so `PrimaryLanguageOverride` is a no-op) while the live Store 1.7.0 package
-ignores the Language setting altogether.
+**The 2.0 set was shot 2026-09-18** on GPD-DAVE from the installed 2.0.0.0 package,
+one run per language with `tools/screenshots-windows/Shoot-Set.ps1`, and it passed
+`tools/capture-gate` with nothing to look at (docs/release-notes/2.0/capture-gate-report.md §5).
+The title bar reads MegaPDF, and the English customer is Jane Whitfield, as on every other store.
 
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the
@@ -363,11 +359,11 @@ effective and the toolbar keeps icon + label in every language, which is what
 these captions and the description assume. Check the toolbar in the shots before
 uploading; if the labels are gone, the scale is wrong, not the resolution.
 
-**One set per language.** `artifacts/store/screenshots/` holds the English five;
-`fr-CA/` and `fr-FR/` hold the French sets, shot 2026-09-10 from the same 1.7.0
-package with the Language setting switched, over the French staging documents
-(`gen_store_docs.py --lang fr`). Same frame, same five files, same order — upload
-each set under its own listing language.
+**One set per language.** `artifacts/store/screenshots/en/`, `fr-CA/` and `fr-FR/`
+each hold the five files, from the same package with the Language setting switched,
+over each language's staging documents (`gen_store_docs.py --lang fr-CA|fr-FR`).
+Same frame, same five files, same order — upload each set under its own listing
+language. The pre-2.0 set is kept in `artifacts/store/screenshots-pre2.0/`.
 
 Re-shooting needs a Windows desktop with the build installed; the harness is
 `tools/screenshots-windows/` (start with its README). It cannot be done from CI —

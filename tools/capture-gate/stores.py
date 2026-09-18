@@ -73,19 +73,46 @@ STORES: dict[str, dict] = {
     "microsoft": {
         "title": "Microsoft Store",
         "slots": {
-            # The Store takes 1366x768 and up in 16:9, and the 2.0 set is shot
-            # on a 2500x1550 frame at 150 % scale (tools/screenshots-windows).
-            # Both the frame and the 16:9 crop are listed because the harness
-            # ships the frame and the listing wants the crop.
-            "desktop": [(2500, 1550), (2560, 1440), (1920, 1080), (1366, 768)],
+            # The frame tools/screenshots-windows ships: the DWM bounds of a
+            # 2500x1550 window on the 2560x1600 capture display at 150 %, which
+            # is 1667 effective px — above the toolbar's full-label breakpoint.
+            # It is the only size that says "a whole window" here.
+            "desktop": [(2482, 1541)],
         },
-        "order": ["textedit", "checkboxes", "signature", "addtext", "shrink"],
+        # Partner Center has no fixed slot for a desktop screenshot: anything at
+        # least 1366x768 (docs/microsoft-store-listing.md § Screenshots). The
+        # 1.7 listing went up at 2482x1541 — not 16:9, and accepted. A size
+        # inside this floor passes; only the frame above is measured as a window.
+        "min_size": (1366, 768),
+        # Listing order is the file numbers (docs/microsoft-store-listing.md);
+        # the poses are the file names with the number taken off.
+        "order": ["edit-text", "checkbox", "signature", "shrink", "add-text"],
         "parse": _pose(r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
-        "toolbar": {"depth": 200, "rows": 1, "height": (40, 130),
+        # Measured on the 2.0 set: the title bar is its own strip, rows 0–45;
+        # the command bar is ink from about 57 to 104, labels beside their
+        # icons; the page's top edge is at 153. Mica runs from the title bar
+        # into the canvas, so the band has no edge to find and is fixed at 150.
+        # A pre-#144 second row would sit under the first with a gap of a few
+        # pixels, which is why only gaps of 4 rows or less are closed.
+        "toolbar": {"depth": 150, "fixed": True, "title_bar": 45, "gap": 4,
+                    "rows": 1, "height": (40, 130),
                     "rows_by_pose": {"search": 2}},
         "zoom": "100",
-        "accent_poses": {"redact": ("banner", "mark")},
+        # Two poses show the inline editor open, and its focus underline is
+        # drawn in the accent: that is the edit being shown, not a stray.
+        "accent_poses": {"redact": ("banner", "mark"),
+                         "edit-text": ("the inline editor's underline",),
+                         "add-text": ("the inline editor's underline",)},
+        # The app's own icon in the title bar is blue (about 400 px of accent
+        # in every shot). Measured on the 2.0 set: a 24 px square at (13, 10).
+        "accent_ignore": [(0, 0, 60, 45)],
         "accent_strict": True,
+        # The DWM bounds include Windows 11's 1 px border, and the capture
+        # reads the screen, so the outer two pixels on every side are border
+        # over whatever wallpaper is behind the window — measured on the 2.0
+        # set, where Spotlight's photo put 70–700 "strokes" on those lines and
+        # none from two pixels in. The clipping check starts inside them.
+        "edge_inset": 2,
         "status_band": None,
         "notes": "Shot on a real desktop, not in CI. Frame and scale matter: "
                  "2500x1550 at 150 % is 1667 effective px, above the toolbar's "

@@ -70,6 +70,10 @@ def size(shot, profile) -> list[Finding]:
             return [_ok("size", f"{w}x{h}, {_ratio(w, h)} — the "
                                 f"{matching[0]} slot, found by size because "
                                 f"the set does not name its device")]
+    floor = profile.get("min_size")
+    if floor and min(w, h) >= min(floor) and max(w, h) >= max(floor):
+        return [_ok("size", f"{w}x{h}, {_ratio(w, h)} — at least the store's "
+                            f"{floor[0]}x{floor[1]}, which is its only rule")]
     if profile.get("crops_expected") and not _is_frame(shot, profile):
         return [_skip("size", f"{w}x{h} — not a window size, so this is a crop "
                               f"of one; the frame checks stand down")]
@@ -111,11 +115,14 @@ def edges(shot, profile, band: int = 3, glyph_max: int = 18,
     w, h = shot.size
     findings = []
     worst = []
+    # Where the window's own edge is not the image's (a border drawn over the
+    # desktop, on Windows), the profile says how far in the app starts.
+    i = profile.get("edge_inset", 0)
     for name, box, outer in (
-            ("top", (0, 0, w, band), "row0"),
-            ("bottom", (0, h - band, w, band), "rowN"),
-            ("left", (0, 0, band, h), "col0"),
-            ("right", (w - band, 0, band, h), "colN")):
+            ("top", (i, i, w - 2 * i, band), "row0"),
+            ("bottom", (i, h - band - i, w - 2 * i, band), "rowN"),
+            ("left", (i, i, band, h - 2 * i), "col0"),
+            ("right", (w - band - i, i, band, h - 2 * i), "colN")):
         crop = im.gray_box(shot.path, box)
         if crop.h == 0 or crop.w == 0:
             continue
@@ -172,13 +179,18 @@ def toolbar(shot, profile) -> list[Finding]:
                                  "measure")]
     raster = im.gray(shot.path)
     end = shot.toolbar_end
+    # A title bar of its own (Windows) sits above the commands and is not a
+    # row of them.
+    title = spec.get("title_bar", 0)
     # A button is an icon with a word under it, and on some platforms the two
     # are far enough apart to read as separate rows of ink. Gaps smaller than
     # a sixth of the band are closed before counting — within the band only,
-    # so that closing one cannot join the bar to the page under it.
-    inside = im.blocks(im.ink_profile(raster)[:end], 0.004,
-                       gap=max(2, end // 6))
+    # so that closing one cannot join the bar to the page under it. Where the
+    # label sits beside the icon, the profile says how small a gap to close.
+    inside = im.blocks(im.ink_profile(raster)[title:end], 0.004,
+                       gap=spec.get("gap", max(2, (end - title) // 6)))
     rows = len(inside)
+    end -= title
     lo, hi = spec["height"]
     # Some poses put a second bar under the toolbar on purpose — Find opens
     # one, and armed modes show their banner. The profile names them, so that
@@ -209,14 +221,25 @@ def accent(shot, profile) -> list[Finding]:
     through its accents.
     """
     mask = im.colour_mask(shot.path, stores.ACCENT)
-    total = im.matched(mask)
+    # Regions the profile knows are always accent (an app icon in the title
+    # bar) are taken out before anything is counted.
+    ignore = profile.get("accent_ignore", ())
+
+    def row_hits(y):
+        row = mask.row(y)
+        hits = row.count(0)
+        for x0, y0, bw, bh in ignore:
+            if y0 <= y < y0 + bh:
+                hits -= row[x0:x0 + bw].count(0)
+        return hits
+
+    total = sum(row_hits(y) for y in range(mask.h))
     if total == 0:
         return [_ok("accent", "no brand accent drawn")]
     allowed = profile.get("accent_poses", {}).get(shot.pose, ())
     band_rows, stray = 0, 0
     for y in range(mask.h):
-        row = mask.row(y)
-        hits = row.count(0)
+        hits = row_hits(y)
         if hits > mask.w * 0.5:
             band_rows += 1
         else:
@@ -379,7 +402,9 @@ def zoom(shot, profile) -> list[Finding]:
     # Only the first row of the band: the search pose opens the find bar under
     # the toolbar, and a crop holding two rows is not a single line to read.
     rows = im.blocks(im.ink_profile(im.gray(shot.path)), 0.004)
-    first = next((b for b in rows if b[1] <= depth), (0, depth))
+    title = (profile.get("toolbar") or {}).get("title_bar", 0)
+    first = next((b for b in rows if b[0] >= title and b[1] <= depth),
+                 (title, depth))
     top, bottom = max(0, first[0] - 3), min(h, first[1] + 3)
     for x, width in im.column_clusters(shot.path, bottom - top, top=top):
         text = im.ocr(shot.path,

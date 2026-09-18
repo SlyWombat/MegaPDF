@@ -23,6 +23,13 @@ PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
 
 ## Run order
 
+`Shoot-Set.ps1 -Lang <en-US|fr-CA|fr-FR> -Dir <en|fr-CA|fr-FR>` runs the whole
+sequence below for one language: it refuses unless the installed package is the
+version to be shot (2.0.0.0 by default), and afterwards it moves the probe and
+in-between frames into `work/`, so the language folder holds only the five listing
+images `tools/capture-gate` reads (`gate.py --store microsoft artifacts/store/screenshots`).
+It produced the 2.0 set. The steps, one at a time:
+
 Each script drives one step against the already-running app, so you can inspect
 the result before continuing. Paths must be **Windows** paths. The whole set is
 shot once per listing language: `en-US`, `fr-CA`, `fr-FR`.
@@ -217,8 +224,9 @@ French probe frame (the layout is the English one, translated):
     .\Shot-AddText.ps1 -X 1420 -Y 1090 -Text '18 mars 2026'   # press Esc first if the signature is still selected
     .\Shot-Shrink.ps1 -Pdf "<shotdir>\scanned-agreement.pdf" -Out "<shotdir>\scanned-agreement - reduit.pdf"
 
-**The French customer is French, with accents (#146).** English stays Dana
-Whitfield with the "Whitfeld" typo. `gen_store_docs.py --lang fr-CA` writes
+**The French customer is French, with accents (#146).** English is Jane
+Whitfield with the "Whitfeld" typo, the name every other store's English set
+poses (it was "Dana" on Windows alone until the 2.0 set). `gen_store_docs.py --lang fr-CA` writes
 "Nom : Hélène Belanger" and `--lang fr-FR` "Nom : Céline Lefevre", and the on-camera
 fix is the missing accent ("Bélanger", "Lefèvre"), which also shows accented
 editing. The coordinates above were read off the 2026-09-10 frame; re-read them
