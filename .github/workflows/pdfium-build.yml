@@ -34,6 +34,11 @@ jobs:
       matrix:
         include:
           - { os: linux,   cpu: x64,   env: '',        runner: ubuntu-24.04 }
+          # linux-arm64 (#254 A6): the patched series cross-builds for it from the
+          # same runner as x64 — pdfium-binaries handles the target and downloads the
+          # arm64 sysroot itself. The app cannot ship from it yet; see
+          # tools/Linux-Packaging.md for the three things still missing.
+          - { os: linux,   cpu: arm64, env: '',        runner: ubuntu-24.04 }
           - { os: android, cpu: arm64, env: '',        runner: ubuntu-24.04 }
           - { os: android, cpu: x64,   env: '',        runner: ubuntu-24.04 }
           - { os: win,     cpu: x64,   env: '',        runner: windows-2022 }

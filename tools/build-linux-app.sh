@@ -5,8 +5,10 @@
 # entry, the application/pdf association, and the hicolor icons.
 #
 # Usage: tools/build-linux-app.sh [rid] [out-dir]
-#   rid     linux-x64 (default). linux-arm64 is not buildable yet — the patched
-#           PDFium series has no arm64 build (#158).
+#   rid     linux-x64 (default). linux-arm64 is refused: the patched PDFium series
+#           cross-builds for it (#254 A6) but no release carries the arm64 archive
+#           yet, and this script would produce an arm64 app with an x64 engine in it.
+#           tools/Linux-Packaging.md lists the three changes and who unblocks them.
 #   out-dir defaults to artifacts/linux
 #
 # NOT a package. Flathub, AppImage and .deb are separate work with their own
@@ -23,7 +25,10 @@ APP="$OUT/MegaPDF"
 case "$RID" in
     linux-x64) ;;
     linux-arm64)
-        echo "::error::linux-arm64 needs an arm64 PDFium build, which the patched series does not have yet (#158)" >&2
+        echo "::error::linux-arm64 needs an arm64 PDFium archive in the pinned release." >&2
+        echo "         The series cross-builds for arm64 (#254 A6); no release carries the" >&2
+        echo "         archive yet, so this would ship an arm64 app around an x64 engine." >&2
+        echo "         See tools/Linux-Packaging.md, \"linux-arm64\"." >&2
         exit 1 ;;
     *) echo "::error::unsupported rid '$RID' (expected linux-x64)" >&2; exit 1 ;;
 esac

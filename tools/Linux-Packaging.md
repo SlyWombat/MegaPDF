@@ -380,5 +380,55 @@ following can be decided here.
    `$XDG_DATA_HOME`. A run that starts the portal under one `HOME` and restarts it under
    another reads an empty database, every handle looks lost, and the wrong answer arrives
    looking exactly like the right one. This is how the first run of the check said "NO".
-4. **`linux-arm64` is out** until the patched PDFium series builds it; `pdfium-build.yml`
-   needs a `linux/arm64` entry first. The manifest and the `.deb` are x86-64 only.
+4. **`linux-arm64`: the engine cross-builds. The app cannot ship from it yet, and should
+   not be in 2.0.** (#254 A6.)
+
+   This used to say the patched PDFium series did not build for arm64. It does, without a
+   patch or a workaround. `tools/pdfium/build-pdfium.sh <work> linux arm64` runs
+   pdfium-binaries' own arm64 path — it downloads the Debian arm64 sysroot itself and
+   `steps/05-configure.sh` has a `linux-arm64` case already — and produces an
+   `ELF 64-bit LSB shared object, ARM aarch64` `libpdfium.so` exporting **exactly the same
+   435 `FPDF*` symbols** as the x64 build of the same series, at a comparable size
+   (7.86 MB against 7.66 MB). Measured 2026-09-18 on series `a02dc04f63e3` (30 patches).
+   `pdfium-build.yml` now has the `linux/arm64` entry.
+
+   The rest was measured too, on the same day:
+
+   | | |
+   |---|---|
+   | `core/` → `libmegapdf_core.so` for aarch64 | **builds**, with a four-line CMake toolchain file and `g++-aarch64-linux-gnu`. `core/CMakeLists.txt` needed no change at all. |
+   | `dotnet publish -r linux-arm64 --self-contained` | **works**. The apphost comes out AArch64, and SkiaSharp and HarfBuzzSharp both ship arm64 natives. |
+   | the two native libraries in that publish | **x86-64**. `MegaPDF.Core.csproj` copies from `libs/pdfium/linux-x64` and `core/build/linux-x64` whatever the runtime identifier is, so the output is an arm64 app carrying an x64 engine. |
+
+   So three code changes remain, all small and none of them unknown:
+
+   1. `tools/fetch-pdfium-linux.sh` takes an architecture and fetches
+      `pdfium-linux-arm64.tgz` (it hardcodes `pdfium-linux-x64.tgz`);
+   2. `tools/build-core.sh` takes an architecture and passes a toolchain file (it
+      hardcodes `linux-x64` from `uname`);
+   3. `MegaPDF.Core.csproj` picks the native pair by runtime identifier, and
+      `tools/build-linux-app.sh` stops refusing `linux-arm64`.
+
+   **What blocks all three is not code.** The pinned PDFium release carries no
+   `pdfium-linux-arm64.tgz`, so nothing can fetch one. Publishing it is Dave's, because
+   it means running the release workflow and pushing a release tag:
+
+   ```
+   gh workflow run "PDFium (patched) build" -f branch=chromium/7934 -f release=true
+   ```
+
+   That rebuilds every target and publishes a new `pdfium-<branch>-megapdf-<series>`
+   prerelease. It does **not** change the patch series, so the x64, Windows, macOS, iOS
+   and Android binaries are the same sources as the pinned ones — but it is a new release
+   and a new pin, and re-pinning every platform during a release hold is not a thing to do
+   for a stretch item.
+
+   **The recommendation is to leave `linux-arm64` out of 2.0.** Not because it cannot be
+   built — it can — but because nothing about it has been *run*. There is no corpus
+   battery on arm64, no QA pass, no baseline to compare against, and this server cannot
+   execute an arm64 binary (no `qemu-aarch64` binfmt, and registering one is a change to
+   the host). GitHub's `ubuntu-24.04-arm` runners would make an arm64 `--self-test` and a
+   battery possible, which is what 2.1 should do. Shipping a Flathub arm64 package that
+   has never been executed is worse than shipping none.
+
+   The manifest and the `.deb` are therefore still x86-64 only, deliberately.
