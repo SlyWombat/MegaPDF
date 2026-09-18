@@ -178,13 +178,14 @@ device. `tools/stress/redaction-battery.sh` runs the same searches across a whol
 where the requirement is 0 leaks, 0 crashes, 0 hangs and no render change outside the
 areas.
 
-Large files (#147, #148, #267) are checked in two tiers, because the defects only
+Large files (#147, #148, #267, #270) are checked in two tiers, because the defects only
 show at sizes no repository can hold. `test_xref_entries_are_findable()` runs on every push:
 it saves the ordinary fixtures in both of PDFium's cross-reference forms and insists every
 in-use entry is a non-negative offset that lands on the `N 0 obj` it names, and that the
 cross-reference stream is a conforming object — `/Type /XRef`, closed with `endobj`, an
 entry for itself, and a `/Length` that is the length of the stream. `test_large_file_xref()`
-makes the same demands of files past 2 and 4 GiB, and runs only where those files exist:
+and `test_large_xref_stream_opens_from_its_table()` make the same demands of files past 2
+and 4 GiB, and run only where those files exist:
 
 ```bash
 python3 tools/gen_large_fixtures.py ~/large --only huge-2_5gb        # ~2 min, 2.7 GB
@@ -192,7 +193,7 @@ python3 tools/make_xref_stream.py ~/large/huge-4_5gb.pdf ~/large/huge-4_5gb-xref
 MEGAPDF_LARGE_FIXTURES=~/large MEGAPDF_LARGE_SCRATCH=/scratch ./megapdf_core_tests ...
 ```
 
-It skips with a printed line when `MEGAPDF_LARGE_FIXTURES` is unset, and each case skips
+Both skip with a printed line when `MEGAPDF_LARGE_FIXTURES` is unset, and each case skips
 itself when the scratch directory has less room than the copy it is about to write — a full
 save is the size of its source and an incremental one is twice that. The saved copies are
 deleted unless `MEGAPDF_LARGE_KEEP` is set. They are *not* in CI: generating a 4.5 GB

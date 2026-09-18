@@ -5310,6 +5310,55 @@ void test_large_file_xref() {
 }
 
 
+// #270, found while testing the stream half of #267: a document over 4 GiB whose
+// cross-reference is a *stream* did not open from that stream. PDFium read every offset
+// in it as a 32-bit value -- `GetVarInt`'s accumulator, whatever /W said -- so the table
+// it built pointed at nothing and the parser rebuilt it by scanning the whole file.
+//
+// There is no small reproduction: the truncation only shows for a value past 4 GiB, which
+// for an offset means a file past 4 GiB. So this lives in the gated tier with #267's
+// large-file test, and the signal is the clock. The two answers are not close: on the
+// shipped 30-patch build the same 4.50 GiB document took 19,177 ms to open as a stream and
+// 0.9 ms as a classic table. A second is a threshold nothing can reach by being slow.
+void test_large_xref_stream_opens_from_its_table() {
+    const char* dir = std::getenv("MEGAPDF_LARGE_FIXTURES");
+    if (dir == nullptr || *dir == 0) {
+        std::printf("large xref stream: skipped -- set MEGAPDF_LARGE_FIXTURES to run it (#270)\n");
+        return;
+    }
+    std::error_code ec;
+    double table_ms = 0, stream_ms = 0;
+    int table_pages = 0, stream_pages = 0;
+    struct Shape { const char* file; double* ms; int* pages; };
+    const Shape shapes[] = {
+        {"huge-4_5gb.pdf", &table_ms, &table_pages},
+        {"huge-4_5gb-xrefstream.pdf", &stream_ms, &stream_pages},
+    };
+    for (const Shape& s : shapes) {
+        const std::string path = std::string(dir) + "/" + s.file;
+        if (!std::filesystem::exists(path, ec)) {
+            std::printf("large xref stream: skipped %s -- not in %s\n", s.file, dir);
+            return;
+        }
+        const auto started = std::chrono::steady_clock::now();
+        FPDF_DOCUMENT doc = FPDF_LoadDocument(path.c_str(), nullptr);
+        *s.pages = doc == nullptr ? 0 : FPDF_GetPageCount(doc);
+        *s.ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
+        check(doc != nullptr, std::string("large xref stream: ") + s.file + " opens");
+        if (doc != nullptr) FPDF_CloseDocument(doc);
+    }
+    std::printf("large xref stream: classic table %.1f ms, cross-reference stream %.1f ms (PDFium patches %d)\n",
+                table_ms, stream_ms, MEGAPDF_PDFIUM_PATCHES);
+    check(table_pages > 100 && stream_pages == table_pages,
+          "large xref stream: both shapes of the document have the same pages",
+          std::to_string(table_pages) + " and " + std::to_string(stream_pages));
+    check(stream_ms < 1000.0,
+          "large xref stream: a document past 4 GiB opens from its cross-reference stream, "
+          "not by rebuilding one (#270)",
+          std::to_string(static_cast<int>(stream_ms)) + " ms against " +
+              std::to_string(static_cast<int>(table_ms)) + " ms for the same document with a table");
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -5359,6 +5408,7 @@ int main(int argc, char** argv) {
     test_redaction_clears_undo(argv[1]);
     test_xref_entries_are_findable(argv[1]);
     test_large_file_xref();
+    test_large_xref_stream_opens_from_its_table();
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
