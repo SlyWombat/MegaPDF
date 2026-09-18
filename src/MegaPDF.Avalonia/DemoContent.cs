@@ -72,7 +72,15 @@ internal static class DemoContent
         (ForLanguage("Field Trip Permission.pdf", "Autorisation de sortie scolaire.pdf", "Autorisation de sortie scolaire.pdf"),
          ForLanguage("Downloads", "Téléchargements", "Téléchargements")),
         (ForLanguage("Insurance Claim Form.pdf", "Formulaire de réclamation.pdf", "Formulaire de réclamation.pdf"),
-         ForLanguage("iCloud Drive", "iCloud Drive", "iCloud Drive")),
+         // The one row whose place is not the same on both of this project's desktops.
+         // "iCloud Drive" is where a Mac keeps a file and is right in the Mac listing's
+         // home shot; on a Linux listing it advertises an Apple service the app cannot
+         // reach, in a screenshot whose whole job is to show the app on this platform
+         // (#254 A1). The macOS value is untouched, so the signed-off Mac set is
+         // unchanged byte for byte.
+         OperatingSystem.IsLinux()
+             ? ForLanguage("Desktop", "Bureau", "Bureau")
+             : ForLanguage("iCloud Drive", "iCloud Drive", "iCloud Drive")),
     ];
 
     private static string ForLanguage(string english, string frenchCanadian, string french)
