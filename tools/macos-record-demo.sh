@@ -130,11 +130,16 @@ sleep 1
 
 RAW="$OUT/macos-$LANG_TAG-$THEME-recorded-raw.mov"
 rm -f "$RAW"
-# -V is a ceiling, not the length: the recorder is stopped when the story ends.
-# Waiting it out held the finished page for the fifteen-odd seconds left over,
-# which the time compression then turned into seven seconds of a still picture
-# at the end of a thirty-second preview.
-screencapture -v -x -V 120 -R "$WX,$((WY + 28)),1920,1080" "$RAW" &
+# screencapture cannot be stopped. SIGINT it ignores — it runs the full -V
+# either way — and SIGTERM kills it and takes the unfinalised file with it,
+# both measured on this machine. So -V is a ceiling with room to spare, the
+# wall clock says how long the story actually took, and the cut below keeps
+# exactly that. Leaving the whole take in was worth seeing: the story runs
+# about forty seconds, the recorder ran to 120, and the time compression then
+# fitted two minutes into thirty seconds — a preview at four times speed.
+CEILING=90
+REC_T0=$(python3 -c "import time; print(time.time())")
+screencapture -v -x -V "$CEILING" -R "$WX,$((WY + 28)),1920,1080" "$RAW" &
 REC=$!
 sleep 3
 
@@ -159,14 +164,22 @@ key return; sleep 1.3
 key esc; sleep 3.0                                     # close find, hold the finished page
 # -------------------------------------------------------------------------
 
-# SIGINT is how screencapture -v is told to stop and finalise the file; it is
-# what Ctrl-C does when a person runs it.
-kill -INT "$REC" 2>/dev/null || true
+# A second past the last step, so the finished page gets a beat. Measured from
+# the fork rather than from the file's own zero, which is a little later still
+# — the difference goes on the same end and is wanted there.
+TAKE=$(python3 -c "import time; print(round(time.time() - $REC_T0 + 1.0, 2))")
+echo "story took ${TAKE}s of a ${CEILING}s ceiling"
 wait "$REC" || true
 sleep 2
+python3 -c "import sys; sys.exit(0 if $TAKE < $CEILING - 2 else 1)" || {
+    echo "the story reached the recorder's ceiling — the take is cut short; raise CEILING" >&2
+    exit 1
+}
 
 DEMO="$OUT/macos-$LANG_TAG-$THEME-recorded-demo.mp4"
-ffmpeg -v error -y -ss 1.5 -i "$RAW" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$DEMO"
+# -t rather than -to: with -ss as an input option the two mean different
+# things, and a duration is the one that is unambiguous.
+ffmpeg -v error -y -ss 1.5 -t "$(python3 -c "print(round($TAKE - 1.5, 2))")" -i "$RAW" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$DEMO"
 DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$DEMO")
 FACTOR=$(python3 -c "print(min(1.0, 29.5 / float('$DUR')))")
 PREVIEW="$OUT/macos-$LANG_TAG-$THEME-recorded-preview.mp4"
