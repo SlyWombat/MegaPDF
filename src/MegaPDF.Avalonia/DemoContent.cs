@@ -40,6 +40,41 @@ internal static class DemoContent
     internal static string RedactedWord => ForLanguage(
         english: "customer named", frenchCanadian: "client nommé", french: "client nommé");
 
+    /// <summary>
+    /// What the demo document is called in a capture.
+    ///
+    /// The fixture on disk is demo.pdf / demo-fr.pdf, and that name is in the status
+    /// line of every shot that has a document open — beside a home shot whose recents
+    /// said "Contrat de location.pdf". One set, two names for the same file (#146 §3).
+    /// The capture script copies the fixture to this name before it opens it.
+    /// </summary>
+    internal static string DocumentFileName => ForLanguage(
+        english: "Rental Agreement.pdf",
+        frenchCanadian: "Contrat de location.pdf",
+        french: "Contrat de location.pdf");
+
+    /// <summary>
+    /// The rows the home screenshot shows (#146 §3): a name and the place under it.
+    ///
+    /// Made up rather than read from the machine, for the reason iOS's demoRecents
+    /// gives: a capture has to look the same every time it is taken, and the machine's
+    /// own list is whatever it last opened — which on the capture Mac was a path
+    /// through the sandbox container. The first row is the document the rest of the
+    /// set is about; the other two are there so the list is a list.
+    ///
+    /// The place lines use the same separator the real rows do, so nothing about the
+    /// shot is a special case in the view.
+    /// </summary>
+    internal static IReadOnlyList<(string Name, string Location)> Recents =>
+    [
+        (DocumentFileName,
+         ForLanguage("Documents › Clients", "Documents › Clients", "Documents › Clients")),
+        (ForLanguage("Field Trip Permission.pdf", "Autorisation de sortie scolaire.pdf", "Autorisation de sortie scolaire.pdf"),
+         ForLanguage("Downloads", "Téléchargements", "Téléchargements")),
+        (ForLanguage("Insurance Claim Form.pdf", "Formulaire de réclamation.pdf", "Formulaire de réclamation.pdf"),
+         ForLanguage("iCloud Drive", "iCloud Drive", "iCloud Drive")),
+    ];
+
     private static string ForLanguage(string english, string frenchCanadian, string french)
     {
         var culture = CultureInfo.CurrentUICulture;

@@ -68,21 +68,29 @@ capture() {
     # UI test left behind (#100).
     xcrun simctl uninstall "$udid" com.megapdf.ios 2>/dev/null || true
     xcrun simctl install "$udid" "$APP"
-    xcrun simctl ui "$udid" appearance light || true
-    for state in home viewer search sign draw text text-edit; do
-        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
+    shot() {   # shot <state> <dir> <suffix>
+        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$1" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
         sleep 8
-        xcrun simctl io "$udid" screenshot "$OUT/$label-$state.png" >/dev/null
+        xcrun simctl io "$udid" screenshot "$OUT/$2/$label-$1$3.png" >/dev/null
         xcrun simctl terminate "$udid" com.megapdf.ios || true
         sleep 1
+    }
+
+    mkdir -p "$OUT/listing" "$OUT/review"
+    xcrun simctl ui "$udid" appearance light || true
+    # The six listing slots, in the order docs/app-store-listing.md gives them.
+    for state in viewer text search sign draw home; do
+        shot "$state" listing ""
+    done
+    # Everything else is for review, in its own folder. The dry run's point: a
+    # folder of nine images next to a table of six slots is how a review shot ends
+    # up on a store listing (#146 §3).
+    for state in text-edit redact; do
+        shot "$state" review ""
     done
     xcrun simctl ui "$udid" appearance dark || true
-    for state in search sign; do
-        xcrun simctl launch "$udid" com.megapdf.ios -screenshot "$state" ${LANG_ARGS[@]+${LANG_ARGS[@]+"${LANG_ARGS[@]}"}} >/dev/null
-        sleep 8
-        xcrun simctl io "$udid" screenshot "$OUT/$label-$state-dark.png" >/dev/null
-        xcrun simctl terminate "$udid" com.megapdf.ios || true
-        sleep 1
+    for state in search sign redact; do
+        shot "$state" review "-dark"
     done
     xcrun simctl ui "$udid" appearance light || true
     xcrun simctl shutdown "$udid" || true
@@ -90,4 +98,5 @@ capture() {
 
 capture 'iPhone .*Pro Max' iphone-6_9
 capture 'iPad Pro 13' ipad-13
-ls -la "$OUT"
+echo "listing slots:"; ls -la "$OUT/listing"
+echo "review shots:"; ls -la "$OUT/review"

@@ -150,6 +150,32 @@ public partial class App : Application
                 }, TimeSpan.FromSeconds(1));
                 return true;
 
+            // The same added text, with nothing selected: the store slot (#146 §3).
+            //
+            // `textbox` selects the box on purpose, to bring the pickers onto the toolbar
+            // for a #144 review shot. A listing image is a different job: the selection
+            // border is drawn tight to the object's own bounds, so on a French name it
+            // runs straight through the acute and grave marks — which in a French store
+            // screenshot reads as the accent bug this project has already been bitten by
+            // (#160), even though the glyphs underneath are perfect. Windows deselects
+            // for the same reason. So this one places the text and lets go of it.
+            case "text":
+                viewModel.AddTextBox(0, new PdfPoint(72, 405), DemoContent.PrintedName);
+                DispatcherTimer.RunOnce(() =>
+                {
+                    if (viewModel.BoxesOn(0).LastOrDefault() is null)
+                    {
+                        Console.Error.WriteLine("::error::--screenshot-state text: the text box was not added.");
+                        return;
+                    }
+                    viewModel.ClearSelection();
+                    if (viewModel.Selection is not null)
+                        Console.Error.WriteLine(
+                            "::error::--screenshot-state text: the box is still selected, so its "
+                            + "border will cut across the name's accents.");
+                }, TimeSpan.FromSeconds(1));
+                return true;
+
             // Redact (#173): the tool armed and a line of the demo document marked, which is
             // the state the feature has to be legible in — a translucent box you can still
             // read through, over text you are about to remove. The mark is placed through
@@ -284,6 +310,26 @@ public partial class App : Application
                 }, TimeSpan.FromSeconds(1));
                 return true;
 
+            // The home screen with a recents list (#146 §3). The machine's own list is
+            // whatever it last opened — on the capture Mac, a path through the sandbox
+            // container — so the rows come from DemoContent, as iOS's do.
+            case "home":
+                if (viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state home was given a document to open. The home "
+                        + "shot is the empty window; pass no .pdf.");
+                    return false;
+                }
+                viewModel.ShowDemoRecents(DemoContent.Recents);
+                if (!viewModel.HasRecents)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state home: the recents list is empty.");
+                    return false;
+                }
+                Console.WriteLine($"screenshot-state home: {viewModel.Recents.Count} recent row(s)");
+                return true;
+
             default:
                 Console.Error.WriteLine($"::error::unknown --screenshot-state '{state}'");
                 return false;
@@ -345,6 +391,7 @@ public partial class App : Application
     /// screen draws it, for review shots (#144). One otherwise, as before.
     /// </summary>
     private static double RenderScale = 1;
+
 
     /// <summary>Renders the window as it stands to a PNG; never throws.</summary>
     private static void RenderWindow(TopLevel window, string outPath)

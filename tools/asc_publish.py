@@ -10,7 +10,7 @@ and the build. Idempotent: run it again and it replaces what is there.
     tools/asc_publish.py status                      what the record looks like now
     tools/asc_publish.py version 1.7.0               name the editable version (or create it)
     tools/asc_publish.py copy                        names, subtitles, descriptions, keywords, URLs
-    tools/asc_publish.py screenshots <captures-dir>  <dir>/ios-screenshots/<lang>/*.png
+    tools/asc_publish.py screenshots <captures-dir>  <dir>/{ios,macos}-screenshots/<lang>/*.png
     tools/asc_publish.py previews <captures-dir>     <dir>/ios/<lang>/*-preview.mp4
     tools/asc_publish.py review [attachment...]      notes + contact, plus files for the reviewer
     tools/asc_publish.py build [<build number>]      attach the newest processed build (or the given one)
@@ -44,7 +44,9 @@ REPO_LOCALE = {"en-CA": "en", "fr-FR": "fr"}
 # is a platform of the same record: ASC_PLATFORM=MAC_OS switches the version,
 # the slot types, and where the captures come from (tools/mac-mini.md).
 if PLATFORM == "MAC_OS":
-    SHOT_ORDER = ["02-signed", "03-find", "04-add-text", "05-form-focus", "01-empty"]
+    # The set tools/macos-store-captures.sh produces, in listing order; the old
+    # five were the #144 review shots and had no Redact in them (#146 §3).
+    SHOT_ORDER = ["01-viewer", "02-text", "03-search", "04-sign", "05-redact", "06-home"]
     SHOT_SETS = {"light": "APP_DESKTOP"}
     PREVIEW_SETS = {"macos-light-recorded": "DESKTOP"}
 else:
@@ -279,8 +281,11 @@ def cmd_screenshots(captures):
     v = editable_version()
     locs = version_localizations(v["id"])
     for locale in LOCALES:
-        folder = (os.path.join(captures, "macos", "listing") if PLATFORM == "MAC_OS"
-                  else os.path.join(captures, "ios-screenshots", REPO_LOCALE.get(locale, locale)))
+        # One folder per listing language on both platforms: the Mac set used to be a
+        # single folder, from when it was English only (#146 §3).
+        repo_locale = REPO_LOCALE.get(locale, locale)
+        folder = (os.path.join(captures, "macos-screenshots", repo_locale) if PLATFORM == "MAC_OS"
+                  else os.path.join(captures, "ios-screenshots", repo_locale))
         if locale not in locs or not os.path.isdir(folder):
             print(f"  {locale}: no localization or no folder {folder}; skipped")
             continue
