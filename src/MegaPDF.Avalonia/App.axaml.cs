@@ -373,6 +373,19 @@ public partial class App : Application
                     Console.WriteLine(main.DescribeToolbar());
                     Console.WriteLine(main.DescribeMenuBar());
                 }
+                if (RenderScale != 1 && OverlaysOnThePage(desktop.MainWindow?.DataContext as MainViewModel))
+                {
+                    Console.Error.WriteLine(
+                        "::error::--scale 2 draws page overlays in the wrong place, so this capture "
+                        + "would be a wrong image rather than a sharp one. Measured on the find state "
+                        + "(#146 §3): every search highlight and redaction mark lands at exactly twice "
+                        + "its offset and twice its size, while the toolbar, the page and the text are "
+                        + "identical — so the highlights float in the grey beside the page. Nothing in "
+                        + "the window is positioned differently; only the offscreen 2x render is. "
+                        + "Capture at 1x, or use a display that is actually Retina.");
+                    desktop.Shutdown(1);
+                    return;
+                }
                 RenderWindow(window, outPath);
             }
             if (ScreenshotDialog is { } dialog)
@@ -389,9 +402,24 @@ public partial class App : Application
     /// <summary>
     /// --scale 2: render at twice the window's DIP size (192 DPI), the way a Retina
     /// screen draws it, for review shots (#144). One otherwise, as before.
+    ///
+    /// Only usable for states with nothing drawn over the page — see the refusal in
+    /// <see cref="CaptureAndExit"/> and <see cref="OverlaysOnThePage"/>.
     /// </summary>
     private static double RenderScale = 1;
 
+    /// <summary>
+    /// Whether anything is drawn over the page by margin: a search highlight, a mark,
+    /// or the per-line busy bar. These are what the 2x render misplaces (#146 §3).
+    ///
+    /// Asked of the state that is actually on screen rather than of the state name, so
+    /// a capture posed some other way is covered too.
+    /// </summary>
+    private static bool OverlaysOnThePage(MainViewModel? viewModel) =>
+        viewModel is not null
+        && viewModel.Pages.Any(page => page.Highlights.Count > 0
+                                       || page.RedactionMarks.Count > 0
+                                       || page.ShowsBusyOnLine);
 
     /// <summary>Renders the window as it stands to a PNG; never throws.</summary>
     private static void RenderWindow(TopLevel window, string outPath)
