@@ -22,17 +22,18 @@ So this does two things and neither of them is clever:
    reviewed by the same checks and on the same contact sheet as the stills.
 
 The gate is run **one language at a time**, and that is deliberate. A clip is
-time-compressed to fit 30 s from however long its own take ran, and the takes
-are not the same length — the French name takes longer to type — so still 12
-of the English clip and still 12 of the fr-CA clip are not the same moment and
-have no business being compared. Run per language, the cross-language checks
-stand down and say so, and the one left doing real work is `chrome`: inside a
-clip the posed status bar is the same pixels in every frame, so a notification
-or a banner arriving halfway through has twenty-odd siblings to disagree with.
+time-compressed to fit 30 s from however long its own take ran, and no two
+takes are the same length — the six 2.0 iOS ones ran 50.6 s to 53.0 s — so
+still 12 of the English clip and still 12 of the fr-CA clip are not the same
+moment and have no business being compared. Run per language, the
+cross-language checks stand down and say so, and the one left doing real work
+is `chrome`: inside a clip the posed status bar is the same pixels in every
+frame, so a notification or a banner arriving halfway through has twenty-nine
+siblings to disagree with.
 
-Neither replaces the eye. A clip is cut into twenty-odd stills precisely so
-that a person can look at each one, which is what #146 §3 asks for; this
-makes that a page of thumbnails instead of a scrubber.
+Neither replaces the eye. A clip is cut into thirty stills precisely so that a
+person can look at each one, which is what #146 §3 asks for; this makes that a
+page of thumbnails instead of a scrubber.
 
 Nothing is uploaded, and nothing is written next to the clip.
 """
