@@ -15,6 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxkbcommon0 libdbus-1-3 libfontconfig1 libfreetype6 \
         mesa-utils libgbm1 libegl1 \
         socat netcat-openbsd imagemagick \
+        # tools/capture-gate reads the screen for its person/language/privacy
+        # checks, and reports them as `skip` without these — a gate that stands
+        # a check down quietly is worse than no gate (#146 §3).
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
