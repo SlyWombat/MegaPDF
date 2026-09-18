@@ -10,6 +10,10 @@ gains 1.3 through 1.7 in the same release.
 
 *The French is awaiting a francophone review — see [README](README.md).*
 
+*The redaction section is the newest of it: written for #254 against the
+approved store blocks and the #173 strings, and not yet read by a
+francophone. It belongs with the #242 findings and §2 of #146.*
+
 ---
 
 ## English
@@ -36,6 +40,57 @@ otherwise MegaPDF substitutes a similar standard font and tells you it did.
 
 **New on iPhone, iPad and Android:** correcting the document's own text at all.
 Tap a line, retype it, and Undo puts the original back exactly.
+
+### Redact, and it really is gone
+
+Whiteout covers, and has only ever covered: what sits under it stays in the
+file, where another app can select it, copy it, search for it. That is the
+well-documented way a redaction fails, and it is why 2.0 has a second tool.
+
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it
+out of the file rather than covering it over. What was underneath is gone: no
+other app can copy it or search for it.
+
+Drag a box, or drag across text to mark the words. A mark is translucent with an
+outline, so you can still read what you are about to remove, and until you save
+it is only a mark: move it, select it, undo it. **Nothing is removed until you
+save.** Save then asks — *Redaction permanently removes the marked content. This
+can't be undone after saving* — and offers **Save as a copy**, named
+*…-redacted*, as the default. Afterwards a short summary says what went:
+*1 area redacted: 13 characters*.
+
+What comes out is the content, not the picture of it. Letters are removed from
+the page's own text, whole letters at a time, and a line only partly covered is
+rewritten so the words beside it do not move. Copies of the same text drawn
+underneath go too. Inside a picture it is the pixels themselves that are
+overwritten before the picture is re-encoded, a scan included. Vector drawing,
+annotations, form fields and links reaching into the area are removed, and so
+are the places text can hide off the page: the document's information,
+bookmarks, the text a screen reader would read, page labels. The undo history
+and the crash-recovery journal keep nothing of it either. What is left is a
+plain black box with no annotation behind it.
+
+None of that is taken on trust. The tests save the file and then go looking for
+what was removed — in the text the engine extracts, in every decompressed
+stream, in the raw bytes as ASCII, as UTF-16 and as PDF hex digits, in the
+document information, the bookmarks, every annotation and every link address, and
+in the pixels inside the area — over the redaction fixtures and across a whole
+corpus, where the requirement is 0 leaks, 0 crashes, 0 hangs and no change to
+the page outside the areas.
+
+**It refuses rather than half-finishes.** Some documents draw part of a page from
+a shared block MegaPDF cannot take apart safely. Marking inside one gets
+*Nothing was removed* and the reason: your marks stay where they are and your
+file is untouched. A file that looks redacted and is not would be worse than no
+feature at all. A document whose owner does not allow changes cannot be redacted
+either, and the tool says so instead of failing quietly.
+
+**Whiteout stays, and now says what it is.** On Windows, the Mac and Linux it is
+still the quick way to cover something on a form — *Whiteout* on Windows,
+*Cover* on the Mac and Linux — and its tooltip and its first-use hint now say
+that it covers without removing, and send you to Redact for the rest. iPhone,
+iPad and Android have Redact and no whiteout, so there is nothing there to
+confuse it with.
 
 ### Nothing gets lost
 
@@ -157,6 +212,7 @@ Android was at 1.2.0, so 2.0 also brings everything the other platforms got in
 ### iPhone and iPad
 
 - Correct the document's own text.
+- Redaction.
 - Protected PDFs.
 - The bottom toolbar and the More menu.
 - Busy feedback and the page warning.
@@ -192,6 +248,63 @@ MegaPDF utilise une police standard semblable et vous le dit.
 **Nouveau sur iPhone, iPad et Android :** corriger le texte du document, tout
 simplement. Touchez une ligne, retapez-la, et Annuler remet l'original
 exactement.
+
+### Caviarder, et c'est vraiment retiré
+
+Le correcteur masque, et n'a jamais fait que masquer : ce qui se trouve dessous
+reste dans le fichier, où une autre application peut le sélectionner, le copier,
+le chercher. C'est la façon bien connue dont un caviardage rate, et c'est
+pourquoi la 2.0 ajoute un second outil.
+
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le
+retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus :
+aucune autre application ne peut le copier ni le chercher.
+
+Glissez pour tracer une zone, ou glissez sur du texte pour en marquer les mots.
+Une marque est translucide, avec un contour : vous lisez encore ce que vous allez
+retirer, et tant que vous n'enregistrez pas, ce n'est qu'une marque —
+déplacez-la, sélectionnez-la, annulez-la. **Rien n'est retiré tant que vous
+n'enregistrez pas.** L'enregistrement pose alors la question — *Le caviardage
+retire définitivement le contenu marqué. Impossible d'annuler après
+l'enregistrement.* — et propose **Enregistrer une copie**, nommée
+*…-caviarde*, comme choix par défaut. Ensuite, un court résumé dit ce qui est
+parti : *1 zone caviardée : 13 caractères*.
+
+Ce qui sort, c'est le contenu, pas son image. Les lettres sont retirées du texte
+de la page, des lettres entières à la fois, et une ligne qui n'est couverte
+qu'en partie est réécrite pour que les mots d'à côté ne bougent pas. Les copies
+du même texte dessinées dessous partent aussi. Dans une image, ce sont les
+pixels eux-mêmes qui sont réécrits avant que l'image soit ré-encodée, une
+numérisation comprise. Les tracés vectoriels, les annotations, les champs de
+formulaire et les liens qui touchent la zone sont retirés, et les endroits où le
+texte peut se cacher hors de la page partent avec : les informations du document,
+les signets, le texte que lirait un lecteur d'écran, les étiquettes de page.
+L'historique d'annulation et le journal de récupération n'en gardent rien non
+plus. Il reste un rectangle noir uni, sans annotation derrière.
+
+Rien de cela n'est tenu pour acquis. Les tests enregistrent le fichier, puis
+vont chercher ce qui a été retiré — dans le texte que le moteur extrait, dans
+chaque flux décompressé, dans les octets bruts en ASCII, en UTF-16 et en chiffres
+hexadécimaux PDF, dans les informations du document, les signets, chaque annotation
+et chaque adresse de lien, et dans les pixels à l'intérieur de la zone — sur les
+fichiers d'essai du caviardage et sur tout un corpus, où l'exigence est de 0
+fuite, 0 plantage, 0 blocage et aucun changement de la page hors des zones.
+
+**Il refuse plutôt que de faire les choses à moitié.** Certains documents
+dessinent une partie de la page à partir d'un bloc partagé que MegaPDF ne peut
+pas défaire sans risque. Marquer à l'intérieur donne *Rien n'a été retiré* et la
+raison : vos marques restent où elles sont et votre fichier n'est pas touché. Un
+fichier qui a l'air caviardé sans l'être serait pire que pas de fonction du
+tout. Un document dont le propriétaire n'autorise pas les modifications ne peut
+pas être caviardé non plus, et l'outil le dit au lieu d'échouer en silence.
+
+**Le correcteur reste, et dit maintenant ce qu'il est.** Sous Windows, sur le
+Mac et sous Linux, il demeure la façon rapide de masquer quelque chose sur un
+formulaire — *Correcteur* sous Windows, *Masquer* sur le Mac et sous Linux — et
+son infobulle et son conseil de première utilisation disent maintenant qu'il
+masque sans rien retirer, et renvoient à Caviarder pour le reste. L'iPhone,
+l'iPad et Android ont Caviarder et pas de correcteur : il n'y a rien là-bas avec
+quoi le confondre.
 
 ### Rien ne se perd
 
@@ -326,6 +439,7 @@ plateformes ont reçu de la 1.3 à la 1.7 :
 ### iPhone et iPad
 
 - Corriger le texte du document.
+- Le caviardage.
 - Les PDF protégés.
 - La barre d'outils du bas et le menu Plus.
 - Les indicateurs d'activité et l'avertissement de page.

@@ -88,6 +88,7 @@ Play. The issues behind them:
 | #149 | text-heavy pages search and extract in linear time |
 | #150 | `/UserUnit` honoured, so banner-size pages measure and print at their real size |
 | #151, #152 | pages with large images, and colour-managed pages, draw several times faster |
+| #173 | redact, and the marked content is out of the file rather than covered; whiteout says it only covers |
 
 ## House rules these follow
 
