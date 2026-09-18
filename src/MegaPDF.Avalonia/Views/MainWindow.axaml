@@ -559,24 +559,42 @@
 
       <Border IsVisible="{Binding ShowEmptyState}"
               Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Spacing="{DynamicResource SpaceL}" MaxWidth="420">
-          <TextBlock Text="MegaPDF" FontSize="{DynamicResource TypeTitle}" FontWeight="SemiBold"
-                     HorizontalAlignment="Center" />
-          <!-- TextAlignment as well as HorizontalAlignment: the first centres the block,
-               the second centres the lines in it. The French tagline wraps at every
-               width, and with only the block centred its second line sat flush left
-               under a centred title and above a centred button (#158). -->
-          <TextBlock Text="{x:Static loc:Strings.EmptyStateTagline}"
-                     Opacity="0.75" HorizontalAlignment="Center"
-                     TextAlignment="Center" TextWrapping="Wrap" />
-          <Button Name="EmptyOpenButton" Content="{x:Static loc:Strings.OpenAPdfEllipsis}"
-                  HorizontalAlignment="Center" />
+        <!-- A grid rather than one stack, so the list is bounded by the space that is
+             left rather than by its own idea of how tall it is (#237).
 
-          <TextBlock Text="{x:Static loc:Strings.Recent}" FontWeight="SemiBold" Margin="0,16,0,0"
-                     IsVisible="{Binding HasRecents}" />
-          <ListBox Name="RecentList" ItemsSource="{Binding Recents}"
-                   IsVisible="{Binding HasRecents}" MaxHeight="200"
+             As one centred stack, the whole block took its natural height whatever the
+             window's was: at the 480×360 minimum the recents ran on under the status
+             line and off the bottom edge, with the scrollbar track running past the
+             status line too. Here the fixed part is measured first and the list takes
+             the remainder, so it ends where the viewport does and scrolls inside it.
+             The grid is centred, so in any window from about 480 DIP tall — 460 in
+             English, 480 in French where the tagline takes a second line, against the
+             700 of the smallest window this is captured at — the list reaches its
+             200 DIP ceiling and the block sits exactly where it always did. -->
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center"
+              MaxWidth="420" RowDefinitions="Auto,*">
+          <StackPanel Grid.Row="0" Spacing="{DynamicResource SpaceL}">
+            <TextBlock Text="MegaPDF" FontSize="{DynamicResource TypeTitle}" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" />
+            <!-- TextAlignment as well as HorizontalAlignment: the first centres the block,
+                 the second centres the lines in it. The French tagline wraps at every
+                 width, and with only the block centred its second line sat flush left
+                 under a centred title and above a centred button (#158). -->
+            <TextBlock Text="{x:Static loc:Strings.EmptyStateTagline}"
+                       Opacity="0.75" HorizontalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" />
+            <Button Name="EmptyOpenButton" Content="{x:Static loc:Strings.OpenAPdfEllipsis}"
+                    HorizontalAlignment="Center" />
+
+            <TextBlock Text="{x:Static loc:Strings.Recent}" FontWeight="SemiBold" Margin="0,16,0,0"
+                       IsVisible="{Binding HasRecents}" />
+          </StackPanel>
+          <!-- Margin, not the grid's RowSpacing, and the same 16 the stack above spaces
+               by: an invisible child contributes no margin, so with no recents to show
+               the block is exactly the stack again. -->
+          <ListBox Grid.Row="1" Name="RecentList" ItemsSource="{Binding Recents}"
+                   IsVisible="{Binding HasRecents}" MaxHeight="200" Margin="0,16,0,0"
+                   VerticalAlignment="Top"
                    Background="Transparent">
             <ListBox.ItemTemplate>
               <DataTemplate>
@@ -600,7 +618,7 @@
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
-        </StackPanel>
+        </Grid>
       </Border>
     </Panel>
 
