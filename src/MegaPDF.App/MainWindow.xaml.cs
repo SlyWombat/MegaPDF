@@ -357,6 +357,11 @@ public sealed partial class MainWindow : Window
             Margin = new Thickness(bounds.X * toDip - 6, bounds.Y * toDip - 8, 0, 0),
             MinWidth = Math.Max(bounds.Width * toDip + 28, 140),
             AcceptsReturn = false,
+            // The words here are the document's, and Windows would check them against
+            // the display language rather than the document's: on an English desktop
+            // every French surname came back red-underlined (#212). Nothing in a PDF
+            // is ours to mark as misspelled.
+            IsSpellCheckEnabled = false,
         };
 
         TextStyleChoice? ChosenStyle() => style is null ? null : PickedTextStyle(style);
@@ -1414,7 +1419,7 @@ public sealed partial class MainWindow : Window
     {
         SignaturesFlyout.Hide();
 
-        var input = new TextBox { Text = item.Name, PlaceholderText = Strings.SignatureNamePlaceholder };
+        var input = new TextBox { Text = item.Name, PlaceholderText = Strings.SignatureNamePlaceholder, IsSpellCheckEnabled = false };
         input.SelectAll();
         var dialog = new ContentDialog
         {
@@ -1490,7 +1495,7 @@ public sealed partial class MainWindow : Window
     private async void OnTypeSignatureClicked(object sender, EventArgs e)
     {
         SignaturesFlyout.Hide();
-        var input = new TextBox { PlaceholderText = Strings.YourNamePlaceholder, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Script"), FontSize = 24 };
+        var input = new TextBox { PlaceholderText = Strings.YourNamePlaceholder, FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Segoe Script"), FontSize = 24, IsSpellCheckEnabled = false };
         var dialog = new ContentDialog
         {
             Title = Strings.TypeSignatureTitle,
@@ -1564,7 +1569,7 @@ public sealed partial class MainWindow : Window
         };
         drawHost.PointerCanceled += (_, _) => currentStroke = null;
 
-        var nameInput = new TextBox { PlaceholderText = Strings.SignatureNamePlaceholder, Text = Strings.MySignature };
+        var nameInput = new TextBox { PlaceholderText = Strings.SignatureNamePlaceholder, Text = Strings.MySignature, IsSpellCheckEnabled = false };
         var clear = new Button { Content = Strings.Clear };
         clear.Click += (_, _) => strokes.Children.Clear();
 

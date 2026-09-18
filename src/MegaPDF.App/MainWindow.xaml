@@ -558,6 +558,7 @@
                         x:Name="FindQuery"
                         x:Uid="FindQuery"
                         AutomationProperties.AutomationId="FindQuery"
+                        IsSpellCheckEnabled="False"
                         MinWidth="180"
                         TextChanged="OnFindQueryChanged" />
                     <TextBlock
