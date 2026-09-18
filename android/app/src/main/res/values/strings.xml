@@ -204,10 +204,6 @@
          not only visible (#173) -->
     <string name="tool_on">On</string>
     <string name="tool_off">Off</string>
-    <!-- Toolbar (#173): tooltip -->
-    <string name="redact_tip">Remove content from the file</string>
-    <!-- Status hint while the Redact tool is armed (#173) -->
-    <string name="redact_hint">Drag across what you want removed, or select text</string>
     <!-- Screen-reader name of a mark on the page (#173) -->
     <string name="redact_mark_name">Marked for redaction</string>
     <!-- Announced after a mark is placed (#173) -->
