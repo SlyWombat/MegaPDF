@@ -28,6 +28,7 @@ runs again in CI on every push.
 | `tools/linux/flatpak/flathub/…yml.in` | the manifest as Flathub would build it, with the `sources:` block left to be filled in. |
 | `tools/linux/make-flathub-manifest.sh` | fills it in, from a tarball's URL and checksum (or its path, for a dry run). |
 | `tools/linux/build-flathub-flatpak.sh` | builds *that* manifest, so the one Flathub runs is the one that has been run. |
+| `tools/linux/qa/` | the desktop-session rigs: a headless session with a named portal backend, the file-dialog check, and the recent-document check inside and outside the sandbox. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
@@ -312,13 +313,72 @@ following can be decided here.
 
    `--portal-print-check` prints the stage it reached: `Accepted` means the portal took
    the document and the dialog is open, which is everything the app is responsible for.
-2. **The file-dialog portal has to be confirmed by hand.** Avalonia chains the XDG portal
-   ahead of its own fallback, but which one it picks is only observable when a dialog
-   opens, and no headless check can tell them apart. One GNOME session, one Open, one
-   Save.
-3. **Recent documents will not reopen across a restart.** A file opened through the
-   portal is a handle in the document store, and the app records the path it was given.
-   Whether that path survives a restart depends on the portal's persistence, which the
-   app does not currently ask for. Worth checking in the same GNOME session as (2).
+2. **The file dialogs go through the portal. Confirmed, from a terminal.** This used to
+   say the choice "is only observable when a dialog opens, and no headless check can tell
+   them apart". It is observable twice over without anyone touching a mouse: a portal
+   dialog is a method call on the session bus, and Avalonia's own fallback makes no
+   D-Bus call at all.
+
+   ```sh
+   tools/linux/qa/filechooser-check.sh gtk artifacts/linux/MegaPDF     # or gnome, or kde
+   ```
+
+   brings up Xvfb, a window manager, `xdg-desktop-portal` and the backend named, opens
+   the app on a document, presses Ctrl+O and Ctrl+Shift+S into it, and reads
+   `dbus-monitor`. Measured on 2026-09-18, with both the GTK and the KDE backends:
+
+   ```
+   interface=org.freedesktop.portal.FileChooser; member=OpenFile
+   interface=org.freedesktop.impl.portal.FileChooser; member=OpenFile
+   interface=org.freedesktop.portal.FileChooser; member=SaveFile
+   interface=org.freedesktop.impl.portal.FileChooser; member=SaveFile
+   ```
+
+   The app calls the portal, the portal hands it to the backend, and the app gets its
+   `Response` on the path it predicted.
+
+   **What a machine still cannot do is work the dialog.** The one thing left for a person
+   is therefore not "which dialog is it" — that is answered — but "the dialog appears,
+   a file can be picked in it, and the app opens what came back". On a desktop with a
+   GNOME or KDE session:
+
+   ```
+   flatpak run ca.electricrv.MegaPDF        # then Ctrl+O, pick a PDF, then Ctrl+Shift+S
+   ```
+
+   The dialog that opens should be the desktop's own, not one drawn by the app.
+
+   One container finding worth keeping: `xdg-desktop-portal-gnome` 46 advertises
+   `org.freedesktop.impl.portal.FileChooser` through the deprecated `UseIn` key and then
+   answers `No such interface`, because its FileChooser needs a GNOME session behind it.
+   The call and the response are the app's side and are unaffected; the dialog is what
+   does not appear. The GTK and KDE backends implement it in the container.
+3. **A recent document does reopen across a restart.** This used to say it would not. It
+   does, and the check is one command:
+
+   ```sh
+   tools/linux/qa/recent-check.sh artifacts/linux/MegaPDF           # outside the sandbox
+   tools/linux/qa/recent-sandbox-check.sh artifacts/flatpak/ca.electricrv.MegaPDF.flatpak
+   ```
+
+   `org.freedesktop.portal.Documents.Add` plus `GrantPermissions` makes exactly what the
+   FileChooser portal makes when someone picks a file — the same store entry, the same
+   permission, the same path inside the sandbox — so the app can be handed the result of
+   a file dialog without one being operated. Measured 2026-09-18, **inside the Flatpak**:
+
+   - the app opens `/run/user/1000/doc/<id>/<name>.pdf` and records exactly that path,
+     with an Avalonia bookmark that wraps the same string and adds nothing;
+   - after the app has quit and started again, that path opens: `render-check: PASS`;
+   - after `xdg-document-portal` itself has been restarted — what a log out and back in
+     does to it — that path still opens: `render-check: PASS`. The document store is on
+     disk under `$XDG_DATA_HOME/flatpak/db/documents`, and the handle is in it;
+   - the same file by its **real** path is `No such file or directory` from inside the
+     sandbox, while the granted path lists normally. The permission is what is being
+     tested, not the filesystem.
+
+   **A caution for anyone repeating this.** `xdg-document-portal` keeps its store under
+   `$XDG_DATA_HOME`. A run that starts the portal under one `HOME` and restarts it under
+   another reads an empty database, every handle looks lost, and the wrong answer arrives
+   looking exactly like the right one. This is how the first run of the check said "NO".
 4. **`linux-arm64` is out** until the patched PDFium series builds it; `pdfium-build.yml`
    needs a `linux/arm64` entry first. The manifest and the `.deb` are x86-64 only.

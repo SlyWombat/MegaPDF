@@ -34,9 +34,12 @@ command: megapdf
 #
 #   --filesystem=home and every other blanket path. Opening and saving go through
 #              org.freedesktop.portal.FileChooser, which needs no permission here and
-#              gives the app exactly the file the person chose. See the runbook for
-#              what this costs: a document reopened from the Recent list is a portal
-#              handle, and handles do not survive a restart.
+#              gives the app exactly the file the person chose — watched on the bus,
+#              under the GTK and KDE backends (#254 A4, tools/linux/qa/). A document in
+#              the Recent list is a portal handle rather than a path, and those do
+#              survive: the same handle opens after the app restarts and after
+#              xdg-document-portal itself restarts, because the document store is on
+#              disk. An earlier note here said they did not; it was wrong.
 #   --share=network. MegaPDF makes no network connection. Leaving it out is what
 #              makes "no network access" true in the listing rather than a claim.
 #   --socket=cups / --filesystem=/run/cups. Printing inside the sandbox goes

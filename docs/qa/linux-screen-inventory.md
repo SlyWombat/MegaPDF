@@ -196,12 +196,77 @@ whole-document search, save and reopen:
 | 9.1 | The Flatpak's granted permissions are `ipc`, `x11`, `dri` and nothing else | ✅ |
 | 9.2 | A file in the real home is **not** readable from inside the sandbox | ✅ |
 | 9.3 | `org.freedesktop.portal.FileChooser` answers from inside the sandbox | ✅ |
-| 9.4 | Which provider a dialog actually uses | **hands** — Avalonia resolves portal-or-fallback when a dialog opens, and no startup inspection can tell them apart |
+| 9.4 | Which provider a dialog actually uses | ✅ — **the portal**, see below |
 | 9.5 | The third-party notices are in the package, beside the binary | ✅ |
 | 9.6 | The engine loads from `$ORIGIN` and nothing else | ✅ |
 | 9.7 | The `.deb` installs on a machine with no .NET, ICU or X libraries | ✅ |
 | 9.8 | The `.desktop` entry validates, offers `application/pdf`, and claims nothing | ✅ |
 | 9.9 | All nine hicolor icon sizes and the scalable icon are installed | ✅ — **this was broken; see the defects** |
+| 9.10 | A document opened through the portal reopens after the app restarts | ✅ |
+| 9.11 | …and after `xdg-document-portal` itself restarts | ✅ |
+
+### 9.4 — which dialog opens, settled (#254 A4)
+
+This row said "no startup inspection can tell them apart". True, and beside the point:
+the dialog does not have to be inspected at startup, it has to be watched when it opens.
+`tools/linux/qa/filechooser-check.sh <gnome|gtk|kde> <app-tree>` does that, and two
+independent things say the same answer.
+
+**The session bus.** A portal dialog is a method call; Avalonia's own fallback makes none.
+
+```
+interface=org.freedesktop.portal.FileChooser;      member=OpenFile
+interface=org.freedesktop.impl.portal.FileChooser; member=OpenFile
+interface=org.freedesktop.portal.FileChooser;      member=SaveFile
+interface=org.freedesktop.impl.portal.FileChooser; member=SaveFile
+```
+
+**The window list.** The dialog belongs to the *backend* process, not to MegaPDF:
+
+```
+0x0280000f  0 MegaPDF.MegaPDF                                Rental Agreement.pdf — MegaPDF
+0x02e00003  0 xdg-desktop-portal-gtk.Xdg-desktop-portal-gtk  Open a PDF
+0x02e02579  0 xdg-desktop-portal-gtk.Xdg-desktop-portal-gtk  Save a copy
+```
+
+and under KDE, with its own backend answering:
+
+```
+0x0260000a  0 xdg-desktop-portal-kde.xdg-desktop-portal-kde  Open a PDF — Portal
+```
+
+Both dialogs carry the titles MegaPDF passed — "Open a PDF", "Save a copy" — so the app
+is reaching the portal, and the portal is reaching the desktop.
+
+![The portal's file chooser over MegaPDF, in a Plasma session](linux-portal-file-dialog.png)
+
+Reached by clicking the toolbar's **Open** button with `xdotool`, in a real Plasma
+session: MegaPDF's window behind, the desktop's own file chooser in front, with its
+sidebar, its `PDF document` filter and its **Open files read-only** box — none of which
+MegaPDF draws or knows about.
+
+**What is still hands:** picking a file in that dialog and seeing the app open what came
+back. One Open and one Save on a real desktop; `tools/Linux-Packaging.md` has the
+command.
+
+### 9.10 and 9.11 — a recent document after a restart (#254 A4)
+
+`tools/linux/qa/recent-sandbox-check.sh <bundle.flatpak>` asks
+`org.freedesktop.portal.Documents` for a handle and grants it to the app, which is what
+the FileChooser portal does when someone picks a file, and then restarts things. Inside
+the sandbox:
+
+- the app records `/run/user/1000/doc/<id>/<name>.pdf`, with an Avalonia bookmark that
+  wraps the same string and adds nothing;
+- that path opens after the app has quit and started again;
+- it still opens after `xdg-document-portal` has been restarted, because the document
+  store is a database on disk;
+- the same file by its **real** path is `No such file or directory` from inside the
+  sandbox, while the granted path lists normally — so what is being measured is the
+  permission, not the filesystem.
+
+The packaging runbook and the Flatpak manifest both used to say handles did not survive a
+restart. They do; both have been corrected.
 
 ## 10. What the second desktop is for
 
