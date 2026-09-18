@@ -77,8 +77,13 @@ For the record, this is what the previous audit's five discrepancies turned into
      an email address landed over fr-FR, and Spotlight rotated the wallpaper so Mica took
      its colour. Windows alone had still been posing "Dana" — the English demo person is
      Jane Whitfield there now too.
-   - **The preview videos** (iPhone, iPad, Mac) — not started. The recording scripts take
-     a language now, so a French clip is French throughout.
+   - ~~**The preview videos** (iPhone, iPad, Mac) — not started.~~ **Cut 2026-09-18**
+     (main `862e029`): nine clips, 270 stills, read one by one and measured by
+     `gate.py --store video`. The recording scripts had never met a 2.0 build and
+     six defects came out of the frames — the iOS clips opened on the iOS home
+     screen, the Mac clip ran at four times speed, and the French Mac clips typed
+     the demo person without her accents. All fixed and re-shot;
+     `preview-videos.md` is the report.
    - **One Android pose**, `redact`, for the reason in the table above.
    - **The human read.** The five shot sets were each read image by image *and* measured by
      `tools/capture-gate`, and the two reads agree — 0 images to look at in all five. What
@@ -268,8 +273,9 @@ to need a second pass.
   the capture Mac), the Play Console's aspect ratio and tablet slot, WACK's one elevated
   click, Linux's portal file dialog and one real print, VoiceOver and Narrator beyond the
   scripted checks, and the register of the French.
-- **The preview videos**, which have not been cut, and **the Android `redact` pose**, which
-  is the one capture still to be re-shot. The Microsoft set is no longer on this list: it
-  was shot on 2026-09-18 and is gate-clean.
+- **The Android `redact` pose**, which is now the one capture still to be re-shot. The
+  Microsoft set left this list on 2026-09-18, gate-clean; the **preview videos** left it
+  the same day, nine clips cut and read frame by frame (`preview-videos.md`). Four things
+  in the clips are a decision rather than a defect, and they are in that report's §5.
 - **Whether the captures are good enough to list.** They are measured and they were read;
   whether each set sells the app is §3's last question and only Dave can answer it.
