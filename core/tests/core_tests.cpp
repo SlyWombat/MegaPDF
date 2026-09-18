@@ -4564,14 +4564,16 @@ void test_user_unit(const std::string& fixtures) {
 
 // #241: "Remove protection" must write a plain file. No /Encrypt, nothing of the
 // security handler left anywhere in it, strings and streams in the clear -- and nothing
-// a reader can see changed by the removal. The fixtures are the six handlers over
-// secure-source.pdf (tools/gen_security_fixtures.sh): two pages of text, a filled text
-// field, a checked checkbox, a red square and a sticky note.
+// a reader can see changed by the removal. The fixtures are eight handlers over
+// secure-source.pdf (tools/gen_security_fixtures.sh), a document with two pages of text,
+// a filled text field, a checked checkbox, a red square and a sticky note.
 //
 // Until PDFium patch 0029 the trailer was clean and the bytes were in the clear, but the
 // encryption dictionary itself survived in the body as an orphan object, carrying /O,
-// /U, /OE, /UE, /Perms and the old /P. CI runs qpdf --check and --show-encryption over
-// everything keep_saved() writes; these asserts are the part that does not need qpdf.
+// /U, /OE, /UE, /Perms and the old /P -- and, for a document whose cross-reference is a
+// stream, so did that stream, still naming it. CI runs qpdf --check, --show-encryption
+// and pdftotext over everything keep_saved() writes; these asserts are the part that
+// needs no other reader.
 
 // A page as a reader sees it: its text, its fields, its annotations and its pixels.
 struct PageShot {

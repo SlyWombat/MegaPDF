@@ -22,10 +22,11 @@
 # owner-only.pdf allows nothing to a plain open: no printing, modifying, copying,
 # annotating, form filling or assembly.
 #
-# The remove-*.pdf family is the same six handlers over secure-source.pdf, the
-# fixture with two pages of text, a filled text field, a checked checkbox and two
-# annotations (#241). Removing protection from each must write a plain file that
-# still draws, fills and annotates exactly the same.
+# The remove-*.pdf family is eight handlers over secure-source.pdf, the fixture with
+# two pages of text, a filled text field, a checked checkbox and two annotations
+# (#241). Removing protection from each must write a plain file that still draws,
+# fills and annotates exactly the same. Six of them, with a classic cross-reference
+# table:
 #
 # | file                    | handler         | user           | owner            | restricts |
 # |-------------------------|-----------------|----------------|------------------|-----------|

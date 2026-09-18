@@ -56,7 +56,7 @@ well as by PDFium itself.
    the corpus the trailer named an object that was never written: the copy was enciphered
    and every reader but MegaPDF called it unencrypted, so its streams would not decode
    (#246). The verified save did not catch it, because it checks the copy by opening it
-   with the new password and PDFium opens an unencrypted document whatever it is handed.
+   with the new credential and PDFium opens an unencrypted document whatever it is handed.
    The core test now reads the copy's own bytes and insists the `/Encrypt` reference names
    an object that is in the file.
 
@@ -95,16 +95,21 @@ well as by PDFium itself.
     but the encryption dictionary itself survived in the body as an orphan object with its
     `/O`, `/U`, `/OE`, `/UE`, `/Perms` and the old `/P`. That is the credential verifier
     material, in a file the user asked to have protection removed from: the original
-    password could still be attacked offline from it. Upstream cleared `encrypt_dict_`,
+    credential could still be attacked offline from it. Upstream cleared `encrypt_dict_`,
     which governs the trailer, but the body is written from the objects reachable from the
-    *parser's* trailer, and that one still named the dictionary.
+    *parser's* trailer, and that one still named the dictionary. When the document's
+    cross-reference is a stream, that stream *is* the trailer and has an object number of
+    its own, so it came across as well — still saying `/Encrypt N 0 R`.
 
-    The core test `test_remove_protection` removes protection from each of the six
-    handlers over a fixture with two pages of text, a filled text field, a checked
-    checkbox and two annotations, and asserts the copy carries no `/Encrypt`, no
+    The core test `test_remove_protection` removes protection from each of eight handlers
+    over a fixture with two pages of text, a filled text field, a checked checkbox and two
+    annotations — six with a classic cross-reference table, two with object streams and a
+    cross-reference stream — and asserts the copy carries no `/Encrypt`, no
     `/Filter /Standard`, no `/Perms` and no `/StdCF`, and that every page's text, fields,
-    annotations and pixels are exactly what they were. CI then has qpdf and pdftotext —
-    readers that are not PDFium — confirm each copy is not encrypted and still readable.
+    annotations and pixels are exactly what they were. The .NET `SecurityTests` assert the
+    same through `VerifiedSave`, the route the desktops take. CI then has qpdf and
+    pdftotext — readers that are not PDFium — confirm each copy is not encrypted and still
+    readable.
 
 ## Consequences
 

@@ -17,7 +17,7 @@ Writes:
                 appearance stream. Used by the iOS PDFKit spike (ADR-001)
                 and future cross-platform interop tests.
 
-  secure-source.pdf - the document tools/gen_security_fixtures.sh encrypts six
+  secure-source.pdf - the document tools/gen_security_fixtures.sh encrypts eight
                 ways for #241: two pages of text, a filled text field "fullname"
                 and a checked checkbox "agree", and a red square and a sticky note
                 carrying MegaPDF_Ids. Removing protection must leave all of it alone.
@@ -664,7 +664,8 @@ def gen_secure_source():
     page content (two pages of text), form fields (a filled text field and a checked
     checkbox) and annotations (a square and a sticky note, each with a MegaPDF_Id so
     the core's stamp contract lists them). tools/gen_security_fixtures.sh encrypts it
-    six ways.
+    eight ways, six with a classic cross-reference table and two with object streams
+    and a cross-reference stream.
     """
     objs = []
     add = lambda b: (objs.append(b), len(objs))[1]
