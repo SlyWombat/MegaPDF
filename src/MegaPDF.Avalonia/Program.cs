@@ -646,35 +646,6 @@ internal static class Program
                       withMarks.RedactionMarkCount == 0);
             }
 
-            // The keyboard route (#173). Marking used to need a drag, so a person with
-            // no pointer could arm Redact and then do nothing with it; on Windows the
-            // same Enter opened the text editor instead. Checked here rather than in a
-            // window because it is the view model that decides what activation means.
-            vm.ClearPageFocus();
-            vm.MoveFocus(forward: true);
-            var focusBefore = vm.PageFocus;
-            var marksBefore = vm.RedactionMarkCount;
-            vm.ToggleRedactCommand.Execute(null);
-            Check("Redact arms again for the keyboard check", vm.IsRedactMode);
-            vm.ActivateFocus();
-            Check($"Enter on the focused {focusBefore?.Kind} region marks it "
-                  + $"({marksBefore} -> {vm.RedactionMarkCount} marks)",
-                  focusBefore is not null && vm.RedactionMarkCount > marksBefore);
-            Check("  and marking leaves the tool, as a drag does", !vm.IsRedactMode);
-
-            // Taken straight off again: a mark is not a change to the document, and
-            // nothing is removed until a save is confirmed, so it has to come back off
-            // before then. It also puts this fixture back the way the checks below it
-            // expect — the focused region here is the whole line, KEEPs and all.
-            if (focusBefore is { } marked)
-            {
-                var centre = new PdfPoint(marked.Bounds.X + (marked.Bounds.Width / 2),
-                                          marked.Bounds.Y + (marked.Bounds.Height / 2));
-                Check("the mark can be selected", vm.SelectRedactionMarkAt(marked.PageIndex, centre));
-                Check("  and removed again before anything is saved",
-                      vm.RemoveSelectedRedactionMark() && vm.RedactionMarkCount == marksBefore);
-            }
-
             var applied = vm.ApplyRedactionsAsync().GetAwaiter().GetResult();
             Check("applying succeeds", applied);
             Check("the marks are gone with it", !vm.HasRedactionMarks);
@@ -1209,6 +1180,57 @@ internal static class Program
             {
                 if (Directory.Exists(busyState))
                     Directory.Delete(busyState, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        // --- Redact from the keyboard (#173) ---
+        //
+        // Its own document: the region Tab reaches on this fixture is the whole line,
+        // so a mark left on it would swallow the KEEP words the checks above rely on.
+        // The Windows real-window check found this route missing there; the Mac had the
+        // same gap, because Enter went through HandlePageClick, which has no Redact
+        // branch and opened the line editor over the text instead.
+        Console.WriteLine("redact from the keyboard (#173):");
+        var keyboardState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-redactkbd-{Guid.NewGuid():N}");
+        try
+        {
+            using var vm = new MainViewModel(keyboardState);
+            vm.Open(Path.Combine(dir, "text-partial-run.pdf"));
+            Check("the fixture opened", vm.IsDocumentOpen);
+
+            vm.MoveFocus(forward: true);
+            var focused = vm.PageFocus;
+            Check($"Tab reaches a page region ({focused?.Kind})", focused is not null);
+
+            vm.ToggleRedactCommand.Execute(null);
+            Check("Redact arms", vm.IsRedactMode);
+            vm.ActivateFocus();
+            Check($"Enter on it marks it ({vm.RedactionMarkCount} mark)", vm.RedactionMarkCount == 1);
+            Check("  and marking leaves the tool, as a drag does", !vm.IsRedactMode);
+            Check("  and nothing has been removed: a mark is not a change",
+                  DocumentSaysCanary(vm, Path.Combine(Path.GetTempPath(),
+                      $"megapdf-selftest-redactkbd-{Guid.NewGuid():N}.pdf")));
+
+            // And off again, because nothing is written until a save is confirmed.
+            var centre = new PdfPoint(focused!.Bounds.X + (focused.Bounds.Width / 2),
+                                      focused.Bounds.Y + (focused.Bounds.Height / 2));
+            Check("the mark selects", vm.SelectRedactionMarkAt(focused.PageIndex, centre));
+            Check("  and comes off again", vm.RemoveSelectedRedactionMark() && vm.RedactionMarkCount == 0);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::redact from the keyboard: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(keyboardState))
+                    Directory.Delete(keyboardState, recursive: true);
             }
             catch (IOException)
             {
