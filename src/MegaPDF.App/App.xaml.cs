@@ -69,17 +69,23 @@ public partial class App : Application
         mainWindow.Activate();
         splash.Close();
 
-        // "Open with MegaPDF" / command-line launch.
+        // Crash recovery is offered before anything else opens, including a file the app
+        // was launched with (#145): opening that first used to return without offering it,
+        // so a double-clicked PDF after a crash silently left the crash's edits behind.
+        await mainWindow.OfferCrashRecoveryAsync();
+
+        // "Open with MegaPDF" / command-line launch — after the offer, and not again if
+        // the restore has just opened this same document with its recovered edits.
         var commandLine = Environment.GetCommandLineArgs();
         if (commandLine.Length > 1
             && commandLine[1].EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
             && File.Exists(commandLine[1]))
         {
-            await mainWindow.ViewModel.OpenDocumentAsync(Path.GetFullPath(commandLine[1]));
+            var launched = Path.GetFullPath(commandLine[1]);
+            if (Core.Recovery.LaunchedDocument.NeedsOpening(launched, mainWindow.ViewModel.DocumentPath))
+                await mainWindow.ViewModel.OpenDocumentAsync(launched);
             return;
         }
-
-        await mainWindow.OfferCrashRecoveryAsync();
 
         // "Reopen last file" setting (off by default).
         if (!mainWindow.ViewModel.IsDocumentOpen
