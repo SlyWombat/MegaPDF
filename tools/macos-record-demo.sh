@@ -16,10 +16,12 @@
 #
 # Writes <out-dir>/macos-<lang>-<theme>-recorded-demo.mp4 (real pace, 1920x1080,
 # 30 fps) and macos-<lang>-<theme>-recorded-preview.mp4 (time-compressed under 30 s for the
-# Mac App Store). The window is placed at a fixed origin and every click is a
-# screen coordinate read off a probe shot of that placement — re-probe if the
-# toolbar changes. The signature library must hold the demo signature
-# ("Mega W."); the script seeds it if the library is empty.
+# Mac App Store). The window is placed at a fixed origin; the toolbar buttons
+# are measured off a probe shot of that placement (tools/macos-measure-toolbar.py)
+# and the page clicks are PDF points mapped through tools/macos-measure-page.py,
+# so neither a toolbar redesign nor a translated label needs anything re-typed
+# in here. The signature library must hold the demo signature ("Mega W."); the
+# script seeds it if the library is empty.
 set -euo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 
@@ -41,9 +43,16 @@ case "$LANG_TAG" in
     *)     echo "unknown language '$LANG_TAG' (expected en, fr-CA or fr)" >&2; exit 2 ;;
 esac
 
-# Window at (320,60), 1920 wide, 28 px title bar: the content is exactly
-# 1920x1080 at screen (320,88). All click coordinates below assume this.
-WX=320; WY=60
+# Window at (0,60), 1920 wide, 28 px title bar: the content is exactly
+# 1920x1080 at screen (0,88), which is the Mac App Store's app-preview frame.
+#
+# Hard against the left, and that is not cosmetic. macOS puts notification
+# banners in the top-right corner of the screen, and on the 2560-wide capture
+# display a window at x=320 ends at 2240 — the last thirty pixels of every
+# recorded frame were the edge of whatever Notification Centre had to say. At
+# x=0 the recorded region ends at 1920 with 640 px of clearance, and no system
+# setting has to be touched to get it.
+WX=0; WY=60
 click() { cliclick "c:$1,$2"; }
 key()   { cliclick "kp:$1"; }
 type_() { cliclick "t:$1"; }
@@ -74,8 +83,32 @@ sleep 5
 osascript -e "tell application \"System Events\" to tell process \"MegaPDF\" to set position of window 1 to {$WX, $WY}"
 osascript -e 'tell application "System Events" to set frontmost of process "MegaPDF" to true'
 sleep 1
-# Fit page: the whole page in the frame, so the signature line is on screen.
-click 1457 118; sleep 1.5
+# No fit-page step. At 1920x1080 the whole 612x792 page is on screen at 100 %,
+# which is where the app opens it and what the Mac listing stills show; the
+# button this used to click belonged to the pre-#144 toolbar and by 2.0 pointed
+# at empty bar.
+
+# Where the toolbar buttons are. They are measured, not written down: #144 made
+# the bar one row and moved every one of them, and the labels are translated —
+# "Ajouter du texte" is nearly twice the width of "Add text", so everything to
+# its right sits somewhere else in a French run. The order is the same in every
+# language, so they are taken by index:
+#
+#   1 Open  2 Save │ 3 Sign  4 Add text  5 Cover  6 Redact │ 7 Undo  8 Redo
+#   │ 9 zoom-out  10 zoom  11 zoom-in  12 More
+screencapture -x -R "$WX,$((WY + 28)),1920,1080" /tmp/megapdf-toolbar.png
+read -r TBY TB <<<"$(python3 "$ROOT/tools/macos-measure-toolbar.py" /tmp/megapdf-toolbar.png)"
+set -- $TB
+[ $# -ge 12 ] || { echo "measured $# toolbar buttons, expected 12" >&2; exit 1; }
+BTN_Y=$((WY + 28 + TBY))
+SIGN_X=$((WX + $3)); ADDTEXT_X=$((WX + $4))
+echo "toolbar: row $BTN_Y, Sign at $SIGN_X, Add text at $ADDTEXT_X"
+# The signature flyout hangs under the Sign button, its left edge on the
+# button's, and the one saved signature is a card 315 px wide filling it. Its
+# centre is 156 px right of the button's centre and 121 px down into the
+# content — measured on the 2.0 bar, and the card is wide enough that the few
+# pixels the anchor moves when "Signer" is wider than "Sign" do not matter.
+SIGCARD_X=$((SIGN_X + 156)); SIGCARD_Y=$((WY + 28 + 121))
 
 # Where the page is. A fresh file opens at whatever zoom fits, and a mode
 # banner (Add text, placing a signature) pushes the page down while it
@@ -97,7 +130,11 @@ sleep 1
 
 RAW="$OUT/macos-$LANG_TAG-$THEME-recorded-raw.mov"
 rm -f "$RAW"
-screencapture -v -x -V 55 -R "$WX,$((WY + 28)),1920,1080" "$RAW" &
+# -V is a ceiling, not the length: the recorder is stopped when the story ends.
+# Waiting it out held the finished page for the fifteen-odd seconds left over,
+# which the time compression then turned into seven seconds of a still picture
+# at the end of a thirty-second preview.
+screencapture -v -x -V 120 -R "$WX,$((WY + 28)),1920,1080" "$RAW" &
 REC=$!
 sleep 3
 
@@ -105,12 +142,12 @@ sleep 3
 sleep 2
 click "$(pagex 78.5)" "$(pagey 590.5)"; sleep 1.6      # tick "Include delivery and pickup"
 click "$(pagex 78.5)" "$(pagey 564.5)"; sleep 2.0      # tick "Damage insurance accepted"
-click 644 118; sleep 2.0                               # Sign → library flyout
-click 716 210; sleep 1.5                               # the saved signature
+click "$SIGN_X" "$BTN_Y"; sleep 2.0                    # Sign → library flyout
+click "$SIGCARD_X" "$SIGCARD_Y"; sleep 1.5             # the saved signature
 measure_page                                           # the placement banner moved the page
 click "$(pagex 196)" "$(pagey 426)"; sleep 1.2         # place it on the line
 key esc; sleep 2.0                                     # drop the selection
-click 702 118; sleep 1.2                               # Add text
+click "$ADDTEXT_X" "$BTN_Y"; sleep 1.2                 # Add text
 measure_page                                           # the mode banner moved the page
 click "$(pagex 72)" "$(pagey 350)"; sleep 1.2          # printed name, clear of the "Sign above the line" label
 type_ "$DEMO_NAME"; sleep 1.2
@@ -122,8 +159,11 @@ key return; sleep 1.3
 key esc; sleep 3.0                                     # close find, hold the finished page
 # -------------------------------------------------------------------------
 
+# SIGINT is how screencapture -v is told to stop and finalise the file; it is
+# what Ctrl-C does when a person runs it.
+kill -INT "$REC" 2>/dev/null || true
 wait "$REC" || true
-sleep 1
+sleep 2
 
 DEMO="$OUT/macos-$LANG_TAG-$THEME-recorded-demo.mp4"
 ffmpeg -v error -y -ss 1.5 -i "$RAW" -r 30 -fps_mode cfr -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart -an "$DEMO"
