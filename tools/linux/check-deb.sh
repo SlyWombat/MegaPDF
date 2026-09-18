@@ -48,6 +48,39 @@ bash "$ROOT/tools/linux/package-check.sh" "$OPTDIR" "$FIXTURES" "" "deb"
 rc=$?
 
 echo
+echo "=== the desktop entry and the icons, as a desktop would look for them ==="
+# The icons have to be under a theme directory. They were not: a cp into a destination
+# that did not exist yet unpacked hicolor's contents straight into /usr/share/icons, so
+# every size sat at a path no icon theme has and nothing would ever have drawn the app's
+# icon (#158 QA pass). Silent, and invisible to every other check there is.
+missing=0
+for size in 16x16 22x22 24x24 32x32 48x48 64x64 128x128 256x256 512x512; do
+    [ -s "/usr/share/icons/hicolor/$size/apps/megapdf.png" ] || missing=$((missing + 1))
+done
+if [ "$missing" -eq 0 ] && [ -s /usr/share/icons/hicolor/scalable/apps/megapdf.svg ]; then
+    echo "  ok    all nine hicolor sizes and the scalable icon are where a theme looks"
+else
+    echo "  FAIL  $missing of nine hicolor sizes missing$([ -s /usr/share/icons/hicolor/scalable/apps/megapdf.svg ] || echo ', and no scalable icon')"
+    find /usr/share/icons -name 'megapdf.*' -print -quit | sed 's/^/        first icon found at: /'
+    rc=$((rc + 1))
+fi
+if desktop-file-validate /usr/share/applications/megapdf.desktop 2>&1; then
+    echo "  ok    the installed desktop entry validates"
+else
+    echo "  FAIL  the installed desktop entry does not validate"
+    rc=$((rc + 1))
+fi
+# It offers application/pdf; it must not claim it. The Mac bundle says
+# LSHandlerRank=Alternate and this is the same promise.
+if grep -rq 'application/pdf=megapdf' /usr/share/applications/mimeapps.list \
+        /etc/xdg/mimeapps.list "$HOME/.config/mimeapps.list" 2>/dev/null; then
+    echo "  FAIL  installing wrote MegaPDF into a mimeapps.list — it claimed the type"
+    rc=$((rc + 1))
+else
+    echo "  ok    installing claimed no default handler"
+fi
+
+echo
 echo "=== the /usr/share/doc copy, which a dpkg path-exclude may have pruned ==="
 # Not a failure either way. It is here because it is how we found out that the notices
 # needed a second home: every Debian and Ubuntu container image ships
