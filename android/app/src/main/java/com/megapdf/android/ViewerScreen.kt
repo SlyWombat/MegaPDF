@@ -102,6 +102,13 @@ import androidx.compose.ui.res.stringResource
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
 
+// A redaction drag, as a fraction of the page (#173). MIN_MARK_EXTENT is what tells a
+// drag from a tap; MIN_MARK_THICKNESS is what a flat drag along a line is grown to, so
+// the band covers the line rather than a hairline through the middle of it. About 8 pt
+// on US Letter, which is the ink height of a line of body text.
+private const val MIN_MARK_EXTENT = 0.005f
+private const val MIN_MARK_THICKNESS = 0.01f
+
 // Search highlight fills (#26): every match gets translucent brand cyan; the
 // current match is set apart in translucent brand blue. Amber used to carry the
 // current match, which read well but is not a colour MegaPDF owns
@@ -702,11 +709,23 @@ fun ViewerScreen(
                                 onDragCancel = { redactBand = null },
                                 onDragEnd = {
                                     redactBand = null
-                                    val left = minOf(origin.x, current.x) / this.size.width
-                                    val right = maxOf(origin.x, current.x) / this.size.width
-                                    val top = minOf(origin.y, current.y) / this.size.height
-                                    val bottom = maxOf(origin.y, current.y) / this.size.height
-                                    if (right - left > 0.005f && bottom - top > 0.005f) {
+                                    var left = minOf(origin.x, current.x) / this.size.width
+                                    var right = maxOf(origin.x, current.x) / this.size.width
+                                    var top = minOf(origin.y, current.y) / this.size.height
+                                    var bottom = maxOf(origin.y, current.y) / this.size.height
+                                    // A drag *along* a line is how text is redacted — the hint
+                                    // says "drag across what you want removed, or select text"
+                                    // — and such a drag is flat by nature. Both extents used to
+                                    // have to clear the threshold, so a straight swipe along a
+                                    // line produced no mark and said nothing: the band followed
+                                    // the finger and then vanished. One extent is enough now, and
+                                    // whichever one is thin is grown to cover what the drag was
+                                    // drawn along; markTextForRedaction then snaps it to whole
+                                    // glyphs. A tap has no extent either way and is still not a
+                                    // mark (#173).
+                                    val wide = right - left > MIN_MARK_EXTENT
+                                    val tall = bottom - top > MIN_MARK_EXTENT
+                                    if (wide || tall) {
                                         onMarkForRedaction(
                                             index,
                                             com.megapdf.engine.PdfRect(
