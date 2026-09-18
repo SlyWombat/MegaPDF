@@ -662,6 +662,19 @@ internal static class Program
                   focusBefore is not null && vm.RedactionMarkCount > marksBefore);
             Check("  and marking leaves the tool, as a drag does", !vm.IsRedactMode);
 
+            // Taken straight off again: a mark is not a change to the document, and
+            // nothing is removed until a save is confirmed, so it has to come back off
+            // before then. It also puts this fixture back the way the checks below it
+            // expect — the focused region here is the whole line, KEEPs and all.
+            if (focusBefore is { } marked)
+            {
+                var centre = new PdfPoint(marked.Bounds.X + (marked.Bounds.Width / 2),
+                                          marked.Bounds.Y + (marked.Bounds.Height / 2));
+                Check("the mark can be selected", vm.SelectRedactionMarkAt(marked.PageIndex, centre));
+                Check("  and removed again before anything is saved",
+                      vm.RemoveSelectedRedactionMark() && vm.RedactionMarkCount == marksBefore);
+            }
+
             var applied = vm.ApplyRedactionsAsync().GetAwaiter().GetResult();
             Check("applying succeeds", applied);
             Check("the marks are gone with it", !vm.HasRedactionMarks);
