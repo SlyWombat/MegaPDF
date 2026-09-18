@@ -99,6 +99,28 @@ def write(path: str, result: dict, shots: list, thumbs: dict,
             line += "<span class='pass'>nothing questionable.</span>"
         parts.append(f"<div class='verdict'>{line}</div>")
 
+    if result.get("pairs"):
+        rows = "; ".join(
+            f"<b>{html.escape(p['a'])}</b> and <b>{html.escape(p['b'])}</b> are "
+            f"the same image in {p['same']} of {p['of']} poses"
+            for p in result["pairs"] if p["same"])
+        if rows:
+            parts.append(f"<div class='verdict'>{rows}. Correct when the demo "
+                         "person is the only string that differs between two "
+                         "catalogues on a listing screen — and worth knowing "
+                         "before three listings go up looking alike.</div>")
+
+    if result.get("constants"):
+        names = ", ".join(html.escape(c["name"]) for c in result["constants"])
+        parts.append(
+            "<div class='verdict'><b>Look at these by eye, whatever the checks "
+            f"say: {names}.</b> Every check here compares an image with "
+            "something — a slot size, the same pose in another language, a set "
+            "you already signed off. Anything that is the same in <i>every</i> "
+            "image of a set has nothing to be compared against: device chrome, "
+            "a launcher taskbar, a wallpaper edge, a watermark. One image per "
+            "device is where those live.</div>")
+
     current = None
     for shot in shots:
         if shot.lang != current:

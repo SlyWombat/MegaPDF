@@ -50,19 +50,33 @@ def _ratio(w: int, h: int) -> str:
 
 
 def size(shot, profile) -> list[Finding]:
+    """The exact pixel size is one this store's slot takes.
+
+    The slot is looked up by name when the set says which device it is, and
+    *found* when it does not: a flat folder of Play captures knows its size but
+    not its slot, and standing down there wasted the one check that can answer
+    whether 1080x2400 is a shape the console will take. Reported either way,
+    with the ratio, because the ratio is the open question (#146).
+    """
     w, h = shot.size
-    accepted = profile["slots"].get(shot.device or "desktop") or []
-    if not accepted:
-        return [_skip("size", f"no slot named {shot.device or 'desktop'!r} in this "
-                              f"profile — {w}x{h}, {_ratio(w, h)}")]
-    if (w, h) in accepted:
-        return [_ok("size", f"{w}x{h}, {_ratio(w, h)}")]
+    slots = profile["slots"]
+    named = slots.get(shot.device or "desktop")
+    if named and (w, h) in named:
+        return [_ok("size", f"{w}x{h}, {_ratio(w, h)}"
+                            + (f" — the {shot.device} slot" if shot.device else ""))]
+    if not named:
+        matching = [name for name, sizes in slots.items() if (w, h) in sizes]
+        if matching:
+            return [_ok("size", f"{w}x{h}, {_ratio(w, h)} — the "
+                                f"{matching[0]} slot, found by size because "
+                                f"the set does not name its device")]
     if profile.get("crops_expected") and not _is_frame(shot, profile):
         return [_skip("size", f"{w}x{h} — not a window size, so this is a crop "
                               f"of one; the frame checks stand down")]
-    return [_flag("size", f"{w}x{h} is not a {shot.device or 'desktop'} slot "
-                          f"({', '.join(f'{a}x{b}' for a, b in accepted)}); "
-                          f"ratio {_ratio(w, h)}")]
+    every = ", ".join(f"{name} {a}x{b}" for name, sizes in slots.items()
+                      for a, b in sizes)
+    return [_flag("size", f"{w}x{h} ({_ratio(w, h)}) is not a slot this store "
+                          f"takes — {every}")]
 
 
 # ---------------------------------------------------------------- clipping
@@ -323,9 +337,23 @@ def person(shot, profile) -> list[Finding]:
     where = plain.index(_unaccented(surname))
     read = haystack[where:where + len(surname)]
     if accents and not _accents(read):
+        # Before calling a missing accent a defect, ask whether the reader
+        # resolved any accent anywhere on this image. On a 420 dpi Android
+        # capture tesseract returned "Helene Belanger" flat while the screen
+        # magnified reads Hélène Bélanger with all three — and the check cannot
+        # tell a missing glyph from a reader that is not seeing accents at all.
+        # So it only testifies when it has shown it can see one.
+        if not _accents(haystack):
+            return [_skip("person", f"{expected!r} is on screen, but this read "
+                                    f"found no accent anywhere on the image — "
+                                    f"the reader is not resolving them here, "
+                                    f"so it cannot say whether the name has "
+                                    f"them. The catalogue is asserted by tests; "
+                                    f"look at this one if it matters.")]
         return [_flag("person", f"{expected!r} is on screen without any of its "
-                                f"accents — a missing glyph, or the wrong "
-                                f"fixture")]
+                                f"accents, on an image where the reader did "
+                                f"resolve accents elsewhere — a missing glyph, "
+                                f"or the wrong fixture")]
     return [_ok("person", f"{expected} — accented, though OCR read it as "
                           f"{read!r} (é and è are one letter to tesseract)")]
 
@@ -517,27 +545,35 @@ def poses_match(group: list, profile) -> list[tuple]:
                           f"than {reference.lang}'s — something modal over "
                           f"the window?")))
 
-        if shot.status_right and reference.status_right:
-            # The posed battery and Wi-Fi do not translate: the same pose in
-            # another language is the one sibling guaranteed to draw them the
-            # same way, down to the pixel. A notification, a carrier name or
-            # SystemUI's "no internet" badge over the Wi-Fi icon has nowhere
-            # to hide in that comparison. The *left* of the bar is not
-            # compared: an iPad puts the date there, and a date translates.
-            ink = max(sum(shot.status_right), 1)
-            differ = im.mask_difference(shot.status_right,
-                                        reference.status_right)
+        if shot.status_ink and reference.status_ink:
+            # The posed status bar does not translate: the same pose in another
+            # language is the one sibling guaranteed to draw it the same way,
+            # down to the pixel. A notification, a carrier name, SystemUI's
+            # "no internet" badge over the Wi-Fi icon — and the *date*, which
+            # an iPad puts on the left of the bar and `simctl status_bar`
+            # cannot override — have nowhere to hide in that comparison.
+            #
+            # The whole bar, not just its right-hand end. An earlier version
+            # compared the right only, because the band reached into the
+            # iPad's navigation bar and caught "Save"/"Enregistrer"; the band
+            # is measured per device now, and over the 2.0.0 Mac, iOS and Play
+            # sets the whole bar differs by at most 0.6 % of its ink between
+            # languages. Comparing the right alone would have missed the one
+            # thing a capture run that crosses midnight produces: an English
+            # set dated a day before the French ones.
+            ink = max(sum(shot.status_ink), 1)
+            differ = im.mask_difference(shot.status_ink, reference.status_ink)
             if differ / ink > 0.02:
                 out.append((shot, _flag(
-                    "chrome", f"the right of the status bar differs from "
-                              f"{reference.lang}'s by {100 * differ / ink:.1f} % "
-                              f"of its ink — the battery and the Wi-Fi do not "
-                              f"translate, so something is in there that "
-                              f"should not be")))
+                    "chrome", f"the status bar differs from {reference.lang}'s "
+                              f"by {100 * differ / ink:.1f} % of its ink — the "
+                              f"bar does not translate, so the clock, the date "
+                              f"or an indicator is not the same in the two "
+                              f"sets")))
             else:
                 out.append((shot, _ok(
-                    "chrome", f"signal, Wi-Fi and battery identical to "
-                              f"{reference.lang}'s")))
+                    "chrome", f"status bar identical to {reference.lang}'s "
+                              f"({100 * differ / ink:.2f} % of its ink differs)")))
 
         # Identical pixels across two languages means one of them did not
         # translate — the check `compare.py` makes on the Android matrix.

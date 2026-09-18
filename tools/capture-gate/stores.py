@@ -157,6 +157,7 @@ STORES: dict[str, dict] = {
         "parse": _pose(
             r"(?P<device>small|tablet|large)__(?P<lang>en|fr-CA|fr-FR)__"
             r"(?:light|dark)__t\d+__(?P<pose>[A-Za-z0-9-]+)\.png$",
+            r"android-(?P<pose>[a-z][a-z0-9-]*)\.png$",
             r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         "toolbar": None,
         # Android has no window to land on and no "100 %" to choose: the page

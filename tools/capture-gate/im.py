@@ -21,6 +21,11 @@ import shutil
 import subprocess
 
 
+# What tesseract is happiest reading: about this many pixels across, whatever
+# the capture's own density. See `ocr`.
+TARGET_OCR_WIDTH = 2000
+
+
 class MissingTool(RuntimeError):
     pass
 
@@ -340,9 +345,15 @@ def column_clusters(path: str, height: int, top: int = 0, join: int = 10,
     return [c for c in out if c[1] >= smallest]
 
 
+@functools.lru_cache(maxsize=256)
 def ocr(path: str, box: tuple[int, int, int, int] | None = None,
         languages: str = "eng+fra", psm: int = 4) -> str | None:
     """The text tesseract can find, or None if tesseract is not installed.
+
+    Cached: three checks read the whole of every image — the demo person, the
+    home-folder paths and the English words — and reading a 2064x2752 iPad
+    capture takes the best part of half a minute. Once per image, not three
+    times.
 
     None is not an empty string: the caller has to report "not checked" rather
     than "nothing wrong", which is the whole difference between a gate and a
@@ -357,7 +368,14 @@ def ocr(path: str, box: tuple[int, int, int, int] | None = None,
         args += ["-crop", f"{w}x{h}+{x}+{y}", "+repage"]
     # Upscale and threshold: tesseract reads UI text at 12 px badly and at
     # 36 px well, and screenshots are already crisp, so nothing is invented.
-    args += ["-resize", "200%", "-colorspace", "Gray", "-depth", "8", "png:-"]
+    # Scale towards a width tesseract is comfortable at rather than always
+    # upscaling. A Mac window at 1440 px wide has 12 px text and wants to be
+    # bigger; a 3x iPhone capture at 1320 px wide already has 40 px text, and a
+    # 2064x2752 iPad doubled is 23 megapixels of it — which is how an earlier
+    # version of this run met the container's memory cap on the iOS sets.
+    width = (box[2] if box else size(path)[0])
+    scale = max(60, min(400, round(100 * TARGET_OCR_WIDTH / max(width, 1))))
+    args += ["-resize", f"{scale}%", "-colorspace", "Gray", "-depth", "8", "png:-"]
     png = _run(["convert"] + args)
     proc = subprocess.run(
         ["tesseract", "stdin", "stdout", "-l", languages, "--psm", str(psm)],

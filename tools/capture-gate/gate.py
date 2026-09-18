@@ -148,10 +148,16 @@ def discover(root: str, profile: dict, only: str | None = None) -> list[Shot]:
         # at one language's folder is a normal thing to do, and the language is
         # then above the root rather than under it.
         folder_lang = None
+        folder_device = None
         for part in os.path.abspath(folder).split(os.sep):
             found = stores.language_of(part)
             if found:
                 folder_lang = found
+            # A set may file its device above its languages — the Play gate set
+            # is phone/<language>/ — in which case the slot is a folder and not
+            # part of the file name.
+            if part in profile["slots"]:
+                folder_device = part
         for entry in sorted(files):
             lower = entry.lower()
             if not lower.endswith(".png") or lower.endswith(".small.png"):
@@ -162,8 +168,51 @@ def discover(root: str, profile: dict, only: str | None = None) -> list[Shot]:
             device, pose, file_lang = parsed
             shots.append(Shot(os.path.join(folder, entry),
                               file_lang or folder_lang or "\u2014",
-                              device, pose, profile))
+                              device or folder_device or "", pose, profile))
     return shots
+
+
+def language_pairs(shots: list) -> list[dict]:
+    """For each pair of languages, how many poses are the same image.
+
+    Not a check — a fact worth seeing. The Mac's fr-CA and fr-FR sets are
+    byte-identical in five of six poses because the demo person is the only
+    string that differs between the two catalogues on any listing screen. That
+    is correct, and it is also a decision someone may want to revisit, so the
+    sheet says it out loud rather than leaving it to be noticed.
+    """
+    by_lang = collections.defaultdict(dict)
+    for shot in shots:
+        by_lang[shot.lang][(shot.device, shot.pose)] = shot.digest
+    out = []
+    langs = sorted(by_lang)
+    for i, a in enumerate(langs):
+        for b in langs[i + 1:]:
+            shared = set(by_lang[a]) & set(by_lang[b])
+            if not shared:
+                continue
+            same = sum(1 for k in shared if by_lang[a][k] == by_lang[b][k])
+            out.append({"a": a, "b": b, "same": same, "of": len(shared)})
+    return out
+
+
+def constants(shots: list) -> list:
+    """One shot per device and appearance — the ones to look at by eye.
+
+    Every check in the gate compares an image with something: a slot size, a
+    sibling in another language, a certified set. Anything that is the same in
+    *every* image of a set has nothing to be compared against and is invisible
+    here. The launcher taskbar that reached all 24 Play tablet captures was
+    exactly that, and this tool does not find it even now that it is known
+    about — the fixed set and the broken one both come back clean.
+
+    So the sheet names one image per device and appearance and says: look at
+    this one properly. It is where the constants live.
+    """
+    seen = {}
+    for shot in shots:
+        seen.setdefault((shot.device, shot.appearance), shot)
+    return list(seen.values())
 
 
 def order_key(shot: Shot, profile: dict):
@@ -246,6 +295,14 @@ def run(root: str, store: str, out: str, thumb_width: int,
                          if f.status == "flag"]}
                 for s in flagged],
         })
+    # Two things the sheet says that no single check can: how alike the
+    # language sets are, and which images carry everything the checks cannot
+    # see.
+    result["pairs"] = language_pairs(shots)
+    result["constants"] = [
+        {"language": s.lang, "device": s.device, "pose": s.pose,
+         "name": s.name, "path": s.path}
+        for s in constants(shots)]
     result["images"] = [s.as_dict() for s in shots]
 
     with open(os.path.join(out, "results.json"), "w", encoding="utf-8") as handle:
