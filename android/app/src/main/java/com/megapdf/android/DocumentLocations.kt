@@ -58,6 +58,20 @@ object DocumentLocations {
      */
     private const val DOWNLOADS = "com.android.providers.downloads.documents"
 
+    /**
+     * The media provider, which is the device's own storage under another name.
+     *
+     * The picker reaches the same files two ways — by folder through external
+     * storage, and by kind ("Documents", "Images") through this one — so the same
+     * file can arrive with either authority. Its app label is "Local storage" on
+     * this image, which is nobody's name for anywhere, and it made one file show as
+     * "Downloads" in one row and "Local storage" in another. Its ids are opaque
+     * (`document:38`), so there are no folders to add; the truthful answer is the
+     * volume it is on, which is the same words external storage would have given
+     * for that file (#165).
+     */
+    private const val MEDIA = "com.android.providers.media.documents"
+
     /** Where [uri] lives, outermost first, or empty if Android will not say. */
     fun segmentsFor(context: Context, uri: Uri): List<String> {
         val authority = uri.authority
@@ -76,6 +90,7 @@ object DocumentLocations {
                 volumeDescription(context, documentId?.substringBefore(':', ""))
                     ?: providerLabel(context, authority)
             DOWNLOADS -> context.getString(R.string.location_downloads)
+            MEDIA -> volumeDescription(context, "primary") ?: providerLabel(context, authority)
             else -> providerLabel(context, authority)
         }
 

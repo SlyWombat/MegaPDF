@@ -55,6 +55,17 @@ class RecentLocationTest {
     }
 
     @Test
+    fun `the media provider's opaque ids yield no folders`() {
+        // The same file reaches us two ways: by folder through external storage, and by
+        // kind through the media provider, whose ids carry no path (#165). One of those
+        // showed as "Local storage" until DocumentLocations named the volume instead.
+        assertEquals(
+            listOf("Internal shared storage"),
+            RecentLocation.segments("com.android.providers.media.documents",
+                "document:38", "Internal shared storage"))
+    }
+
+    @Test
     fun `a downloads raw id never becomes a path`() {
         // The Downloads provider hands out `raw:/storage/emulated/0/Download/x.pdf`
         // for some documents. It is not external storage, so it is not read — and
