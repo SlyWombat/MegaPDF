@@ -16,12 +16,13 @@ form** follows each block for the GitHub release body, which has no limit.
 
 ## English (Canada) — `en-CA`
 
-**Release notes** [500] (452)
+**Release notes** [500] (495)
 
 ```
 MegaPDF speaks French, and does a great deal more.
 
 • Correct the document's own text — tap a line and retype it
+• Redact — text or pictures, gone for good
 • Type a name to make a signature, and rename the ones you keep
 • Open password-protected PDFs, and set, change or remove a password
 • One row of tools along the bottom, file commands under More
@@ -51,12 +52,13 @@ Very large PDFs. A 2.5 GB, thousand-page file used to be out of reach; it now op
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (459)
+**Notes de version** [500] (489)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
+• Caviarder : vraiment retiré
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
@@ -86,12 +88,13 @@ Les PDF très volumineux. Un fichier de 2,5 Go et mille pages était hors de por
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (459)
+**Notes de version** [500] (489)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
+• Caviarder : vraiment retiré
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus

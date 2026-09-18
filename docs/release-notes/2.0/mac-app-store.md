@@ -9,12 +9,15 @@ No other platform is named (App Review 2.3.10).
 
 ## English (Canada) — `en-CA`
 
-**What's New** [4000] (2126)
+**What's New** [4000] (2401)
 
 ```
 Nothing gets lost
 
 Quitting, closing a window or opening another file with unsaved changes now always asks first, with Save, Don't Save and Cancel. A save that fails can no longer leave the original empty — the file you were sent stays exactly as it was until a complete, verified copy is ready to take its place. Changes made while a save is running are no longer counted as saved.
+
+Redact, and it really is gone
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Whiteout still only covers, and now says so.
 
 One row of tools
 
@@ -47,12 +50,15 @@ The toolbar, the scroll bars, the font and size pickers and the checkboxes on a 
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (2576)
+**Quoi de neuf** [4000] (2885)
 
 ```
 Rien ne se perd
 
 Quitter, fermer une fenêtre ou ouvrir un autre fichier alors que des modifications ne sont pas enregistrées pose maintenant toujours la question d'abord, avec Enregistrer, Ne pas enregistrer et Annuler. Un enregistrement raté ne peut plus vider l'original : le fichier qu'on vous a envoyé reste exactement tel quel tant qu'une copie complète et vérifiée n'est pas prête à le remplacer. Les modifications faites pendant un enregistrement ne sont plus comptées comme enregistrées.
+
+Caviarder, et c'est vraiment retiré
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher. Masquer ne fait que recouvrir, et le dit maintenant.
 
 Une seule rangée d'outils
 
@@ -85,12 +91,15 @@ La barre d'outils, les barres de défilement, les sélecteurs de police et de ta
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (2576)
+**Quoi de neuf** [4000] (2885)
 
 ```
 Rien ne se perd
 
 Quitter, fermer une fenêtre ou ouvrir un autre fichier alors que des modifications ne sont pas enregistrées pose maintenant toujours la question d'abord, avec Enregistrer, Ne pas enregistrer et Annuler. Un enregistrement raté ne peut plus vider l'original : le fichier qu'on vous a envoyé reste exactement tel quel tant qu'une copie complète et vérifiée n'est pas prête à le remplacer. Les modifications faites pendant un enregistrement ne sont plus comptées comme enregistrées.
+
+Caviarder, et c'est vraiment retiré
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher. Masquer ne fait que recouvrir, et le dit maintenant.
 
 Une seule rangée d'outils
 
