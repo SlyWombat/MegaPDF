@@ -11,7 +11,7 @@ whiteout, no Shrink for email and no Print on iOS, so none of them appears.
 
 ## English (Canada) — `en-CA`
 
-**What's New** [4000] (1804)
+**What's New** [4000] (1760)
 
 ```
 Correct the document's own text
@@ -19,7 +19,8 @@ Correct the document's own text
 Tap a line in the document and retype it. Wrong date, misspelled name, the wrong amount — you no longer have to cover it up and write beside it. MegaPDF keeps the line's own font where it can and tells you when it had to use a similar one, and Undo puts the original back exactly. If a change would disturb the rest of the page, it says so instead of quietly moving things.
 
 Redact, and it really is gone
-Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Whiteout still only covers, and now says so.
+
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
 
 Protected PDFs
 
@@ -44,7 +45,7 @@ Lines a document draws twice — the old trick for fake bold — now edit cleanl
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (2152)
+**Quoi de neuf** [4000] (2100)
 
 ```
 Corrigez le texte du document
@@ -52,7 +53,8 @@ Corrigez le texte du document
 Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 Caviarder, et c'est vraiment retiré
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher. Masquer ne fait que recouvrir, et le dit maintenant.
+
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher.
 
 PDF protégés
 
@@ -77,7 +79,7 @@ Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (2152)
+**Quoi de neuf** [4000] (2100)
 
 ```
 Corrigez le texte du document
@@ -85,7 +87,8 @@ Corrigez le texte du document
 Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 Caviarder, et c'est vraiment retiré
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher. Masquer ne fait que recouvrir, et le dit maintenant.
+
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher.
 
 PDF protégés
 

@@ -58,7 +58,7 @@ Very large PDFs. A 2.5 GB, thousand-page file used to be out of reach; it now op
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviarder : vraiment retiré
+• Caviarder : vraiment retiré
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
@@ -94,7 +94,7 @@ Les PDF très volumineux. Un fichier de 2,5 Go et mille pages était hors de por
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviarder : vraiment retiré
+• Caviarder : vraiment retiré
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
@@ -105,7 +105,7 @@ MegaPDF parle français, et fait bien plus encore.
 **Version longue** (corps de la publication GitHub)
 
 ```
-Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7 ; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
+Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions en étaient à la 1.7 ; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
 
 Le français. L'application suit la langue de votre appareil ; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
 
