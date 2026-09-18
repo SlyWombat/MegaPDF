@@ -76,6 +76,11 @@ public sealed partial class PageViewModel : ObservableObject, IDisposable
     partial void OnZoomChanged(double value)
     {
         RebuildHighlights();
+        // Marks are positioned the same way and were left out of this: a mark stayed at
+        // the size and place the last zoom gave it, so zooming in left it sitting beside
+        // the words it covers rather than over them (#173). Found in a real window; the
+        // headless checks never zoom.
+        RebuildRedactionMarks();
         PlaceBusy();
     }
 
