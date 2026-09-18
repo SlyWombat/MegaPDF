@@ -4,10 +4,14 @@
     python3 flows.py --serial emulator-5560 --out /work/out/flows
 
 Every flow the issue lists that Android has: open, scroll, zoom, find, tick,
-sign, add text, edit text, undo and redo, save and save as, set and remove
-protection, close with unsaved changes, and what happens when the app is killed.
-Whiteout, Shrink and Print have no Android screen, so they are reported as not
-applicable rather than skipped silently.
+sign, add text, **redact**, edit text, undo and redo, save and save as, set and
+remove protection, close with unsaved changes, and what happens when the app is
+killed. Whiteout, Shrink and Print have no Android screen, so they are reported
+as not applicable rather than skipped silently.
+
+The redaction group reads the saved file back with pdftotext and qpdf rather than
+asking PDFium whether PDFium removed something — the same rule tools/leakcheck
+follows (#173).
 
 Then the large files, with the peak resident set of the app process recorded for
 each — `adb root` first, so /proc/<pid>/status is readable.
@@ -39,6 +43,11 @@ TEXT_SPOT = (330.0, 330.0)
 # A copy of the review form, so the destructive steps (Save over it, set and
 # remove protection) do not consume the fixture itself.
 FORM = "qa-form.pdf"
+
+# The redaction group works on its own copy and writes its own output, so what it
+# checks for in the saved file cannot have been changed by an earlier flow (#173).
+REDACT_FORM = "qa-redact.pdf"
+REDACTED_OUT = "qa-redacted.pdf"
 
 # Test data, and the only two secrets this rig has. Both are throwaway strings
 # for one emulator run; nothing real is ever typed into a QA device.
@@ -228,20 +237,33 @@ def edit_flows(f: Flow) -> None:
     def zoom():
         # A zoomed page is wider than the display, and uiautomator clips a node's
         # bounds to the display, so the bounds say nothing. Compare the pixels.
+        #
+        # Whatever happens, leave the page at 1x. A double tap is timing-sensitive
+        # on a loaded emulator (detectTapGestures defers a tap ~300 ms to tell one
+        # from the other), and when the second tap was missed the page stayed at 2x
+        # — where tap_page maps points through bounds the window manager has
+        # clipped to the display, so the *next* flow tapped the wrong place and
+        # reported that ticking a checkbox no longer marks the document. One
+        # flaky gesture presenting as a defect in another flow is worse than the
+        # flake, so the restart is unconditional (#146).
         before = d.adb("exec-out", "screencap -p", binary=True)
-        d.double_tap_fraction(0.5, 0.45)
-        zoomed = d.adb("exec-out", "screencap -p", binary=True)
-        d.screencap(os.path.join(f.out, "03a-zoomed.png"))
-        assert zoomed != before, "double-tap did not zoom the page"
-        d.double_tap_fraction(0.5, 0.45)
-        back = d.adb("exec-out", "screencap -p", binary=True)
-        assert back == before, "a second double-tap did not come back to 1x"
-        d.pinch_out()
-        d.screencap(os.path.join(f.out, "03b-pinched.png"))
-        pinched = d.adb("exec-out", "screencap -p", binary=True)
-        assert pinched != before, "pinch did not zoom the page"
-        d.pinch_in()
-        return "double-tap 1x -> 2x -> 1x, and pinch zooms; both at real touch events"
+        try:
+            d.double_tap_fraction(0.5, 0.45)
+            zoomed = d.adb("exec-out", "screencap -p", binary=True)
+            d.screencap(os.path.join(f.out, "03a-zoomed.png"))
+            assert zoomed != before, "double-tap did not zoom the page"
+            d.double_tap_fraction(0.5, 0.45)
+            back = d.adb("exec-out", "screencap -p", binary=True)
+            assert back == before, "a second double-tap did not come back to 1x"
+            d.pinch_out()
+            d.screencap(os.path.join(f.out, "03b-pinched.png"))
+            pinched = d.adb("exec-out", "screencap -p", binary=True)
+            assert pinched != before, "pinch did not zoom the page"
+            d.pinch_in()
+            return "double-tap 1x -> 2x -> 1x, and pinch zooms; both at real touch events"
+        finally:
+            f.restart_clean()
+            f.open_file(FORM)
     f.step("03-zoom", lambda body=zoom: (f.ensure_viewer(FORM), body())[1])
 
     def find():
@@ -340,6 +362,140 @@ def edit_flows(f: Flow) -> None:
         d.tap(contains="SAVE", settle=6.0)
         return "saved a copy as qa-form-copy.pdf"
     f.step("12-save-a-copy", lambda body=save_as: (f.ensure_viewer(FORM), body())[1])
+
+
+def redaction_flows(f: Flow) -> list[dict]:
+    """Redact, end to end, and then read the saved file with a different toolchain.
+
+    The rig had no redaction coverage at all — the screen inventory predates the
+    feature on Android and #173's real-window checks were done on Windows, the Mac
+    and iOS. So this walks it: arm, mark, confirm, save a copy, and then check with
+    qpdf and pdftotext that the marked words are gone and an unmarked one is not.
+    """
+    d, s = f.d, f.s
+    result: dict = {}
+
+    # Its own copy: the edit group saves over qa-form.pdf, and this group needs to say
+    # what was in the file before and after.
+    d.shell(f"cp /sdcard/Download/MegaPDF-Test-Form.pdf /sdcard/Download/{REDACT_FORM}")
+    d.shell("content call --uri content://media/external/file --method scan_file "
+            f"--arg /sdcard/Download/{REDACT_FORM}")
+    time.sleep(2)
+
+    def arm():
+        # Open it here rather than through ensure_viewer in the next step: arming and
+        # then re-opening loses the mode, which is how this walk first read as "the
+        # drag does not mark" when the drag was never made with the tool on.
+        f.restart_clean()
+        f.open_file(REDACT_FORM)
+        d.tap(desc=s["redact"], settle=1.5)
+        # The armed state has to be *in the tree*, not only in the fill (#173).
+        armed = _tool_state(d, s["redact"])
+        assert armed == "on", f"Redact armed but the accessibility tree says {armed!r}"
+        return "armed, and the node reports it"
+    f.step("R1-arm-redact", arm)
+
+    def mark():
+        left, top, right, bottom = f.page_bounds()
+        # Straight along the subtitle line, which is how text is redacted — and which
+        # marked nothing at all until the flat-drag fix (#173).
+        y = top + ((FORM_H - SUBTITLE[1]) / FORM_H) * (bottom - top)
+        d.swipe(int(left + 0.10 * (right - left)), int(y),
+                int(left + 0.88 * (right - left)), int(y), 700, settle=3.0)
+        count = _mark_count(d, s)
+        assert count, "a drag along the line made no mark"
+        result["mark_note"] = count
+        return f"dragged along the subtitle; the page reports {count!r}"
+    f.step("R2-mark-a-line", mark)
+
+    def disarms():
+        state = _tool_state(d, s["redact"])
+        assert state == "off", f"Redact stayed armed after a mark landed ({state!r})"
+        return "the tool disarms itself once the mark lands"
+    f.step("R3-disarms-after-marking", disarms)
+
+    def confirm_and_save():
+        d.tap(text=s["save"], settle=3.0)
+        d.wait_for(text=s["redact_confirm_title"], timeout=15)
+        d.screencap(os.path.join(f.out, "R4a-redact-confirmation.png"))
+        # The body and the count are one Text joined by a blank line, so neither is a
+        # node of its own — match inside the node rather than against it.
+        blob = "\n".join((n.get("text") or "") for n in d.nodes())
+        body = s["redact_confirm_body"] in blob
+        counted = s["redact_mark_count_one"] in blob
+        assert body, "the confirmation gave no reason"
+        assert counted, "the confirmation did not say how many areas are marked"
+        d.tap(text=s["redact_save_copy"], settle=4.0)
+        f.clear_field()
+        d.type_text(REDACTED_OUT)
+        d.tap(contains="SAVE", settle=8.0)
+        for _ in range(24):
+            if not f.is_dirty():
+                break
+            time.sleep(5)
+        return "confirmation shown with its reason and the mark count; saved a copy"
+    f.step("R4-confirm-and-save-a-copy", confirm_and_save)
+
+    def read_it_back():
+        out = os.path.join(f.out, REDACTED_OUT)
+        d.adb("pull", f"/sdcard/Download/{REDACTED_OUT}", out)
+        text = _pdftotext(out)
+        # "customer copy" is only in the subtitle that was marked. "Sunrise Tool Rental"
+        # is in the body as well, so it must survive — which is what makes this a test of
+        # redaction rather than of deletion.
+        gone = "customer copy" not in text
+        kept = "Sunrise Tool Rental" in text and "Options" in text
+        qpdf = _qpdf_check(out)
+        result.update({"marked_text_gone": gone, "unmarked_text_kept": kept, "qpdf": qpdf})
+        assert gone, "the marked words are still in the saved file's text"
+        assert kept, "unmarked text went missing too"
+        return f"marked words gone, unmarked text kept, qpdf: {qpdf}"
+    f.step("R5-read-the-saved-file-back", read_it_back, shot=False)
+
+    return [result]
+
+
+def _tool_state(d: Device, label: str) -> str | None:
+    """A toolbar tool's on/off state as the accessibility tree reports it (#173).
+
+    Compose publishes a `selected` semantic as checkable/checked on the node that
+    takes the click, which is the parent of the one carrying the label — so this
+    matches by bounds rather than by walking a tree uiautomator flattens.
+    """
+    label_node = d.find(desc=label)
+    lx, ly, rx, ry = d._bounds(label_node)
+    for node in d.nodes():
+        if node.get("clickable") != "true":
+            continue
+        bx, by, bex, bey = d._bounds(node)
+        if bx <= lx and by <= ly and bex >= rx and bey >= ry:
+            if node.get("checkable") != "true":
+                return None            # no state at all: the gap this checks for
+            return "on" if node.get("checked") == "true" else "off"
+    return None
+
+
+def _mark_count(d: Device, s: Strings) -> str | None:
+    """Whatever on screen says how many areas are marked, label or overlay."""
+    wanted = {s["redact_mark_count_one"], s.format("redact_mark_count", 1),
+              s.format("redact_mark_count", 2)}
+    for node in d.nodes():
+        for key in ("content-desc", "text"):
+            value = node.get(key) or ""
+            if value in wanted:
+                return value
+    return None
+
+
+def _pdftotext(path: str) -> str:
+    import subprocess
+    return subprocess.run(["pdftotext", path, "-"], capture_output=True, text=True).stdout
+
+
+def _qpdf_check(path: str) -> str:
+    import subprocess
+    done = subprocess.run(["qpdf", "--check", path], capture_output=True, text=True)
+    return "no errors" if done.returncode == 0 else done.stdout.strip().splitlines()[-1][:120]
 
 
 def protection_flows(f: Flow) -> None:
@@ -545,7 +701,7 @@ def main() -> int:
     parser.add_argument("--serial", default="emulator-5560")
     parser.add_argument("--lang", default="en", choices=["en", "fr-CA", "fr-FR"])
     parser.add_argument("--out", default="/work/out/flows")
-    parser.add_argument("--groups", default="edit,protection,close,large")
+    parser.add_argument("--groups", default="edit,redact,protection,close,large")
     parser.add_argument("--only-large", default="")
     args = parser.parse_args()
 
@@ -565,6 +721,9 @@ def main() -> int:
     large: list[dict] = []
     if "edit" in groups:
         edit_flows(f)
+    redaction: list[dict] = []
+    if "redact" in groups:
+        redaction = redaction_flows(f)
     if "protection" in groups:
         protection_flows(f)
     if "close" in groups:
@@ -574,7 +733,8 @@ def main() -> int:
         only = [x for x in args.only_large.split(",") if x] or None
         large = large_file_flows(f, only)
 
-    summary = {"lang": args.lang, "steps": f.steps, "large_files": large}
+    summary = {"lang": args.lang, "steps": f.steps,
+               "redaction": redaction, "large_files": large}
     with open(os.path.join(args.out, "flows.json"), "w") as handle:
         json.dump(summary, handle, indent=2, ensure_ascii=False)
     failed = [x for x in f.steps if not x.get("ok")] + [x for x in large if not x.get("ok")]
