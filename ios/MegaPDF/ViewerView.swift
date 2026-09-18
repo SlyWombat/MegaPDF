@@ -130,7 +130,14 @@ struct ViewerView: View {
                     // is written until it has been answered.
                     if model.redactionMarkCount > 0 { redactConfirm = .overwrite } else { model.save() }
                 }
-                    .disabled(!model.isDirty || model.isSaving || model.fileCommandsBlocked)
+                    // Marks count as something to save, even though they are not a change
+                    // to the document — nothing is written until the question above is
+                    // answered, so marking deliberately leaves it clean. Asking isDirty
+                    // alone left Save greyed out with areas marked, which made the branch
+                    // inside this very button unreachable and left the ⋯ menu as the only
+                    // way to finish a redaction (#173).
+                    .disabled((!model.isDirty && model.redactionMarkCount == 0)
+                              || model.isSaving || model.fileCommandsBlocked)
                 Menu {
                     Button("Save a copy") {
                         if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
