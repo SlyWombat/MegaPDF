@@ -27,6 +27,27 @@ internal static class SamplePdf
         ]);
     }
 
+    /// <summary>
+    /// One page, plus an object listed in the cross-reference table that nothing refers
+    /// to (#246). PDFium's writer only writes what it can reach, so the last object it
+    /// writes is not the document's last object number — the shape under which the two
+    /// places that number a new encryption dictionary used to disagree, and the copy's
+    /// trailer named an /Encrypt object that was never written.
+    /// </summary>
+    public static byte[] BuildWithUnusedTailObject()
+    {
+        var content = "BT /F1 18 Tf 72 700 Td (An object nobody refers to follows this one.) Tj ET\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Type /MegaPDFUnused /Note (nothing refers to this object) >>\nendobj\n",
+        ]);
+    }
+
     /// <summary>One-page US-Letter PDF drawing Helvetica text at 72,700.</summary>
     public static byte[] Build(string text = "Hello MegaPDF")
     {
