@@ -188,7 +188,8 @@ private fun RecentCard(row: RecentRow, onClick: () -> Unit, onLongClick: () -> U
     val describe = when {
         !row.available -> stringResource(R.string.recent_row_a11y_not_found, entry.displayName)
         location.isNotEmpty() -> stringResource(R.string.recent_row_a11y, entry.displayName, location)
-        else -> stringResource(R.string.recent_row_a11y_no_location, entry.displayName)
+        // No location known: the name is the whole accessible name.
+        else -> entry.displayName
     }
     val dim = if (row.available) 1f else 0.55f
     Card(

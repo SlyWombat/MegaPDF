@@ -155,7 +155,6 @@
     <string name="recent_location_unknown">Emplacement inconnu</string>
     <string name="recent_not_found">Introuvable</string>
     <string name="recent_row_a11y">%1$s, dans %2$s</string>
-    <string name="recent_row_a11y_no_location">%1$s</string>
     <string name="recent_row_a11y_not_found">%1$s, introuvable</string>
     <string name="recent_open">Ouvrir</string>
     <string name="recent_remove">Retirer des récents</string>
