@@ -3,11 +3,11 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="MegaPDF fills, checks, and signs PDF forms — free, open source, on Windows, Android, and iPhone. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    <meta name="description" content="MegaPDF fills, checks, signs and redacts PDF forms — free, open source, on Windows, Mac, iPhone, iPad and Android, with Linux coming to Flathub. No account, no cloud, no tracking. Open. Fix. Save. Done.">
     <link rel="canonical" href="https://electricrv.ca/megapdf/">
     <title>MegaPDF — Fill, check &amp; sign PDFs. Free, private, everywhere.</title>
     <meta property="og:title" content="MegaPDF — Fill, check &amp; sign PDFs">
-    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Android, and iPhone. No account, no cloud, no tracking.">
+    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Mac, iPhone, iPad and Android — Linux coming to Flathub. No account, no cloud, no tracking.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://electricrv.ca/megapdf/">
     <meta property="og:image" content="https://electricrv.ca/megapdf/icon.png">
@@ -48,7 +48,7 @@
         .tagline { font-family: 'Space Grotesk', sans-serif; font-size: 20px; color: var(--accent);
                    letter-spacing: .5px; margin-bottom: 16px; }
         .hero p.sub { color: var(--muted); font-size: 17px; max-width: 54ch; margin-bottom: 28px; }
-        .ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+        .ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
         .cta {
             display: inline-block; background: var(--accent); color: #061325; font-weight: 700;
             font-size: 15px; padding: 13px 26px; border-radius: 10px; text-decoration: none;
@@ -56,16 +56,16 @@
         .cta:hover { background: #6fd0f0; }
         .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
         .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
-        .stores { color: var(--muted); font-size: 13px; margin-top: 14px; }
-        .stores strong { color: var(--text); }
-        /* Store links, used once the apps are public (see the block in the hero). */
-        .storelinks { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
-        .storelinks a {
+        /* Store links. One chip per platform; the Linux chip is not a link until
+           the Flathub listing is live (see website/README.md). */
+        .storelinks { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+        .storelinks a, .storelinks .soon {
             display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
             border: 1px solid rgba(255,255,255,.25); border-radius: 10px;
             padding: 10px 18px; color: var(--text); font-size: 14px;
         }
         .storelinks a:hover { border-color: var(--accent); color: var(--accent); }
+        .storelinks .soon { border-style: dashed; border-color: rgba(255,255,255,.16); color: var(--muted); }
         .storelinks .where { color: var(--muted); font-size: 12px; display: block; }
 
         .shot { flex: 0 1 300px; }
@@ -75,6 +75,8 @@
             box-shadow: 0 24px 60px rgba(4, 33, 61, .55);
         }
 
+        section h2.sec { font-size: 26px; margin-bottom: 6px; }
+        section p.lead { color: var(--muted); margin-bottom: 26px; }
         .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
                     gap: 18px; padding: 24px 0 40px; }
         .feature { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
@@ -82,12 +84,17 @@
         .feature h3 .dot { color: var(--accent); }
         .feature p { color: var(--muted); font-size: 14.5px; }
 
+        .whatsnew { padding: 16px 0 8px; }
+        .whatsnew .features { padding-top: 18px; }
+        .whatsnew .feature { border-color: rgba(53,182,224,.34); }
         .gallery { padding: 16px 0 48px; }
         .gallery h2 { font-size: 26px; margin-bottom: 6px; }
         .gallery p.lead { color: var(--muted); margin-bottom: 26px; }
         .gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                           gap: 22px; }
         .gallery figure { margin: 0; }
+        .gallery figure.wide { grid-column: 1 / -1; }
+        .gallery figure.wide img { max-width: 720px; margin: 0 auto; border-radius: 12px; }
         .gallery img {
             width: 100%; border-radius: 18px; display: block;
             border: 1px solid rgba(255,255,255,.12);
@@ -133,34 +140,73 @@
                     without an account, a subscription, or your document ever
                     leaving your device.
                 </p>
-                <div class="ctas">
-                    <a class="cta" href="https://apps.microsoft.com/detail/9PF4TRRH4M76">Get it for Windows</a>
-                    <a class="cta ghost" href="https://github.com/SlyWombat/MegaPDF">View the source</a>
-                </div>
                 <div class="storelinks">
                     <a href="https://apps.microsoft.com/detail/9PF4TRRH4M76">
                         <span><span class="where">Get it from</span>Microsoft Store</span>
                     </a>
-                    <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
-                        <span><span class="where">Get it on</span>Google Play</span>
-                    </a>
-                </div>
-                <p class="stores">The <strong>iPhone&nbsp;/&nbsp;iPad</strong> app is in testing now —
-                   the App&nbsp;Store release is on the way.</p>
-
-                <!-- LAUNCH SWAP (App Store): when Apple approves, delete the
-                     <p class="stores"> line above and move this link into the
-                     .storelinks div. The listing 404s until it is public, so do not
-                     uncomment early. Deploy with website/deploy.py (credentials in
-                     Lighting Arduino/.env).
                     <a href="https://apps.apple.com/app/id6799522972">
                         <span><span class="where">Download on the</span>App Store</span>
                     </a>
-                -->
+                    <a href="https://apps.apple.com/app/id6799522972?platform=mac">
+                        <span><span class="where">Download on the</span>Mac App Store</span>
+                    </a>
+                    <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
+                        <span><span class="where">Get it on</span>Google Play</span>
+                    </a>
+                    <span class="soon">
+                        <span><span class="where">Coming to</span>Flathub</span>
+                    </span>
+                </div>
+                <div class="ctas">
+                    <a class="cta ghost" href="https://github.com/SlyWombat/MegaPDF">View the source</a>
+                </div>
             </div>
             <div class="shot">
                 <img src="screenshot-viewer.png"
                      alt="MegaPDF on iPhone showing a rental agreement with checked boxes and a signature">
+            </div>
+        </section>
+
+        <section class="whatsnew" aria-label="New in MegaPDF 2.0">
+            <h2 class="sec">New in 2.0</h2>
+            <div class="features">
+                <article class="feature">
+                    <h3><span class="dot">■</span> Redact, and it really is gone</h3>
+                    <p>Mark what has to come out — a name, an address, a picture — and
+                       MegaPDF takes it out of the file rather than covering it over.
+                       What was underneath is gone: no other app can copy it or search
+                       for it. Whiteout still only covers, and now says so.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">✏</span> Fix the document's own text, far more often</h3>
+                    <p>MegaPDF used to refuse a correction when it could not promise the
+                       rest of the page would stay put. It now makes those changes. Over
+                       a 22,000-edit test run, every one of the 112 edits it used to
+                       refuse goes through, and none of them disturbs the page.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">⧉</span> Very large PDFs</h3>
+                    <p>A 2.5 GB file used to take a minute to open and gigabytes of
+                       memory. It now opens straight away. Banner-size pages measure at
+                       their real size, and pages full of pictures draw several times
+                       faster.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔑</span> Protected PDFs</h3>
+                    <p>Open one with its password. If its owner restricted what may be
+                       changed, MegaPDF respects that and says so, and the owner password
+                       unlocks it. You can also set a password on a document, change it,
+                       or remove it.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">▤</span> One row of tools</h3>
+                    <p>The toolbar is a single row, with the pickers appearing beside the
+                       tool they belong to and everything else under More.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🇫🇷</span> MegaPDF speaks French</h3>
+                    <p>MegaPDF now speaks French. The app follows your device language.</p>
+                </article>
             </div>
         </section>
 
@@ -204,6 +250,10 @@
             <h2>See it in action</h2>
             <p class="lead">The real app, doing the real job — no mockups.</p>
             <div class="shots">
+                <figure class="wide">
+                    <img src="shot-desktop.png" alt="MegaPDF on a Mac, a single row of tools with Redact armed and a line of the rental agreement marked for redaction">
+                    <figcaption>Redact removes it. It does not just cover it.</figcaption>
+                </figure>
                 <figure>
                     <img src="shot-viewer.png" alt="A rental agreement with two checked boxes and a handwritten MegaWoman signature">
                     <figcaption>Checked and signed in under a minute</figcaption>
@@ -233,9 +283,10 @@
 
         <section class="strip">
             <div class="wrap" style="padding:0">
-                <span><b>One engine, three platforms.</b> Documents you sign on Windows
-                      open perfectly on Android and iPhone — and vice versa.</span>
-                <span>Windows&nbsp;11 · Android · iOS&nbsp;/&nbsp;iPadOS</span>
+                <span><b>One engine, five platforms.</b> Documents you sign on Windows
+                      open perfectly on a Mac, an iPhone, an iPad and Android — and
+                      vice versa.</span>
+                <span>Windows&nbsp;11 · macOS · iOS&nbsp;/&nbsp;iPadOS · Android · Linux</span>
             </div>
         </section>
     </main>
