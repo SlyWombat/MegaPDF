@@ -41,7 +41,8 @@ final class RedactionTests: XCTestCase {
 
         let made = try await engine.markTextForRedaction(doc, pageIndex: 0, rect: line.rect)
         XCTAssertGreaterThan(made, 0, "a drag across text should mark the text")
-        XCTAssertEqual(await engine.redactionMarkCount(doc), made)
+        var count = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(count, made)
 
         // Nothing has been removed: the words are still there.
         let after = try await page0Text(engine, doc)
@@ -51,8 +52,8 @@ final class RedactionTests: XCTestCase {
         // feature exists to stop is a file that looks redacted and is not.
         let bytes = try await engine.save(doc)
         let reopened = try await engine.open(bytes)
-        XCTAssertEqual(await engine.redactionMarkCount(reopened), 0,
-                       "marks must never be written to the file")
+        count = await engine.redactionMarkCount(reopened)
+        XCTAssertEqual(count, 0, "marks must never be written to the file")
         await engine.close(reopened)
     }
 
@@ -67,7 +68,8 @@ final class RedactionTests: XCTestCase {
         let report = await engine.applyRedactions(doc)
         XCTAssertTrue(report.applied, "refusals: \(report.refusals)")
         XCTAssertGreaterThan(report.counts.characters, 0, "the summary should count what went")
-        XCTAssertEqual(await engine.redactionMarkCount(doc), 0, "applying drops the marks")
+        let leftOver = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(leftOver, 0, "applying drops the marks")
 
         // Read the saved bytes back through a second open, not through the document
         // that wrote them.
@@ -104,7 +106,8 @@ final class RedactionTests: XCTestCase {
         for mark in marks {
             try await engine.removeRedactionMark(doc, pageIndex: 0, markId: mark.markId)
         }
-        XCTAssertEqual(await engine.redactionMarkCount(doc), 0)
+        let remaining = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(remaining, 0)
 
         // Removing one that has gone is success, so an undo cannot fail.
         try await engine.removeRedactionMark(doc, pageIndex: 0, markId: marks[0].markId)
@@ -117,10 +120,11 @@ final class RedactionTests: XCTestCase {
 
         // Well below the last line of the agreement: empty paper.
         let empty = PdfRect(left: 60, bottom: 80, right: 200, top: 120)
-        XCTAssertEqual(try await engine.markTextForRedaction(doc, pageIndex: 0, rect: empty), 0,
-                       "no text there, so nothing to grow to glyphs")
+        let grown = try await engine.markTextForRedaction(doc, pageIndex: 0, rect: empty)
+        XCTAssertEqual(grown, 0, "no text there, so nothing to grow to glyphs")
         let markId = try await engine.markForRedaction(doc, pageIndex: 0, rect: empty)
         XCTAssertGreaterThanOrEqual(markId, 0)
-        XCTAssertEqual(await engine.redactionMarkCount(doc), 1)
+        let marked = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(marked, 1)
     }
 }
