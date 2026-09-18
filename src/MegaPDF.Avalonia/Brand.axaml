@@ -78,8 +78,14 @@
       <SolidColorBrush x:Key="BrandAccentOn" Color="#0B1B2B" />
       <SolidColorBrush x:Key="BrandFindMatch" Color="#6118B6C8" />
       <SolidColorBrush x:Key="BrandFindMatchCurrent" Color="#804F9BEA" />
-      <SolidColorBrush x:Key="BrandRedactionMark" Color="#59F2F7FC" />
-      <SolidColorBrush x:Key="BrandRedactionMarkOutline" Color="#CCF2F7FC" />
+      <!-- The same values as the light theme, and that is the point: a mark is drawn on
+           the page, and the page is white in both themes because a PDF's paper does not
+           invert. The near-white dark variant these two used to carry was invisible —
+           measured on a dark capture, the marked line came back #FAFCFE on #FFFFFF, so
+           an area could be marked and look unmarked (#146 §3). Android has always used
+           one colour here for the same reason. -->
+      <SolidColorBrush x:Key="BrandRedactionMark" Color="#3D16324F" />
+      <SolidColorBrush x:Key="BrandRedactionMarkOutline" Color="#B216324F" />
       <SolidColorBrush x:Key="BrandDanger" Color="#E2685E" />
       <SolidColorBrush x:Key="BrandInk" Color="#F2F7FC" />
       <SolidColorBrush x:Key="BrandRule" Color="#59FFFFFF" />
