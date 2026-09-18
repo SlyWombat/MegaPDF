@@ -365,17 +365,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun applyScreenshotMode(state: String?) {
         if (state == null) return
         val app = getApplication<Application>()
-        if (signatures.isEmpty()) {
-            runCatching {
-                app.assets.open("demo-signature.png").use { input ->
-                    android.graphics.BitmapFactory.decodeStream(input)
-                }
-            }.getOrNull()?.let { bmp ->
-                signatureStore.add(app.getString(R.string.screenshot_signature_name), bmp)
-                signatures.clear()
-                signatures.addAll(signatureStore.load())
-            }
-        }
+        seedScreenshotSignatures(app)
         when (state) {
             "home" -> {
                 val now = System.currentTimeMillis()
@@ -468,6 +458,25 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+    /**
+     * The signature library a store capture poses with: exactly the bundled
+     * "Mega W.", and nothing else.
+     *
+     * It used to seed only when the library was empty, which made the shot a
+     * function of whatever the device already held — and the Windows set went
+     * to review with a stale signature in it for that reason (#146). A capture
+     * run owns its fixture, so anything already there is dropped first.
+     */
+    private fun seedScreenshotSignatures(app: Application) {
+        val demo = runCatching {
+            app.assets.open("demo-signature.png").use { android.graphics.BitmapFactory.decodeStream(it) }
+        }.getOrNull() ?: return          // no asset: leave the library alone rather than empty it
+        signatureStore.load().forEach { signatureStore.delete(it.id) }
+        signatureStore.add(app.getString(R.string.screenshot_signature_name), demo)
+        signatures.clear()
+        signatures.addAll(signatureStore.load())
     }
 
     /** The stamp currently selected for move/resize/remove. */

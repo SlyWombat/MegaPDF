@@ -92,6 +92,11 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 
+// Zoom is a multiple of fit-to-width, not of the page's own size: the page is
+// laid out at the container's width, so 1f fills it edge to edge and is also the
+// floor. There is no window to land on and no "100%" to choose, which is why the
+// store captures pose at 1f and need nothing to pin them — every capture is a
+// fresh process, and this is where it starts (#146).
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 4f
 
