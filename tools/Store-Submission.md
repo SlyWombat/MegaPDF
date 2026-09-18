@@ -204,9 +204,15 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
   default (SDD §5), but the Store still wants a hosted policy page.
   - Use **https://electricrv.ca/megapdf/privacy/** on the submission's
     Properties page. Source: `website/megapdf/privacy/index.html`, deployed with
-    `website/deploy.py --privacy`. Effective 8 August 2026, it covers Windows,
-    Android, and iOS in one document, and it is the same URL both mobile store
-    listings reference.
+    `website/deploy.py --privacy`. It is the same URL both mobile store listings
+    reference.
+  - **What is live today** is the 8 August 2026 policy, covering Windows,
+    Android and iOS in one document. **What is staged** is a 2.0 revision
+    (effective 18 September 2026) that adds macOS and Linux, says what
+    redaction and document protection do with your data, and replaces "no
+    network access at all" with what actually happens when you print. It goes
+    up with the 2.0 site deploy — `website/README.md` § Launch runbook — so
+    a 2.0 submission should cite it only once that deploy has happened.
   - **Superseded:** the original 2026-07-22 policy, `docs/privacy.html` hosted
     via GitHub Pages (`main` `/docs`) at
     https://slywombat.github.io/MegaPDF/privacy.html, is Windows-only and still
