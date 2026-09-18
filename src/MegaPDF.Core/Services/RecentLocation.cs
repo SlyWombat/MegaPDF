@@ -28,7 +28,14 @@ public static class RecentLocation
     /// longest match wins. The matched folder becomes the first segment, and nothing
     /// above it is shown: a file in Documents\Clients reads "Documents › Clients".
     /// </param>
-    public static IReadOnlyList<string> Segments(string filePath, IReadOnlyList<NamedFolder> named)
+    /// <param name="opaque">
+    /// Roots whose insides must never be spelled out — a sandbox container, an app's
+    /// private storage. A file under one reads as its own folder alone, which is all
+    /// the platform is willing to say about it, rather than as the route through the
+    /// container: "fixtures", not "claude › … › Data › tmp › fixtures" (#146 §3).
+    /// </param>
+    public static IReadOnlyList<string> Segments(string filePath, IReadOnlyList<NamedFolder> named,
+                                                 IReadOnlyList<string>? opaque = null)
     {
         // String work only, no System.IO: a Windows path must format the same when the
         // tests run on the Mac, and a Mac path the same on Windows.
@@ -36,6 +43,14 @@ public static class RecentLocation
         if (cut <= 0)
             return [];
         var folder = filePath[..cut];
+
+        // Checked before the named folders, because a container lives inside the home
+        // folder and would otherwise match it and print the whole way down.
+        if (opaque is not null && opaque.Any(root => IsSameOrBelow(folder, root)))
+        {
+            var own = folder.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+            return own is { Length: > 0 } ? [own] : [];
+        }
 
         var match = named
             .Where(f => IsSameOrBelow(folder, f.Path))

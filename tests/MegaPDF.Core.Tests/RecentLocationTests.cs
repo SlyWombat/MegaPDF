@@ -63,6 +63,25 @@ public class RecentLocationTests
                      RecentLocation.Segments("/Users/claude/Documents/Clients/a.pdf", mac));
     }
 
+    /// <summary>
+    /// A sandbox container is inside the home folder, so the home folder matched it and
+    /// the row printed the whole way down: "claude › … › Data › tmp › fixtures". #165
+    /// says a row never shows a container path; the store-capture dry run found one.
+    /// </summary>
+    [Fact]
+    public void AFileInsideAnOpaqueRoot_ReadsAsItsOwnFolderAlone()
+    {
+        NamedFolder[] mac = [new("/Users/claude", "claude")];
+        string[] opaque = ["/Users/claude/Library/Containers"];
+
+        Assert.Equal(["fixtures"], RecentLocation.Segments(
+            "/Users/claude/Library/Containers/com.megapdf.ios/Data/tmp/fixtures/case.pdf", mac, opaque));
+
+        // Everywhere else is untouched, including the home folder the container sits in.
+        Assert.Equal(["claude", "Scans"],
+                     RecentLocation.Segments("/Users/claude/Scans/a.pdf", mac, opaque));
+    }
+
     [Fact]
     public void AFileWithNoFolder_HasNoLocation()
     {

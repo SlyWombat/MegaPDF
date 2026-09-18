@@ -1026,13 +1026,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         var places = OperatingSystem.IsMacOS()
             ? Platform.MacFileNames.Places()
             : (IReadOnlyList<NamedFolder>)[];
+        // The sandbox container is inside the home folder, so without this a file the
+        // app opened from its own container reads as the whole way down to it (#146 §3).
+        var opaque = OperatingSystem.IsMacOS()
+            ? Platform.MacFileNames.OpaqueRoots()
+            : (IReadOnlyList<string>)[];
 
         var rows = _recents.Entries
             .Select(entry => (
                 Entry: entry,
                 Name: (OperatingSystem.IsMacOS() ? Platform.MacFileNames.DisplayName(entry.Path) : null)
                       ?? entry.DisplayName,
-                Segments: RecentLocation.Segments(entry.Path, places)))
+                Segments: RecentLocation.Segments(entry.Path, places, opaque)))
             .ToList();
 
         // How far up a row has to go before it reads differently from the others with
@@ -1053,6 +1058,22 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                                       string.IsNullOrEmpty(line) ? null : line,
                                       string.IsNullOrEmpty(full) ? null : full));
         }
+        OnPropertyChanged(nameof(HasRecents));
+    }
+
+    /// <summary>
+    /// Replaces the recents list with rows made for a capture (#146 §3).
+    ///
+    /// The home screenshot was whatever the machine had last opened, which is not a
+    /// screenshot anyone can re-take. These rows go in as RecentRow directly rather
+    /// than through the store: nothing about them has to exist on disk, and going
+    /// through the store would write into the person's real list.
+    /// </summary>
+    internal void ShowDemoRecents(IReadOnlyList<(string Name, string Location)> rows)
+    {
+        Recents.Clear();
+        foreach (var (name, location) in rows)
+            Recents.Add(new RecentRow(new RecentEntry(name), name, location, location));
         OnPropertyChanged(nameof(HasRecents));
     }
 

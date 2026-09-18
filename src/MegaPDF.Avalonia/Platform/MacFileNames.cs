@@ -122,6 +122,28 @@ internal static class MacFileNames
     }
 
     /// <summary>
+    /// Folders a recents line must not spell out the inside of: this app's sandbox
+    /// container and the group containers beside it (#146 §3).
+    ///
+    /// The #165 spec says a row never shows a container path, and it did: a file the
+    /// app had opened from its own container read "claude › … › Data › tmp › fixtures",
+    /// which is both a path and a place no one can navigate to. Named here rather than
+    /// in <see cref="Places"/> because there is no name to give them — the point is
+    /// that the route through them is not shown at all.
+    /// </summary>
+    internal static IReadOnlyList<string> OpaqueRoots()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (string.IsNullOrEmpty(home))
+            return [];
+        return
+        [
+            Path.Combine(home, "Library", "Containers"),
+            Path.Combine(home, "Library", "Group Containers"),
+        ];
+    }
+
+    /// <summary>
     /// The folders a recents line may start from, each under the name Finder gives
     /// it: the home folder, the standard folders inside it, iCloud Drive, and any
     /// mounted volume. Longest match wins, so a file in ~/Documents/Clients reads
