@@ -66,12 +66,19 @@ image by image. Nothing here is a mockup or a re-shoot for the website.
 | `shot-viewer/text/search/sign/draw/home.png` | `gate-ios/en/listing/iphone-6_9-<state>.png` (1320×2868) | exactly a third: **440×956** |
 | `screenshot-viewer.png` | `gate-ios/en/listing/iphone-6_9-viewer.png` | exactly a half: **660×1434** |
 | `shot-desktop.png` | `gate-macos/en/light-05-redact.png` (1440×900) | exactly two-thirds: **960×600** |
-| `screenshots/linux/*` | the Xvfb captures of #254 A1 | as captured |
+| `screenshots/linux/{en,fr-CA,fr-FR}/*` | the Xvfb captures of #254 A1 (PR #255), 1280×800 | as captured |
 
 The iPhone set is the App Store listing set, so its poses and the captions under
 them are the ones in `docs/app-store-listing.md` § Screenshots. The desktop shot
 is Mac slot #5 and carries that slot's caption. Windows would have done as well;
 the Mac set is the one that is not only on Dave's laptop.
+
+All eighteen Linux captures are staged, because the AppStream metainfo points at
+every one of them per language. The gallery itself shows **one** —
+`screenshots/linux/en/01-viewer.png`, beside the Mac shot — because the other
+five are the same poses the iPhone row already shows. Referenced in place rather
+than resized into a `shot-linux.png`, so there is one copy of each Linux capture
+and part A stays the only thing that writes them.
 
 Refresh them by re-running the capture sets (the **iOS Screenshots** workflow for
 iPhone, `tools/macos-store-captures.sh` for the Mac) and resizing with

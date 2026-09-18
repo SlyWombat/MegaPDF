@@ -93,8 +93,9 @@
         .gallery .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                           gap: 22px; }
         .gallery figure { margin: 0; }
-        .gallery figure.wide { grid-column: 1 / -1; }
-        .gallery figure.wide img { max-width: 720px; margin: 0 auto; border-radius: 12px; }
+        .gallery .desktops { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+                             gap: 22px; margin-bottom: 26px; }
+        .gallery .desktops img { border-radius: 12px; }
         .gallery img {
             width: 100%; border-radius: 18px; display: block;
             border: 1px solid rgba(255,255,255,.12);
@@ -249,11 +250,17 @@
         <section class="gallery" aria-label="Screenshots">
             <h2>See it in action</h2>
             <p class="lead">The real app, doing the real job — no mockups.</p>
-            <div class="shots">
-                <figure class="wide">
+            <div class="desktops">
+                <figure>
                     <img src="shot-desktop.png" alt="MegaPDF on a Mac, a single row of tools with Redact armed and a line of the rental agreement marked for redaction">
                     <figcaption>Redact removes it. It does not just cover it.</figcaption>
                 </figure>
+                <figure>
+                    <img src="screenshots/linux/en/01-viewer.png" alt="MegaPDF on Linux, showing the rental agreement with two checked boxes and a signature">
+                    <figcaption>The same app on Linux — coming to Flathub</figcaption>
+                </figure>
+            </div>
+            <div class="shots">
                 <figure>
                     <img src="shot-viewer.png" alt="A rental agreement with two checked boxes and a handwritten MegaWoman signature">
                     <figcaption>Checked and signed in under a minute</figcaption>
