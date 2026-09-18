@@ -185,4 +185,14 @@ which is how the six iOS clips were re-cut after the springboard fix.
 the source: `com.megapdf.ios` **2.0.0** from `~/dd-ios` for the six iOS clips
 (the script prints it), and `CFBundleShortVersionString` **2.0.0** in
 `~/app-macos/MegaPDF.app` for the three Mac ones. Both built on the capture Mac
-from main `167afe3`'s tree.*
+from main `167afe3`'s tree, with the PDFium pin that tree carried,
+`pdfium-7934-megapdf-1a09f6c61f3b`.*
+
+*main moved while these were being cut — #241 and #246 landed, and with them a
+new PDFium pin, `…-a02dc04f63e3`. **Nothing in it is in shot.** Both new
+patches are save-with-security ones (0029 drops a removed encryption
+dictionary, 0030 names the dictionary written), the clips never save, and the
+document they show is not protected. The same is true of the #237 work that
+landed beside it, which is the Linux window at its 480 px minimum. If something
+that **is** in shot changes before submission, these are two commands per clip
+to re-cut — §6.*
