@@ -47,8 +47,19 @@ ln -sf "$OPTDIR/MegaPDF" "$STAGE/usr/bin/megapdf"
 sed "s|^Exec=megapdf |Exec=$OPTDIR/MegaPDF |" \
     "$ROOT/tools/linux/megapdf.desktop" > "$STAGE/usr/share/applications/$PKG.desktop"
 
-cp -R "$TREE/share/icons/hicolor" "$STAGE/usr/share/icons/" 2>/dev/null \
-    || { mkdir -p "$STAGE/usr/share/icons"; cp -R "$TREE/share/icons/hicolor" "$STAGE/usr/share/icons/"; }
+# The theme directory has to exist before the copy. `cp -R src dst/` where dst is not
+# there copies src *as* dst, so hicolor's contents landed straight in /usr/share/icons
+# and every size sat at /usr/share/icons/48x48/apps/megapdf.png — a path no icon theme
+# has, so nothing ever found the icon (#158 QA pass).
+mkdir -p "$STAGE/usr/share/icons/hicolor"
+cp -R "$TREE/share/icons/hicolor/." "$STAGE/usr/share/icons/hicolor/"
+
+# Asserted, because the failure above was silent: cp succeeded, and the package looked
+# complete right up to the point where a desktop tried to draw the icon.
+for size in 16x16 48x48 256x256 scalable; do
+    [ -n "$(find "$STAGE/usr/share/icons/hicolor/$size/apps" -type f -print -quit 2>/dev/null)" ] \
+        || { echo "::error::no icon at usr/share/icons/hicolor/$size/apps — the theme directory is wrong" >&2; exit 1; }
+done
 
 # Several of these licences require the text to travel with the binary, and no channel
 # accepts a package without it (#194). Refused rather than warned about.
