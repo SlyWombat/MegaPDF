@@ -529,8 +529,13 @@
                     Spacing="{DynamicResource SpaceL}" MaxWidth="420">
           <TextBlock Text="MegaPDF" FontSize="{DynamicResource TypeTitle}" FontWeight="SemiBold"
                      HorizontalAlignment="Center" />
+          <!-- TextAlignment as well as HorizontalAlignment: the first centres the block,
+               the second centres the lines in it. The French tagline wraps at every
+               width, and with only the block centred its second line sat flush left
+               under a centred title and above a centred button (#158). -->
           <TextBlock Text="{x:Static loc:Strings.EmptyStateTagline}"
-                     Opacity="0.75" HorizontalAlignment="Center" TextWrapping="Wrap" />
+                     Opacity="0.75" HorizontalAlignment="Center"
+                     TextAlignment="Center" TextWrapping="Wrap" />
           <Button Name="EmptyOpenButton" Content="{x:Static loc:Strings.OpenAPdfEllipsis}"
                   HorizontalAlignment="Center" />
 
