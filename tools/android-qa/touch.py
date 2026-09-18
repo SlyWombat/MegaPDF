@@ -95,9 +95,19 @@ class Touch:
                    + self._finger_up(0) + [self._ev(EV_KEY, BTN_TOUCH, 0), self._sync()])
         time.sleep(settle)
 
-    def double_tap(self, x: float, y: float, gap: float = 0.09,
+    def double_tap(self, x: float, y: float, gap: float = 0.03,
                    settle: float = 1.5) -> None:
-        """Two taps in one batch, well inside ViewConfiguration's 300 ms window."""
+        """Two taps in one batch, well inside ViewConfiguration's 300 ms window.
+
+        The gap was 0.09, which is not well inside it. The real separation is the
+        requested gap *plus* what `sleep` and the surrounding `sendevent` calls
+        cost inside one adb shell batch, and on a loaded host that pushed the
+        pair past 300 ms: measured over ten runs each on an idle API 36 emulator,
+        0.03 s zoomed 10/10, 0.05 s zoomed 10/10 and **0.09 s zoomed 4/10**
+        (2026-09-18 RC pass, #146). A flaky gesture is worse than a slow one,
+        because it is reported as "double-tap did not zoom the page" — a defect
+        in the app that is not there.
+        """
         lines = (self._finger_down(0, 1, x, y) + [self._sync()]
                  + self._finger_up(0) + [self._ev(EV_KEY, BTN_TOUCH, 0), self._sync()]
                  + [f"sleep {gap}"]
