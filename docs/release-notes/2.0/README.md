@@ -11,6 +11,11 @@ pasted into a console; this is the text to paste when 2.0 is submitted.
 > live — the same gate `android/RELEASING.md` and `docs/app-store-listing.md`
 > put on the listing copy, and the same gate #146 §2 puts on the new 2.0 strings.
 
+**The French strings themselves** — everything 2.0 adds or changes in the app, as
+opposed to this store copy — are in [`french-review.md`](french-review.md), laid
+out for the same reviewer: 230 rows, 37 of them needing judgement rather than
+proofreading.
+
 | File | Store | Field | Limit |
 |---|---|---|---|
 | [`microsoft-store.md`](microsoft-store.md) | Microsoft Store | What's new in this version | 1500 |

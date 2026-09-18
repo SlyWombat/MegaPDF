@@ -439,4 +439,12 @@ The third-party notices window beside it is **English in a French run**, on purp
 
 ---
 
+**How this was built**, so it can be rebuilt for 2.1: the four catalogues were read at
+`ios-v1.7.0` and at `main`, each string reduced to its (English, fr-CA, fr-FR) text,
+and the two sets compared. A row is *new* when its French appears nowhere in the 1.7
+set, *changed* when the English was there with different French, and *unchanged*
+otherwise — which is why a string that merely moved between platforms does not appear.
+The judgement list comes from the `for francophone review` comments the catalogues
+carry and from the glossary's own review marks, not from a guess.
+
 The captures are from the Linux 2.0 QA pass (#158), Canadian French, light theme, 1280 px. They show the shared strings; Windows, macOS, Android and iOS draw the same words in their own chrome.
