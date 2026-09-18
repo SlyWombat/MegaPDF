@@ -473,7 +473,17 @@ fun ViewerScreen(
                         // overflow for everything done to the file as a whole. The editing tools
                         // live in the bottom bar, so the title keeps its width.
                         actions = {
-                            TextButton(onClick = onSave, enabled = isDirty && !isSaving && !documentLocked) {
+                            // A mark deliberately leaves the document clean — nothing is
+                            // written until the confirmation is answered — so gating Save on
+                            // isDirty alone greyed it out with an area marked, and the
+                            // confirmation onSave already raises was reachable only through
+                            // the overflow's Save a copy. The Windows and Mac passes found
+                            // exactly this; it was here too (#173).
+                            val hasMarks = redactionMarks.values.any { it.isNotEmpty() }
+                            TextButton(
+                                onClick = onSave,
+                                enabled = (isDirty || hasMarks) && !isSaving && !documentLocked,
+                            ) {
                                 Text(stringResource(if (isSaving) R.string.saving else R.string.save))
                             }
                             IconButton(onClick = { menuOpen = true }) {
@@ -726,6 +736,16 @@ fun ViewerScreen(
                                     val wide = right - left > MIN_MARK_EXTENT
                                     val tall = bottom - top > MIN_MARK_EXTENT
                                     if (wide || tall) {
+                                        if (bottom - top < MIN_MARK_THICKNESS) {
+                                            val middle = (top + bottom) / 2f
+                                            top = middle - MIN_MARK_THICKNESS / 2
+                                            bottom = middle + MIN_MARK_THICKNESS / 2
+                                        }
+                                        if (right - left < MIN_MARK_THICKNESS) {
+                                            val middle = (left + right) / 2f
+                                            left = middle - MIN_MARK_THICKNESS / 2
+                                            right = middle + MIN_MARK_THICKNESS / 2
+                                        }
                                         onMarkForRedaction(
                                             index,
                                             com.megapdf.engine.PdfRect(
