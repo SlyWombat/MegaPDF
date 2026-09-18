@@ -15,9 +15,10 @@
 
   <name>MegaPDF</name>
   <name xml:lang="fr">MegaPDF</name>
-  <summary>Fill, check and sign PDFs</summary>
-  <summary xml:lang="fr">Remplir, cocher et signer des PDF</summary>
-  <summary xml:lang="fr-CA">Remplir, cocher et signer des PDF</summary>
+  <name xml:lang="fr-CA">MegaPDF</name>
+  <summary>Fill in, sign and redact PDF forms</summary>
+  <summary xml:lang="fr">Remplir, signer et caviarder des formulaires PDF</summary>
+  <summary xml:lang="fr-CA">Remplir, signer et caviarder des formulaires PDF</summary>
 
   <developer id="ca.electricrv">
     <name>Electric RV</name>
@@ -25,37 +26,80 @@
 
   <launchable type="desktop-id">ca.electricrv.MegaPDF.desktop</launchable>
 
+  <!-- Written for someone reading a software centre on Linux, not for a phone store.
+       The App Store copy this was first adapted from (docs/app-store-listing.md) talks
+       about tapping, about "your device", and about opening files from Mail and iCloud
+       Drive; none of that belongs here, and nor does a word about what the app does on
+       any other platform. Everything below is true of this package on this machine. -->
   <description>
     <p>
       MegaPDF does the one job most people actually have with a PDF: someone sent you a
-      form, and you need to send it back filled in, checked off, and signed. No account,
+      form, and you need to send it back filled in, checked off and signed. No account,
       no subscription, no cloud. Everything happens on your own computer.
     </p>
-    <p>What it does:</p>
+    <p>Filling a form in:</p>
     <ul>
-      <li>Check any box — real form fields and plain printed squares alike, including
-      drawn checkboxes other apps treat as decoration.</li>
+      <li>Tick any box — real form fields and plain printed squares alike, including
+      drawn checkboxes other applications treat as decoration.</li>
       <li>Type on any line, in the size and face that matches the form. What you add is
       real, searchable text, not a sticker on top of the page.</li>
-      <li>Fix the document's own text. MegaPDF keeps the document's font where it can
-      and says so when it had to use a similar one; if a change would disturb the rest
-      of the page it tells you instead of quietly moving things.</li>
       <li>Sign by drawing, or from a photograph of a signature on paper — the white
-      background disappears. Signatures stay in a private library on your computer.</li>
-      <li>Save without fear. Every document is verified before your original is touched,
-      so a failed save cannot corrupt the file someone sent you.</li>
+      background disappears. Signatures stay in a library on your own computer.</li>
       <li>Search the whole document as you type, with every match counted.</li>
+      <li>Print through your desktop's own print dialogue.</li>
+    </ul>
+    <p>Changing what is already on the page:</p>
+    <ul>
+      <li>Correct the document's own text. MegaPDF keeps the document's font when that
+      font can draw everything you typed, and tells you when it had to use a similar
+      one. If a change would disturb the rest of the page, it asks first rather than
+      quietly moving things.</li>
+      <li>Redact: mark text or a picture, and MegaPDF removes it from the file. Whiteout
+      covers rather than removes, and says so.</li>
+      <li>Open a protected PDF with its password, and set, change or remove one. Where
+      the owner restricted what may be changed, MegaPDF honours that and says why.</li>
     </ul>
     <p>
-      MegaPDF makes no network connection and this package asks for no network
-      permission. Your documents and your signature never leave your computer, because
-      there is no server for them to go to. The app is open source, so anyone can check.
+      Very large documents open straight away: MegaPDF reads a file as it needs it
+      rather than loading the whole thing, so a 2.5 GB document of a thousand pages
+      opens in milliseconds instead of a minute, and in megabytes instead of gigabytes.
+    </p>
+    <p>
+      Nothing is lost. Every document is verified before your original is touched, so a
+      failed save cannot corrupt the file someone sent you, and closing or quitting with
+      unsaved changes always asks first.
+    </p>
+    <p>
+      MegaPDF makes no network connection, and this package asks for no network
+      permission — so that is a fact about the package rather than a claim in a listing.
+      It asks for no access to your files either: opening and saving go through the
+      desktop's file portal, which hands the application exactly the file you picked and
+      nothing else. Your documents and your signature never leave your computer, because
+      there is no server for them to go to.
+    </p>
+    <p>
+      The interface is in English and French. MegaPDF is free software under the Apache
+      License 2.0, so anyone can check any of the above.
     </p>
   </description>
 
   <url type="homepage">https://electricrv.ca/megapdf/</url>
   <url type="bugtracker">https://github.com/SlyWombat/MegaPDF/issues</url>
   <url type="vcs-browser">https://github.com/SlyWombat/MegaPDF</url>
+  <url type="contribute">https://github.com/SlyWombat/MegaPDF</url>
+  <!-- The privacy policy, which is the same page both Apple's and Google's listings
+       point at. AppStream 1.0 has no `privacy` url type, so it goes under `contact` —
+       the type whose description is the page a user reaches the publisher through. -->
+  <url type="contact">https://electricrv.ca/megapdf/privacy/</url>
+
+  <!-- The colours a software centre paints behind the name. Both are already in the
+       app's own palette (src/MegaPDF.Avalonia/Brand.axaml): the light one is
+       BrandSystemAccentColorLight3 and the dark one BrandSystemAccentColorDark3, either
+       side of the accent the application draws its selections in. -->
+  <branding>
+    <color type="primary" scheme_preference="light">#9FC5EF</color>
+    <color type="primary" scheme_preference="dark">#062C56</color>
+  </branding>
 
   <!-- Linux captures of this app, at the 1280x800 "desktop" slot the capture gate
        holds the Linux set to. Taken by tools/linux/store-captures.sh and reviewed by
@@ -155,10 +199,52 @@
     <display_length compare="ge">768</display_length>
   </requires>
 
-  <!-- One entry, the version this packaging was built and tested against. A submission
-       wants the release history the other stores already have; the runbook says where
-       it comes from. -->
+  <!-- The product's version history, newest first.
+       Two things this list is not. It is not a claim that these versions ran on Linux:
+       2.0.0 is the first MegaPDF built for it, and the earlier entries are the same
+       product on the desktops and phones it already shipped on. And it is not a set of
+       release notes: the repository keeps notes for 2.0 only
+       (docs/release-notes/2.0/), so 2.0.0 carries a description taken from that
+       approved copy and the earlier entries carry a version and the date of their tag
+       in this repository, which is all that can be said without inventing any of it.
+
+       2.0.0's date is the day this packaging and the 2.0 copy were finished, not a
+       release date — 2.0 has not been released. Both the version and the date have to
+       be right at tag time, and the tag build is where that is enforced (#254 A3)
+       rather than left to whoever remembers. -->
   <releases>
-    <release version="1.7.0" date="2026-09-17"/>
+    <release version="2.0.0" date="2026-09-18">
+      <url type="details">https://github.com/SlyWombat/MegaPDF/blob/main/docs/release-notes/2.0/release-notes-2.0.md</url>
+      <description>
+        <p>The first MegaPDF release for Linux. It brings everything in 2.0:</p>
+        <ul>
+          <li>Correcting the document's own text far more often. Over a 22,000-edit test
+          run, every one of the 112 edits 1.7 used to refuse now goes through, and none
+          of them disturbs the page.</li>
+          <li>Redaction: mark text or a picture and MegaPDF removes it from the file.
+          Whiteout only covers, and now says so.</li>
+          <li>Protected PDFs: open one with its password, and set, change or remove a
+          password. Where the owner restricted what may be changed, MegaPDF respects
+          that and says so.</li>
+          <li>Very large PDFs. A 2.5 GB file used to take a minute to open and gigabytes
+          of memory; it now opens straight away. Banner-size pages measure at their real
+          size, and pages full of pictures draw several times faster.</li>
+          <li>One row of tools, with the pickers appearing beside the tool they belong to
+          and everything else under More.</li>
+          <li>It tells you what it is doing: opening, saving, checking the saved file,
+          searching, checking a page, making a smaller copy, preparing to print. Anything
+          quicker than half a second still says nothing at all.</li>
+          <li>Your work is safer. Closing, quitting or opening another file with unsaved
+          changes always asks first, and a save that fails can no longer leave the
+          original empty.</li>
+          <li>French.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="1.7.0" date="2026-09-11"/>
+    <release version="1.6.2" date="2026-08-29"/>
+    <release version="1.5.0" date="2026-07-16"/>
+    <release version="1.4.0" date="2026-07-09"/>
+    <release version="1.3.0" date="2026-07-09"/>
   </releases>
 </component>

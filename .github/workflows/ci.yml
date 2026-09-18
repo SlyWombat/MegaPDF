@@ -428,6 +428,19 @@ jobs:
           flatpak install -y --noninteractive --user flathub \
             "org.freedesktop.Platform//$runtime" "org.freedesktop.Sdk//$runtime"
 
+      # Flathub's own linter, which is the tool that will read this submission. It lives
+      # inside org.flatpak.Builder and is built on the Sdk the step above has already
+      # installed, so this is a small download rather than another runtime.
+      - name: Flathub's linter
+        run: flatpak install -y --noninteractive --user flathub org.flatpak.Builder
+
+      # The listing, checked by both the tools a Flathub reviewer would run: appstreamcli
+      # offline, and flatpak-builder-lint over the metainfo and the manifest. The one
+      # thing it tolerates is the screenshot URLs not resolving until the site is
+      # deployed, and it tolerates nothing else — see the script (#254 A1, A2).
+      - name: The listing a software centre will show
+        run: tools/linux/check-metainfo.sh
+
       - name: Build the Flatpak
         run: tools/linux/build-flatpak.sh "$RUNNER_TEMP/app/MegaPDF" "$RUNNER_TEMP/flatpak"
 

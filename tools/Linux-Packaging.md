@@ -23,6 +23,7 @@ runs again in CI on every push.
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.yml` | the manifest. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | the AppStream data a software centre shows. |
 | `tools/linux/store-captures.sh` | the six listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
+| `tools/linux/check-metainfo.sh` | the listing, through both the tools a Flathub reviewer runs: `appstreamcli validate` and `flatpak-builder-lint`. In CI on every push. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
@@ -39,6 +40,14 @@ sudo tools/linux/check-deb.sh            # installs it, runs it, removes it
 
 tools/linux/build-flatpak.sh             # -> artifacts/flatpak/ca.electricrv.MegaPDF.flatpak
 tools/linux/check-flatpak.sh             # installs it, runs the app in the sandbox
+
+tools/linux/check-metainfo.sh            # the listing, through both validators
+```
+
+`check-metainfo.sh` needs Flathub's own linter, which is a flatpak:
+
+```sh
+flatpak install --user flathub org.flatpak.Builder
 ```
 
 The listing screenshots, which are not part of either package but are what the metainfo
@@ -217,11 +226,30 @@ following can be decided here.
 
      Eighteen `200`s, and then `appstreamcli validate --pedantic` (no `--no-net`) passes
      on its own.
-4. **The summary and description** in the metainfo are adapted from the App Store copy in
-   `docs/app-store-listing.md`. Read them once as a Linux listing rather than an iOS one.
-5. **A release history.** The metainfo has one `<release>` entry for the version it was
-   built against. A submission wants the same history the other stores have, from
-   `docs/release-notes/`.
+4. **The summary and description — rewritten for this platform; the French needs a
+   reader.** They were adapted from the App Store copy in `docs/app-store-listing.md`,
+   which talks about tapping, about "your device", and about opening files from Mail and
+   iCloud Drive. They now describe this package on this machine: the form work, the text
+   correction, redaction, protected documents, very large files, printing through the
+   desktop's own dialogue, and the two permissions the package does *not* ask for. No
+   sentence claims anything about another platform.
+
+   **What is still owed:** the French `<summary>`, `<description>` and screenshot
+   captions are new copy, written here rather than taken from anything already approved.
+   They belong in the same francophone review as the rest of the 2.0 listing copy
+   (#146 §2, `docs/release-notes/2.0/README.md`) and should go to the same reviewer.
+   The English is the version to trust until they do.
+5. **A release history — present, and honest about what it is.** `<releases>` now runs
+   2.0.0, 1.7.0, 1.6.2, 1.5.0, 1.4.0, 1.3.0. Only 2.0.0 carries a description, taken
+   from the approved 2.0 copy in `docs/release-notes/2.0/`; the earlier entries carry a
+   version and the date of their tag in this repository, because the repository keeps no
+   notes for them and inventing some is worse than a bare entry. The list is the
+   product's history, not a claim that those versions ran on Linux — 2.0.0 is the first
+   MegaPDF built for it, and its own description says so.
+
+   **2.0.0's date is the day the packaging and the 2.0 copy were finished, not a release
+   date.** Both the version and the date have to be right when 2.0 is tagged; the tag
+   build is where that is checked, so it is not left to whoever remembers.
 6. **Which branch.** Flathub builds from a manifest in its own repository. This one
    installs a prebuilt tree, which Flathub accepts for a project whose source is public —
    MegaPDF is Apache-2.0 — but it means the manifest there fetches a release tarball from
