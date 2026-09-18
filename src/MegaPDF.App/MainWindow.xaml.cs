@@ -113,6 +113,15 @@ public sealed partial class MainWindow : Window
             // Arming Add text brings the font and size pickers onto the toolbar (#144).
             if (e.PropertyName is nameof(MainViewModel.IsTextBoxMode))
                 OnTextBoxModeChanged();
+            // A tool turning off says so (#268). Turning on is already spoken — the hint
+            // banner is a live region — but Esc, a finished whiteout or redaction, and a
+            // second press end a tool in silence, and focus is usually on the page by then.
+            if (e.PropertyName is nameof(MainViewModel.IsTextBoxMode) && !ViewModel.IsTextBoxMode)
+                Announce(Strings.ToolOffNotice(AddTextButton.Label));
+            if (e.PropertyName is nameof(MainViewModel.IsWhiteoutMode) && !ViewModel.IsWhiteoutMode)
+                Announce(Strings.ToolOffNotice(WhiteoutButton.Label));
+            if (e.PropertyName is nameof(MainViewModel.IsRedactMode) && !ViewModel.IsRedactMode)
+                Announce(Strings.ToolOffNotice(RedactButton.Label));
         };
         Title = ViewModel.WindowTitle;
     }
@@ -1463,14 +1472,25 @@ public sealed partial class MainWindow : Window
     private void OnCancelPlacementClicked(InfoBar sender, object args) =>
         ViewModel.CancelPlacementModes();
 
-    private void OnWhiteoutModeClicked(object sender, RoutedEventArgs e) =>
-        ViewModel.StartWhiteoutMode();
+    // The three tools are toggles (#268): pressing one that is on turns it off, as on the
+    // Mac. Their automation peer says "pressed", so pressing it again has to release it.
+    private void OnWhiteoutModeClicked(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.IsWhiteoutMode) ViewModel.CancelPlacementModes();
+        else ViewModel.StartWhiteoutMode();
+    }
 
-    private void OnRedactModeClicked(object sender, RoutedEventArgs e) =>
-        ViewModel.StartRedactMode();
+    private void OnRedactModeClicked(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.IsRedactMode) ViewModel.CancelPlacementModes();
+        else ViewModel.StartRedactMode();
+    }
 
-    private void OnTextBoxModeClicked(object sender, RoutedEventArgs e) =>
-        ViewModel.StartTextBoxMode();
+    private void OnTextBoxModeClicked(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.IsTextBoxMode) ViewModel.CancelPlacementModes();
+        else ViewModel.StartTextBoxMode();
+    }
 
     private void OnDefaultAppCardClosed(InfoBar sender, object args) =>
         ViewModel.DismissDefaultAppCard();

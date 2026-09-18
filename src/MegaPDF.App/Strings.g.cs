@@ -40,6 +40,9 @@ public static partial class Strings
     /// <summary>{0} of {1}</summary>
     public static string MatchOf(object? arg0, object? arg1) => string.Format(CultureInfo.CurrentCulture, Get("MatchOf"), arg0, arg1);
 
+    /// <summary>{0} off</summary>
+    public static string ToolOffNotice(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ToolOffNotice"), arg0);
+
     /// <summary>Click on the page to place “{0}”</summary>
     public static string PlaceSignatureHint(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("PlaceSignatureHint"), arg0);
 

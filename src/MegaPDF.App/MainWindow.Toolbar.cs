@@ -355,8 +355,39 @@ public sealed partial class MainWindow
         var visibility = TextPickersWanted ? Visibility.Visible : Visibility.Collapsed;
         if (FontPickerItem.Visibility == visibility)
             return;
+        // Relaying the row out for the pickers re-templates it on a later layout pass, and
+        // the focus manager then moved focus to More: a keyboard user pressing Add text heard
+        // "More options" instead of "pressed" (#268). While that relayout runs, a focus move
+        // away from Add text that no key or pointer asked for is refused.
+        if (AddTextButton.FocusState != FocusState.Unfocused)
+            HoldAddTextFocus();
         FontPickerItem.Visibility = SizePickerItem.Visibility = visibility;
         ApplyToolbarLayout();
+    }
+
+    private bool _holdingAddTextFocus;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _addTextFocusRelease;
+
+    private void HoldAddTextFocus()
+    {
+        if (_addTextFocusRelease is null)
+        {
+            AddTextButton.LosingFocus += (_, args) =>
+            {
+                // Measured: the move arrives flagged as Keyboard, straight to More, the
+                // instant the pickers appear — the row's relayout, not the person's next
+                // key. Only that move is refused, and only while the relayout runs.
+                if (_holdingAddTextFocus && args.NewFocusedElement is FrameworkElement { Name: "MoreButton" })
+                    args.TryCancel();
+            };
+            _addTextFocusRelease = DispatcherQueue.CreateTimer();
+            _addTextFocusRelease.Interval = TimeSpan.FromMilliseconds(500);
+            _addTextFocusRelease.IsRepeating = false;
+            _addTextFocusRelease.Tick += (_, _) => _holdingAddTextFocus = false;
+        }
+        _holdingAddTextFocus = true;
+        _addTextFocusRelease.Stop();
+        _addTextFocusRelease.Start();
     }
 
     private void OnTextBoxModeChanged()

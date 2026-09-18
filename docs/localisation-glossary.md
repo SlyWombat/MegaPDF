@@ -178,6 +178,7 @@ Conventions (OQLF, Canadian French):
 | Overwrite the original | Remplacer l'original | #173 |
 | -redacted | -caviarde | #173 file-name suffix; no accent, because it is a file name |
 | {0} areas redacted: {1} | {0} zones caviardées : {1} | #173 summary after saving |
+| {0} off | {0} : désactivé | #268, Windows: spoken when Add text, Whiteout or Redact turns off; {0} is the tool's label |
 | Nothing was removed | Rien n'a été retiré | #173, when a redaction fails closed |
 | About MegaPDF | À propos de MegaPDF | #176, macOS app menu and the window it opens; every platform spells the product MegaPDF (2026-09-18) |
 | Version {0} ({1}) | Version {0} ({1}) | #176; the build number only appears once it differs from the version |

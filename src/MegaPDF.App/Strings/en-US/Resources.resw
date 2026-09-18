@@ -240,6 +240,10 @@
     <value>{0} of {1}</value>
     <comment>Find bar: current match of total</comment>
   </data>
+  <data name="ToolOffNotice" xml:space="preserve">
+    <value>{0} off</value>
+    <comment>#268: spoken when Add text, Whiteout or Redact turns off; {0} is the tool's toolbar label</comment>
+  </data>
   <data name="PlaceSignatureHint" xml:space="preserve">
     <value>Click on the page to place “{0}”</value>
   </data>

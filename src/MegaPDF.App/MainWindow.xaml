@@ -104,18 +104,18 @@
             <AppBarButton x:Name="SignaturesToolbarButton" Click="OnSignaturesClicked" IsEnabled="{x:Bind ViewModel.IsSigningAllowed, Mode=OneWay}" DynamicOverflowOrder="80" AutomationProperties.AutomationId="SignaturesButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xEE56;" /></AppBarButton.Icon>
             </AppBarButton>
-            <AppBarButton x:Name="AddTextButton" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
-                <AppBarButton.Icon><FontIcon Glyph="&#xE8D2;" /></AppBarButton.Icon>
-            </AppBarButton>
-            <AppBarButton x:Name="WhiteoutButton" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
-                <AppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></AppBarButton.Icon>
-            </AppBarButton>
+            <local:ArmableAppBarButton x:Name="AddTextButton" IsArmed="{x:Bind ViewModel.IsTextBoxMode, Mode=OneWay}" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
+                <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE8D2;" /></local:ArmableAppBarButton.Icon>
+            </local:ArmableAppBarButton>
+            <local:ArmableAppBarButton x:Name="WhiteoutButton" IsArmed="{x:Bind ViewModel.IsWhiteoutMode, Mode=OneWay}" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
+                <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></local:ArmableAppBarButton.Icon>
+            </local:ArmableAppBarButton>
             <!-- Redact beside Whiteout, because the pair is the point (#173): one covers,
                  the other removes, and each tooltip says which. Glyph E7BA is the "block
                  out" mark; it overflows before Whiteout does, not after. -->
-            <AppBarButton x:Name="RedactButton" Click="OnRedactModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
-                <AppBarButton.Icon><FontIcon Glyph="&#xE7BA;" /></AppBarButton.Icon>
-            </AppBarButton>
+            <local:ArmableAppBarButton x:Name="RedactButton" IsArmed="{x:Bind ViewModel.IsRedactMode, Mode=OneWay}" Click="OnRedactModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
+                <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE7BA;" /></local:ArmableAppBarButton.Icon>
+            </local:ArmableAppBarButton>
             <!-- Contextual (#144): shown while Add text is armed, or an added text box is
                  selected or being edited. No formatting UI for the document's own text
                  or form fields (SDD §3.1): their formatting is inherited. -->
