@@ -30,11 +30,11 @@ the result before continuing. Paths must be **Windows** paths.
     python3 tools/screenshots-windows/gen_store_docs.py
 
     # 1. launch, size the window, open the agreement
-    .\Setup-Frame.ps1 -W 3060 -T 2000 -Pdf "<repo>\artifacts\store\screenshots\blank-agreement.pdf" `
+    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\artifacts\store\screenshots\blank-agreement.pdf" `
                       -Fit "FitPageItem" -ZoomIn 1 -Name probe-frame
 
     # 2. shot 1 — click the misspelled name, retype it (caret must be visible)
-    .\Shot-TextEdit.ps1 -X 1013 -Y 735
+    .\Shot-TextEdit.ps1 -X 854 -Y 572
 
     # 3. shot 2 — commit the edit, tick two of the three boxes
     .\Shot-Checkboxes.ps1
@@ -42,13 +42,26 @@ the result before continuing. Paths must be **Windows** paths.
     # 4. shot 3 — arm the signature, scroll down, drop it on the line
     .\Open-SignatureFlyout.ps1        # once, to locate the library item
     .\Arm-Signature.ps1 -Notches 7
-    .\Place-Signature.ps1 -X 1203 -Y 1401
+    .\Place-Signature.ps1 -X 1000 -Y 1150
 
     # 5. shot 4 — save, open the scan, Shrink for email
+    #    French runs: name the copy the way the app suggests — "… - réduit.pdf"
     .\Shot-Shrink.ps1 -Pdf "<repo>\...\scanned-agreement.pdf" -Out "<repo>\...\scanned-agreement - smaller.pdf"
 
     # 6. shot 5 — Add text with the size and face pickers showing (#43)
-    .\Shot-AddText.ps1 -X 1430 -Y 1080
+    .\Shot-AddText.ps1 -X 1500 -Y 1130
+
+The checkbox clicks in step 3 are at 746,756 and 746,812 on this frame.
+
+**Deselect before shots 3 and 5.** A signature keeps its selection box once it is
+dropped, and the box — a blue rectangle with handles, straight across the
+signature line — is in the shot. Click the grey margin (about 200,1200) after
+`Place-Signature.ps1` and again before `Shot-AddText.ps1`. Found in the
+2026-09-17 dry run, in all three languages.
+
+**Clear the signature library first.** Whatever else is in it shows above
+MegaWoman in the flyout, and the library labels a row with the file name it was
+seeded from. Leave exactly one signature, named like a person.
 
 `Test-FullBreakpoint.ps1` captures toolbar strips right at the full-label
 breakpoint with a document open and edited, so `Save ●` is showing — the widest
@@ -64,8 +77,9 @@ signature library (needed once per machine). `Test-ToolbarWidths.ps1` captures
 toolbar strips across a list of widths. `Shot-Now.ps1` grabs the current state.
 
 **The coordinates above are for a 2500x1550 window on a 2560x1600 display at 150%
-scale** (GPD-DAVE, 2026-09-09); the previous set was a 3060x2000 window on a
-3240x2160 display at 200%.
+scale** (GPD-DAVE, re-read 2026-09-17 against the one-row toolbar of #144; the
+2026-09-09 set was for the two-row bar and clicks the wrong things now). The set
+before that was a 3060x2000 window on a 3240x2160 display at 200%.
 
 **Set the display scale, not just the resolution.** `ApplyToolbarLayout` switches
 on *effective* pixels, so a 2500 px window at 200% is 1250 effective and drops the
