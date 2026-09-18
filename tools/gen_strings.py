@@ -161,7 +161,10 @@ def write_pseudo(source: Path, target: Path) -> None:
 # Edit the table, not the derived files — CI regenerates and diffs them.
 
 FR_CA_TO_FR_FR = [
-    # (Canadian, France) — order matters, longer phrases first.
+    # (Canadian, France) — order matters, longer phrases first. The contracted
+    # articles go first too: "au courriel" is "à l'e-mail", never "au e-mail".
+    ("au courriel", "à l'e-mail"),
+    ("du courriel", "de l'e-mail"),
     ("pour le courriel", "pour l'e-mail"),
     ("pour courriel", "pour l'e-mail"),
     ("courriel", "e-mail"),

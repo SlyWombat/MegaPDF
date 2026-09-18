@@ -280,7 +280,7 @@ PDF léger
 01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
-04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée au e-mail en un clic.
+04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée à l'e-mail en un clic.
 05-add-text.png: Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire.
 ```
 
