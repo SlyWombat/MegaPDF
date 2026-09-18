@@ -49,7 +49,9 @@ final class BodyTextEditUITests: XCTestCase {
             font: "<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>")
     }
 
-    /// Text under 4 pt of character spacing, which PDFium's content writer cannot write back (#118).
+    /// Text under 4 pt of character spacing. Stock PDFium's content writer cannot
+    /// write this back (#118); the pinned build can, because of the spacing patch
+    /// (#121) — see the test below.
     private var spacedHeading: String {
         pdf(content: "BT /F1 24 Tf 4 Tc 72 700 Td (Spaced report) Tj ET BT /F1 24 Tf 72 660 Td (Second line) Tj ET",
             font: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
@@ -110,14 +112,31 @@ final class BodyTextEditUITests: XCTestCase {
         XCTAssertTrue(banner.label.contains("standard font"), banner.label)
     }
 
-    func testAPageThatCannotBeRewrittenFaithfullySaysSoInsteadOfOpeningTheEditor() {
+    /// Text under 4 pt of character spacing **is** editable, because the pinned
+    /// PDFium carries the spacing patch (#121).
+    ///
+    /// This test used to assert the opposite — that the page refuses (#118) — and
+    /// it went red the moment the pin moved, because nothing in CI runs
+    /// `MegaPDFUITests` and so nobody saw it go stale. `core_tests.cpp` had
+    /// always guarded the same case with `if (MEGAPDF_PDFIUM_PATCHES < 1)`, and
+    /// its fidelity table (`test_rewrite_fidelity`) tops out at `fixed_by = 16`
+    /// against a build carrying 30 patches: at this pin **no** case in that table
+    /// is refused. So the refusal has no fixture left to drive it from the UI,
+    /// and asserting it here was asserting that the patch had not been applied.
+    ///
+    /// What is worth holding on to is the other half — that the spacing patch
+    /// really does let this page through, and that retyping one line leaves the
+    /// neighbouring line alone. The refusal path itself is covered where it can
+    /// be: `core_tests.cpp` §#118 and `test_rewrite_fidelity`, per patch level.
+    func testTextUnderCharacterSpacingIsEditableWithThePinnedPdfium() {
         let page = launch(with: spacedHeading)
         tap(page, x: 160, yFromBottom: 708)
-        let banner = app.staticTexts["noticeBanner"]
-        XCTAssertTrue(banner.waitForExistence(timeout: 8), "a page the engine will not rewrite must say so")
-        XCTAssertTrue(banner.label.contains("layout"), banner.label)
-        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "bodyTextField").firstMatch.exists,
-                       "the editor must not open on text that cannot be changed faithfully")
+        retype("Adjusted report")
+        XCTAssertFalse(app.staticTexts["noticeBanner"].waitForExistence(timeout: 2),
+                       "an edit the engine accepts must not show a refusal notice: "
+                       + app.staticTexts["noticeBanner"].label)
+        XCTAssertTrue(app.buttons["Undo"].isEnabled || app.buttons["Undo"].exists,
+                      "the edit is on the undo stack")
     }
 
     func testTier3_aPageWithNoTextSaysItIsAScannedImage() {

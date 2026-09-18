@@ -57,7 +57,7 @@ the second desktop is for is everything around the window — see §10.
 
 | # | Dialog | Buttons | How to reach it | Posed by | Seen |
 |---|---|---|---|---|---|
-| 2.1 | **Unsaved changes** — "Do you want to save the changes made to the document "{0}"?" | Don't Save / Cancel / **Save** | edit, then Close or Ctrl+Q | `--screenshot-state unsaved` → `<out>-dialog.png` | ✅ |
+| 2.1 | **Unsaved changes** — "Do you want to save the changes made to the document "{0}"?" | Don't Save / Cancel / **Save** | edit, then close the window (**not** Ctrl+W or Ctrl+Q — see the note under §3) | `--screenshot-state unsaved` → `<out>-dialog.png` | ✅ |
 | 2.2 | **Restore unsaved work** (recovery) | Discard them / Decide later / **Restore** | kill the app mid-edit, relaunch | real window | journal verified, §9 |
 | 2.3 | **Key needed** to open a protected file | Cancel / **Open** | open a user-protected PDF | real window | hands |
 | 2.4 | **Unlock document** (owner credential) — same window, relabelled | Cancel / **Unlock** | **Unlock…** in the restricted banner | real window | hands |
@@ -77,7 +77,7 @@ the second desktop is for is everything around the window — see §10.
 
 | # | Menu | Contents | Seen |
 |---|---|---|---|
-| 3.1 | The menu bar, in the window | File / Edit / View / Tools / Window / Help (`MainWindow.MenuBar.cs`) | ✅ asserted by `--self-test` |
+| 3.1 | The menu bar — **built but not drawn on Linux** | File / Edit / View / Tools / Window / Help (`MainWindow.MenuBar.cs`) | ✅ the structure is asserted by `--self-test`; **no menu bar appears in the window** |
 | 3.2 | Every toolbar, More and zoom command reachable from it | 22 commands | ✅ asserted by `--self-test` |
 | 3.3 | **More** (•••) — Save As, Password…, Print, Shrink, Options, plus anything overflowed | | ✅ at 1280/1000/800/480 |
 | 3.4 | Zoom menu — the presets, Fit width, Fit page, Actual size | | hands (the flyout is its own window) |
@@ -86,6 +86,21 @@ the second desktop is for is everything around the window — see §10.
 
 Command key is **Ctrl** (`Shortcut(...)`, `MainWindow.MenuBar.cs:42`); Redo is **Ctrl+Y**
 off macOS, not Ctrl+Shift+Z.
+
+**`NativeMenu` has no host on X11, so none of it is on screen and neither are the
+two shortcuts that live only in it.** `SDD.md` §"Command surface" says the app has
+no menu bar, and on Linux it does not: `MainWindow.axaml` carries no
+`NativeMenuBar`, so `NativeMenu.SetMenu` builds a structure that `--self-test` can
+walk and that nothing draws. Every command that also has a toolbar button or an
+entry in `Window.KeyBindings` (`MainWindow.axaml.cs:1447-1469` — Open, Save, Save
+As, Print, Undo, Redo, zoom in/out, Actual size, Options, Find) is reachable
+anyway. **Close (Ctrl+W) and Minimize (Ctrl+M) are not**: they exist only as
+`NativeMenuItem` gestures, so on Linux they do nothing. Measured in the
+2026-09-18 RC pass: Ctrl+W and Ctrl+Q leave a changed document open with no
+prompt, while the window manager's close button raises **Unsaved changes** with
+Don't Save / Cancel / Save as it should — so nothing can be lost, and the Windows
+app has no Ctrl+W either. Only macOS has one, because there the `NativeMenu` *is*
+the menu bar.
 
 ## 4. Toolbar and find-bar layout steps
 

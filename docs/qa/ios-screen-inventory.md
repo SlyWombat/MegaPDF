@@ -118,8 +118,18 @@ announces itself with a modal alert instead.
 | 5.4 | **Edit body text** | tap a line of the document's own text | opens the body-text sheet; a spinner sits on the line while the #139 verdict runs | Cancel / Save |
 | 5.5 | Tick / checkmark | tap an AcroForm field, an existing mark, or a detected square | none | — |
 
-**Cover / redact does not exist on iOS.** Do not file its absence as a defect
-here; it is a platform-feature gap, and belongs on its own issue if Dave wants it.
+**Redact does exist on iOS** (#173) — bottom bar ▸ Redact (id `viewerRedact`),
+armed state on the button's accessibility *value* ("On"/"Off"), a drag marks an
+area, the tool disarms itself once a mark lands, and Save raises a confirmation
+before anything is removed. A mark on its own does not change the document, so
+the title stays clean until it is applied. This line used to say redaction was
+absent, which was true when the inventory was written and stopped being true
+when #173 landed.
+
+**Cover (whiteout) does not exist on iOS.** The mobile set is fill, check, sign,
+find, add text and redact (`ViewerView.swift:169`). Do not file its absence as a
+defect here; it is a platform-feature gap, and belongs on its own issue if Dave
+wants it.
 
 Tap dispatch order, for reproducing an ambiguous tap: pending signature → pending
 text → existing signature → text box → AcroForm field → existing mark → detected
@@ -183,12 +193,20 @@ square → body-text line → empty page (scanned hint).
 - [ ] add text
 - [ ] edit body text
 - [ ] undo and redo
+- [ ] **redact** — arm, drag, confirm, and read the saved copy back from outside
+      the app (the rule #173 sets: never ask PDFium whether PDFium removed it)
 - [ ] save, and save a copy
 - [ ] set protection, then remove it
 - [ ] close with unsaved changes
 - [ ] relaunch after the app is killed
 
 Cover, shrink and print have no iOS surface — skip them here.
+
+**#259 cannot happen on iOS**: zoom is clamped to 1×–4× (`ViewerView.swift:30`,
+`min(max(zoom * gestureZoom, 1), 4)`), so there is no zoom below 100 % for a
+dropped signature to be clamped up from. Measured as well as read, in the
+2026-09-18 RC pass: a hard pinch inwards from 1× leaves the page exactly as wide
+as it was.
 
 ## 9. iPad vs iPhone
 
