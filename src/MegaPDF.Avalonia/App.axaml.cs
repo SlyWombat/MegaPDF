@@ -371,6 +371,10 @@ public partial class App : Application
                 if (window is MainWindow main)
                 {
                     Console.WriteLine(main.DescribeToolbar());
+                    // And the find bar's, when there is one on screen: it folds on the
+                    // same principle and at 480 it is the row that used to overflow (#237).
+                    if (main.DataContext is MainViewModel { IsFindOpen: true })
+                        Console.WriteLine(main.DescribeFindBar());
                     Console.WriteLine(main.DescribeMenuBar());
                 }
                 if (RenderScale != 1 && OverlaysOnThePage(desktop.MainWindow?.DataContext as MainViewModel))
