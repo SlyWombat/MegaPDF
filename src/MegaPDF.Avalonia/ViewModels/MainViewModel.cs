@@ -1936,6 +1936,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
         RefreshRedactionMarks();
         SetMode(PageMode.Select);
+        // Last, and it has to be: SetMode(Select) puts "Ready." in the status line, so
+        // saying this before it meant the mark was never announced at all — not in the
+        // status bar and not to a screen reader, which is the only confirmation there
+        // is that a faint translucent band went where it was meant to (#173).
+        Status = Strings.RedactMarkPlaced;
     }
 
     /// <summary>Re-reads the marks from the core onto every loaded page.</summary>

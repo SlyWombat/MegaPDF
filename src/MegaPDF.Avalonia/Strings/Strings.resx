@@ -973,7 +973,7 @@
     <comment>Toolbar (#173): tooltip</comment>
   </data>
   <data name="RedactHint" xml:space="preserve">
-    <value>Drag across what you want removed, or select text — Esc cancels</value>
+    <value>Drag across what you want removed, select text, or press Enter on the focused item — Esc cancels</value>
     <comment>Status hint while the Redact tool is armed (#173)</comment>
   </data>
   <data name="RedactMarkName" xml:space="preserve">

@@ -971,7 +971,7 @@
     <comment>Toolbar (#173): tooltip. #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactHint" xml:space="preserve">
-    <value>Glissez sur ce qui doit être retiré, ou sélectionnez du texte. Échap pour annuler</value>
+    <value>Glissez sur ce qui doit être retiré, sélectionnez du texte ou appuyez sur Entrée sur l'élément ciblé. Échap pour annuler</value>
     <comment>Status hint while the Redact tool is armed (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactMarkName" xml:space="preserve">
