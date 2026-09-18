@@ -1439,9 +1439,13 @@ public partial class MainViewModel(Window window) : ObservableObject
             var width = defaultWidthPoints;
             var height = width * image.Height / image.Width;
 
-            // Clamp within the page.
+            // Clamp within the page, in points. PageView's size is the page as drawn — at the
+            // current zoom — so it is divided back out: at Fit page (62 %) the old conversion
+            // took a Letter page for 491 pt tall and lifted any signature dropped on its lower
+            // part, the signature line included, up the page.
             var pageView = Pages[pageIndex];
-            double pageW = pageView.Width * 72 / 96, pageH = pageView.Height * 72 / 96;
+            var toPoint = 72.0 / 96 / ZoomFactor;
+            double pageW = pageView.Width * toPoint, pageH = pageView.Height * toPoint;
             var x = Math.Clamp(point.X - width / 2, 0, Math.Max(0, pageW - width));
             var y = Math.Clamp(point.Y - height / 2, 0, Math.Max(0, pageH - height));
 
