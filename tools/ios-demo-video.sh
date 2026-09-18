@@ -96,23 +96,41 @@ sleep 2
 xcrun simctl shutdown "$UDID" || true
 fi
 
-# Trim to the app. Saturation tells the two apart: the home-screen wallpaper
-# averages about 30, the app — grey chrome, white page, black ink — under 2,
-# launch splash included. (Luma does not: the page with the keyboard down sits
-# right on the wallpaper's value.) Before the first app frame is the
-# springboard while xcodebuild starts up; after the last, the springboard again
-# once the runner has killed the app.
-read -r START END <<<"$(ffmpeg -v error -i "$RAW" -vf "scale=32:32,signalstats,metadata=print:key=lavfi.signalstats.SATAVG:file=-" -f null - 2>/dev/null \
+# Trim to the app. Two measurements, because one does not separate three
+# things. Measured over the six 2.0 runs, on a light-appearance simulator
+# (forced above):
+#
+#   the springboard   SATAVG 29-32   YAVG 158-168
+#   the launch screen SATAVG  0.0    YAVG  16          (black, and unsaturated)
+#   the app, drawing  SATAVG  0-9.6  YAVG 103-217
+#
+# Saturation alone lets the black launch screen through, and luma alone cannot
+# be trusted — the page with the keyboard down sits right on the wallpaper's
+# value. Unsaturated *and* bright is the app with something on screen.
+#
+# Neither end is padded, and that is the point. The 0.2 s this used to keep on
+# each side put six frames of the iOS home screen — other apps' icons, and the
+# UI-test runner's icon among them — at the head of every clip that went to the
+# store, and put the home screen back at the tail. In the six runs the frame
+# before the start reads Y 80-100 (the app fading in) and the frame after the
+# end is either the springboard at SATAVG 31.8 or black at Y 16.
+read -r START END <<<"$(ffmpeg -v error -i "$RAW" -vf "scale=32:32,signalstats,metadata=print:key=lavfi.signalstats.SATAVG:file=-,metadata=print:key=lavfi.signalstats.YAVG:file=-" -f null - 2>/dev/null \
     | python3 -c "
 import re, sys
-t, app = None, []
+# Two metadata filters each print their own frame header, so one frame's two
+# values do not arrive together: collect by timestamp, decide afterwards.
+t, seen = None, {}
 for line in sys.stdin:
     m = re.search(r'pts_time:([0-9.]+)', line)
     if m: t = float(m.group(1)); continue
-    m = re.search(r'SATAVG=([0-9.]+)', line)
-    if m and t is not None and float(m.group(1)) < 10:
-        app.append(t)
-print(max(0.0, app[0] - 0.2) if app else 0, (app[-1] + 0.2) if app else 999999)")"
+    m = re.search(r'\.(SATAVG|YAVG)=([0-9.]+)', line)
+    if m and t is not None: seen.setdefault(t, {})[m.group(1)] = float(m.group(2))
+app = [t for t in sorted(seen)
+       if seen[t].get('SATAVG', 99) < 1 and seen[t].get('YAVG', 0) > 100]
+if not app:
+    sys.exit('the recording never shows the app: no unsaturated frame above Y 100')
+print(app[0], app[-1])")"
+echo "trimmed to the app: $START s .. $END s"
 DEMO="$OUT/$LABEL-demo.mp4"
 # Constant 30 fps from here on: the simulator recording is variable-rate,
 # and the time compression below only lands on its target from a constant one.
