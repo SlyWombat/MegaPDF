@@ -24,44 +24,63 @@ PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
 ## Run order
 
 Each script drives one step against the already-running app, so you can inspect
-the result before continuing. Paths must be **Windows** paths.
+the result before continuing. Paths must be **Windows** paths. The whole set is
+shot once per listing language: `en-US`, `fr-CA`, `fr-FR`.
 
-    # 0. staging documents (regenerate before EVERY re-shoot — see below)
-    python3 tools/screenshots-windows/gen_store_docs.py
+    # 0. staging documents, per language (regenerate before EVERY re-shoot — see below)
+    python3 tools/screenshots-windows/gen_store_docs.py <repo>\artifacts\store\screenshots\fr-CA --lang fr-CA
 
-    # 1. launch, size the window, open the agreement
-    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\artifacts\store\screenshots\blank-agreement.pdf" `
-                      -Fit "FitPageItem" -ZoomIn 1 -Name probe-frame
+    # 1. the machine's state: the app's language, and a signature library of exactly one
+    .\Set-Language.ps1 -Lang fr-CA -Theme Light
+    .\Reset-SignatureLibrary.ps1
 
-    # 2. shot 1 — click the misspelled name, retype it (caret must be visible)
-    .\Shot-TextEdit.ps1 -X 854 -Y 572
+    # 2. launch, size the window, open the agreement at 100%
+    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\artifacts\store\screenshots\fr-CA\blank-agreement.pdf" `
+                      -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame
 
-    # 3. shot 2 — commit the edit, tick two of the three boxes
-    .\Shot-Checkboxes.ps1
+    # 3. shot 1 — click the misspelled name, retype it (caret must be visible)
+    .\Shot-TextEdit.ps1 -X 880 -Y 538 -Text "Nom : Helene Belanger"   # with the accents
 
-    # 4. shot 3 — arm the signature, scroll down, drop it on the line
+    # 4. shot 2 — commit the edit, tick two of the three boxes
+    .\Shot-Checkboxes.ps1 -X 787 -Y1 707 -Y2 759
+
+    # 5. shot 3 — arm the signature, drop it on the line, let go of it
     .\Open-SignatureFlyout.ps1        # once, to locate the library item
-    .\Arm-Signature.ps1 -Notches 7
-    .\Place-Signature.ps1 -X 1000 -Y 1150
-
-    # 5. shot 4 — save, open the scan, Shrink for email
-    #    French runs: name the copy the way the app suggests — "… - réduit.pdf"
-    .\Shot-Shrink.ps1 -Pdf "<repo>\...\scanned-agreement.pdf" -Out "<repo>\...\scanned-agreement - smaller.pdf"
+    .\Arm-Signature.ps1 -Notches 0 -X 510 -Y 248
+    .\Place-Signature.ps1 -X 1022 -Y 1400
 
     # 6. shot 5 — Add text with the size and face pickers showing (#43)
-    .\Shot-AddText.ps1 -X 1500 -Y 1130
+    .\Shot-AddText.ps1 -X 1390 -Y 1360 -Text "18 mars 2026"
 
-The checkbox clicks in step 3 are at 746,756 and 746,812 on this frame.
+    # 7. shot 4 — save, open the scan, Shrink for email (last: it replaces the document)
+    .\Shot-Shrink.ps1 -Pdf "<repo>\...\fr-CA\scanned-agreement.pdf" -Lang fr-CA
 
-**Deselect before shots 3 and 5.** A signature keeps its selection box once it is
-dropped, and the box — a blue rectangle with handles, straight across the
-signature line — is in the shot. Click the grey margin (about 200,1200) after
-`Place-Signature.ps1` and again before `Shot-AddText.ps1`. Found in the
-2026-09-17 dry run, in all three languages.
+**Shoot at 100%, not at a fit.** "Fit page then one zoom in" landed on 109% in every
+shot, and a listing image with a number like that in the toolbar reads like an
+accident. At 100% on this frame the whole page fits anyway, signature line included,
+so nothing has to be scrolled into view (#146, 2026-09-17).
 
-**Clear the signature library first.** Whatever else is in it shows above
-MegaWoman in the flyout, and the library labels a row with the file name it was
-seeded from. Leave exactly one signature, named like a person.
+**Shot 5 before shot 4.** Shrink opens the scan, which replaces the agreement in the
+window, so Add text has to happen while the agreement is still open. `Shot-AddText.ps1`
+commits its edit after the shot; leaving the editor open swallows the Ctrl+S that
+Shrink starts with, and Shrink then walks into "Save changes?" with its toolbar
+disabled behind the dialog.
+
+**Type the accents from code points, not from this file.** Text piped from WSL through
+`powershell.exe -Command` arrives in the OEM code page: `Hélène` becomes mojibake in
+the document. Build the string in the driver script (`"Nom : H$([char]0xE9)l$([char]0xE8)ne..."`)
+or put it in a `.ps1` saved with a BOM.
+
+**The signature library is part of the frame.** `Reset-SignatureLibrary.ps1` replaces it
+with one entry — the repo's own `tools/assets/megawoman-sig.png`, named "MegaWoman" —
+and sets the machine's own library aside (`-Restore` puts it back). Seeding through the
+UI instead leaves whatever was already there in the flyout and names the row after the
+file it was imported from; both were in the 2026-09-17 dry run.
+
+**The copy Shrink saves is named by the app, not by the harness.** Leave `-Out` off and
+`Shot-Shrink.ps1` reads `SmallerFileName` out of the language's own `.resw`, so the
+French shots say "scanned-agreement - réduit.pdf". Typing an English `-Out` is how
+"- smaller.pdf" ended up in both French sets.
 
 `Test-FullBreakpoint.ps1` captures toolbar strips right at the full-label
 breakpoint with a document open and edited, so `Save ●` is showing — the widest
@@ -72,13 +91,14 @@ Since #91 the breakpoint is measured from the labels rather than fixed at 1500
 this script at 1603 / 1619 effective), so pass `-Widths` straddling the right
 value for the language being shot.
 
-`Add-SignatureToLibrary.ps1` seeds `tools/assets/megawoman-sig.jpg` into the
-signature library (needed once per machine). `Test-ToolbarWidths.ps1` captures
+`Add-SignatureToLibrary.ps1` imports `tools/assets/megawoman-sig.jpg` through the app's
+own "From photo" flow — how the fixture PNG was made, not how a capture run should set
+the library up (use `Reset-SignatureLibrary.ps1`). `Test-ToolbarWidths.ps1` captures
 toolbar strips across a list of widths. `Shot-Now.ps1` grabs the current state.
 
 **The coordinates above are for a 2500x1550 window on a 2560x1600 display at 150%
-scale** (GPD-DAVE, re-read 2026-09-17 against the one-row toolbar of #144; the
-2026-09-09 set was for the two-row bar and clicks the wrong things now). The set
+scale** (GPD-DAVE, re-read 2026-09-17 against the one-row toolbar of #144 at 100%
+zoom; the 2026-09-09 set was for the two-row bar and clicks the wrong things now). The set
 before that was a 3060x2000 window on a 3240x2160 display at 200%.
 
 **Set the display scale, not just the resolution.** `ApplyToolbarLayout` switches

@@ -25,3 +25,9 @@ Start-Sleep -Seconds 2
 Start-Sleep -Seconds 2
 Park $h
 Shot $h "05-add-text"
+# Commit the edit once the shot is taken. Leaving the editor open swallows the
+# Ctrl+S the Shrink step starts with, and Shrink then walks into "Save changes?"
+# with its toolbar disabled behind the dialog.
+Front $h
+[System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+Start-Sleep -Seconds 2
