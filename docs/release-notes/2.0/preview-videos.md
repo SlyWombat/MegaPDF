@@ -82,10 +82,28 @@ Seventy-five flags in all, and they are five things rather than seventy-five:
 |---:|---|---|
 | **40** `clipping` | every Mac still from the moment the page is scrolled | The scrollbar's chevron at the right edge, at row 1046, byte-identical in all forty. The check's own notes say a scrollbar is not a defect. |
 | **17** `chrome` | iPhone stills | H.264 ringing along the clock, and the status bar crossing between its dark and light states as the find bar opens. See below, and §5.2. |
-| **10** `person` | fr-FR Mac stills | *"'Céline Lefèvre' is on screen without any of its accents."* **The tool is wrong and the eye is right**: opened at full size, t019 through t029 all read *Céline Lefèvre* with both accents. tesseract resolved accents elsewhere on those images and not in the name, which is the same thing that happened to Hélène Bélanger on a 420 dpi Android capture (stills report §3). The fr-CA Mac stills, with the same fix behind them, read clean. |
+| **10** `person` | fr-FR Mac stills | *"'Céline Lefèvre' is on screen without any of its accents."* **The tool is wrong and the eye is right** — see below. |
 | **6** `clipping` | iPhone and iPad, bottom | A sheet caught mid-presentation, or the keyboard. Both genuinely touch the bottom of the frame; that is what they look like while they move. |
 | **2** `clipping` | iPhone, right | The device's rounded corner mask read as strokes at the edge — the same shape of thing as the two-pixel Windows fringe in the stills report §5. |
 | **2** `squiggle` | iPhone, on the just-placed signature | The red ⊗ that sits on a selected signature. Not a spelling underline. |
+
+**The accents are confirmed twice over, and the one disagreement is the
+reader's.** `person` reads the demo name off the image and checks that the
+accents are *there*:
+
+| set | `person` |
+|---|---|
+| iOS — en / fr-CA / fr-FR | **19 / 20 / 20 pass**, 0 flag |
+| Mac — en | 30 skip (English poses no accent to find) |
+| Mac — fr-CA | **10 pass**, 0 flag |
+| Mac — fr-FR | 4 pass, **10 flag** |
+
+So *Hélène Bélanger* and *Céline Lefèvre* are read correctly off fifty-four
+stills, including four of the very fr-FR Mac clip whose other ten are flagged.
+Opened at full size, t019 through t029 of that clip all read *Céline Lefèvre*
+with both accents. It is the reader, not the image — the same thing that
+happened to Hélène Bélanger on a 420 dpi Android capture (stills report §3),
+and the check is right to say so out loud rather than pass quietly.
 
 **The `chrome` check had to be retuned for video, and the retuning is measured.**
 A still out of an H.264 clip has no flat areas: the quantiser smears the status
