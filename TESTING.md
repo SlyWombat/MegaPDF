@@ -188,10 +188,12 @@ and `test_large_xref_stream_opens_from_its_table()` make the same demands of fil
 and 4 GiB, and run only where those files exist:
 
 ```bash
-python3 tools/gen_large_fixtures.py ~/large --only huge-2_5gb        # ~2 min, 2.7 GB
+python3 tools/gen_large_fixtures.py ~/large --only huge-2_5gb,huge-4_5gb   # ~4 min, 7.5 GB
 python3 tools/make_xref_stream.py ~/large/huge-4_5gb.pdf ~/large/huge-4_5gb-xrefstream.pdf
 MEGAPDF_LARGE_FIXTURES=~/large MEGAPDF_LARGE_SCRATCH=/scratch ./megapdf_core_tests ...
 ```
+
+Each case skips itself if its fixture is not there, so the 2.68 GB file alone is a useful run.
 
 Both skip with a printed line when `MEGAPDF_LARGE_FIXTURES` is unset, and each case skips
 itself when the scratch directory has less room than the copy it is about to write — a full

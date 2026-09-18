@@ -24,6 +24,8 @@ Writes (the outputs are not committed; several are hundreds of MB to GBs):
     big-1gb.pdf          400 report pages, each with a large figure image.
     huge-2_5gb.pdf       1,000 report pages, past the 2 GB / int32 offset line.
                          Skipped with --skip-huge.
+    huge-4_5gb.pdf       1,700 report pages, past the 4 GiB / uint32 offset line too.
+                         Skipped with --skip-huge.
     huge-image-page.pdf  one page holding one 20,000 x 15,000 px image.
   Combined
     wide-deep.pdf        500 engineering drawings at 48 x 36 in.
@@ -1403,6 +1405,14 @@ HUGE_INFO = [
     "Stresses: graceful failure or success for files over 2 GB: open (streamed or memory-mapped, never a single "
     "2 GB+ byte array), save, the share and copy paths, and any code that reads the whole file into memory.",
 ]
+HUGE_4_5_INFO = [
+    "1,700 Letter report pages with large figures, about 4.5 GB: past the 4 GiB line as well as the 2 GB one, so "
+    "an offset in the last quarter of the file needs more than 32 unsigned bits and not just more than 31 signed "
+    "ones. The pair with huge-2_5gb.pdf separates the two limits (#267).",
+    "Stresses: the classic xref writer's ten-digit offset field, and a cross-reference stream's offset field "
+    "width. tools/make_xref_stream.py turns this file's classic table into a stream, which is the only shape "
+    "PDFium's writer produces a cross-reference stream for, and the shape #270 could not read back.",
+]
 
 FILES = [
     ("wide-poster.pdf", gen_wide_poster),
@@ -1416,10 +1426,11 @@ FILES = [
     ("big-scan-250mb.pdf", gen_big_scan),
     ("big-1gb.pdf", lambda p: gen_big_report(p, 1000 * MB, 400, "big-1gb.pdf", BIG_1GB_INFO)),
     ("huge-2_5gb.pdf", lambda p: gen_big_report(p, 2560 * MB, 1000, "huge-2_5gb.pdf", HUGE_INFO)),
+    ("huge-4_5gb.pdf", lambda p: gen_big_report(p, 4608 * MB, 1700, "huge-4_5gb.pdf", HUGE_4_5_INFO)),
     ("huge-image-page.pdf", gen_huge_image_page),
     ("wide-deep.pdf", gen_wide_deep),
 ]
-HUGE = {"huge-2_5gb.pdf"}
+HUGE = {"huge-2_5gb.pdf", "huge-4_5gb.pdf"}
 
 
 def main(argv):
