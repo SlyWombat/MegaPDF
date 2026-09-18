@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for MegaPDF (#158). This is what a software centre shows and
+     what Flathub's listing is built from; the desktop file alone is not enough for
+     either. Validated by tools/linux/build-flatpak.sh with `appstreamcli validate`.
+
+     Not submitted anywhere. tools/Linux-Packaging.md lists what is still Dave's to
+     decide here — the app ID, the screenshots and the release history. -->
+<component type="desktop-application">
+  <id>ca.electricrv.MegaPDF</id>
+
+  <!-- The licence of this file, which is not the licence of the app. CC0 is what
+       Flathub asks for so listing text can be reused; the app is Apache-2.0. -->
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+
+  <name>MegaPDF</name>
+  <name xml:lang="fr">MegaPDF</name>
+  <summary>Fill, check and sign PDFs</summary>
+  <summary xml:lang="fr">Remplir, cocher et signer des PDF</summary>
+  <summary xml:lang="fr-CA">Remplir, cocher et signer des PDF</summary>
+
+  <developer id="ca.electricrv">
+    <name>Electric RV</name>
+  </developer>
+
+  <launchable type="desktop-id">ca.electricrv.MegaPDF.desktop</launchable>
+
+  <description>
+    <p>
+      MegaPDF does the one job most people actually have with a PDF: someone sent you a
+      form, and you need to send it back filled in, checked off, and signed. No account,
+      no subscription, no cloud. Everything happens on your own computer.
+    </p>
+    <p>What it does:</p>
+    <ul>
+      <li>Check any box — real form fields and plain printed squares alike, including
+      drawn checkboxes other apps treat as decoration.</li>
+      <li>Type on any line, in the size and face that matches the form. What you add is
+      real, searchable text, not a sticker on top of the page.</li>
+      <li>Fix the document's own text. MegaPDF keeps the document's font where it can
+      and says so when it had to use a similar one; if a change would disturb the rest
+      of the page it tells you instead of quietly moving things.</li>
+      <li>Sign by drawing, or from a photograph of a signature on paper — the white
+      background disappears. Signatures stay in a private library on your computer.</li>
+      <li>Save without fear. Every document is verified before your original is touched,
+      so a failed save cannot corrupt the file someone sent you.</li>
+      <li>Search the whole document as you type, with every match counted.</li>
+    </ul>
+    <p>
+      MegaPDF makes no network connection and this package asks for no network
+      permission. Your documents and your signature never leave your computer, because
+      there is no server for them to go to. The app is open source, so anyone can check.
+    </p>
+  </description>
+
+  <url type="homepage">https://electricrv.ca/megapdf/</url>
+  <url type="bugtracker">https://github.com/SlyWombat/MegaPDF/issues</url>
+  <url type="vcs-browser">https://github.com/SlyWombat/MegaPDF</url>
+
+  <!-- These are the product's own published screenshots. They are not Linux captures:
+       see the runbook, which lists replacing them as one of the things a submission
+       needs, and how to take Linux ones with the app's own capture rig. -->
+  <screenshots>
+    <screenshot type="default">
+      <image>https://electricrv.ca/megapdf/shot-viewer.png</image>
+      <caption>A document open, with the page shown as it will print</caption>
+      <caption xml:lang="fr">Un document ouvert, affiché tel qu'il sera imprimé</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://electricrv.ca/megapdf/shot-sign.png</image>
+      <caption>A signature placed on the line it belongs on</caption>
+      <caption xml:lang="fr">Une signature posée sur la ligne à laquelle elle appartient</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://electricrv.ca/megapdf/shot-text.png</image>
+      <caption>Retyping a line of the document's own text</caption>
+      <caption xml:lang="fr">Retaper une ligne du texte même du document</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://electricrv.ca/megapdf/shot-search.png</image>
+      <caption>Searching the whole document as you type</caption>
+      <caption xml:lang="fr">Rechercher dans tout le document à mesure que vous tapez</caption>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>Office</category>
+    <category>Viewer</category>
+  </categories>
+
+  <keywords>
+    <keyword>PDF</keyword>
+    <keyword>form</keyword>
+    <keyword>sign</keyword>
+    <keyword>signature</keyword>
+    <keyword>checkbox</keyword>
+    <keyword>fill</keyword>
+    <keyword>edit</keyword>
+  </keywords>
+
+  <provides>
+    <mediatype>application/pdf</mediatype>
+  </provides>
+
+  <!-- Every OARS question answered "none": there is no user-generated content, no
+       communication, no purchasing and no network. -->
+  <content_rating type="oars-1.1"/>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+
+  <!-- One entry, the version this packaging was built and tested against. A submission
+       wants the release history the other stores already have; the runbook says where
+       it comes from. -->
+  <releases>
+    <release version="1.7.0" date="2026-09-17"/>
+  </releases>
+</component>

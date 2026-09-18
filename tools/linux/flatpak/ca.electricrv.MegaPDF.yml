@@ -1,0 +1,100 @@
+# Flatpak manifest for MegaPDF (#158). Built by tools/linux/build-flatpak.sh, which
+# assembles a build context beside this file's copy and runs flatpak-builder in it.
+#
+# NOT submitted anywhere. What Flathub needs from us before it could be is listed in
+# tools/Linux-Packaging.md.
+#
+# The app ID is the reverse of electricrv.ca, the domain the product's page is on
+# (website/deploy.py), and matches the Android package ca.electricrv.megapdf. Flathub
+# verifies that the domain belongs to the publisher, so this is the one that can be.
+app-id: ca.electricrv.MegaPDF
+
+# freedesktop rather than GNOME or KDE: MegaPDF draws its own interface with Skia
+# through Avalonia and uses no toolkit from either desktop, so their runtimes would be
+# a few hundred megabytes of libraries it never loads. 25.08 rather than 26.08 because
+# it is the current stable series with a year of use behind it; the bump is this line
+# and the sdk line below. 24.08 is close enough to end-of-life not to start on.
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+
+command: megapdf
+
+# What the app actually needs, and nothing else.
+#
+#   x11        Avalonia.X11 is the only Linux windowing backend in the published
+#              output, so a Wayland session runs this through XWayland. There is no
+#              --socket=wayland to add until there is a Wayland backend to use it.
+#   ipc        X11 shared memory. Without it every window repaint goes over the
+#              socket, which on a 2.5 GB document is the difference between scrolling
+#              and not.
+#   dri        Skia's GPU surface. The app still runs without it, on the CPU.
+#
+# Deliberately absent:
+#
+#   --filesystem=home and every other blanket path. Opening and saving go through
+#              org.freedesktop.portal.FileChooser, which needs no permission here and
+#              gives the app exactly the file the person chose. See the runbook for
+#              what this costs: a document reopened from the Recent list is a portal
+#              handle, and handles do not survive a restart.
+#   --share=network. MegaPDF makes no network connection. Leaving it out is what
+#              makes "no network access" true in the listing rather than a claim.
+#   --socket=cups / --filesystem=/run/cups. Printing is CUPS through `lp`, which is
+#              not in the sandbox at all; the app detects /.flatpak-info and says so.
+#              org.freedesktop.portal.Print is the fix and is not written yet (#158).
+finish-args:
+  - --socket=x11
+  - --share=ipc
+  - --device=dri
+
+modules:
+  - name: megapdf
+    buildsystem: simple
+    # The tree arrives already published: DebugType=none, no .pdb, and two native
+    # libraries that were built and tested exactly as they are. There is no debuginfo
+    # to extract, and stripping libpdfium.so here would mean shipping a binary that is
+    # not the one the batteries ran against — which is the whole reason the app carries
+    # its own patched engine (libs/pdfium/RELEASE) rather than a distribution's.
+    build-options:
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      # The published tree goes in one piece under /app/lib: it is a self-contained
+      # .NET publish whose apphost finds libmegapdf_core.so and libpdfium.so beside
+      # itself, and splitting it across the filesystem would break exactly that.
+      - install -d /app/lib/megapdf
+      - cp -a tree/bin/. /app/lib/megapdf/
+      - install -Dm755 megapdf.sh /app/bin/megapdf
+
+      # Named for the app ID, which is what Flatpak exports and AppStream matches on.
+      - install -Dm644 ca.electricrv.MegaPDF.desktop /app/share/applications/ca.electricrv.MegaPDF.desktop
+      - install -Dm644 ca.electricrv.MegaPDF.metainfo.xml /app/share/metainfo/ca.electricrv.MegaPDF.metainfo.xml
+      - |
+        set -e
+        for size in 16x16 22x22 24x24 32x32 48x48 64x64 128x128 256x256 512x512; do
+            install -Dm644 "tree/share/icons/hicolor/$size/apps/megapdf.png" \
+                "/app/share/icons/hicolor/$size/apps/ca.electricrv.MegaPDF.png"
+        done
+        install -Dm644 tree/share/icons/hicolor/scalable/apps/megapdf.svg \
+            /app/share/icons/hicolor/scalable/apps/ca.electricrv.MegaPDF.svg
+
+      # Several of the licences these are under require the text to travel with the
+      # binary, and no channel accepts a package without them (#194). The packaging
+      # check asserts they arrived; this is where they come from.
+      # Twice: beside the binary, where nothing can prune it, and under share/doc where
+      # the convention says to look. The .deb learned the difference the hard way —
+      # dpkg path-excludes throw /usr/share/doc away on every Docker image and on a
+      # minimal install, and took the notices with it.
+      - install -Dm644 tree/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt /app/lib/megapdf/THIRD-PARTY-NOTICES.txt
+      - install -Dm644 tree/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt /app/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt
+      - install -Dm644 tree/share/doc/MegaPDF/LICENSE /app/share/doc/MegaPDF/LICENSE
+    sources:
+      - type: dir
+        path: tree
+        dest: tree
+      - type: file
+        path: megapdf.sh
+      - type: file
+        path: ca.electricrv.MegaPDF.desktop
+      - type: file
+        path: ca.electricrv.MegaPDF.metainfo.xml
