@@ -53,7 +53,10 @@ public class LaunchedDocumentTests : IDisposable
         try
         {
             Environment.CurrentDirectory = _dir;
-            Assert.False(LaunchedDocument.NeedsOpening("lease.pdf", openDocumentPath: lease));
+            // As the process sees its own directory: on macOS the temp folder is behind a
+            // symlink (/var -> /private/var), and the working directory comes back resolved.
+            var open = Path.Combine(Environment.CurrentDirectory, "lease.pdf");
+            Assert.False(LaunchedDocument.NeedsOpening("lease.pdf", openDocumentPath: open));
         }
         finally
         {

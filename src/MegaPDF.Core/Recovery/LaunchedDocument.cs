@@ -28,7 +28,9 @@ public static class LaunchedDocument
 
     /// <summary>
     /// The same file, as the file system would resolve it: full paths, and case ignored on
-    /// Windows and macOS, whose default file systems are case-insensitive.
+    /// Windows and macOS, whose default file systems are case-insensitive. Symbolic links
+    /// are not followed; if two spellings of one file ever go unmatched, the launched file
+    /// is opened again, which asks about the recovered edits rather than losing them.
     /// </summary>
     public static bool SameFile(string a, string b)
     {
