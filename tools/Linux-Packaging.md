@@ -22,6 +22,7 @@ runs again in CI on every push.
 | `tools/linux/check-deb.sh` | installs the `.deb` on a bare machine, runs the app out of it, removes it again. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.yml` | the manifest. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | the AppStream data a software centre shows. |
+| `tools/linux/store-captures.sh` | the six listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
@@ -38,6 +39,15 @@ sudo tools/linux/check-deb.sh            # installs it, runs it, removes it
 
 tools/linux/build-flatpak.sh             # -> artifacts/flatpak/ca.electricrv.MegaPDF.flatpak
 tools/linux/check-flatpak.sh             # installs it, runs the app in the sandbox
+```
+
+The listing screenshots, which are not part of either package but are what the metainfo
+in both of them points at:
+
+```sh
+for l in en fr-CA fr-FR; do tools/linux/store-captures.sh "$l"; done
+python3 tools/capture-gate/gate.py --store linux artifacts/store/linux -o /tmp/gate
+cp artifacts/store/linux/en/*.png website/megapdf/screenshots/linux/en/          # and the two French
 ```
 
 Needs `flatpak flatpak-builder appstream desktop-file-utils dpkg-dev librsvg2-common
@@ -177,13 +187,36 @@ following can be decided here.
    as a new app.
 2. **A Flathub account** (a GitHub account, added to the Flathub organisation on
    acceptance) and the decision to submit at all.
-3. **Screenshots.** The metainfo currently points at the product's own published
-   screenshots on `electricrv.ca`. They are not Linux captures, and reviewers expect the
-   listing to show the app as it looks on the platform. Linux ones can be taken here —
-   `--screenshot`, `--screenshot-state` and `--story` all work under Xvfb, and
-   `X11PlatformOptions.OverlayPopups` is set so flyout states capture — but they then
-   have to be **deployed to electricrv.ca** before submission, because AppStream
-   screenshots are URLs and Flathub's linter fetches them.
+3. **Screenshots — taken; the site deploy is what is left.** The metainfo now points at
+   eighteen Linux captures of this app: the six listing slots the Mac listing uses
+   (viewer, text, search, sign, redact, home) at 1280x800, in en, fr-CA and fr-FR.
+   `tools/linux/store-captures.sh <lang>` shoots a language in one command, under its own
+   Xvfb, and `tools/capture-gate/gate.py` with the `linux` store profile reviews the
+   result. The files are staged in this repo under
+   `website/megapdf/screenshots/linux/<lang>/`.
+
+   **They have to be deployed to electricrv.ca before a submission, not after.** AppStream
+   screenshots are URLs, and both Flathub's linter and `appstreamcli validate` fetch every
+   one of them: run today, validation fails with eighteen `screenshot-image-not-found`
+   warnings, and passes with `--no-net`. Two things have to happen first, in this order:
+
+   - `website/deploy.py` has to learn to walk subdirectories. It uploads the files at the
+     top of `website/megapdf/` and, with `--privacy`, those in `privacy/` — nothing else.
+     `screenshots/linux/` is three levels down and would not be uploaded at all
+     (#254 B6, where the deploy tooling is being worked on).
+   - Then the site has to actually be deployed, which is Dave's call under the release
+     hold (#146). The exact check afterwards, from any machine:
+
+     ```sh
+     for l in en fr-CA fr-FR; do for s in 01-viewer 02-text 03-search 04-sign 05-redact 06-home; do
+       printf '%s/%s ' "$l" "$s"
+       curl -s -o /dev/null -w '%{http_code}\n' \
+         "https://electricrv.ca/megapdf/screenshots/linux/$l/$s.png"
+     done; done
+     ```
+
+     Eighteen `200`s, and then `appstreamcli validate --pedantic` (no `--no-net`) passes
+     on its own.
 4. **The summary and description** in the metainfo are adapted from the App Store copy in
    `docs/app-store-listing.md`. Read them once as a Linux listing rather than an iOS one.
 5. **A release history.** The metainfo has one `<release>` entry for the version it was

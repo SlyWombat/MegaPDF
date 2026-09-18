@@ -57,29 +57,69 @@
   <url type="bugtracker">https://github.com/SlyWombat/MegaPDF/issues</url>
   <url type="vcs-browser">https://github.com/SlyWombat/MegaPDF</url>
 
-  <!-- These are the product's own published screenshots. They are not Linux captures:
-       see the runbook, which lists replacing them as one of the things a submission
-       needs, and how to take Linux ones with the app's own capture rig. -->
+  <!-- Linux captures of this app, at the 1280x800 "desktop" slot the capture gate
+       holds the Linux set to. Taken by tools/linux/store-captures.sh and reviewed by
+       tools/capture-gate/gate.py with the linux store profile; the files are staged in this repo under
+       website/megapdf/screenshots/linux/ and are served from electricrv.ca.
+
+       These URLs 404 until the site is deployed. AppStream screenshots are URLs and
+       Flathub's linter fetches every one of them, so the site deploy is a step *before*
+       a submission, not after it — see tools/Linux-Packaging.md.
+
+       Per-language images because the whole interface translates: measured on this set,
+       3.5-7.9 % of the pixels of every slot differ between the English and the French
+       captures. fr-CA and fr-FR are kept as separate complete sets even though five of
+       the six slots are byte-identical between them today (only the demo person's name
+       differs, 1,045 px of 1,024,000): a set that is complete per language is one a
+       person can look at and sign off, and a partial one goes stale without saying so. -->
   <screenshots>
     <screenshot type="default">
-      <image>https://electricrv.ca/megapdf/shot-viewer.png</image>
-      <caption>A document open, with the page shown as it will print</caption>
-      <caption xml:lang="fr">Un document ouvert, affiché tel qu'il sera imprimé</caption>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/01-viewer.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/01-viewer.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/01-viewer.png</image>
+      <caption>The form open, ticked and signed — the page exactly as it will print</caption>
+      <caption xml:lang="fr-CA">Le formulaire ouvert, coché et signé — la page exactement telle qu'elle sera imprimée</caption>
+      <caption xml:lang="fr">Le formulaire ouvert, coché et signé — la page exactement telle qu'elle sera imprimée</caption>
     </screenshot>
     <screenshot>
-      <image>https://electricrv.ca/megapdf/shot-sign.png</image>
-      <caption>A signature placed on the line it belongs on</caption>
-      <caption xml:lang="fr">Une signature posée sur la ligne à laquelle elle appartient</caption>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/02-text.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/02-text.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/02-text.png</image>
+      <caption>Typing a name on the line: real, searchable text, not a sticker on the page</caption>
+      <caption xml:lang="fr-CA">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
+      <caption xml:lang="fr">Taper un nom sur la ligne : du vrai texte, consultable, et non une vignette posée sur la page</caption>
     </screenshot>
     <screenshot>
-      <image>https://electricrv.ca/megapdf/shot-text.png</image>
-      <caption>Retyping a line of the document's own text</caption>
-      <caption xml:lang="fr">Retaper une ligne du texte même du document</caption>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/03-search.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/03-search.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/03-search.png</image>
+      <caption>Searching the whole document as you type, with every match counted</caption>
+      <caption xml:lang="fr-CA">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
+      <caption xml:lang="fr">Rechercher dans tout le document à mesure que vous tapez, chaque occurrence comptée</caption>
     </screenshot>
     <screenshot>
-      <image>https://electricrv.ca/megapdf/shot-search.png</image>
-      <caption>Searching the whole document as you type</caption>
-      <caption xml:lang="fr">Rechercher dans tout le document à mesure que vous tapez</caption>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/04-sign.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/04-sign.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/04-sign.png</image>
+      <caption>The signature library, kept on this computer and nowhere else</caption>
+      <caption xml:lang="fr-CA">La bibliothèque de signatures, conservée sur cet ordinateur et nulle part ailleurs</caption>
+      <caption xml:lang="fr">La bibliothèque de signatures, conservée sur cet ordinateur et nulle part ailleurs</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/05-redact.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/05-redact.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/05-redact.png</image>
+      <caption>Marking a line to be redacted — the words are removed, not covered over</caption>
+      <caption xml:lang="fr-CA">Marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
+      <caption xml:lang="fr">Marquer une ligne à caviarder — les mots sont supprimés, et non recouverts</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="1280" height="800">https://electricrv.ca/megapdf/screenshots/linux/en/06-home.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr-CA">https://electricrv.ca/megapdf/screenshots/linux/fr-CA/06-home.png</image>
+      <image type="source" width="1280" height="800" xml:lang="fr">https://electricrv.ca/megapdf/screenshots/linux/fr-FR/06-home.png</image>
+      <caption>The empty window, with the documents you opened last</caption>
+      <caption xml:lang="fr-CA">La fenêtre vide, avec les documents ouverts en dernier</caption>
+      <caption xml:lang="fr">La fenêtre vide, avec les documents ouverts en dernier</caption>
     </screenshot>
   </screenshots>
 

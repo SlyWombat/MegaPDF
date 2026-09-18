@@ -9,18 +9,29 @@
 #
 # Usage: tools/linux/store-captures.sh [lang] [out-dir] [app-tree]
 #   lang      en (default), fr-CA or fr-FR
-#   out-dir   default website/megapdf/screenshots/linux/<lang>
+#   out-dir   default artifacts/store/linux/<lang>
 #   app-tree  default artifacts/linux/MegaPDF, else artifacts/linux
 #
-# Nothing is uploaded. These files are staged in the site source and only reach
-# electricrv.ca when website/deploy.py is run, which is a separate, deliberate step —
-# and the AppStream <screenshot> URLs do not resolve until it has been (see
-# tools/Linux-Packaging.md, "Before a submission").
+# The set is reviewed where it lands:
+#
+#     python3 tools/capture-gate/gate.py --store linux artifacts/store/linux -o /tmp/gate
+#
+# and only the PNGs are then staged into the site, which is where the AppStream
+# <screenshot> URLs point:
+#
+#     cp artifacts/store/linux/<lang>/*.png website/megapdf/screenshots/linux/<lang>/
+#
+# Only the PNGs, deliberately: RUN.txt and the per-slot logs beside them are evidence
+# for whoever re-shoots the set, not files to publish on a web server.
+#
+# Nothing is uploaded. Staged files reach electricrv.ca only when website/deploy.py is
+# run, which is a separate, deliberate step — and the AppStream <screenshot> URLs do not
+# resolve until it has been (see tools/Linux-Packaging.md, "Before a submission").
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LANG_TAG="${1:-en}"
-OUT="${2:-$ROOT/website/megapdf/screenshots/linux/$LANG_TAG}"
+OUT="${2:-$ROOT/artifacts/store/linux/$LANG_TAG}"
 TREE="${3:-}"
 if [ -z "$TREE" ]; then
     for candidate in "$ROOT/artifacts/linux/MegaPDF" "$ROOT/artifacts/linux"; do
@@ -47,7 +58,7 @@ case "$LANG_TAG" in
     *) echo "lang must be en, fr-CA or fr-FR" >&2; exit 1 ;;
 esac
 
-mkdir -p "$OUT"
+mkdir -p "$OUT/logs"
 
 # The run owns its display. A capture renders the window to a bitmap rather than reading
 # the screen, so no window manager is needed and no compositor is involved — but
@@ -115,7 +126,7 @@ SIG="$ROOT/tools/assets/megawoman-sig.jpg"
 #   home    the empty window with a recents list
 shoot() {
     local slot="$1" state="$2" doc="$3" sig="${4:-}"
-    local log="$OUT/$slot.log"
+    local log="$OUT/logs/$slot.log"
     local args=("--window" "$WINDOW" "--language" "$CULTURE" "--screenshot" "$OUT/$slot.png")
     [ -n "$state" ] && args+=("--screenshot-state" "$state")
     [ -n "$sig" ] && args+=("--signature" "$sig")
