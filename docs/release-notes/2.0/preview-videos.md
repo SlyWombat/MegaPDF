@@ -113,8 +113,13 @@ frames with nothing in the bar, against **12.6 %** for a planted badge — the
 check could not tell them apart at all. Widening each background tone by 16
 (`ink_tolerance`, set on the `video` profile and nowhere else) puts the same
 clean frames at 3.9–4.6 % and the badge at 24.6 %; planted back into the set,
-`gate.py` flags it at 25.2 %. **No set that was already signed off is measured
-any differently.**
+`gate.py` flags it at 25.2 %.
+
+**No set that was already signed off is measured any differently**, and that is
+run rather than argued: `gate.py --store ios` over the 48-image App Store set,
+once from `origin/main` and once from this branch, with tesseract in both,
+comes back **identical — 48 images, 496 checks, every status and every note the
+same.** `ink_tolerance` defaults to 0 and only the `video` profile sets it.
 
 ## 5. What no check can see here, and the four things for Dave
 
