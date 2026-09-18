@@ -1470,6 +1470,40 @@
         }
       }
     },
+    "Off" : {
+      "comment" : "VoiceOver value for a toolbar tool that is not armed, read after its name (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactivé"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactivé"
+          }
+        }
+      }
+    },
+    "On" : {
+      "comment" : "VoiceOver value for a toolbar tool that is armed, read after its name (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activé"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activé"
+          }
+        }
+      }
+    },
     "On My iPad" : {
       "localizations" : {
         "fr" : {

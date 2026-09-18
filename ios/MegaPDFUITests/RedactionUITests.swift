@@ -25,6 +25,17 @@ final class RedactionUITests: XCTestCase {
                                "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
+    /// Polls rather than reading once: the value follows a state change through a
+    /// SwiftUI update, which is not synchronous with the tap.
+    private func waitForValue(_ element: XCUIElement, _ expected: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element.value as? String == expected { return true }
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        return false
+    }
+
     /// A confirmation dialog's buttons are not always in `app.buttons` on every idiom —
     /// on the phone it is an action sheet — so they are looked for anywhere in the app.
     private func button(_ label: String) -> XCUIElement {
@@ -53,20 +64,23 @@ final class RedactionUITests: XCTestCase {
                       "the question does not say what it does")
     }
 
-    /// The tool says what it is and what it does.
+    /// The tool says what it is, what it does, and whether it is armed.
     ///
-    /// It does NOT say when it is armed, and that is a live finding rather than an
-    /// oversight here: ViewerView adds `.isSelected` to this button while redactMode
-    /// is on, and the trait does not reach the accessibility element — `isSelected`
-    /// stays false through ten seconds of polling while the icon plainly shows the
-    /// tool armed. The Mac has the same hole by a different route (its Redact toggle
-    /// reports as a button where Cover and Add text report as checkboxes). Reported
-    /// on #173; asserting it here would only pin a bug in place.
-    func testTheRedactToolSaysWhatItIs() {
+    /// The last of those was missing, and this is the check that keeps it: a mode with
+    /// no announced state is a mode a screen-reader user gets stuck in. `.isSelected`
+    /// is the right trait and does not survive the bottom-bar bridge — measured both on
+    /// the button and inside its label — so the state rides on the accessibility value,
+    /// which does arrive. If the trait ever starts working, this still passes.
+    func testTheRedactToolSaysWhatItIsAndWhetherItIsArmed() {
         app.launch()
         let redact = app.buttons["viewerRedact"]
         XCTAssertTrue(redact.waitForExistence(timeout: 20), "no Redact tool")
         XCTAssertEqual(redact.label, "Redact")
-        XCTAssertFalse(redact.label.isEmpty)
+        // -screenshot redact leaves the tool armed.
+        XCTAssertEqual(redact.value as? String, "On",
+                       "the armed Redact tool does not tell a screen reader it is armed")
+        redact.tap()
+        XCTAssertTrue(waitForValue(redact, "Off", timeout: 5),
+                      "disarming Redact does not reach a screen reader either")
     }
 }

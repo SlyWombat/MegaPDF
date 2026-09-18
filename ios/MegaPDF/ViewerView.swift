@@ -177,6 +177,14 @@ struct ViewerView: View {
                 .disabled(!model.capabilities.canEditContent || model.fileCommandsBlocked)
                 .accessibilityLabel("Redact")
                 .accessibilityHint("Remove content from the file")
+                // The armed state, as a value rather than a trait (#173). .isSelected is
+                // the right thing to say and it does not arrive: measured on a device
+                // element, the trait is dropped by the bottom-bar bridge whether it is
+                // added here or inside the label, while the label, hint, identifier and
+                // value all come through. The trait stays because it is correct and
+                // costs nothing if the bridge ever carries it; the value is what a
+                // screen reader actually reads today — "Redact, On".
+                .accessibilityValue(model.redactMode ? "On" : "Off")
                 .accessibilityAddTraits(model.redactMode ? .isSelected : [])
                 .accessibilityIdentifier("viewerRedact")
                 Button {
