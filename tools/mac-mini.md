@@ -59,7 +59,14 @@ dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
 output files are for. Takes about three minutes per device.
 
 **iOS listing screenshots**: `tools/ios-screenshots.sh <lang> [out]` — the CI
-recipe, locally.
+recipe, locally. The six listing slots land in `<out>/listing`, the review shots
+in `<out>/review`.
+
+**Mac listing screenshots**: `tools/macos-store-captures.sh <lang> [out] [app]` —
+the six Mac App Store slots at 1440x900, one process per image, with the
+fixtures, the signature library and the recents owned by the run rather than by
+this machine. `docs/qa/mac-store-captures.md` is the runbook and the gate. There
+is no workflow for this one: it needs a real display.
 
 **macOS preview video**: `tools/macos-demo-video.sh ~/app-macos/MegaPDF.app ~/captures/macos/video 1440x900 [light|dark] [en|fr-CA|fr]`
 — the app's `--story` mode renders a frame after each step (tick, tick,

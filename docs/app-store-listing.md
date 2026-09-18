@@ -292,6 +292,35 @@ The same set comes off the in-house Mac without a runner:
 `tools/ios-screenshots.sh <lang>` (see `tools/mac-mini.md`). Same files, same
 slots.
 
+**The six above land in `listing/`; everything else the run takes lands in
+`review/`** — `text-edit`, `redact`, and the dark-mode `search`, `sign` and
+`redact`. They are for looking at, not for uploading. A folder of eleven images
+beside a table of six slots is how a review shot ends up on a store listing.
+
+## Screenshots — Mac App Store
+
+The Mac is the same App Store record's other platform, so it has its own set, its
+own slots and its own captions. Six images per listing language at **1440×900**,
+from `tools/macos-store-captures.sh <lang>` on the in-house Mac (there is no
+workflow: the Mac app needs a real display and a runner has none).
+
+| File | Slot | Suggested caption (optional overlay text) |
+|---|---|---|
+| `light-01-viewer.png` | Mac #1 | *Checked and signed in under a minute* |
+| `light-02-text.png` | Mac #2 | *Type on the blank line — your size, your font* |
+| `light-03-search.png` | Mac #3 | *Find any word, on every page* |
+| `light-04-sign.png` | Mac #4 | *Your signatures, saved on your Mac* |
+| `light-05-redact.png` | Mac #5 | *Redact removes it. It does not just cover it.* |
+| `light-06-home.png` | Mac #6 | *No account. No cloud. No tracking.* |
+
+Order matters here too: the filled, signed agreement leads, and Redact is in the
+set because it is what 2.0 is for.
+
+Not 2880×1800. `--scale 2` draws every page overlay at twice its offset, so the
+capture refuses rather than write a wrong image; 1440×900 is an accepted size and
+the set is composed for it. `docs/qa/mac-store-captures.md` is the runbook and
+the gate for both Apple platforms.
+
 ## App preview videos
 
 `tools/ios-demo-video.sh <lang> [device] [label]` records the real app filling
