@@ -120,8 +120,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private var documentReadsUri: Uri? = null
     private val recentsStore =
         RecentFilesStore(File(application.filesDir, "recent.json"))
-    private val signatureStore =
-        SignatureLibraryStore(File(application.filesDir, "signatures"))
+    private val signatureDir = File(application.filesDir, "signatures")
+    private val signatureStore = SignatureLibraryStore(signatureDir)
 
     /** Signature library entries, newest last; backs the Sign dialog. */
     val signatures = androidx.compose.runtime.mutableStateListOf<SignatureEntry>().apply {
@@ -467,13 +467,24 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * It used to seed only when the library was empty, which made the shot a
      * function of whatever the device already held — and the Windows set went
      * to review with a stale signature in it for that reason (#146). A capture
-     * run owns its fixture, so anything already there is dropped first.
+     * run owns its fixture, so whatever is already there goes first.
+     *
+     * Set aside rather than deleted, and under a name the app never lists, so
+     * the launch extra cannot cost anyone their signatures: the same choice
+     * tools/screenshots-windows/Reset-SignatureLibrary.ps1 makes.
      */
     private fun seedScreenshotSignatures(app: Application) {
         val demo = runCatching {
             app.assets.open("demo-signature.png").use { android.graphics.BitmapFactory.decodeStream(it) }
         }.getOrNull() ?: return          // no asset: leave the library alone rather than empty it
-        signatureStore.load().forEach { signatureStore.delete(it.id) }
+        if (signatureStore.load().isNotEmpty()) {
+            // Set aside once, on the first pose of a run: by the second the library is
+            // already our own fixture, and moving that over the real one would lose it.
+            val aside = File(signatureDir.parentFile, "${signatureDir.name}.before-capture")
+            if (aside.exists() || !signatureDir.renameTo(aside)) {
+                signatureStore.load().forEach { signatureStore.delete(it.id) }
+            }
+        }
         signatureStore.add(app.getString(R.string.screenshot_signature_name), demo)
         signatures.clear()
         signatures.addAll(signatureStore.load())

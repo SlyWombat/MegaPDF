@@ -43,7 +43,11 @@ Each of these has been a defect at least once, so each is named:
 - **The signature library.** `applyScreenshotMode` **replaces** the library with the
   bundled `demo-signature.png` ("Mega W.") on every launch. It used to seed only when
   the library was empty, which made the `sign` and `draw` shots a function of whatever
-  the device already held — that is how a stale signature reached a review set.
+  the device already held — that is how a stale signature reached a review set. What
+  was there is moved to `files/signatures.before-capture`, not deleted, so the launch
+  extra cannot cost anyone their signatures; Windows does the same in
+  `tools/screenshots-windows/Reset-SignatureLibrary.ps1`. Note the two platforms label
+  the row differently — "Mega W." here, "MegaWoman" there.
 - **The status bar.** SystemUI demo mode, re-asserted before every capture, not once
   at the start: clock 9:41, battery 100 % unplugged, Wi-Fi full **with `fully true`**
   (without it SystemUI draws the "no internet" badge over the icon, because the
