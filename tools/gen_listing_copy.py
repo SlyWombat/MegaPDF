@@ -30,7 +30,7 @@ from gen_strings import to_france  # noqa: E402
 
 MS_EN = {
     "short": "The lightweight PDF editor for Windows. Open. Fix. Save. Done.",
-    "description": """Mega PDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
+    "description": """MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
@@ -46,7 +46,7 @@ Also included, because real documents need them: find any word with Ctrl+F (ever
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
-Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
+MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
     "features": [
         "Edit the document's own text by clicking and typing — like a Word document",
         "Add text on any blank line, in the size and face that matches the form",
@@ -71,7 +71,7 @@ Mega PDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
 
 MS_FR_CA = {
     "short": "L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.",
-    "description": """Mega PDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
+    "description": """MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
@@ -87,7 +87,7 @@ Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot av
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
-Mega PDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
+MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     "features": [
         "Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word",
         "Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire",
@@ -144,7 +144,7 @@ Private by design
 MegaPDF requests zero permissions and makes zero network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
 
 Works with everything
-Open PDFs from Mail, Files, iCloud Drive, Google Drive, or any app that shares files. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows and Android — same engine, same result, on every platform.
+Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app.
 
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.""",
     "keywords": "pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign",
@@ -190,7 +190,7 @@ Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et Android : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
     "keywords": "pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter",
@@ -210,21 +210,25 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 # Google Play — the App Store description with the Android app names.
 # --------------------------------------------------------------------------
 
+# Apple rejects a description that names another platform (2.3.10, c1b0a4a), so
+# the App Store copy above names none; Play's "Works with everything" paragraph
+# is its own, and may.
+WORKS_EN_AS = "Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app."
+WORKS_EN_PLAY = "Open PDFs from Gmail, Files, Google Drive, or any app that shares files. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows and iOS — same engine, same result, on every platform."
+WORKS_FR_CA_AS = "Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF."
+WORKS_FR_CA_PLAY = "Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes."
+
 PLAY_EN = {
     "title": "MegaPDF",
     "short": "Fill, check and sign a PDF. No account, no cloud.",
-    "description": AS_EN["description"]
-        .replace("Mail, Files, iCloud Drive, Google Drive", "Gmail, Files, Google Drive")
-        .replace("MegaPDF for Windows and Android", "MegaPDF for Windows and iOS"),
+    "description": AS_EN["description"].replace(WORKS_EN_AS, WORKS_EN_PLAY),
     "notes": "MegaPDF now speaks French. The app follows your device language; on Android 13 and later you can also pick one under Settings → Apps → MegaPDF → Language.",
 }
 
 PLAY_FR_CA = {
     "title": "MegaPDF",
     "short": "Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.",
-    "description": AS_FR_CA["description"]
-        .replace("Mail, Fichiers, iCloud Drive, Google Drive", "Gmail, Fichiers, Google Drive")
-        .replace("MegaPDF pour Windows et Android", "MegaPDF pour Windows et iOS"),
+    "description": AS_FR_CA["description"].replace(WORKS_FR_CA_AS, WORKS_FR_CA_PLAY),
     "notes": "MegaPDF parle maintenant français. L'application suit la langue de votre appareil; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.",
 }
 

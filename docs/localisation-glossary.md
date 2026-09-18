@@ -10,7 +10,7 @@ Conventions (OQLF, Canadian French):
 - Quotation marks are guillemets with non-breaking spaces inside: `« {0} »`.
 - *Courriel*, never *e-mail*; *enregistrer*, never *sauvegarder*.
 - Sentence case for buttons and titles, as in the English.
-- Product and brand names stay as they are: MegaPDF, Mega PDF, Electric RV,
+- Product and brand names stay as they are: MegaPDF, Electric RV,
   Mega Woman, GitHub, Apache-2.0, Helvetica, Times, Courier.
 - Language names are written in their own language: *English*, *Français (Canada)*.
 - Units: *Mo* for MB. Numbers take the platform's culture formatting (`1,4 Mo`).
@@ -101,7 +101,7 @@ Conventions (OQLF, Canadian French):
 | Make marks & signatures permanent when saving | Rendre les marques et signatures permanentes à l'enregistrement | |
 | Flatten when saving | Aplatir à l'enregistrement | macOS |
 | Check for updates at startup | Vérifier les mises à jour au démarrage | |
-| About Mega PDF | À propos de Mega PDF | |
+| About MegaPDF | À propos de MegaPDF | Windows Settings panel |
 | Version {0} | Version {0} | |
 | Free & open source · Apache-2.0 | Libre et à code source ouvert · Apache-2.0 | |
 | Copyright © 2026 ElectricRV.ca Corporation. All rights reserved. | © 2026 ElectricRV.ca Corporation. Tous droits réservés. | |
@@ -179,7 +179,7 @@ Conventions (OQLF, Canadian French):
 | -redacted | -caviarde | #173 file-name suffix; no accent, because it is a file name |
 | {0} areas redacted: {1} | {0} zones caviardées : {1} | #173 summary after saving |
 | Nothing was removed | Rien n'a été retiré | #173, when a redaction fails closed |
-| About MegaPDF | À propos de MegaPDF | #176, macOS app menu and the window it opens; the Mac spells the product MegaPDF, the Windows About says Mega PDF |
+| About MegaPDF | À propos de MegaPDF | #176, macOS app menu and the window it opens; every platform spells the product MegaPDF (2026-09-18) |
 | Version {0} ({1}) | Version {0} ({1}) | #176; the build number only appears once it differs from the version |
 | Third-Party Notices… | Avis de tiers… | #176, the button that opens the notices window |
 | The notices file is missing from this build. | Le fichier des avis est absent de cette version. | #176 |

@@ -41,13 +41,13 @@ def vendored(rel: str) -> str:
     return (VENDORED / rel).read_text(encoding="utf-8").lstrip("\ufeff")
 
 HEADER = f"""{RULE}
- Mega PDF — Third-Party Notices
+ MegaPDF — Third-Party Notices
 {RULE}
 
-Mega PDF
+MegaPDF
 Copyright (c) 2026 ElectricRV.ca Corporation. All rights reserved.
 
-Mega PDF is open source software, released under the Apache License,
+MegaPDF is open source software, released under the Apache License,
 Version 2.0. Source code: https://github.com/SlyWombat/MegaPDF
 
 Special thanks to Mega Woman.
@@ -84,15 +84,15 @@ PACKAGES_MACOS = {
     "HarfBuzzSharp.NativeAssets.macOS": "SkiaSharp and HarfBuzzSharp",
     "CommunityToolkit.Mvvm": "CommunityToolkit.Mvvm",
     "System.IO.Pipelines": ".NET Runtime",
-    "MegaPDF": "Mega PDF",
-    "MegaPDF.Core": "Mega PDF",
+    "MegaPDF": "MegaPDF",
+    "MegaPDF.Core": "MegaPDF",
 }
 
 # Files in the publish output that deps.json does not attribute, and what owns
 # each: the apphost is the .NET runtime's, the two .json files are not code.
 UNATTRIBUTED_MACOS = {
     "MegaPDF": ".NET Runtime",
-    "libmegapdf_core.dylib": "Mega PDF",
+    "libmegapdf_core.dylib": "MegaPDF",
     "libpdfium.dylib": "PDFium",
     "MegaPDF.deps.json": None,
     "MegaPDF.runtimeconfig.json": None,
@@ -162,7 +162,7 @@ def mvvm_sections() -> str:
 
 
 MACOS_COMPONENTS = [
-    "Mega PDF (this application) — Apache License 2.0",
+    "MegaPDF (this application) — Apache License 2.0",
     "Avalonia, including Avalonia.Native — MIT License",
     "MicroCom.Runtime (a dependency of Avalonia) — MIT License",
     "Tmds.DBus.Protocol (a dependency of Avalonia) — MIT License",
@@ -174,7 +174,7 @@ MACOS_COMPONENTS = [
 ]
 
 WINDOWS_COMPONENTS = [
-    "Mega PDF (this application) — Apache License 2.0",
+    "MegaPDF (this application) — Apache License 2.0",
     "Windows App SDK and WinUI 3 — Microsoft Software License Terms",
     "CommunityToolkit.Mvvm — MIT License",
     "The .NET Runtime and .NET libraries — MIT License",
@@ -182,7 +182,7 @@ WINDOWS_COMPONENTS = [
 ]
 
 ANDROID_COMPONENTS = [
-    "Mega PDF (this application) — Apache License 2.0",
+    "MegaPDF (this application) — Apache License 2.0",
     "AndroidX and Jetpack Compose — Apache License 2.0",
     "Material Components for Android — Apache License 2.0",
     "The Kotlin standard library, kotlinx.coroutines and kotlinx.serialization"
@@ -191,7 +191,7 @@ ANDROID_COMPONENTS = [
 ]
 
 IOS_COMPONENTS = [
-    "Mega PDF (this application) — Apache License 2.0",
+    "MegaPDF (this application) — Apache License 2.0",
     "PDFium, and the components built into it — BSD, MIT and other licenses",
 ]
 
@@ -200,7 +200,7 @@ PLATFORMS = {
     "windows": {
         "out": ROOT / "src/MegaPDF.App/Assets/THIRD-PARTY-NOTICES.txt",
         "body": lambda: inventory(WINDOWS_COMPONENTS)
-        + apache_section("Mega PDF — Apache License 2.0")
+        + apache_section("MegaPDF — Apache License 2.0")
         # Not MIT. The Windows App SDK redistributable is licensed under
         # Microsoft's own terms and carries a NOTICE.txt that its licence
         # requires to travel with it; both are reproduced (#176).
@@ -216,7 +216,7 @@ PLATFORMS = {
         "out": ROOT / "android/app/src/main/assets/THIRD-PARTY-NOTICES.txt",
         "body": lambda: inventory(ANDROID_COMPONENTS)
         + apache_section(
-            "Mega PDF, AndroidX / Jetpack Compose, Kotlin, kotlinx.coroutines,"
+            "MegaPDF, AndroidX / Jetpack Compose, Kotlin, kotlinx.coroutines,"
             " kotlinx.serialization, Material Components — Apache License 2.0"
         )
         + pdfium_sections("android"),
@@ -224,13 +224,13 @@ PLATFORMS = {
     "ios": {
         "out": ROOT / "ios/MegaPDF/Resources/THIRD-PARTY-NOTICES.txt",
         "body": lambda: inventory(IOS_COMPONENTS)
-        + apache_section("Mega PDF — Apache License 2.0")
+        + apache_section("MegaPDF — Apache License 2.0")
         + pdfium_sections("android"),  # same bblanchon release/license set as iOS
     },
     "macos": {
         "out": ROOT / "src/MegaPDF.Avalonia/Assets/THIRD-PARTY-NOTICES.txt",
         "body": lambda: inventory(MACOS_COMPONENTS)
-        + apache_section("Mega PDF — Apache License 2.0")
+        + apache_section("MegaPDF — Apache License 2.0")
         + section("Avalonia — MIT License", vendored("avalonia/licence.md"))
         + section("MicroCom.Runtime — MIT License", vendored("microcom.runtime/LICENSE"))
         + section("Tmds.DBus.Protocol — MIT License", vendored("tmds.dbus.protocol/COPYING"))

@@ -15,6 +15,11 @@ step) all disappear, and the Store handles updates.
 - When creating the new app, product type = **"MSIX or PWA app"** (not EXE/MSI —
   Store re-signing, Store-managed updates, and package flights are MSIX-only).
 - Name reserved 2026-07-22: **"Mega PDF"** (with a space — "MegaPDF" was taken).
+  The product itself is **MegaPDF** everywhere (Dave, 2026-09-18): title bar, About and
+  listing copy. Only the reserved name keeps the space, so `Package.appxmanifest`'s two
+  `DisplayName`s (and its tile `ShortName`) stay "Mega PDF" — Partner Center checks
+  them against the reservation. Start and Settings → Apps show that name until the
+  reservation changes.
   Manifest display names (`Properties/DisplayName`, `VisualElements DisplayName`,
   tile `ShortName`) updated to match; submission validation requires the package
   display name to match a reserved name.

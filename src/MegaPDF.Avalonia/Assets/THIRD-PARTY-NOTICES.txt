@@ -1,11 +1,11 @@
 ========================================================================
- Mega PDF — Third-Party Notices
+ MegaPDF — Third-Party Notices
 ========================================================================
 
-Mega PDF
+MegaPDF
 Copyright (c) 2026 ElectricRV.ca Corporation. All rights reserved.
 
-Mega PDF is open source software, released under the Apache License,
+MegaPDF is open source software, released under the Apache License,
 Version 2.0. Source code: https://github.com/SlyWombat/MegaPDF
 
 Special thanks to Mega Woman.
@@ -19,7 +19,7 @@ that follow, as required by the respective licenses.
  Components included
 ========================================================================
 
-  * Mega PDF (this application) — Apache License 2.0
+  * MegaPDF (this application) — Apache License 2.0
   * Avalonia, including Avalonia.Native — MIT License
   * MicroCom.Runtime (a dependency of Avalonia) — MIT License
   * Tmds.DBus.Protocol (a dependency of Avalonia) — MIT License
@@ -31,7 +31,7 @@ that follow, as required by the respective licenses.
 
 
 ========================================================================
- Mega PDF — Apache License 2.0
+ MegaPDF — Apache License 2.0
 ========================================================================
 
 Apache License

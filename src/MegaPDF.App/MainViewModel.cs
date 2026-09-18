@@ -435,10 +435,11 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public string OpenDocumentName => DocumentPath is null ? "" : Path.GetFileName(DocumentPath);
 
-    // Unsaved-changes dot convention (SDD §2.2). "Mega PDF" with the space is the
-    // reserved Store name and the manifest DisplayName; the title bar is what the
-    // listing's screenshots show, so it has to read the same.
-    public const string AppName = "Mega PDF";
+    // Unsaved-changes dot convention (SDD §2.2). The product is "MegaPDF" on every
+    // platform (Dave, 2026-09-18). "Mega PDF" with the space survives only as the
+    // reserved Store name, so the manifest's DisplayName keeps it — the Store checks
+    // that against the reservation — while the app itself never says it.
+    public const string AppName = "MegaPDF";
 
     public string WindowTitle =>
         DocumentPath is null ? AppName

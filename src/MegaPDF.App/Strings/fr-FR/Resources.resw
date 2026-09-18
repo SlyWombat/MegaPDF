@@ -107,10 +107,10 @@
     <value>Rendre les marques et signatures permanentes à l'enregistrement</value>
   </data>
   <data name="AboutPanel.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>À propos de Mega PDF</value>
+    <value>À propos de MegaPDF</value>
   </data>
   <data name="AboutHeading.Text" xml:space="preserve">
-    <value>À propos de Mega PDF</value>
+    <value>À propos de MegaPDF</value>
   </data>
   <data name="AboutLicense.Text" xml:space="preserve">
     <value>Libre et à code source ouvert · Apache-2.0</value>
@@ -122,7 +122,7 @@
     <value>Un grand merci à Mega Woman.</value>
   </data>
   <data name="GitHubLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Mega PDF sur GitHub</value>
+    <value>MegaPDF sur GitHub</value>
   </data>
   <data name="NoticesLink.Content" xml:space="preserve">
     <value>Avis de tiers</value>

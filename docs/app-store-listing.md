@@ -57,7 +57,7 @@ Fill, check & sign PDFs
 Someone emailed you a PDF to sign? Open it, tap the boxes, drop in your signature, save. Done in under a minute — no account, no subscription.
 ```
 
-**Description** [4000] (2391)
+**Description** [4000] (2304)
 ```
 Open. Fix. Save. Done.
 
@@ -128,7 +128,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3020)
+**Description** [4000] (2913)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -199,7 +199,7 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer ? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (3018)
+**Description** [4000] (2911)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 

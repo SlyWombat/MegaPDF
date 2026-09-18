@@ -116,10 +116,10 @@
     <value>Make marks &amp; signatures permanent when saving</value>
   </data>
   <data name="AboutPanel.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>About Mega PDF</value>
+    <value>About MegaPDF</value>
   </data>
   <data name="AboutHeading.Text" xml:space="preserve">
-    <value>About Mega PDF</value>
+    <value>About MegaPDF</value>
   </data>
   <data name="AboutLicense.Text" xml:space="preserve">
     <value>Free &amp; open source · Apache-2.0</value>
@@ -131,7 +131,7 @@
     <value>Special thanks to Mega Woman.</value>
   </data>
   <data name="GitHubLink.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
-    <value>Mega PDF on GitHub</value>
+    <value>MegaPDF on GitHub</value>
   </data>
   <data name="NoticesLink.Content" xml:space="preserve">
     <value>Third-party notices</value>
