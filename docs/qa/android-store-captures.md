@@ -13,7 +13,7 @@ deliberate act in the Play Console.
 |---|---|
 | Workflow | **Android Screenshots** (`.github/workflows/android-screenshots.yml`), `workflow_dispatch` |
 | Script | `android/scripts/capture-screenshots.sh` — the same file runs locally |
-| Device | `profile: pixel_6`, `api-level: 33` → **1080 × 2400 at 420 dpi** (411 × 914 dp) |
+| Device | `profile: pixel_6`, `api-level: 33` → **1080 × 2400 at 420 dpi** (411 × 914 dp). `tools/android-qa/make-store-avds.sh` builds that geometry and a 1600 × 2560 tablet on the same image. |
 | Languages | `en`, `fr-CA`, `fr-FR`, one artifact each (`MEGAPDF_LANG`) |
 | States | `home viewer search sign draw text text-edit redact` — 8 images per language, 24 in all |
 
@@ -48,6 +48,11 @@ Each of these has been a defect at least once, so each is named:
   extra cannot cost anyone their signatures; Windows does the same in
   `tools/screenshots-windows/Reset-SignatureLibrary.ps1`. Note the two platforms label
   the row differently — "Mega W." here, "MegaWoman" there.
+- **The launcher's taskbar.** On a large screen the launcher draws a taskbar across
+  the bottom of every app, carrying whatever the device has pinned, with the
+  navigation buttons beside it — it was in all 24 tablet captures. The script
+  disables the launcher for the run and puts it back on the way out. No effect on a
+  phone: the captures come out byte-identical either way.
 - **The status bar.** SystemUI demo mode, re-asserted before every capture, not once
   at the start: clock 9:41, battery 100 % unplugged, Wi-Fi full **with `fully true`**
   (without it SystemUI draws the "no internet" badge over the icon, because the
@@ -68,12 +73,17 @@ Look at every image. A set ships only when all of this holds:
    buttons (#180), the ellipsising title (#181). No pre-#144 toolbar.
 4. **The right demo person per language**, accents rendering.
 5. **A clean status bar**: 9:41, full battery, no "no internet" badge, no
-   notification icons, nothing of the emulator's own.
-6. **No stray dialogs** — only the one each state is posing.
-7. **Identical poses across the three languages.** `fr-CA` and `fr-FR` should differ
+   notification icons, nothing of the emulator's own. And a clean *bottom*: no
+   taskbar, no navigation buttons.
+6. **The version the app reports.** About shows it, so a set shot from the wrong
+   tree is a set that has to be shot again — which is what happened when the 2.0
+   bump landed after the first gate set. Confirm `versionName` in the built APK
+   (`aapt2 dump badging`) before shooting, not in the gradle file.
+7. **No stray dialogs** — only the one each state is posing.
+8. **Identical poses across the three languages.** `fr-CA` and `fr-FR` should differ
    only in `text`; `en` should differ from them everywhere but agree in layout.
 
-`compare -metric AE` between the language sets is a quick way to check 7, and
+`compare -metric AE` between the language sets is a quick way to check 8, and
 between two runs of the same language a quick way to check the set is reproducible
 at all: English is byte-identical run to run.
 
