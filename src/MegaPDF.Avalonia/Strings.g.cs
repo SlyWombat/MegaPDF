@@ -449,7 +449,7 @@ public static partial class Strings
     /// <summary>Printing needs the CUPS printing system. Install the cups-client package and try again.</summary>
     public static string PrintingNeedsCups => Get("PrintingNeedsCups");
 
-    /// <summary>Printing from inside the sandbox is not available in this build yet.</summary>
+    /// <summary>Printing needs the desktop's print portal, and this session does not provide one.</summary>
     public static string PrintingNeedsPortal => Get("PrintingNeedsPortal");
 
     /// <summary>The print queue did not answer.</summary>
