@@ -1,17 +1,19 @@
 --- a/core/fpdfapi/edit/cpdf_creator.h
 +++ b/core/fpdfapi/edit/cpdf_creator.h
-@@ -86,9 +86,15 @@
+@@ -86,9 +86,17 @@
  
    void RemoveSecurity();
    bool ApplyNewSecurity();
-+  bool IsRemovedEncryptDict(uint32_t objnum) const;
++  bool LeftOutBySecurityRemoval(uint32_t objnum) const;
  
    CPDF_CryptoHandler* GetCryptoHandler();
  
-+  // The object number of the encryption dictionary RemoveSecurity() dropped, so
-+  // the body does not write it out again. 0 when the document had none, or its
-+  // dictionary was inline and so had no object number of its own.
++  // Object numbers the body must not write once security has been removed: the
++  // encryption dictionary, and the old cross-reference stream that names it. Either
++  // is 0 when the document had none, or when it was inline and so had no object
++  // number of its own.
 +  uint32_t removed_encrypt_obj_num_ = 0;
++  uint32_t removed_trailer_obj_num_ = 0;
 +
    // What SetSecurity() asked for; applied by Create().
    bool set_security_ = false;
@@ -22,33 +24,50 @@
      if (!pdfium::Contains(objects_with_refs, objnum)) {
        continue;
      }
-+    if (IsRemovedEncryptDict(objnum)) {
++    if (LeftOutBySecurityRemoval(objnum)) {
 +      continue;
 +    }
      if (!WriteOldIndirectObject(objnum)) {
        return false;
      }
-@@ -761,10 +764,25 @@
+@@ -761,10 +764,42 @@
  void CPDF_Creator::RemoveSecurity() {
    security_handler_.Reset();
    security_changed_ = true;
 +  // Clearing `encrypt_dict_` stops the copy being enciphered and keeps /Encrypt out
-+  // of the trailer, but it does not stop the body writing the dictionary out. The
-+  // body writes every object in GetObjectsWithReferences(), whose walk starts at the
++  // of the trailer, but it does not stop the body writing the security out. The body
++  // writes every object in GetObjectsWithReferences(), whose walk starts at the
 +  // *parser's* trailer -- the one the file was read with, which still says
-+  // /Encrypt N 0 R. So object N stayed reachable and was copied verbatim into the
-+  // plain file, an orphan carrying /O, /U, /OE, /UE, /Perms and the old /P (#241).
-+  // Remember its number and leave it out.
++  // /Encrypt N 0 R. Two objects stay reachable through it and are copied verbatim
++  // into the plain file (#241):
++  //
++  //   * the encryption dictionary, an orphan carrying /O, /U, /OE, /UE, /Perms and
++  //     the old /P, so the original password can still be attacked offline from a
++  //     file the user asked to have protection removed from;
++  //   * when the cross-reference is a stream, that stream is itself the trailer and
++  //     has an object number of its own, so the old cross-reference stream is
++  //     written out too -- and its dictionary still says /Encrypt N 0 R.
++  //
++  // The new file has its own cross-reference, and nothing in it refers to either, so
++  // both are left out. This only applies to a save that removes security; an ordinary
++  // save writes exactly what it wrote before.
 +  if (encrypt_dict_) {
 +    removed_encrypt_obj_num_ = encrypt_dict_->GetObjNum();
++  }
++  if (parser_) {
++    removed_trailer_obj_num_ = parser_->GetTrailerObjectNumber();
 +  }
    encrypt_dict_ = nullptr;
    new_encrypt_dict_.Reset();
  }
  
-+// Object numbers start at 1, so 0 means there is nothing to leave out.
-+bool CPDF_Creator::IsRemovedEncryptDict(uint32_t objnum) const {
-+  return removed_encrypt_obj_num_ != 0 && objnum == removed_encrypt_obj_num_;
++// Object numbers start at 1, so 0 means there is nothing to leave out. An inline
++// trailer has no object number, and neither does an inline encryption dictionary.
++bool CPDF_Creator::LeftOutBySecurityRemoval(uint32_t objnum) const {
++  if (objnum == 0) {
++    return false;
++  }
++  return objnum == removed_encrypt_obj_num_ || objnum == removed_trailer_obj_num_;
 +}
 +
  CPDF_CryptoHandler* CPDF_Creator::GetCryptoHandler() {

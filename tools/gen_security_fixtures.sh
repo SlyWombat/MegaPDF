@@ -35,6 +35,13 @@
 # | remove-aes-256.pdf      | R6, AES-256     | u-remove-a256  | o-remove-a256    | nothing   |
 # | remove-owner-only.pdf   | R6, no user     | (none)         | o-remove-owner   | all       |
 # | remove-user-owner.pdf   | R6, both        | u-remove-both  | o-remove-both    | all       |
+#
+# and two of the same handlers written with object streams and a cross-reference
+# stream, because the cross-reference stream is itself the trailer and so has an
+# object number: a removal that leaves it in the file leaves /Encrypt in the file.
+#
+# | remove-objstm-aes256.pdf  | R6, AES-256, object streams  | u-remove-x256 | o-remove-x256 |
+# | remove-objstm-rc4-128.pdf | R3, RC4-128, object streams  | u-remove-x128 | o-remove-x128 |
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -83,3 +90,6 @@ rich_fixture remove-aes-128     --encrypt u-remove-a128 o-remove-a128 128 --use-
 rich_fixture remove-aes-256     --encrypt u-remove-a256 o-remove-a256 256
 rich_fixture remove-owner-only  --encrypt "" o-remove-owner 256 "${deny_everything[@]}"
 rich_fixture remove-user-owner  --encrypt u-remove-both o-remove-both 256 "${deny_everything[@]}"
+rich_fixture remove-objstm-aes256  --object-streams=generate --encrypt u-remove-x256 o-remove-x256 256
+rich_fixture remove-objstm-rc4-128 --allow-weak-crypto --object-streams=generate \
+                                   --encrypt u-remove-x128 o-remove-x128 128 --use-aes=n

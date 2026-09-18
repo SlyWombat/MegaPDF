@@ -4617,6 +4617,11 @@ void test_remove_protection() {
         {"remove-aes-256.pdf", 6, "u-remove-a256", "o-remove-a256", false},
         {"remove-owner-only.pdf", 6, nullptr, "o-remove-owner", true},
         {"remove-user-owner.pdf", 6, "u-remove-both", "o-remove-both", true},
+        // The same handlers with object streams and a cross-reference stream. That
+        // stream is itself the trailer, so it has an object number of its own, and a
+        // removal that leaves it behind leaves an /Encrypt reference in the file.
+        {"remove-objstm-aes256.pdf", 6, "u-remove-x256", "o-remove-x256", false},
+        {"remove-objstm-rc4-128.pdf", 3, "u-remove-x128", "o-remove-x128", false},
     };
 
     for (const Protected& f : matrix) {
