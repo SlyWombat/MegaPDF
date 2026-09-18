@@ -69,6 +69,11 @@ sleep 20
 xcrun simctl status_bar "$UDID" override --time "9:41" \
     --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
 xcrun simctl ui "$UDID" appearance light || true
+# A fresh container, as ios-screenshots.sh takes one: the demo signature
+# library is seeded only when the store is empty, and this machine's
+# simulators keep whatever the last run left in it — the App Review
+# walkthrough draws a second signature and saves it (#100).
+xcrun simctl uninstall "$UDID" com.megapdf.ios 2>/dev/null || true
 
 xcrun simctl io "$UDID" recordVideo --codec h264 --force "$RAW" >"$OUT/$LABEL-record.log" 2>&1 &
 REC=$!
@@ -76,9 +81,15 @@ sleep 3
 # TEST_RUNNER_ variables reach the test runner only from xcodebuild's own
 # environment — as a build-setting argument the name is accepted and ignored,
 # and the first French pass came out in English.
+#
+# One test, named in full. `-only-testing:MegaPDFUITests` is the whole bundle,
+# which is now four UI-test classes — the App Review walkthrough, redaction,
+# body-text editing and the Recents accessibility pass — and every one of them
+# would be driven on camera and land in the clip. The story is the preview.
 TEST_RUNNER_DEMO_LANG="$LANG_TAG" xcodebuild test-without-building -project MegaPDF.xcodeproj \
     -scheme MegaPDFDemo -destination "id=$UDID" -derivedDataPath "$DD" \
-    -only-testing:MegaPDFUITests 2>&1 | grep -E "Test Case|error:|\*\* TEST" || true
+    -only-testing:MegaPDFUITests/DemoFlowUITests/testFillCheckSignStory 2>&1 \
+    | grep -E "Test Case|error:|\*\* TEST" || true
 sleep 1
 kill -INT "$REC"; wait "$REC" 2>/dev/null || true
 sleep 2

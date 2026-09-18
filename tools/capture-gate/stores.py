@@ -198,6 +198,43 @@ STORES: dict[str, dict] = {
                  "mode. The aspect ratio and the tablet slot are Play Console "
                  "questions, written up in docs/qa/android-store-captures.md.",
     },
+    # ------------------------------------------------- App previews (video)
+    # Not a sixth store: the same three listings, one still per second pulled
+    # out of a preview clip (tools/preview-gate.py). A clip is checked one
+    # language at a time, so the cross-language checks stand down by design
+    # and the one that earns its keep is `chrome` — within a clip the posed
+    # status bar is the same pixels in every frame, so a notification or a
+    # banner arriving halfway through has 20-odd siblings to disagree with.
+    "video": {
+        "title": "App previews (App Store, Mac App Store)",
+        # The sizes the repo's own tooling produces, and nothing else: iOS
+        # records the simulator at the device's native size, which is the
+        # listing slot (docs/app-store-listing.md § App preview videos), and
+        # tools/macos-record-demo.sh records a 1920x1080 window.
+        "slots": {
+            "iphone-6_9": [(1320, 2868), (1290, 2796)],
+            "ipad-13": [(2064, 2752), (2048, 2732)],
+            "mac": [(1920, 1080), (3840, 2160)],
+        },
+        "order": [],
+        "parse": _pose(r"(?P<device>iphone-[0-9_]+|ipad-[0-9]+|mac)-"
+                       r"(?P<pose>t[0-9]+)\.png$"),
+        # A frame caught mid-flow legitimately shows a second row — the find
+        # bar, the placing banner, a sheet over the toolbar — so a row count
+        # would flag most of a clip and mean nothing. The one-row 2.0 toolbar
+        # is proved by the stills sets; here it is read by eye.
+        "toolbar": None,
+        "zoom": None,
+        "accent_poses": {},
+        # Every armed mode in the story paints in the accent on purpose.
+        "accent_strict": False,
+        # iOS poses the status bar (9:41, full battery, no badge); the Mac
+        # frames are the window's content, which has none.
+        "status_band": {"height_frac": 0.045,
+                        "by_device": {"ipad-13": 0.019, "mac": 0}},
+        "notes": "tools/preview-gate.py, one still per second of the clip "
+                 "that goes to App Store Connect.",
+    },
     # ------------------------------------------------------------------ Linux
     # Not a store: the GitHub release page and, later, Flathub. Here because
     # the Linux set is the one that can be re-shot on this server, which makes
