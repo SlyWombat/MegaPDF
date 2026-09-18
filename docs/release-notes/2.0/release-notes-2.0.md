@@ -175,7 +175,7 @@ bien plus souvent au lieu de refuser : sur une série de 22 267 modifications
 réelles dans le corpus de test, les 112 modifications refusées par la 1.7
 passent toutes, sans aucune régression ailleurs et sans page dérangée. Il a
 fallu onze correctifs au moteur d'écriture PDF (les correctifs 0015 à 0025 de la
-branche PDFium de MegaPDF) : ressources de formulaire, texte contourné sous une
+branche PDFium de MegaPDF) : ressources de formulaire, texte tracé en contour sous une
 transformation mise à l'échelle, motifs, glyphes servant de découpe, couleurs
 grises, mise à l'échelle JPEG, et d'autres.
 
@@ -297,8 +297,8 @@ modification est appliquée sans avertissement plutôt que de vous faire attendr
 - Outils ▸ Police du texte et Taille du texte sont grisés hors d'Ajouter du
   texte, au lieu d'offrir un sous-menu vide.
 - Zoom avant avec Cmd+Maj+= autant qu'avec Cmd+=.
-- Le texte de départ d'un éditeur en ligne n'est plus une étape d'annulation à
-  lui seul.
+- Le texte de départ de l'éditeur sur la page n'est plus une étape
+  d'annulation à lui seul.
 - La fenêtre d'impression explique pourquoi elle veut chercher des appareils sur
   le réseau local.
 
@@ -329,8 +329,8 @@ plateformes ont reçu de la 1.3 à la 1.7 :
 - Les PDF protégés.
 - La barre d'outils du bas et le menu Plus.
 - Les indicateurs d'activité et l'avertissement de page.
-- Les gros fichiers : un document de 2,5 Go s'ouvre en un cinquième de seconde,
-  à environ 110 Mo.
+- Les fichiers volumineux : un document de 2,5 Go s'ouvre en un cinquième de
+  seconde, à environ 110 Mo.
 
 ---
 
