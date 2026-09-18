@@ -20,6 +20,7 @@
 #include <functional>
 #include <mutex>
 #include <thread>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -4706,6 +4707,91 @@ void test_remove_protection() {
     }
 }
 
+// #246: a copy written with new security must name an encryption dictionary that is
+// actually in the file. PDFium numbered it in two places that could disagree -- the body
+// wrote it at `last_obj_num_ + 1`, which WriteOldObjs() may have lowered to the last
+// object it could reach, while the trailer named `document_->GetLastObjNum() + 1`. On a
+// document whose highest object number is one nothing refers to, the trailer then pointed
+// at an object that was never written: every reader concluded the file was not encrypted,
+// and read its enciphered streams as if they were plain. MegaPDF was the one reader that
+// did not notice, because PDFium opens an unencrypted document whatever it is given and
+// rebuilds a cross-reference table that does not add up.
+//
+// unused-tail.pdf is that shape in five objects. 30% of the 4,337-document corpus had it.
+
+// The object number the last /Encrypt reference in `bytes` names, or 0 for none.
+unsigned long encrypt_reference(const std::vector<unsigned char>& bytes) {
+    const std::string text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    unsigned long found = 0;
+    for (size_t at = text.find("/Encrypt"); at != std::string::npos; at = text.find("/Encrypt", at + 1)) {
+        size_t i = at + 8;
+        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) i++;
+        size_t start = i;
+        while (i < text.size() && std::isdigit(static_cast<unsigned char>(text[i]))) i++;
+        if (i > start) found = std::stoul(text.substr(start, i - start));
+    }
+    return found;
+}
+
+bool writes_object(const std::vector<unsigned char>& bytes, unsigned long objnum) {
+    const std::string text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    return text.find("\n" + std::to_string(objnum) + " 0 obj") != std::string::npos ||
+           text.find("\r" + std::to_string(objnum) + " 0 obj") != std::string::npos;
+}
+
+void test_protect_names_the_dictionary_it_wrote(const std::string& fixtures) {
+    struct Case { const char* file; const char* why; };
+    const Case cases[] = {
+        {"unused-tail.pdf", "its highest object number is one nothing refers to (#246)"},
+        {"fixture.pdf", "every object is reachable"},
+        {"forms.pdf", "it has a form field"},
+        {"secure-source.pdf", "it has fields and annotations"},
+    };
+    for (const Case& c : cases) {
+        const std::string name = c.file;
+        const auto bytes = read_file(fixtures + "/" + c.file);
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, name + ": opens");
+        if (d == nullptr) continue;
+        const std::string before = first_run_text(d);
+
+        std::vector<unsigned char> locked;
+        // Test data, in this file only.
+        const char* user = "tail-user";
+        const char* owner = "tail-owner";
+        check(megapdf_save_with_security(d, user, owner, MEGAPDF_PERMIT_PRINT, collect, &locked) == MEGAPDF_OK,
+              name + ": a copy saves with new security", megapdf_last_error_message());
+        megapdf_close(d);
+        if (locked.empty()) continue;
+        keep_saved("protect-numbering", locked);
+
+        const unsigned long named = encrypt_reference(locked);
+        check(named != 0, name + ": the copy's trailer names an /Encrypt object");
+        check(named != 0 && writes_object(locked, named),
+              name + ": and that object is in the file -- " + std::string(c.why),
+              "/Encrypt " + std::to_string(named) + " 0 R");
+
+        // What every other reader concludes: it needs a credential, and it is the one
+        // we set.
+        megapdf_document* bare = megapdf_open(locked.data(), locked.size(), nullptr);
+        check(bare == nullptr && megapdf_last_error() == 4 /* FPDF_ERR_PASSWORD */,
+              name + ": the protected copy does not open without a credential");
+        megapdf_close(bare);
+
+        megapdf_document* open = megapdf_open(locked.data(), locked.size(), owner);
+        megapdf_security s{};
+        check(open != nullptr && megapdf_security_info(open, &s) == MEGAPDF_OK && s.encrypted == 1 &&
+                  s.revision == 6 && s.full_access == 1,
+              name + ": the owner credential opens it, protected at revision 6",
+              std::to_string(s.revision));
+        if (open != nullptr) {
+            check(first_run_text(open) == before, name + ": and it reads what it read before",
+                  first_run_text(open));
+            megapdf_close(open);
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
@@ -4728,6 +4814,7 @@ int main(int argc, char** argv) {
     test_protected_save(argv[1]);
     test_security(argv[1]);
     test_remove_protection();
+    test_protect_names_the_dictionary_it_wrote(argv[1]);
     test_subset_font_glyphs();
     test_cid_font_glyphs();
     test_render();

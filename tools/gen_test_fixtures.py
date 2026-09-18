@@ -21,6 +21,9 @@ Writes:
                 ways for #241: two pages of text, a filled text field "fullname"
                 and a checked checkbox "agree", and a red square and a sticky note
                 carrying MegaPDF_Ids. Removing protection must leave all of it alone.
+  unused-tail.pdf - a document whose highest object number is one nothing refers
+                to (#246): the shape under which PDFium's writer numbered a new
+                encryption dictionary differently from the trailer naming it.
   cropped.pdf - CropBox [0 100 612 700] on a 612x792 MediaBox (#28/#30): the
                 offset that makes user-space and rendered coordinates disagree.
   userunit.pdf - /UserUnit 2 with a CropBox offset (#150): cropped.pdf drawn in
@@ -723,6 +726,34 @@ def gen_secure_source():
     return build(objs)
 
 
+def gen_unused_tail():
+    """A document whose highest object number is one nothing refers to (#246).
+
+    PDFium's writer only writes the objects it can reach, so for a file like this the
+    last object it writes is not the document's last object number -- the condition
+    under which the two places that number a new encryption dictionary used to
+    disagree, and the protected copy's trailer named an /Encrypt object that was never
+    written. Real documents get here through an incremental-update history or a stale
+    object; this is the same shape in five objects.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    content = add(stream(
+        b"", b"BT /F1 18 Tf 72 700 Td (An object nobody refers to follows this one.) Tj ET\n"))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>"
+               % (pages_num, font, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    # Listed in the cross-reference table, reachable from nothing.
+    add(b"<< /Type /MegaPDFUnused /Note (nothing refers to this object) >>")
+    return build(objs)
+
+
 def main():
     outdir = sys.argv[1]
     os.makedirs(outdir, exist_ok=True)
@@ -739,7 +770,8 @@ def main():
                        ("doubled-far.pdf", gen_doubled_far()),
                        ("softmask.pdf", gen_softmask()),
                        ("encrypted.pdf", gen_encrypted()),
-                       ("secure-source.pdf", gen_secure_source())):
+                       ("secure-source.pdf", gen_secure_source()),
+                       ("unused-tail.pdf", gen_unused_tail())):
         path = os.path.join(outdir, name)
         with open(path, "wb") as f:
             f.write(data)

@@ -51,6 +51,15 @@ well as by PDFium itself.
 4. **New security is AES-256 only** (standard handler, revision 6): the strongest the
    standard handler has, and the only one patch 0010 writes.
 
+   Patch 0030 is what makes that true of the file on disk. Before it, PDFium chose the new
+   encryption dictionary's object number in two places that could disagree, and for 30% of
+   the corpus the trailer named an object that was never written: the copy was enciphered
+   and every reader but MegaPDF called it unencrypted, so its streams would not decode
+   (#246). The verified save did not catch it, because it checks the copy by opening it
+   with the new password and PDFium opens an unencrypted document whatever it is handed.
+   The core test now reads the copy's own bytes and insists the `/Encrypt` reference names
+   an object that is in the file.
+
 5. **The Password command sets one password.** It opens the document with every
    permission: the owner password is the same as the user password. Setting restrictions
    with a separate owner password is not offered in the apps yet; the core API
@@ -99,8 +108,9 @@ well as by PDFium itself.
 
 ## Consequences
 
-- The apps need MegaPDF's PDFium from patch 0010 on, and from patch 0029 on for the
-  removal to be complete (`libs/pdfium/RELEASE`).
+- The apps need MegaPDF's PDFium from patch 0010 on; from 0029 on for the removal to
+  be complete, and from 0030 on for decision 4 to hold at all on a document whose
+  highest object number is one nothing refers to (#246, `libs/pdfium/RELEASE`).
 - Every handler from RC4-40 to AES-256, an owner-only restricted document, non-ASCII
   passwords and cleartext metadata are committed fixtures (`tests/MegaPDF.Core.Tests/Fixtures/security`),
   exercised by the core tests on every CI OS and by the desktop tests; the phone tests use

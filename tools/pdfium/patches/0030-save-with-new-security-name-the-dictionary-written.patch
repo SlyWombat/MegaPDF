@@ -1,0 +1,46 @@
+--- a/core/fpdfapi/edit/cpdf_creator.h
++++ b/core/fpdfapi/edit/cpdf_creator.h
+@@ -97,6 +97,10 @@
+   uint32_t removed_encrypt_obj_num_ = 0;
+   uint32_t removed_trailer_obj_num_ = 0;
+ 
++  // The object number an inline encryption dictionary was written at, so the trailer
++  // names the object the body actually wrote (#246). 0 until it has been written.
++  uint32_t written_encrypt_obj_num_ = 0;
++
+   // What SetSecurity() asked for; applied by Create().
+   bool set_security_ = false;
+   ByteString security_user_;
+--- a/core/fpdfapi/edit/cpdf_creator.cpp
++++ b/core/fpdfapi/edit/cpdf_creator.cpp
+@@ -329,7 +329,15 @@
+   }
+   if (stage_ == Stage::kWriteEncryptDict27) {
+     if (encrypt_dict_ && encrypt_dict_->IsInline()) {
+-      last_obj_num_ += 1;
++      // Past every object number the document has, not just past the last one written.
++      // WriteOldObjs() lowers `last_obj_num_` to the last object it actually wrote, so
++      // `last_obj_num_ + 1` can land on a number the source already uses -- and on a
++      // number lower than the one WriteTrailerAndRoot() names in /Encrypt, which is
++      // `document_->GetLastObjNum() + 1`. The trailer then pointed at an object that was
++      // never written, and every reader concluded the file was not encrypted while its
++      // streams were enciphered (#246).
++      last_obj_num_ = std::max(last_obj_num_, document_->GetLastObjNum()) + 1;
++      written_encrypt_obj_num_ = last_obj_num_;
+       FX_FILESIZE saveOffset = archive_->CurrentOffset();
+       if (!WriteIndirectObj(last_obj_num_, encrypt_dict_.Get())) {
+         return Stage::kInvalid;
+@@ -510,9 +518,12 @@
+       return Stage::kInvalid;
+     }
+ 
++    // The number the body wrote it at, not a second guess at it (#246). The trailer is
++    // written after kWriteEncryptDict27, so by now this is set.
+     uint32_t dwObjNum = encrypt_dict_->GetObjNum();
+     if (dwObjNum == 0) {
+-      dwObjNum = document_->GetLastObjNum() + 1;
++      dwObjNum = written_encrypt_obj_num_ != 0 ? written_encrypt_obj_num_
++                                               : document_->GetLastObjNum() + 1;
+     }
+     if (!archive_->WriteString(" ") || !archive_->WriteDWord(dwObjNum) ||
+         !archive_->WriteString(" 0 R ")) {
