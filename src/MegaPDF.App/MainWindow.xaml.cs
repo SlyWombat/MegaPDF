@@ -716,6 +716,12 @@ public sealed partial class MainWindow : Window
 
     private void OnPagePointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        // A new press is a new gesture. The end of a whiteout or redaction drag sets
+        // _suppressNextTap for the Tapped its release raises, but a drag that moved raises
+        // none, so the flag used to wait and swallow the next real click — the first click
+        // on a line, a box or the signature line after any whiteout did nothing.
+        _suppressNextTap = false;
+
         if ((!ViewModel.IsWhiteoutMode && !ViewModel.IsRedactMode) || ViewModel.Busy.IsBusy ||
             sender is not PageCanvas canvas)
         {
