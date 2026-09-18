@@ -73,6 +73,19 @@ Look at every image. A set ships only when all of this holds:
 between two runs of the same language a quick way to check the set is reproducible
 at all: English is byte-identical run to run.
 
+## Two things this runbook cannot settle from here
+
+**The aspect ratio.** `pixel_6` is 1080 × 2400, which is 9:20. Play's help text
+for phone screenshots asks for 9:16, and 2400 ÷ 1080 = 2.22 is past a 2:1 limit if
+that is the one being enforced. Whether the console accepts it has to be checked in
+the console. If it does not, the fix is the AVD and not the script: the script
+captures whatever geometry it is pointed at, so `hw.lcd.height=1920` (16:9) or
+`2160` (2:1) re-shoots the whole set unchanged in every other respect.
+
+**Whether the listing has a tablet slot.** The workflow shoots phone only. A tablet
+set has been taken once as a look-ahead and read fine, but nothing in this repo
+records the listing's slots — that is in the console too.
+
 ## What each image is for
 
 | State | Shows |
