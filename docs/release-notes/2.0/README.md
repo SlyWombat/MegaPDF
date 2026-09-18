@@ -24,6 +24,10 @@ proofreading.
 | [`google-play.md`](google-play.md) | Google Play | Release notes | 500 |
 | [`release-notes-2.0.md`](release-notes-2.0.md) | — | the long form, for the repo and the website | — |
 
+The captures that go up beside this copy are measured in
+[`capture-gate-report.md`](capture-gate-report.md) (the stills) and
+[`preview-videos.md`](preview-videos.md) (the nine app preview clips).
+
 Microsoft Store has four listing languages (`en-US`, `en-CA`, `fr-CA`, `fr-FR`);
 the English block is pasted into both English listings. The Apple and Play
 listings have three (`en-CA` / `en`, `fr-CA`, `fr-FR`).

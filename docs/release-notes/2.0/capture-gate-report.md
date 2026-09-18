@@ -8,6 +8,12 @@ then where the tool and the eye disagreed.
 **Nothing here was uploaded anywhere.** Every set is sitting on the machine that
 shot it.
 
+The **preview videos** are the other half of §3 and have their own report:
+[`preview-videos.md`](preview-videos.md). Nine clips, 270 stills, six defects
+found by reading them, and one measured change to this tool — `ink_tolerance`,
+which the `video` profile sets and no other profile does, so nothing below is
+measured any differently than it was.
+
 ---
 
 ## 1. The verdict
@@ -201,6 +207,7 @@ beside them — so one can be mailed or opened on a phone with no network.
 | Play tablet | `.../final/play-tablet/` | `gate.py --store play <set>/tablet -o out` |
 | Linux | `kdocker2:~/megapdf-157-work/cg-out2/linux/` | `gate.py --store linux <shots> -o out` |
 | Microsoft | GPD-DAVE `artifacts/store/gate-microsoft/` | `gate.py --store microsoft artifacts/store/screenshots -o out` (tesseract in a container: the WSL box has no sudo) |
+| Preview videos | kdocker2 `~/megapdf-video-work/{preview-out,mac-out}/gate/<lang>/` | `preview-gate.py -o out <clip>…` then `gate.py --store video out/frames/<lang> -o out/gate/<lang>`, **one language at a time** — see `preview-videos.md` |
 
 Add `--against <a set you already signed off>` for a re-shoot: it reports
 everything that changed, and everything that changed had better be something
