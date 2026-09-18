@@ -161,7 +161,7 @@
     <string name="recent_options">Options pour %1$s</string>
     <!-- Mode capture d\'écran (#91) -->
     <string name="screenshot_demo_asset">demo-fr.pdf</string>
-    <string name="screenshot_document_name">Contrat de location.pdf</string>
+    <string name="screenshot_document_name">Contrat location.pdf</string>
     <string name="screenshot_recent_2">Autorisation de sortie scolaire.pdf</string>
     <string name="screenshot_recent_3">Formulaire de réclamation d\'assurance.pdf</string>
     <string name="screenshot_location_1">Téléchargements</string>
