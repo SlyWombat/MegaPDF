@@ -1,0 +1,3 @@
+. '$PSScriptRoot\common.ps1'
+[Win]::Windows() | ForEach-Object { $t = [Win]::Title($_); if ($t) { $r = New-Object Win+RECT; [Win]::GetWindowRect($_, [ref]$r) | Out-Null; "{0} | {1},{2} {3}x{4}" -f $t, $r.Left, $r.Top, ($r.Right-$r.Left), ($r.Bottom-$r.Top) } } | Where-Object { $_ -notmatch '^(Default IME|MSCTFIME|GDI\+|\.NET|DDE|Hidden|Program Manager|Windows Input)' } | Select-Object -First 25
+$bmp = New-Object System.Drawing.Bitmap 2560, 1600; $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen(0, 0, 0, 0, $bmp.Size); $bmp.Save('D:\megapdf-qa\rc2\shots\screen-now.png'); $g.Dispose(); $bmp.Dispose()
