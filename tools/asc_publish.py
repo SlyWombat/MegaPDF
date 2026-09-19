@@ -159,6 +159,14 @@ def listing_copy():
         for fm in re.finditer(r"^\*\*([A-Za-z' ]+)\*\* \[\d+\].*?\n```\n(.*?)\n```", block, re.M | re.S):
             fields[fm.group(1).strip()] = fm.group(2).strip()
         out[locale] = fields
+    # The Mac version has its own description and promotional text ('mac-<locale>'
+    # sections): the iPhone copy says "tap" and "finger", which App Review reads
+    # against the Mac app. Everything else is shared.
+    mac = {k[4:]: v for k, v in out.items() if k.startswith("mac-")}
+    out = {k: v for k, v in out.items() if not k.startswith("mac-")}
+    if PLATFORM == "MAC_OS":
+        for locale, fields in mac.items():
+            out[locale] = {**out.get(locale, {}), **fields}
     return out
 
 
@@ -240,7 +248,9 @@ def cmd_version(version_string):
         print(f"version {version_string} already editable: {v['id']}")
     api("PATCH", f"/v1/appStoreVersions/{v['id']}", {"data": {
         "type": "appStoreVersions", "id": v["id"],
-        "attributes": {"copyright": "2026 Electric RV", "releaseType": "MANUAL"}}})
+        "attributes": {"copyright": "2026 Electric RV",
+                       # Dave, 2026-09-19: "Set everything to go live" — publish on approval.
+                       "releaseType": os.environ.get("ASC_RELEASE_TYPE", "AFTER_APPROVAL")}}})
     return v
 
 

@@ -240,6 +240,91 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 }
 
 # --------------------------------------------------------------------------
+# Mac App Store — the same record's MAC_OS platform. Only the promotional text and
+# the description differ: the iPhone copy says "tap" and "finger" and names iCloud
+# Drive, which App Review reads against the Mac app (2.3). Name, subtitle and
+# keywords are shared with iOS on the record's app info.
+# --------------------------------------------------------------------------
+
+AS_MAC_EN = {
+    "promo": "Someone emailed you a PDF to sign? Open it, click the boxes, drop in your signature, save. Done in under a minute — no account, no subscription.",
+    "description": """Open. Fix. Save. Done.
+
+MegaPDF does the one job most people actually have with a PDF: someone sent you a form, and you need to send it back filled in, checked off, and signed. No account. No subscription. No cloud. Everything happens on your Mac.
+
+Check any box
+Click a checkbox and it's checked — real interactive form fields and plain printed squares alike. MegaPDF recognizes drawn checkboxes that other apps treat as decoration.
+
+Type on any line
+Click where the answer goes and type it. Choose the size and the face — sans, serif or monospace — so what you add matches the form you are filling in. Drag it into place, or double-click it to fix a typo. Everything you add is real, searchable text, not a sticker on top of the page.
+
+Fix the document's own text
+Wrong date? Misspelled name? Click the line and retype it. MegaPDF keeps the document's own font where it can and tells you when it had to use a similar one. If a change would disturb the rest of the page, it says so instead of quietly moving things. Undo puts the original back exactly.
+
+Redact, and it really is gone
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Cover is there too, for when hiding it on the page is enough, and it says that it only covers.
+
+Sign like you mean it
+Draw your signature with the trackpad or mouse, type it, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your Mac; drop one onto any document, move and resize it until it sits right on the line.
+
+Save without fear
+Double-click a PDF in the Finder and Save writes back to that file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Closing or quitting with unsaved changes always asks first.
+
+Find any word
+Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a keystroke away.
+
+Protect, shrink, print
+Set, change or remove a document's password. Save a smaller copy to send by email. Print through the standard macOS print panel.
+
+Private by design
+MegaPDF makes zero network connections — its sandbox does not even allow them — and opens only the files you choose. Your documents and your signature never leave your Mac. The app is open source, so anyone can verify that.
+
+At home on the Mac
+Every command is in the menu bar with the keyboard shortcut you expect. VoiceOver reads the toolbar and the page, and the app follows your Mac's light or dark appearance. Documents you fill and sign here are standard PDFs: they open perfectly in Preview and any other PDF app.
+
+MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.""",
+}
+
+AS_MAC_FR_CA = {
+    "promo": "On vous a envoyé un PDF à signer? Ouvrez-le, cliquez sur les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.",
+    "description": """Ouvrir. Corriger. Enregistrer. Terminé.
+
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique. Tout se passe sur votre Mac.
+
+Cochez n'importe quelle case
+Cliquez sur une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+
+Écrivez sur n'importe quelle ligne
+Cliquez à l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou double-cliquez dessus pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
+
+Corrigez le texte du document
+Mauvaise date? Nom mal orthographié? Cliquez sur la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+
+Caviardez, et c'est parti pour de bon
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer est là aussi, quand il suffit de cacher quelque chose sur la page, et il précise qu'il ne fait que recouvrir.
+
+Signez pour de vrai
+Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+
+Enregistrez sans crainte
+Double-cliquez sur un PDF dans le Finder, et Enregistrer écrit dans ce fichier, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
+
+Trouvez n'importe quel mot
+Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à une touche près.
+
+Protéger, réduire, imprimer
+Ajoutez, changez ou retirez le mot de passe d'un document. Enregistrez une copie réduite à envoyer par courriel. Imprimez avec la zone de dialogue d'impression standard de macOS.
+
+Confidentiel par conception
+MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre; n'importe qui peut le vérifier.
+
+Chez lui sur le Mac
+Chaque commande est dans la barre des menus, avec le raccourci clavier attendu. VoiceOver lit la barre d'outils et la page, et l'application suit l'apparence claire ou sombre de votre Mac. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans Aperçu et dans toute autre application PDF.
+
+MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
+}
+
+# --------------------------------------------------------------------------
 # Google Play — the App Store description with the Android app names.
 # --------------------------------------------------------------------------
 
@@ -363,6 +448,17 @@ def as_section(title: str, tag: str, c: dict, note: str = "") -> str:
     return "\n".join(p for p in parts if p)
 
 
+def mac_section(title: str, tag: str, c: dict) -> str:
+    """The Mac platform's own fields, as a '### … — `mac-<locale>`' section that
+    tools/asc_publish.py lays over the shared copy when ASC_PLATFORM=MAC_OS."""
+    parts = [f"### Mac App Store — {title} — `mac-{tag}`\n",
+             "*The Mac version's description and promotional text. Name, subtitle and "
+             "keywords are the shared ones above.*\n"]
+    parts.append(f"**Promotional text** [170] ({len(c['promo'])})\n" + block(c["promo"]))
+    parts.append(f"**Description** [4000] ({len(c['description'])})\n" + block(c["description"]))
+    return "\n".join(parts)
+
+
 def play_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts = [f"### {title} — `{tag}`\n", note]
     parts.append(f"**Title** [30] ({len(c['title'])})\n" + block(c["title"]))
@@ -385,6 +481,8 @@ LIMITS_OK = [
     (len(AS_EN["keywords"]) <= 100 and len(AS_FR_CA["keywords"]) <= 100, "AS keywords ≤100"),
     (len(AS_EN["description"]) <= 4000 and len(AS_FR_CA["description"]) <= 4000, "AS description ≤4000"),
     (len(PLAY_EN["title"]) <= 30 and len(PLAY_FR_CA["title"]) <= 30, "Play title ≤30"),
+    (len(AS_MAC_EN["promo"]) <= 170 and len(AS_MAC_FR_CA["promo"]) <= 170, "Mac promo ≤170"),
+    (len(AS_MAC_EN["description"]) <= 4000 and len(AS_MAC_FR_CA["description"]) <= 4000, "Mac description ≤4000"),
     (len(PLAY_EN["short"]) <= 80 and len(PLAY_FR_CA["short"]) <= 80, "Play short ≤80"),
     (len(PLAY_EN["description"]) <= 4000 and len(PLAY_FR_CA["description"]) <= 4000, "Play full description ≤4000"),
     (len(PLAY_EN["notes"]) <= 500 and len(PLAY_FR_CA["notes"]) <= 500, "Play notes ≤500"),
@@ -421,6 +519,9 @@ AS_BODY = "\n".join([
     as_section("Français (Canada)", "fr-CA", canada(AS_FR_CA)),
     # The 2.0 What's new carries hand-made France wording (#242), so it is read, not derived.
     as_section("Français", "fr", {**derive(AS_FR_CA), "whatsnew": release_block("app-store.md", "Français (France)")}),
+    mac_section("English (Canada)", "en-CA", AS_MAC_EN),
+    mac_section("Français (Canada)", "fr-CA", canada(AS_MAC_FR_CA)),
+    mac_section("Français", "fr", derive(AS_MAC_FR_CA)),
 ])
 
 PLAY_BODY = "\n".join([

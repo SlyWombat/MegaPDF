@@ -49,12 +49,12 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
    **Save**. It keeps its size and font; Undo restores the original exactly.
 6. **Search:** the magnifier → type a word; the arrows step through the matches.
 7. **Save:** **Save** writes back to the original file ("Saved" confirms);
-   **Save a copy** (overflow menu) writes a new file through the Files picker.
+   **Save a copy** (under **More**) writes a new file through the Files picker.
 8. **Redact:** **Redact** → drag across what must come out → **Save**. A
    confirmation says redaction permanently removes the content and offers
    **Overwrite the original** or **Save as a copy**, then says what was removed.
    The content is taken out of the file, not covered.
-9. **Protect:** overflow menu → **Password…** sets, changes or removes a
+9. **Protect:** **More** → **Password…** sets, changes or removes a
    document password. A protected PDF asks for it when opened.
 
 **1. Screen recording**
@@ -64,8 +64,7 @@ signature, search, save, reopen from Recents, and the Photos picker opening and
 closing. Steps 8 and 9 are not in it; they need only an open PDF.
 
 **2. Devices and OS versions tested**
-iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5, and the
-TestFlight build on the developer's own devices.
+iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5.
 
 **5. External services, tools or platforms**
 None. No network requests: no analytics, crash reporting, advertising, sign-in,
@@ -124,7 +123,7 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
    Save a smaller copy for email** makes a smaller copy. **Print** (⌘P) uses the standard macOS print panel.
 
 **Screen recording**
-Attached: the flow above on a Mac mini (M4) running macOS 26.6 — ticks, the
+Attached: the flow above on a Mac mini (M4) running macOS 26.6.2 — ticks, the
 signature placed, text added, find.
 
 **Devices tested**
@@ -143,8 +142,9 @@ language follows the system setting.
 **Regulated industry / third-party material** Not applicable: a general-purpose
 document utility working on the user's own files.
 
-**Permissions and privacy** Sandboxed; no entitlements beyond user-selected
-file access and printing. No data is collected; privacy policy:
+**Permissions and privacy** Sandboxed. Entitlements: user-selected file access,
+printing, and `com.apple.security.cs.allow-jit`, which the .NET runtime needs to
+compile its code; nothing else. No data is collected; privacy policy:
 https://electricrv.ca/megapdf/privacy/
 
 ---

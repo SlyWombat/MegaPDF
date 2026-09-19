@@ -9,7 +9,7 @@ No other platform is named (App Review 2.3.10).
 
 ## English (Canada) — `en-CA`
 
-**What's New** [4000] (2402)
+**What's New** [4000] (2399)
 
 ```
 Nothing gets lost
@@ -18,7 +18,7 @@ Quitting, closing a window or opening another file with unsaved changes now alwa
 
 Redact, and it really is gone
 
-Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Whiteout still only covers, and now says so.
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Cover still only covers, and now says so.
 
 One row of tools
 
@@ -72,7 +72,7 @@ Double-cliquez sur un PDF dans le Finder et Enregistrer écrit dans ce fichier, 
 
 Corriger le texte du document, bien plus souvent
 
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans perturber la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans perturber la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
 
 PDF protégés
 
@@ -114,7 +114,7 @@ Double-cliquez sur un PDF dans le Finder et Enregistrer écrit dans ce fichier, 
 
 Corriger le texte du document, bien plus souvent
 
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans perturber la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans perturber la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
 
 PDF protégés
 

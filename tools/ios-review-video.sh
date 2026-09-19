@@ -71,6 +71,15 @@ xcrun simctl status_bar "$UDID" override --time "9:41" \
     --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
 xcrun simctl ui "$UDID" appearance light || true
 
+# The test runner is an app too, and its icon sat beside MegaPDF's on the home
+# screen at the start of the first 2.0 take. Installing it and taking it off the
+# home screen before the recording starts leaves only what a user would have.
+xcodebuild test-without-building -project MegaPDF.xcodeproj -scheme MegaPDFDemo \
+    -destination "id=$UDID" -derivedDataPath "$DD" \
+    -only-testing:MegaPDFUITests/DemoFlowUITests/testHideRunnerFromHomeScreen \
+    2>&1 | grep -E "Test Case|error:|\*\* TEST" || true
+xcrun simctl terminate "$UDID" com.megapdf.ios >/dev/null 2>&1 || true
+
 RAW="$OUT/review-walkthrough-raw.mp4"
 xcrun simctl io "$UDID" recordVideo --codec h264 --force "$RAW" >"$OUT/record.log" 2>&1 &
 REC=$!

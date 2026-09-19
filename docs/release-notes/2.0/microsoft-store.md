@@ -39,7 +39,7 @@ The toolbar is a single row, with the pickers appearing beside the tool they bel
 
 ```
 Corriger le texte du document, bien plus souvent
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
 
 Caviarder
 Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Masquer ne fait que recouvrir, et le dit maintenant.
@@ -66,7 +66,7 @@ La barre d'outils tient sur une rangée : les sélecteurs apparaissent à côt�
 
 ```
 Corriger le texte du document, bien plus souvent
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
 
 Caviarder
 Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Masquer ne fait que recouvrir, et le dit maintenant.

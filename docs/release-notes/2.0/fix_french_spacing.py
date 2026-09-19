@@ -45,6 +45,10 @@ def space_before(text: str, punctuation: str) -> str:
         preceding = rf"[^\s{NBSP}\d]" if mark == ":" else rf"[^\s{NBSP}]"
         text = re.sub(rf"(?<={preceding})[ {NBSP}]?(?={re.escape(mark)}(?:\s|$))",
                       wanted, text)
+    if punctuation:
+        # French groups thousands with a space, and a plain one lets "22 000" break
+        # across two lines, so both variants take U+00A0 there ("22 000").
+        text = re.sub(r"(?<=\d) (?=\d{3}(?!\d))", NBSP, text)
     return text
 
 

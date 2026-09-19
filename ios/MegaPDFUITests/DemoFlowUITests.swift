@@ -218,11 +218,16 @@ final class DemoFlowUITests: XCTestCase {
         let hint = app.alerts.firstMatch
         if hint.waitForExistence(timeout: 2) { pause(1.2); hint.buttons.firstMatch.tap() }
         pause(0.8)
-        tapPage(x: 190, yFromBottom: 380); pause(1.5)          // placed a little high…
+        // The rule runs from x=72 to 320 at y=300, and a placed signature is a third
+        // of the page wide (204 pt) and centred on the tap. Centred at y=328 its ink
+        // sits on the rule, below the "Customer signature" heading at 372. It lands
+        // a little right of the rule's middle and is dragged along it, so the take
+        // shows a move without ever covering the Confirmations text above.
+        tapPage(x: 250, yFromBottom: 328); pause(1.5)
         let p = page()
-        let from = p.coordinate(withNormalizedOffset: CGVector(dx: 190 / 612.0, dy: (792 - 380) / 792.0))
-        let to = p.coordinate(withNormalizedOffset: CGVector(dx: 190 / 612.0, dy: (792 - 335) / 792.0))
-        from.press(forDuration: 0.4, thenDragTo: to)            // …then dragged down onto the line
+        let from = p.coordinate(withNormalizedOffset: CGVector(dx: 250 / 612.0, dy: (792 - 328) / 792.0))
+        let to = p.coordinate(withNormalizedOffset: CGVector(dx: 196 / 612.0, dy: (792 - 328) / 792.0))
+        from.press(forDuration: 0.4, thenDragTo: to)
         pause(1.5)
         tapPage(x: 500, yFromBottom: 150); pause(1.5)           // deselect
 
@@ -268,6 +273,26 @@ final class DemoFlowUITests: XCTestCase {
         app.buttons["Close"].firstMatch.tap(); pause(2.5)
     }
 
+    /// Takes the UI-test runner's icon off the home screen (it stays in the App
+    /// Library), so the review take's opening seconds show the home screen a user
+    /// would see. tools/ios-review-video.sh runs this before it starts recording;
+    /// the first 2.0 take had "MegaPDFUITests-Runner" beside MegaPDF.
+    func testHideRunnerFromHomeScreen() {
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        XCUIDevice.shared.press(.home)
+        let icon = springboard.icons.matching(NSPredicate(format: "label BEGINSWITH 'MegaPDFUITests'")).firstMatch
+        guard icon.waitForExistence(timeout: 5) else { return }   // already off the home screen
+        icon.press(forDuration: 1.5)
+        let remove = springboard.buttons["Remove App"].firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), "no Remove App in the icon's menu")
+        remove.tap()
+        let fromHome = springboard.buttons["Remove from Home Screen"].firstMatch
+        XCTAssertTrue(fromHome.waitForExistence(timeout: 5), "no Remove from Home Screen")
+        fromHome.tap()
+        XCUIDevice.shared.press(.home)
+        XCTAssertFalse(icon.waitForExistence(timeout: 2), "the runner is still on the home screen")
+    }
+
     /// The topmost of several same-named buttons (a sheet's Save above the
     /// viewer's Save): XCUITest lists them in hierarchy order, sheets last.
     private func lastButton(_ app: XCUIApplication, _ label: String) -> XCUIElement {
@@ -289,8 +314,10 @@ final class DemoFlowUITests: XCTestCase {
         XCTFail("MegaPDF-Test-Form.pdf is not visible in the Files picker")
     }
 
-    /// Two strokes across the drawing canvas, the second one a loop, so it
-    /// reads as a signature rather than a line.
+    /// A cursive signature: one looping stroke (a prolate cycloid, so the pen runs
+    /// back on itself four times the way joined-up handwriting does) and a flourish
+    /// under it. The first review take drew two straight diagonals, which read as
+    /// a cross-out rather than a name.
     private func drawSignature(_ app: XCUIApplication) {
         let canvas = app.otherElements.matching(NSPredicate(format: "label == 'Signature canvas'")).firstMatch
         let area: XCUIElement = canvas.exists ? canvas : app.windows.firstMatch
@@ -299,9 +326,15 @@ final class DemoFlowUITests: XCTestCase {
         }
         // Slow drags: at the default velocity the gesture samples so few points
         // that the canvas records dots, not a line.
+        let loops = 4.0, steps = 36
+        let span = loops * 2 * Double.pi
+        let cursive: [(Double, Double)] = (0...steps).map { i in
+            let t = span * Double(i) / Double(steps)
+            return (0.12 + 0.72 * t / span - 0.05 * sin(t), 0.50 - 0.14 * cos(t))
+        }
         let strokes: [[(Double, Double)]] = [
-            [(0.12, 0.62), (0.30, 0.30), (0.42, 0.66)],
-            [(0.44, 0.66), (0.62, 0.30), (0.88, 0.60)],
+            cursive,
+            [(0.16, 0.78), (0.50, 0.72), (0.86, 0.70)],
         ]
         for stroke in strokes {
             for (a, b) in zip(stroke, stroke.dropFirst()) {

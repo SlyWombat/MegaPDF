@@ -225,7 +225,7 @@ Android was at 1.2.0, so 2.0 also brings everything the other platforms got in
 MegaPDF a toujours refusé une modification de texte qu'il ne pouvait pas faire
 sans perturber le reste de la page : il préfère dire non plutôt que de déplacer
 en silence quelque chose que vous n'avez pas touché. La version 2.0 la réussit
-bien plus souvent au lieu de refuser : sur une série de 22 267 modifications
+bien plus souvent au lieu de refuser : sur une série de 22 267 modifications
 réelles dans le corpus de test, les 112 modifications refusées par la 1.7
 passent toutes, sans aucune régression ailleurs et sans page dérangée. Il a
 fallu onze correctifs au moteur d'écriture PDF (les correctifs 0015 à 0025 de la
@@ -370,10 +370,10 @@ la demande, dans le fichier lui-même :
 
 | | 1.7 | 2.0 |
 |---|---|---|
-| 2,5 Go, 1 000 pages : ouverture | 62 s, 5,2 Go | 4,1 ms, 6 Mo |
-| fichier de 1 Go, mémoire maximale | 6 171 Mo | 1 058 Mo |
-| une page avec une image de 20 000 × 15 000 | redécodée à chaque affichage et modification | décodée une fois, gardée à la taille nécessaire |
-| 20 000 objets texte sur une page | 21,8 s à lire | linéaire selon le nombre d'objets |
+| 2,5 Go, 1 000 pages : ouverture | 62 s, 5,2 Go | 4,1 ms, 6 Mo |
+| fichier de 1 Go, mémoire maximale | 6 171 Mo | 1 058 Mo |
+| une page avec une image de 20 000 × 15 000 | redécodée à chaque affichage et modification | décodée une fois, gardée à la taille nécessaire |
+| 20 000 objets texte sur une page | 21,8 s à lire | linéaire selon le nombre d'objets |
 | pages en couleurs gérées CMJN / ICC | — | environ 6× plus rapide |
 
 Les fichiers de 2 Go et plus s'ouvrent maintenant, et un fichier trop volumineux
