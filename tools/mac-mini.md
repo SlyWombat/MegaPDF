@@ -65,6 +65,30 @@ is a **regex** over the available simulators, not a name: Xcode 26.6 calls the
 recipe, locally. The six listing slots land in `<out>/listing`, the review shots
 in `<out>/review`.
 
+**iOS file flows, end to end**: `BIG_PDF=<1 GB fixture> tools/ios-files-e2e.sh [device] [out]`
+opens real files through the real Files picker, then runs redaction (checked from
+outside the app by `tools/leakcheck/outside.py`, poppler and qpdf only, against a
+control that must fail), save, save a copy, set, refuse and remove a password, and the
+1 GB file with timings. It reads each result back out of "On My iPhone" between tests.
+Everything else in `MegaPDFUITests` opens bundled bytes with no file behind them, so
+this is the only place those flows run on iOS. Use a simulator of its own
+(`xcrun simctl create "MegaPDF E2E" …`) so its Files state belongs to the run.
+
+Two traps it gets past, each of which cost a pass (2026-09-18):
+
+- **Staging into "On My iPhone".** A simulator has *three* folders named
+  `File Provider Storage`: Photos, iCloud Drive and the local one. `find … | head -1`
+  picks whichever comes first, and a fixture copied into the wrong one never shows
+  in the picker ("… is not visible in the Files picker"). Pick the app group whose
+  container metadata says `group.com.apple.FileProvider.LocalStorage` (see
+  `local_storage()` in the script). That folder exists only after Files has run once
+  on the simulator, so launch `com.apple.DocumentsApp` once first.
+  `tools/ios-review-video.sh` had the same `head -1` and was fixed the same way.
+- **The export sheet on iOS 26 has no name field.** It opens in the last folder
+  used, and its Save lives in the nav bar `FullDocumentManagerViewControllerNavigationBar`.
+  An unscoped `buttons["Save"]` finds the app's own greyed-out Save first. A name clash
+  asks Keep Both or Replace, so the copy is found as the one new file in the folder.
+
 **Mac listing screenshots**: `tools/macos-store-captures.sh <lang> [out] [app]` —
 the six Mac App Store slots at 1440x900, one process per image, with the
 fixtures, the signature library and the recents owned by the run rather than by

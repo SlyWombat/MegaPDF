@@ -38,17 +38,29 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null
 sleep 20
 
 # The test form into the simulator's "On My iPhone": the local file provider's
-# storage lives in a shared app group under the device's data directory.
+# storage lives in a shared app group under the device's data directory. There are
+# three folders called "File Provider Storage" (Photos, iCloud Drive and this one)
+# and `find` lists them in no particular order, so a `head -1` staged the form where
+# the picker never looks. Found by identity instead: group.com.apple.FileProvider.LocalStorage.
 DATA="$HOME/Library/Developer/CoreSimulator/Devices/$UDID/data"
-STORE=$(find "$DATA/Containers/Shared/AppGroup" -maxdepth 2 -type d -name "File Provider Storage" 2>/dev/null | head -1)
-if [ -z "$STORE" ]; then
+local_storage() {
+    local g
+    for g in "$DATA/Containers/Shared/AppGroup"/*/; do
+        if [ "$(plutil -extract MCMMetadataIdentifier raw "$g.com.apple.mobile_container_manager.metadata.plist" 2>/dev/null)" \
+             = group.com.apple.FileProvider.LocalStorage ]; then
+            echo "${g}File Provider Storage"; return
+        fi
+    done
+}
+STORE=$(local_storage)
+if [ -z "$STORE" ] || [ ! -d "$STORE" ]; then
     # Not created until Files has run once; launching it makes the directory.
     xcrun simctl launch "$UDID" com.apple.DocumentsApp >/dev/null 2>&1 || true
-    sleep 5
+    sleep 8
     xcrun simctl terminate "$UDID" com.apple.DocumentsApp >/dev/null 2>&1 || true
-    STORE=$(find "$DATA/Containers/Shared/AppGroup" -maxdepth 2 -type d -name "File Provider Storage" 2>/dev/null | head -1)
+    STORE=$(local_storage)
 fi
-[ -n "$STORE" ] || { echo "no File Provider Storage on $DEVICE" >&2; exit 1; }
+[ -n "$STORE" ] && [ -d "$STORE" ] || { echo "no On My iPhone storage on $DEVICE" >&2; exit 1; }
 cp "$ROOT/docs/review/MegaPDF-Test-Form.pdf" "$STORE/"
 echo "staged MegaPDF-Test-Form.pdf in $STORE"
 
