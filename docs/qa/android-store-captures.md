@@ -113,5 +113,6 @@ records the listing's slots — that is in the console too.
 | `text-edit` | the body-text editor mid-correction (#114) |
 | `redact` | the redaction tool armed with a line marked (#173) |
 
-`redact` only belongs on the listing once #173 is finished; until then the state is
-captured but the shot is not for use.
+`redact` is a listing shot now that #173 is finished. It poses a marked line, so
+**Save is live (brand blue) in it** and grey in the seven others. That's expected,
+not a defect: a marked area is an unsaved change.

@@ -198,7 +198,7 @@ of it a defect:
 Dave handed over "Dave reviews the full set" (#146 §3): *"The full screen shot set,
 you can review those yourself."* The French was signed off by the human reviewer
 the same evening. This section covers the Mac, iOS and Microsoft sets. The two Play
-sets belong to the Android track, which is re-shooting its one stale `redact` pose.
+sets belong to the Android track, and are in §7.
 
 **One French pose changes after this read.** Later that night Dave asked for the
 Fable French review's recommendations (#242) to be applied, so fr-CA and fr-FR
@@ -289,7 +289,7 @@ Smaller, and not worth a re-shoot on their own:
 | Mac `light-01-viewer.png` | **Clear.** A strong lead: ticked boxes, the signature on its line, the status line saying what to do next. Nothing stray at the edges. |
 | iOS `iphone-6_9-viewer.png` | **Defect 1.** The content is right, but "Rental Agreement.pdf" and the clock are 2.0 : 1 on the dark wall. The page sits vertically centred, so the top fifth is empty backdrop; that is the #48 layout, and it is fine. |
 | iOS `ipad-13-viewer.png` | **Defects 1 and 2**: the title contrast, and the resize grabber at the bottom-right. |
-| Play `android-viewer.png` × 2 | The Android track's to call, alongside its re-shoot. |
+| Play `android-viewer.png` × 2 | **Clear**, phone and tablet: dark title on the white app bar, clean status bar, no taskbar. See §7. |
 
 ### Where each final set lives
 
@@ -299,8 +299,47 @@ Smaller, and not worth a re-shoot on their own:
 | iOS | Mac mini | `~/gate-ios/{en,fr-CA,fr}/{listing,review}/` (upload `listing/` only) |
 | Microsoft | GPD-DAVE | `artifacts/store/screenshots/{en,fr-CA,fr-FR}/0?-*.png` (not `work/`) |
 | Preview clips | kdocker2 | `~/megapdf-video-work/{preview-out,mac-out}/` |
+| Play phone + tablet | kdocker2 | `~/megapdf-rc-android-work/{phone,tablet}/{en,fr-CA,fr-FR}/android-*.png` (identical to `~/megapdf-146-work/gate-2.0b/`) |
 
-## 7. Running it again
+## 7. The Play sets, re-shot on the RC tree (2026-09-19)
+
+Both Play sets were shot again from main `bcddfb7`: the PDFium 32-patch series,
+#241/#246/#267/#270 and the MegaPDF rename. That's everything that landed on
+Android after `4200f1c`. The debug APK read `versionCode 9`, `versionName 2.0.0`
+out of `aapt2 dump badging` before shooting. Same AVDs (`make-store-avds.sh`), same
+script, API 33, launcher disabled.
+
+- **All 48 images are pixel-identical to the signed-off set** (`compare -metric
+  AE` = 0 for every image, phone and tablet, en / fr-CA / fr-FR). The only
+  Android-side changes since `4200f1c` are two unused strings removed (#173),
+  the third-party notices and the engine, and none of them reaches a posed screen.
+- The gate, with tesseract, `--against` the signed-off set: **0 images to look
+  at** in all six cells (phone 49/73/73 checks passed, tablet the same).
+- **The `redact` pose was already current.** #146 §3 listed it as needing a
+  re-shoot for #173's Save fix. The fix landed in round 4 and the signed-off set
+  was shot in round 5, after it: Save is brand blue in all six `redact` images.
+
+**Read by eye, all 48, including `android-viewer.png` on both devices:** no
+defects. The status bar is clean (9:41, full battery, no badge), there's no taskbar
+or navigation buttons, the right person appears in each language with every
+accent, and nothing is clipped. What a listing reader will notice, though none of
+it is a defect:
+
+1. **`redact` is the weakest image.** The mark is a thin outline around one line,
+   and Android shows no hint strip (#173, decided). Only the filled Redact button
+   says the tool is on. The copy promises "gone for good", and the image shows
+   "marked". Put it last, or leave it out of the listing.
+2. **Tablet `home` is mostly empty.** It's the phone layout on an 800 dp canvas:
+   the recents sit in the top third. Lead the tablet listing with `viewer` or
+   `search`.
+3. The demo document's French (`fin de semaine`, `ramassage`) is Quebec usage
+   and also appears in the fr-FR set. It's document content, not the app's
+   strings, so it isn't in any string review.
+
+The set lives at `kdocker2:~/megapdf-rc-android-work/{phone,tablet}/<lang>/`. It's
+identical to `~/megapdf-146-work/gate-2.0b/`, and either one is the upload set.
+
+## 8. Running it again
 
 The sheets are self-contained HTML — thumbnails inlined, full images linked
 beside them — so one can be mailed or opened on a phone with no network.
