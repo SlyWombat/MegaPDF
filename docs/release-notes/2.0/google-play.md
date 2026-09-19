@@ -1,4 +1,4 @@
-# Google Play — release notes, 2.0.0 (versionCode 9)
+# Google Play — release notes, 2.0 (versionCode 9, shipped as 2.0.1 / versionCode 10)
 
 Play Console → the release → **Release notes**, per language. Limit **500
 characters** — by far the tightest of the four stores, and Play's span is the
