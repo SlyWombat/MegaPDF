@@ -26,15 +26,17 @@ CONTEXT="$OUT/context"
 
 [ -d "$TREE/bin" ] || { echo "::error::no app tree at $TREE — run tools/build-linux-app.sh first" >&2; exit 1; }
 [ -s "$TREE/VERSION" ] || { echo "::error::$TREE/VERSION is missing" >&2; exit 1; }
-VERSION="$(cat "$TREE/VERSION")"
+APP_VERSION="$(cat "$TREE/VERSION")"
 command -v snapcraft >/dev/null || { echo "::error::snapcraft is not installed (sudo snap install snapcraft --classic)" >&2; exit 1; }
-. /etc/os-release
-if [ "${VERSION_ID:-}" != "24.04" ]; then
-    echo "::error::--destructive-mode builds core24 snaps on Ubuntu 24.04 only; this is ${PRETTY_NAME:-unknown}" >&2
+# Read in a subshell: /etc/os-release defines VERSION, and sourcing it here would
+# quietly replace the app's version with the distribution's.
+OS_ID="$(. /etc/os-release && echo "${ID:-}-${VERSION_ID:-}")"
+if [ "$OS_ID" != "ubuntu-24.04" ]; then
+    echo "::error::--destructive-mode builds core24 snaps on Ubuntu 24.04 only; this is $OS_ID" >&2
     exit 1
 fi
 
-echo "building the megapdf snap $VERSION from $TREE"
+echo "building the megapdf snap $APP_VERSION from $TREE"
 
 # --- the build context ----------------------------------------------------------
 # Assembled rather than built in place, like the Flatpak's: snapcraft treats its project
@@ -53,21 +55,23 @@ cp "$ROOT/LICENSE" "$CONTEXT/payload/lib/megapdf/LICENSE"
 # The desktop entry is the one every other Linux package ships, with one change: a
 # snap's icon is a path under the snap, not a theme name. Exec already says `megapdf
 # %f`, which is this snap's command.
+# Validated before the change rather than after: desktop-file-validate reads
+# ${SNAP}/… as a relative path, which it is until snapd expands it on install.
+if command -v desktop-file-validate >/dev/null; then
+    desktop-file-validate "$ROOT/tools/linux/megapdf.desktop"
+    echo "  desktop entry valid"
+fi
 sed -e 's|^Icon=.*|Icon=${SNAP}/meta/gui/megapdf.png|' \
     "$ROOT/tools/linux/megapdf.desktop" > "$CONTEXT/snap/gui/megapdf.desktop"
 cp "$ROOT/assets/branding/linux/hicolor/256x256/apps/megapdf.png" "$CONTEXT/snap/gui/megapdf.png"
-if command -v desktop-file-validate >/dev/null; then
-    desktop-file-validate "$CONTEXT/snap/gui/megapdf.desktop"
-    echo "  desktop entry valid"
-fi
 
 python3 "$SRC/make-snapcraft-yaml.py" "$SRC/snapcraft.yaml.in" "$METAINFO" \
-    "$VERSION" "$CONTEXT/snap/snapcraft.yaml"
+    "$APP_VERSION" "$CONTEXT/snap/snapcraft.yaml"
 
 # --- build ----------------------------------------------------------------------
 
 mkdir -p "$OUT"
-SNAP_FILE="$OUT/megapdf_${VERSION}_amd64.snap"
+SNAP_FILE="$OUT/megapdf_${APP_VERSION}_amd64.snap"
 rm -f "$SNAP_FILE"
 ( cd "$CONTEXT" && snapcraft pack --destructive-mode --output "$SNAP_FILE" )
 
