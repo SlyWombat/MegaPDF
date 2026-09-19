@@ -38,7 +38,7 @@ pricing. Done that way for 1.7.0 on 2026-09-11.
 
 App Store Connect → the version page → **Localizations**: **English (Canada)** is the primary language; add **French (Canada)** and **French**. Every field for every language is below as a block that pastes as-is. Character limits are in brackets with the actual count beside them.
 
-*French copy was translated by the build assistant against `docs/localisation-glossary.md`; have a francophone read it before it goes live. The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*
+*French copy was translated by the build assistant against `docs/localisation-glossary.md` and signed off by a francophone reviewer for 2.0 (2026-09-18, #242); new copy gets the same read before it goes live. The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*
 
 ### English (Canada) — `en-CA`
 

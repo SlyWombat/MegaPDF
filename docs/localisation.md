@@ -144,8 +144,9 @@ gitignored and picked up by the next build; run the Windows app with
 
 French copy for the three stores is in `docs/microsoft-store-listing.md`,
 `docs/app-store-listing.md` and `android/RELEASING.md`, each under a
-"Français (Canada)" heading. It was translated by the build assistant; have a
-francophone read it before pasting it into a store. Screenshots exist per language on every
+"Français (Canada)" heading. It was translated by the build assistant and signed off
+by a francophone reviewer for 2.0 (2026-09-18, #242); new copy gets the same read before
+it is pasted into a store. Screenshots exist per language on every
 platform: Windows sets live in `artifacts/store/screenshots/{fr-CA,fr-FR}/`
 (harness README § French screenshots); the Android and iOS capture workflows run
 a language matrix and open a French demo agreement (`demo-fr.pdf`, from

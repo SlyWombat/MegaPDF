@@ -5,7 +5,7 @@ in This Version*, per language. Limit 4000 characters.
 
 No other platform is named (App Review 2.3.10).
 
-*Awaiting francophone review — see [README](README.md).*
+*The French is signed off: a francophone reviewed it (Dave, 2026-09-18), and the Fable review's recommendations are applied (#242) — see [README](README.md).*
 
 ## English (Canada) — `en-CA`
 

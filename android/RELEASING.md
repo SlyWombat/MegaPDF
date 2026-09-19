@@ -55,7 +55,7 @@
 
 Main store listing → **Manage translations** → add **French (Canada) – fr-CA** and **French (France) – fr-FR** beside the default **English (Canada) – en-CA**. `tools/play_submit.py` uploads binaries only; this text is pasted by hand. Every field for every language is below as a block that pastes as-is. Screenshots: the **Android Screenshots** workflow captures once per language (artifacts `play-screenshots-en`, `-fr-CA`, `-fr-FR`); the French runs set the app's per-app locale on the emulator and open the French demo agreement.
 
-*French copy was translated by the build assistant against `docs/localisation-glossary.md`; have a francophone read it before it goes live. The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*
+*French copy was translated by the build assistant against `docs/localisation-glossary.md` and signed off by a francophone reviewer for 2.0 (2026-09-18, #242); new copy gets the same read before it goes live. The France variant is derived from the Canadian one by `tools/gen_listing_copy.py`.*
 
 ### English (Canada) — `en-CA`
 

@@ -8,11 +8,9 @@ Written from `git log ios-v1.7.0..ee2751d` (188 commits) and, for Android,
 `git log android-v1.2.0..ee2751d` — Android's public version is 1.2.0, so it
 gains 1.3 through 1.7 in the same release.
 
-*The French is awaiting a francophone review — see [README](README.md).*
-
-*The redaction section is the newest of it: written for #254 against the
-approved store blocks and the #173 strings, and not yet read by a
-francophone. It belongs with the #242 findings and §2 of #146.*
+*The French is signed off: a francophone reviewed it (Dave, 2026-09-18), and the
+Fable review's recommendations are applied, the redaction section included
+(#242) — see [README](README.md).*
 
 ---
 

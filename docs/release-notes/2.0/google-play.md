@@ -12,7 +12,7 @@ At 500 characters there is no room to explain anything, so the notes name the
 features and let the listing's full description do the explaining. A **long
 form** follows each block for the GitHub release body, which has no limit.
 
-*Awaiting francophone review — see [README](README.md).*
+*The French is signed off: a francophone reviewed it (Dave, 2026-09-18), and the Fable review's recommendations are applied (#242) — see [README](README.md).*
 
 ## English (Canada) — `en-CA`
 

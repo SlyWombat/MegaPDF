@@ -7,7 +7,7 @@ No other platform is named anywhere in this copy (App Review 2.3.10), and no
 feature is named that the iPhone and iPad app does not have — there is no
 whiteout, no Shrink for email and no Print on iOS, so none of them appears.
 
-*Awaiting francophone review — see [README](README.md).*
+*The French is signed off: a francophone reviewed it (Dave, 2026-09-18), and the Fable review's recommendations are applied (#242) — see [README](README.md).*
 
 ## English (Canada) — `en-CA`
 

@@ -3,13 +3,14 @@
 Draft copy for every store, in `en`, `fr-CA` and `fr-FR`. Nothing here has been
 pasted into a console; this is the text to paste when 2.0 is submitted.
 
-> **Awaiting francophone review.** The French was written by the build assistant
-> against `docs/localisation-glossary.md`, with the France variant derived from
-> the Canadian one by the same rules `tools/gen_strings.py fr-fr` applies
+> **The French is signed off.** It was written by the build assistant against
+> `docs/localisation-glossary.md`, with the France variant derived from the
+> Canadian one by the same rules `tools/gen_strings.py fr-fr` applies
 > (*courriel* → *e-mail*, *infonuagique* → *cloud*, and a non-breaking space
-> before `?`, `!` and `;` as well as `:`). A francophone reads it before it goes
-> live — the same gate `android/RELEASING.md` and `docs/app-store-listing.md`
-> put on the listing copy, and the same gate #146 §2 puts on the new 2.0 strings.
+> before `?`, `!` and `;` as well as `:`). A francophone reviewed it and signed it
+> off (Dave, 2026-09-18), and the recommendations of the independent Fable review
+> are applied ([`french-review-fable.md`](french-review-fable.md), #242). Hand-made
+> France wording (« en étaient à la 1.7 ») lives in the fr-FR blocks themselves.
 
 **The French strings themselves** — everything 2.0 adds or changes in the app, as
 opposed to this store copy — are in [`french-review.md`](french-review.md), laid
@@ -33,6 +34,8 @@ the English block is pasted into both English listings. The Apple and Play
 listings have three (`en-CA` / `en`, `fr-CA`, `fr-FR`).
 
 ## For the francophone reviewer
+
+*Settled by the review (2026-09-18); kept as the record of what was asked.*
 
 Beyond the register, three things to settle:
 

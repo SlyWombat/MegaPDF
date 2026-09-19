@@ -4,7 +4,7 @@ Partner Center → the submission → **Store listings** → *What's new in this
 version*, per language. Limit 1500 characters; the count is beside each block.
 Paste the English into both `en-US` and `en-CA`.
 
-*Awaiting francophone review — see [README](README.md).*
+*The French is signed off: a francophone reviewed it (Dave, 2026-09-18), and the Fable review's recommendations are applied (#242) — see [README](README.md).*
 
 ## English — `en-US` and `en-CA`
 
