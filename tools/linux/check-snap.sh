@@ -22,7 +22,7 @@
 #     is not the app's /tmp, and a USB drive is readable only once removable-media is
 #     connected;
 #   * a document at the top of the home folder saves. The snap's home plug refuses a
-#     hidden file there, and every save writes a hidden temporary file beside the
+#     new hidden file there, and Save writes a hidden temporary file beside the
 #     document first, so without AtomicFileWriter's fallback this is the save that fails;
 #   * the file dialogs are the XDG portal's, and a Save a copy through the portal's own
 #     dialog writes a real file;
@@ -47,16 +47,22 @@ check() { if [ "$1" -eq 0 ]; then echo "  ok"; else echo "  FAIL (exit $1)"; fai
 # A refusal only counts if the snap ran: a snap that cannot start refuses everything,
 # which is how an earlier version of this check passed every refusal while nothing ran.
 # So each probe runs a shell inside the snap that says RAN before it tries anything.
-probe() {  # <description> <expected: READ|REFUSED> <path>
-    local what=$1 expected=$2 path=$3 out
-    out=$(snap run --shell megapdf -c "echo RAN; if head -c 1 '$path' >/dev/null 2>&1; then echo READ; else echo REFUSED; fi" 2>&1)
+probe() {  # <description> <expected: READ|WROTE|REFUSED> <path> [read|write]
+    local what=$1 expected=$2 path=$3 mode=${4:-read} out try ok
+    if [ "$mode" = write ]; then
+        # Whether a new file can be made at the path (and it is removed again).
+        try="( : > '$path' ) 2>/dev/null && rm -f '$path'"; ok=WROTE
+    else
+        try="head -c 1 '$path' >/dev/null 2>&1"; ok=READ
+    fi
+    out=$(snap run --shell megapdf -c "echo RAN; if $try; then echo $ok; else echo REFUSED; fi" 2>&1)
     if ! echo "$out" | grep -qx RAN; then
         echo "  FAIL: $what — the snap did not run: $(echo "$out" | tail -1)"
         failures=$((failures + 1))
     elif echo "$out" | grep -qx "$expected"; then
         echo "  ok: $what — ${expected,,}"
     else
-        echo "  FAIL: $what — expected ${expected,,}, got $(echo "$out" | grep -xE 'READ|REFUSED')"
+        echo "  FAIL: $what — expected ${expected,,}, got $(echo "$out" | grep -xE 'READ|WROTE|REFUSED')"
         failures=$((failures + 1))
     fi
 }
@@ -188,6 +194,10 @@ probe "a hidden file at the top of the home folder"   REFUSED "$HOME/.megapdf-sn
 probe "a hidden folder inside ~/Documents"            READ    "$HOME/Documents/.megapdf-probe-dir/x.txt"
 probe "a file outside the home folder (/opt)"         REFUSED /opt/megapdf-snap-probe.pdf
 probe "the host's /tmp (the snap has its own)"        REFUSED /tmp/megapdf-snap-tmp-probe
+# The pair that made AtomicFileWriter's fallback necessary: at the top of the home
+# folder a new visible file can be made and a new hidden one cannot.
+probe "a new file at the top of the home folder"      WROTE   "$HOME/megapdf-snap-new-probe" write
+probe "a new hidden file there"                       REFUSED "$HOME/.megapdf-snap-new-probe" write
 rm -rf "$HOME/megapdf-snap-probe.txt" "$HOME/.megapdf-snap-hidden-probe" "$HOME/Documents/.megapdf-probe-dir" /tmp/megapdf-snap-tmp-probe
 sudo rm -f /opt/megapdf-snap-probe.pdf
 
@@ -205,13 +215,19 @@ sudo rm -rf /media/megapdf-usb
 # --- saving ---------------------------------------------------------------------
 
 step "--self-test, every save made at the top of the home folder"
-# The self-test's saves (fill, check, sign, redact, edit text, save a copy, save over
-# the original) all go to --save-dir. At the top of the home folder the snap may write
-# the document but not the hidden temporary file a save writes beside it first, which
-# is the case AtomicFileWriter falls back for (#158).
+# The self-test's saves all go to --save-dir. Most of them go through a stream; its
+# "save in place, by path" check is the Save command as Linux makes it, through
+# AtomicFileWriter's temporary file and swap. At the top of the home folder the snap may
+# write the document but not a hidden temporary file beside it, which is the case
+# AtomicFileWriter falls back for (#158).
 before=$(ls -A "$HOME")
-megapdf --self-test "$WORK" --save-dir "$HOME" 2>&1 | tail -4
-check "${PIPESTATUS[0]}"
+megapdf --self-test "$WORK" --save-dir "$HOME" >/tmp/megapdf-snap-selftest.log 2>&1
+rc=$?
+# The by-path save in full, since it is the one this check exists for, then the verdict.
+sed -n '/^save in place, by path:/,/^[A-Za-z]/p' /tmp/megapdf-snap-selftest.log | sed '$d'
+grep -E '^::error::|FAIL' /tmp/megapdf-snap-selftest.log | head -10
+tail -1 /tmp/megapdf-snap-selftest.log
+check "$rc"
 left=$(comm -13 <(echo "$before") <(ls -A "$HOME") | grep -E 'megapdf-tmp|megapdf-verify' || true)
 if [ -n "$left" ]; then
     echo "  FAIL: temporary files left in the home folder:"; echo "$left" | sed 's/^/    /'

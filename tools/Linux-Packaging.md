@@ -313,8 +313,8 @@ does.
 beside the document and swaps it in. The `home` plug refuses a hidden file at the top of
 the home folder, so a document at `~/form.pdf` opened and then never saved. It now falls
 back to the same swap under a visible name when, and only when, the hidden name is
-refused. `check-snap.sh` saves every self-test document at the top of the home folder
-to keep that honest.
+refused. `check-snap.sh` proves both halves in the real snap: a new hidden file at the
+top of the home folder is refused, and the self-test's by-path Save made there succeeds.
 
 ### Building and checking it
 

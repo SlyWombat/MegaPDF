@@ -538,6 +538,45 @@ internal static class Program
             if (File.Exists(savedPath)) File.Delete(savedPath);
         }
 
+        // --- Save in place, by path: the Save command on Linux (MainWindow.SaveAsync) ---
+        // Everything else here saves through a stream. Save on Linux goes by path, through
+        // AtomicFileWriter's temporary file and swap, and that is the save the snap's home
+        // plug can refuse: it allows ~/form.pdf and no hidden file beside it (#158). So it
+        // is made in --save-dir, which tools/linux/check-snap.sh sets to the top of the home
+        // folder.
+        Console.WriteLine("save in place, by path:");
+        var inPlacePath = Path.Combine(saveDir, $"megapdf-selftest-inplace-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            File.Copy(Path.Combine(dir, "fixture.pdf"), inPlacePath);
+            using (var vm = new MainViewModel(state))
+            {
+                vm.Open(inPlacePath);
+                vm.HandlePageClick(0, drawnCentre);
+                Check("a tick makes the document dirty", vm.IsDirty);
+                var saved = vm.SaveToPathAsync(inPlacePath).GetAwaiter().GetResult();
+                Check($"Save by path writes it ({vm.Status})", saved && !vm.IsDirty);
+            }
+            using (var engine = new PdfiumEngine())
+            using (var reopened = engine.Open(inPlacePath))
+            using (var page = reopened.GetPage(0))
+                Check("and the tick reads back from the file",
+                      page.GetStamps().Any(st => st.Id.StartsWith("mark:", StringComparison.Ordinal)));
+            var prefix = Path.GetFileName(inPlacePath);
+            Check("no temporary file is left beside it",
+                  !Directory.EnumerateFiles(saveDir)
+                            .Any(f => Path.GetFileName(f).TrimStart('.').StartsWith(prefix + ".", StringComparison.Ordinal)));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::save in place: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(inPlacePath)) File.Delete(inPlacePath);
+        }
+
         // --- AcroForm checkbox ---
         Console.WriteLine("AcroForm checkbox:");
         try
