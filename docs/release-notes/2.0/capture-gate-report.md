@@ -193,7 +193,111 @@ of it a defect:
   editor's underline runs through the top of the "Rental period" line under it.
   That is what the app does, so it is a pose choice, not a capture fault.
 
-## 6. Running it again
+## 6. The full-set review — Dave's box (2026-09-18, 23:55 EDT)
+
+Dave handed over "Dave reviews the full set" (#146 §3): *"The full screen shot set,
+you can review those yourself."* The French was signed off by the human reviewer
+the same evening. This section covers the Mac, iOS and Microsoft sets. The two Play
+sets belong to the Android track, which is re-shooting its one stale `redact` pose.
+
+**The French verdicts here are provisional.** Later that night Dave asked for the
+Fable French review's recommendations (#242) to be applied, so fr-CA and fr-FR
+strings change on every platform, including the redaction copy. Any fr-CA or fr-FR
+pose that shows a changed string is re-shot from a build that includes that merge,
+and only then are the French sets final. The English verdicts below stand.
+
+**How it was read.** Every listing image was opened: 18 Mac, 36 iOS listing, 30 iOS
+review and 15 Microsoft. Each pose was also read with en, fr-CA and fr-FR side by
+side. Images that are pixel-identical between fr-CA and fr-FR (hashed first) were
+read once. The nine preview clips were skimmed at six stills per device rather than
+re-read (§3 of `preview-videos.md` already reads all 270).
+
+### Staleness: nothing to re-shoot
+
+Every commit since each set was shot was listed against the code the captures show.
+Mac and iOS sets are from `476ce15`; the Microsoft set is from the rename's tree
+(`8a77b8c`).
+
+| commit | what changed | does a capture change? |
+|---|---|---|
+| `136aa6b` #268 | Windows Redact / Whiteout / Add text expose a toggle state | **No.** They are the same `AppBarButton` template, "pixel-identical off and armed", per the commit's own measurement. `05-add-text`, the one armed pose, stands. |
+| `0989c70` #259, `771bcae` #261, `7966fc1` #145 | Windows placement below 100 %, first click after a drag, recovery order | No. Every pose is at 100 %, and none shows a drag or a recovery. |
+| `01ba248` | the phones' redact hint loses "— Esc cancels" | No on iOS. The review `redact` poses are taken after the mark, with the tool off, so no hint banner is on screen. |
+| `476bfff` #172 | iOS toolbar label style removed | No. It was after `476ce15`, but the commit measured that the style never reached the screen: the iPad bar is icon-only either way, and the captures show exactly that. |
+| `3d4c1de`, `ef86ca3` #237 | Avalonia find bar and empty state at the 480 px minimum | No. At 1440 × 900 the find bar is at its full step, and the empty state's list margin is 16, the same as `SpaceL` (`Brand.axaml:118`), so `light-03-search` and `light-06-home` lay out as shot. |
+| `6033f30`, `a6af591`, PDFium `606c006`/`7cf6ff0` | Linux shortcuts, recovery order, engine | No visible change on these screens. |
+
+### Per set
+
+| set | verdict |
+|---|---|
+| **Mac App Store**, 18 | **English ready; French pending the #242 strings.** It leads with a filled, signed agreement. Text, search, the signature picker and redaction follow, then home. That is the story the copy tells, in its order. fr-CA and fr-FR read naturally ("Caviarder", "Masquer", "Ajouter du texte" and "100 %" with its space all fit the toolbar). The weakest image is `light-06-home`: the empty state's grey wall reads like a dimmed modal. It is last in the set and it is what the app looks like. |
+| **Microsoft Store**, 15 | **English ready; French pending the #242 strings.** Edit text, checkbox, signature, shrink and add text in all three languages, and the title bar reads *— MegaPDF*. The French is consistent with the glossary: *Correcteur* is the toolbar noun and *masquer* the verb. The shrink dialog is correct in each language (fr: "Avant : 3,2 Mo, après : 0,1 Mo", "courriel"). |
+| **App Store (iOS)**, 36 + 30 | **Two defects in the listing, both on screen in every set.** Neither is a capture fault, and neither is caught by a comparison, because each is in every image. See below. The composition and the French are otherwise good: the demo person, keyboards per locale (Canadian QWERTY with ç/è/à against French AZERTY) and the dark review poses all have good contrast. |
+
+### Found on this read
+
+1. **iOS, light mode: the document name and the status bar are black on the
+   viewer's dark wall.** `Brand.backdrop` is `Color(white: 0.25)`
+   (`ios/MegaPDF/Brand.swift:38`). Under iOS 26 the navigation bar is transparent
+   over it, so the inline title and the status-bar clock draw in the light
+   scheme's black on `#404040`, a **contrast ratio of 2.0 : 1** (1.7 : 1 on the
+   `#333` behind a sheet), under WCAG's 3 : 1 even for large text. It is in 8 of
+   the 12 listing images per language: every pose but `home`, and `search`, whose
+   find bar lightens the top. In iPhone `draw` only the status bar is affected,
+   because the sheet covers the title. It is also in the iPhone and iPad preview
+   clips. The dark-mode review captures show the same screen correct,
+   with white on the same wall, so the fix is to give the viewer's bars the dark
+   scheme (`.toolbarColorScheme(.dark, for: .navigationBar)`). This is a **product
+   change**: fixing it means re-shooting the iOS listing and the six iOS preview
+   clips.
+2. **iPad: the iPadOS 26 window-resize grabber is in the bottom-right corner of
+   every iPad image and every iPad preview frame.** It is a grey arc about 60 px
+   across, drawn because the simulator ran in *Windowed Apps* mode. It is the
+   §4 kind of thing, identical everywhere, so no comparison can see it. The
+   rig fix is *Settings → Multitasking & Gestures → Full Screen Apps* on the
+   capture simulator before `tools/ios-screenshots.sh`. It goes with any iPad
+   re-shoot.
+3. **The iOS and Windows listings don't show the two 2.0 headline features.**
+   The 2.0 copy on every store leads with redaction and fixing the document's own
+   text. The Mac listing shows redaction (`light-05`), and Play has both. The
+   iOS listing's six slots have neither, although `text-edit` and `redact` are
+   shot, gate-clean, and sitting in `review/`. `docs/app-store-listing.md` even
+   carries a `text-edit` caption with no slot. The Microsoft set has no redaction
+   pose. The App Store and Microsoft Store both take up to ten images, so this is
+   a choice about slots, not a limit.
+
+Smaller, and not worth a re-shoot on their own:
+
+- **fr iPhone viewer title truncates** to "Contrat de loc…", because *Enregistrer*
+  takes the room. That is iOS behaviour, and the page below names the document
+  in full.
+- **iPhone `draw`**: two thirds of the frame is an empty white canvas. It is the
+  real sheet, but it is the thinnest image in the set.
+- **Windows Redact icon is a warning triangle.** Glyph `E7BA` in Segoe Fluent is
+  *Warning*, not the "block out" mark that the comment at `MainWindow.xaml` says it
+  is. It reads as "careful", which is arguably right for redaction, but the
+  comment and the glyph disagree.
+
+### The five images no comparison can clear (§2)
+
+| image | verdict |
+|---|---|
+| Mac `light-01-viewer.png` | **Clear.** A strong lead: ticked boxes, the signature on its line, the status line saying what to do next. Nothing stray at the edges. |
+| iOS `iphone-6_9-viewer.png` | **Defect 1.** The content is right, but "Rental Agreement.pdf" and the clock are 2.0 : 1 on the dark wall. The page sits vertically centred, so the top fifth is empty backdrop; that is the #48 layout, and it is fine. |
+| iOS `ipad-13-viewer.png` | **Defects 1 and 2**: the title contrast, and the resize grabber at the bottom-right. |
+| Play `android-viewer.png` × 2 | The Android track's to call, alongside its re-shoot. |
+
+### Where each final set lives
+
+| set | host | path |
+|---|---|---|
+| Mac | Mac mini | `~/gate-macos/{en,fr-CA,fr}/light-0?-*.png` |
+| iOS | Mac mini | `~/gate-ios/{en,fr-CA,fr}/{listing,review}/` (upload `listing/` only) |
+| Microsoft | GPD-DAVE | `artifacts/store/screenshots/{en,fr-CA,fr-FR}/0?-*.png` (not `work/`) |
+| Preview clips | kdocker2 | `~/megapdf-video-work/{preview-out,mac-out}/` |
+
+## 7. Running it again
 
 The sheets are self-contained HTML — thumbnails inlined, full images linked
 beside them — so one can be mailed or opened on a phone with no network.
