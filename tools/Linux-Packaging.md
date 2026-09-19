@@ -1,4 +1,4 @@
-# Linux packaging and the Flathub submission (#158)
+# Linux packaging: the .deb, the Flatpak, the snap and the Flathub submission (#158)
 
 What exists, how to build it, and what is still Dave's to decide before MegaPDF can be
 submitted anywhere. Companion to `tools/Store-Submission.md`, which covers the other
@@ -48,6 +48,10 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 | `tools/linux/make-flathub-manifest.sh` | fills it in, from a tarball's URL and checksum (or its path, for a dry run). |
 | `tools/linux/build-flathub-flatpak.sh` | builds *that* manifest, so the one Flathub runs is the one that has been run. |
 | `tools/linux/qa/` | the desktop-session rigs: a headless session with a named portal backend, the file-dialog check, the recent-document check inside and outside the sandbox, and the KDE pass in a whole Plasma session. |
+| `tools/linux/snap/snapcraft.yaml.in` | the snap, as a template: version and listing text are filled in from the tree and the metainfo. |
+| `tools/linux/snap/make-snapcraft-yaml.py` | fills it in, replacing the one metainfo paragraph that is only true of the Flatpak. |
+| `tools/linux/build-snap.sh` | the snap, from that tree, with `snapcraft pack --destructive-mode` (Ubuntu 24.04 only). |
+| `tools/linux/check-snap.sh` | installs the snap and drives the app under strict confinement: what it can and cannot reach, a save at the top of the home folder, the portal dialogs, printing, French, and what AppArmor refused. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
@@ -283,6 +287,79 @@ to miss the date.
 **A later release** is the same, from step 1, with the Linux page's version (its download
 links and the `.deb` file name) bumped in `website/megapdf/linux/index.html`.
 `deploy.py --linux` refuses if the page and the repository disagree.
+
+## The Snap Store
+
+Dave chose the Snap Store as a Linux channel on 2026-09-19, after Flathub's policy on
+AI-written apps made that channel uncertain. **Nothing has been registered or uploaded.**
+
+### What the snap is
+
+`megapdf`, core24, **strict confinement**, amd64. It wraps the same published tree as
+the `.deb` and the Flatpak, in one piece under `$SNAP/lib/megapdf`. The listing text is
+the metainfo's (`make-snapcraft-yaml.py`) with one paragraph swapped: the Flatpak asks
+for no access to your files and the snap does, so the snap's listing says what the snap
+does.
+
+| plug | why |
+|---|---|
+| `home` | a PDF double-clicked in a file manager arrives as a path, and a snap has no document-portal forwarding for command-line files the way a Flatpak does. Auto-connected. Hidden files at the top of the home folder stay out of reach. |
+| `removable-media` | `/media`, `/mnt`, `/run/media`. **Not auto-connected**: `snap connect megapdf:removable-media`, or the switch in the software centre. |
+| desktop, x11, opengl, wayland… | from the `gnome` extension, which also brings the shared `gnome-46-2404` content snap (fontconfig, the X libraries, ICU). MegaPDF uses nothing from GNOME; the extension is the standard desktop plumbing for a core24 snap. |
+| no `network` | MegaPDF makes no connection, and the snap updates through snapd. |
+| no `cups` | printing goes through `org.freedesktop.portal.Print`, as in the Flatpak (`LinuxPrinter.InSandbox`). |
+
+**One product change came out of it.** `AtomicFileWriter` writes a hidden temporary file
+beside the document and swaps it in. The `home` plug refuses a hidden file at the top of
+the home folder, so a document at `~/form.pdf` opened and then never saved. It now falls
+back to the same swap under a visible name when, and only when, the hidden name is
+refused. `check-snap.sh` saves every self-test document at the top of the home folder
+to keep that honest.
+
+### Building and checking it
+
+```sh
+tools/build-linux-app.sh linux-x64 artifacts/linux
+sudo snap install snapcraft --classic
+sudo tools/linux/build-snap.sh                 # -> artifacts/snap/megapdf_<ver>_amd64.snap
+tools/linux/check-snap.sh artifacts/snap/megapdf_*_amd64.snap artifacts/fixtures artifacts/linux/MegaPDF
+```
+
+On an Ubuntu 24.04 machine with snapd and AppArmor, not in a container: snapd needs
+systemd, and the confinement being checked is AppArmor. CI does exactly this on a GitHub
+`ubuntu-24.04` runner, which is a VM (`.github/workflows/snap.yml`, on every change to
+the Linux app).
+
+### What Dave has to do before the first upload
+
+In this order. Every step happens in Dave's own account, so none of it can be delegated.
+
+1. **An Ubuntu One account.** Then sign in at <https://snapcraft.io/account> and accept
+   the developer agreement.
+2. **Register the name `megapdf`** at <https://snapcraft.io/register-snap>. On
+   2026-09-19 no published snap is called `megapdf`, `mega-pdf` or `megapdf-editor` (the
+   store API answers 404 for all three), but a name that was registered and never
+   published cannot be seen from outside an account. If `megapdf` is taken, pick another
+   and change the `name:` line in `snapcraft.yaml.in`, the `snap/gui/megapdf.*` names in
+   `build-snap.sh`, and the website's install line.
+3. **A store credential for CI**, made on any machine with snapcraft after
+   `snapcraft login`: `snapcraft export-login` with `--snaps=megapdf`,
+   `--acls=package_access,package_push,package_update,package_release` and an
+   `--expires` date a year out, written to a file. Put that file's contents into the
+   repository secret `SNAPCRAFT_STORE_CREDENTIALS` with `gh secret set`, reading it from
+   the file rather than typing it, then delete the file. Scoped to this one snap and
+   expiring; never pasted anywhere else.
+4. **The listing page** (snapcraft.io/megapdf/listing): the six Linux screenshots in
+   `website/megapdf/screenshots/linux/en/`, the category (Productivity or Office), the
+   website and the contact. The summary and description arrive with the upload.
+5. **The first upload**: Actions → Snap → Run workflow, with `upload` ticked. It goes to
+   the **edge** channel only. Try it with `sudo snap install megapdf --edge`.
+6. **Stable**: promote that revision in the dashboard's Releases tab. From then on
+   `sudo snap install megapdf` works for everyone, and Ubuntu's App Center lists it.
+
+Nothing here needs a store review of the app's permissions: any snap may plug `home` and
+`removable-media`, and neither is asked to auto-connect. Asking for `removable-media` to
+auto-connect would be a request on forum.snapcraft.io, in Dave's own words.
 
 ## Before a Flathub submission: what is needed from Dave
 
