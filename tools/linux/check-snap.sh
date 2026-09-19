@@ -164,6 +164,12 @@ shell '
 '
 check $?
 
+step "--install-kind: About will say the Snap Store keeps it up to date"
+out=$(megapdf --install-kind 2>&1)
+echo "  $out"
+[ "$out" = "install-kind: Snap" ]
+check $?
+
 step "--render-check: the engine loads inside the snap and a page renders"
 megapdf --render-check "$WORK/stamped.pdf"
 check $?

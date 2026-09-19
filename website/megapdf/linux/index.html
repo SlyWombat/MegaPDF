@@ -147,13 +147,20 @@ sudo apt update</code></pre>
         </section>
 
         <!--snap:live-->
-        <!-- SNAP SECTION: the Snap Store package is set up separately. Adjust the command,
-             the store link and the requirements to match its final listing. -->
+        <!-- SNAP SECTION: the snap is tools/linux/snap (#158, PR #292). The name `megapdf`
+             is the one it is built under; it is only ours once Dave registers it
+             (tools/Linux-Packaging.md, "The Snap Store"), and if it has to change, the
+             command and the connect line below change with it. -->
         <section class="way" id="snap">
             <h2>The Snap Store</h2>
             <p class="for">For Ubuntu, and any distribution with <code>snapd</code></p>
             <p>Find MegaPDF in Ubuntu's App Center, or in a terminal:</p>
 <pre><code>sudo snap install megapdf</code></pre>
+            <h3>Documents on a USB drive</h3>
+            <p>The snap reads the documents in your home folder straight away. To open ones on a
+               USB drive or another removable disk too, allow it once, in App Center's
+               permissions for MegaPDF or in a terminal:</p>
+<pre><code>sudo snap connect megapdf:removable-media</code></pre>
             <h3>Updates</h3>
             <p>Automatic. The Snap Store installs new versions in the background.</p>
             <h3>Uninstall</h3>
