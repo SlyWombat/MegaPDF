@@ -49,6 +49,12 @@ def space_before(text: str, punctuation: str) -> str:
         # French groups thousands with a space, and a plain one lets "22 000" break
         # across two lines, so both variants take U+00A0 there ("22 000").
         text = re.sub(r"(?<=\d) (?=\d{3}(?!\d))", NBSP, text)
+        # The glossary: guillemets take U+00A0 inside (« {0} »), and a percentage
+        # takes one before the sign ("100 %"). A plain space there lets the mark
+        # wrap onto a line of its own.
+        text = re.sub(rf"«[ {NBSP}]?", "«" + NBSP, text)
+        text = re.sub(rf"[ {NBSP}]?»", NBSP + "»", text)
+        text = re.sub(rf"(?<=\d)[ {NBSP}]?%", NBSP + "%", text)
     return text
 
 

@@ -181,7 +181,7 @@ COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. 
 
 APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images de signature. Choisissez-en une et cliquez à l'endroit voulu. Déplacez-la, ajustez-la, redimensionnez-la jusqu'à ce qu'elle soit exactement à sa place.
 
-ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
+ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
 
 Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG).
 
@@ -201,7 +201,7 @@ Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée po
 Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
 Réduisez les numérisations trop lourdes pour le courriel en un clic
 Imprimez directement depuis l'application
-Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie
+Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie
 ```
 
 **Search terms** — one per box, seven boxes
@@ -251,7 +251,7 @@ COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. 
 
 APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images de signature. Choisissez-en une et cliquez à l'endroit voulu. Déplacez-la, ajustez-la, redimensionnez-la jusqu'à ce qu'elle soit exactement à sa place.
 
-ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
+ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
 
 Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour l'e-mail en un clic (sous-échantillonnage des images et recompression JPEG).
 
@@ -271,7 +271,7 @@ Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée po
 Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
 Réduisez les numérisations trop lourdes pour l'e-mail en un clic
 Imprimez directement depuis l'application
-Traitement 100 % local : pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie
+Traitement 100 % local : pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie
 ```
 
 **Search terms** — one per box, seven boxes
@@ -350,7 +350,7 @@ caption each:
 
 | File | Caption (≤ 200 chars) |
 |---|---|
-| `01-edit-text.png` | Click any text and type — editing a PDF like a Word file. |
+| `01-edit-text.png` | Click the text and type — editing a PDF like a Word file. |
 | `02-checkbox.png` | Click an empty square to check it. Drawn checkboxes too, not just real form fields. |
 | `03-signature.png` | Drop a saved signature on the line, then nudge it into place. |
 | `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |

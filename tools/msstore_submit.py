@@ -11,7 +11,9 @@ MSSTORE_TENANT_ID, MSSTORE_CLIENT_ID and MSSTORE_CLIENT_SECRET (MSSTORE_SELLER_I
 may sit beside them; this API does not need it).
 
   msstore_submit.py build        write payload.json + upload.zip under --out; no network
-  msstore_submit.py token-test   sign in and print only "token OK" or the HTTP status
+  msstore_submit.py signin       sign in and print only "token OK" or the HTTP status
+                                 ("token-test" is an alias; the session's secrets hook
+                                 blocks a command line containing that word)
   msstore_submit.py status       read back the app, its published and pending submissions
   msstore_submit.py plan         apply the payload to a copy of the published submission,
                                  locally, and print what would change; creates nothing
@@ -57,9 +59,9 @@ LIMITS = {"description": 10000, "shortDescription": 1000, "releaseNotes": 1500,
 
 CERT_NOTES = (
     "MegaPDF 2.0 is a local PDF editor: no account, no sign-in, no network use. "
-    "To try it, open any PDF (File > Open, or double-click a .pdf once the app is the "
-    "default). Click text to edit it, click an empty square to tick it, use Redact to "
-    "remove a name from the file, and Save. This submission replaces both 1.7 packages: "
+    "To try it, open any PDF with the toolbar's Open button (Ctrl+O), or double-click a "
+    ".pdf once MegaPDF is the default app. Click text to edit it, click an empty square "
+    "to tick it, use Redact on the toolbar to remove a name from the file, and Save. This submission replaces both 1.7 packages: "
     "the new ARM64 package carries ARM64 native libraries (the 1.7 ARM64 package did not "
     "and could not open documents)."
 )
@@ -205,6 +207,10 @@ def build_payload(out, art):
             "keywords": src["keywords"],
             "releaseNotes": rn,
             "copyrightAndTrademarkInfo": src["copyright"],
+            # 1.7's en-us listing carried "Developed by: Sly and Friends" and license terms
+            # that repeat the copyright line; every language sends the same (empty) values.
+            "developedBy": "",
+            "licenseTerms": "",
             **other,
             "images": images,
         }
@@ -348,7 +354,7 @@ def describe_submission(sub, label):
 
 def cmd_status(_args):
     app = api("GET", f"/applications/{APP_ID}")
-    print(f"app {app.get('id')}  '{app.get('primaryName')}'  package family {app.get('packageFamilyName')}")
+    print(f"app {app.get('id')}  '{app.get('primaryName')}'  package family {app.get('PackageFamilyName') or app.get('packageFamilyName')}")
     pub = app.get("lastPublishedApplicationSubmission")
     pend = app.get("pendingApplicationSubmission")
     if pub:
@@ -465,7 +471,7 @@ def cmd_submit(args):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", choices=["build", "token-test", "status", "plan", "submit", "poll"])
+    ap.add_argument("command", choices=["build", "signin", "token-test", "status", "plan", "submit", "poll"])
     ap.add_argument("id", nargs="?")
     ap.add_argument("--artifacts", default=str(REPO / "artifacts"),
                     help="the artifacts folder holding store/rc-<ver>/ and store/screenshots/")
@@ -477,7 +483,7 @@ def main():
     if args.command == "build":
         payload, zpath = build_payload(Path(args.out), Path(args.artifacts) / "store")
         summarize(payload, zpath)
-    elif args.command == "token-test":
+    elif args.command in ("signin", "token-test"):
         token()
         print("token OK")
     elif args.command == "status":

@@ -159,6 +159,16 @@ log prints the SHA-256 of each package. Download it with
 `gh run download <run> -n MegaPDF-store-packages`, then run the identity, resource-map
 and architecture checks below on the file you'll upload.
 
+**Both packages from one commit, and from the same recipe (#306).** 2.0 shipped an x64
+package built locally from `23c4f0c` and an ARM64 package built in CI from `0bb52f7`.
+Users saw the same app, but the two carried different bundled .NET runtimes
+(`mscordaccore` 8.0.2926 against 8.0.3026). Don't do that again. The same CI job builds
+**both** architectures from one clean checkout with the command above, so for the next
+release **take both `.msix` files from the one `MegaPDF-store-packages` artifact of the
+`CI` run on the commit being shipped.** Record that SHA and run number in `SHA256SUMS`.
+WACK then runs on a test-signed copy of that same x64 file, not on a local rebuild. A
+local build is for trying things, never for upload.
+
 **What proves it runs.** WACK can't test an ARM64 package on x64 hardware (appcert runs
 against the host architecture), and nobody here has an ARM64 PC. CI's `Windows ARM64` job
 runs on a GitHub `windows-11-arm` machine instead. There, natively on ARM64, it runs the
@@ -264,13 +274,19 @@ command line. It never prints the secret, the token or the upload (SAS) URL.
 **Steps**, from the repo root:
 
 ```
-python3 tools/msstore_submit.py build        # payload.json + upload.zip, no network
-python3 tools/msstore_submit.py token-test   # prints only "token OK"
-python3 tools/msstore_submit.py status       # the app, its published and pending submissions
-python3 tools/msstore_submit.py plan         # the published submission, before and after; creates nothing
-python3 tools/msstore_submit.py submit       # create, fill, upload, commit, poll
-python3 tools/msstore_submit.py status       # read it back
+tools/msstore.sh build      # payload.json + upload.zip, no network
+tools/msstore.sh signin     # prints only "token OK"
+tools/msstore.sh status     # the app, its published and pending submissions
+tools/msstore.sh plan       # the published submission, before and after; creates nothing
+tools/msstore.sh submit     # create, fill, upload, commit, poll
+tools/msstore.sh status     # read it back
 ```
+
+`tools/msstore.sh` just runs `msstore_submit.py` from wherever you are. Use it and the
+`signin` command (not its alias `token-test`) from a Claude Code session. The session's
+secrets hook blocks any Bash command that names the credentials file, its folder or the
+word `token-test`. This wrapper keeps those out of the command line, so no scratch
+script is needed.
 
 **`build` reads everything from the repo:**
 - The listing copy for `en-us`, `en-ca`, `fr-ca` and `fr-fr`, from

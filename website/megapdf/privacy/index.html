@@ -76,9 +76,10 @@
                 first- or third-party.</li>
             <li><strong>No crash reporting</strong> — crashes are never transmitted anywhere.</li>
             <li><strong>No network access</strong> — MegaPDF opens no network connection
-                of its own, on any platform. On Android it declares zero permissions; on
-                iOS it requests no network entitlements; on Windows it asks for no network
-                capability; and the Linux Flatpak is built without network access at all.</li>
+                of its own, on any platform. On Android it asks you for no permissions; on
+                iOS it requests no network entitlements; on macOS its App Sandbox grants it
+                no network access; on Windows it asks for no network capability; and on
+                Linux the Flatpak and the Snap are both built without network access.</li>
         </ul>
         <p>The PDF documents you open, the edits you make, and the signature images you
         create are processed entirely on your device and stored only where you choose

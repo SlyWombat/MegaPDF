@@ -8,7 +8,7 @@ Paste the English into both `en-US` and `en-CA`.
 
 ## English — `en-US` and `en-CA`
 
-**What's new** [1500] (1483)
+**What's new** [1500] (1495)
 
 ```
 Fix the document's own text, far more often
@@ -30,19 +30,19 @@ Very large PDFs
 A 2.5 GB file used to take a minute to open and gigabytes of memory. It now opens straight away. Banner-size pages measure at their real size, and pages full of pictures draw several times faster.
 
 One row of tools
-The toolbar is a single row, with the pickers appearing beside the tool they belong to and everything else under More.
+The toolbar is a single row, with the pickers appearing beside the tool they belong to and everything else under … (More options).
 ```
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [1500] (1485)
+**Quoi de neuf** [1500] (1483)
 
 ```
 Corriger le texte du document, bien plus souvent
 MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
 
 Caviarder
-Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Masquer ne fait que recouvrir, et le dit maintenant.
+Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Le correcteur ne fait que recouvrir, et le dit maintenant.
 
 Il vous dit ce qu'il fait
 Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, copie réduite, préparation de l'impression : chaque tâche s'annonce pendant qu'elle travaille.
@@ -57,19 +57,19 @@ PDF très volumineux
 Un fichier de 2,5 Go prenait une minute à ouvrir et des gigaoctets de mémoire. Il s'ouvre maintenant tout de suite. Les pages pleines d'images s'affichent plusieurs fois plus vite.
 
 Une seule rangée d'outils
-La barre d'outils tient sur une rangée : les sélecteurs apparaissent à côté de l'outil auquel ils appartiennent, et le reste se trouve sous Plus.
+La barre d'outils tient sur une rangée : les sélecteurs apparaissent à côté de leur outil, et le reste se trouve sous … (Plus d'options).
 ```
 
 ## Français (France) — `fr-FR`
 
-**Quoi de neuf** [1500] (1485)
+**Quoi de neuf** [1500] (1483)
 
 ```
 Corriger le texte du document, bien plus souvent
 MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
 
 Caviarder
-Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Masquer ne fait que recouvrir, et le dit maintenant.
+Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Le correcteur ne fait que recouvrir, et le dit maintenant.
 
 Il vous dit ce qu'il fait
 Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, copie réduite, préparation de l'impression : chaque tâche s'annonce pendant qu'elle travaille.
@@ -84,7 +84,7 @@ PDF très volumineux
 Un fichier de 2,5 Go prenait une minute à ouvrir et des gigaoctets de mémoire. Il s'ouvre maintenant tout de suite. Les pages pleines d'images s'affichent plusieurs fois plus vite.
 
 Une seule rangée d'outils
-La barre d'outils tient sur une rangée : les sélecteurs apparaissent à côté de l'outil auquel ils appartiennent, et le reste se trouve sous Plus.
+La barre d'outils tient sur une rangée : les sélecteurs apparaissent à côté de leur outil, et le reste se trouve sous … (Plus d'options).
 ```
 
 > The two French blocks differ only where the derivation rules say they should.
