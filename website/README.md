@@ -40,7 +40,16 @@ The main-page teaser block (`.megapdf-teaser` CSS + section) lives in
 /usr/bin/python3 website/deploy.py --linux       # also linux/ and apt/, and every page links them
 /usr/bin/python3 website/deploy.py --linux --snap  # ...and the Snap Store section on linux/
 /usr/bin/python3 website/deploy.py --dry-run --privacy --dest /public_html/megapdf-preview
+/usr/bin/python3 website/deploy.py --linux --privacy --only linux,apt,privacy,screenshots/linux \
+    --landing live-index.html                    # only those parts, and this file as index.html
 ```
+
+`--only` is for a partial release. Linux 2.0 (2026-09-19) went out before the
+stores approved 2.0, so only the Linux page, the APT repository, the privacy
+policy and the AppStream screenshots went up. The landing page stayed the live
+1.x one, with a single "Install on Linux" link added, passed in with
+`--landing`. The staged 2.0 landing and feature pages go up once the stores
+approve 2.0: a plain `deploy.py --linux --privacy` then.
 
 `--dry-run` touches nothing: it does not read the `.env`, does not open a
 socket, and does not call the UAPI. It is the only mode that runs anywhere but

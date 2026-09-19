@@ -28,6 +28,17 @@ the `snap:` regions of linux/index.html, for when the Snap Store listing is live
 `--dry-run` reads nothing but the working tree: no .env, no network, no UAPI
 call. It is the only mode that is safe to run from a machine that is not Dave's.
 
+`--only` uploads just the named parts of the tree, for a partial release. Linux 2.0
+went out before the stores approved 2.0, so only its parts went up, next to the
+live 1.x landing page, which `--landing` supplies instead of the staged one:
+
+    /usr/bin/python3 website/deploy.py --linux --privacy \
+        --only linux,apt,privacy,screenshots/linux --landing /path/to/live-index.html
+
+Each name is a path under website/megapdf/ (a directory or a file). `--landing`
+uploads the given file as index.html at the destination, as it is, and without
+it the landing page is left alone.
+
 `--dest` puts the same tree somewhere else on the server, so a release can be
 looked at before it replaces the live page:
 
@@ -200,6 +211,26 @@ def plan(dest, include_privacy, include_linux=False):
     return targets
 
 
+def only(targets, names):
+    """The targets whose source is one of `names` (paths under website/megapdf/),
+    or inside one. Refuses a name that matches nothing, so a typo cannot quietly
+    upload less than asked for."""
+    names = [n.strip().strip("/") for n in names.split(",") if n.strip()]
+    kept, hit = [], set()
+    for path, remote in targets:
+        rel = os.path.relpath(path, SITE).replace(os.sep, "/")
+        for n in names:
+            if rel == n or rel.startswith(n + "/"):
+                kept.append((path, remote))
+                hit.add(n)
+                break
+    unmatched = [n for n in names if n not in hit]
+    if unmatched:
+        raise SystemExit(f"--only: nothing to upload for {', '.join(unmatched)} "
+                         "(an opt-in directory also needs its flag: --privacy, --linux)")
+    return kept
+
+
 def staged(targets, live):
     """The files as they will be uploaded: every .html resolved into a temporary
     copy under its own name, everything else as it is on disk."""
@@ -230,6 +261,10 @@ def main():
                     help="with --linux: show the Snap Store section of linux/")
     ap.add_argument("--dry-run", action="store_true",
                     help="list what would be uploaded and where; no .env, no network")
+    ap.add_argument("--only", metavar="NAMES",
+                    help="upload only these comma-separated paths under website/megapdf/")
+    ap.add_argument("--landing", metavar="FILE",
+                    help="upload FILE as index.html at the destination (with --only)")
     ap.add_argument("--dest", default=DEFAULT_DEST, metavar="PATH",
                     help=f"remote directory (default {DEFAULT_DEST})")
     args = ap.parse_args()
@@ -239,8 +274,23 @@ def main():
     linux_note = check_linux(args.snap) if args.linux else "Linux held back: linux/ and apt/ stay off the server, pages say \"coming soon\""
     live = {"linux": args.linux, "snap": args.snap}
 
+    if args.landing and not args.only:
+        ap.error("--landing goes with --only: without it the staged index.html goes up")
+    if args.landing and not os.path.isfile(args.landing):
+        ap.error(f"--landing: no such file {args.landing}")
+
     dest = args.dest.rstrip("/")
-    tmp, targets = staged(plan(dest, args.privacy, args.linux), live)
+    chosen = plan(dest, args.privacy, args.linux)
+    if args.only:
+        chosen = only(chosen, args.only)
+    tmp, targets = staged(chosen, live)
+    if args.landing:
+        # Uploads keep the local file's name, so the landing page goes up from a
+        # copy called index.html.
+        landing = os.path.join(tmp, "landing", "index.html")
+        os.makedirs(os.path.dirname(landing))
+        shutil.copyfile(args.landing, landing)
+        targets.append((landing, dest, os.path.join(SITE, "index.html")))
     # Every remote directory below dest, parents first. dest itself is in the
     # list too: --dest may name a path that does not exist yet.
     needed = {dest}

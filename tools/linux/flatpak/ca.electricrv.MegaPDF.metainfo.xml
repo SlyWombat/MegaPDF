@@ -213,7 +213,7 @@
        be right at tag time, and the tag build is where that is enforced (#254 A3)
        rather than left to whoever remembers. -->
   <releases>
-    <release version="2.0.0" date="2026-09-18">
+    <release version="2.0.0" date="2026-09-19">
       <url type="details">https://github.com/SlyWombat/MegaPDF/blob/main/docs/release-notes/2.0/release-notes-2.0.md</url>
       <description>
         <p>The first MegaPDF release for Linux. It brings everything in 2.0:</p>
