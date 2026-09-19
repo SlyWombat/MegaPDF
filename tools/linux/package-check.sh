@@ -102,7 +102,21 @@ run() {  # <description> <args...>
 
 run "--render-check: the engine loads and a page renders" --render-check "$FIXTURES/stamped.pdf"
 run "--language-check: the POSIX locale chain is read"    --language-check
-run "--print-check: the CUPS route is sound"              --print-check "$FIXTURES/fixture.pdf"
+if [ "${NO_PRINT_CLIENT:-0}" = 1 ]; then
+    # An install without recommends (check-apt-repo.sh's +norecs image) has no
+    # cups-client: printing is a Recommends, not a Depends, so a machine that doesn't
+    # print isn't made to install CUPS. What has to hold then is that the app knows,
+    # and says what to install, rather than failing somewhere later (#316).
+    if pc=$("$ROOT/MegaPDF" --print-check "$FIXTURES/fixture.pdf" 2>&1); then
+        fail "--print-check passed although lp is not installed"
+    elif printf '%s\n' "$pc" | grep -q 'lp is not on PATH'; then
+        ok "--print-check: with no cups-client, the app says lp is missing and what to install"
+    else
+        fail "--print-check failed for another reason"; printf '%s\n' "$pc" | tail -5 | sed 's/^/        /'
+    fi
+else
+    run "--print-check: the CUPS route is sound"          --print-check "$FIXTURES/fixture.pdf"
+fi
 run "--self-test: fill, check, sign, save, reopen"        --self-test "$FIXTURES"
 
 if [ -n "$EXPECTED_KIND" ]; then

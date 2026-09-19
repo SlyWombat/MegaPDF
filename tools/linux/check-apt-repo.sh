@@ -144,7 +144,7 @@ fi
     && ok "the AppStream metainfo is installed and launches megapdf.desktop" \
     || fail "no AppStream metainfo for megapdf.desktop in /usr/share/metainfo"
 apt-cache policy megapdf | sed -n '1,6p' | sed 's/^/     /'
-bash /src/tools/linux/package-check.sh /opt/MegaPDF /fixtures "" apt AptRepository || fails=$((fails + 1))
+NO_PRINT_CLIENT="$NORECS" bash /src/tools/linux/package-check.sh /opt/MegaPDF /fixtures "" apt AptRepository || fails=$((fails + 1))
 
 echo "-- a newer version is published: apt upgrade takes it"
 point r2
