@@ -77,7 +77,7 @@ struct ContentView: View {
                         guard !model.fileCommandsBlocked else { return }
                         exportName = displayName
                         Task {
-                            if let file = await model.exportFile() {
+                            if let file = await model.exportFile(named: displayName) {
                                 exportDoc = PdfExportDocument(file: file)
                                 exporting = true
                             }
@@ -103,9 +103,11 @@ struct ContentView: View {
             model.statusMessage ?? "",
             isPresented: Binding(
                 get: { model.statusMessage != nil },
-                set: { if !$0 { model.statusMessage = nil } })
+                set: { if !$0 { model.statusMessage = nil; model.statusDetail = nil } })
         ) {
-            Button("OK") { model.statusMessage = nil }
+            Button("OK") { model.statusMessage = nil; model.statusDetail = nil }
+        } message: {
+            if let detail = model.statusDetail { Text(detail) }
         }
     }
 }

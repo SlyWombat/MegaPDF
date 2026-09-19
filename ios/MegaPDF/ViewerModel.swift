@@ -84,6 +84,9 @@ final class ViewerModel: ObservableObject {
     @Published private(set) var isDirty = false
     @Published private(set) var isSaving = false
     @Published var statusMessage: String?
+    /// A second line under `statusMessage`, cleared with it: what a redaction removed, when it
+    /// went out with the save that wrote it.
+    @Published var statusDetail: String?
     @Published private(set) var signatures: [SignatureEntry] = []
     @Published private(set) var pendingSignature: SignatureEntry?
     @Published private(set) var selectedStamp: SelectedStamp?
@@ -158,6 +161,10 @@ final class ViewerModel: ObservableObject {
 
     /// The summary after a redaction, shown once and dismissed.
     @Published var redactionSummary: String?
+    /// The same summary held for the save or the copy that follows: it goes out with "Saved"
+    /// as one alert. Raised on its own at the moment the save began, it collided with what
+    /// came next — with "Saved" neither showed (#276), and the export sheet never appeared (#279).
+    private var summaryForSave: String?
 
     /// Why a redaction refused, shown once and dismissed. Nothing was removed.
     @Published var redactionRefusal: String?
@@ -207,8 +214,12 @@ final class ViewerModel: ObservableObject {
 
     /// Applies every mark. True when the document was redacted and may be saved; false when
     /// it refused — and then NOTHING was removed and the marks are still there.
+    ///
+    /// `reportWithSave` holds what was removed for the save or the copy the caller starts next,
+    /// which reports it under "Saved" (or on its own, if the copy is cancelled), rather than
+    /// raising an alert now over the save that is about to begin.
     @discardableResult
-    func applyRedactions() async -> Bool {
+    func applyRedactions(reportWithSave: Bool = false) async -> Bool {
         guard let doc = document, redactionMarkCount > 0 else { return true }
         let report = await PdfEngine.shared.applyRedactions(doc)
         guard report.applied else {
@@ -222,7 +233,11 @@ final class ViewerModel: ObservableObject {
         canUndo = false
         canRedo = false
         redactionMarks = [:]
-        redactionSummary = Self.describeRedaction(report.counts)
+        if reportWithSave {
+            summaryForSave = Self.describeRedaction(report.counts)
+        } else {
+            redactionSummary = Self.describeRedaction(report.counts)
+        }
         // Every page's raster is stale once content has been removed.
         pageImages.removeAll()
         renderedWidths.removeAll()
@@ -1548,8 +1563,11 @@ final class ViewerModel: ObservableObject {
                     close()
                 } else {
                     statusMessage = String(localized: "Saved")
+                    statusDetail = summaryForSave
                 }
+                summaryForSave = nil
             } catch {
+                summaryForSave = nil
                 showSaveFailed(error)
             }
         }
@@ -1601,13 +1619,24 @@ final class ViewerModel: ObservableObject {
     /// with the same busy state as Save (#145). Staged rather than in memory, so a large document
     /// exports without holding its size twice (#147); `finishExport` removes it. Nil when it
     /// failed, or when other work is still running.
-    func exportFile() async -> URL? {
+    ///
+    /// The staged file carries the document's name, in a folder of its own: the export sheet
+    /// names the copy after the file it is handed, whatever its default name says, and a staged
+    /// "save-<UUID>.pdf" was what every copy was being called (#278).
+    func exportFile(named name: String) async -> URL? {
         guard let doc = document,
               let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return nil }
         defer { busy.end(token) }
         let editsAtStart = editCount
         discardExportFile()
-        let staged = Self.stagingURL()
+        let staged: URL
+        do {
+            staged = try Self.namedStagingURL(for: name)
+        } catch {
+            summaryForSave = nil
+            statusMessage = String(localized: "Couldn't prepare the copy.")
+            return nil
+        }
         do {
             let engine = PdfEngine.shared
             try await engine.save(doc, to: staged)
@@ -1622,25 +1651,45 @@ final class ViewerModel: ObservableObject {
             exportStagedURL = staged
             return staged
         } catch {
-            try? FileManager.default.removeItem(at: staged)
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+            summaryForSave = nil
             statusMessage = String(localized: "Couldn't prepare the copy.")
             return nil
         }
+    }
+
+    /// `<tmp>/export-<UUID>/<name>.pdf`: a fresh folder, so the name can be the document's own.
+    private nonisolated static func namedStagingURL(for name: String) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("export-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var base = name.replacingOccurrences(of: "/", with: "-")
+        if base.lowercased().hasSuffix(".pdf") { base = String(base.dropLast(4)) }
+        if base.isEmpty { base = String(localized: "Document") }
+        return folder.appendingPathComponent(base).appendingPathExtension("pdf")
     }
 
     /// The exporter finished. When it wrote the copy, the document is marked saved, but only if
     /// nothing changed since the copy was made (D3). The staged file goes either way.
     func finishExport(saved: Bool) {
         discardExportFile()
-        guard saved else { return }
+        let summary = summaryForSave
+        summaryForSave = nil
+        guard saved else {
+            // Cancelled: nothing was written, but the redaction was applied to the open
+            // document, so what it removed is still said.
+            if let summary { redactionSummary = summary }
+            return
+        }
         if exportEditCount == editCount { isDirty = false }
         exportEditCount = nil
         statusMessage = String(localized: "Saved")
+        statusDetail = summary
     }
 
     private func discardExportFile() {
         if let staged = exportStagedURL {
-            try? FileManager.default.removeItem(at: staged)
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
             exportStagedURL = nil
         }
     }

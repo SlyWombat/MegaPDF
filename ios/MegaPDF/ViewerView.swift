@@ -217,11 +217,11 @@ struct ViewerView: View {
         ) {
             Button("Save as a copy") {
                 redactConfirm = nil
-                Task { if await model.applyRedactions() { onSaveCopy() } }
+                Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy() } }
             }
             Button("Overwrite the original") {
                 redactConfirm = nil
-                Task { if await model.applyRedactions() { model.save() } }
+                Task { if await model.applyRedactions(reportWithSave: true) { model.save() } }
             }
             Button("Cancel", role: .cancel) { redactConfirm = nil }
         } message: {
@@ -448,12 +448,17 @@ struct ViewerView: View {
         let width = containerWidth * effectiveZoom
         let height = width * size.height / size.width
         ZStack(alignment: .topLeading) {
+            // The page's name goes on the page itself, not on this stack: a label on the
+            // stack is stamped over every element inside it, so VoiceOver read a redaction
+            // mark and a selected stamp's Remove and Edit buttons all as "Page 1" (#277).
             if let image = model.pageImages[index] {
                 Image(uiImage: UIImage(cgImage: image))
                     .resizable()
                     .interpolation(.high)
+                    .accessibilityLabel("Page \(index + 1)")
             } else {
                 Color.white  // placeholder keeps layout stable until the render lands
+                    .accessibilityLabel("Page \(index + 1)")
             }
             if !model.searchMatches.isEmpty {
                 searchHighlights(index: index, pageSize: size,
@@ -584,7 +589,6 @@ struct ViewerView: View {
                             yFraction: Double(value.location.y / height))
                     })
         )
-        .accessibilityLabel("Page \(index + 1)")
     }
 
     private func pushWindow(containerWidth: CGFloat) {

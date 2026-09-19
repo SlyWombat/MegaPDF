@@ -325,15 +325,24 @@ final class PageCheckTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         model.noteDocumentChanged()
-        let file = await model.exportFile()
+        let file = await model.exportFile(named: "Rental Agreement.pdf")
         XCTAssertNotNil(file)
-        if let file { XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "the copy is staged in a file (#147)") }
+        if let file {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: file.path), "the copy is staged in a file (#147)")
+            // The export sheet names the copy after this file, so it has to be the document's
+            // name, not the staging name (#278).
+            XCTAssertEqual(file.lastPathComponent, "Rental Agreement.pdf")
+        }
         model.noteDocumentChanged()
         model.finishExport(saved: true)
         XCTAssertTrue(model.isDirty)
-        if let file { XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the staged copy goes once the exporter is done") }
+        if let file {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "the staged copy goes once the exporter is done")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.deletingLastPathComponent().path),
+                           "and so does the folder it was staged in")
+        }
 
-        _ = await model.exportFile()
+        _ = await model.exportFile(named: "Rental Agreement")
         model.finishExport(saved: true)
         XCTAssertFalse(model.isDirty)
         model.close()

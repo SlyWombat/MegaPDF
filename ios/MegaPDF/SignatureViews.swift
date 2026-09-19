@@ -596,6 +596,7 @@ struct SelectionOverlay: View {
                     .foregroundStyle(.white, .red)
                     .font(.title3)
             }
+            .accessibilityLabel("Remove")
             .offset(x: 10, y: -10)
             if let onEdit {
                 Button(action: onEdit) {
@@ -603,6 +604,7 @@ struct SelectionOverlay: View {
                         .foregroundStyle(.white, .blue)
                         .font(.title3)
                 }
+                .accessibilityLabel("Edit text")
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .offset(x: -10, y: -10)
             }
