@@ -44,8 +44,8 @@ looked at before it replaces the live page:
 
     /usr/bin/python3 website/deploy.py --dest /public_html/megapdf-preview
 
-A destination that does not exist yet is created, one level at a time;
---dry-run names each directory it would create. The preview path is not linked
+A destination that does not exist yet is created by the upload itself;
+--dry-run names each directory that will appear. The preview path is not linked
 from anywhere and is not in robots.txt — it is a URL you know, not a secret.
 """
 
@@ -97,22 +97,6 @@ class Server:
         )
         resp = urllib.request.urlopen(req, timeout=60, context=CTX)
         return json.loads(resp.read().decode())
-
-    def mkdir(self, remote_dir):
-        """Create one directory. Already-there is success — cPanel reports it as
-        an error, and re-running a deploy must not be a failure."""
-        parent, name = os.path.split(remote_dir.rstrip("/"))
-        body = urllib.parse.urlencode({"path": parent, "name": name}).encode()
-        try:
-            out = self._post("Fileman/mkdir", body, "application/x-www-form-urlencoded")
-        except urllib.error.HTTPError as exc:
-            return False, f"HTTP {exc.code}"
-        if out.get("status") == 1:
-            return True, "created"
-        why = "; ".join(out.get("errors") or []) or "refused"
-        if "exist" in why.lower():
-            return True, "already there"
-        return False, why
 
     def upload(self, local_path, remote_dir):
         name = os.path.basename(local_path)
@@ -323,13 +307,10 @@ def main():
 
     failures = 0
     server = Server()
-    for d in needed:
-        if d == DEFAULT_DEST:
-            continue  # the live directory has been there since 2026-08
-        ok, why = server.mkdir(d)
-        print(f"  {'DIR ' if ok else 'FAIL'} {d}/  ({why})")
-        if not ok:
-            failures += 1
+    # No mkdir: this server's UAPI has no Fileman/mkdir ("could not find the
+    # function"), and Fileman/upload_files creates every missing directory in a
+    # file's path by itself. Seen on the Linux 2.0 deploy (2026-09-19), which
+    # created apt/pool/main/m/megapdf/ and the rest that way.
     for path, remote, source in targets:
         ok = server.upload(path, remote)
         print(f"  {'OK  ' if ok else 'FAIL'} {os.path.relpath(source, SITE):<34}"

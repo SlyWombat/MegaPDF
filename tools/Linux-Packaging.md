@@ -237,7 +237,29 @@ this being a bundled third-party package rather than one for the Debian archive.
 
 ## Going live
 
-Linux ships after the other platforms, on Dave's go-ahead. Nothing below has been done.
+**Linux 2.0.0 was released on 2026-09-19** (Dave: "lets get a linux version released"),
+while the store versions of 2.0 were still in review:
+
+- tag `linux-v2.0.0` on `3e9d4cc`, release run 35457209344, published at
+  https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.0.0 (marked Latest):
+  `megapdf_2.0.0_amd64.deb` (sha256 `6d333071…4503`) and
+  `megapdf-linux-x64-2.0.0.tar.gz` (sha256 `8ee3b3a5…bcc8`), each with its `.sha256`;
+- the signed APT repository at https://electricrv.ca/megapdf/apt/ (its pool `.deb` is
+  byte-identical to the release's);
+- **only the Linux parts of the site**, per Dave: `linux/`, `apt/`, `privacy/` (with the
+  server-log and Linux-signature-library lines he approved) and `screenshots/linux/`,
+  plus the *live 1.x* landing page with one "Install on Linux" link added, via
+  `deploy.py --linux --privacy --only linux,apt,privacy,screenshots/linux --landing <file>`.
+  The staged 2.0 landing and feature pages go up once the stores approve 2.0, with a
+  plain `deploy.py --linux --privacy`;
+- checked from outside: in clean Debian 12 and Ubuntu 24.04 containers, the live page's
+  commands verbatim (key, sources, `apt install megapdf`), then `package-check.sh` on the
+  APT install, the release `.deb` and the release tarball's `install.sh` (36 checks each,
+  0 failures; `--install-kind` AptRepository / DebFile / Tarball). Pages render at 390 px
+  and 1280 px without sideways scrolling.
+
+The Snap Store is not released: it waits on Dave's Snap account (see "The Snap Store").
+The steps below are the recipe, and are what was done.
 
 ### The signing key
 
