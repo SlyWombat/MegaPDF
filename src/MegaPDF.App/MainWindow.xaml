@@ -111,8 +111,9 @@
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
             <!-- Redact beside Whiteout, because the pair is the point (#173): one covers,
-                 the other removes, and each tooltip says which. Glyph E7BA is the "block
-                 out" mark; it overflows before Whiteout does, not after. -->
+                 the other removes, and each tooltip says which. Glyph E7BA is Segoe Fluent's
+                 Warning triangle, not a block-out mark: it reads as "careful", and it stays
+                 for 2.0 (#146 §3). It overflows before Whiteout does, not after. -->
             <local:ArmableAppBarButton x:Name="RedactButton" IsArmed="{x:Bind ViewModel.IsRedactMode, Mode=OneWay}" Click="OnRedactModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE7BA;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>

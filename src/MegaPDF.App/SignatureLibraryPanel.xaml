@@ -102,7 +102,8 @@
         </ScrollViewer>
 
         <!-- Three equal ways in. A label may wrap to two lines (fr: "À partir d'une photo"),
-             and the three buttons stretch to the tallest so the row stays even. -->
+             and the three buttons stretch to the tallest so the row stays even. Content sits
+             at the top, so the three icons stay on one line when only one label wraps. -->
         <Grid ColumnSpacing="{ThemeResource SpaceS}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -110,7 +111,7 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Button Grid.Column="0" x:Uid="DrawSignatureButton" x:Name="DrawSignatureButton" Click="OnDrawClicked" AutomationProperties.AutomationId="DrawSignatureButton"
-                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="8,10">
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" VerticalContentAlignment="Top" Padding="8,10">
                 <StackPanel Spacing="{ThemeResource SpaceXs}" HorizontalAlignment="Center">
                     <FontIcon Glyph="&#xEE56;" FontSize="{ThemeResource TypeSubtitle}" />
                     <TextBlock x:Uid="DrawSignatureLabel" FontSize="{ThemeResource TypeCaption}" HorizontalAlignment="Center"
@@ -118,7 +119,7 @@
                 </StackPanel>
             </Button>
             <Button Grid.Column="1" x:Uid="TypeSignatureButton" x:Name="TypeSignatureButton" Click="OnTypeClicked" AutomationProperties.AutomationId="TypeSignatureButton"
-                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="8,10">
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" VerticalContentAlignment="Top" Padding="8,10">
                 <StackPanel Spacing="{ThemeResource SpaceXs}" HorizontalAlignment="Center">
                     <FontIcon Glyph="&#xE70F;" FontSize="{ThemeResource TypeSubtitle}" />
                     <TextBlock x:Uid="TypeSignatureLabel" FontSize="{ThemeResource TypeCaption}" HorizontalAlignment="Center"
@@ -126,7 +127,7 @@
                 </StackPanel>
             </Button>
             <Button Grid.Column="2" x:Uid="AddSignatureFromImageButton" x:Name="AddSignatureFromImageButton" Click="OnPhotoClicked" AutomationProperties.AutomationId="AddSignatureFromImageButton"
-                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="8,10">
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" VerticalContentAlignment="Top" Padding="8,10">
                 <StackPanel Spacing="{ThemeResource SpaceXs}" HorizontalAlignment="Center">
                     <FontIcon Glyph="&#xEB9F;" FontSize="{ThemeResource TypeSubtitle}" />
                     <TextBlock x:Uid="AddFromImageLabel" FontSize="{ThemeResource TypeCaption}" HorizontalAlignment="Center"
