@@ -166,27 +166,15 @@ Apple's own lookup API puts the record at iOS 1.7.0. (The Microsoft Store title
 keeps the space because the *reservation* does — `tools/Store-Submission.md`.
 The product is MegaPDF everywhere else, this site included.)
 
-## Before 2.0: the App Store link on its own
+## Deployed: 2.0, 2026-09-19
 
-The live page still says the iPhone/iPad app is "in testing now" and keeps the
-App Store link commented out. That has been untrue since **2026-09-16**, when
-iOS 1.7.0 and Mac 1.7.1 were approved. Turning it on is a one-file change to
-`index.html` and one deploy, and it does not wait for 2.0. It is on branch
-`website/254-app-store-link-now` — pushed, deliberately **not** merged, and
-deliberately not part of the 2.0 staging commits.
-
-```
-git checkout website/254-app-store-link-now
-/usr/bin/python3 website/deploy.py --dry-run
-/usr/bin/python3 website/deploy.py
-```
-
-Check `https://electricrv.ca/megapdf/` afterwards: the Apple chips appear, the
-"in testing now" line is gone.
-
-**Before the 2.0 deploy, never after.** That branch carries the 1.x page and the
-1.x gallery on purpose — deploying it once 2.0 is live would put the old page
-back. After the 2.0 deploy it has no use and can be deleted.
+The full 2.0 site went up on 2026-09-19 at 14:25 EDT with
+`deploy.py --linux --privacy` (41 files), after Google Play 2.0.1 and Linux
+2.0.0-2 were live and while Apple and Microsoft 2.0 were still in review (Dave:
+"update website completely"). The APT repository was re-uploaded byte for byte
+(it holds 2.0.0 and 2.0.0-2), and the Snap section is still held back (#314).
+The `website/254-app-store-link-now` branch this section used to describe
+had no use after this deploy and was deleted.
 
 ## Launch runbook — 2.0
 
