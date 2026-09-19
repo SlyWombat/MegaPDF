@@ -8,6 +8,22 @@ three stores.
 ID reserved, no repository requested. Everything below was built and run on kdocker2 and
 runs again in CI on every push.
 
+**The channels (Dave, 2026-09-19):** GitHub Releases, our own signed APT repository on
+electricrv.ca, and the Snap Store. Flathub is on hold: it now accepts AI-assisted apps only
+on disclosure and at a reviewer's discretion, and its submission pull request must be
+written by a person. The Flathub work below stays because CI proves it and it costs
+nothing. How each channel goes live is § "Going live".
+
+**MegaPDF has no update check, on purpose.** It opens no network connection of its own,
+on any platform, and says so in the privacy policy and every listing. On Linux the package
+manager is the update mechanism, and About MegaPDF says which one this copy has
+(`MegaPDF.Core/Services/LinuxInstall.cs`): apt, snapd or Flatpak. A .deb installed from a
+file, or the tarball, has none, so About says so and links the download page, which the
+person's browser opens. Each tree carries an `INSTALL-KIND` marker beside the binary
+(`tarball`, rewritten to `deb` by `build-deb.sh`), and Snap and Flatpak are recognised
+by their environment. `MegaPDF --install-kind` prints the decision, and `package-check.sh`,
+`check-flatpak.sh` and `check-apt-repo.sh` assert it.
+
 ---
 
 ## What is in the tree
@@ -20,6 +36,9 @@ runs again in CI on every push.
 | `tools/linux/package-check.sh` | what any package must be true of. Run against whatever a package installed. |
 | `tools/linux/check-flatpak.sh` | installs the bundle and drives the app inside the sandbox. |
 | `tools/linux/check-deb.sh` | installs the `.deb` on a bare machine, runs the app out of it, removes it again. |
+| `tools/linux/make-apt-repo.sh` | the signed APT repository (`dists/stable`, `pool/main`) from one or more `.deb`s. Refuses any key but the one in `website/megapdf/apt/FINGERPRINT`, and checks its own signature with gpgv before it finishes. |
+| `tools/linux/check-apt-repo.sh` | subscribes to that repository in clean Debian 12, Ubuntu 22.04 and 24.04 containers exactly as the website says, installs, runs the app, publishes a newer version and watches `apt upgrade` take it, and checks that a forged signature is refused. |
+| `website/megapdf/apt/` | the public half of the repository: `megapdf.gpg`, `megapdf.asc`, `megapdf.sources`, `FINGERPRINT`. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.yml` | the manifest. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml` | the AppStream data a software centre shows. |
 | `tools/linux/store-captures.sh` | the six listing screenshots the metainfo points at, one language per run, under its own Xvfb. |
@@ -211,6 +230,59 @@ this being a bundled third-party package rather than one for the Debian archive.
 | `custom-library-search-path` | **This one was real** and is fixed: the shipped `libmegapdf_core.so` carried the build machine's own directory in its runpath. |
 
 ---
+
+## Going live
+
+Linux ships after the other platforms, on Dave's go-ahead. Nothing below has been done.
+
+### The signing key
+
+`MegaPDF APT repository <noreply@electricrv.ca>`, ed25519, no expiry, fingerprint
+**`1982 176F F9E6 14A7 C60D 20D1 0097 49E2 44B5 848B`** (created 2026-09-19). The
+private key exists in two places and nowhere else: `~/secrets/megapdf/apt-signing-key.asc` (mode 0600) in this
+laptop's WSL, and the `APT_SIGNING_KEY` Actions secret. It has no passphrase because CI
+signs with it; the secret store and the file mode are its protection. **Back the file up
+somewhere offline**: if both copies are lost, every existing user has to fetch a new key
+before apt will take another update from us. No expiry was chosen on purpose: an expired
+key stops every user's updates silently, and a one-person project is the one most likely
+to miss the date.
+
+### The day
+
+1. **Tag.** `git tag -a linux-v2.0.0 <sha> -m "MegaPDF 2.0.0 for Linux"` and push it.
+   `linux-release.yml` builds the tarball, the .deb and the signed repository, installs
+   each one and runs the app out of it, and puts the tarball, the .deb and their sha256s
+   in a **draft** release named `linux-v2.0.0`. The tag is `linux-v*`, like `ios-v*` and
+   `android-v*`. The bare `v*` of v1.3.0 … v1.6.2 belonged to the retired Windows
+   sideload builds. Their updater reads `/releases/latest` and offers only a newer,
+   parseable tag with a `.msix` in it, so no Linux release can reach them. That was
+   proved by running the retired `UpdateVersion.cs` against every candidate tag and the
+   live `/releases/latest` (#158).
+2. **Publish the draft** on GitHub. The Linux page's download links and the Flathub
+   manifest's URL only resolve after this.
+3. **Put the repository into the site.** Download the tag run's `MegaPDF-apt-repository`
+   artefact into `website/megapdf/apt/` (it holds `dists/` and `pool/`, and the same key
+   files). Or build it locally from the release's own .deb, with `APT_SIGNING_KEY_FILE`
+   pointing at the key file: `tools/linux/make-apt-repo.sh website/megapdf/apt
+   megapdf_2.0.0_amd64.deb`. For a later release, keep the old `pool/` there and add the
+   new .deb, so a machine that is a version behind can still resolve what it has.
+4. **Rehearse.** `python3 website/deploy.py --dry-run --linux --privacy`. It refuses
+   unless the repository verifies against the committed key and holds the version
+   `linux/index.html` offers.
+5. **Deploy.** `python3 website/deploy.py --linux --privacy`. That uploads `linux/`,
+   `apt/`, and the landing page and privacy policy with their Linux text live (the Linux
+   chip links the Linux page).
+6. **Check it from outside**, on any Debian or Ubuntu machine or container, with the
+   commands on `https://electricrv.ca/megapdf/linux/` exactly as written:
+   `apt update` must fetch `electricrv.ca/megapdf/apt stable InRelease`, and after
+   `apt install megapdf`, `/opt/MegaPDF/MegaPDF --install-kind` must print `AptRepository`.
+7. **The Snap Store**, when its listing is public: `deploy.py --linux --snap --privacy`,
+   which adds the Snap section of the Linux page and the Snap Store in the privacy
+   policy's list.
+
+**A later release** is the same, from step 1, with the Linux page's version (its download
+links and the `.deb` file name) bumped in `website/megapdf/linux/index.html`.
+`deploy.py --linux` refuses if the page and the repository disagree.
 
 ## Before a Flathub submission: what is needed from Dave
 

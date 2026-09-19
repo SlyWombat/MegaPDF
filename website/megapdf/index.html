@@ -3,11 +3,22 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="MegaPDF fills, checks, signs and redacts PDF forms — free, open source, on Windows, Mac, iPhone, iPad and Android, with Linux coming to Flathub. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    <!-- The linux: regions are resolved by website/deploy.py: with --linux the live
+         text goes up, without it the "soon" text inside the comment does, so the page
+         never links a Linux page or repository that is not on the server yet. -->
+    <!--linux:live-->
+    <meta name="description" content="MegaPDF fills, checks, signs and redacts PDF forms — free, open source, on Windows, Mac, iPhone, iPad, Android and Linux. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    <!--linux:soon
+    <meta name="description" content="MegaPDF fills, checks, signs and redacts PDF forms — free, open source, on Windows, Mac, iPhone, iPad and Android, with Linux coming soon. No account, no cloud, no tracking. Open. Fix. Save. Done.">
+    linux:end-->
     <link rel="canonical" href="https://electricrv.ca/megapdf/">
     <title>MegaPDF — Fill, check &amp; sign PDFs. Free, private, everywhere.</title>
     <meta property="og:title" content="MegaPDF — Fill, check &amp; sign PDFs">
-    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Mac, iPhone, iPad and Android — Linux coming to Flathub. No account, no cloud, no tracking.">
+    <!--linux:live-->
+    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Mac, iPhone, iPad, Android and Linux. No account, no cloud, no tracking.">
+    <!--linux:soon
+    <meta property="og:description" content="Free, open-source PDF form filler for Windows, Mac, iPhone, iPad and Android, with Linux coming soon. No account, no cloud, no tracking.">
+    linux:end-->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://electricrv.ca/megapdf/">
     <meta property="og:image" content="https://electricrv.ca/megapdf/icon.png">
@@ -56,8 +67,9 @@
         .cta:hover { background: #6fd0f0; }
         .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
         .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
-        /* Store links. One chip per platform; the Linux chip is not a link until
-           the Flathub listing is live (see website/README.md). */
+        /* Store links. One chip per platform. The Linux chip links linux/ only in a
+           deploy made with --linux; otherwise it is the dashed "soon" chip
+           (see website/README.md). */
         .storelinks { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
         .storelinks a, .storelinks .soon {
             display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
@@ -154,9 +166,15 @@
                     <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
                         <span><span class="where">Get it on</span>Google Play</span>
                     </a>
+                    <!--linux:live-->
+                    <a href="linux/">
+                        <span><span class="where">Install on</span>Linux</span>
+                    </a>
+                    <!--linux:soon
                     <span class="soon">
-                        <span><span class="where">Coming to</span>Flathub</span>
+                        <span><span class="where">Coming to</span>Linux</span>
                     </span>
+                    linux:end-->
                 </div>
                 <div class="ctas">
                     <a class="cta ghost" href="https://github.com/SlyWombat/MegaPDF">View the source</a>
@@ -257,7 +275,9 @@
                 </figure>
                 <figure>
                     <img src="screenshots/linux/en/01-viewer.png" alt="MegaPDF on Linux, showing the rental agreement with two checked boxes and a signature">
-                    <figcaption>The same app on Linux — coming to Flathub</figcaption>
+                    <!--linux:live--><figcaption>The same app on Linux — <a href="linux/" style="color:inherit">how to install it</a></figcaption><!--linux:soon
+                    <figcaption>The same app on Linux — coming soon</figcaption>
+                    linux:end-->
                 </figure>
             </div>
             <div class="shots">

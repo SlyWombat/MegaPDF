@@ -12,6 +12,19 @@ Fileman/upload_files pattern as that project's server/deploy.py.
 Privacy is opt-in because it is the URL both app-store listings point at, and it
 should only change deliberately.
 
+Linux is opt-in too (#158), because it ships after the other platforms:
+
+    /usr/bin/python3 website/deploy.py --linux          # also linux/ and the APT repo
+    /usr/bin/python3 website/deploy.py --linux --snap   # ...and the Snap Store section
+
+Without --linux, linux/ and apt/ stay off the server, and every page is uploaded
+with its `<!--linux:live-->…<!--linux:soon …linux:end-->` regions resolved to the
+"soon" text, so no page links a Linux page or repository that is not there. With
+--linux the live text goes up instead, and the upload refuses to start unless
+apt/ holds a complete repository whose signature verifies against apt/megapdf.gpg
+and whose .deb is the version linux/index.html offers. `--snap` does the same for
+the `snap:` regions of linux/index.html, for when the Snap Store listing is live.
+
 `--dry-run` reads nothing but the working tree: no .env, no network, no UAPI
 call. It is the only mode that is safe to run from a machine that is not Dave's.
 
@@ -28,7 +41,11 @@ from anywhere and is not in robots.txt — it is a URL you know, not a secret.
 import argparse
 import json
 import os
+import re
+import shutil
 import ssl
+import subprocess
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -105,50 +122,136 @@ class Server:
         return out.get("status") == 1
 
 
-def plan(dest, include_privacy):
+# Directories that go up only when asked for, and the flag that asks.
+OPT_IN = {"privacy": "privacy", "linux": "linux", "apt": "linux"}
+
+REGION = r"<!--{name}:live-->(.*?)<!--{name}:soon(.*?){name}:end-->"
+
+
+def resolve(html, live):
+    """The page as it should go up: each gated region resolved to its live or its
+    "soon" text. `live` maps a region name ("linux", "snap") to whether it is live."""
+    for name, is_live in live.items():
+        html = re.sub(REGION.format(name=name),
+                      lambda m, on=is_live: m.group(1) if on else m.group(2),
+                      html, flags=re.S)
+    leftover = re.search(r"<!--\w+:(live|soon)", html)
+    if leftover:
+        raise SystemExit(f"a gated region is malformed or unknown near: {html[leftover.start():leftover.start() + 60]!r}")
+    return html
+
+
+def check_linux(snap):
+    """Refuse a --linux deploy that would publish a Linux page with no working
+    repository behind it. Returns a line describing what was checked."""
+    apt = os.path.join(SITE, "apt")
+    need = ["megapdf.gpg", "megapdf.sources", "dists/stable/InRelease",
+            "dists/stable/Release", "dists/stable/Release.gpg",
+            "dists/stable/main/binary-amd64/Packages"]
+    missing = [n for n in need if not os.path.isfile(os.path.join(apt, n))]
+    if missing:
+        raise SystemExit("--linux: apt/ is not a complete repository (missing "
+                         + ", ".join(missing) + "). Build it with tools/linux/make-apt-repo.sh "
+                         "website/megapdf/apt <the release .deb>, or download the "
+                         "MegaPDF-apt-repository artefact of the tag's Linux release run into it.")
+    keyring = os.path.join(apt, "megapdf.gpg")
+    for args in (["dists/stable/InRelease"], ["dists/stable/Release.gpg", "dists/stable/Release"]):
+        run = subprocess.run(["gpgv", "--keyring", keyring] + [os.path.join(apt, a) for a in args],
+                             capture_output=True, text=True)
+        if run.returncode != 0:
+            raise SystemExit(f"--linux: {args[0]} does not verify against apt/megapdf.gpg")
+    with open(os.path.join(apt, "dists/stable/main/binary-amd64/Packages")) as f:
+        versions = re.findall(r"^Version: (.+)$", f.read(), flags=re.M)
+    with open(os.path.join(SITE, "linux", "index.html")) as f:
+        page = f.read()
+    offered = sorted(set(re.findall(r"megapdf_([0-9][^_\s\"]*)_amd64\.deb", page)))
+    if len(offered) != 1 or offered[0] not in versions:
+        raise SystemExit(f"--linux: linux/index.html offers {offered or 'no .deb'}, "
+                         f"but the repository holds {versions}. Update the page's version.")
+    pool = os.path.join(apt, "pool/main/m/megapdf", f"megapdf_{offered[0]}_amd64.deb")
+    if not os.path.isfile(pool):
+        raise SystemExit(f"--linux: {os.path.relpath(pool, SITE)} is not in the pool")
+    return (f"apt/ verified: signed by apt/megapdf.gpg, holds {', '.join(versions)}; "
+            f"linux/index.html offers {offered[0]}; Snap section {'live' if snap else 'held back'}")
+
+
+def plan(dest, include_privacy, include_linux=False):
     """Every file under website/megapdf/, with the remote directory it goes to.
 
     Subdirectories are walked, so screenshots/linux/ (the AppStream set, #254 A1)
-    goes up with everything else. privacy/ is the one exception: it is skipped
-    unless asked for.
+    goes up with everything else. privacy/, linux/ and apt/ are the exceptions:
+    each is skipped unless its flag asks for it.
     """
+    wanted = {"privacy": include_privacy, "linux": include_linux}
     targets = []
     for root, dirs, files in os.walk(SITE):
         rel = os.path.relpath(root, SITE)
         rel = "" if rel == "." else rel
-        if rel.split(os.sep)[0] == "privacy" and not include_privacy:
+        top = rel.split(os.sep)[0]
+        if top in OPT_IN and not wanted[OPT_IN[top]]:
             dirs[:] = []
             continue
         dirs.sort()
         remote = dest if not rel else dest + "/" + rel.replace(os.sep, "/")
         for name in sorted(files):
+            if top == "apt" and name == "FINGERPRINT":
+                continue  # the build's own check, not something to serve
             targets.append((os.path.join(root, name), remote))
     return targets
+
+
+def staged(targets, live):
+    """The files as they will be uploaded: every .html resolved into a temporary
+    copy under its own name, everything else as it is on disk."""
+    tmp = tempfile.mkdtemp(prefix="megapdf-deploy-")
+    out = []
+    for i, (path, remote) in enumerate(targets):
+        if path.endswith(".html"):
+            with open(path, encoding="utf-8") as f:
+                html = resolve(f.read(), live)
+            copy_dir = os.path.join(tmp, str(i))
+            os.makedirs(copy_dir)
+            copy = os.path.join(copy_dir, os.path.basename(path))
+            with open(copy, "w", encoding="utf-8") as f:
+                f.write(html)
+            out.append((copy, remote, path))
+        else:
+            out.append((path, remote, path))
+    return tmp, out
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--privacy", action="store_true",
                     help="also upload privacy/ — the URL both store listings point at")
+    ap.add_argument("--linux", action="store_true",
+                    help="also upload linux/ and the APT repository in apt/, and link them")
+    ap.add_argument("--snap", action="store_true",
+                    help="with --linux: show the Snap Store section of linux/")
     ap.add_argument("--dry-run", action="store_true",
                     help="list what would be uploaded and where; no .env, no network")
     ap.add_argument("--dest", default=DEFAULT_DEST, metavar="PATH",
                     help=f"remote directory (default {DEFAULT_DEST})")
     args = ap.parse_args()
 
+    if args.snap and not args.linux:
+        ap.error("--snap needs --linux: the Snap section is on the Linux page")
+    linux_note = check_linux(args.snap) if args.linux else "Linux held back: linux/ and apt/ stay off the server, pages say \"coming soon\""
+    live = {"linux": args.linux, "snap": args.snap}
+
     dest = args.dest.rstrip("/")
-    targets = plan(dest, args.privacy)
+    tmp, targets = staged(plan(dest, args.privacy, args.linux), live)
     # Every remote directory below dest, parents first. dest itself is in the
     # list too: --dest may name a path that does not exist yet.
     needed = {dest}
-    for _, remote in targets:
+    for _, remote, _ in targets:
         parts = remote[len(dest):].strip("/").split("/")
         for i in range(1, len(parts) + 1):
             if parts[0]:
                 needed.add(dest + "/" + "/".join(parts[:i]))
     needed = sorted(needed, key=lambda d: (d.count("/"), d))
 
-    total = sum(os.path.getsize(p) for p, _ in targets)
+    total = sum(os.path.getsize(p) for p, _, _ in targets)
 
     if args.dry_run:
         print("DRY RUN — nothing is uploaded and nothing is contacted.\n")
@@ -158,12 +261,14 @@ def main():
         for d in needed:
             print(f"    {d}/")
         print("\n  files:")
-        for path, remote in targets:
-            print(f"    {os.path.relpath(path, SITE):<34} {os.path.getsize(path):>9,} B"
+        for path, remote, source in targets:
+            print(f"    {os.path.relpath(source, SITE):<34} {os.path.getsize(path):>9,} B"
                   f" -> {remote}/")
         print(f"\n{len(targets)} files, {total:,} B, into {len(needed)} directories"
               + (" — privacy/ included" if args.privacy else " — privacy/ untouched"))
+        print(linux_note)
         print("To do it for real, run the same command without --dry-run.")
+        shutil.rmtree(tmp, ignore_errors=True)
         return 0
 
     failures = 0
@@ -175,14 +280,16 @@ def main():
         print(f"  {'DIR ' if ok else 'FAIL'} {d}/  ({why})")
         if not ok:
             failures += 1
-    for path, remote in targets:
+    for path, remote, source in targets:
         ok = server.upload(path, remote)
-        print(f"  {'OK  ' if ok else 'FAIL'} {os.path.relpath(path, SITE):<34}"
+        print(f"  {'OK  ' if ok else 'FAIL'} {os.path.relpath(source, SITE):<34}"
               f" {os.path.getsize(path):>9,} B -> {remote}/")
         if not ok:
             failures += 1
+    shutil.rmtree(tmp, ignore_errors=True)
     print(f"\n{len(targets) - failures}/{len(targets)} uploaded to {dest}/"
           + (" — privacy/ included" if args.privacy else " — privacy/ untouched"))
+    print(linux_note)
     return 1 if failures else 0
 
 

@@ -96,7 +96,9 @@
         <h2>3. Your signature library</h2>
         <p>Signatures you draw or photograph are stored in the app's private storage on
         your device, and nowhere else. Deleting a signature in the app deletes its file;
-        uninstalling the app removes the entire library.</p>
+        uninstalling the app removes the entire library. Linux is the exception: Linux
+        package managers leave your own files alone, so the library stays in your home
+        folder until you delete it.</p>
 
         <h2>4. Unlocking a protected document</h2>
         <p>MegaPDF can open a protected PDF once you unlock it, and can set, change or
@@ -115,11 +117,20 @@
 
         <h2>6. Third parties</h2>
         <p>MegaPDF embeds no third-party services, SDKs, or advertising. The app stores
-        you install it from (Microsoft Store, Google Play, Apple's App Store, and
-        Flathub once the Linux build is published there) collect
+        you install it from (Microsoft Store, Google Play<!--linux:live-->, Apple's App Store,
+        and on Linux <!--snap:live-->the Snap Store and <!--snap:soon snap:end-->GitHub<!--linux:soon
+        and Apple's App Store linux:end-->) collect
         their own install statistics under their own privacy policies; that data is
         theirs, not ours, and none of it reaches Electric RV in a form that identifies
         you.</p>
+        <!--linux:live-->
+        <p>On Linux you can also install MegaPDF from our own APT repository at
+        electricrv.ca. When your package manager checks it for updates, our web server
+        answers like any other and keeps its ordinary access log of the request: the
+        address that asked, the time, and the file. We use that log only to keep the
+        server running, never to identify anyone. MegaPDF itself never contacts the
+        repository; your package manager does, when your system checks for updates.</p>
+        <!--linux:soon linux:end-->
 
         <h2>7. Children</h2>
         <p>MegaPDF is suitable for all ages and collects no data from anyone, children

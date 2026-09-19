@@ -17,6 +17,15 @@ machine is limited to `deploy.py --dry-run`.
   (#254 A1). The metainfo points at
   `https://electricrv.ca/megapdf/screenshots/linux/…`, so **those URLs only
   resolve after a deploy**, and a Flathub submission has to follow one.
+- `megapdf/linux/index.html` — how to install MegaPDF on Linux: the APT
+  repository, the Snap Store, the .deb, the tarball, and how updates arrive for
+  each (#158). **Only goes up with `--linux`.**
+- `megapdf/apt/` — the APT repository that `https://electricrv.ca/megapdf/apt`
+  serves. Committed: `megapdf.gpg` (the public signing key, for
+  `/etc/apt/keyrings`), `megapdf.asc` (the same, readable), `megapdf.sources`
+  (the deb822 entry), and `FINGERPRINT` (what `make-apt-repo.sh` checks the
+  signing key against; not uploaded). Generated at release time and git-ignored:
+  `dists/` and `pool/`. **Only goes up with `--linux`.**
 
 The main-page teaser block (`.megapdf-teaser` CSS + section) lives in
 `/public_html/index.html` on the server; a pre-edit backup was uploaded as
@@ -28,6 +37,8 @@ The main-page teaser block (`.megapdf-teaser` CSS + section) lives in
 /usr/bin/python3 website/deploy.py --dry-run     # lists every file and where it goes
 /usr/bin/python3 website/deploy.py               # the landing page, images and screenshots/
 /usr/bin/python3 website/deploy.py --privacy     # the same, plus privacy/
+/usr/bin/python3 website/deploy.py --linux       # also linux/ and apt/, and every page links them
+/usr/bin/python3 website/deploy.py --linux --snap  # ...and the Snap Store section on linux/
 /usr/bin/python3 website/deploy.py --dry-run --privacy --dest /public_html/megapdf-preview
 ```
 
@@ -54,6 +65,30 @@ manager when you are done with it.
 Subdirectories are walked, so `screenshots/linux/` goes up with everything else,
 and a destination directory that does not exist yet is created a level at a
 time. `--dry-run` names each directory it would create.
+
+### Linux is gated
+
+Linux ships after the other platforms, so the Linux parts of the site are held
+back until a deploy says otherwise. Every page can carry gated regions:
+
+```html
+<!--linux:live-->what goes up with --linux<!--linux:soon what goes up without it linux:end-->
+```
+
+and `snap:` regions the same way for `--snap`. A browser opening the file
+straight from the repository sees the live text (the "soon" text is inside a
+comment), which is also what a `--linux` deploy uploads. **Without `--linux`**,
+`linux/` and `apt/` stay off the server and every page goes up with its "soon"
+text: the landing page's Linux chip is the dashed *Coming to Linux* and nothing
+links a page that is not there. Today the regions are in `index.html` (both
+meta descriptions, the Linux chip, the Linux gallery caption), `privacy/`
+(§6: the Linux channels and the APT repository's server log) and `linux/`
+(everything about the Snap Store).
+
+**`--linux` refuses to start** unless `apt/` is a complete repository whose
+`InRelease` and `Release.gpg` verify against `apt/megapdf.gpg`, and whose `.deb`
+is the version `linux/index.html` offers. `--dry-run --linux` runs the same
+checks, so it is the rehearsal.
 
 ## Where the gallery images come from
 
@@ -107,7 +142,7 @@ done
 | iPhone / iPad | `https://apps.apple.com/app/id6799522972` | live — approved 2026-09-16 |
 | Mac | `https://apps.apple.com/app/id6799522972?platform=mac` | live — approved 2026-09-16 |
 | Android | `https://play.google.com/store/apps/details?id=ca.electricrv.megapdf` | live — public 2026-09-09 |
-| Linux | — | no link until the Flathub listing exists |
+| Linux | `https://electricrv.ca/megapdf/linux/` | our own page: goes up with `--linux`, on Linux's own day (below) |
 
 **Apple is one app ID for both platforms.** `6799522972` is the whole record;
 `tools/asc_publish.py` switches platform with `ASC_PLATFORM=MAC_OS` against the
@@ -178,12 +213,14 @@ last one you are linking to is up, or deploy twice.
    bump the date in the file and redeploy rather than shipping a stale one.
 6. **Tear down the preview**, if you made one.
 
-**Linux, afterwards, not on the day.** `screenshots/linux/` goes up with step 4
-like any other file, and that deploy is what makes the AppStream
-`<screenshot>` URLs resolve. The Flathub submission has to come after it —
-that dependency is written into `tools/Linux-Packaging.md` § "Before a
-submission". When Flathub is live, replace the dashed **Coming to Flathub** chip
-in `index.html` with a real link and deploy again.
+**Linux, afterwards, not on the day.** The 2.0 deploy is made *without*
+`--linux`, so the Linux chip says *Coming to Linux* and no Linux page or
+repository goes up. `screenshots/linux/` still goes up with it like any other
+file, which is what makes the AppStream `<screenshot>` URLs resolve. Linux's own
+day is its own runbook, `tools/Linux-Packaging.md` § "Going live": publish the
+draft `linux-v*` release, put the release's signed repository into `apt/`,
+`deploy.py --dry-run --linux`, then `deploy.py --linux --privacy`. Add `--snap`
+once the Snap Store listing is public.
 
 **Rolling back** is a redeploy of the previous commit: `git checkout <sha> --
 website/` then `deploy.py`. Uploads overwrite; nothing is versioned on the

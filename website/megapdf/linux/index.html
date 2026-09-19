@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!--snap:live-->
+    <meta name="description" content="Install MegaPDF on Linux: from the MegaPDF APT repository on Debian and Ubuntu, from the Snap Store, or as a .deb or a tarball. Free, open source, no account, no network connection.">
+    <!--snap:soon
+    <meta name="description" content="Install MegaPDF on Linux: from the MegaPDF APT repository on Debian and Ubuntu, or as a .deb or a tarball. Free, open source, no account, no network connection.">
+    snap:end-->
+    <link rel="canonical" href="https://electricrv.ca/megapdf/linux/">
+    <title>MegaPDF for Linux — install and update</title>
+    <link rel="icon" href="../icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0c1220; --bg2: #10233b; --card: rgba(255,255,255,.04);
+            --line: rgba(15,168,198,.22); --text: #e2e8f0; --muted: #a9b4cc;
+            --blue: #0A5BC4; --teal: #0FA8C6; --accent: #35b6e0; --code: #070c16;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: linear-gradient(135deg, var(--bg) 0%, #141c2e 55%, var(--bg2) 100%);
+            color: var(--text); font-family: 'Inter', -apple-system, sans-serif;
+            line-height: 1.6; min-height: 100vh;
+        }
+        h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+        a { color: var(--accent); }
+        .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+        header.site { padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+        header.site .wrap { display: flex; align-items: center; gap: 12px; }
+        header.site img { width: 34px; height: 34px; border-radius: 8px; }
+        header.site .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px;
+                            color: var(--text); text-decoration: none; }
+        header.site a.home { margin-left: auto; color: var(--muted); text-decoration: none; font-size: 14px; }
+        header.site a.home:hover { color: var(--text); }
+
+        .intro { padding: 48px 0 12px; }
+        .intro h1 { font-size: 38px; line-height: 1.15; margin-bottom: 12px; }
+        .intro p { color: var(--muted); font-size: 17px; max-width: 62ch; }
+        .picker { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                  gap: 14px; margin: 26px 0 8px; }
+        .picker a { display: block; background: var(--card); border: 1px solid var(--line);
+                    border-radius: 12px; padding: 16px 18px; text-decoration: none; color: var(--text); }
+        .picker a:hover { border-color: var(--accent); }
+        .picker b { font-family: 'Space Grotesk', sans-serif; display: block; font-size: 16px; }
+        .picker span { color: var(--muted); font-size: 14px; }
+
+        section.way { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+                      padding: 26px 24px; margin: 26px 0; }
+        section.way h2 { font-size: 24px; margin-bottom: 4px; }
+        section.way .for { color: var(--accent); font-size: 14px; margin-bottom: 14px; }
+        section.way h3 { font-size: 16px; margin: 20px 0 6px; }
+        section.way p, section.way li { color: var(--muted); font-size: 15px; }
+        section.way p + p { margin-top: 8px; }
+        section.way ul { padding-left: 20px; }
+        section.way strong { color: var(--text); }
+        pre {
+            background: var(--code); border: 1px solid rgba(255,255,255,.08); border-radius: 10px;
+            padding: 14px 16px; margin: 8px 0 4px; overflow-x: auto; max-width: 100%;
+            font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+            font-size: 13.5px; line-height: 1.55; color: #d7e3f4;
+        }
+        code { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 0.92em;
+               background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 5px; color: var(--text);
+               overflow-wrap: anywhere; }
+        pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+        .fpr { font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; color: var(--text);
+               font-size: 14px; overflow-wrap: anywhere; }
+        .note { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; margin-top: 14px; }
+
+        footer { border-top: 1px solid rgba(255,255,255,.06); padding: 26px 0 40px; margin-top: 30px;
+                 color: var(--muted); font-size: 13.5px; }
+        footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+        footer a { color: var(--muted); }
+        footer a:hover { color: var(--text); }
+        @media (max-width: 640px) {
+            .intro { padding: 32px 0 8px; }
+            .intro h1 { font-size: 29px; }
+            section.way { padding: 20px 16px; }
+            pre { font-size: 12.5px; padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="site">
+        <div class="wrap">
+            <img src="../icon.png" alt="">
+            <a class="name" href="../">MegaPDF</a>
+            <a class="home" href="/">ElectricRV home</a>
+        </div>
+    </header>
+
+    <main class="wrap">
+        <section class="intro">
+            <h1>MegaPDF for Linux</h1>
+            <p>The same app as on Windows, the Mac, iPhone and Android: fill in a form,
+               check the boxes, sign it, redact what has to go, and save it back. Version
+               2.0.0, for 64-bit PCs (x86-64). ARM computers aren't supported yet.</p>
+            <div class="picker">
+                <a href="#apt"><b>Debian, Ubuntu, Mint, Pop!_OS</b>
+                    <span>Add the MegaPDF repository. Updates arrive with your system's.</span></a>
+                <!--snap:live-->
+                <a href="#snap"><b>Any distribution with Snap</b>
+                    <span>Install from the Snap Store. Updates are automatic.</span></a>
+                <!--snap:soon snap:end-->
+                <a href="#tarball"><b>Anything else</b>
+                    <span>Unpack the tarball into your home folder. No root needed.</span></a>
+            </div>
+        </section>
+
+        <section class="way" id="apt">
+            <h2>The MegaPDF APT repository</h2>
+            <p class="for">Recommended for Debian 12 or later, Ubuntu 22.04 or later, and the
+               distributions built on them</p>
+            <p>Paste these into a terminal. They add MegaPDF's signing key and repository,
+               then install the app:</p>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://electricrv.ca/megapdf/apt/megapdf.gpg \
+  | sudo tee /etc/apt/keyrings/megapdf.gpg > /dev/null
+curl -fsSL https://electricrv.ca/megapdf/apt/megapdf.sources \
+  | sudo tee /etc/apt/sources.list.d/megapdf.sources > /dev/null
+sudo apt update
+sudo apt install megapdf</code></pre>
+            <p>MegaPDF then appears in your applications menu, PDF files offer it under
+               <strong>Open With</strong>, and <code>megapdf file.pdf</code> works from a terminal.
+               If <code>curl</code> is missing, install it first with <code>sudo apt install curl</code>.</p>
+
+            <h3>Updates</h3>
+            <p>They arrive with your system's own updates, in Software Updater or with
+               <code>sudo apt update &amp;&amp; sudo apt upgrade</code>. There's nothing to do
+               in MegaPDF itself.</p>
+
+            <h3>Check the signing key</h3>
+            <p>The repository is signed, and apt refuses anything the key didn't sign. To
+               confirm you have the right key:</p>
+<pre><code>gpg --show-keys /etc/apt/keyrings/megapdf.gpg</code></pre>
+            <p>It should say <em>MegaPDF APT repository</em>, with this fingerprint:</p>
+            <p class="fpr">1982 176F F9E6 14A7 C60D 20D1 0097 49E2 44B5 848B</p>
+
+            <h3>Uninstall</h3>
+<pre><code>sudo apt remove megapdf</code></pre>
+            <p>To stop getting updates from the repository as well:</p>
+<pre><code>sudo rm /etc/apt/sources.list.d/megapdf.sources /etc/apt/keyrings/megapdf.gpg
+sudo apt update</code></pre>
+        </section>
+
+        <!--snap:live-->
+        <!-- SNAP SECTION: the Snap Store package is set up separately. Adjust the command,
+             the store link and the requirements to match its final listing. -->
+        <section class="way" id="snap">
+            <h2>The Snap Store</h2>
+            <p class="for">For Ubuntu, and any distribution with <code>snapd</code></p>
+            <p>Find MegaPDF in Ubuntu's App Center, or in a terminal:</p>
+<pre><code>sudo snap install megapdf</code></pre>
+            <h3>Updates</h3>
+            <p>Automatic. The Snap Store installs new versions in the background.</p>
+            <h3>Uninstall</h3>
+<pre><code>sudo snap remove megapdf</code></pre>
+        </section>
+        <!--snap:soon snap:end-->
+
+        <section class="way" id="deb">
+            <h2>Just the .deb</h2>
+            <p class="for">Debian and Ubuntu, if you'd rather not add a repository</p>
+            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0/megapdf_2.0.0_amd64.deb">megapdf_2.0.0_amd64.deb</a>
+               and install it, which also pulls in anything it needs:</p>
+<pre><code>sudo apt install ./megapdf_2.0.0_amd64.deb</code></pre>
+            <div class="note">
+                <p><strong>This copy won't update itself.</strong> For updates, add the
+                   repository as shown <a href="#apt">above</a>. It takes over this install
+                   with no need to remove it first.</p>
+            </div>
+            <h3>Uninstall</h3>
+<pre><code>sudo apt remove megapdf</code></pre>
+        </section>
+
+        <section class="way" id="tarball">
+            <h2>The tarball</h2>
+            <p class="for">Any distribution. Installs into your home folder, no root needed.</p>
+            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0/megapdf-linux-x64-2.0.0.tar.gz">megapdf-linux-x64-2.0.0.tar.gz</a>,
+               then:</p>
+<pre><code>tar -xzf megapdf-linux-x64-2.0.0.tar.gz
+cd megapdf-linux-x64-2.0.0
+./install.sh</code></pre>
+            <p>That puts MegaPDF in <code>~/.local</code>, in your applications menu, and on
+               your <code>PATH</code> as <code>megapdf</code>. It needs glibc 2.35 or later
+               and the ICU, fontconfig and X11 libraries, which almost every desktop
+               already has.</p>
+            <h3>Updates</h3>
+            <p>MegaPDF doesn't check for them: it makes no network connection at all.
+               Come back to this page, download the newer tarball and run its
+               <code>./install.sh</code>, which replaces the old version. About MegaPDF has a
+               link here.</p>
+            <h3>Uninstall</h3>
+            <p>From the unpacked folder:</p>
+<pre><code>./uninstall.sh</code></pre>
+        </section>
+
+        <section class="way" id="checksums">
+            <h2>Checksums</h2>
+            <p>Each download on the
+               <a href="https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.0.0">release page</a>
+               has a <code>.sha256</code> file beside it. Save both in the same folder and run:</p>
+<pre><code>sha256sum -c megapdf_2.0.0_amd64.deb.sha256</code></pre>
+            <p>Packages from the APT repository<!--snap:live--> and the Snap Store<!--snap:soon snap:end-->
+               are checked automatically.</p>
+        </section>
+
+        <section class="way" id="data">
+            <h2>Your signatures and settings</h2>
+            <p>They live in <code>~/.local/share/MegaPDF</code>, and uninstalling doesn't
+               touch them, so reinstalling brings them back. Delete that folder to remove
+               them. MegaPDF sends nothing anywhere; see the <a href="../privacy/">privacy policy</a>.</p>
+        </section>
+    </main>
+
+    <footer>
+        <div class="wrap">
+            <span>© 2026 Electric RV</span>
+            <a href="../">MegaPDF</a>
+            <a href="../privacy/">Privacy policy</a>
+            <a href="https://github.com/SlyWombat/MegaPDF">GitHub</a>
+        </div>
+    </footer>
+</body>
+</html>
