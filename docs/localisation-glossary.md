@@ -41,6 +41,7 @@ Conventions (OQLF, Canadian French):
 | Add | Ajouter | |
 | Clear | Effacer | |
 | Delete | Supprimer | |
+| Delete (the key) | Suppr (Windows) / Supprimer (Mac) | the key's own name on each keyboard: a French Windows keycap reads *Suppr*, and « Supprimer la retire » would read as *deleting removes it* (#242) |
 | Remove | Retirer | from a library or a page |
 | Discard | Abandonner | |
 | Don't save | Ne pas enregistrer | |
@@ -140,7 +141,7 @@ Conventions (OQLF, Canadian French):
 | Opening… | Ouverture… | busy strip (#145) |
 | Checking the saved file… | Vérification du fichier enregistré… | busy strip, while a save is read back (#145) |
 | Checking this page… | Vérification de cette page… | page spinner, the #139 check and the text-edit check (#145) |
-| Applying… | Application de la modification… | page spinner while a change is made (#145) |
+| Applying… | Modification en cours… | page spinner while a change is made (#145); « Application… » alone would read as *the app*, and the long form was three times the English on the smallest label in the app (#242) |
 | Searching… | Recherche… | busy strip (#145) |
 | Making a smaller copy… | Création d'une copie réduite… | busy strip, shrink for email (#145) |
 | Preparing to print… | Préparation de l'impression… | busy strip (#145) |
@@ -173,10 +174,10 @@ Conventions (OQLF, Canadian French):
 | Marked for redaction | Marqué pour caviardage | #173 |
 | Remove content from the file | Retirer du contenu du fichier | #173. "Retirer" (take out), not "supprimer" (delete), because the point is that it leaves the file |
 | Cover an area — this doesn't remove what's under it | Masquer une zone : ce qui est dessous n'est pas retiré | #173. The whiteout tooltip, reworded so the tool says what it does |
-| Whiteout covers — it doesn't remove | Le correcteur masque, il ne retire rien | #173 first-use hint |
+| Whiteout covers — it doesn't remove | Le correcteur masque sans rien retirer | #173 first-use hint; no comma splice (#242) |
 | Save as a copy | Enregistrer une copie | #173 |
 | Overwrite the original | Remplacer l'original | #173 |
-| -redacted | -caviarde | #173 file-name suffix; no accent, because it is a file name |
+| -redacted | -caviardé | #173 file-name suffix. With its accent, like the app's other suggested names (`{0} - modifié`, `{0} - réduit`); without it it reads as the verb *il caviarde* (#242) |
 | {0} areas redacted: {1} | {0} zones caviardées : {1} | #173 summary after saving |
 | {0} off | {0} : désactivé | #268, Windows: spoken when Add text, Whiteout or Redact turns off; {0} is the tool's label |
 | Nothing was removed | Rien n'a été retiré | #173, when a redaction fails closed |
@@ -186,7 +187,7 @@ Conventions (OQLF, Canadian French):
 | The notices file is missing from this build. | Le fichier des avis est absent de cette version. | #176 |
 | Window | Fenêtre | #176, macOS menu bar |
 | Help | Aide | #176, macOS menu bar |
-| Minimize | Réduire | #176, macOS Window menu; the same word as Shrink, as in macOS itself |
+| Minimize | Minimiser | #176, macOS Window menu. macOS's own word, read from AppKit's MenuCommands.loctable (fr and fr_CA alike) on the Mac mini, 2026-09-19 (#242) |
 | Zoom | Zoom | #176, macOS Window menu; the same word in French |
 | Hide {0} | Masquer {0} | #191, macOS app menu. These five are macOS's own words, copied from TextEdit's Edit.loctable rather than translated — fr and fr-CA are identical there |
 | Hide Others | Masquer les autres | #191 |

@@ -81,10 +81,10 @@
     <string name="security_unlock_ellipsis">Déverrouiller…</string>
     <string name="security_password_menu">Mot de passe…</string>
     <string name="security_password_title">Mot de passe du document</string>
-    <string name="security_password_restricted_body">Le propriétaire de ce document l\'a restreint. Sans le mot de passe du propriétaire, son mot de passe ne peut pas être défini, modifié ni retiré.</string>
+    <string name="security_password_restricted_body">Le propriétaire de ce document a restreint ce qu\'on peut en faire. Sans le mot de passe du propriétaire, son mot de passe ne peut pas être défini, modifié ni retiré.</string>
     <string name="security_set_title">Définir un mot de passe</string>
-    <string name="security_set_body">Toute personne qui ouvre ce document devra entrer ce mot de passe. Le définir enregistre le document.</string>
-    <string name="security_change_body">Ce document est protégé par un mot de passe. Le modifier ou le retirer enregistre le document.</string>
+    <string name="security_set_body">Toute personne qui ouvre ce document devra entrer ce mot de passe. Le document sera enregistré au passage.</string>
+    <string name="security_change_body">Ce document est protégé par un mot de passe. Si vous le modifiez ou le retirez, le document sera enregistré au passage.</string>
     <string name="security_new_password">Nouveau mot de passe</string>
     <string name="security_confirm_password">Confirmer le mot de passe</string>
     <string name="security_password_empty">Entrez un mot de passe.</string>
@@ -112,7 +112,7 @@
     <string name="body_text_hint">Modifiez cette ligne. La taille et la police restent les mêmes.</string>
     <string name="body_text_substituted">La police d\'origine ne pouvait pas afficher ce texte ; une police standard semblable a été utilisée.</string>
     <string name="body_text_scanned">Cette page est une image numérisée ; son texte ne peut pas être modifié.</string>
-    <string name="body_text_layout">Le texte de cette page ne peut pas être modifié sans déranger sa mise en page.</string>
+    <string name="body_text_layout">Le texte de cette page ne peut pas être modifié sans perturber sa mise en page.</string>
     <string name="body_text_layout_render">Cette ligne ne peut pas être modifiée sans changer l\'apparence d\'autres parties de la page.</string>
     <string name="body_text_layout_text_moves">Cette ligne ne peut pas être modifiée sans déplacer du texte ailleurs sur la page.</string>
     <string name="page_rewrite_warning_title">Modifier cette page ?</string>
@@ -177,7 +177,7 @@
     <string name="busy_verifying_save">Vérification du fichier enregistré…</string>
     <string name="busy_searching">Recherche…</string>
     <string name="busy_checking_page">Vérification de cette page…</string>
-    <string name="busy_applying">Application de la modification…</string>
+    <string name="busy_applying">Modification en cours…</string>
     <string name="search_failed">Impossible de rechercher dans ce document.</string>
     <string name="edit_failed">Impossible d\'effectuer cette modification.</string>
     <string name="signature_move_failed">Impossible de déplacer cette signature</string>
@@ -200,7 +200,7 @@
     <!-- #173 — new French, for francophone review -->
     <string name="redact_overwrite">Remplacer l\'original</string>
     <!-- Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review -->
-    <string name="redacted_file_suffix">-caviarde</string>
+    <string name="redacted_file_suffix">-caviardé</string>
     <!-- Shown after saving (#173); {0} is a list such as "41 characters, 1 image". #173 — new French, for francophone review -->
     <string name="redact_summary_one">1 zone caviardée&#160;: %1$s</string>
     <!-- #173 — new French, for francophone review -->
@@ -226,7 +226,7 @@
     <!-- Shown when a redaction fails closed (#173). #173 — new French, for francophone review -->
     <string name="redact_refused_title">Rien n\'a été retiré</string>
     <!-- Refusal body (#173); {0} is a page number. #173 — new French, for francophone review -->
-    <string name="redact_refused_body">MegaPDF n\'a pas pu tout retirer à la page %1$s ; rien n\'a été retiré et le fichier est resté intact.</string>
+    <string name="redact_refused_body">MegaPDF n\'a pas pu tout retirer de la page %1$s ; rien n\'a été retiré et le fichier est resté intact.</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redact_refused_font">Le texte à cet endroit utilise une police que MegaPDF ne peut pas redessiner autour de vos marques.</string>
     <!-- #173 — new French, for francophone review -->

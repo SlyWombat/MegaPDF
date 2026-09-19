@@ -87,13 +87,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "-caviarde"
+            "value" : "-caviardé"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "-caviarde"
+            "value" : "-caviardé"
           }
         }
       }
@@ -297,13 +297,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder."
+            "value" : "Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le retrouver par une recherche. Pour le retirer du fichier, utilisez Caviarder."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder."
+            "value" : "Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le retrouver par une recherche. Pour le retirer du fichier, utilisez Caviarder."
           }
         }
       }
@@ -313,13 +313,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Application de la modification…"
+            "value" : "Modification en cours…"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Application de la modification…"
+            "value" : "Modification en cours…"
           }
         }
       }
@@ -1267,13 +1267,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MegaPDF n'a pas pu tout retirer à la page {0} ; rien n'a été retiré et le fichier est resté intact."
+            "value" : "MegaPDF n'a pas pu tout retirer de la page {0} ; rien n'a été retiré et le fichier est resté intact."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MegaPDF n'a pas pu tout retirer à la page {0}; rien n'a été retiré et le fichier est resté intact."
+            "value" : "MegaPDF n'a pas pu tout retirer de la page {0}; rien n'a été retiré et le fichier est resté intact."
           }
         }
       }
@@ -1686,13 +1686,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mot de passe changé."
+            "value" : "Mot de passe modifié."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mot de passe changé."
+            "value" : "Mot de passe modifié."
           }
         }
       }
@@ -2668,13 +2668,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La sécurité de ce document ne le permet pas sans le mot de passe du propriétaire."
+            "value" : "Les réglages de sécurité de ce document ne permettent pas cette action sans le mot de passe du propriétaire."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La sécurité de ce document ne le permet pas sans le mot de passe du propriétaire."
+            "value" : "Les réglages de sécurité de ce document ne permettent pas cette action sans le mot de passe du propriétaire."
           }
         }
       }
@@ -2748,13 +2748,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le texte de cette page ne peut pas être modifié sans déranger sa mise en page."
+            "value" : "Le texte de cette page ne peut pas être modifié sans perturber sa mise en page."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le texte de cette page ne peut pas être modifié sans déranger sa mise en page."
+            "value" : "Le texte de cette page ne peut pas être modifié sans perturber sa mise en page."
           }
         }
       }
@@ -2957,13 +2957,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le correcteur masque, il ne retire rien"
+            "value" : "Le correcteur masque sans rien retirer"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Le correcteur masque, il ne retire rien"
+            "value" : "Le correcteur masque sans rien retirer"
           }
         }
       }

@@ -37,7 +37,7 @@
     <value>Options de la signature</value>
   </data>
   <data name="AddFromImageLabel.Text" xml:space="preserve">
-    <value>D'une photo</value>
+    <value>À partir d'une photo</value>
   </data>
   <data name="TypeSignatureLabel.Text" xml:space="preserve">
     <value>Taper</value>
@@ -151,7 +151,7 @@
     <value>Choisir les applications par défaut</value>
   </data>
   <data name="RestrictedNoticeBar.Message" xml:space="preserve">
-    <value>Le propriétaire de ce document l'a restreint ; certains outils ne sont pas disponibles.</value>
+    <value>Le propriétaire de ce document a restreint ce qu'on peut en faire ; certains outils ne sont pas disponibles.</value>
   </data>
   <data name="UnlockButton.Content" xml:space="preserve">
     <value>Déverrouiller…</value>
@@ -229,10 +229,10 @@
     <comment>#268: spoken when Add text, Whiteout or Redact turns off; {0} is the tool's toolbar label</comment>
   </data>
   <data name="PlaceSignatureHint" xml:space="preserve">
-    <value>Cliquez sur la page pour placer « {0} »</value>
+    <value>Cliquez sur la page pour placer «&#160;{0}&#160;»</value>
   </data>
   <data name="WhiteoutHint" xml:space="preserve">
-    <value>Glissez sur la zone à masquer. Échap pour annuler. Masquer ne retire rien&#160;: Caviarder le fait</value>
+    <value>Glissez sur la zone à masquer. Échap pour annuler. Masquer ne retire rien ; pour retirer, utilisez Caviarder</value>
   </data>
   <data name="TextBoxHint" xml:space="preserve">
     <value>Cliquez à l'endroit où placer le nouveau texte. Échap pour annuler</value>
@@ -257,7 +257,7 @@
     <value>Impossible d'enregistrer</value>
   </data>
   <data name="TrySaveAsHint" xml:space="preserve">
-    <value>Essayez « Enregistrer sous » pour enregistrer une copie.</value>
+    <value>Essayez «&#160;Enregistrer sous&#160;» pour enregistrer une copie.</value>
   </data>
   <data name="PdfDocumentFilter" xml:space="preserve">
     <value>Document PDF</value>
@@ -298,7 +298,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Ce mot de passe est incorrect. Réessayez.</value>
   </data>
   <data name="PasswordPrompt" xml:space="preserve">
-    <value>« {0} » est protégé. Entrez son mot de passe pour l'ouvrir.</value>
+    <value>«&#160;{0}&#160;» est protégé. Entrez son mot de passe pour l'ouvrir.</value>
   </data>
   <data name="PasswordRequiredTitle" xml:space="preserve">
     <value>Mot de passe requis</value>
@@ -318,7 +318,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Déverrouiller le document</value>
   </data>
   <data name="UnlockPrompt" xml:space="preserve">
-    <value>Le propriétaire de « {0} » a restreint ce qu'on peut en faire. Entrez le mot de passe du propriétaire pour utiliser tous les outils.</value>
+    <value>Le propriétaire de «&#160;{0}&#160;» a restreint ce qu'on peut en faire. Entrez le mot de passe du propriétaire pour utiliser tous les outils.</value>
   </data>
   <data name="UnlockWrong" xml:space="preserve">
     <value>Ce mot de passe n'a pas déverrouillé le document. Réessayez.</value>
@@ -339,7 +339,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Modifier le mot de passe</value>
   </data>
   <data name="SetPasswordBody" xml:space="preserve">
-    <value>Toute personne qui ouvre « {0} » aura besoin de ce mot de passe. MegaPDF ne peut pas le récupérer s'il est oublié.</value>
+    <value>Toute personne qui ouvre «&#160;{0}&#160;» aura besoin de ce mot de passe. MegaPDF ne peut pas le récupérer s'il est oublié.</value>
   </data>
   <data name="NewPasswordPlaceholder" xml:space="preserve">
     <value>Nouveau mot de passe</value>
@@ -357,7 +357,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Mot de passe du document</value>
   </data>
   <data name="ProtectedBody" xml:space="preserve">
-    <value>« {0} » est protégé par un mot de passe. Vous pouvez le modifier ou le retirer.</value>
+    <value>«&#160;{0}&#160;» est protégé par un mot de passe. Vous pouvez le modifier ou le retirer.</value>
   </data>
   <data name="ChangePasswordEllipsis" xml:space="preserve">
     <value>Modifier le mot de passe…</value>
@@ -475,7 +475,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Ce texte fait partie d'une image numérisée et ne peut pas être modifié. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
   </data>
   <data name="ErrorLayoutWouldChange" xml:space="preserve">
-    <value>Le texte de cette page ne peut pas être modifié sans déranger sa mise en page&#160;: le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
+    <value>Le texte de cette page ne peut pas être modifié sans perturber sa mise en page&#160;: le réécrire décalerait l'espacement d'autres textes. Masquez-le avec du correcteur et ajoutez un nouveau texte.</value>
   </data>
   <data name="ErrorLayoutRenderWouldChange" xml:space="preserve">
     <value>Cette ligne ne peut pas être modifiée sans changer l'apparence d'autres parties de la page. Masquez-la avec du correcteur et ajoutez un nouveau texte.</value>
@@ -566,13 +566,13 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>UIA localized control type of the keyboard focus ring; lower case, like "button"</comment>
   </data>
   <data name="SignatureSelectedKeyHint" xml:space="preserve">
-    <value>Signature sélectionnée. Les flèches la déplacent, Supprimer la retire, Échap la désélectionne.</value>
+    <value>Signature sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la désélectionne.</value>
   </data>
   <data name="TextBoxSelectedKeyHint" xml:space="preserve">
-    <value>Texte sélectionné. Les flèches le déplacent, Entrée le modifie, Supprimer le retire, Échap le désélectionne.</value>
+    <value>Texte sélectionné. Les flèches le déplacent, Entrée le modifie, Suppr le retire, Échap le désélectionne.</value>
   </data>
   <data name="CoverSelectedKeyHint" xml:space="preserve">
-    <value>Correcteur sélectionné. Supprimer le retire, Échap le désélectionne.</value>
+    <value>Correcteur sélectionné. Suppr le retire, Échap le désélectionne.</value>
   </data>
   <data name="PlaceSignatureKeyHint" xml:space="preserve">
     <value>Avec Tab, allez à l'endroit où placer la signature, puis appuyez sur Entrée.</value>
@@ -744,7 +744,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>Page spinner while the page check runs before a change (#139, #145)</comment>
   </data>
   <data name="BusyApplying" xml:space="preserve">
-    <value>Application de la modification…</value>
+    <value>Modification en cours…</value>
     <comment>Page spinner while a change is applied (#145)</comment>
   </data>
   <data name="BusySearching" xml:space="preserve">
@@ -788,7 +788,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Impossible de trouver ce fichier</value>
   </data>
   <data name="RecentMissingBody" xml:space="preserve">
-    <value>« {0} » ne se trouve plus dans {1}. Le fichier a peut-être été déplacé, renommé ou supprimé.</value>
+    <value>«&#160;{0}&#160;» ne se trouve plus dans {1}. Le fichier a peut-être été déplacé, renommé ou supprimé.</value>
   </data>
   <data name="RemoveFromRecent" xml:space="preserve">
     <value>Retirer des récents</value>
@@ -814,7 +814,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>Toolbar (#173): tooltip. #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactHint" xml:space="preserve">
-    <value>Glissez sur ce qui doit être retiré, sélectionnez du texte ou appuyez sur Entrée sur l’élément ciblé. Échap pour annuler</value>
+    <value>Glissez sur ce qui doit être retiré, sélectionnez du texte ou appuyez sur Entrée sur l'élément actif. Échap pour annuler</value>
     <comment>Status hint while the Redact tool is armed (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactMarkName" xml:space="preserve">
@@ -854,7 +854,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>#173 — new French, for francophone review</comment>
   </data>
   <data name="RedactedFileSuffix" xml:space="preserve">
-    <value>-caviarde</value>
+    <value>-caviardé</value>
     <comment>Appended to the file name offered by Save as a copy (#173); no accents — it is a file name. #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactSummaryOne" xml:space="preserve">
@@ -906,7 +906,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>Shown when a redaction fails closed (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactRefusedBody" xml:space="preserve">
-    <value>MegaPDF n'a pas pu tout retirer à la page {0} ; rien n'a été retiré et le fichier est resté intact.</value>
+    <value>MegaPDF n'a pas pu tout retirer de la page {0} ; rien n'a été retiré et le fichier est resté intact.</value>
     <comment>Refusal body (#173); {0} is a page number. #173 — new French, for francophone review</comment>
   </data>
   <data name="RedactRefusedFont" xml:space="preserve">
@@ -934,11 +934,11 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>The fail-closed case the rehearsal says cannot happen (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="WhiteoutCoversOnlyTitle" xml:space="preserve">
-    <value>Le correcteur masque, il ne retire rien</value>
+    <value>Le correcteur masque sans rien retirer</value>
     <comment>First-use hint on the Whiteout tool (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="WhiteoutCoversOnlyBody" xml:space="preserve">
-    <value>Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le chercher. Pour le retirer du fichier, utilisez Caviarder.</value>
+    <value>Ce qui est sous un correcteur reste dans le fichier, et une autre application peut le copier ou le retrouver par une recherche. Pour le retirer du fichier, utilisez Caviarder.</value>
     <comment>First-use hint body (#173). #173 — new French, for francophone review</comment>
   </data>
   <data name="PageRegionDescriptionWithContent" xml:space="preserve">

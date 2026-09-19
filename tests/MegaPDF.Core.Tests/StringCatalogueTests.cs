@@ -215,6 +215,39 @@ public class StringCatalogueTests
             + string.Join("\n", offenders));
     }
 
+    /// <summary>
+    /// Guillemets hold their words with non-breaking spaces: « {0} », never « {0} ».
+    ///
+    /// The glossary's second rule, and the same failure as the colon: a plain space
+    /// lets a line break fall between « and the name it quotes. Android and iOS had
+    /// it right; Windows and the Mac had six strings each without it until the
+    /// French review (#242) counted them.
+    /// </summary>
+    [Fact]
+    public void FrenchGuillemetsHoldTheirWordsWithNonBreakingSpaces()
+    {
+        var offenders = new List<string>();
+        void Check(string label, Dictionary<string, string> values)
+        {
+            foreach (var (key, value) in values)
+                if (value.Contains("« ", StringComparison.Ordinal) || value.Contains(" »", StringComparison.Ordinal))
+                    offenders.Add($"{label} {key}: {value}");
+        }
+
+        foreach (var language in new[] { "fr-CA", "fr-FR" })
+            Check($"Windows {language}", ResxValues($"src/MegaPDF.App/Strings/{language}/Resources.resw"));
+        foreach (var culture in new[] { "fr-CA", "fr" })
+            Check($"macOS {culture}", ResxValues($"src/MegaPDF.Avalonia/Strings/Strings.{culture}.resx"));
+        foreach (var folder in new[] { "values-fr-rCA", "values-fr" })
+            Check($"Android {folder}", AndroidValues($"android/app/src/main/res/{folder}/strings.xml"));
+        foreach (var localization in new[] { "fr-CA", "fr" })
+            Check($"iOS {localization}", IosValues(localization));
+
+        Assert.True(offenders.Count == 0,
+            "French wants U+00A0 inside guillemets, not a plain space (docs/localisation-glossary.md):\n"
+            + string.Join("\n", offenders));
+    }
+
     /// <summary>Anything a catalogue substitutes into, in any of the four dialects of placeholder.</summary>
     private static readonly Regex Placeholders =
         new(@"\{[^}]*\}|%(\d+\$)?(lld|ld|[sd@])", RegexOptions.Compiled);
