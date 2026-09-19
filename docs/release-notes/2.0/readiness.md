@@ -188,8 +188,13 @@ words in the long notes are corrected (`08c3865`). Every block recounted and equ
 stated count: App Store 1760 / 2100 / 2100 of 4000; Mac 2402 / 2886 / 2886 of 4000;
 Microsoft 1483 / 1479 / 1479 of 1500; Play 495 / 489 / 489 of 500. `gen_strings.py fr-fr`,
 `gen_listing_copy.py` and `fix_french_spacing.py --check` all leave the tree clean.
-**The 19 *should* and 23 *taste* items are untouched and wait for the human reviewer**;
-#242 stays open as the record and marks each fixed row with its SHA.
+The human review then signed the French off, and on Dave's word (2026-09-18, 23:55 EDT)
+**the rest of the review was implemented too**, in PR #242: all 19 *should* items and 15 of
+the 23 *taste* items (app strings `688d835`, store copy and listings `f1a07b4`; the review
+marks every row applied or skipped, with the reason). Recounted: App Store 1760 / 2130 /
+2130 of 4000; Mac 2402 / 2910 / 2908 of 4000; Microsoft 1483 / 1485 / 1485 of 1500; Play
+495 / 492 / 492 of 500. One store capture changes: the Mac redact pose in both French sets,
+where the hint now says « l'élément actif ».
 
 ### Deliberately deferred — recorded, not forgotten
 
