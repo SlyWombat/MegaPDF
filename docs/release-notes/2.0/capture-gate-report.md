@@ -200,11 +200,14 @@ you can review those yourself."* The French was signed off by the human reviewer
 the same evening. This section covers the Mac, iOS and Microsoft sets. The two Play
 sets belong to the Android track, which is re-shooting its one stale `redact` pose.
 
-**The French verdicts here are provisional.** Later that night Dave asked for the
+**One French pose changes after this read.** Later that night Dave asked for the
 Fable French review's recommendations (#242) to be applied, so fr-CA and fr-FR
-strings change on every platform, including the redaction copy. Any fr-CA or fr-FR
-pose that shows a changed string is re-shot from a build that includes that merge,
-and only then are the French sets final. The English verdicts below stand.
+strings change on every platform. The French agent's list of changed strings
+that are visible in a store capture has one entry: the Mac redact hint, where
+« …sur l'élément ciblé… » becomes « …sur l'élément actif… ». That puts
+`light-05-redact.png` in fr-CA and fr-FR in the re-shoot, from a Mac build that
+includes the #242 merge. Every other pose and every preview clip is unaffected,
+and English doesn't change.
 
 **How it was read.** Every listing image was opened: 18 Mac, 36 iOS listing, 30 iOS
 review and 15 Microsoft. Each pose was also read with en, fr-CA and fr-FR side by
@@ -231,8 +234,8 @@ Mac and iOS sets are from `476ce15`; the Microsoft set is from the rename's tree
 
 | set | verdict |
 |---|---|
-| **Mac App Store**, 18 | **English ready; French pending the #242 strings.** It leads with a filled, signed agreement. Text, search, the signature picker and redaction follow, then home. That is the story the copy tells, in its order. fr-CA and fr-FR read naturally ("Caviarder", "Masquer", "Ajouter du texte" and "100 %" with its space all fit the toolbar). The weakest image is `light-06-home`: the empty state's grey wall reads like a dimmed modal. It is last in the set and it is what the app looks like. |
-| **Microsoft Store**, 15 | **English ready; French pending the #242 strings.** Edit text, checkbox, signature, shrink and add text in all three languages, and the title bar reads *— MegaPDF*. The French is consistent with the glossary: *Correcteur* is the toolbar noun and *masquer* the verb. The shrink dialog is correct in each language (fr: "Avant : 3,2 Mo, après : 0,1 Mo", "courriel"). |
+| **Mac App Store**, 18 | **Ready, except `light-05-redact` in fr-CA and fr-FR, which is re-shot for #242.** It leads with a filled, signed agreement. Text, search, the signature picker and redaction follow, then home. That is the story the copy tells, in its order. fr-CA and fr-FR read naturally ("Caviarder", "Masquer", "Ajouter du texte" and "100 %" with its space all fit the toolbar). The weakest image is `light-06-home`: the empty state's grey wall reads like a dimmed modal. It is last in the set and it is what the app looks like. |
+| **Microsoft Store**, 15 | **Ready.** Edit text, checkbox, signature, shrink and add text in all three languages, and the title bar reads *— MegaPDF*. The French is consistent with the glossary: *Correcteur* is the toolbar noun and *masquer* the verb. The shrink dialog is correct in each language (fr: "Avant : 3,2 Mo, après : 0,1 Mo", "courriel"). |
 | **App Store (iOS)**, 36 + 30 | **Two defects in the listing, both on screen in every set.** Neither is a capture fault, and neither is caught by a comparison, because each is in every image. See below. The composition and the French are otherwise good: the demo person, keyboards per locale (Canadian QWERTY with ç/è/à against French AZERTY) and the dark review poses all have good contrast. |
 
 ### Found on this read
