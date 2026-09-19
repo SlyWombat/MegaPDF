@@ -12,11 +12,29 @@ public static class AtomicFileWriter
         var directory = Path.GetDirectoryName(Path.GetFullPath(destinationPath))
             ?? throw new ArgumentException($"Path has no directory: {destinationPath}", nameof(destinationPath));
 
-        var tempPath = Path.Combine(directory, $".{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.megapdf-tmp");
+        var name = $"{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.megapdf-tmp";
+        var tempPath = Path.Combine(directory, "." + name);
 
         try
         {
-            using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            FileStream created;
+            try
+            {
+                created = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The folder takes the document but not a hidden file beside it. That is
+                // the snap's `home` plug exactly (#158): AppArmor lets a confined app write
+                // non-hidden files at the top of the home folder and nothing hidden there,
+                // so ~/form.pdf could be opened but never saved. The same swap under a
+                // visible name keeps the save atomic. Anywhere a hidden file is refused
+                // for some other reason this is refused too, and the save fails as before.
+                tempPath = Path.Combine(directory, name);
+                created = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            }
+
+            using (var stream = created)
             {
                 writeContent(stream);
                 stream.Flush(flushToDisk: true);

@@ -1,0 +1,91 @@
+# The MegaPDF snap (#158, Dave 2026-09-19: the Snap Store as a Linux channel).
+#
+# A TEMPLATE. tools/linux/build-snap.sh fills in the three at-sign fields below and
+# writes the result to snap/snapcraft.yaml inside a build context it assembles. Nothing
+# is built from this directory directly:
+#
+#   version      the tree's VERSION file, which build-linux-app.sh took from the csproj
+#   summary      the English <summary> of the AppStream metainfo
+#   description  the English <description> of the same metainfo, with the one
+#                paragraph that is only true of the Flatpak replaced by SNAP_PERMISSIONS
+#                in make-snapcraft-yaml.py (see there for why)
+#
+# NOT uploaded anywhere. What the Snap Store needs from Dave first (an account, the
+# name, a credential) is in tools/Linux-Packaging.md, "The Snap Store".
+name: megapdf
+title: MegaPDF
+base: core24
+version: '@VERSION@'
+summary: '@SUMMARY@'
+description: |
+@DESCRIPTION@
+
+# Apache-2.0, the licence of the app (LICENSE). The bundled third-party notices ride
+# beside the binary in lib/megapdf, where every other Linux package keeps them (#194).
+license: Apache-2.0
+website: https://electricrv.ca/megapdf/
+source-code: https://github.com/SlyWombat/MegaPDF
+issues: https://github.com/SlyWombat/MegaPDF/issues
+icon: snap/gui/megapdf.png
+
+grade: stable
+confinement: strict
+
+# lzo rather than the default xz. A snap is mounted compressed and read from the
+# squashfs as the app runs, so the compressor is paid at every cold start, and the app
+# reads a 90 MB tree on its first launch. lzo is what Canonical's own desktop snaps use
+# for exactly this reason; the snap is somewhat larger for it.
+compression: lzo
+
+# x86-64 only, like the .deb and the Flatpak: the patched PDFium series cross-builds for
+# arm64 (#254 A6) but no release carries the arm64 archive yet, and build-linux-app.sh
+# refuses to make an arm64 app around an x64 engine. Adding arm64 here is one line once
+# it does.
+platforms:
+  amd64:
+
+apps:
+  megapdf:
+    # The apphost itself: it finds libmegapdf_core.so and libpdfium.so beside it, which
+    # is why the tree goes in one piece (tools/Linux-Packaging.md, "The published tree
+    # goes in one piece").
+    command: lib/megapdf/MegaPDF
+    # The desktop entry is snap/gui/megapdf.desktop, which snapcraft installs for this
+    # app because the names match; common-id ties the app to the AppStream ID the
+    # Flatpak and the metainfo use, so a software centre that knows one knows both.
+    common-id: ca.electricrv.MegaPDF
+    # The gnome extension, although MegaPDF uses nothing from GNOME. It is the standard
+    # desktop plumbing for a core24 snap: the desktop, x11, opengl and wayland plugs,
+    # fontconfig pointed at the host's fonts, the XDG directories, and the shared
+    # gnome-46-2404 content snap for libraries the snap would otherwise carry itself
+    # (fontconfig, freetype, the X libraries Avalonia.X11 dlopens, ICU for .NET). That
+    # content snap is shared by every GNOME-extension snap on the machine.
+    extensions: [gnome]
+    plugs:
+      # Non-hidden files in the person's home folder. Needed because a snap has no
+      # equivalent of Flatpak's document-portal forwarding for a file handed over on
+      # the command line: double-clicking a PDF in a file manager runs
+      # `megapdf /home/…/form.pdf`, and without this plug that path cannot be opened.
+      # The file dialogs themselves still go through the XDG portal. Auto-connected.
+      - home
+      # /media, /mnt and /run/media, for documents on a USB stick. Not auto-connected:
+      # the person runs `snap connect megapdf:removable-media` or flips it on in the
+      # software centre. The portal dialogs reach removable drives without it.
+      - removable-media
+    # Deliberately absent:
+    #   network  MegaPDF makes no network connection. The snap updates through snapd,
+    #            so the app's own update check is off inside a snap and needs nothing.
+    #   cups     Printing goes through org.freedesktop.portal.Print, as in the
+    #            Flatpak (LinuxPrinter.InSandbox): the desktop prints a file descriptor
+    #            the app hands it, with its own dialog. The portal is reachable through
+    #            the desktop plug the extension already brings.
+
+parts:
+  megapdf:
+    # The tree arrives already published and already tested — the same bytes the .deb
+    # and the Flatpak wrap — so there is nothing to compile. Not stripped for the reason
+    # the Flatpak gives: libpdfium.so is the patched build the batteries ran against.
+    plugin: dump
+    source: payload
+    prime:
+      - lib/megapdf

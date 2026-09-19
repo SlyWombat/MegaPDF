@@ -34,8 +34,23 @@ internal static class LinuxPrinter
     /// <summary>True inside a Flatpak sandbox, where lp is not reachable and the portal is the route.</summary>
     internal static bool InFlatpakSandbox => File.Exists("/.flatpak-info");
 
+    /// <summary>
+    /// True inside the snap. The snap asks for no <c>cups</c> plug and stages no
+    /// <c>lp</c>, for the same reason the Flatpak has no CUPS socket: the portal
+    /// prints for it, and xdg-desktop-portal serves a strictly confined snap exactly
+    /// as it serves a Flatpak (tools/linux/snap/snapcraft.yaml). <c>SNAP_NAME</c> is
+    /// set by snapd for every command a snap runs, and by nothing else.
+    /// </summary>
+    internal static bool InSnapSandbox => Environment.GetEnvironmentVariable("SNAP_NAME") is { Length: > 0 };
+
+    /// <summary>Inside either sandbox: no lp, and the print portal is the route.</summary>
+    internal static bool InSandbox => InFlatpakSandbox || InSnapSandbox;
+
+    /// <summary>"Flatpak" or "snap", for reports that say which sandbox they found.</summary>
+    internal static string SandboxName => InFlatpakSandbox ? "Flatpak" : "snap";
+
     /// <summary>Whether CUPS' client tools are installed at all.</summary>
-    internal static bool IsAvailable => !InFlatpakSandbox && ResolveOnPath("lp") is not null;
+    internal static bool IsAvailable => !InSandbox && ResolveOnPath("lp") is not null;
 
     /// <summary>
     /// The destinations CUPS knows about, most-preferred first (the default leads).
@@ -137,7 +152,7 @@ internal static class LinuxPrinter
         if (!OperatingSystem.IsLinux())
             return new Printing.Outcome(false, Strings.PrintingUnavailableHere);
 
-        if (InFlatpakSandbox)
+        if (InSandbox)
             return new Printing.Outcome(false, Strings.PrintingNeedsPortal);
 
         if (ResolveOnPath("lp") is not { } lp)
@@ -216,7 +231,7 @@ internal static class LinuxPrinter
             return new Printing.Outcome(false, "more than one destination claimed to be the default");
         report.Append("lpstat parsing: the default leads and both queues are found");
 
-        if (InFlatpakSandbox)
+        if (InSandbox)
         {
             // Inside the sandbox the CUPS route is not the route, so what is worth
             // reporting is whether the desktop offers the portal that is: asked
@@ -225,9 +240,9 @@ internal static class LinuxPrinter
             var version = PortalPrinter.VersionAsync(TimeSpan.FromSeconds(5))
                                        .GetAwaiter().GetResult();
             report.Append(version is null
-                ? "; in a Flatpak sandbox, and this session offers no "
+                ? $"; in a {SandboxName} sandbox, and this session offers no "
                   + "org.freedesktop.portal.Print — printing has no route here"
-                : $"; in a Flatpak sandbox, printing through "
+                : $"; in a {SandboxName} sandbox, printing through "
                   + $"org.freedesktop.portal.Print version {version}");
             return new Printing.Outcome(version is not null, report.ToString());
         }

@@ -461,10 +461,16 @@ internal static class Program
 
     private static int SelfTest(string[] args)
     {
-        var dir = args.FirstOrDefault(a => Directory.Exists(a));
-        if (dir is null)
+        // Where the checks save their documents: the temp folder, unless `--save-dir
+        // <dir>` names another. tools/linux/check-snap.sh points it at the top of the
+        // home folder, the one place a snap may write a document but no hidden file
+        // beside it (#158), so every save below is also a save the snap has to make.
+        var saveFlag = Array.IndexOf(args, "--save-dir");
+        var saveDir = saveFlag >= 0 && saveFlag + 1 < args.Length ? args[saveFlag + 1] : Path.GetTempPath();
+        var dir = args.Where((_, i) => saveFlag < 0 || i != saveFlag + 1).FirstOrDefault(a => Directory.Exists(a));
+        if (dir is null || !Directory.Exists(saveDir))
         {
-            Console.Error.WriteLine("usage: MegaPDF --self-test <fixtures-dir>");
+            Console.Error.WriteLine("usage: MegaPDF --self-test <fixtures-dir> [--save-dir <dir>]");
             return 2;
         }
 
@@ -492,7 +498,7 @@ internal static class Program
         // --- Drawn checkbox: hit-test, click, save, reopen ---
         Console.WriteLine("drawn checkbox (SDD §3.2 heuristic):");
         var drawnCentre = new PdfPoint(78, 186);
-        var savedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-{Guid.NewGuid():N}.pdf");
+        var savedPath = Path.Combine(saveDir, $"megapdf-selftest-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -559,7 +565,7 @@ internal static class Program
 
         // --- Signature placement (SDD §3.3) ---
         Console.WriteLine("signature placement:");
-        var signedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-sig-{Guid.NewGuid():N}.pdf");
+        var signedPath = Path.Combine(saveDir, $"megapdf-selftest-sig-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -651,7 +657,7 @@ internal static class Program
 
         // --- Text boxes and whiteout (SDD §3.1, §3.3) ---
         Console.WriteLine("text boxes and cover:");
-        var editedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-edit-{Guid.NewGuid():N}.pdf");
+        var editedPath = Path.Combine(saveDir, $"megapdf-selftest-edit-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -702,7 +708,7 @@ internal static class Program
         // that nothing has been written yet, apply, and prove the words are gone from the
         // saved file rather than merely invisible in it.
         Console.WriteLine("redaction:");
-        var redactedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-redact-{Guid.NewGuid():N}.pdf");
+        var redactedPath = Path.Combine(saveDir, $"megapdf-selftest-redact-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -767,7 +773,7 @@ internal static class Program
 
         // --- Body text editing (SDD §3.1 — F1) ---
         Console.WriteLine("body text editing:");
-        var retypedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-text-{Guid.NewGuid():N}.pdf");
+        var retypedPath = Path.Combine(saveDir, $"megapdf-selftest-text-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -812,7 +818,7 @@ internal static class Program
 
         // --- AcroForm text fields ---
         Console.WriteLine("form text fields:");
-        var filledPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-form-{Guid.NewGuid():N}.pdf");
+        var filledPath = Path.Combine(saveDir, $"megapdf-selftest-form-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -858,7 +864,7 @@ internal static class Program
 
         // --- Selection, move, resize, restyle, delete, flatten, mark style ---
         Console.WriteLine("adjusting what has been placed:");
-        var adjustedPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-adj-{Guid.NewGuid():N}.pdf");
+        var adjustedPath = Path.Combine(saveDir, $"megapdf-selftest-adj-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -1053,7 +1059,7 @@ internal static class Program
 
         // --- Save As adopts the copy (#68) ---
         Console.WriteLine("save as:");
-        var copyPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-copy-{Guid.NewGuid():N}.pdf");
+        var copyPath = Path.Combine(saveDir, $"megapdf-selftest-copy-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -1097,7 +1103,7 @@ internal static class Program
         // that traversal reaches the interactive regions in reading order and that
         // activating one does the same thing a click does.
         Console.WriteLine("keyboard traversal:");
-        var kbPath = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-kb-{Guid.NewGuid():N}.pdf");
+        var kbPath = Path.Combine(saveDir, $"megapdf-selftest-kb-{Guid.NewGuid():N}.pdf");
         try
         {
             using var vm = new MainViewModel(state);
@@ -1165,7 +1171,7 @@ internal static class Program
         // off the UI thread, which is checked here on the thread pool.
         Console.WriteLine("saving, busy state and closing (#145):");
         var busyState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-busy-{Guid.NewGuid():N}");
-        var original = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-d2-{Guid.NewGuid():N}.pdf");
+        var original = Path.Combine(saveDir, $"megapdf-selftest-d2-{Guid.NewGuid():N}.pdf");
         try
         {
             File.Copy(Path.Combine(dir, "fixture.pdf"), original);

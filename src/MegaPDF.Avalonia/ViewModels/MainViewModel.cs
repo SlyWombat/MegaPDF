@@ -830,12 +830,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // dialog costs nothing — not even a copy of the document in the temp
         // directory. macOS cannot: NSPrintOperation's panel is part of the print,
         // and it needs the file to preview (#158).
-        // Inside a Flatpak the desktop's portal owns the dialog: it lists the
-        // printers, it takes the copies, it prints. Asking our own question first
+        // Inside a Flatpak or the snap the desktop's portal owns the dialog: it lists
+        // the printers, it takes the copies, it prints. Asking our own question first
         // would be asking the same question twice, so the app goes straight to
         // writing the document and hands it over (#158).
         var throughPortal = OperatingSystem.IsLinux()
-                            && Platform.LinuxPrinter.InFlatpakSandbox;
+                            && Platform.LinuxPrinter.InSandbox;
 
         Platform.Printing.Choice? choice = null;
         if (OperatingSystem.IsLinux() && !throughPortal)

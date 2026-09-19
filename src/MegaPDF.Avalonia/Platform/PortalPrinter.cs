@@ -6,7 +6,7 @@ using Tmds.DBus.Protocol;
 namespace MegaPDF.Avalonia.Platform;
 
 /// <summary>
-/// Printing from inside a Flatpak sandbox, through
+/// Printing from inside a Flatpak sandbox or the snap, through
 /// <c>org.freedesktop.portal.Print</c> (#158).
 ///
 /// **Why a portal at all.** The sandbox has no <c>lp</c> and no CUPS socket, and
