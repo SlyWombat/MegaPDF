@@ -64,8 +64,12 @@ jobs:
           sudo snap install snapcraft --classic
           snapcraft --version
 
+      # Built as root (the gnome extension installs its SDK through snapd), and then handed
+      # back: review-tools is itself a confined snap and cannot read a root-owned file.
       - name: Build the snap
-        run: sudo tools/linux/build-snap.sh "$RUNNER_TEMP/linux/MegaPDF" "$RUNNER_TEMP/snap"
+        run: |
+          sudo tools/linux/build-snap.sh "$RUNNER_TEMP/linux/MegaPDF" "$RUNNER_TEMP/snap"
+          sudo chown -R "$USER" "$RUNNER_TEMP/snap"
 
       # The Snap Store's own checks run again on upload; snapcraft's linter says most of
       # what they will. Reported rather than enforced, like lintian for the .deb.

@@ -330,6 +330,35 @@ systemd, and the confinement being checked is AppArmor. CI does exactly this on 
 `ubuntu-24.04` runner, which is a VM (`.github/workflows/snap.yml`, on every change to
 the Linux app).
 
+**Run the check from inside a user session.** snapd tracks every snap process in a
+transient scope under the user's systemd manager and refuses to start one from anywhere
+else, with `… is not a snap cgroup for tag snap.megapdf.megapdf`. A desktop terminal is
+already such a session. A CI step is a system service, so the workflow enables lingering
+and runs the check through `systemd-run --machine=$USER@.host --user`. The first CI run
+without this failed every confined check and passed every refusal, because nothing ran:
+each probe now prints `RAN` from inside the snap before its answer counts.
+
+**What AppArmor refuses, and why each one is expected** (the check lists them):
+
+| refused | why |
+|---|---|
+| the check's own probes: a hidden file at the top of the home folder, `/opt`, `/media` before removable-media is connected | on purpose |
+| `create` of an `inet` / `inet6` datagram socket | .NET asking the kernel which address families exist, the first time anything opens a socket. Here that is Tmds.DBus opening its Unix socket to the session bus. No connection is attempted, and the answer ("neither") changes nothing for an app that makes no network connection. |
+| `file_lock` on `/proc/<pid>/stat` | the .NET runtime reading its own process statistics. |
+
+**Startup cost**, measured by the check on the CI runner (best of three, warm cache;
+cold is one run after dropping the page cache):
+
+| | snap | unpacked tree |
+|---|---|---|
+| `--language-check`, cold | 763 ms | 168 ms |
+| `--language-check`, warm | 186 ms | 54 ms |
+| `--render-check`, warm | 199 ms | 74 ms |
+
+About 130 ms per launch is `snap run` and the gnome extension's `desktop-launch` chain.
+The cold figure also includes reading the compressed squashfs, which is why the snap is
+built with lzo rather than xz.
+
 ### What Dave has to do before the first upload
 
 In this order. Every step happens in Dave's own account, so none of it can be delegated.

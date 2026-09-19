@@ -26,6 +26,9 @@ license: Apache-2.0
 website: https://electricrv.ca/megapdf/
 source-code: https://github.com/SlyWombat/MegaPDF
 issues: https://github.com/SlyWombat/MegaPDF/issues
+# The privacy policy, as the metainfo's `contact` url is: it is the page the other stores
+# already point people at to reach the publisher.
+contact: https://electricrv.ca/megapdf/privacy/
 icon: snap/gui/megapdf.png
 
 grade: stable
