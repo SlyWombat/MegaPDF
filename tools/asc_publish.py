@@ -48,9 +48,12 @@ if PLATFORM == "MAC_OS":
     # five were the #144 review shots and had no Redact in them (#146 §3).
     SHOT_ORDER = ["01-viewer", "02-text", "03-search", "04-sign", "05-redact", "06-home"]
     SHOT_SETS = {"light": "APP_DESKTOP"}
-    PREVIEW_SETS = {"macos-light-recorded": "DESKTOP"}
+    # One clip per listing language: macos-<lang>-light-recorded-preview.mp4.
+    PREVIEW_SETS = {"macos-{lang}-light-recorded": "DESKTOP"}
 else:
-    SHOT_ORDER = ["viewer", "text", "search", "sign", "draw", "home"]
+    # Eight slots from 2.0: the two things the 2.0 copy leads with come straight
+    # after the viewer (docs/app-store-listing.md § Screenshots, #146 §3).
+    SHOT_ORDER = ["viewer", "text-edit", "redact", "text", "search", "sign", "draw", "home"]
     SHOT_SETS = {"iphone-6_9": "APP_IPHONE_67", "ipad-13": "APP_IPAD_PRO_3GEN_129"}
     PREVIEW_SETS = {"iphone-6_9": "IPHONE_67", "ipad-13": "IPAD_PRO_3GEN_129"}
 
@@ -159,6 +162,27 @@ def listing_copy():
     return out
 
 
+def whats_new():
+    """Per-locale "What's New" from docs/release-notes/<ver>/{app-store,mac-app-store}.md:
+    the first fenced block in each '## … — `locale`' section. Empty when the file
+    does not exist (a first release has no What's New)."""
+    ver = os.environ.get("ASC_NOTES_VERSION", "2.0")
+    name = "mac-app-store.md" if PLATFORM == "MAC_OS" else "app-store.md"
+    path = os.path.join(ROOT, "docs/release-notes", ver, name)
+    if not os.path.exists(path):
+        return {}
+    text = open(path, encoding="utf-8").read()
+    out = {}
+    for m in re.finditer(r"^## .*?`([a-zA-Z-]+)`\s*$", text, re.M):
+        body = text[m.end():]
+        nxt = re.search(r"^## ", body, re.M)
+        body = body[:nxt.start()] if nxt else body
+        fm = re.search(r"^```\n(.*?)\n```", body, re.M | re.S)
+        if fm:
+            out[m.group(1)] = fm.group(1).strip()
+    return out
+
+
 def review_notes():
     """The Notes field text from docs/app-review-notes.md: between the
     '## Notes field text' heading and the next '---'."""
@@ -230,6 +254,7 @@ def cmd_copy():
     if v is None:
         sys.exit("no editable version — run `version` first")
     copy = listing_copy()
+    notes = whats_new()
     locs = version_localizations(v["id"])
     for locale in LOCALES:
         fields = copy.get(locale) or copy.get(REPO_LOCALE.get(locale, locale))
@@ -240,6 +265,11 @@ def cmd_copy():
                  "promotionalText": fields.get("Promotional text", ""),
                  "supportUrl": "https://github.com/SlyWombat/MegaPDF",
                  "marketingUrl": "https://electricrv.ca/megapdf/"}
+        wn = notes.get(locale) or notes.get(REPO_LOCALE.get(locale, locale))
+        if wn:
+            if len(wn) > 4000:
+                sys.exit(f"What's New for {locale} is {len(wn)} characters, over 4000")
+            attrs["whatsNew"] = wn
         if locale in locs:
             api("PATCH", f"/v1/appStoreVersionLocalizations/{locs[locale]['id']}", {"data": {
                 "type": "appStoreVersionLocalizations", "id": locs[locale]["id"], "attributes": attrs}})
@@ -248,7 +278,8 @@ def cmd_copy():
             api("POST", "/v1/appStoreVersionLocalizations", {"data": {
                 "type": "appStoreVersionLocalizations", "attributes": attrs,
                 "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
-        print(f"  version copy {locale}: description {len(fields['Description'])}, keywords {len(fields['Keywords'])}")
+        print(f"  version copy {locale}: description {len(fields['Description'])}, keywords {len(fields['Keywords'])}, "
+              f"what's new {len(wn) if wn else 'none'}")
 
     # Name and subtitle live on the app info, not the version.
     infos = api("GET", f"/v1/apps/{APP_ID}/appInfos")["data"]
@@ -315,8 +346,9 @@ def cmd_previews(captures):
     v = editable_version()
     locs = version_localizations(v["id"])
     for locale in LOCALES:
-        folder = (os.path.join(captures, "macos", "video") if PLATFORM == "MAC_OS"
-                  else os.path.join(captures, "ios", REPO_LOCALE.get(locale, locale)))
+        repo_locale = REPO_LOCALE.get(locale, locale)
+        folder = (os.path.join(captures, "macos") if PLATFORM == "MAC_OS"
+                  else os.path.join(captures, "ios", repo_locale))
         if locale not in locs or not os.path.isdir(folder):
             print(f"  {locale}: no localization or no folder {folder}; skipped")
             continue
@@ -324,7 +356,7 @@ def cmd_previews(captures):
         sets = {s["attributes"]["previewType"]: s for s in
                 paged(f"/v1/appStoreVersionLocalizations/{lid}/appPreviewSets?limit=50")}
         for label, ptype in PREVIEW_SETS.items():
-            path = os.path.join(folder, f"{label}-preview.mp4")
+            path = os.path.join(folder, f"{label.format(lang=repo_locale)}-preview.mp4")
             if not os.path.exists(path):
                 continue
             if ptype in sets:

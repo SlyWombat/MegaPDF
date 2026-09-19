@@ -26,87 +26,65 @@ the next submission starts with it already written.
 
 ## Notes field text
 
-MegaPDF has no accounts, no sign-in, no purchases, no subscriptions, no
-user-generated content shared with anyone, and makes no network connections.
-Nothing in the app is gated: every feature below is reachable immediately on
-first launch with no credentials.
+MegaPDF has no accounts, sign-in, purchases, subscriptions or shared user content,
+and makes no network connections. Every feature below is reachable on first
+launch with nothing to enter.
 
 **3. What the app does, and for whom**
-MegaPDF fills in, checks and signs PDF forms entirely on the device, for people
-who are sent a form — a rental agreement, a permission slip, a claim form — and
-need to complete and return it. No subscription, no cloud upload; the document
-never leaves the device.
+MegaPDF fills in, checks, signs and corrects PDF forms entirely on the device, for
+people sent a form (a rental agreement, a permission slip, a claim form) who need
+to complete and return it. The document never leaves the device.
 
-**4. Setting up and reaching the main features**
-Any PDF works as a sample; the app ships no content of its own and needs none.
-The blank form used in the attached recording is in the public repository at
+**4. Reaching the main features**
+Any PDF works. The form in the attached recording is at
 https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
-(three printed squares, two real AcroForm checkboxes, a signature rule, and the
-word "insurance" four times for the search demonstration).
-1. Launch the app → Home screen → tap **Open PDF** → the iOS Files picker opens →
-   choose any PDF from Files or iCloud Drive.
-2. **Check a box:** tap a checkbox or an empty printed square on the page — it is
-   marked immediately. Both real AcroForm checkboxes and drawn squares work.
-3. **Clear a mark:** tap a marked box again and the mark is removed.
-4. **Sign:** tap **Sign** → **Draw** to sign with a finger or Apple Pencil, or
-   **Photos** to use a photograph of a signature on paper (the white background is
-   removed automatically). Then tap the saved signature and tap the page to place
-   it; drag to move it, use the handles to resize.
-5. **Add text:** tap **Text**, tap a blank line, type, choose a size and font,
-   tap **Add**. Tap the text again to move it or fix a typo.
-   **Change the document's own text:** tap any line of printed text (a heading,
-   a date), retype it in the editor that opens, tap **Save**. It keeps its size
-   and font; if that font cannot show what was typed, a similar standard font is
-   used and a one-line notice says so. Clearing the field removes the line. Undo
-   (the arrow in the toolbar) restores the original exactly.
-6. **Search:** tap the magnifier, type a word — every match is highlighted and the
-   up/down arrows step through them.
-7. **Save:** tap **Save** — the edited PDF is written back to the original file
-   in place (a "Saved" confirmation appears); **Save a copy**, in the overflow
-   menu, writes a new file through the Files picker instead.
-
-> **Scope note (updated 2026-09-13 for the release after 1.7.0):** the iOS build
-> does checkboxes (AcroForm widgets and drawn squares), signature stamps, added
-> text with size and face (#43), editing a document's existing text line by line
-> (#113, through the shared engine core), search, render and save. Scanned pages
-> are pictures: tapping one explains that its text cannot be edited. Until that
-> release ships, keep describing 1.7.0 without existing-text editing.
+1. Home → **Open PDF** → the Files picker → choose a PDF.
+2. **Check a box:** tap a checkbox or an empty printed square; tap again to clear.
+3. **Sign:** **Sign** → **Draw** (finger or Apple Pencil) or **Photo** (a photo of
+   a signature on paper; the background is removed) → tap the saved signature →
+   tap the page to place it; drag to move, handles to resize.
+4. **Add text:** **Add text** → tap a blank line → type, choose size and font →
+   **Add**. Tap it again to move it or fix a typo.
+5. **Change the document's own text:** tap a line of printed text, retype it,
+   **Save**. It keeps its size and font; Undo restores the original exactly.
+6. **Search:** the magnifier → type a word; the arrows step through the matches.
+7. **Save:** **Save** writes back to the original file ("Saved" confirms);
+   **Save a copy** (overflow menu) writes a new file through the Files picker.
+8. **Redact:** **Redact** → drag across what must come out → **Save**. A
+   confirmation says redaction permanently removes the content and offers
+   **Overwrite the original** or **Save as a copy**, then says what was removed.
+   The content is taken out of the file, not covered.
+9. **Protect:** overflow menu → **Password…** sets, changes or removes a
+   document password. A protected PDF asks for it when opened.
 
 **1. Screen recording**
-Attached: the full flow above on an iPhone 17 Pro Max simulator running
-iOS 26.5 — cold launch, open the test form from Files, tick and clear boxes,
-draw and place a signature, search, save, reopen from Recents, and the Photos
-picker appearing and closing.
+Attached: MegaPDF 2.0.0 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
+launch, open the form from Files, tick and clear boxes, draw and place a
+signature, search, save, reopen from Recents, and the Photos picker opening and
+closing. Steps 8 and 9 are not in it; they need only an open PDF.
 
 **2. Devices and OS versions tested**
 iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5, and the
 TestFlight build on the developer's own devices.
 
 **5. External services, tools or platforms**
-None. The app makes no network requests at all — no analytics, no crash
-reporting, no advertising identifiers, no authentication, no payment processing,
-no AI or data-provider services, and no server component of any kind. It embeds
-one third-party open-source library, **PDFium** (BSD-3-Clause), which renders and
-edits PDFs entirely offline and is compiled into the app. The only outbound link
-anywhere in the app is a single "view the source" link on the About screen, which
-opens the public GitHub repository in Safari.
+None. No network requests: no analytics, crash reporting, advertising, sign-in,
+payments, AI services or server. One embedded open-source library, PDFium
+(BSD-3-Clause), works offline. The only outbound link is "view the source" on
+the About screen, which opens GitHub in Safari.
 
 **6. Regional differences**
-None: no geo-gating, no region-specific content, pricing or features, and no
-server. Localised in English (en-CA) and French (fr-CA, fr); the language
-follows the device setting and nothing else differs.
+None. English (en-CA) and French (fr-CA, fr), following the device language.
 
 **7. Regulated industry / protected third-party material**
-Not applicable. MegaPDF is a general-purpose document utility. It operates only on
-files the user already has and already opened, contains no third-party protected
-material, and provides no service in a regulated industry.
+Not applicable: a general-purpose document utility working on the user's own
+files.
 
 **Permissions and privacy**
-The app requests no permissions and shows no permission dialogs. Adding a
-signature from a photo uses SwiftUI's PhotosPicker, which runs out of process and
-hands back only the chosen image, so no photo-library authorisation is requested.
-No location, contacts, camera or tracking prompts. No data is collected; privacy
-policy: https://electricrv.ca/megapdf/privacy/
+No permissions are requested and no permission dialogs appear. Signing from a
+photo uses SwiftUI's PhotosPicker, which runs out of process and returns only the
+chosen image, so no photo-library access is requested. No data is collected;
+privacy policy: https://electricrv.ca/megapdf/privacy/
 
 ---
 
@@ -133,10 +111,17 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
    it; drag to move, handles to resize.
 4. **Add text:** **Add text** → click a blank line → type → Return; the font
    and size pickers in the toolbar apply to it.
-5. **Cover:** paints white over anything, by dragging.
+   **Change the document's own text:** with no tool selected, click a line of
+   printed text, retype it in place, Return. It keeps its size and font; ⌘Z
+   restores the original exactly.
+5. **Cover:** paints white over anything, by dragging, and says that it only
+   covers. **Redact** is the tool that removes: drag over what has to come out,
+   then Save; a confirmation offers **Overwrite the original** or **Save as a
+   copy** and then says what was removed. The content is gone from the file.
 6. **Find:** ⌘F → type → Return steps through the matches.
 7. **Save:** ⌘S writes back to the file that was opened; **Save As** writes a
-   copy. **Print** (⌘P) uses the standard macOS print panel.
+   copy. **File → Password…** sets, changes or removes a password; **File →
+   Save a smaller copy for email** makes a smaller copy. **Print** (⌘P) uses the standard macOS print panel.
 
 **Screen recording**
 Attached: the flow above on a Mac mini (M4) running macOS 26.6 — ticks, the
