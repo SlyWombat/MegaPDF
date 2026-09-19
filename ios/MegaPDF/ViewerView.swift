@@ -109,6 +109,15 @@ struct ViewerView: View {
         }
         .navigationTitle((model.isDirty ? "• " : "") + displayName)
         .navigationBarTitleDisplayMode(.inline)
+        // The bar sits on the dark wall, so it takes the dark scheme whatever the
+        // system's: in light mode the transparent bar drew the title and the status
+        // bar in black on Brand.backdrop, 2.0 : 1. The background is made visible
+        // and the wall's own colour because the scheme only applies to a bar whose
+        // background is showing, and so a page scrolled up under the bar does not
+        // flip the bar back to light halfway through a scroll.
+        .toolbarBackground(Brand.backdrop, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         // #144: the navigation bar holds what is done to the file as a whole — Close,
         // Save, and a More menu — and the bottom toolbar holds the everyday tools, as
         // the HIG lays out an iPhone document viewer. Everything else stays in More,
