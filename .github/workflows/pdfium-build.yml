@@ -20,6 +20,19 @@ on:
         type: boolean
         required: false
         default: false
+      targets:
+        description: >-
+          Which targets to build: "all", or a space-separated list of archive names
+          without the pdfium- prefix, e.g. "win-arm64"
+        required: false
+        default: all
+      attach_to:
+        description: >-
+          Add the archives to this existing release (a pdfium-<build>-megapdf-<series>
+          tag) instead of publishing a new one. Refused unless every archive's VERSION
+          matches the release's, and an asset the release already has is never replaced.
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -42,22 +55,34 @@ jobs:
           - { os: android, cpu: arm64, env: '',        runner: ubuntu-24.04 }
           - { os: android, cpu: x64,   env: '',        runner: ubuntu-24.04 }
           - { os: win,     cpu: x64,   env: '',        runner: windows-2022 }
+          # win-arm64 (#288): cross-built on the x64 runner, as pdfium-binaries does for
+          # its own win-arm64 release. The Store's ARM64 package needs it: before this,
+          # that package shipped the x64 DLL and could not load it.
+          - { os: win,     cpu: arm64, env: '',        runner: windows-2022 }
           - { os: mac,     cpu: arm64, env: '',        runner: macos-15 }
           - { os: mac,     cpu: x64,   env: '',        runner: macos-15 }
           - { os: ios,     cpu: arm64, env: device,    runner: macos-15 }
           - { os: ios,     cpu: arm64, env: simulator, runner: macos-15 }
           - { os: ios,     cpu: x64,   env: simulator, runner: macos-15 }
+    # A target outside `targets` still gets a runner, and every step skips at once
+    # (a job-level `if` cannot see the matrix).
+    env:
+      WANTED: ${{ inputs.targets == 'all' || contains(format(' {0} ', inputs.targets), format(' {0}{1}-{2} ', matrix.os, matrix.env && format('-{0}', matrix.env) || '', matrix.cpu)) }}
     steps:
       - uses: actions/checkout@v4
+        if: env.WANTED == 'true'
       - name: Build
+        if: env.WANTED == 'true'
         shell: bash
         env:
           PDFIUM_BRANCH: ${{ inputs.branch }}
         run: bash tools/pdfium/build-pdfium.sh "$RUNNER_TEMP/pdfium-build" ${{ matrix.os }} ${{ matrix.cpu }} ${{ matrix.env }}
       - name: Show VERSION
+        if: env.WANTED == 'true'
         shell: bash
         run: cat "$RUNNER_TEMP/pdfium-build/staging/VERSION" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: env.WANTED == 'true'
         with:
           name: pdfium-${{ matrix.os }}${{ matrix.env && format('-{0}', matrix.env) || '' }}-${{ matrix.cpu }}
           path: ${{ runner.temp }}/pdfium-build/pdfium-${{ matrix.os }}${{ matrix.env && format('-{0}', matrix.env) || '' }}-${{ matrix.cpu }}.tgz
@@ -67,7 +92,7 @@ jobs:
     name: mac universal
     needs: build
     # Only the two mac archives matter here; another target failing must not skip it.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (inputs.targets == 'all' || (contains(inputs.targets, 'mac-arm64') && contains(inputs.targets, 'mac-x64'))) }}
     runs-on: macos-15
     steps:
       - uses: actions/download-artifact@v4
@@ -92,7 +117,7 @@ jobs:
 
   release:
     name: publish
-    if: inputs.release
+    if: inputs.release && inputs.attach_to == ''
     needs: [build, mac-univ]
     runs-on: ubuntu-24.04
     permissions:
@@ -116,3 +141,43 @@ jobs:
             --title "PDFium $BUILD + MegaPDF patches ($PATCHES, series $SERIES)" \
             --notes "PDFium chromium/$BUILD built with bblanchon/pdfium-binaries and MegaPDF's content-writer patch series (tools/pdfium/patches at $GITHUB_SHA). See #119." \
             --prerelease
+
+  # Adds archives to a release that already exists, for a target the series was not
+  # first built for (#288: win-arm64 joined 71de3e7cee0e after it was published). The
+  # series is the release's identity, so an archive whose VERSION differs from the one
+  # the release already carries is refused, and nothing already there is replaced.
+  attach:
+    name: attach to ${{ inputs.attach_to }}
+    if: inputs.attach_to != ''
+    needs: [build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: pdfium-*
+          merge-multiple: true
+      - name: Check the series, then upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.attach_to }}
+        run: |
+          set -euo pipefail
+          ls pdfium-*.tgz >/dev/null
+          existing=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          mkdir ref && gh release download "$TAG" -p pdfium-linux-x64.tgz -D ref
+          tar xzf ref/pdfium-linux-x64.tgz -C ref VERSION
+          echo "the release carries:"; cat ref/VERSION
+          for a in pdfium-*.tgz; do
+            if grep -qxF "$a" <<<"$existing"; then
+              echo "::error::$TAG already has $a; attaching never replaces an asset"; exit 1
+            fi
+            mkdir -p "v/$a" && tar xzf "$a" -C "v/$a" VERSION
+            if ! diff -u ref/VERSION "v/$a/VERSION"; then
+              echo "::error::$a is not the series $TAG was built from"; exit 1
+            fi
+          done
+          gh release upload "$TAG" pdfium-*.tgz
+          gh release view "$TAG" --json assets --jq '.assets[].name'
