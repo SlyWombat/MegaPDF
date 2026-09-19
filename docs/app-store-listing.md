@@ -132,8 +132,9 @@ Lines a document draws twice — the old trick for fake bold — now edit cleanl
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
 viewer: Checked and signed in under a minute
-text: Type on the blank line — your size, your font
 text-edit: Fix a typo in the document itself
+redact: Redact removes it. It does not just cover it.
+text: Type on the blank line — your size, your font
 search: Find any word, on every page
 sign: Your signatures, saved on your device
 draw: Draw it once, use it everywhere
@@ -232,8 +233,9 @@ Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
 viewer: Coché et signé en moins d'une minute
-text: Écrivez sur la ligne vide : votre taille, votre police
 text-edit: Corrigez une coquille dans le document même
+redact: Caviardez : c'est retiré, pas seulement couvert.
+text: Écrivez sur la ligne vide : votre taille, votre police
 search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
@@ -332,8 +334,9 @@ Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
 viewer: Coché et signé en moins d'une minute
-text: Écrivez sur la ligne vide : votre taille, votre police
 text-edit: Corrigez une coquille dans le document même
+redact: Caviardez : c'est retiré, pas seulement couvert.
+text: Écrivez sur la ligne vide : votre taille, votre police
 search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
 draw: Dessinez-la une fois, utilisez-la partout
@@ -361,14 +364,19 @@ its own localisation, same slots:
 | File | Slot | Suggested caption (optional overlay text) |
 |---|---|---|
 | `iphone-6_9-viewer.png` | iPhone 6.9" #1 | *Checked and signed in under a minute* |
-| `iphone-6_9-text.png` | iPhone 6.9" #2 | *Type on the blank line — your size, your font* |
-| `iphone-6_9-search.png` | iPhone 6.9" #3 | *Find any word, on every page* |
-| `iphone-6_9-sign.png` | iPhone 6.9" #4 | *Your signatures, saved on your device* |
-| `iphone-6_9-draw.png` | iPhone 6.9" #5 | *Draw it once, use it everywhere* |
-| `iphone-6_9-home.png` | iPhone 6.9" #6 | *No account. No cloud. No tracking.* |
-| `ipad-13-*.png` | iPad 13" #1–6 | same order |
+| `iphone-6_9-text-edit.png` | iPhone 6.9" #2 | *Fix a typo in the document itself* |
+| `iphone-6_9-redact.png` | iPhone 6.9" #3 | *Redact removes it. It does not just cover it.* |
+| `iphone-6_9-text.png` | iPhone 6.9" #4 | *Type on the blank line — your size, your font* |
+| `iphone-6_9-search.png` | iPhone 6.9" #5 | *Find any word, on every page* |
+| `iphone-6_9-sign.png` | iPhone 6.9" #6 | *Your signatures, saved on your device* |
+| `iphone-6_9-draw.png` | iPhone 6.9" #7 | *Draw it once, use it everywhere* |
+| `iphone-6_9-home.png` | iPhone 6.9" #8 | *No account. No cloud. No tracking.* |
+| `ipad-13-*.png` | iPad 13" #1–8 | same order |
 
-Order matters: the viewer shot (a filled, signed agreement) leads.
+Order matters: the viewer shot (a filled, signed agreement) leads, and the two
+things the 2.0 copy leads with — correcting the document's own text, and
+redaction — come straight after it (#146 §3, 2026-09-19). The App Store takes up
+to ten per device.
 
 Each shot only exists once its screenshot state ships. `search` is not in the
 1.0 builds, and `text` is newer still (#43) — upload each with the update that
@@ -379,10 +387,15 @@ The same set comes off the in-house Mac without a runner:
 `tools/ios-screenshots.sh <lang>` (see `tools/mac-mini.md`). Same files, same
 slots.
 
-**The six above land in `listing/`; everything else the run takes lands in
-`review/`** — `text-edit`, `redact`, and the dark-mode `search`, `sign` and
-`redact`. They are for looking at, not for uploading. A folder of eleven images
-beside a table of six slots is how a review shot ends up on a store listing.
+**The eight above land in `listing/`; everything else the run takes lands in
+`review/`** — the dark-mode `search`, `sign` and `redact`. They are for looking
+at, not for uploading. A folder of more images than the table has slots is how a
+review shot ends up on a store listing.
+
+The iPad simulator is put in **Full Screen Apps** first (Settings → Multitasking
+& Gestures, driven by `CaptureSimulatorSetupUITests`): in Windowed Apps iPadOS 26
+draws a resize grabber in the corner of every image, and the first 2.0 set
+carried it in all of them.
 
 ## Screenshots — Mac App Store
 

@@ -64,6 +64,16 @@ xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true   # settle a device still 
 sleep 5
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null
+# An iPad in Windowed Apps draws a resize grabber in the corner of every frame
+# (capture-gate-report.md §6): Full Screen Apps first, through Settings.
+case "${PICKED##*|}" in
+    iPad*)
+        SETUP=$(xcodebuild test-without-building -project MegaPDF.xcodeproj -scheme MegaPDFDemo \
+                    -destination "id=$UDID" -derivedDataPath "$DD" \
+                    -only-testing:MegaPDFUITests/CaptureSimulatorSetupUITests 2>&1) || true
+        printf '%s\n' "$SETUP" | grep -q "testIPadRunsAppsFullScreen\]' passed" \
+            || { echo "could not put the iPad in Full Screen Apps" >&2; exit 1; } ;;
+esac
 # First-boot banners come and go for a while after bootstatus returns.
 sleep 20
 xcrun simctl status_bar "$UDID" override --time "9:41" \

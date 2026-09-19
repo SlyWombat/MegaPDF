@@ -143,7 +143,8 @@ STORES: dict[str, dict] = {
             "iphone-6_5": [(1242, 2688), (1284, 2778)],
             "ipad-13": [(2064, 2752), (2048, 2732)],
         },
-        "order": ["home", "viewer", "search", "text", "sign", "draw", "redact"],
+        # The listing order, docs/app-store-listing.md § Screenshots (2026-09-19).
+        "order": ["viewer", "text-edit", "redact", "text", "search", "sign", "draw", "home"],
         "parse": _pose(r"(?:[a-z]-)?(?:(?P<lang>[a-z]{2}(?:-[A-Za-z]{2})?)-)?"
                        r"(?P<device>iphone-[0-9_]+|ipad-[0-9]+)-"
                        r"(?P<pose>[a-z][a-z0-9-]*)\.png$"),

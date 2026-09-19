@@ -48,6 +48,20 @@ for v in devs.values():
 sys.exit(1)" "$1"
 }
 
+# Settings → Multitasking & Gestures → Full Screen Apps, driven by a UI test
+# (ios/MegaPDFUITests/CaptureSimulatorSetupUITests.swift). The setting sticks to
+# the simulator, so this only changes something the first time.
+ipad_full_screen() {
+    local log
+    [ -f "$ROOT/ios/MegaPDF.xcodeproj/project.pbxproj" ] || (cd "$ROOT/ios" && xcodegen generate >/dev/null)
+    log=$(cd "$ROOT/ios" && xcodebuild test -project MegaPDF.xcodeproj -scheme MegaPDFDemo \
+            -destination "id=$1" -derivedDataPath "$DD" CODE_SIGNING_ALLOWED=NO \
+            -only-testing:MegaPDFUITests/CaptureSimulatorSetupUITests 2>&1) || true
+    printf '%s\n' "$log" | grep -E "Test Case .*(passed|failed)|error:" || true
+    printf '%s\n' "$log" | grep -q "testIPadRunsAppsFullScreen\]' passed" \
+        || { echo "could not put $1 in Full Screen Apps" >&2; return 1; }
+}
+
 capture() {
     local pattern="$1" label="$2" picked udid name
     picked=$(pick_device "$pattern") || { echo "no simulator matches $pattern" >&2; return 1; }
@@ -59,6 +73,10 @@ capture() {
     sleep 5
     xcrun simctl boot "$udid" 2>/dev/null || true
     xcrun simctl bootstatus "$udid" -b >/dev/null
+    # An iPad in Windowed Apps draws a resize grabber in the corner of every app,
+    # identical in every image, so no comparison sees it (capture-gate-report.md
+    # §6). Put it in Full Screen Apps, through Settings, before shooting.
+    case "$name" in iPad*) ipad_full_screen "$udid" ;; esac
     # First-boot banners come and go for a while after bootstatus returns.
     sleep 30
     xcrun simctl status_bar "$udid" override --time "9:41" \
@@ -78,16 +96,14 @@ capture() {
 
     mkdir -p "$OUT/listing" "$OUT/review"
     xcrun simctl ui "$udid" appearance light || true
-    # The six listing slots, in the order docs/app-store-listing.md gives them.
-    for state in viewer text search sign draw home; do
+    # The eight listing slots, in the order docs/app-store-listing.md gives them:
+    # the signed agreement leads, then the two things the 2.0 copy leads with.
+    for state in viewer text-edit redact text search sign draw home; do
         shot "$state" listing ""
     done
     # Everything else is for review, in its own folder. The dry run's point: a
-    # folder of nine images next to a table of six slots is how a review shot ends
+    # folder of more images than the table has slots is how a review shot ends
     # up on a store listing (#146 §3).
-    for state in text-edit redact; do
-        shot "$state" review ""
-    done
     xcrun simctl ui "$udid" appearance dark || true
     for state in search sign redact; do
         shot "$state" review "-dark"

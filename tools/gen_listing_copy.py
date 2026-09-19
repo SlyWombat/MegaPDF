@@ -179,8 +179,9 @@ MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you
     "whatsnew": release_block("app-store.md", "English (Canada)"),
     "captions": [
         ("viewer", "Checked and signed in under a minute"),
-        ("text", "Type on the blank line — your size, your font"),
         ("text-edit", "Fix a typo in the document itself"),
+        ("redact", "Redact removes it. It does not just cover it."),
+        ("text", "Type on the blank line — your size, your font"),
         ("search", "Find any word, on every page"),
         ("sign", "Your signatures, saved on your device"),
         ("draw", "Draw it once, use it everywhere"),
@@ -228,8 +229,9 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
     "whatsnew": release_block("app-store.md", "Français (Canada)"),
     "captions": [
         ("viewer", "Coché et signé en moins d'une minute"),
-        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
         ("text-edit", "Corrigez une coquille dans le document même"),
+        ("redact", "Caviardez : c'est retiré, pas seulement couvert."),
+        ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
         ("search", "Trouvez n'importe quel mot, sur chaque page"),
         ("sign", "Vos signatures, enregistrées sur votre appareil"),
         ("draw", "Dessinez-la une fois, utilisez-la partout"),
