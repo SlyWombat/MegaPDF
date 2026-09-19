@@ -274,7 +274,11 @@ Bump `versionCode` and `versionName` → push a tag `android-v<version>` on **ma
 puts it on the **internal** track. Nothing else is automatic.
 
 **Promoting to production is a separate, deliberate step** — `play_submit.py` only
-ever touches `internal`. Either use the Play Console, or drive the API directly:
+ever touches `internal`. `tools/play_listing.py` does it in one edit: the listing text per language from the
+copy-by-language section above, the phone and 10-inch tablet screenshots from a capture
+folder, and the production release with its notes (`push <captures> --production <vc>`
+validates and discards; add `--commit` to send it), then `readback` compares a fresh
+edit with the sources. By hand, the API calls are:
 create an edit, `PUT /edits/{id}/tracks/production` with
 `{"releases":[{"versionCodes":["<vc>"],"status":"completed","releaseNotes":[…]}]}`,
 then `POST /edits/{id}:commit`. Service-account key at
@@ -296,3 +300,4 @@ not public yet.
 | 1.0.0 | 4 | production | submitted 2026-08-09 for Google's first-app review; **shipped the default Android launcher icon** (no mipmap resources existed) |
 | 1.1.2 | 7 | production | promoted 2026-08-14, replacing vc4 while that review was still pending — accepted a likely review restart to avoid a first public release with a placeholder icon and misplaced highlights. Adds search, the real launcher icon, the CropBox coordinate fix (#28) and scroll-to-hit. |
 | 1.2.0 | 8 | production | tagged 2026-08-29 (internal via the pipeline); **promoted to production 2026-09-04** via the API, full rollout, en-CA notes from `docs/release-notes-mobile-1.2.md`. vc7 had gone public by then (listing live, 2026-09-04 check). Adds undo/redo, Add text (#34), text-box drag (#36), text faces (#43), and targets API 36 (#40) — which restores visibility on Android 16 devices after the 31 Aug deadline. |
+| 2.0.0 | 9 | production | tagged 2026-09-19 at `b9327b2` (internal via the pipeline); **promoted to production 2026-09-19 07:39 EDT** with `tools/play_listing.py` (edit 02001940654542014226), full rollout on approval (Dave: "set everything to go live"). Same edit: title/short/full description in en-CA, fr-CA, fr-FR from the copy above, and 8 phone + 8 ten-inch tablet screenshots per language (viewer, text-edit, text, search, sign, draw, home, redact), replacing the four 1.x phone images. Read back identical. The 9:20 phone images and the 1600×2560 tablet images were accepted. |
