@@ -35,7 +35,11 @@ APP_ID="$(basename "$MANIFEST" .yml)"
 [ -f "$TREE/VERSION" ] || { echo "::error::$TREE has no VERSION file" >&2; exit 1; }
 
 VERSION="$(tr -d '[:space:]' < "$TREE/VERSION")"
-NAME="megapdf-linux-x64-$VERSION"
+# Named for the package version, which carries a packaging revision when the tarball
+# was rebuilt around an unchanged app (tools/linux/PACKAGE-REVISION, #315), so a
+# rebuilt tarball never shares a name with the published one it replaces. The
+# metainfo check below is about the app, so it stays on VERSION.
+NAME="megapdf-linux-x64-$("$ROOT/tools/linux/package-version.sh" "$VERSION")"
 
 # --- the metainfo has to agree with what is being released ------------------------
 # A release history whose top entry is the *previous* version is the kind of thing a

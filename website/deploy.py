@@ -36,8 +36,11 @@ live 1.x landing page, which `--landing` supplies instead of the staged one:
         --only linux,apt,privacy,screenshots/linux --landing /path/to/live-index.html
 
 Each name is a path under website/megapdf/ (a directory or a file). `--landing`
-uploads the given file as index.html at the destination, as it is, and without
-it the landing page is left alone.
+uploads the given file as index.html at the destination, as it is apart from its
+HTML comments, and without it the landing page is left alone.
+
+Every page goes up with its HTML comments removed (#322): they are notes for whoever
+edits the source, and one on the live landing page once named an internal path.
 
 `--dest` puts the same tree somewhere else on the server, so a release can be
 looked at before it replaces the live page:
@@ -133,7 +136,16 @@ def resolve(html, live):
     leftover = re.search(r"<!--\w+:(live|soon)", html)
     if leftover:
         raise SystemExit(f"a gated region is malformed or unknown near: {html[leftover.start():leftover.start() + 60]!r}")
-    return html
+    return strip_comments(html)
+
+
+def strip_comments(html):
+    """Every HTML comment removed before a page goes up. Comments in the source are
+    notes for whoever edits it (issue numbers, paths, who decides what), and the
+    public page is not the place for them: one on the live landing page named an
+    internal file path (#322). Conditional comments (<!--[if ...]>) are markup, not
+    notes, and stay."""
+    return re.sub(r"<!--(?!\[if).*?-->", "", html, flags=re.S)
 
 
 def check_linux(snap):
@@ -163,6 +175,13 @@ def check_linux(snap):
     if len(offered) != 1 or offered[0] not in versions:
         raise SystemExit(f"--linux: linux/index.html offers {offered or 'no .deb'}, "
                          f"but the repository holds {versions}. Update the page's version.")
+    # The repository keeps every published .deb, so the page must offer the newest of
+    # them, by dpkg's ordering (2.0.0 < 2.0.0-2 < 2.0.1), not merely one it holds.
+    newer = [v for v in versions if v != offered[0] and subprocess.run(
+        ["dpkg", "--compare-versions", v, "gt", offered[0]]).returncode == 0]
+    if newer:
+        raise SystemExit(f"--linux: linux/index.html offers {offered[0]}, but the repository "
+                         f"also holds the newer {', '.join(newer)}. Offer the newest.")
     pool = os.path.join(apt, "pool/main/m/megapdf", f"megapdf_{offered[0]}_amd64.deb")
     if not os.path.isfile(pool):
         raise SystemExit(f"--linux: {os.path.relpath(pool, SITE)} is not in the pool")
@@ -273,7 +292,10 @@ def main():
         # copy called index.html.
         landing = os.path.join(tmp, "landing", "index.html")
         os.makedirs(os.path.dirname(landing))
-        shutil.copyfile(args.landing, landing)
+        with open(args.landing, encoding="utf-8") as f:
+            page = strip_comments(f.read())
+        with open(landing, "w", encoding="utf-8") as f:
+            f.write(page)
         targets.append((landing, dest, os.path.join(SITE, "index.html")))
     # Every remote directory below dest, parents first. dest itself is in the
     # list too: --dest may name a path that does not exist yet.

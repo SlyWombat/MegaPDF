@@ -33,6 +33,11 @@ on:
       - 'tools/linux/build-deb.sh'
       - 'tools/linux/make-apt-repo.sh'
       - 'tools/linux/check-apt-repo.sh'
+      - 'tools/linux/package-version.sh'
+      - 'tools/linux/PACKAGE-REVISION'
+      - 'tools/linux/install.sh'
+      - 'tools/linux/uninstall.sh'
+      - 'tools/linux/flatpak/*.metainfo.xml'
       - 'website/megapdf/apt/**'
 
 permissions:
@@ -65,11 +70,13 @@ jobs:
         run: tools/linux/make-release-tarball.sh artifacts/linux/MegaPDF artifacts/release
 
       # A tag names the version it releases. linux-v2.0.1 on a tree that says 2.0.0
-      # would publish a release whose files contradict its name.
+      # would publish a release whose files contradict its name. The version is the
+      # package's: the app's, plus the packaging revision in
+      # tools/linux/PACKAGE-REVISION when there is one (linux-v2.0.0-2, #315).
       - name: The tag matches the version
         if: startsWith(github.ref, 'refs/tags/linux-v')
         run: |
-          built="$(tr -d '[:space:]' < artifacts/linux/MegaPDF/VERSION)"
+          built="$(tools/linux/package-version.sh "$(tr -d '[:space:]' < artifacts/linux/MegaPDF/VERSION)")"
           [ "linux-v$built" = "$GITHUB_REF_NAME" ] || {
             echo "::error::tag $GITHUB_REF_NAME, but this tree builds $built"; exit 1; }
 
@@ -115,6 +122,27 @@ jobs:
       - name: Install it and run the app inside its sandbox
         run: tools/linux/check-flatpak.sh artifacts/flathub/ca.electricrv.MegaPDF.flatpak "$RUNNER_TEMP/fixtures"
 
+      # Every .deb already published stays in the repository, so the site can replace
+      # the repository wholesale without taking away a version someone has pinned, and
+      # apt upgrade sees the path from each one to this one. Downloaded from the
+      # published (not draft) linux-v* releases into the pool, which make-apt-repo.sh
+      # keeps.
+      - name: The .debs already published
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          POOL=artifacts/apt/pool/main/m/megapdf
+          mkdir -p "$POOL"
+          for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+                         --json tagName,isDraft --jq '.[] | select(.isDraft | not) | .tagName' \
+                       | grep '^linux-v' || true); do
+            [ "$tag" = "$GITHUB_REF_NAME" ] && continue
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern 'megapdf_*_amd64.deb' --dir "$POOL" --skip-existing
+          done
+          ls -l "$POOL"
+
       # Signed with the repository key, which the environment hands over and the script
       # imports from stdin, never from a command line. A pull request from a fork has no
       # secrets, so there this step says so and stops short.
@@ -132,7 +160,8 @@ jobs:
 
       # The repository the way a person meets it: subscribe as the website says, install,
       # run the app, see a newer version arrive through apt upgrade, and see a stranger's
-      # signature refused. In clean Debian 12, Ubuntu 22.04 and Ubuntu 24.04 containers.
+      # signature refused. In clean Debian 12 and 13 and Ubuntu 22.04, 24.04 and 26.04
+      # containers, plus a Debian 12 that installs without recommends (#315, #316).
       - name: Install from the APT repository, upgrade, and refuse a forgery
         if: steps.apt.outputs.built == '1'
         env:

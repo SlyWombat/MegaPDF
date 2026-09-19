@@ -308,12 +308,50 @@ to miss the date.
 
 **A later release** is the same, from step 1, with the Linux page's version (its download
 links and the `.deb` file name) bumped in `website/megapdf/linux/index.html`.
-`deploy.py --linux` refuses if the page and the repository disagree.
+`deploy.py --linux` refuses if the page and the repository disagree, or if the page
+offers anything but the newest version the repository holds.
+
+### A packaging revision (the app unchanged)
+
+When the packages have to be rebuilt around an app that hasn't changed (a dependency, an
+installed file, the metainfo), the published files must not be replaced under the same
+name. Instead:
+
+1. Set `tools/linux/PACKAGE-REVISION` to `<app version> <revision>`, e.g. `2.0.0 2`.
+   `tools/linux/package-version.sh` then makes the .deb `2.0.0-2` and the tarball
+   `megapdf-linux-x64-2.0.0-2.tar.gz`. dpkg orders `2.0.0 < 2.0.0-2 < 2.0.1`, so
+   `apt upgrade` takes it. The revision only applies while it names the csproj's
+   version: after the app moves to 2.0.1, packages are `2.0.1` with no suffix, whatever
+   the file says.
+2. Tag `linux-v2.0.0-2`. The tag build checks the tag against the package version, not
+   the app version.
+3. The tag build downloads the .debs of every *published* `linux-v*` release into the
+   repository's pool, so the repository it builds holds 2.0.0 and 2.0.0-2 together.
+   `check-apt-repo.sh` installs the oldest and checks that `apt upgrade` takes it to
+   the newest (on a distribution where the oldest installed at all).
+4. Publish the draft as Latest. The old release stays, with its files untouched.
+5. Bump the Linux page's links, download the tag run's repository into
+   `website/megapdf/apt/`, and deploy the Linux parts as on "the day".
+
+The metainfo's `<releases>` lists app versions, so a revision adds no entry there.
+
+**2.0.0-2** (2026-09-19) was the first: Ubuntu 26.04's `libicu78` was missing from the
+Depends line so the .deb wouldn't install there (#315); libssl was undeclared, so a
+system without recommends crashed at the first save (#316); no `Installed-Size` (#317);
+no AppStream metainfo for software centres (#318). The ICU alternatives now run from
+`libicu80` down to `libicu70`, generated in `build-deb.sh`; **when a distribution ships a
+newer ICU, extend the range** and add that distribution to `check-apt-repo.sh`'s images.
+
+Every page `deploy.py` uploads has its HTML comments removed (#322), so notes in the
+source (issue numbers, paths, "only ours once Dave registers it") never reach the site.
 
 ## The Snap Store
 
 Dave chose the Snap Store as a Linux channel on 2026-09-19, after Flathub's policy on
-AI-written apps made that channel uncertain. **Nothing has been registered or uploaded.**
+AI-written apps made that channel uncertain. **Nothing has been registered or uploaded**
+(#314). The name `megapdf` is the one the snap is built under, and it is only ours once
+Dave registers it: if it has to change, so do the install and `snap connect` commands in
+the Snap section of `website/megapdf/linux/index.html`.
 
 ### What the snap is
 

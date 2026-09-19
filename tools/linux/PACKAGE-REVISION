@@ -1,0 +1,12 @@
+# The Linux packaging revision: "<app version> <revision>".
+#
+# Bump the revision when the .deb, the tarball or the APT repository has to be rebuilt
+# while the app itself is unchanged (a dependency, an installed file, the metainfo),
+# so the new package has a version of its own and never replaces the published files
+# of the same name. It applies only while the app version matches: once the csproj
+# moves to a new version, packages are that version again with no suffix, whatever
+# this file says. tools/linux/package-version.sh reads it.
+#
+# 2.0.0-2 (2026-09-19): Ubuntu 26.04's libicu78, a declared libssl, Installed-Size,
+# and AppStream metainfo for software centres (#315-#318).
+2.0.0 2

@@ -26,6 +26,7 @@ if [ -L "$BINDIR/megapdf" ] && [ "$(readlink "$BINDIR/megapdf")" = "$LIBDIR/Mega
     rm -f "$BINDIR/megapdf"
 fi
 rm -f "$DESKTOP_DIR/megapdf.desktop"
+rm -f "$DATA_HOME/metainfo/ca.electricrv.MegaPDF.metainfo.xml"
 
 # Only the files this app installed, by name. Removing the size directories
 # would take every other application's icons with them. Guarded: with

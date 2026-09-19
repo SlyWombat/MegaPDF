@@ -78,8 +78,13 @@
             <li><strong>No network access</strong> — MegaPDF opens no network connection
                 of its own, on any platform. On Android it asks you for no permissions; on
                 iOS it requests no network entitlements; on macOS its App Sandbox grants it
-                no network access; on Windows it asks for no network capability; and on
-                Linux the Flatpak and the Snap are both built without network access.</li>
+                no network access; on Windows it asks for no network capability. On Linux,
+                where the .deb, our APT repository and the tarball run like most Linux
+                software, without a sandbox, the app simply contains no networking code: it
+                talks only to your own desktop (over its local D-Bus session, for file dialogs)
+                and to your printing system. The link in About MegaPDF opens our web page in
+                your browser when you click it; that visit is your browser's, not the app's.
+                The Snap, when it's available, is also built without network access.</li>
         </ul>
         <p>The PDF documents you open, the edits you make, and the signature images you
         create are processed entirely on your device and stored only where you choose
@@ -90,9 +95,11 @@
         your computer's, not MegaPDF's.</strong> The system print dialog is what finds
         your printers, including any on your local network. On a Mac, macOS asks your
         permission before it looks, and MegaPDF supplies the reason macOS shows you. On
-        Linux, printing inside the Flatpak goes through the desktop's own print portal:
-        MegaPDF hands the desktop the document and the desktop prints it. Either way the
-        document goes to your printer and nowhere else.</p>
+        Linux, you choose a printer in MegaPDF's print window and MegaPDF hands the
+        document to CUPS, your system's own printing service (the <code>lp</code>
+        command); in the Snap, when it's available, the desktop's print portal does
+        that part instead. Either way the document goes to your printer and nowhere
+        else.</p>
 
         <h2>3. Your signature library</h2>
         <p>Signatures you draw or photograph are stored in the app's private storage on

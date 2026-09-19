@@ -16,6 +16,7 @@ LIBDIR="$PREFIX/lib/megapdf"
 BINDIR="$PREFIX/bin"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICON_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+META_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/metainfo"
 
 [ -x "$HERE/bin/MegaPDF" ] || { echo "error: run this from inside an unpacked MegaPDF tree" >&2; exit 1; }
 
@@ -43,6 +44,17 @@ chmod 644 "$DESKTOP_DIR/megapdf.desktop"
 mkdir -p "$ICON_DIR"
 cp -R "$HERE/share/icons/hicolor/." "$ICON_DIR/"
 
+# The AppStream listing, so a software centre shows MegaPDF with its description and
+# screenshots (#318). The tarball carries the Flatpak's copy under flatpak/; its
+# launchable is pointed at the desktop file installed above. Skipped quietly for a
+# tree that has none (a build straight out of tools/build-linux-app.sh).
+META_SRC="$HERE/flatpak/ca.electricrv.MegaPDF.metainfo.xml"
+if [ -f "$META_SRC" ]; then
+    mkdir -p "$META_DIR"
+    sed 's|<launchable type="desktop-id">[^<]*</launchable>|<launchable type="desktop-id">megapdf.desktop</launchable>|' \
+        "$META_SRC" > "$META_DIR/ca.electricrv.MegaPDF.metainfo.xml"
+fi
+
 # These caches are what make the entry appear without logging out. Each is
 # best-effort: a desktop that has none of them reads the directories directly.
 # update-desktop-database is also what puts MegaPDF in a PDF's Open With menu,
@@ -67,5 +79,7 @@ echo "MegaPDF now offers itself in a PDF's Open With menu. To make it the one th
 echo "opens PDFs by default:  xdg-mime default megapdf.desktop application/pdf"
 case ":$PATH:" in
     *":$BINDIR:"*) ;;
-    *) echo "note: $BINDIR is not on your PATH, so the 'megapdf' command will not be found there." ;;
+    *) echo "note: $BINDIR is not on your PATH yet, so the 'megapdf' command won't be found in"
+       echo "      this terminal. On most distributions it joins PATH at your next login: log out"
+       echo "      and back in. The applications menu works straight away." ;;
 esac

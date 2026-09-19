@@ -95,9 +95,9 @@
     <main class="wrap">
         <section class="intro">
             <h1>MegaPDF for Linux</h1>
-            <p>The same app as on Windows, the Mac, iPhone and Android: fill in a form,
-               check the boxes, sign it, redact what has to go, and save it back. Version
-               2.0.0, for 64-bit PCs (x86-64). ARM computers aren't supported yet.</p>
+            <p>MegaPDF 2.0 for Linux: fill in a form, check the boxes, sign it, redact what
+               has to go, and save it back. For 64-bit PCs (x86-64); ARM computers aren't
+               supported yet.</p>
             <div class="picker">
                 <a href="#apt"><b>Debian, Ubuntu, Mint, Pop!_OS</b>
                     <span>Add the MegaPDF repository. Updates arrive with your system's.</span></a>
@@ -112,8 +112,8 @@
 
         <section class="way" id="apt">
             <h2>The MegaPDF APT repository</h2>
-            <p class="for">Recommended for Debian 12 or later, Ubuntu 22.04 or later, and the
-               distributions built on them</p>
+            <p class="for">Recommended for Debian 12 and 13, Ubuntu 22.04, 24.04 and 26.04, and
+               the distributions built on them</p>
             <p>Paste these into a terminal. They add MegaPDF's signing key and repository,
                then install the app:</p>
 <pre><code>sudo install -d -m 0755 /etc/apt/keyrings
@@ -126,6 +126,12 @@ sudo apt install megapdf</code></pre>
             <p>MegaPDF then appears in your applications menu, PDF files offer it under
                <strong>Open With</strong>, and <code>megapdf file.pdf</code> works from a terminal.
                If <code>curl</code> is missing, install it first with <code>sudo apt install curl</code>.</p>
+            <div class="note">
+                <p><strong>Debian without <code>sudo</code>?</strong> If you gave Debian a root
+                   password when you installed it, your account can't use <code>sudo</code>.
+                   Run <code>su -</code> first, enter the root password, and paste the commands
+                   without the word <code>sudo</code>.</p>
+            </div>
 
             <h3>Updates</h3>
             <p>They arrive with your system's own updates, in Software Updater or with
@@ -136,8 +142,10 @@ sudo apt install megapdf</code></pre>
             <p>The repository is signed, and apt refuses anything the key didn't sign. To
                confirm you have the right key:</p>
 <pre><code>gpg --show-keys /etc/apt/keyrings/megapdf.gpg</code></pre>
-            <p>It should say <em>MegaPDF APT repository</em>, with this fingerprint:</p>
-            <p class="fpr">1982 176F F9E6 14A7 C60D 20D1 0097 49E2 44B5 848B</p>
+            <p>It should say <em>MegaPDF APT repository</em>, with this fingerprint, which
+               <code>gpg</code> prints as one string:</p>
+            <p class="fpr">1982176FF9E614A7C60D20D1009749E244B5848B</p>
+            <p>The same, in groups of four: <span class="fpr">1982 176F F9E6 14A7 C60D 20D1 0097 49E2 44B5 848B</span></p>
 
             <h3>Uninstall</h3>
 <pre><code>sudo apt remove megapdf</code></pre>
@@ -147,10 +155,6 @@ sudo apt update</code></pre>
         </section>
 
         <!--snap:live-->
-        <!-- SNAP SECTION: the snap is tools/linux/snap (#158, PR #292). The name `megapdf`
-             is the one it is built under; it is only ours once Dave registers it
-             (tools/Linux-Packaging.md, "The Snap Store"), and if it has to change, the
-             command and the connect line below change with it. -->
         <section class="way" id="snap">
             <h2>The Snap Store</h2>
             <p class="for">For Ubuntu, and any distribution with <code>snapd</code></p>
@@ -171,9 +175,9 @@ sudo apt update</code></pre>
         <section class="way" id="deb">
             <h2>Just the .deb</h2>
             <p class="for">Debian and Ubuntu, if you'd rather not add a repository</p>
-            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0/megapdf_2.0.0_amd64.deb">megapdf_2.0.0_amd64.deb</a>
+            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0-2/megapdf_2.0.0-2_amd64.deb">megapdf_2.0.0-2_amd64.deb</a>
                and install it, which also pulls in anything it needs:</p>
-<pre><code>sudo apt install ./megapdf_2.0.0_amd64.deb</code></pre>
+<pre><code>sudo apt install ./megapdf_2.0.0-2_amd64.deb</code></pre>
             <div class="note">
                 <p><strong>This copy won't update itself.</strong> For updates, add the
                    repository as shown <a href="#apt">above</a>. It takes over this install
@@ -186,15 +190,19 @@ sudo apt update</code></pre>
         <section class="way" id="tarball">
             <h2>The tarball</h2>
             <p class="for">Any distribution. Installs into your home folder, no root needed.</p>
-            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0/megapdf-linux-x64-2.0.0.tar.gz">megapdf-linux-x64-2.0.0.tar.gz</a>,
+            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0-2/megapdf-linux-x64-2.0.0-2.tar.gz">megapdf-linux-x64-2.0.0-2.tar.gz</a>,
                then:</p>
-<pre><code>tar -xzf megapdf-linux-x64-2.0.0.tar.gz
-cd megapdf-linux-x64-2.0.0
+<pre><code>tar -xzf megapdf-linux-x64-2.0.0-2.tar.gz
+cd megapdf-linux-x64-2.0.0-2
 ./install.sh</code></pre>
             <p>That puts MegaPDF in <code>~/.local</code>, in your applications menu, and on
-               your <code>PATH</code> as <code>megapdf</code>. It needs glibc 2.35 or later
-               and the ICU, fontconfig and X11 libraries, which almost every desktop
-               already has.</p>
+               your <code>PATH</code> as <code>megapdf</code>. If a terminal then says
+               <code>megapdf</code> isn't found, log out and back in: on most distributions
+               <code>~/.local/bin</code> joins your <code>PATH</code> at the next login.</p>
+            <p>It needs glibc 2.35 or later and the ICU, OpenSSL, fontconfig and X11
+               libraries, which almost every desktop already has. On a minimal system, the
+               <a href="#apt">repository</a> or the <a href="#deb">.deb</a> is simpler: apt
+               installs those for you.</p>
             <h3>Updates</h3>
             <p>MegaPDF doesn't check for them: it makes no network connection at all.
                Come back to this page, download the newer tarball and run its
@@ -208,9 +216,9 @@ cd megapdf-linux-x64-2.0.0
         <section class="way" id="checksums">
             <h2>Checksums</h2>
             <p>Each download on the
-               <a href="https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.0.0">release page</a>
+               <a href="https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.0.0-2">release page</a>
                has a <code>.sha256</code> file beside it. Save both in the same folder and run:</p>
-<pre><code>sha256sum -c megapdf_2.0.0_amd64.deb.sha256</code></pre>
+<pre><code>sha256sum -c megapdf_2.0.0-2_amd64.deb.sha256</code></pre>
             <p>Packages from the APT repository<!--snap:live--> and the Snap Store<!--snap:soon snap:end-->
                are checked automatically.</p>
         </section>

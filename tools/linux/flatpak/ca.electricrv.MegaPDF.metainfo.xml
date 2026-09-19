@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- AppStream metadata for MegaPDF (#158). This is what a software centre shows and
-     what Flathub's listing is built from; the desktop file alone is not enough for
-     either. Validated by tools/linux/build-flatpak.sh with `appstreamcli validate`.
+<!-- AppStream metadata for MegaPDF (#158). This is what a software centre shows; the
+     desktop file alone is not enough. Validated with `appstreamcli validate` by
+     tools/linux/build-flatpak.sh and tools/linux/build-deb.sh.
 
-     Not submitted anywhere. tools/Linux-Packaging.md lists what is still Dave's to
-     decide here — the app ID, the screenshots and the release history. -->
+     One file for every Linux channel. The Flatpak and the Snap install it as it is.
+     The .deb (/usr/share/metainfo) and the tarball's install.sh
+     (~/.local/share/metainfo) install it with the launchable pointed at their own
+     desktop file, megapdf.desktop (#318). Linux 2.0.0 was released on 2026-09-19
+     through GitHub Releases and the APT repository at electricrv.ca/megapdf/apt/;
+     it is not on Flathub (tools/Linux-Packaging.md). -->
 <component type="desktop-application">
   <id>ca.electricrv.MegaPDF</id>
 
@@ -106,9 +110,9 @@
        tools/capture-gate/gate.py with the linux store profile; the files are staged in this repo under
        website/megapdf/screenshots/linux/ and are served from electricrv.ca.
 
-       These URLs 404 until the site is deployed. AppStream screenshots are URLs and
-       Flathub's linter fetches every one of them, so the site deploy is a step *before*
-       a submission, not after it — see tools/Linux-Packaging.md.
+       They are served from electricrv.ca (deployed with the Linux release on
+       2026-09-19). AppStream screenshots are URLs that software centres and Flathub's
+       linter fetch, so a new capture has to be deployed before a release that names it.
 
        Per-language images because the whole interface translates: measured on this set,
        3.5-7.9 % of the pixels of every slot differ between the English and the French
@@ -208,10 +212,11 @@
        approved copy and the earlier entries carry a version and the date of their tag
        in this repository, which is all that can be said without inventing any of it.
 
-       2.0.0's date is the day this packaging and the 2.0 copy were finished, not a
-       release date — 2.0 has not been released. Both the version and the date have to
-       be right at tag time, and the tag build is where that is enforced (#254 A3)
-       rather than left to whoever remembers. -->
+       2.0.0's date is the day it was released on Linux (2026-09-19). A packaging
+       revision such as 2.0.0-2 (tools/linux/PACKAGE-REVISION) is the same app and adds
+       no entry here. The version and the date have to be right at tag time, and the
+       tag build is where that is enforced (#254 A3) rather than left to whoever
+       remembers. -->
   <releases>
     <release version="2.0.0" date="2026-09-19">
       <url type="details">https://github.com/SlyWombat/MegaPDF/blob/main/docs/release-notes/2.0/release-notes-2.0.md</url>

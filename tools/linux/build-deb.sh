@@ -25,14 +25,17 @@ OPTDIR=/opt/MegaPDF
 
 [ -d "$TREE/bin" ] || { echo "::error::no app tree at $TREE — run tools/build-linux-app.sh first" >&2; exit 1; }
 VERSION="$(cat "$TREE/VERSION" 2>/dev/null || echo 0.1.0)"
+# The package's own version: the app's, plus a packaging revision when the package was
+# rebuilt around an unchanged app (tools/linux/PACKAGE-REVISION, #315).
+PKG_VERSION="$("$ROOT/tools/linux/package-version.sh" "$VERSION")"
 ARCH=amd64
 
-STAGE="$OUT/$PKG-$VERSION"
+STAGE="$OUT/$PKG-$PKG_VERSION"
 rm -rf "$STAGE"
 mkdir -p "$STAGE/DEBIAN" "$STAGE$OPTDIR" "$STAGE/usr/bin" \
-         "$STAGE/usr/share/applications" "$STAGE/usr/share/doc/$PKG"
+         "$STAGE/usr/share/applications" "$STAGE/usr/share/doc/$PKG" "$STAGE/usr/share/metainfo"
 
-echo "building $PKG $VERSION ($ARCH) from $TREE"
+echo "building $PKG $PKG_VERSION ($ARCH) from $TREE"
 
 # --- the payload ----------------------------------------------------------------
 # The published tree goes in one piece: the apphost finds libmegapdf_core.so and
@@ -50,6 +53,22 @@ ln -sf "$OPTDIR/MegaPDF" "$STAGE/usr/bin/megapdf"
 # whose Exec cannot be resolved fails with no message at all.
 sed "s|^Exec=megapdf |Exec=$OPTDIR/MegaPDF |" \
     "$ROOT/tools/linux/megapdf.desktop" > "$STAGE/usr/share/applications/$PKG.desktop"
+
+# The AppStream listing, so a software centre (GNOME Software, KDE Discover) shows
+# MegaPDF with its description and screenshots rather than a bare desktop entry (#318).
+# One source for every channel: the Flatpak's metainfo, with its launchable pointed at
+# the desktop file this package installs. The component ID stays the same, which is
+# what tells a software centre it is the same app however it was installed.
+META_SRC="$ROOT/tools/linux/flatpak/ca.electricrv.MegaPDF.metainfo.xml"
+META="$STAGE/usr/share/metainfo/ca.electricrv.MegaPDF.metainfo.xml"
+sed 's|<launchable type="desktop-id">[^<]*</launchable>|<launchable type="desktop-id">'"$PKG"'.desktop</launchable>|' \
+    "$META_SRC" > "$META"
+grep -q "<launchable type=\"desktop-id\">$PKG.desktop</launchable>" "$META" \
+    || { echo "::error::the metainfo's launchable was not rewritten to $PKG.desktop" >&2; exit 1; }
+if command -v appstreamcli >/dev/null 2>&1; then
+    appstreamcli validate --no-net "$META" >/dev/null \
+        || { appstreamcli validate --no-net "$META" >&2; echo "::error::the metainfo does not validate" >&2; exit 1; }
+fi
 
 # The theme directory has to exist before the copy. `cp -R src dst/` where dst is not
 # there copies src *as* dst, so hicolor's contents landed straight in /usr/share/icons
@@ -88,12 +107,17 @@ cp "$TREE/share/doc/MegaPDF/LICENSE" "$STAGE/usr/share/doc/$PKG/copyright"
 # it — a missing libicu is a FailFast at the first CultureInfo, with a message about
 # installing libicu and nothing about MegaPDF.
 #
-# The libicu alternatives run from Ubuntu 22.04 to the current Debian: the soname is
-# versioned and every release ships a different one, so naming just one would make the
-# package refuse to install on every other release.
+# The libicu alternatives: the soname is versioned and every release ships a different
+# one, so naming just one would make the package refuse to install on every other
+# release. The range runs from Ubuntu 22.04's libicu70 upwards, past the newest any
+# release ships today (Ubuntu 26.04's libicu78, which 2.0.0 left out, #315), so the
+# next one or two releases install too. .NET's ICU loader probes for the newest
+# libicuuc it can find, so a soname the app has never met is still one it can load.
+# Names that don't exist yet cost nothing: apt just takes the first one that does.
+ICU_DEPS="$(for n in $(seq 80 -1 70); do printf 'libicu%s | ' "$n"; done | sed 's/ | $//')"
 {
     echo "Package: $PKG"
-    echo "Version: $VERSION"
+    echo "Version: $PKG_VERSION"
     echo "Architecture: $ARCH"
     echo "Maintainer: Electric RV <noreply@electricrv.ca>"
     echo "Section: text"
@@ -101,7 +125,12 @@ cp "$TREE/share/doc/MegaPDF/LICENSE" "$STAGE/usr/share/doc/$PKG/copyright"
     echo "Homepage: https://electricrv.ca/megapdf/"
     echo "Depends: libc6 (>= 2.35), libgcc-s1, libstdc++6, zlib1g, libfontconfig1, libfreetype6," \
          "libx11-6, libice6, libsm6, libxext6, libxi6, libxrandr2, libxcursor1," \
-         "libicu76 | libicu74 | libicu72 | libicu71 | libicu70"
+         "libssl3t64 | libssl3, $ICU_DEPS"
+    # libssl: .NET's cryptography on Linux is OpenSSL, loaded at run time like ICU, and
+    # a save needs it. It used to arrive only through cups-client's Recommends chain,
+    # so a minimal install without recommends crashed at the first save (#316).
+    # Installed-Size, in KiB, is what apt reports before it installs (#317).
+    echo "Installed-Size: $(du -sk --exclude=DEBIAN "$STAGE" | cut -f1)"
     # Neither is needed to start, and a hard dependency on either would keep MegaPDF
     # off a machine that simply does not print or sign.
     echo "Recommends: cups-client"
@@ -145,7 +174,7 @@ chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
 find "$STAGE$OPTDIR" -type f -name '*.so' -exec chmod 644 {} +
 chmod 755 "$STAGE$OPTDIR/MegaPDF"
 
-DEB="$OUT/${PKG}_${VERSION}_${ARCH}.deb"
+DEB="$OUT/${PKG}_${PKG_VERSION}_${ARCH}.deb"
 rm -f "$DEB"
 # xz over the default: the payload is ninety megabytes of mostly-compressible IL and
 # native code, and a Releases download is the one place the size is felt.
