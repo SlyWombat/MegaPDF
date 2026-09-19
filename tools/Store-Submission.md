@@ -10,7 +10,8 @@ step) all disappear, and the Store handles updates.
   and published the same day; the listing at
   https://apps.microsoft.com/detail/9PF4TRRH4M76 went public at 18:55 UTC and
   electricrv.ca/megapdf links to it. Next release: bump the version, rebuild
-  both architectures, new submission.
+  both architectures, new submission. **Its ARM64 package can't open a document**
+  (#288: x64 `pdfium.dll` inside), so 2.0 is the first working ARM64 release.
 - Partner Center developer account: **active as of 2026-07-22.**
 - When creating the new app, product type = **"MSIX or PWA app"** (not EXE/MSI —
   Store re-signing, Store-managed updates, and package flights are MSIX-only).
@@ -127,23 +128,45 @@ to upload. Check the manifest of what you are shipping, not that the file exists
 Output: `src/MegaPDF.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/AppPackages/MegaPDF.App_<ver>_x64_Test/MegaPDF.App_<ver>_x64.msix`.
 The `_Test` folder name is cosmetic — the package inside carries the Store identity.
 
-⛔ **Do not upload the ARM64 package until #288 is fixed.** It is ARM64 everywhere except the
-two DLLs that matter: `pdfium.dll` and `megapdf_core.dll` are **x64** (PE machine `0x8664`),
-because `MegaPDF.Core.csproj` copies `libs/pdfium/win-x64` and `core/build/win-x64` for every
-Windows RID, and there is no `win-arm64` PDFium build and no MSVC ARM64 toolchain on GPD-DAVE. An
-ARM64 process can't load an x64 DLL, so on an ARM64 device the engine can't load. The live
-1.7.0.0 ARM64 package has the same flaw with `pdfium.dll`. Until it's fixed, submit **x64 only**
-and remove the ARM64 package from the submission: ARM64 Windows 11 runs the x64 package under
-emulation. Check any package before shipping it: read the PE machine of `pdfium.dll` and
-`megapdf_core.dll` out of the `.msix` (the offset at `0x3c`, then 2 bytes at `+4`); `0xAA64` is ARM64.
+**ARM64:** the same command with `-p:Platform=ARM64 -p:RuntimeIdentifier=win-arm64`. It
+lands under `bin/ARM64/.../win-arm64/AppPackages/`. Upload **both** packages to the same
+submission, with the same identity and version but a different `ProcessorArchitecture`,
+and the Store serves each device the right one, so ARM64 machines run native code instead
+of x64 emulation.
 
-**ARM64:** the same command with `-p:Platform=ARM64 -p:RuntimeIdentifier=win-arm64`.
-It cross-compiles from an x64 machine with no extra toolchain and lands under
-`bin/ARM64/.../win-arm64/AppPackages/`. Upload **both** packages to the same
-submission — same identity and version, different `ProcessorArchitecture` — and the
-Store serves each device the right one, so ARM64 machines run native code instead
-of x64 emulation. WACK cannot test the ARM64 package on x64 hardware (appcert runs
-against the host architecture); Store certification tests both server-side.
+⚠️ **Every binary must be its package's architecture (#288).** From 1.7.0.0 to the first
+2.0 RC the ARM64 package carried an x64 `pdfium.dll` (and, in 2.0, an x64
+`megapdf_core.dll`), which its ARM64 process can't load, so no document opened on an ARM64
+PC. Fixed 2026-09-19: `libs/pdfium/win-arm64` is the same patched series built for ARM64,
+and `MegaPDF.Core.csproj` picks natives by architecture. Check every package before
+uploading it:
+
+```
+python3 tools/check-native-arch.py x64   <x64 package>.msix
+python3 tools/check-native-arch.py arm64 <arm64 package>.msix
+```
+
+Each must end `N binaries, 0 not <arch>`. CI's `build-and-test` runs the same check on both
+packages on every commit.
+
+**Where the ARM64 package comes from.** Building it needs the MSVC ARM64 tools for
+`megapdf_core.dll` (`tools/build-core.ps1 -Arch arm64`; the Build Tools component "MSVC
+v143 - VS 2022 C++ ARM64/ARM64EC build tools"). GPD-DAVE doesn't have them, and adding them
+needs an elevated Visual Studio Installer. So the upload package is the one CI builds:
+the `MegaPDF-store-packages` artifact of the `CI` run on the commit being shipped. That run
+builds from a clean checkout with the command above, which also rules out #166, and its
+log prints the SHA-256 of each package. Download it with
+`gh run download <run> -n MegaPDF-store-packages`, then run the identity, resource-map
+and architecture checks below on the file you'll upload.
+
+**What proves it runs.** WACK can't test an ARM64 package on x64 hardware (appcert runs
+against the host architecture), and nobody here has an ARM64 PC. CI's `Windows ARM64` job
+runs on a GitHub `windows-11-arm` machine instead. There, natively on ARM64, it runs the
+engine core's tests, the .NET engine tests, and the app itself:
+`MegaPDF.exe --engine-check <report> --term <word> <doc.pdf>` opens, renders, searches, adds
+a text box, redacts, saves and reads the saved file back from the same executable and
+beside the same DLLs, with no window. Store certification also tests both packages
+server-side.
 
 Note: the build rewrites `MaxVersionTested` from `TargetFramework`, so shipped
 packages carry **10.0.19041.0** even though `Package.appxmanifest` says
