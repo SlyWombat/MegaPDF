@@ -59,9 +59,9 @@ Main store listing → **Manage translations** → add **French (Canada) – fr-
 
 ### English (Canada) — `en-CA`
 
-**Title** [30] (7)
+**Title** [30] (25)
 ```
-MegaPDF
+MegaPDF: Fill & Sign PDFs
 ```
 
 **Short description** [80] (49)
@@ -69,7 +69,7 @@ MegaPDF
 Fill, check and sign a PDF. No account, no cloud.
 ```
 
-**Full description** [4000] (2604)
+**Full description** [4000] (2709)
 ```
 Open. Fix. Save. Done.
 
@@ -88,19 +88,19 @@ Redact, and it really is gone
 Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
 
 Sign like you mean it
-Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
+Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
 
 Save without fear
-Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy.
+Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. You can also protect a document with a password, or remove one you know.
 
 Find any word
 Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a few taps away.
 
 Private by design
-MegaPDF requests zero permissions and makes zero network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
+MegaPDF asks you for no permissions and makes no network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
 
 Works with everything
-Open PDFs from Gmail, Files, Google Drive, or any app that shares files. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows and iOS — same engine, same result, on every platform.
+Open PDFs from Files, Google Drive, or any storage app through MegaPDF's file picker. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows, Mac and iOS — same engine, same result, on every platform.
 
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
@@ -120,9 +120,9 @@ MegaPDF speaks French, and does a great deal more.
 
 ### Français (Canada) — `fr-CA`
 
-**Title** [30] (7)
+**Title** [30] (27)
 ```
-MegaPDF
+MegaPDF : remplir et signer
 ```
 
 **Short description** [80] (68)
@@ -130,7 +130,7 @@ MegaPDF
 Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.
 ```
 
-**Full description** [4000] (3281)
+**Full description** [4000] (3451)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -149,41 +149,41 @@ Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
 
 Confidentiel par conception
-MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
+MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Fichiers, Google Drive ou toute application de stockage, avec le sélecteur de fichiers de MegaPDF. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (492) — 2.0, from `docs/release-notes/2.0/google-play.md`
+**Release notes** [500] (493) — 2.0, from `docs/release-notes/2.0/google-play.md`
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviardez : retiré pour de bon
+• Caviardez texte et images : retirés pour de bon
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
-• L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
-• Les PDF très volumineux s'ouvrent tout de suite
+• L'application dit ce qu'elle fait : ouverture, enregistrement
+• Les PDF très volumineux s'ouvrent aussitôt
 ```
 
 ### Français (France) — `fr-FR`
 
-**Title** [30] (7)
+**Title** [30] (27)
 ```
-MegaPDF
+MegaPDF : remplir et signer
 ```
 
 **Short description** [80] (62)
@@ -191,7 +191,7 @@ MegaPDF
 Remplir, cocher et signer un PDF. Pas de compte, pas de cloud.
 ```
 
-**Full description** [4000] (3279)
+**Full description** [4000] (3449)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -210,34 +210,34 @@ Caviardez, et c'est parti pour de bon
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
 
 Confidentiel par conception
-MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
+MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Fichiers, Google Drive ou toute application de stockage, avec le sélecteur de fichiers de MegaPDF. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (492) — 2.0, from `docs/release-notes/2.0/google-play.md`
+**Release notes** [500] (493) — 2.0, from `docs/release-notes/2.0/google-play.md`
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviardez : retiré pour de bon
+• Caviardez texte et images : retirés pour de bon
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
-• L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
-• Les PDF très volumineux s'ouvrent tout de suite
+• L'application dit ce qu'elle fait : ouverture, enregistrement
+• Les PDF très volumineux s'ouvrent aussitôt
 ```
 
 <!-- /copy-by-language -->

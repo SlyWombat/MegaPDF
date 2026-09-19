@@ -247,21 +247,53 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 # the App Store copy above names none; Play's "Works with everything" paragraph
 # is its own, and may.
 WORKS_EN_AS = "Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app."
-WORKS_EN_PLAY = "Open PDFs from Gmail, Files, Google Drive, or any app that shares files. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows and iOS — same engine, same result, on every platform."
+WORKS_EN_PLAY = "Open PDFs from Files, Google Drive, or any storage app through MegaPDF's file picker. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows, Mac and iOS — same engine, same result, on every platform."
 WORKS_FR_CA_AS = "Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF."
-WORKS_FR_CA_PLAY = "Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes."
+WORKS_FR_CA_PLAY = "Ouvrez des PDF depuis Fichiers, Google Drive ou toute application de stockage, avec le sélecteur de fichiers de MegaPDF. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes."
+
+# What the Android app does differently from the iPhone one, checked against the code
+# (2026-09-19 independent Play audit): no "Open with"/share-sheet entry (no VIEW or SEND
+# intent filter, so PDFs come in through the picker), signatures from the photo picker
+# rather than the camera, typed signatures, and a merged signature-level androidx
+# permission that the user is never asked for. Each pair must match exactly once.
+PLAY_EN_SWAPS = [
+    (WORKS_EN_AS, WORKS_EN_PLAY),
+    ("Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically.",
+     "Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically."),
+    ("Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy.",
+     "Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. You can also protect a document with a password, or remove one you know."),
+    ("MegaPDF requests zero permissions and makes zero network connections.",
+     "MegaPDF asks you for no permissions and makes no network connections."),
+]
+PLAY_FR_CA_SWAPS = [
+    (WORKS_FR_CA_AS, WORKS_FR_CA_PLAY),
+    ("Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement.",
+     "Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement."),
+    ("MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.",
+     "MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez."),
+    ("MegaPDF ne demande aucune permission et n'établit aucune connexion réseau.",
+     "MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau."),
+]
+
+
+def swapped(text: str, swaps: list) -> str:
+    for old, new in swaps:
+        assert text.count(old) == 1, f"Play swap does not match exactly once: {old[:60]}"
+        text = text.replace(old, new)
+    return text
+
 
 PLAY_EN = {
-    "title": "MegaPDF",
+    "title": "MegaPDF: Fill & Sign PDFs",
     "short": "Fill, check and sign a PDF. No account, no cloud.",
-    "description": AS_EN["description"].replace(WORKS_EN_AS, WORKS_EN_PLAY),
+    "description": swapped(AS_EN["description"], PLAY_EN_SWAPS),
     "notes": release_block("google-play.md", "English (Canada)"),
 }
 
 PLAY_FR_CA = {
-    "title": "MegaPDF",
+    "title": "MegaPDF : remplir et signer",
     "short": "Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.",
-    "description": AS_FR_CA["description"].replace(WORKS_FR_CA_AS, WORKS_FR_CA_PLAY),
+    "description": swapped(AS_FR_CA["description"], PLAY_FR_CA_SWAPS),
     "notes": release_block("google-play.md", "Français (Canada)"),
 }
 
@@ -352,6 +384,7 @@ LIMITS_OK = [
     (len(AS_EN["promo"]) <= 170 and len(AS_FR_CA["promo"]) <= 170, "AS promo ≤170"),
     (len(AS_EN["keywords"]) <= 100 and len(AS_FR_CA["keywords"]) <= 100, "AS keywords ≤100"),
     (len(AS_EN["description"]) <= 4000 and len(AS_FR_CA["description"]) <= 4000, "AS description ≤4000"),
+    (len(PLAY_EN["title"]) <= 30 and len(PLAY_FR_CA["title"]) <= 30, "Play title ≤30"),
     (len(PLAY_EN["short"]) <= 80 and len(PLAY_FR_CA["short"]) <= 80, "Play short ≤80"),
     (len(PLAY_EN["description"]) <= 4000 and len(PLAY_FR_CA["description"]) <= 4000, "Play full description ≤4000"),
     (len(PLAY_EN["notes"]) <= 500 and len(PLAY_FR_CA["notes"]) <= 500, "Play notes ≤500"),

@@ -16,6 +16,9 @@ by-hand production step that android/RELEASING.md describes.
     play_listing.py readback <captures> [--production <vc>]
                                                     fresh edit, compare to the sources
 
+<captures> may be `--text-only` instead: the listing text and the release notes
+are set or compared, and the screenshots on Play are left exactly as they are.
+
 <captures> holds {phone,tablet}/{en,fr-CA,fr-FR}/android-<pose>.png.
 Key: PLAY_SA_PATH (a file) or PLAY_SA_JSON, as play_submit.py takes it.
 """
@@ -115,8 +118,9 @@ def production_release(copy, vc):
 
 def cmd_push(captures, vc, commit):
     copy = copy_by_language()
-    plan = {loc: {dev: shots(captures, dev, folder) for dev in IMAGE_TYPES}
-            for loc, folder in LOCALES.items()}
+    plan = None if captures is None else {
+        loc: {dev: shots(captures, dev, folder) for dev in IMAGE_TYPES}
+        for loc, folder in LOCALES.items()}
     e = Edit()
     try:
         for loc in LOCALES:
@@ -125,7 +129,7 @@ def cmd_push(captures, vc, commit):
                 "language": loc, "title": c["title"],
                 "shortDescription": c["shortDescription"], "fullDescription": c["fullDescription"]})
             print(f"{loc}: text set")
-            for dev, itype in IMAGE_TYPES.items():
+            for dev, itype in (IMAGE_TYPES.items() if plan else ()):
                 e.call("DELETE", f"/listings/{loc}/{itype}")
                 for f in plan[loc][dev]:
                     e.upload(f"/listings/{loc}/{itype}", f)
@@ -160,7 +164,7 @@ def cmd_readback(captures, vc):
                 ok = l.get(k) == copy[loc][k]
                 bad += not ok
                 print(f"{loc} {k}: {'same' if ok else 'DIFFERENT'} ({len(l.get(k, ''))})")
-            for dev, itype in IMAGE_TYPES.items():
+            for dev, itype in (IMAGE_TYPES.items() if captures else ()):
                 got = [i["sha1"] for i in e.call("GET", f"/listings/{loc}/{itype}").get("images", [])]
                 want = [sha1(f) for f in shots(captures, dev, folder)]
                 ok = got == want
@@ -186,12 +190,13 @@ def main(argv):
     vc = argv[argv.index("--production") + 1] if "--production" in argv else None
     if not argv:
         raise SystemExit(__doc__)
+    captures = None if len(argv) > 1 and argv[1] == "--text-only" else (argv[1] if len(argv) > 1 else None)
     if argv[0] == "status":
         cmd_status()
     elif argv[0] == "push":
-        cmd_push(argv[1], vc, "--commit" in argv)
+        cmd_push(captures, vc, "--commit" in argv)
     elif argv[0] == "readback":
-        sys.exit(1 if cmd_readback(argv[1], vc) else 0)
+        sys.exit(1 if cmd_readback(captures, vc) else 0)
     else:
         raise SystemExit(__doc__)
 

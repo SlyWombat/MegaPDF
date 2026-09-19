@@ -39,7 +39,7 @@ French. The app follows your device language; on Android 13 and later you can al
 
 Correct the document's own text. Tap a line in the document and retype it. MegaPDF keeps the line's own font where it can and tells you when it had to use a similar one; Undo puts the original back exactly. If a change would disturb the rest of the page, it says so instead of quietly moving things — and it now makes far more of those changes than it used to refuse.
 
-Signatures. Type a name to make one, as well as drawing it or photographing it. The library is a sheet showing each signature's real ink, and each one can be renamed or deleted.
+Signatures. Type a name to make one, as well as drawing it or using a photo of it. The library is a sheet showing each signature's real ink, and each one can be renamed or deleted.
 
 Protected PDFs. Open one with its password. If its owner restricted what may be changed, MegaPDF respects that and tells you, and the owner password unlocks it. Set a password on a document, change it, or remove it.
 
@@ -52,18 +52,18 @@ Very large PDFs. A 2.5 GB, thousand-page file used to be out of reach; it now op
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (492)
+**Notes de version** [500] (493)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviardez : retiré pour de bon
+• Caviardez texte et images : retirés pour de bon
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
-• L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
-• Les PDF très volumineux s'ouvrent tout de suite
+• L'application dit ce qu'elle fait : ouverture, enregistrement
+• Les PDF très volumineux s'ouvrent aussitôt
 ```
 
 **Version longue** (corps de la publication GitHub)
@@ -75,7 +75,7 @@ Le français. L'application suit la langue de votre appareil; sur Android 13 et 
 
 Corrigez le texte du document. Touchez une ligne du document et retapez-la. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable; Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence — et il effectue maintenant bien plus de ces modifications qu'il n'en refusait.
 
-Les signatures. Tapez un nom pour en créer une, en plus de la dessiner ou de la photographier. La bibliothèque est une feuille qui montre l'encre réelle de chaque signature, et chacune peut être renommée ou supprimée.
+Les signatures. Tapez un nom pour en créer une, en plus de la dessiner ou d'utiliser une photo. La bibliothèque est une feuille qui montre l'encre réelle de chaque signature, et chacune peut être renommée ou supprimée.
 
 Les PDF protégés. Ouvrez-en un avec son mot de passe. Si son propriétaire a restreint les modifications, MegaPDF le respecte et vous le dit, et le mot de passe du propriétaire le déverrouille. Définissez un mot de passe sur un document, changez-le ou retirez-le.
 
@@ -88,18 +88,18 @@ Les PDF très volumineux. Un fichier de 2,5 Go et mille pages était hors de por
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (492)
+**Notes de version** [500] (493)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviardez : retiré pour de bon
+• Caviardez texte et images : retirés pour de bon
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
-• L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
-• Les PDF très volumineux s'ouvrent tout de suite
+• L'application dit ce qu'elle fait : ouverture, enregistrement
+• Les PDF très volumineux s'ouvrent aussitôt
 ```
 
 **Version longue** (corps de la publication GitHub)
@@ -111,7 +111,7 @@ Le français. L'application suit la langue de votre appareil ; sur Android 13 e
 
 Corrigez le texte du document. Touchez une ligne du document et retapez-la. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable ; Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence — et il effectue maintenant bien plus de ces modifications qu'il n'en refusait.
 
-Les signatures. Tapez un nom pour en créer une, en plus de la dessiner ou de la photographier. La bibliothèque est une feuille qui montre l'encre réelle de chaque signature, et chacune peut être renommée ou supprimée.
+Les signatures. Tapez un nom pour en créer une, en plus de la dessiner ou d'utiliser une photo. La bibliothèque est une feuille qui montre l'encre réelle de chaque signature, et chacune peut être renommée ou supprimée.
 
 Les PDF protégés. Ouvrez-en un avec son mot de passe. Si son propriétaire a restreint les modifications, MegaPDF le respecte et vous le dit, et le mot de passe du propriétaire le déverrouille. Définissez un mot de passe sur un document, changez-le ou retirez-le.
 
