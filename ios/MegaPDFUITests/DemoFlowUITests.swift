@@ -259,7 +259,9 @@ final class DemoFlowUITests: XCTestCase {
 
         // 8. The Photos picker appears (no permission prompt) and is dismissed.
         app.buttons["Sign"].firstMatch.tap(); pause(1.5)
-        app.buttons["Photos"].firstMatch.tap(); pause(3.0)
+        // "Photo" since the signature sheet's redesign (#99-#101); this step was never reached
+        // while the form was staged where the picker could not see it.
+        app.buttons["Photo"].firstMatch.tap(); pause(3.0)
         let cancel = lastButton(app, "Cancel")
         if cancel.waitForExistence(timeout: 5) { cancel.tap() }
         pause(1.5)
