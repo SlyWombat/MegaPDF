@@ -242,6 +242,69 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
 - `runFullTrust` (the only declared capability) is allowed for packaged desktop apps;
   expect to briefly justify it during submission — standard for WinUI 3 desktop apps.
 
+## Submitting through the API (2.0 onward)
+
+From 2.0 the submission is made headlessly with `tools/msstore_submit.py`, through
+the Microsoft Store submission API. It needs no browser and no Partner Center
+session.
+
+**Identity.** The Microsoft Entra application **"MegaPDF submission"** (tenant
+drscapital.com, role **Manager (Windows)**) was added by Dave on 2026-09-19 under
+Partner Center → ⚙ Account settings → User management → Microsoft Entra
+applications. Its reply URL, https://electricrv.ca/megapdf, is required by the form
+and never used. **Its key expires 2028-09-19**: add a new key on the same page
+before then and update the credentials file.
+
+**Credentials** live in a `KEY=VALUE` file, `megapdf-msstore.env` in the `.secrets`
+folder of the WSL home, mode 0600, or wherever `MSSTORE_ENV_FILE` points. It holds
+`MSSTORE_TENANT_ID`, `MSSTORE_CLIENT_ID`, `MSSTORE_CLIENT_SECRET` and
+`MSSTORE_SELLER_ID`. The tool reads the file itself, so no value ever goes on a
+command line. It never prints the secret, the token or the upload (SAS) URL.
+
+**Steps**, from the repo root:
+
+```
+python3 tools/msstore_submit.py build        # payload.json + upload.zip, no network
+python3 tools/msstore_submit.py token-test   # prints only "token OK"
+python3 tools/msstore_submit.py status       # the app, its published and pending submissions
+python3 tools/msstore_submit.py plan         # the published submission, before and after; creates nothing
+python3 tools/msstore_submit.py submit       # create, fill, upload, commit, poll
+python3 tools/msstore_submit.py status       # read it back
+```
+
+**`build` reads everything from the repo:**
+- The listing copy for `en-us`, `en-ca`, `fr-ca` and `fr-fr`, from
+  *Copy by language* in `docs/microsoft-store-listing.md`, which
+  `gen_listing_copy.py` generates.
+- What's new, from `docs/release-notes/<ver>/microsoft-store.md`.
+- The six screenshots per language, with their captions, from
+  `artifacts/store/screenshots/<lang>/`.
+- Both packages, from `artifacts/store/rc-<ver>/`. It refuses a package whose
+  sha256 isn't the one in that folder's `SHA256SUMS`.
+
+It also checks every field against Partner Center's limits:
+- the description, 10,000;
+- What's new, 1,500;
+- up to 20 features of 200;
+- 7 search terms of 30, with at most 21 words in total;
+- captions, 200.
+
+It stops rather than send anything over a limit.
+
+**`submit` then:**
+- clones the last published submission;
+- marks every earlier package and screenshot for deletion, and adds the new
+  ones;
+- sets **publish mode Immediate**, so the release goes live as soon as it
+  passes certification (Dave, 2026-09-19);
+- uploads the zip;
+- commits, and polls until certification starts.
+
+It leaves pricing, age rating and properties exactly as they were. It also
+refuses to run while another submission is pending.
+
+The listing title stays **"Mega PDF"**, the reserved name.
+
 ## Listing content (needs account)
 - Description, screenshots, category, **age rating** (IARC questionnaire).
 - **Privacy policy URL** — required. Data is local-only and telemetry is off by
