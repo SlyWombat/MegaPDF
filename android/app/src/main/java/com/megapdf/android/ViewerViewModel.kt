@@ -873,7 +873,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         currentUri = uri
         documentReadsUri = if (opened.readsUri) uri else null
         val name = queryDisplayName(uri)
-        persistReadPermission(uri)
+        persistPermission(uri)
         // The uri, the name and where it lives (#165) — asked once, here, because the
         // list must not query a provider per row while it draws. Never a password:
         // whatever opened it stays with the open document.
@@ -1672,7 +1672,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
                 if (isSaveAs) {
                     currentUri = uri
-                    persistReadPermission(uri)
+                    persistPermission(uri)
                     val name = queryDisplayName(uri)
                     unavailableChecked -= uri.toString()
                     recentsStore.add(
@@ -1983,14 +1983,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private fun defaultSignatureName(): String =
         str(R.string.signature_default_name, signatures.size + 1)
 
-    private fun persistReadPermission(uri: Uri) {
-        try {
-            getApplication<Application>().contentResolver.takePersistableUriPermission(
-                uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        } catch (_: SecurityException) {
-            // Not a persistable grant (e.g. some third-party providers); recents
-            // will just round-trip through the picker for this document.
+    private fun persistPermission(uri: Uri) {
+        // Read and write when offered, read alone otherwise (UriGrants). Null is a
+        // provider with no persistable grant: recents will just round-trip through
+        // the picker for this document.
+        UriGrants.persist { flags ->
+            getApplication<Application>().contentResolver.takePersistableUriPermission(uri, flags)
         }
     }
 
