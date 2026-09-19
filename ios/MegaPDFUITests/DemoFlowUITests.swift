@@ -282,6 +282,12 @@ final class DemoFlowUITests: XCTestCase {
         XCUIDevice.shared.press(.home)
         let icon = springboard.icons.matching(NSPredicate(format: "label BEGINSWITH 'MegaPDFUITests'")).firstMatch
         guard icon.waitForExistence(timeout: 5) else { return }   // already off the home screen
+        // New apps land on a later home-screen page, where the icon exists but has a
+        // zero frame until that page is showing: page right until it can be touched.
+        for _ in 0..<4 where !icon.isHittable {
+            springboard.swipeLeft(); Thread.sleep(forTimeInterval: 1.0)
+        }
+        XCTAssertTrue(icon.isHittable, "the runner's icon is on no home-screen page")
         icon.press(forDuration: 1.5)
         let remove = springboard.buttons["Remove App"].firstMatch
         XCTAssertTrue(remove.waitForExistence(timeout: 5), "no Remove App in the icon's menu")
