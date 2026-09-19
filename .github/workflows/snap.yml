@@ -75,19 +75,37 @@ jobs:
           sudo snap install review-tools
           /snap/bin/review-tools.snap-review "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap || true
 
+      # dbus-user-session puts the session bus under the user's systemd manager, which is
+      # where snapd asks for the transient scope it tracks a snap in.
       - name: Desktop session tools for the check
         run: |
-          sudo apt-get install -y -qq xvfb dbus dbus-x11 x11-utils xdotool metacity \
-            xdg-desktop-portal xdg-desktop-portal-gtk poppler-utils
+          sudo apt-get install -y -qq xvfb dbus dbus-x11 dbus-user-session x11-utils \
+            xdotool metacity xdg-desktop-portal xdg-desktop-portal-gtk poppler-utils
 
       - name: Generate fixtures
         run: |
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
 
+      # A step is a child of the runner's system service, and snapd will not start a snap
+      # from there ("… is not a snap cgroup"): it tracks each snap process in a scope under
+      # the user's own systemd manager. Lingering starts that manager with no login, and
+      # systemd-run puts the check inside it, where a terminal on a desktop would be.
+      - name: A user session for the check
+        run: |
+          sudo loginctl enable-linger "$USER"
+          for _ in $(seq 1 60); do
+            systemctl is-active --quiet "user@$(id -u).service" && break
+            sleep 1
+          done
+          systemctl is-active "user@$(id -u).service"
+
       - name: Install the snap and run the app under strict confinement
         run: |
-          tools/linux/check-snap.sh "$(ls "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap)" \
+          sudo systemd-run --machine="$USER@.host" --user --pipe --wait --quiet --collect \
+            --working-directory="$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/tools/linux/check-snap.sh" \
+            "$(ls "$RUNNER_TEMP"/snap/megapdf_*_amd64.snap)" \
             "$RUNNER_TEMP/fixtures" "$RUNNER_TEMP/linux/MegaPDF"
 
       - uses: actions/upload-artifact@v4

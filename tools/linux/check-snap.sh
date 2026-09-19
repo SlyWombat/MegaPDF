@@ -7,6 +7,12 @@
 # ubuntu-24.04 runner, or an Ubuntu desktop. Not in a container: snapd needs systemd,
 # and strict confinement is AppArmor, which is the thing being checked.
 #
+# And from inside that user's own systemd session. snapd tracks every snap process in a
+# transient scope under the user's manager, and refuses to start one from anywhere else
+# ("… is not a snap cgroup for tag snap.megapdf.megapdf"). A desktop terminal already is
+# such a session; a CI step is a system service, so the workflow enables lingering and
+# runs this script through `systemd-run --machine=<user>@.host --user` (snap.yml).
+#
 # What it proves, each as something a confined app could get wrong while the snap still
 # builds:
 #
@@ -38,7 +44,22 @@ FIXTURES=$(cd "$FIXTURES" && pwd)
 failures=0
 step()  { echo; echo "=== $* ==="; }
 check() { if [ "$1" -eq 0 ]; then echo "  ok"; else echo "  FAIL (exit $1)"; failures=$((failures + 1)); fi; }
-expect_fail() { if [ "$1" -ne 0 ]; then echo "  ok (refused, as it should be)"; else echo "  FAIL: it was allowed"; failures=$((failures + 1)); fi; }
+# A refusal only counts if the snap ran: a snap that cannot start refuses everything,
+# which is how an earlier version of this check passed every refusal while nothing ran.
+# So each probe runs a shell inside the snap that says RAN before it tries anything.
+probe() {  # <description> <expected: READ|REFUSED> <path>
+    local what=$1 expected=$2 path=$3 out
+    out=$(snap run --shell megapdf -c "echo RAN; if head -c 1 '$path' >/dev/null 2>&1; then echo READ; else echo REFUSED; fi" 2>&1)
+    if ! echo "$out" | grep -qx RAN; then
+        echo "  FAIL: $what — the snap did not run: $(echo "$out" | tail -1)"
+        failures=$((failures + 1))
+    elif echo "$out" | grep -qx "$expected"; then
+        echo "  ok: $what — ${expected,,}"
+    else
+        echo "  FAIL: $what — expected ${expected,,}, got $(echo "$out" | grep -xE 'READ|REFUSED')"
+        failures=$((failures + 1))
+    fi
+}
 START=$(date +%s)
 
 # --- install --------------------------------------------------------------------
@@ -66,18 +87,26 @@ check $?
 # a backend. GNOME's portal configuration falls back to the GTK backend when GNOME's own
 # is not installed, which is how #254 A4 ran it too.
 
-export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 sudo mkdir -p "$XDG_RUNTIME_DIR"
 sudo chown "$(id -u):$(id -g)" "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
-rm -f "$XDG_RUNTIME_DIR/bus"
-BUS_PID=$(dbus-daemon --session --address="$DBUS_SESSION_BUS_ADDRESS" --fork --print-pid)
+BUS_PID=
+if [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+    echo "  session bus: the user manager's, at $XDG_RUNTIME_DIR/bus"
+else
+    BUS_PID=$(dbus-daemon --session --address="$DBUS_SESSION_BUS_ADDRESS" --fork --print-pid)
+    echo "  session bus: started at $XDG_RUNTIME_DIR/bus"
+fi
 export DISPLAY=:99
 Xvfb "$DISPLAY" -screen 0 1440x900x24 -nolisten tcp >/tmp/megapdf-snap-xvfb.log 2>&1 &
 XVFB_PID=$!
 for _ in $(seq 1 50); do xdpyinfo >/dev/null 2>&1 && break; sleep 0.2; done
 export XDG_CURRENT_DESKTOP=GNOME GTK_USE_PORTAL=1
+# The portal backend and the document portal are started by D-Bus activation, through
+# the user manager when there is one, and they need the display this script just made.
+dbus-update-activation-environment --systemd DISPLAY XDG_CURRENT_DESKTOP GTK_USE_PORTAL 2>/dev/null || true
 if command -v metacity >/dev/null; then metacity --sm-disable >/tmp/megapdf-snap-wm.log 2>&1 & fi
 /usr/libexec/xdg-desktop-portal >/tmp/megapdf-snap-portal.log 2>&1 &
 PORTAL_PID=$!
@@ -88,7 +117,7 @@ done
 dbus-monitor --session >/tmp/megapdf-snap-bus.log 2>&1 &
 MONITOR_PID=$!
 cleanup() {
-    kill "$MONITOR_PID" "$PORTAL_PID" "$XVFB_PID" "$BUS_PID" 2>/dev/null
+    kill "$MONITOR_PID" "$PORTAL_PID" "$XVFB_PID" ${BUS_PID:+"$BUS_PID"} 2>/dev/null
     pkill -f 'xdg-desktop-portal-gtk$' 2>/dev/null
     pkill -f '/usr/libexec/xdg-document-portal$' 2>/dev/null
     pkill -x metacity 2>/dev/null
@@ -102,6 +131,17 @@ shell()   { snap run --shell megapdf -c "$1"; }
 WORK="$HOME/MegaPDF snap check"
 rm -rf "$WORK"; mkdir -p "$WORK"
 cp -r "$FIXTURES/." "$WORK/"
+
+step "the snap starts at all from this session"
+out=$(snap run megapdf --language-check 2>&1); rc=$?
+echo "$out" | tail -2 | sed 's/^/  /'
+if [ $rc -ne 0 ]; then
+    if echo "$out" | grep -q 'is not a snap cgroup'; then
+        echo "::error::snapd will not start a snap from this process: it is not inside a user session. See the top of this script." >&2
+    fi
+    echo "::error::the snap does not start; nothing after this would mean anything" >&2
+    exit 1
+fi
 
 # --- inside the snap ------------------------------------------------------------
 
@@ -136,30 +176,27 @@ step "a document in the home folder opens (the home plug)"
 megapdf --render-check "$HOME/MegaPDF snap check/stamped.pdf" >/dev/null
 check $?
 
-step "a hidden file in the home folder does not"
+step "what the confinement lets the app read"
+echo "a document" > "$HOME/megapdf-snap-probe.txt"
 echo "hidden" > "$HOME/.megapdf-snap-hidden-probe"
-shell "cat '$HOME/.megapdf-snap-hidden-probe'" >/dev/null 2>&1
-expect_fail $?
-rm -f "$HOME/.megapdf-snap-hidden-probe"
-
-step "a file outside the home folder does not"
+mkdir -p "$HOME/Documents/.megapdf-probe-dir"
+echo "deeper" > "$HOME/Documents/.megapdf-probe-dir/x.txt"
 sudo install -m 644 "$FIXTURES/stamped.pdf" /opt/megapdf-snap-probe.pdf
-megapdf --render-check /opt/megapdf-snap-probe.pdf >/dev/null 2>&1
-expect_fail $?
-sudo rm -f /opt/megapdf-snap-probe.pdf
-
-step "the host's /tmp is not the snap's /tmp"
 echo "host" > /tmp/megapdf-snap-tmp-probe
-shell "test -e /tmp/megapdf-snap-tmp-probe"
-expect_fail $?
-rm -f /tmp/megapdf-snap-tmp-probe
+probe "a file at the top of the home folder"          READ    "$HOME/megapdf-snap-probe.txt"
+probe "a hidden file at the top of the home folder"   REFUSED "$HOME/.megapdf-snap-hidden-probe"
+probe "a hidden folder inside ~/Documents"            READ    "$HOME/Documents/.megapdf-probe-dir/x.txt"
+probe "a file outside the home folder (/opt)"         REFUSED /opt/megapdf-snap-probe.pdf
+probe "the host's /tmp (the snap has its own)"        REFUSED /tmp/megapdf-snap-tmp-probe
+rm -rf "$HOME/megapdf-snap-probe.txt" "$HOME/.megapdf-snap-hidden-probe" "$HOME/Documents/.megapdf-probe-dir" /tmp/megapdf-snap-tmp-probe
+sudo rm -f /opt/megapdf-snap-probe.pdf
 
 step "a document on a USB drive: refused until removable-media is connected, then read"
 sudo mkdir -p /media/megapdf-usb
 sudo install -m 644 "$FIXTURES/stamped.pdf" /media/megapdf-usb/stamped.pdf
-megapdf --render-check /media/megapdf-usb/stamped.pdf >/dev/null 2>&1
-expect_fail $?
+probe "a PDF on /media, removable-media not connected" REFUSED /media/megapdf-usb/stamped.pdf
 sudo snap connect megapdf:removable-media
+probe "the same PDF, removable-media connected"        READ    /media/megapdf-usb/stamped.pdf
 megapdf --render-check /media/megapdf-usb/stamped.pdf >/dev/null
 check $?
 sudo snap disconnect megapdf:removable-media
