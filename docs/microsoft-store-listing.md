@@ -173,11 +173,11 @@ APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images 
 
 ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
 
-Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG).
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG).
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
-MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
+MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
 **App features** — one line per box, nine boxes
@@ -186,11 +186,11 @@ Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un 
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
 Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
-Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
-Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
+Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
+Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
 Réduisez les numérisations trop lourdes pour le courriel en un clic
 Imprimez directement depuis l'application
-Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie
+Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie
 ```
 
 **Search terms** — one per box, seven boxes
@@ -211,7 +211,7 @@ PDF léger
 
 **Screenshot captions** — same five files, same order
 ```
-01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
+01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
 04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic.
@@ -239,11 +239,11 @@ APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images 
 
 ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
 
-Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour l'e-mail en un clic (sous-échantillonnage des images et recompression JPEG).
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour l'e-mail en un clic (sous-échantillonnage des images et recompression JPEG).
 
-CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
+CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais envoyé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
-MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
+MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
 **App features** — one line per box, nine boxes
@@ -252,11 +252,11 @@ Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un 
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
 Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
-Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
-Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
+Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
+Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
 Réduisez les numérisations trop lourdes pour l'e-mail en un clic
 Imprimez directement depuis l'application
-Traitement 100 % local : pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie
+Traitement 100 % local : pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie
 ```
 
 **Search terms** — one per box, seven boxes
@@ -277,7 +277,7 @@ PDF léger
 
 **Screenshot captions** — same five files, same order
 ```
-01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
+01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
 04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée à l'e-mail en un clic.

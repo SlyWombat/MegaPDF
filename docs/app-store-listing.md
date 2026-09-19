@@ -95,9 +95,35 @@ MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you
 pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign
 ```
 
-**What's new** — for the release that first carries the language
+**What's new** [4000] (1760) — 2.0, from `docs/release-notes/2.0/app-store.md`
 ```
-MegaPDF now speaks French. The app follows your device language; you can also pick one under Settings → MegaPDF → Language.
+Correct the document's own text
+
+Tap a line in the document and retype it. Wrong date, misspelled name, the wrong amount — you no longer have to cover it up and write beside it. MegaPDF keeps the line's own font where it can and tells you when it had to use a similar one, and Undo puts the original back exactly. If a change would disturb the rest of the page, it says so instead of quietly moving things.
+
+Redact, and it really is gone
+
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
+
+Protected PDFs
+
+Open a PDF that asks for a password. If its owner restricted what may be changed, MegaPDF respects that and tells you, and the owner password unlocks it. You can also set a password on a document, change it, or remove it.
+
+One row of tools
+
+The tools now sit in a single row along the bottom, where a thumb reaches them, and everything done to the file as a whole is under More at the top.
+
+It tells you what it is doing
+
+Opening, saving, checking the saved file, searching, checking a page, applying a change: each says so while it works, and repeat taps are ignored rather than queued. Anything quicker than half a second still says nothing at all.
+
+Very large PDFs
+
+A 2.5 GB, thousand-page file used to be out of reach. It now opens straight away and stays well inside what a phone can hold. Banner-size pages measure at their real size, and pages full of pictures draw several times faster.
+
+Smaller things
+
+Lines a document draws twice — the old trick for fake bold — now edit cleanly instead of leaving a ghost. Search reaches the match itself when the page is zoomed in, not just the page it is on.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -128,35 +154,35 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (2913)
+**Description** [4000] (2914)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
-MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique. Tout se passe sur votre appareil.
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique. Tout se passe sur votre appareil.
 
 Cochez n'importe quelle case
-Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
 
 Confidentiel par conception
-MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
+MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
+Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
@@ -166,15 +192,41 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
 ```
 
-**What's new** — for the release that first carries the language
+**What's new** [4000] (2130) — 2.0, from `docs/release-notes/2.0/app-store.md`
 ```
-MegaPDF parle maintenant français. L'application suit la langue de votre appareil; vous pouvez aussi la choisir dans Réglages → MegaPDF → Langue.
+Corrigez le texte du document
+
+Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
+
+Caviardez, et c'est parti pour de bon
+
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
+
+PDF protégés
+
+Ouvrez un PDF qui demande un mot de passe. Si son propriétaire a restreint les modifications, MegaPDF le respecte et vous le dit, et le mot de passe du propriétaire le déverrouille. Vous pouvez aussi définir un mot de passe sur un document, le changer ou le retirer.
+
+Une seule rangée d'outils
+
+Les outils tiennent maintenant sur une seule rangée en bas, là où le pouce les atteint, et tout ce qui touche au fichier dans son ensemble se trouve sous Plus, en haut.
+
+Il vous dit ce qu'il fait
+
+Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente. Ce qui prend moins d'une demi-seconde continue de ne rien dire.
+
+PDF très volumineux
+
+Un fichier de 2,5 Go et mille pages était hors de portée. Il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
+
+Et aussi
+
+Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le gras — se modifient maintenant proprement, sans laisser de fantôme. La recherche atteint le résultat lui-même quand la page est agrandie, et non seulement la page où il se trouve.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
 viewer: Coché et signé en moins d'une minute
-text: Écrivez sur la ligne vide : votre taille, votre police
+text: Écrivez sur la ligne vide : votre taille, votre police
 text-edit: Corrigez une coquille dans le document même
 search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil
@@ -199,35 +251,35 @@ Remplir, cocher, signer
 On vous a envoyé un PDF à signer ? Ouvrez-le, cochez les cases, apposez votre signature, enregistrez. Fait en moins d'une minute, sans compte ni abonnement.
 ```
 
-**Description** [4000] (2911)
+**Description** [4000] (2912)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
-MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas de cloud. Tout se passe sur votre appareil.
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas de cloud. Tout se passe sur votre appareil.
 
 Cochez n'importe quelle case
-Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
 
 Confidentiel par conception
-MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
+MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
+Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
@@ -237,15 +289,41 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
 ```
 
-**What's new** — for the release that first carries the language
+**What's new** [4000] (2130) — 2.0, from `docs/release-notes/2.0/app-store.md`
 ```
-MegaPDF parle maintenant français. L'application suit la langue de votre appareil ; vous pouvez aussi la choisir dans Réglages → MegaPDF → Langue.
+Corrigez le texte du document
+
+Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
+
+Caviardez, et c'est parti pour de bon
+
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
+
+PDF protégés
+
+Ouvrez un PDF qui demande un mot de passe. Si son propriétaire a restreint les modifications, MegaPDF le respecte et vous le dit, et le mot de passe du propriétaire le déverrouille. Vous pouvez aussi définir un mot de passe sur un document, le changer ou le retirer.
+
+Une seule rangée d'outils
+
+Les outils tiennent maintenant sur une seule rangée en bas, là où le pouce les atteint, et tout ce qui touche au fichier dans son ensemble se trouve sous Plus, en haut.
+
+Il vous dit ce qu'il fait
+
+Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente. Ce qui prend moins d'une demi-seconde continue de ne rien dire.
+
+PDF très volumineux
+
+Un fichier de 2,5 Go et mille pages était hors de portée. Il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
+
+Et aussi
+
+Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le gras — se modifient maintenant proprement, sans laisser de fantôme. La recherche atteint le résultat lui-même quand la page est agrandie, et non seulement la page où il se trouve.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
 ```
 viewer: Coché et signé en moins d'une minute
-text: Écrivez sur la ligne vide : votre taille, votre police
+text: Écrivez sur la ligne vide : votre taille, votre police
 text-edit: Corrigez une coquille dans le document même
 search: Trouvez n'importe quel mot, sur chaque page
 sign: Vos signatures, enregistrées sur votre appareil

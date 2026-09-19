@@ -225,7 +225,7 @@ Android was at 1.2.0, so 2.0 also brings everything the other platforms got in
 ### Corriger le texte du document, bien plus souvent
 
 MegaPDF a toujours refusé une modification de texte qu'il ne pouvait pas faire
-sans déranger le reste de la page : il préfère dire non plutôt que de déplacer
+sans perturber le reste de la page : il préfère dire non plutôt que de déplacer
 en silence quelque chose que vous n'avez pas touché. La version 2.0 la réussit
 bien plus souvent au lieu de refuser : sur une série de 22 267 modifications
 réelles dans le corpus de test, les 112 modifications refusées par la 1.7
@@ -245,20 +245,20 @@ de l'autre dans le contenu. Et une modification garde la police du document
 seulement si cette police peut dessiner tous les caractères tapés; sinon,
 MegaPDF utilise une police standard semblable et vous le dit.
 
-**Nouveau sur iPhone, iPad et Android :** corriger le texte du document, tout
-simplement. Touchez une ligne, retapez-la, et Annuler remet l'original
+**Nouveau sur iPhone, iPad et Android :** pouvoir corriger le texte du document,
+tout court. Touchez une ligne, retapez-la, et Annuler remet l'original
 exactement.
 
-### Caviarder, et c'est vraiment retiré
+### Caviardez, et c'est parti pour de bon
 
 Le correcteur masque, et n'a jamais fait que masquer : ce qui se trouve dessous
 reste dans le fichier, où une autre application peut le sélectionner, le copier,
-le chercher. C'est la façon bien connue dont un caviardage rate, et c'est
+le retrouver par une recherche. C'est la façon bien connue dont un caviardage rate, et c'est
 pourquoi la 2.0 ajoute un second outil.
 
 Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le
 retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus :
-aucune autre application ne peut le copier ni le chercher.
+aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Glissez pour tracer une zone, ou glissez sur du texte pour en marquer les mots.
 Une marque est translucide, avec un contour : vous lisez encore ce que vous allez
@@ -267,7 +267,7 @@ déplacez-la, sélectionnez-la, annulez-la. **Rien n'est retiré tant que vous
 n'enregistrez pas.** L'enregistrement pose alors la question — *Le caviardage
 retire définitivement le contenu marqué. Impossible d'annuler après
 l'enregistrement.* — et propose **Enregistrer une copie**, nommée
-*…-caviarde*, comme choix par défaut. Ensuite, un court résumé dit ce qui est
+*…-caviardé*, comme choix par défaut. Ensuite, un court résumé dit ce qui est
 parti : *1 zone caviardée : 13 caractères*.
 
 Ce qui sort, c'est le contenu, pas son image. Les lettres sont retirées du texte
@@ -316,8 +316,8 @@ quoi le confondre.
   pas prête à le remplacer.
 - Les modifications faites pendant un enregistrement ne sont plus comptées comme
   enregistrées.
-- La modification et Fermer sont verrouillées pendant un enregistrement ou un
-  changement de mot de passe, au lieu de lui faire la course.
+- Modifier et Fermer sont bloqués pendant un enregistrement ou un changement de
+  mot de passe, au lieu d'entrer en conflit avec lui.
 - La récupération après une fermeture inattendue garde le journal de chaque
   instance séparé, et n'en supprime jamais un qu'une autre instance utilise.
 
@@ -332,8 +332,9 @@ travail sur une ligne.
 
 Rien de plus rapide qu'une demi-seconde n'affiche d'indicateur, et un indicateur
 qui apparaît reste au moins un tiers de seconde, alors rien ne clignote jamais.
-Les libellés sont des zones actives polies : un lecteur d'écran les lit sans
-voler le focus. Sous Windows, l'impression est passée hors du fil d'interface;
+Les libellés sont des zones dynamiques « polies » au sens des lecteurs d'écran :
+un lecteur d'écran les lit sans voler le focus. Sous Windows, l'impression est
+passée hors du fil d'exécution de l'interface;
 sur le Mac, tout le travail du moteur aussi — la fenêtre reste réactive du début
 à la fin.
 
@@ -398,7 +399,7 @@ modification est appliquée sans avertissement plutôt que de vous faire attendr
 
 ### Mac
 
-- Un PDF ouvert depuis le Finder s'enregistre dans ce fichier, au lieu de
+- Un PDF ouvert à partir du Finder s'enregistre dans ce fichier, au lieu de
   demander où le mettre.
 - La première vue montre la page entière.
 - La page est dessinée à la pleine résolution de l'écran.

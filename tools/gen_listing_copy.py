@@ -24,6 +24,23 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 from gen_strings import to_france  # noqa: E402
 
+# The spacing rule the 2.0 store blocks follow, applied here too: U+00A0 before ":"
+# in both French variants, and before "?", "!" and ";" as well in France's
+# (docs/localisation-glossary.md). The live listings carried a plain space before
+# some forty colons until the French review (#242) counted them.
+sys.path.insert(0, str(ROOT / "docs/release-notes/2.0"))
+from fix_french_spacing import space_before  # noqa: E402
+
+RELEASE_NOTES = ROOT / "docs/release-notes/2.0"
+
+
+def release_block(name: str, language: str) -> str:
+    """The first counted block in `language`'s section of a 2.0 store-copy file, so the
+    listing's What's new is the 2.0 text itself rather than a second copy of it."""
+    text = (RELEASE_NOTES / name).read_text(encoding="utf-8")
+    section = text.split(f"\n## {language}", 1)[1]
+    return re.search(r"\*\*[^*]+\*\*\s*\[\d+\]\s*\(\d+\)\s*\n\n```\n(.*?)\n```", section, re.S).group(1)
+
 # --------------------------------------------------------------------------
 # Microsoft Store
 # --------------------------------------------------------------------------
@@ -148,7 +165,7 @@ Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Document
 
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.""",
     "keywords": "pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign",
-    "whatsnew": "MegaPDF now speaks French. The app follows your device language; you can also pick one under Settings → MegaPDF → Language.",
+    "whatsnew": release_block("app-store.md", "English (Canada)"),
     "captions": [
         ("viewer", "Checked and signed in under a minute"),
         ("text", "Type on the blank line — your size, your font"),
@@ -175,7 +192,7 @@ Touchez une case et elle est cochée : les vrais champs de formulaire interactif
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
@@ -194,7 +211,7 @@ Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui part
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
     "keywords": "pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter",
-    "whatsnew": "MegaPDF parle maintenant français. L'application suit la langue de votre appareil; vous pouvez aussi la choisir dans Réglages → MegaPDF → Langue.",
+    "whatsnew": release_block("app-store.md", "Français (Canada)"),
     "captions": [
         ("viewer", "Coché et signé en moins d'une minute"),
         ("text", "Écrivez sur la ligne vide : votre taille, votre police"),
@@ -222,14 +239,14 @@ PLAY_EN = {
     "title": "MegaPDF",
     "short": "Fill, check and sign a PDF. No account, no cloud.",
     "description": AS_EN["description"].replace(WORKS_EN_AS, WORKS_EN_PLAY),
-    "notes": "MegaPDF now speaks French. The app follows your device language; on Android 13 and later you can also pick one under Settings → Apps → MegaPDF → Language.",
+    "notes": release_block("google-play.md", "English (Canada)"),
 }
 
 PLAY_FR_CA = {
     "title": "MegaPDF",
     "short": "Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.",
     "description": AS_FR_CA["description"].replace(WORKS_FR_CA_AS, WORKS_FR_CA_PLAY),
-    "notes": "MegaPDF parle maintenant français. L'application suit la langue de votre appareil; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.",
+    "notes": release_block("google-play.md", "Français (Canada)"),
 }
 
 
@@ -239,6 +256,24 @@ PLAY_FR_CA = {
 
 def block(text: str) -> str:
     return "```\n" + text.rstrip("\n") + "\n```\n"
+
+
+def respace(copy: dict, punctuation: str) -> dict:
+    """Every value of a French copy dictionary with its spacing rule applied."""
+    out = {}
+    for k, v in copy.items():
+        if isinstance(v, str):
+            out[k] = space_before(v, punctuation)
+        elif isinstance(v, list) and v and isinstance(v[0], tuple):
+            out[k] = [(f, space_before(c, punctuation)) for f, c in v]
+        else:
+            out[k] = [space_before(x, punctuation) for x in v]
+    return out
+
+
+def canada(copy: dict) -> dict:
+    """Quebec's rule: U+00A0 before ":" only."""
+    return respace(copy, ":")
 
 
 def derive(copy: dict) -> dict:
@@ -251,7 +286,7 @@ def derive(copy: dict) -> dict:
             out[k] = [(f, to_france(c)) for f, c in v]
         else:
             out[k] = [to_france(x) for x in v]
-    return out
+    return respace(out, ":?!;")
 
 
 def ms_section(title: str, tag: str, c: dict, note: str = "") -> str:
@@ -273,7 +308,8 @@ def as_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**Promotional text** [170] ({len(c['promo'])})\n" + block(c["promo"]))
     parts.append(f"**Description** [4000] ({len(c['description'])})\n" + block(c["description"]))
     parts.append(f"**Keywords** [100] ({len(c['keywords'])})\n" + block(c["keywords"]))
-    parts.append("**What's new** — for the release that first carries the language\n" + block(c["whatsnew"]))
+    parts.append(f"**What's new** [4000] ({len(c['whatsnew'])}) — 2.0, from `docs/release-notes/2.0/app-store.md`\n"
+                 + block(c["whatsnew"]))
     parts.append("**Screenshot captions** (optional overlay text), iPhone 6.9\" and iPad 13\" in this order\n"
                  + block("\n".join(f"{f}: {cap}" for f, cap in c["captions"])))
     return "\n".join(p for p in parts if p)
@@ -284,7 +320,8 @@ def play_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**Title** [30] ({len(c['title'])})\n" + block(c["title"]))
     parts.append(f"**Short description** [80] ({len(c['short'])})\n" + block(c["short"]))
     parts.append(f"**Full description** [4000] ({len(c['description'])})\n" + block(c["description"]))
-    parts.append(f"**Release notes** [500] ({len(c['notes'])})\n" + block(c["notes"]))
+    parts.append(f"**Release notes** [500] ({len(c['notes'])}) — 2.0, from `docs/release-notes/2.0/google-play.md`\n"
+                 + block(c["notes"]))
     return "\n".join(p for p in parts if p)
 
 
@@ -316,7 +353,7 @@ MS_BODY = "\n".join([
     ms_section("English (United States)", "en-US", MS_EN),
     ms_section("English (Canada)", "en-CA", MS_EN,
                "*Identical to en-US — the copy carries no US-vs-CA spelling. Repeated so this section pastes on its own.*\n"),
-    ms_section("Français (Canada)", "fr-CA", MS_FR_CA),
+    ms_section("Français (Canada)", "fr-CA", canada(MS_FR_CA)),
     ms_section("Français (France)", "fr-FR", derive(MS_FR_CA)),
 ])
 
@@ -328,8 +365,9 @@ AS_BODY = "\n".join([
     "in brackets with the actual count beside them.\n",
     REVIEW_NOTE,
     as_section("English (Canada)", "en-CA", AS_EN),
-    as_section("Français (Canada)", "fr-CA", AS_FR_CA),
-    as_section("Français", "fr", derive(AS_FR_CA)),
+    as_section("Français (Canada)", "fr-CA", canada(AS_FR_CA)),
+    # The 2.0 What's new carries hand-made France wording (#242), so it is read, not derived.
+    as_section("Français", "fr", {**derive(AS_FR_CA), "whatsnew": release_block("app-store.md", "Français (France)")}),
 ])
 
 PLAY_BODY = "\n".join([
@@ -343,8 +381,8 @@ PLAY_BODY = "\n".join([
     "app's per-app locale on the emulator and open the French demo agreement.\n",
     REVIEW_NOTE,
     play_section("English (Canada)", "en-CA", PLAY_EN),
-    play_section("Français (Canada)", "fr-CA", PLAY_FR_CA),
-    play_section("Français (France)", "fr-FR", derive(PLAY_FR_CA)),
+    play_section("Français (Canada)", "fr-CA", canada(PLAY_FR_CA)),
+    play_section("Français (France)", "fr-FR", {**derive(PLAY_FR_CA), "notes": release_block("google-play.md", "Français (France)")}),
 ])
 
 START, END = "<!-- copy-by-language -->", "<!-- /copy-by-language -->"

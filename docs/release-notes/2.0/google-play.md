@@ -52,13 +52,13 @@ Very large PDFs. A 2.5 GB, thousand-page file used to be out of reach; it now op
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (489)
+**Notes de version** [500] (492)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviarder : vraiment retiré
+• Caviardez : retiré pour de bon
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
@@ -69,11 +69,11 @@ MegaPDF parle français, et fait bien plus encore.
 **Version longue** (corps de la publication GitHub)
 
 ```
-Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
+Une mise à jour majeure : Android en était à 1.2.0 alors que les autres versions étaient rendues à 1.7; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
 
 Le français. L'application suit la langue de votre appareil; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
 
-Corrigez le texte du document. Touchez une ligne du document et retapez-la. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable; Annuler remet l'original exactement. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence — et il effectue maintenant bien plus de ces modifications qu'il n'en refusait.
+Corrigez le texte du document. Touchez une ligne du document et retapez-la. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable; Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence — et il effectue maintenant bien plus de ces modifications qu'il n'en refusait.
 
 Les signatures. Tapez un nom pour en créer une, en plus de la dessiner ou de la photographier. La bibliothèque est une feuille qui montre l'encre réelle de chaque signature, et chacune peut être renommée ou supprimée.
 
@@ -81,20 +81,20 @@ Les PDF protégés. Ouvrez-en un avec son mot de passe. Si son propriétaire a r
 
 Une rangée d'outils. Signer, Ajouter du texte, Rechercher, Annuler et Rétablir tiennent en bas, là où le pouce les atteint; Enregistrer une copie, Mot de passe et À propos se trouvent sous Plus, en haut.
 
-Il vous dit ce qu'il fait. Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file.
+Il vous dit ce qu'il fait. Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente.
 
 Les PDF très volumineux. Un fichier de 2,5 Go et mille pages était hors de portée; il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
 ```
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (489)
+**Notes de version** [500] (492)
 
 ```
 MegaPDF parle français, et fait bien plus encore.
 
 • Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviarder : vraiment retiré
+• Caviardez : retiré pour de bon
 • Tapez un nom pour créer une signature, et renommez celles que vous gardez
 • Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
 • Une rangée d'outils en bas, les commandes de fichier sous Plus
@@ -105,11 +105,11 @@ MegaPDF parle français, et fait bien plus encore.
 **Version longue** (corps de la publication GitHub)
 
 ```
-Une grosse mise à jour : Android en était à 1.2.0 alors que les autres versions en étaient à la 1.7 ; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
+Une mise à jour majeure : Android en était à 1.2.0 alors que les autres versions en étaient à la 1.7 ; la 2.0 apporte donc aussi tout ce qu'il y avait entre les deux.
 
 Le français. L'application suit la langue de votre appareil ; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
 
-Corrigez le texte du document. Touchez une ligne du document et retapez-la. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable ; Annuler remet l'original exactement. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence — et il effectue maintenant bien plus de ces modifications qu'il n'en refusait.
+Corrigez le texte du document. Touchez une ligne du document et retapez-la. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable ; Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence — et il effectue maintenant bien plus de ces modifications qu'il n'en refusait.
 
 Les signatures. Tapez un nom pour en créer une, en plus de la dessiner ou de la photographier. La bibliothèque est une feuille qui montre l'encre réelle de chaque signature, et chacune peut être renommée ou supprimée.
 
@@ -117,7 +117,7 @@ Les PDF protégés. Ouvrez-en un avec son mot de passe. Si son propriétaire a r
 
 Une rangée d'outils. Signer, Ajouter du texte, Rechercher, Annuler et Rétablir tiennent en bas, là où le pouce les atteint ; Enregistrer une copie, Mot de passe et À propos se trouvent sous Plus, en haut.
 
-Il vous dit ce qu'il fait. Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file.
+Il vous dit ce qu'il fait. Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente.
 
 Les PDF très volumineux. Un fichier de 2,5 Go et mille pages était hors de portée ; il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
 ```

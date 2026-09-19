@@ -102,9 +102,17 @@ Open PDFs from Gmail, Files, Google Drive, or any app that shares files. Documen
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Release notes** [500] (154)
+**Release notes** [500] (495) — 2.0, from `docs/release-notes/2.0/google-play.md`
 ```
-MegaPDF now speaks French. The app follows your device language; on Android 13 and later you can also pick one under Settings → Apps → MegaPDF → Language.
+MegaPDF speaks French, and does a great deal more.
+
+• Correct the document's own text — tap a line and retype it
+• Redact — text or pictures, gone for good
+• Type a name to make a signature, and rename the ones you keep
+• Open password-protected PDFs, and set, change or remove a password
+• One row of tools along the bottom, file commands under More
+• The app says what it is doing: opening, saving, searching, applying
+• Huge PDFs open straight away, and pages full of pictures draw far faster
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -119,42 +127,50 @@ MegaPDF
 Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.
 ```
 
-**Full description** [4000] (3003)
+**Full description** [4000] (3004)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
-MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique. Tout se passe sur votre appareil.
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas d'infonuagique. Tout se passe sur votre appareil.
 
 Cochez n'importe quelle case
-Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
 
 Confidentiel par conception
-MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
+MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (186)
+**Release notes** [500] (492) — 2.0, from `docs/release-notes/2.0/google-play.md`
 ```
-MegaPDF parle maintenant français. L'application suit la langue de votre appareil; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
+MegaPDF parle français, et fait bien plus encore.
+
+• Corrigez le texte du document : touchez une ligne et retapez-la
+• Caviardez : retiré pour de bon
+• Tapez un nom pour créer une signature, et renommez celles que vous gardez
+• Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
+• Une rangée d'outils en bas, les commandes de fichier sous Plus
+• L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
+• Les PDF très volumineux s'ouvrent tout de suite
 ```
 
 ### Français (France) — `fr-FR`
@@ -169,42 +185,50 @@ MegaPDF
 Remplir, cocher et signer un PDF. Pas de compte, pas de cloud.
 ```
 
-**Full description** [4000] (3001)
+**Full description** [4000] (3002)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
-MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas de cloud. Tout se passe sur votre appareil.
+MegaPDF fait la seule chose que la plupart des gens ont vraiment à faire avec un PDF : quelqu'un vous a envoyé un formulaire, et vous devez le renvoyer rempli, coché et signé. Pas de compte. Pas d'abonnement. Pas de cloud. Tout se passe sur votre appareil.
 
 Cochez n'importe quelle case
-Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
+Touchez une case et elle est cochée : les vrais champs de formulaire interactifs comme les simples carrés imprimés. MegaPDF reconnaît les cases dessinées que d'autres applications prennent pour de la décoration.
 
 Écrivez sur n'importe quelle ligne
 Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au formulaire. Glissez-le en place, ou touchez-le de nouveau pour corriger une coquille. Tout ce que vous ajoutez est du vrai texte, dans lequel on peut chercher, pas un autocollant posé sur la page.
 
 Corrigez le texte du document
-Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+Mauvaise date ? Nom mal orthographié ? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
 
 Signez pour de vrai
-Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
+Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
 
 Confidentiel par conception
-MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
+MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre ; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes.
+Ouvrez des PDF depuis Gmail, Fichiers, Google Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows et iOS : même moteur, même résultat, sur toutes les plateformes.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (187)
+**Release notes** [500] (492) — 2.0, from `docs/release-notes/2.0/google-play.md`
 ```
-MegaPDF parle maintenant français. L'application suit la langue de votre appareil ; sur Android 13 et plus, vous pouvez aussi la choisir dans Paramètres → Applications → MegaPDF → Langue.
+MegaPDF parle français, et fait bien plus encore.
+
+• Corrigez le texte du document : touchez une ligne et retapez-la
+• Caviardez : retiré pour de bon
+• Tapez un nom pour créer une signature, et renommez celles que vous gardez
+• Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
+• Une rangée d'outils en bas, les commandes de fichier sous Plus
+• L'application dit ce qu'elle fait : ouverture, enregistrement, recherche
+• Les PDF très volumineux s'ouvrent tout de suite
 ```
 
 <!-- /copy-by-language -->

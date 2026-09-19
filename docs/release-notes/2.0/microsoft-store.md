@@ -35,14 +35,14 @@ The toolbar is a single row, with the pickers appearing beside the tool they bel
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [1500] (1479)
+**Quoi de neuf** [1500] (1485)
 
 ```
 Corriger le texte du document, bien plus souvent
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans déranger la page.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
 
 Caviarder
-Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de la vue. Masquer ne fait que recouvrir, et le dit maintenant.
+Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Masquer ne fait que recouvrir, et le dit maintenant.
 
 Il vous dit ce qu'il fait
 Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, copie réduite, préparation de l'impression : chaque tâche s'annonce pendant qu'elle travaille.
@@ -62,14 +62,14 @@ La barre d'outils tient sur une rangée : les sélecteurs apparaissent à côt�
 
 ## Français (France) — `fr-FR`
 
-**Quoi de neuf** [1500] (1479)
+**Quoi de neuf** [1500] (1485)
 
 ```
 Corriger le texte du document, bien plus souvent
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans déranger la page.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur 22 000 modifications d'essai, les 112 qu'il refusait passent toutes, sans perturber la page.
 
 Caviarder
-Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de la vue. Masquer ne fait que recouvrir, et le dit maintenant.
+Marquez du texte ou une image et MegaPDF le retire du fichier, pas seulement de l'affichage. Masquer ne fait que recouvrir, et le dit maintenant.
 
 Il vous dit ce qu'il fait
 Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, copie réduite, préparation de l'impression : chaque tâche s'annonce pendant qu'elle travaille.

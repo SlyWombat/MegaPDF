@@ -45,16 +45,16 @@ Lines a document draws twice — the old trick for fake bold — now edit cleanl
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (2100)
+**Quoi de neuf** [4000] (2130)
 
 ```
 Corrigez le texte du document
 
-Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
+Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
-Caviarder, et c'est vraiment retiré
+Caviardez, et c'est parti pour de bon
 
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher.
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 PDF protégés
 
@@ -66,29 +66,29 @@ Les outils tiennent maintenant sur une seule rangée en bas, là où le pouce le
 
 Il vous dit ce qu'il fait
 
-Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file. Ce qui prend moins d'une demi-seconde ne dit toujours rien.
+Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente. Ce qui prend moins d'une demi-seconde continue de ne rien dire.
 
 PDF très volumineux
 
 Un fichier de 2,5 Go et mille pages était hors de portée. Il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
 
-Petites choses
+Et aussi
 
 Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le gras — se modifient maintenant proprement, sans laisser de fantôme. La recherche atteint le résultat lui-même quand la page est agrandie, et non seulement la page où il se trouve.
 ```
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (2100)
+**Quoi de neuf** [4000] (2130)
 
 ```
 Corrigez le texte du document
 
-Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait déranger le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
+Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
-Caviarder, et c'est vraiment retiré
+Caviardez, et c'est parti pour de bon
 
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher.
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 PDF protégés
 
@@ -100,13 +100,13 @@ Les outils tiennent maintenant sur une seule rangée en bas, là où le pouce le
 
 Il vous dit ce qu'il fait
 
-Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file. Ce qui prend moins d'une demi-seconde ne dit toujours rien.
+Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente. Ce qui prend moins d'une demi-seconde continue de ne rien dire.
 
 PDF très volumineux
 
 Un fichier de 2,5 Go et mille pages était hors de portée. Il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
 
-Petites choses
+Et aussi
 
 Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le gras — se modifient maintenant proprement, sans laisser de fantôme. La recherche atteint le résultat lui-même quand la page est agrandie, et non seulement la page où il se trouve.
 ```

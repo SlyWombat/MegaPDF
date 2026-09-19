@@ -51,28 +51,28 @@ The toolbar, the scroll bars, the font and size pickers and the checkboxes on a 
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (2886)
+**Quoi de neuf** [4000] (2910)
 
 ```
 Rien ne se perd
 
 Quitter, fermer une fenêtre ou ouvrir un autre fichier alors que des modifications ne sont pas enregistrées pose maintenant toujours la question d'abord, avec Enregistrer, Ne pas enregistrer et Annuler. Un enregistrement raté ne peut plus vider l'original : le fichier qu'on vous a envoyé reste exactement tel quel tant qu'une copie complète et vérifiée n'est pas prête à le remplacer. Les modifications faites pendant un enregistrement ne sont plus comptées comme enregistrées.
 
-Caviarder, et c'est vraiment retiré
+Caviardez, et c'est parti pour de bon
 
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher. Masquer ne fait que recouvrir, et le dit maintenant.
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer ne fait que recouvrir, et le dit maintenant.
 
 Une seule rangée d'outils
 
 La barre d'outils tient sur une seule rangée de hauteur fixe. Les sélecteurs de taille et de police apparaissent à côté de l'outil auquel ils appartiennent et disparaissent avec lui, le zoom est un seul contrôle au lieu de quatre, et le reste se trouve sous Plus. La barre de menus porte les mêmes commandes, avec leurs raccourcis clavier.
 
-Les fichiers ouverts depuis le Finder
+Les fichiers ouverts à partir du Finder
 
 Double-cliquez sur un PDF dans le Finder et Enregistrer écrit dans ce fichier, au lieu de demander où le mettre. La première vue montre la page entière, et la page est dessinée à la pleine résolution de l'écran.
 
 Corriger le texte du document, bien plus souvent
 
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans déranger la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans perturber la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
 
 PDF protégés
 
@@ -93,16 +93,16 @@ La barre d'outils, les barres de défilement, les sélecteurs de police et de ta
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (2886)
+**Quoi de neuf** [4000] (2908)
 
 ```
 Rien ne se perd
 
 Quitter, fermer une fenêtre ou ouvrir un autre fichier alors que des modifications ne sont pas enregistrées pose maintenant toujours la question d'abord, avec Enregistrer, Ne pas enregistrer et Annuler. Un enregistrement raté ne peut plus vider l'original : le fichier qu'on vous a envoyé reste exactement tel quel tant qu'une copie complète et vérifiée n'est pas prête à le remplacer. Les modifications faites pendant un enregistrement ne sont plus comptées comme enregistrées.
 
-Caviarder, et c'est vraiment retiré
+Caviardez, et c'est parti pour de bon
 
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le chercher. Masquer ne fait que recouvrir, et le dit maintenant.
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Masquer ne fait que recouvrir, et le dit maintenant.
 
 Une seule rangée d'outils
 
@@ -114,7 +114,7 @@ Double-cliquez sur un PDF dans le Finder et Enregistrer écrit dans ce fichier, 
 
 Corriger le texte du document, bien plus souvent
 
-MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans déranger la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
+MegaPDF refusait une correction lorsqu'il ne pouvait pas garantir que le reste de la page resterait en place. Il l'effectue maintenant : sur une série de 22 000 modifications, les 112 que l'application refusait passent toutes, sans perturber la page. Quand une modification est vraiment impossible, il indique maintenant quelle partie de la page fait obstacle.
 
 PDF protégés
 

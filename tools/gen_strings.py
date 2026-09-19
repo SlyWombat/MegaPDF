@@ -169,6 +169,8 @@ FR_CA_TO_FR_FR = [
     ("pour courriel", "pour l'e-mail"),
     ("courriel", "e-mail"),
     ("Courriel", "E-mail"),
+    # Quebec's téléverser is understood in France, but a French reader writes envoyer.
+    ("téléversé nulle part", "envoyé nulle part"),
     ("d'infonuagique", "de cloud"),
     ("infonuagique", "cloud"),
     ("crochet", "coche"),
