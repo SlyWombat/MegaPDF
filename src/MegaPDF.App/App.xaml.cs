@@ -47,6 +47,19 @@ public partial class App : Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // --engine-check <report.txt> --term <word> <document.pdf>: the engine through
+        // this executable and the DLLs beside it, no window, then quit (#288).
+        if (Screenshot.ArgumentAfter("--engine-check") is { } report)
+        {
+            var pdf = Environment.GetCommandLineArgs()
+                .FirstOrDefault(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
+            var code = pdf is null
+                ? 2
+                : EngineCheck.Run(pdf, Screenshot.ArgumentAfter("--term") ?? "CANARY-42-XYZ", report);
+            Environment.Exit(code);
+            return;
+        }
+
         // --screenshot <out.png>: render the window and quit (#84). Taken before
         // the splash, because two and a half seconds of artwork is not what is
         // being photographed, and before the crash-recovery prompt, which would

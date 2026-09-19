@@ -1,12 +1,21 @@
-# Builds the shared engine core as megapdf_core.dll for win-x64 (#38, ADR-003).
+# Builds the shared engine core as megapdf_core.dll for win-x64 or win-arm64 (#38,
+# ADR-003, #288).
 #
-#     tools\build-core.ps1            # -> core\build\win-x64\Release\megapdf_core.dll
+#     tools\build-core.ps1               # -> core\build\win-x64\Release\megapdf_core.dll
+#     tools\build-core.ps1 -Arch arm64   # -> core\build\win-arm64\Release\megapdf_core.dll
+#
+# arm64 on an x64 machine cross-compiles, and needs the Build Tools' "MSVC v143 - VS
+# 2022 C++ ARM64/ARM64EC build tools" component; the GitHub windows-latest image has it.
 #
 # MegaPDF.Core.csproj runs this itself when the DLL is missing or older than
 # core\*.cpp, so `dotnet build` is normally all anyone types. Needs MSVC and the
 # Windows SDK (VS 2022 Build Tools with the C++ workload) and CMake; the Build
 # Tools' own CMake is used when none is on PATH. CMake generates the pdfium
-# import library from libs\pdfium\win-x64\pdfium.dll's export table.
+# import library from libs\pdfium\win-<arch>\pdfium.dll's export table.
+param(
+    [ValidateSet('x64', 'arm64')]
+    [string]$Arch = 'x64'
+)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 
@@ -26,8 +35,9 @@ if (-not $cmake) {
 }
 
 $src = Join-Path $repo 'core'
-$build = Join-Path $repo 'core\build\win-x64'
-& $cmake -S $src -B $build -A x64 -DCMAKE_BUILD_TYPE=Release | Out-Host
+$build = Join-Path $repo "core\build\win-$Arch"
+$platform = @{ x64 = 'x64'; arm64 = 'ARM64' }[$Arch]
+& $cmake -S $src -B $build -A $platform -DCMAKE_BUILD_TYPE=Release | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 & $cmake --build $build --config Release | Out-Host
 if ($LASTEXITCODE -ne 0) { throw "cmake build failed" }

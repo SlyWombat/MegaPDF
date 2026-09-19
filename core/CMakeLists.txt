@@ -47,10 +47,27 @@ set(MEGAPDF_PDFIUM_HEADERS ${MEGAPDF_PDFIUM_INCLUDE} ${REPO}/libs/pdfium/android
 target_include_directories(megapdf_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MEGAPDF_PDFIUM_HEADERS})
 
 if(WIN32)
-    # libs/pdfium/win-x64 vendors only pdfium.dll: no import library. It is
+    # libs/pdfium/win-<arch> vendors only pdfium.dll: no import library. It is
     # generated here from the DLL's export table with the MSVC tools that live
     # next to the linker CMake found.
-    set(PDFIUM_DLL ${REPO}/libs/pdfium/win-x64/pdfium.dll)
+    #
+    # The architecture is the compiler's, not the host's (#288): `-A ARM64` on an x64
+    # machine cross-compiles, and must link, and ship beside, the ARM64 pdfium.dll.
+    # Until #288 this always took win-x64, so the Store's ARM64 package carried two
+    # x64 DLLs its ARM64 process could not load.
+    if(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^(ARM64|arm64)$")
+        set(MEGAPDF_WIN_ARCH arm64)
+        set(MEGAPDF_LIB_MACHINE ARM64)
+    elseif(CMAKE_CXX_COMPILER_ARCHITECTURE_ID MATCHES "^(x64|X64|AMD64)$")
+        set(MEGAPDF_WIN_ARCH x64)
+        set(MEGAPDF_LIB_MACHINE X64)
+    else()
+        message(FATAL_ERROR "no pdfium.dll for the compiler architecture '${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}'")
+    endif()
+    set(PDFIUM_DLL ${REPO}/libs/pdfium/win-${MEGAPDF_WIN_ARCH}/pdfium.dll)
+    if(NOT EXISTS ${PDFIUM_DLL})
+        message(FATAL_ERROR "${PDFIUM_DLL} is missing (tools/pdfium/install-release.sh installs it)")
+    endif()
     get_filename_component(MSVC_BIN "${CMAKE_LINKER}" DIRECTORY)
     find_program(DUMPBIN_EXE dumpbin HINTS ${MSVC_BIN} REQUIRED)
     find_program(LIB_EXE lib HINTS ${MSVC_BIN} REQUIRED)
@@ -78,12 +95,12 @@ if(WIN32)
         string(REPLACE ";" "\n  " body "${names}")
         file(WRITE ${PDFIUM_DEF} "LIBRARY pdfium\nEXPORTS\n  ${body}\n")
         execute_process(
-            COMMAND ${LIB_EXE} /NOLOGO /DEF:${PDFIUM_DEF} /MACHINE:X64 /OUT:${PDFIUM_LIB}
+            COMMAND ${LIB_EXE} /NOLOGO /DEF:${PDFIUM_DEF} /MACHINE:${MEGAPDF_LIB_MACHINE} /OUT:${PDFIUM_LIB}
             RESULT_VARIABLE rc OUTPUT_QUIET)
         if(NOT rc EQUAL 0)
             message(FATAL_ERROR "lib.exe could not build the pdfium import library")
         endif()
-        message(STATUS "pdfium import library: ${count} exports")
+        message(STATUS "pdfium import library (${MEGAPDF_LIB_MACHINE}): ${count} exports")
     endif()
 
     target_compile_definitions(megapdf_core PRIVATE MEGAPDF_CORE_BUILD)

@@ -9,6 +9,20 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!-- Which Windows architecture's natives (pdfium.dll, megapdf_core.dll) this build
+       carries (#288). This is a library, built AnyCPU, so it can't tell from its own
+       Platform: an explicit MegaPdfWinArch wins (MegaPDF.App passes one when it builds
+       for an architecture other than the machine's), then a Platform or
+       RuntimeIdentifier that names one, then the machine's own architecture, so tests
+       run on an ARM64 machine load ARM64 natives. Until #288 this was always x64, and
+       the Store's ARM64 package shipped two x64 DLLs its process could not load. -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <MegaPdfWinArch Condition="'$(MegaPdfWinArch)' == '' And ('$(Platform)' == 'ARM64' Or '$(RuntimeIdentifier)' == 'win-arm64')">arm64</MegaPdfWinArch>
+    <MegaPdfWinArch Condition="'$(MegaPdfWinArch)' == '' And ('$(Platform)' == 'x64' Or '$(RuntimeIdentifier)' == 'win-x64')">x64</MegaPdfWinArch>
+    <MegaPdfWinArch Condition="'$(MegaPdfWinArch)' == '' And '$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</MegaPdfWinArch>
+    <MegaPdfWinArch Condition="'$(MegaPdfWinArch)' == ''">x64</MegaPdfWinArch>
+  </PropertyGroup>
+
   <!-- PDFium native binary (BSD-3, see libs\pdfium\*\LICENSE). Flows to
        referencing projects' output. PdfiumNative.Dll is the bare name "pdfium",
        so .NET probes for pdfium.dll on Windows, libpdfium.dylib on macOS and
@@ -18,10 +32,9 @@
        Conditioned rather than unconditional: without this, a macOS build copies
        a Windows DLL it can never load and no dylib at all. Named for Windows
        rather than "not macOS" since #158 — a Linux build took the Windows branch
-       and copied a pdfium.dll it could no more load than the Mac could.
-       win-arm64 remains a TODO. -->
+       and copied a pdfium.dll it could no more load than the Mac could. -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <None Include="..\..\libs\pdfium\win-x64\pdfium.dll" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\libs\pdfium\win-$(MegaPdfWinArch)\pdfium.dll" Link="pdfium.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Fetched by tools/fetch-pdfium-mac.sh, not committed (ADR-002 §7 tracks
@@ -56,10 +69,10 @@
        Tools with the C++ workload on Windows, Xcode CLT + Homebrew cmake on macOS). -->
   <PropertyGroup>
     <MegaPdfCoreDir>$(MSBuildThisFileDirectory)..\..\core\</MegaPdfCoreDir>
-    <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(MegaPdfCoreDir)build\win-x64\Release\megapdf_core.dll</MegaPdfCoreArtifact>
+    <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(MegaPdfCoreDir)build\win-$(MegaPdfWinArch)\Release\megapdf_core.dll</MegaPdfCoreArtifact>
     <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('OSX'))">$(MegaPdfCoreDir)build/osx/libmegapdf_core.dylib</MegaPdfCoreArtifact>
     <MegaPdfCoreArtifact Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(MegaPdfCoreDir)build/linux-x64/libmegapdf_core.so</MegaPdfCoreArtifact>
-    <MegaPdfCoreBuildCommand Condition="$([MSBuild]::IsOSPlatform('Windows'))">powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)..\..\tools\build-core.ps1"</MegaPdfCoreBuildCommand>
+    <MegaPdfCoreBuildCommand Condition="$([MSBuild]::IsOSPlatform('Windows'))">powershell -NoProfile -ExecutionPolicy Bypass -File "$(MSBuildThisFileDirectory)..\..\tools\build-core.ps1" -Arch $(MegaPdfWinArch)</MegaPdfCoreBuildCommand>
     <MegaPdfCoreBuildCommand Condition="!$([MSBuild]::IsOSPlatform('Windows'))">bash "$(MSBuildThisFileDirectory)../../tools/build-core.sh"</MegaPdfCoreBuildCommand>
   </PropertyGroup>
 

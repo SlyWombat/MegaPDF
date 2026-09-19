@@ -1,6 +1,7 @@
 #!/bin/bash
 # Installs MegaPDF's patched PDFium release into the committed trees (#120):
-# libs/pdfium/win-x64 (pdfium.dll) and libs/pdfium/android (arm64-v8a and x86_64
+# libs/pdfium/win-x64 and libs/pdfium/win-arm64 (pdfium.dll, #288) and
+# libs/pdfium/android (arm64-v8a and x86_64
 # libpdfium.so plus the public headers every platform's core build uses).
 #
 # macOS, Linux and iOS fetch at build time from the same libs/pdfium/RELEASE, and
@@ -23,7 +24,7 @@ fetch() {
     tar xzf "$TMP/$name.tgz" -C "$TMP/$name"
 }
 
-for name in pdfium-win-x64 pdfium-android-arm64 pdfium-android-x64 pdfium-linux-x64 pdfium-mac-univ \
+for name in pdfium-win-x64 pdfium-win-arm64 pdfium-android-arm64 pdfium-android-x64 pdfium-linux-x64 pdfium-mac-univ \
             pdfium-ios-device-arm64 pdfium-ios-simulator-arm64 pdfium-ios-simulator-x64; do
     fetch "$name"
 done
@@ -36,12 +37,16 @@ for dir in "$TMP"/pdfium-*/; do
 done
 echo "every archive carries:"; cat "$REFERENCE"
 
-# Windows: the DLL, its VERSION and licences.
-WIN="$ROOT/libs/pdfium/win-x64"
-cp "$TMP/pdfium-win-x64/bin/pdfium.dll" "$WIN/pdfium.dll"
-cp "$REFERENCE" "$WIN/VERSION"
-cp "$TMP/pdfium-win-x64/LICENSE" "$WIN/LICENSE"
-rm -rf "$WIN/licenses" && cp -R "$TMP/pdfium-win-x64/licenses" "$WIN/licenses"
+# Windows: the DLL, its VERSION and licences, for each architecture the Store package
+# ships (#288: until then the ARM64 package carried the x64 DLL).
+for arch in x64 arm64; do
+    WIN="$ROOT/libs/pdfium/win-$arch"
+    mkdir -p "$WIN"
+    cp "$TMP/pdfium-win-$arch/bin/pdfium.dll" "$WIN/pdfium.dll"
+    cp "$REFERENCE" "$WIN/VERSION"
+    cp "$TMP/pdfium-win-$arch/LICENSE" "$WIN/LICENSE"
+    rm -rf "$WIN/licenses" && cp -R "$TMP/pdfium-win-$arch/licenses" "$WIN/licenses"
+done
 
 # Android: both ABIs, the headers (shared by every platform's core build), VERSION, licences.
 AND="$ROOT/libs/pdfium/android"
@@ -54,4 +59,4 @@ rm -rf "$AND/licenses" && cp -R "$TMP/pdfium-android-arm64/licenses" "$AND/licen
 
 # Fetched trees on this machine are now stale; the fetch scripts skip when present.
 rm -rf "$ROOT/libs/pdfium/linux-x64" "$ROOT/libs/pdfium/mac-univ" "$ROOT/ios/Vendor/pdfium.xcframework"
-echo "installed $(sed -n 's/^MEGAPDF_SERIES=//p' "$REFERENCE") into libs/pdfium/win-x64 and libs/pdfium/android"
+echo "installed $(sed -n 's/^MEGAPDF_SERIES=//p' "$REFERENCE") into libs/pdfium/win-x64, win-arm64 and android"

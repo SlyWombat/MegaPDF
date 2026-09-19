@@ -486,3 +486,127 @@ jobs:
         with:
           name: test-results
           path: '**/TestResults/*.trx'
+
+      # #288: the Store's ARM64 package shipped from 1.7 to 2.0 with an x64 pdfium.dll
+      # and megapdf_core.dll, which its ARM64 process can't load. Both Store packages are
+      # built here the way tools/Store-Submission.md builds them (an x64 machine
+      # cross-building ARM64, which is GPD-DAVE's situation too), and every binary in each
+      # must be its package's architecture. From a clean App output: an unpackaged build
+      # leaves a resources.pri a package would inherit (#166).
+      - name: Build the shared engine core for ARM64 (cross)
+        run: pwsh tools/build-core.ps1 -Arch arm64
+
+      - name: Store packages, both architectures, and what is in them
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($arch in 'x64', 'arm64') {
+            $platform = @{ x64 = 'x64'; arm64 = 'ARM64' }[$arch]
+            Remove-Item -Recurse -Force src/MegaPDF.App/bin, src/MegaPDF.App/obj -ErrorAction SilentlyContinue
+            dotnet build src/MegaPDF.App/MegaPDF.App.csproj -c Release `
+              -p:Platform=$platform -p:RuntimeIdentifier=win-$arch `
+              -p:WindowsPackageType=MSIX -p:AppxPackageSigningEnabled=false `
+              -p:UapAppxPackageBuildMode=StoreUpload `
+              -p:SelfContained=true -p:WindowsAppSDKSelfContained=true `
+              -p:GenerateAppxPackageOnBuild=true --nologo -v q
+            if ($LASTEXITCODE -ne 0) { throw "the $arch package did not build" }
+            $msix = Get-ChildItem -Recurse src/MegaPDF.App/bin -Filter "MegaPDF.App_*_$arch.msix" | Select-Object -First 1
+            if (-not $msix) { throw "no $arch .msix was produced" }
+            New-Item -ItemType Directory -Force "$env:RUNNER_TEMP/store" | Out-Null
+            Copy-Item $msix.FullName "$env:RUNNER_TEMP/store/"
+            python tools/check-native-arch.py $arch $msix.FullName | Select-String -NotMatch '^ok '
+            if ($LASTEXITCODE -ne 0) { throw "the $arch package carries binaries for another architecture" }
+          }
+          Get-ChildItem "$env:RUNNER_TEMP/store" | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName).Hash.ToLower(), $_.Name }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-store-packages
+          path: ${{ runner.temp }}/store/*.msix
+          if-no-files-found: error
+
+  # #288: the one ARM64 Windows machine we have. Everything here runs natively on ARM64:
+  # the engine core and its tests, the .NET engine tests, and the app itself, which
+  # opens, renders, searches, edits, redacts and saves from the same executable and
+  # beside the same DLLs the ARM64 package ships (--engine-check; the app's screenshot
+  # mode can't run on a runner, #84).
+  windows-arm64:
+    name: Windows ARM64
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: What this machine is
+        shell: pwsh
+        run: |
+          "OS architecture: $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+          "dotnet: $((Get-Command dotnet).Source)"
+          dotnet --info | Select-String -Pattern 'RID|Architecture'
+
+      - name: Build the shared engine core (megapdf_core.dll, ARM64)
+        run: pwsh tools/build-core.ps1 -Arch arm64
+
+      - name: Core tests on ARM64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $fixtures = "$env:RUNNER_TEMP/fixtures"
+          python tools/gen_test_fixtures.py $fixtures
+          python tools/gen_redaction_fixtures.py $fixtures
+          cmake -S core -B "$env:RUNNER_TEMP/core-build" -A ARM64 -DCMAKE_BUILD_TYPE=Debug `
+            -DMEGAPDF_CORE_TESTS=ON -DMEGAPDF_FIXTURES_DIR="$fixtures"
+          if ($LASTEXITCODE -ne 0) { throw "configure failed" }
+          cmake --build "$env:RUNNER_TEMP/core-build" --config Debug
+          if ($LASTEXITCODE -ne 0) { throw "build failed" }
+          python tools/check-native-arch.py arm64 "$env:RUNNER_TEMP/core-build/Debug"
+          if ($LASTEXITCODE -ne 0) { throw "the core tests are not all ARM64" }
+          Push-Location "$env:RUNNER_TEMP/core-build"
+          ctest -C Debug --output-on-failure
+          if ($LASTEXITCODE -ne 0) { throw "core tests failed" }
+          Pop-Location
+
+      - name: .NET engine tests on ARM64
+        run: dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj --configuration Release --logger "trx;LogFileName=results-arm64.trx"
+
+      - name: Build the app for ARM64
+        shell: pwsh
+        run: |
+          dotnet build src/MegaPDF.App/MegaPDF.App.csproj -c Release -p:Platform=ARM64 --nologo -v q
+          if ($LASTEXITCODE -ne 0) { throw "the ARM64 app did not build" }
+          $out = (Get-ChildItem -Recurse src/MegaPDF.App/bin/ARM64/Release -Filter MegaPDF.exe | Select-Object -First 1).DirectoryName
+          python tools/check-native-arch.py arm64 $out | Select-String -NotMatch '^ok '
+          if ($LASTEXITCODE -ne 0) { throw "the ARM64 app carries binaries for another architecture" }
+          "APP_DIR=$out" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: The app's engine, run natively on ARM64
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = "$env:RUNNER_TEMP/engine-check"
+          python tools/gen_redaction_fixtures.py $dir | Out-Null
+          $report = Join-Path $dir 'report.txt'
+          # Start-Process -Wait: MegaPDF is a windowed app, so `&` would return at once.
+          $argsLine = "--engine-check `"$report`" --term CANARY-42-XYZ `"$(Join-Path $dir 'text-partial-run.pdf')`""
+          $p = Start-Process -FilePath (Join-Path $env:APP_DIR 'MegaPDF.exe') -ArgumentList $argsLine -Wait -PassThru
+          if (Test-Path $report) { Get-Content $report } else { "no report written" }
+          if ($p.ExitCode -ne 0) { throw "engine check exited $($p.ExitCode)" }
+          if (-not (Select-String -Path $report -Pattern '^process Arm64' -Quiet)) { throw "the check did not run as an ARM64 process" }
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-arm64
+          path: |
+            **/TestResults/*.trx
+            ${{ runner.temp }}/engine-check/report.txt

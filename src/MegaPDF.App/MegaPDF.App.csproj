@@ -48,8 +48,24 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
   </ItemGroup>
 
+  <!-- The natives MegaPDF.Core carries follow the architecture being built, not the
+       machine building it (#288). Core falls back to the machine's architecture, so
+       tell it only when the two differ: an ARM64 package built on an x64 machine, or
+       the reverse. Passing it every time would give Core a second set of global
+       properties in a solution build, and two builds of it racing on one obj folder. -->
+  <PropertyGroup>
+    <MegaPdfAppArch Condition="'$(Platform)' == 'ARM64' Or '$(RuntimeIdentifier)' == 'win-arm64'">arm64</MegaPdfAppArch>
+    <MegaPdfAppArch Condition="'$(MegaPdfAppArch)' == '' And ('$(Platform)' == 'x64' Or '$(RuntimeIdentifier)' == 'win-x64')">x64</MegaPdfAppArch>
+    <MegaPdfHostArch>x64</MegaPdfHostArch>
+    <MegaPdfHostArch Condition="'$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)' == 'Arm64'">arm64</MegaPdfHostArch>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\MegaPDF.Core\MegaPDF.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(MegaPdfAppArch)' != '' And '$(MegaPdfAppArch)' != '$(MegaPdfHostArch)'">
+    <ProjectReference Update="..\MegaPDF.Core\MegaPDF.Core.csproj" AdditionalProperties="MegaPdfWinArch=$(MegaPdfAppArch)" />
   </ItemGroup>
 
 </Project>
