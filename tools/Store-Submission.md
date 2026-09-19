@@ -127,6 +127,16 @@ to upload. Check the manifest of what you are shipping, not that the file exists
 Output: `src/MegaPDF.App/bin/x64/Release/net8.0-windows10.0.19041.0/win-x64/AppPackages/MegaPDF.App_<ver>_x64_Test/MegaPDF.App_<ver>_x64.msix`.
 The `_Test` folder name is cosmetic — the package inside carries the Store identity.
 
+⛔ **Do not upload the ARM64 package until #288 is fixed.** It is ARM64 everywhere except the
+two DLLs that matter: `pdfium.dll` and `megapdf_core.dll` are **x64** (PE machine `0x8664`),
+because `MegaPDF.Core.csproj` copies `libs/pdfium/win-x64` and `core/build/win-x64` for every
+Windows RID, and there is no `win-arm64` PDFium build and no MSVC ARM64 toolchain on GPD-DAVE. An
+ARM64 process can't load an x64 DLL, so on an ARM64 device the engine can't load. The live
+1.7.0.0 ARM64 package has the same flaw with `pdfium.dll`. Until it's fixed, submit **x64 only**
+and remove the ARM64 package from the submission: ARM64 Windows 11 runs the x64 package under
+emulation. Check any package before shipping it: read the PE machine of `pdfium.dll` and
+`megapdf_core.dll` out of the `.msix` (the offset at `0x3c`, then 2 bytes at `+4`); `0xAA64` is ARM64.
+
 **ARM64:** the same command with `-p:Platform=ARM64 -p:RuntimeIdentifier=win-arm64`.
 It cross-compiles from an x64 machine with no extra toolchain and lands under
 `bin/ARM64/.../win-arm64/AppPackages/`. Upload **both** packages to the same
@@ -191,6 +201,17 @@ improve crash-report readability in Partner Center. Not a reason to install VS.
     `Microsoft.WindowsAppRuntime.dll`, `System.Diagnostics.Process.dll`, etc., plus
     string false-positives ("cmd", "Reg") in framework DLLs. `runFullTrust` apps may
     launch processes; informational only.
+- **Raising WACK from WSL: through a scheduled task, and only with Dave at the console.**
+  Windows cancels an unanswered UAC prompt after about **2 minutes**, and a prompt raised from a
+  shell that then exits can go with it. So the launcher is a *non-elevated* scheduled task,
+  registered without admin rights, whose only action raises the prompt:
+  `powershell.exe -NoProfile -WindowStyle Hidden -Command "Start-Process powershell.exe -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command & C:\temp\rc20\wack-run.ps1'"`
+  (a copy of `artifacts/store/wack-run.ps1` in a path with no spaces). Register it with
+  `Register-ScheduledTask -TaskName 'MegaPDF WACK'`, `-LogonType Interactive -RunLevel Limited`,
+  and start it with `Start-ScheduledTask -TaskName 'MegaPDF WACK'` only when someone will
+  click Yes. The report lands at `artifacts/store/wack-report.xml`, and `wack-done.marker`
+  is written when it finishes. Rename the previous report first, because the runner deletes it.
+  Delete the task afterwards.
 - To re-run WACK headlessly: build, sign a copy with the CurrentUser cert
   `CN=AF0F2AB7-…` (thumbprint `606D40BABE571A55D85E2C0BD26AA17A40B5D9F3`), then run
   `artifacts/store/wack-run.ps1` elevated (it temporarily trusts the cert + enables
