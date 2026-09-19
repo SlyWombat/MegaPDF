@@ -258,6 +258,29 @@ while the store versions of 2.0 were still in review:
   0 failures; `--install-kind` AptRepository / DebFile / Tarball). Pages render at 390 px
   and 1280 px without sideways scrolling.
 
+**2.0.0-2**, a packaging revision (the same app), was released the same day at 14:20 EDT
+after the independent check found 2.0.0's .deb wouldn't install on Ubuntu 26.04 and a
+minimal system crashed at the first save (#315–#322, PR #323):
+
+- tag `linux-v2.0.0-2` on `1368e80`, run 35460426939, published as Latest at
+  https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.0.0-2:
+  `megapdf_2.0.0-2_amd64.deb` (sha256 `0ffa6d97…b8c3`) and
+  `megapdf-linux-x64-2.0.0-2.tar.gz` (sha256 `62c9518c…539f`). The 2.0.0 release
+  keeps its files, and its notes were corrected in place (#319);
+- the APT repository now holds 2.0.0 and 2.0.0-2 (both pool .debs byte-identical to
+  their releases), deployed with `deploy.py --linux --only linux,apt`: 12 files, apt/
+  and linux/index.html only;
+- checked from outside, following the live page as an ordinary sudo user:
+  - APT install, `--install-kind` AptRepository, the AppStream metainfo,
+    `package-check` (12 checks) and remove, on Ubuntu 26.04, 24.04 and 22.04 and
+    Debian 12 and 13. Also on Debian 12 with `--no-install-recommends`, where the app
+    correctly reports that `lp` is missing;
+  - `apt upgrade` from 2.0.0 to 2.0.0-2 on Ubuntu 24.04;
+  - the release .deb on 24.04 and 26.04;
+  - the tarball's `install.sh`/`uninstall.sh` on 24.04, 26.04 and Debian 12.
+
+  The tag run's CI covered the same distributions, plus the 2.0.0 → 2.0.0-2 upgrade.
+
 The Snap Store is not released: it waits on Dave's Snap account (see "The Snap Store").
 The steps below are the recipe, and are what was done.
 
