@@ -282,6 +282,40 @@ Smaller, and not worth a re-shoot on their own:
   is. It reads as "careful", which is arguably right for redaction, but the
   comment and the glyph disagree.
 
+### What was done about it (2026-09-19, 00:30–01:10 EDT)
+
+The coordinator made the calls Dave had handed over:
+
+- **iOS (defects 1 and 2, and the `text-edit` and `redact` slots):** the
+  light-mode contrast is fixed as a product change, the iPad grabber is dropped in
+  the re-shoot, and the iOS listing gains both slots. A separate iOS agent owns all
+  of it, including the six iOS preview clips. Nothing in this section touched iOS.
+- **Mac `light-05-redact`, fr-CA and fr-FR:** re-shot from a Mac build of `f8eadc9`
+  (#242 merged). The only change is the hint bar, « …sur l'élément ciblé… » →
+  « …sur l'élément actif… »: 1 258 px, all inside the bar (x 582–743, y 57–74),
+  0.097 % of the frame. The gate, with tesseract, `--against` the signed-off set:
+  0 to look at in all three languages. The other five poses came out byte-identical
+  in every language, apart from `home`, which is kept as it was shot (next point).
+  The old pair is in `~/gate-macos-pre242/`.
+- **Trap: the Mac `home` pose takes the pointer's hover.** The re-shot `home`
+  showed the first recent highlighted, with its "Documents › Clients" tooltip,
+  because the mouse was resting over that spot on the capture Mac's display. The
+  layout is otherwise identical. The signed-off `light-06-home` stands.
+- **Microsoft: `06-redact.png` added** in en, fr-CA and fr-FR
+  (`tools/screenshots-windows/Shot-Redact.ps1`). On the finished agreement, it
+  marks the customer's name, saves a redacted copy, and shows the result: a black
+  bar where the name was, and "1 area redacted: 15 characters" (fr: « 1 zone
+  caviardée : 15 caractères »). Read back with qpdf, the name is in no decoded
+  stream of any language's copy, and the unredacted control still carries it. The
+  gate with tesseract, `--against` the five-image set: 0 to look at, the five old
+  images unchanged, and the French `06` has no English words. Slot order and
+  captions are in `docs/microsoft-store-listing.md` (`gen_listing_copy.py`).
+  The caption is the App Store's approved heading, "Redact, and it really is gone" /
+  « Caviardez, et c'est parti pour de bon ». The Microsoft description and feature
+  list still don't mention redaction, so the image is ahead of the copy there.
+- **The Redact glyph stays for 2.0.** Only the `MainWindow.xaml` comment was
+  corrected (`fd12ffa`).
+
 ### The five images no comparison can clear (§2)
 
 | image | verdict |
@@ -297,7 +331,7 @@ Smaller, and not worth a re-shoot on their own:
 |---|---|---|
 | Mac | Mac mini | `~/gate-macos/{en,fr-CA,fr}/light-0?-*.png` |
 | iOS | Mac mini | `~/gate-ios/{en,fr-CA,fr}/{listing,review}/` (upload `listing/` only) |
-| Microsoft | GPD-DAVE | `artifacts/store/screenshots/{en,fr-CA,fr-FR}/0?-*.png` (not `work/`) |
+| Microsoft | GPD-DAVE | `artifacts/store/screenshots/{en,fr-CA,fr-FR}/0[1-6]-*.png`: six per language, `06-redact` added 2026-09-19 (not `work/`) |
 | Preview clips | kdocker2 | `~/megapdf-video-work/{preview-out,mac-out}/` |
 | Play phone + tablet | kdocker2 | `~/megapdf-rc-android-work/{phone,tablet}/{en,fr-CA,fr-FR}/android-*.png` (identical to `~/megapdf-146-work/gate-2.0b/`) |
 

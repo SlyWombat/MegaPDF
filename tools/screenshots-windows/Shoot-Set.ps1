@@ -9,7 +9,7 @@
 # (gen_store_docs.py <shotdir> --lang ...; the run saves over blank-agreement.pdf).
 # The coordinates are the ones in README.md, read off the 2500x1550 frame.
 #
-# The five listing images land in artifacts\store\screenshots\<Dir>\; the probe
+# The six listing images land in artifacts\store\screenshots\<Dir>\; the probe
 # and in-between frames go to its work\ folder, so the gate sees only the set.
 param(
     [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US',
@@ -51,8 +51,12 @@ Get-ChildItem (Join-Path $env:LOCALAPPDATA 'MegaPDF\Recovery') -Filter *.journal
 & "$H\Place-Signature.ps1" -X 1022 -Y 1400
 & "$H\Shot-AddText.ps1" -X 1390 -Y 1360 -Text $Date
 & "$H\Shot-Shrink.ps1" -Pdf "$shots\scanned-agreement.pdf" -Lang $Lang
+# Shot 6: redaction, on the agreement the steps above finished and Shrink saved. It
+# writes a redacted copy beside it and leaves blank-agreement.pdf as it was.
+& "$H\Setup-Frame.ps1" -W 2500 -T 1550 -Pdf "$shots\blank-agreement.pdf" -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame-redact
+& "$H\Shot-Redact.ps1" -Lang $Lang -Save
 
 $work = Join-Path $shots 'work'
 New-Item -ItemType Directory -Force $work | Out-Null
-Get-ChildItem $shots -Filter *.png | Where-Object { $_.Name -notmatch '^0[1-5]-' } | Move-Item -Destination $work -Force
+Get-ChildItem $shots -Filter *.png | Where-Object { $_.Name -notmatch '^0[1-6]-' } | Move-Item -Destination $work -Force
 Get-ChildItem $shots -Filter *.png | Select-Object Name, Length | Format-Table | Out-String

@@ -47,6 +47,7 @@ rather than a sequence of commands somebody remembers.
 | **The document has one name** | `DemoContent.DocumentFileName`, so the status line and the recents list agree. The fixture is `demo-fr.pdf` on disk and "Contrat de location.pdf" in every shot. |
 | **The language is an argument** | `--language fr-CA` on the Mac, `-AppleLanguages`/`-AppleLocale` on iOS. The machine's own language is never changed, so a run cannot pick up half of it. |
 | **The binary is named** | Each Mac run writes `RUN.txt` with the bundle path and the binary's sha256. This Mac has ~20 stale `com.megapdf.ios` bundles registered, and everything is launched by absolute path rather than through LaunchServices. |
+| **The pointer is off the window** | The Mac shots are the real window on the capture Mac's display, so a pointer resting over it paints hover. A 2026-09-19 re-shot `home` came out with the first recent highlighted and its location tooltip up. Move the pointer to a corner first (it is the one input the script doesn't pose), and read `home` before keeping it. |
 | **The iPhone status bar is fixed** | `simctl status_bar override`: 9:41, full bars, charged. The iPad's date cannot be overridden — see below. |
 
 ## The gate

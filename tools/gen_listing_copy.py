@@ -83,6 +83,7 @@ MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
         ("03-signature.png", "Drop a saved signature on the line, then nudge it into place."),
         ("04-shrink.png", "Shrink oversized scans to email-friendly sizes in one click."),
         ("05-add-text.png", "Type on a blank line, in the size and face that matches the form."),
+        ("06-redact.png", "Redact, and it really is gone."),
     ],
 }
 
@@ -124,6 +125,7 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
         ("03-signature.png", "Déposez une signature enregistrée sur la ligne, puis ajustez-la en place."),
         ("04-shrink.png", "Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic."),
         ("05-add-text.png", "Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire."),
+        ("06-redact.png", "Caviardez, et c'est parti pour de bon."),
     ],
 }
 
@@ -296,7 +298,7 @@ def ms_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append("**App features** — one line per box, nine boxes\n" + block("\n".join(c["features"])))
     parts.append("**Search terms** — one per box, seven boxes\n" + block("\n".join(c["terms"])))
     parts.append("**Copyright**\n" + block(c["copyright"]))
-    parts.append("**Screenshot captions** — same five files, same order\n"
+    parts.append("**Screenshot captions** — same six files, same order\n"
                  + block("\n".join(f"{f}: {cap}" for f, cap in c["captions"])))
     return "\n".join(p for p in parts if p)
 

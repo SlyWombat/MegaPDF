@@ -26,7 +26,7 @@ PowerShell, but `Click-InShot`, `^o` and the pickers work (2026-09-13).
 `Shoot-Set.ps1 -Lang <en-US|fr-CA|fr-FR> -Dir <en|fr-CA|fr-FR>` runs the whole
 sequence below for one language: it refuses unless the installed package is the
 version to be shot (2.0.0.0 by default), and afterwards it moves the probe and
-in-between frames into `work/`, so the language folder holds only the five listing
+in-between frames into `work/`, so the language folder holds only the six listing
 images `tools/capture-gate` reads (`gate.py --store microsoft artifacts/store/screenshots`).
 It produced the 2.0 set. The steps, one at a time:
 
@@ -61,6 +61,9 @@ shot once per listing language: `en-US`, `fr-CA`, `fr-FR`.
 
     # 7. shot 4 — save, open the scan, Shrink for email (last: it replaces the document)
     .\Shot-Shrink.ps1 -Pdf "<repo>\...\fr-CA\scanned-agreement.pdf" -Lang fr-CA
+    # 8. shot 6 — reopen the finished agreement, mark the name, save a redacted copy
+    .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\...\fr-CA\blank-agreement.pdf" -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame-redact
+    .\Shot-Redact.ps1 -Lang fr-CA -Save
 
 **Shoot at 100%, not at a fit.** "Fit page then one zoom in" landed on 109% in every
 shot, and a listing image with a number like that in the toolbar reads like an

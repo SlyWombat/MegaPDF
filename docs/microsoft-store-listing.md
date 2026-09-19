@@ -75,13 +75,14 @@ lightweight PDF
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 
-**Screenshot captions** — same five files, same order
+**Screenshot captions** — same six files, same order
 ```
 01-edit-text.png: Click the text and type — editing a PDF like a Word file.
 02-checkbox.png: Click an empty square to check it. Drawn checkboxes too, not just real form fields.
 03-signature.png: Drop a saved signature on the line, then nudge it into place.
 04-shrink.png: Shrink oversized scans to email-friendly sizes in one click.
 05-add-text.png: Type on a blank line, in the size and face that matches the form.
+06-redact.png: Redact, and it really is gone.
 ```
 
 ### English (Canada) — `en-CA`
@@ -143,13 +144,14 @@ lightweight PDF
 © 2026 Electric RV. Licensed under Apache-2.0.
 ```
 
-**Screenshot captions** — same five files, same order
+**Screenshot captions** — same six files, same order
 ```
 01-edit-text.png: Click the text and type — editing a PDF like a Word file.
 02-checkbox.png: Click an empty square to check it. Drawn checkboxes too, not just real form fields.
 03-signature.png: Drop a saved signature on the line, then nudge it into place.
 04-shrink.png: Shrink oversized scans to email-friendly sizes in one click.
 05-add-text.png: Type on a blank line, in the size and face that matches the form.
+06-redact.png: Redact, and it really is gone.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -209,13 +211,14 @@ PDF léger
 © 2026 Electric RV. Sous licence Apache-2.0.
 ```
 
-**Screenshot captions** — same five files, same order
+**Screenshot captions** — same six files, same order
 ```
 01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
 04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée au courriel en un clic.
 05-add-text.png: Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire.
+06-redact.png: Caviardez, et c'est parti pour de bon.
 ```
 
 ### Français (France) — `fr-FR`
@@ -275,13 +278,14 @@ PDF léger
 © 2026 Electric RV. Sous licence Apache-2.0.
 ```
 
-**Screenshot captions** — same five files, same order
+**Screenshot captions** — same six files, same order
 ```
 01-edit-text.png: Cliquez sur le texte et tapez : modifier un PDF comme un document Word.
 02-checkbox.png: Cliquez sur un carré vide pour le cocher. Les cases dessinées aussi, pas seulement les vrais champs de formulaire.
 03-signature.png: Déposez une signature enregistrée sur la ligne, puis ajustez-la en place.
 04-shrink.png: Réduisez les numérisations trop lourdes à une taille adaptée à l'e-mail en un clic.
 05-add-text.png: Écrivez sur une ligne vide, dans la taille et la police qui correspondent au formulaire.
+06-redact.png: Caviardez, et c'est parti pour de bon.
 ```
 
 <!-- /copy-by-language -->
@@ -329,7 +333,7 @@ check there before assuming 300×300 is the only one.
 
 ## Screenshots
 `artifacts/store/screenshots/<lang>/` (2482×1541, well over the 1366×768 minimum; at
-least one required, up to nine allowed). Upload all five in this order, one
+least one required, up to nine allowed). Upload all six in this order, one
 caption each:
 
 | File | Caption (≤ 200 chars) |
@@ -339,15 +343,25 @@ caption each:
 | `03-signature.png` | Drop a saved signature on the line, then nudge it into place. |
 | `04-shrink.png` | Shrink oversized scans to email-friendly sizes in one click. |
 | `05-add-text.png` | Type on a blank line, in the size and face that matches the form. |
+| `06-redact.png` | Redact, and it really is gone. |
 
 **The 2.0 set was shot 2026-09-18** on GPD-DAVE from the installed 2.0.0.0 package,
 one run per language with `tools/screenshots-windows/Shoot-Set.ps1`, and it passed
 `tools/capture-gate` with nothing to look at (docs/release-notes/2.0/capture-gate-report.md §5).
 The title bar reads MegaPDF, and the English customer is Jane Whitfield, as on every other store.
 
+**`06-redact.png` was added 2026-09-19**, because 2.0's copy leads with redaction and
+the first five shots don't show it (capture-gate-report.md §6). Same frame and package
+family, shot with `tools/screenshots-windows/Shot-Redact.ps1` on the finished
+agreement. It marks the customer's name, saves a redacted copy through the
+confirmation's *Save as a copy*, and shows the result: the name is a black bar and the
+summary bar reads "1 area redacted: 15 characters". The saved copy was read back
+outside the app with qpdf, and the name is gone from every decoded stream while the
+unredacted control still carries it.
+
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the
-Store's minimum on both axes, and all five share one frame.
+Store's minimum on both axes, and all six share one frame.
 
 **Display scale matters as much as resolution.** `ApplyToolbarLayout` switches on
 *effective* pixels, so at 200% scale a 2500 px window is only 1250 effective —
@@ -360,9 +374,9 @@ these captions and the description assume. Check the toolbar in the shots before
 uploading; if the labels are gone, the scale is wrong, not the resolution.
 
 **One set per language.** `artifacts/store/screenshots/en/`, `fr-CA/` and `fr-FR/`
-each hold the five files, from the same package with the Language setting switched,
+each hold the six files, from the same package with the Language setting switched,
 over each language's staging documents (`gen_store_docs.py --lang fr-CA|fr-FR`).
-Same frame, same five files, same order — upload each set under its own listing
+Same frame, same six files, same order — upload each set under its own listing
 language. The pre-2.0 set is kept in `artifacts/store/screenshots-pre2.0/`.
 
 Re-shooting needs a Windows desktop with the build installed; the harness is

@@ -86,7 +86,7 @@ STORES: dict[str, dict] = {
         "min_size": (1366, 768),
         # Listing order is the file numbers (docs/microsoft-store-listing.md);
         # the poses are the file names with the number taken off.
-        "order": ["edit-text", "checkbox", "signature", "shrink", "add-text"],
+        "order": ["edit-text", "checkbox", "signature", "shrink", "add-text", "redact"],
         "parse": _pose(r"(?:\d+[-_])?(?P<pose>[a-z][a-z0-9-]*)\.png$"),
         # Measured on the 2.0 set: the title bar is its own strip, rows 0–45;
         # the command bar is ink from about 57 to 104, labels beside their
