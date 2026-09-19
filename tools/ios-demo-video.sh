@@ -133,8 +133,13 @@ t, seen = None, {}
 for line in sys.stdin:
     m = re.search(r'pts_time:([0-9.]+)', line)
     if m: t = float(m.group(1)); continue
+    # The two filters share stdout and a line can arrive torn ('1.67.89', seen
+    # on the fr-FR iPhone take): a value that does not parse is dropped, which
+    # costs one sample of one frame.
     m = re.search(r'\.(SATAVG|YAVG)=([0-9.]+)', line)
-    if m and t is not None: seen.setdefault(t, {})[m.group(1)] = float(m.group(2))
+    if m and t is not None:
+        try: seen.setdefault(t, {})[m.group(1)] = float(m.group(2))
+        except ValueError: pass
 app = [t for t in sorted(seen)
        if seen[t].get('SATAVG', 99) < 1 and seen[t].get('YAVG', 0) > 100]
 if not app:
