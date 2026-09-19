@@ -47,11 +47,13 @@ def release_block(name: str, language: str) -> str:
 
 MS_EN = {
     "short": "The lightweight PDF editor for Windows. Open. Fix. Save. Done.",
-    "description": """MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
+    "description": """MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does six things exceptionally well — and deliberately nothing else.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
 ADD TEXT — Click a blank line and type on it. Pick the size and the face — sans, serif or monospace — so what you add matches the rest of the form. Drag it into place, or double-click it later to change it.
+
+REDACT — Drag over a name, an address or a picture, or select the text, and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Whiteout, which only covers, says so.
 
 CHECK BOXES — Click an empty square and it becomes a checked box. Forms that were never meant to be filled digitally, filled digitally.
 
@@ -66,6 +68,7 @@ PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
     "features": [
         "Edit the document's own text by clicking and typing — like a Word document",
+        "Redact names, addresses and pictures: taken out of the file, not just covered over",
         "Add text on any blank line, in the size and face that matches the form",
         "Click empty squares to check boxes on any form",
         "Place a signature from your personal library with a click, then nudge and resize it",
@@ -89,11 +92,13 @@ MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
 
 MS_FR_CA = {
     "short": "L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.",
-    "description": """MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
+    "description": """MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait six choses exceptionnellement bien, et volontairement rien d'autre.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou double-cliquez dessus plus tard pour le modifier.
+
+CAVIARDER — Glissez sur un nom, une adresse ou une image, ou sélectionnez le texte, et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Le correcteur, qui ne fait que recouvrir, le dit.
 
 COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. Des formulaires jamais conçus pour être remplis à l'écran, remplis à l'écran.
 
@@ -108,6 +113,7 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnem
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
     "features": [
         "Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word",
+        "Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts",
         "Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire",
         "Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire",
         "Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la",
@@ -149,6 +155,9 @@ Tap where the answer goes and type it. Choose the size and the face — sans, se
 
 Fix the document's own text
 Wrong date? Misspelled name? Tap the line and retype it. MegaPDF keeps the document's own font where it can and tells you when it had to use a similar one. If a change would disturb the rest of the page, it says so instead of quietly moving things. Undo puts the original back exactly.
+
+Redact, and it really is gone
+Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
 
 Sign like you mean it
 Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
@@ -195,6 +204,9 @@ Touchez l'endroit où va la réponse et tapez-la. Choisissez la taille et la pol
 
 Corrigez le texte du document
 Mauvaise date? Nom mal orthographié? Touchez la ligne et retapez-la. MegaPDF garde la police du document quand il le peut et vous prévient quand il a dû en utiliser une semblable. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence. Annuler remet l'original exactement.
+
+Caviardez, et c'est parti pour de bon
+Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
 
 Signez pour de vrai
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
@@ -295,7 +307,7 @@ def ms_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts = [f"### {title} — `{tag}`\n", note]
     parts.append("**Short description / first line**\n" + block(c["short"]))
     parts.append("**Description** (plain text; the blank lines are paragraph breaks)\n" + block(c["description"]))
-    parts.append("**App features** — one line per box, nine boxes\n" + block("\n".join(c["features"])))
+    parts.append(f"**App features** — one line per box, {len(c['features'])} boxes\n" + block("\n".join(c["features"])))
     parts.append("**Search terms** — one per box, seven boxes\n" + block("\n".join(c["terms"])))
     parts.append("**Copyright**\n" + block(c["copyright"]))
     parts.append("**Screenshot captions** — same six files, same order\n"
@@ -330,6 +342,8 @@ def play_section(title: str, tag: str, c: dict, note: str = "") -> str:
 LIMITS_OK = [
     (len(MS_EN["short"]) <= 100 and len(MS_FR_CA["short"]) <= 100, "MS short"),
     (all(len(f) <= 200 for f in MS_EN["features"] + MS_FR_CA["features"]), "MS features ≤200"),
+    (len(MS_EN["features"]) <= 20 and len(MS_FR_CA["features"]) <= 20, "MS at most 20 features"),
+    (len(MS_EN["description"]) <= 10000 and len(MS_FR_CA["description"]) <= 10000, "MS description ≤10000"),
     (all(len(t) <= 30 for t in MS_EN["terms"] + MS_FR_CA["terms"]), "MS terms ≤30"),
     (all(len(c) <= 200 for _, c in MS_EN["captions"] + MS_FR_CA["captions"]), "MS captions ≤200"),
     (len(AS_EN["subtitle"]) <= 30 and len(AS_FR_CA["subtitle"]) <= 30, "AS subtitle ≤30"),
@@ -337,6 +351,7 @@ LIMITS_OK = [
     (len(AS_EN["keywords"]) <= 100 and len(AS_FR_CA["keywords"]) <= 100, "AS keywords ≤100"),
     (len(AS_EN["description"]) <= 4000 and len(AS_FR_CA["description"]) <= 4000, "AS description ≤4000"),
     (len(PLAY_EN["short"]) <= 80 and len(PLAY_FR_CA["short"]) <= 80, "Play short ≤80"),
+    (len(PLAY_EN["description"]) <= 4000 and len(PLAY_FR_CA["description"]) <= 4000, "Play full description ≤4000"),
     (len(PLAY_EN["notes"]) <= 500 and len(PLAY_FR_CA["notes"]) <= 500, "Play notes ≤500"),
 ]
 

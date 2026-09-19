@@ -27,11 +27,13 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
+MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does six things exceptionally well — and deliberately nothing else.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
 ADD TEXT — Click a blank line and type on it. Pick the size and the face — sans, serif or monospace — so what you add matches the rest of the form. Drag it into place, or double-click it later to change it.
+
+REDACT — Drag over a name, an address or a picture, or select the text, and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Whiteout, which only covers, says so.
 
 CHECK BOXES — Click an empty square and it becomes a checked box. Forms that were never meant to be filled digitally, filled digitally.
 
@@ -46,9 +48,10 @@ PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, nine boxes
+**App features** — one line per box, 10 boxes
 ```
 Edit the document's own text by clicking and typing — like a Word document
+Redact names, addresses and pictures: taken out of the file, not just covered over
 Add text on any blank line, in the size and face that matches the form
 Click empty squares to check boxes on any form
 Place a signature from your personal library with a click, then nudge and resize it
@@ -96,11 +99,13 @@ The lightweight PDF editor for Windows. Open. Fix. Save. Done.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does five things exceptionally well — and deliberately nothing else.
+MegaPDF is a free, lightweight PDF editor built for people who find the big PDF suites too bloated and complex. It does six things exceptionally well — and deliberately nothing else.
 
 EDIT TEXT — Click text in the document and type, like editing a Word file. Fix a typo, change a date, update a number. MegaPDF keeps the document's own font where it can, and if a change would shift the rest of the page it tells you rather than quietly moving things.
 
 ADD TEXT — Click a blank line and type on it. Pick the size and the face — sans, serif or monospace — so what you add matches the rest of the form. Drag it into place, or double-click it later to change it.
+
+REDACT — Drag over a name, an address or a picture, or select the text, and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it. Whiteout, which only covers, says so.
 
 CHECK BOXES — Click an empty square and it becomes a checked box. Forms that were never meant to be filled digitally, filled digitally.
 
@@ -115,9 +120,10 @@ PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, nine boxes
+**App features** — one line per box, 10 boxes
 ```
 Edit the document's own text by clicking and typing — like a Word document
+Redact names, addresses and pictures: taken out of the file, not just covered over
 Add text on any blank line, in the size and face that matches the form
 Click empty squares to check boxes on any form
 Place a signature from your personal library with a click, then nudge and resize it
@@ -163,11 +169,13 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
+MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait six choses exceptionnellement bien, et volontairement rien d'autre.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou double-cliquez dessus plus tard pour le modifier.
+
+CAVIARDER — Glissez sur un nom, une adresse ou une image, ou sélectionnez le texte, et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Le correcteur, qui ne fait que recouvrir, le dit.
 
 COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. Des formulaires jamais conçus pour être remplis à l'écran, remplis à l'écran.
 
@@ -182,9 +190,10 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnem
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, nine boxes
+**App features** — one line per box, 10 boxes
 ```
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
+Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
 Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
@@ -230,11 +239,13 @@ L'éditeur PDF léger pour Windows. Ouvrir. Corriger. Enregistrer. Terminé.
 
 **Description** (plain text; the blank lines are paragraph breaks)
 ```
-MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait cinq choses exceptionnellement bien, et volontairement rien d'autre.
+MegaPDF est un éditeur PDF gratuit et léger, conçu pour ceux qui trouvent les grandes suites PDF trop lourdes et trop compliquées. Il fait six choses exceptionnellement bien, et volontairement rien d'autre.
 
 MODIFIER LE TEXTE — Cliquez sur le texte du document et tapez, comme dans un document Word. Corrigez une coquille, changez une date, mettez un montant à jour. MegaPDF garde la police du document quand il le peut, et si une modification devait déplacer le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
 
 AJOUTER DU TEXTE — Cliquez sur une ligne vide et écrivez dessus. Choisissez la taille et la police (sans empattement, avec empattement ou à chasse fixe) pour que votre ajout s'accorde au reste du formulaire. Glissez-le en place, ou double-cliquez dessus plus tard pour le modifier.
+
+CAVIARDER — Glissez sur un nom, une adresse ou une image, ou sélectionnez le texte, et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche. Le correcteur, qui ne fait que recouvrir, le dit.
 
 COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. Des formulaires jamais conçus pour être remplis à l'écran, remplis à l'écran.
 
@@ -249,9 +260,10 @@ CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. P
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, nine boxes
+**App features** — one line per box, 10 boxes
 ```
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
+Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
 Ajoutez du texte sur une ligne vide, dans la taille et la police du formulaire
 Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
