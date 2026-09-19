@@ -316,13 +316,63 @@ The coordinator made the calls Dave had handed over:
 - **The Redact glyph stays for 2.0.** Only the `MainWindow.xaml` comment was
   corrected (`fd12ffa`).
 
+### iOS: defects 1–3 fixed and re-shot (2026-09-19, 00:40–01:40 EDT)
+
+- **Defect 1, the title contrast, is #284**, fixed in PR #285: the viewer's bar
+  takes the dark scheme on a visible background of the wall's own colour.
+  `ViewerBarContrastUITests` measures the title and the clock off the screen, and
+  was proved both ways on the Mac mini: without the fix it fails at **2.03 : 1**
+  (this review measured 2.0 : 1); with it, it passes on iPhone in light and dark
+  and on iPad. Dark mode was already right and doesn't change: the dark review
+  shots differ from the old ones only in the iPad's bottom bar (next point).
+- **Defect 2, the iPad grabber:** the rig now puts the capture iPad in *Full
+  Screen Apps* through Settings (`CaptureSimulatorSetupUITests`, run by
+  `ios-screenshots.sh` and `ios-demo-video.sh`) before shooting. It's gone from
+  every iPad image and every iPad clip. Settings writes
+  `SBChamoisWindowingEnabled = false`, but the rig drives Settings instead of
+  writing a private key that has moved between releases.
+- **Defect 3, the listing:** eight slots now, not six. `text-edit` and `redact`
+  come straight after the signed agreement, because the 2.0 copy leads with them:
+  viewer, text-edit, redact, text, search, sign, draw, home. The captions are in
+  `docs/app-store-listing.md` in all three languages (`gen_listing_copy.py`). The
+  redact caption is the Mac's, "Redact removes it. It does not just cover it." /
+  « Caviardez : c'est retiré, pas seulement couvert. » `review/` now holds only
+  the three dark shots per device.
+- **The re-shoot** is the full iOS set from a build of `6ab967e` (read out of
+  the app: `com.megapdf.ios` 2.0.0, `MEGAPDF_SERIES=71de3e7cee0e`,
+  `MEGAPDF_PATCHES=32`), in en, fr-CA and fr-FR on iPhone 17 Pro Max and iPad Pro
+  13-inch (M5): 48 listing and 18 review images. **The gate, with tesseract: 0 to
+  look at in all six cells.** `--against` the signed-off set (with its
+  `text-edit` and `redact` light shots taken from `review/`) flags every image,
+  as it should, and the changed pixels were located image by image:
+  - **iPhone:** all of them are above the navigation bar's bottom edge (the
+    find bar's too in `search`). Below it, 0.000–0.012 %, which is the
+    signature thumbnail's anti-aliasing.
+  - **iPad:** the same top band, plus the bottom 130–160 px (the floating
+    toolbar sits differently in Full Screen Apps) and a 47 × 47 px square in
+    `home` where the grabber was. `text-edit` differs by 0.02 % inside its form
+    sheet, which blurs the page behind it.
+  - **Dark review shots:** iPhone 0.000 %; iPad only the bottom bar band.
+- **Read by eye:** all 48 listing images one by one, and the 18 dark review shots on a
+  contact sheet. The title and clock are white on the dark bar in every light
+  viewer pose, there's no grabber, and each language is its own throughout,
+  with Hélène Bélanger and Céline Lefèvre accented. The fr iPhone title still
+  truncates to « Contrat de loc… » (iOS behaviour, noted above). Two poses are
+  weaker as selling images, and neither is a defect:
+  - **iPhone `text-edit`** is the edit sheet over the keyboard, so the page
+    isn't in shot; the iPad one shows the sheet over the page. The caption
+    carries the story.
+  - **`redact`** shows the mark as a thin outline around one line, like
+    Android's (§7).
+- **The six iOS preview clips are re-cut**; see `preview-videos.md` §7.
+
 ### The five images no comparison can clear (§2)
 
 | image | verdict |
 |---|---|
 | Mac `light-01-viewer.png` | **Clear.** A strong lead: ticked boxes, the signature on its line, the status line saying what to do next. Nothing stray at the edges. |
-| iOS `iphone-6_9-viewer.png` | **Defect 1.** The content is right, but "Rental Agreement.pdf" and the clock are 2.0 : 1 on the dark wall. The page sits vertically centred, so the top fifth is empty backdrop; that is the #48 layout, and it is fine. |
-| iOS `ipad-13-viewer.png` | **Defects 1 and 2**: the title contrast, and the resize grabber at the bottom-right. |
+| iOS `iphone-6_9-viewer.png` | **Was defect 1; clear after the re-shoot.** The content is right, and "Rental Agreement.pdf" and the clock are now white on the dark bar (#284). The page sits vertically centred, so the top fifth is empty backdrop; that is the #48 layout, and it is fine. |
+| iOS `ipad-13-viewer.png` | **Was defects 1 and 2; clear after the re-shoot:** the title is white on the dark bar, and there's no grabber. |
 | Play `android-viewer.png` × 2 | **Clear**, phone and tablet: dark title on the white app bar, clean status bar, no taskbar. See §7. |
 
 ### Where each final set lives
@@ -330,9 +380,9 @@ The coordinator made the calls Dave had handed over:
 | set | host | path |
 |---|---|---|
 | Mac | Mac mini | `~/gate-macos/{en,fr-CA,fr}/light-0?-*.png` |
-| iOS | Mac mini | `~/gate-ios/{en,fr-CA,fr}/{listing,review}/` (upload `listing/` only) |
+| iOS | Mac mini | `~/gate-ios-284/{en,fr-CA,fr}/{listing,review}/`: eight listing images per device, re-shot 2026-09-19 for #284 (upload `listing/` only; the old set is `~/gate-ios/`) |
 | Microsoft | GPD-DAVE | `artifacts/store/screenshots/{en,fr-CA,fr-FR}/0[1-6]-*.png`: six per language, `06-redact` added 2026-09-19 (not `work/`) |
-| Preview clips | kdocker2 | `~/megapdf-video-work/{preview-out,mac-out}/` |
+| Preview clips | Mac mini | iOS: `~/captures/video-2.0-284/ios/<lang>/*-preview.mp4` (re-cut 2026-09-19); Mac: `~/captures/video-2.0/macos/`. Stills and sheets on kdocker2: `~/megapdf-284/vout/` (iOS) and `~/megapdf-video-work/mac-out/` (Mac) |
 | Play phone + tablet | kdocker2 | `~/megapdf-rc-android-work/{phone,tablet}/{en,fr-CA,fr-FR}/android-*.png` (identical to `~/megapdf-146-work/gate-2.0b/`) |
 
 ## 7. The Play sets, re-shot on the RC tree (2026-09-19)

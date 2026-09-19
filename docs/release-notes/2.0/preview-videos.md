@@ -161,8 +161,9 @@ set lives on the machine that shot it (`tools/mac-mini.md`).
 
 | | |
 |---|---|
-| all nine clips | capture Mac, `~/captures/video-2.0/{ios/<lang>,macos}/` |
-| the stills and sheets | kdocker2, `~/megapdf-video-work/{preview-out,mac-out}/` |
+| the six iOS clips | capture Mac, `~/captures/video-2.0-284/ios/<lang>/` (re-cut 2026-09-19, §7; the first cut stays in `~/captures/video-2.0/ios/`) |
+| the three Mac clips | capture Mac, `~/captures/video-2.0/macos/` |
+| the stills and sheets | kdocker2: iOS `~/megapdf-284/vout/`, Mac `~/megapdf-video-work/mac-out/` |
 | contact sheets, committed | [`preview-contact-sheets/`](preview-contact-sheets/) |
 
 ```bash
@@ -196,3 +197,38 @@ document they show is not protected. The same is true of the #237 work that
 landed beside it, which is the Linux window at its 480 px minimum. If something
 that **is** in shot changes before submission, these are two commands per clip
 to re-cut — §6.*
+
+## 7. The six iOS clips, re-cut for #284 (2026-09-19)
+
+The full-set review (`capture-gate-report.md` §6) found the viewer's title and
+status-bar clock drawn black on the dark wall in light mode (2.0 : 1), and the
+iPadOS 26 resize grabber in the corner of every iPad frame. Both were in all six
+iOS clips. #284 fixed the first in the app, and the rig now puts the iPad in Full
+Screen Apps before recording, which fixes the second. So all six iOS clips were
+recorded again, from a build of `6ab967e`: `com.megapdf.ios` 2.0.0, read out of
+the built app, PDFium `71de3e7cee0e` with 32 patches. The Mac clips don't show
+either defect and are unchanged.
+
+| clip | frame | duration | fps | codec | audio | stills | gate flags |
+|---|---|---:|---:|---|---|---:|---:|
+| iPhone 6.9" — en / fr-CA / fr-FR | 1320 × 2868 | 29.57 s | 30 cfr | H.264 yuv420p | silent AAC stereo | 90 | 3 / 0 / 3 |
+| iPad 13" — en / fr-CA / fr-FR | 2064 × 2752 | 29.57 s | 30 cfr | H.264 yuv420p | silent AAC stereo | 90 | 0 / 0 / 0 |
+
+**Six flags in 180 stills, down from 25, and none is a defect.** There are four
+`squiggle` flags on the red ⊗ of a just-placed signature (en and fr-FR, t013 and
+t014), and two `clipping` flags where a sheet or the keyboard is still moving
+at the bottom of the frame (en t019, fr-FR t007). Both kinds are in §4 already.
+**The 17 `chrome` flags are gone:** the bar stays dark while the find bar opens,
+so the status bar no longer flips between dark and light. That settles §5
+point 2, the two seconds of pale status bar.
+
+Every still was looked at on a contact sheet per clip. The title and the clock
+are white on the dark bar throughout, no iPad frame has the grabber, each clip
+starts on the app with no home screen at either end, and each is in its own
+language throughout, keyboard included (fr-FR on AZERTY).
+
+One rig fix came out of it. On the fr-FR iPhone take, the trim's frame reader
+got a torn line (`1.67.89`: two filters share stdout) and stopped before the
+cut. It now drops a value that doesn't parse, and that clip was re-cut from its
+raw recording with `TRIM_ONLY=1`.
+
