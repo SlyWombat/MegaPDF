@@ -64,18 +64,28 @@
         .cta:hover { background: #6fd0f0; }
         .cta.ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.25); }
         .cta.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
-        /* Store links. One chip per platform. The Linux chip links linux/ only in a
-           deploy made with --linux; otherwise it is the dashed "soon" chip
-           (see website/README.md). */
-        .storelinks { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
-        .storelinks a, .storelinks .soon {
-            display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
-            border: 1px solid rgba(255,255,255,.25); border-radius: 10px;
-            padding: 10px 18px; color: var(--text); font-size: 14px;
+        /* Store links: each store's own official badge, unaltered (sources and
+           guidelines in website/README.md). Every badge is 48px tall, above
+           Apple's 40px minimum, and the 16px gap keeps the clear space the badge
+           guidelines ask for. The Google Play PNG carries its own transparent
+           clear space (41 of 250px each side), so it is drawn larger and pulled
+           in by that margin to line up with the others. The Linux link has no
+           store badge; it is a plain button of the same height and shape. It
+           links linux/ only in a deploy made with --linux; otherwise it is the
+           dashed "soon" button (see website/README.md). */
+        .storelinks { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+        .storelinks a { display: inline-block; line-height: 0; border-radius: 8px; }
+        .storelinks a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+        .storelinks img { height: 48px; width: auto; display: block; }
+        .storelinks a.gplay img { height: 71.4px; margin: -11.7px; }
+        .storelinks .linux, .storelinks .soon {
+            display: inline-flex; flex-direction: column; justify-content: center;
+            height: 48px; padding: 0 18px; border-radius: 7px; line-height: 1.15;
+            background: #000; border: 1px solid #a6a6a6; color: #fff;
+            font-size: 19px; font-weight: 600; text-decoration: none;
         }
-        .storelinks a:hover { border-color: var(--accent); color: var(--accent); }
-        .storelinks .soon { border-style: dashed; border-color: rgba(255,255,255,.16); color: var(--muted); }
-        .storelinks .where { color: var(--muted); font-size: 12px; display: block; }
+        .storelinks .where { font-size: 11px; font-weight: 400; display: block; }
+        .storelinks .soon { background: transparent; border-style: dashed; border-color: rgba(255,255,255,.3); color: var(--muted); }
 
         .shot { flex: 0 1 300px; }
         .shot img {
@@ -152,25 +162,21 @@
                 </p>
                 <div class="storelinks">
                     <a href="https://apps.microsoft.com/detail/9PF4TRRH4M76">
-                        <span><span class="where">Get it from</span>Microsoft Store</span>
+                        <img src="badges/get-it-from-microsoft.svg" width="176" height="48" alt="Download from the Microsoft Store">
                     </a>
                     <a href="https://apps.apple.com/app/id6799522972">
-                        <span><span class="where">Download on the</span>App Store</span>
+                        <img src="badges/download-on-the-app-store.svg" width="144" height="48" alt="Download on the App Store">
                     </a>
                     <a href="https://apps.apple.com/app/id6799522972?platform=mac">
-                        <span><span class="where">Download on the</span>Mac App Store</span>
+                        <img src="badges/download-on-the-mac-app-store.svg" width="187" height="48" alt="Download on the Mac App Store">
                     </a>
-                    <a href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
-                        <span><span class="where">Get it on</span>Google Play</span>
+                    <a class="gplay" href="https://play.google.com/store/apps/details?id=ca.electricrv.megapdf">
+                        <img src="badges/get-it-on-google-play.png" width="185" height="71" alt="Get it on Google Play">
                     </a>
                     <!--linux:live-->
-                    <a href="linux/">
-                        <span><span class="where">Install on</span>Linux</span>
-                    </a>
+                    <a class="linux" href="linux/"><span class="where">Install on</span>Linux</a>
                     <!--linux:soon
-                    <span class="soon">
-                        <span><span class="where">Coming to</span>Linux</span>
-                    </span>
+                    <span class="soon"><span class="where">Coming to</span>Linux</span>
                     linux:end-->
                 </div>
                 <div class="ctas">

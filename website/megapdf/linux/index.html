@@ -52,6 +52,11 @@
         section.way h2 { font-size: 24px; margin-bottom: 4px; }
         section.way .for { color: var(--accent); font-size: 14px; margin-bottom: 14px; }
         section.way h3 { font-size: 16px; margin: 20px 0 6px; }
+        /* The Snap Store's official badge, unaltered and at its own size: its SVG has no
+           viewBox, so it can't be scaled (source in website/README.md). */
+        section.way .snapbadge { margin: 4px 0 16px; line-height: 0; }
+        section.way .snapbadge a { display: inline-block; border-radius: 4px; }
+        section.way .snapbadge a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
         section.way p, section.way li { color: var(--muted); font-size: 15px; }
         section.way p + p { margin-top: 8px; }
         section.way ul { padding-left: 20px; }
@@ -158,6 +163,7 @@ sudo apt update</code></pre>
         <section class="way" id="snap">
             <h2>The Snap Store</h2>
             <p class="for">For Ubuntu, and any distribution with <code>snapd</code></p>
+            <p class="snapbadge"><a href="https://snapcraft.io/megapdf"><img src="../badges/get-it-from-the-snap-store.svg" width="182" height="56" alt="Get it from the Snap Store"></a></p>
             <p>Find MegaPDF in Ubuntu's App Center, or in a terminal:</p>
 <pre><code>sudo snap install megapdf</code></pre>
             <h3>Documents on a USB drive</h3>

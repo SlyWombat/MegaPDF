@@ -166,6 +166,29 @@ Apple's own lookup API puts the record at iOS 1.7.0. (The Microsoft Store title
 keeps the space because the *reservation* does — `tools/Store-Submission.md`.
 The product is MegaPDF everywhere else, this site included.)
 
+## Store badges
+
+The landing page links each store with that store's own badge, vendored in
+`megapdf/badges/` exactly as downloaded (Dave, 2026-09-19: "the website should
+be using the logos for the respective stores"). Don't recolour, crop, restyle or
+re-export them. To refresh one, download it again from the source below.
+
+| File | Source | Guideline followed |
+|---|---|---|
+| `download-on-the-app-store.svg` | `https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us` (identical to `developer.apple.com/assets/elements/badges/download-on-the-app-store.svg`) | Apple App Store Marketing Guidelines: the black badge, unaltered, at least 40px tall, with clear space of a quarter of its height |
+| `download-on-the-mac-app-store.svg` | `https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-mac-app-store/black/en-us` | the same Apple guidelines |
+| `get-it-on-google-play.png` | `https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png` | Google Play badge guidelines (play.google.com/intl/en_us/badges/): the PNG carries its own transparent clear space (41 of 250px on every side), and the badge must be at least as large as the other stores' badges. The CSS draws it larger and pulls it in by exactly that padding, so the visible badge matches the others' 48px height without cropping anything |
+| `get-it-from-microsoft.svg` | `https://get.microsoft.com/images/en-us%20dark.svg` (the badge generator at get.microsoft.com) | Microsoft Store badge guidelines: the dark badge ("Download from the Microsoft Store"), unaltered |
+| `get-it-from-the-snap-store.svg` | `https://snapcraft.io/static/images/badges/en/snap-store-black.svg` | Snap Store brand guidelines (snapcraft.io/docs/snap-store-brand-guidelines). It's used only in the Linux page's Snap section, which goes live with `--snap` (#314). Its SVG has no viewBox, so it's shown at its own 182×56 |
+
+The site has a single dark theme, so every badge is the black version (Apple's
+and Google's black badges carry a grey keyline made for dark backgrounds).
+Every badge is 48px tall and 16px apart. The Linux link has no store badge: no
+store sells it. It's a plain black button of the same height and shape. The
+Tux mark is left out because its licence asks for attribution on request.
+Badges keep their own look on hover, and keyboard focus shows as an outline
+around the link.
+
 ## Deployed: 2.0, 2026-09-19
 
 The full 2.0 site went up on 2026-09-19 at 14:25 EDT with
