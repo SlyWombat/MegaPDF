@@ -85,6 +85,14 @@ step "--language-check: ICU comes from the runtime, and the POSIX chain is read"
 flatpak run --user --command=/app/lib/megapdf/MegaPDF "$APP_ID" --language-check >/dev/null
 check $?
 
+step "--install-kind: the app knows Flatpak brings its updates"
+# Built from the tarball, so the tree beside the binary says "tarball"; the sandbox has
+# to win over that, or About would send a Flatpak user to the download page (#158).
+kind=$(flatpak run --user --command=/app/lib/megapdf/MegaPDF "$APP_ID" --install-kind 2>/dev/null)
+echo "  $kind"
+[ "$kind" = "install-kind: Flatpak" ]
+check $?
+
 step "--print-check: what printing does in a sandbox with no lp in it"
 # Reported, not asserted. Printing has no portal route yet; what this proves is that
 # the app says so rather than failing obscurely.

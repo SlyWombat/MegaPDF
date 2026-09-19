@@ -904,4 +904,22 @@ public static partial class Strings
 
     /// <summary>Couldn't show {0} in the Finder.</summary>
     public static string CouldNotShowInFinder(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("CouldNotShowInFinder"), arg0);
+
+    /// <summary>Updates arrive with your system's software updates.</summary>
+    public static string UpdatesFromApt => Get("UpdatesFromApt");
+
+    /// <summary>The Snap Store installs updates automatically.</summary>
+    public static string UpdatesFromSnap => Get("UpdatesFromSnap");
+
+    /// <summary>Flatpak installs updates.</summary>
+    public static string UpdatesFromFlatpak => Get("UpdatesFromFlatpak");
+
+    /// <summary>This .deb gets no updates by itself. Add the MegaPDF repository to get them with your system's.</summary>
+    public static string UpdatesFromDebFile => Get("UpdatesFromDebFile");
+
+    /// <summary>MegaPDF doesn't check for updates. Newer versions are on the download page.</summary>
+    public static string UpdatesFromTarball => Get("UpdatesFromTarball");
+
+    /// <summary>Download page</summary>
+    public static string LinuxDownloadPage => Get("LinuxDownloadPage");
 }

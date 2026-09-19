@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Input;
+using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.Views;
 
@@ -17,6 +18,15 @@ public partial class AboutWindow : Window
 
         VersionText.Text = AppInfo.VersionLabel;
         ProjectLink.NavigateUri = new Uri(AppInfo.ProjectUrl);
+
+        var install = LinuxInstall.Current(AppContext.BaseDirectory);
+        if (AppInfo.UpdatesLine(install) is { } updates)
+        {
+            UpdatesText.Text = updates;
+            UpdatesPanel.IsVisible = true;
+            DownloadPageLink.IsVisible = LinuxInstall.NeedsDownloadPage(install);
+            DownloadPageLink.NavigateUri = new Uri(LinuxInstall.DownloadPage);
+        }
         // Not a modal dialog: a licence is something to read beside the app, and a
         // Mac About panel does not hold the app hostage. App owns the one instance,
         // because Help reaches the same window without going through here.

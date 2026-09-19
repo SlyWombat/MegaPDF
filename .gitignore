@@ -82,3 +82,9 @@ libs/pdfium/linux-x64/
 # Python bytecode from the QA rig running in its container
 __pycache__/
 *.pyc
+
+# The APT repository's generated half (#158): built by tools/linux/make-apt-repo.sh
+# from the release .deb at deploy time, never committed. The key, the .sources file
+# and FINGERPRINT beside them are committed.
+website/megapdf/apt/dists/
+website/megapdf/apt/pool/

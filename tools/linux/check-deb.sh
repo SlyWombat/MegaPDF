@@ -44,7 +44,8 @@ echo "=== the launcher is on PATH and points into the package ==="
 command -v megapdf && readlink -f "$(command -v megapdf)"
 
 echo
-bash "$ROOT/tools/linux/package-check.sh" "$OPTDIR" "$FIXTURES" "" "deb"
+# A .deb installed from the file itself, with no repository behind it: DebFile.
+bash "$ROOT/tools/linux/package-check.sh" "$OPTDIR" "$FIXTURES" "" "deb" DebFile
 rc=$?
 
 echo

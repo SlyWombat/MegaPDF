@@ -36,6 +36,20 @@
                      FontSize="{DynamicResource TypeCaption}"
                      HorizontalAlignment="Center" Padding="4,2" />
 
+    <!-- Linux only (#158): where this copy's updates come from. MegaPDF makes no network
+         connection of its own, so it never checks; the package manager does, and where
+         there is none the link opens the download page in the person's browser. -->
+    <StackPanel Name="UpdatesPanel" IsVisible="False"
+                Spacing="{DynamicResource SpaceXs}" HorizontalAlignment="Center">
+      <TextBlock Name="UpdatesText"
+                 FontSize="{DynamicResource TypeCaption}" Opacity="0.75" MaxWidth="300"
+                 TextWrapping="Wrap" TextAlignment="Center" />
+      <HyperlinkButton Name="DownloadPageLink" IsVisible="False"
+                       Content="{x:Static loc:Strings.LinuxDownloadPage}"
+                       FontSize="{DynamicResource TypeCaption}"
+                       HorizontalAlignment="Center" Padding="4,2" />
+    </StackPanel>
+
     <Button Name="NoticesButton"
             Content="{x:Static loc:Strings.ThirdPartyNoticesEllipsis}"
             HorizontalAlignment="Center" />

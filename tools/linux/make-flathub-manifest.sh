@@ -39,9 +39,10 @@ VERSION="$(echo "$BASE" | sed -E 's/^megapdf-linux-x64-(.+)\.tar\.gz$/\1/')"
     echo "::error::$BASE is not named megapdf-linux-x64-<version>.tar.gz" >&2; exit 1; }
 SHA="$(sha256sum "$TARBALL" | cut -d' ' -f1)"
 
-# The tag that carries this tarball. The desktop releases in this repository are tagged
-# v<version> (v1.3.0 … v1.6.2), which is what the Linux tag build fires on.
-URL="https://github.com/SlyWombat/MegaPDF/releases/download/v$VERSION/$BASE"
+# The tag that carries this tarball: linux-v<version>, the Linux series of the
+# per-platform tags this repository uses (ios-v*, android-v*). Not a bare v<version>,
+# which v1.3.0 … v1.6.2 used for the retired Windows sideload builds.
+URL="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v$VERSION/$BASE"
 
 mkdir -p "$(dirname "$OUT")"
 if [ -n "$LOCAL" ]; then

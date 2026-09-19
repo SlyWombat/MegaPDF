@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # What every MegaPDF Linux package must be true of, whatever its format (#158).
 #
-#     tools/linux/package-check.sh <app-root> <fixtures-dir> [notices-file] [label]
+#     tools/linux/package-check.sh <app-root> <fixtures-dir> [notices-file] [label] [install-kind]
 #
 # <app-root> is the directory the package installs the tree under — /app/lib/megapdf
 # inside a Flatpak, /opt/MegaPDF from the .deb, <out>/MegaPDF/bin from an unpacked
@@ -31,11 +31,14 @@
 # Nothing here needs a display. Everything here has failed at least once.
 set -uo pipefail
 
-USAGE='usage: package-check.sh <app-root> <fixtures-dir> [notices-file] [label]'
+USAGE='usage: package-check.sh <app-root> <fixtures-dir> [notices-file] [label] [install-kind]'
 ROOT=${1:?$USAGE}
 FIXTURES=${2:?$USAGE}
 NOTICES=${3:-$ROOT/THIRD-PARTY-NOTICES.txt}
 LABEL=${4:-package}
+# What the app must say it is: the About window tells a person where updates come from
+# by this, so a .deb that thinks it is a tarball sends them to the wrong place (#158).
+EXPECTED_KIND=${5:-}
 
 failures=0
 ok()   { printf '  ok    %s\n' "$1"; }
@@ -101,6 +104,12 @@ run "--render-check: the engine loads and a page renders" --render-check "$FIXTU
 run "--language-check: the POSIX locale chain is read"    --language-check
 run "--print-check: the CUPS route is sound"              --print-check "$FIXTURES/fixture.pdf"
 run "--self-test: fill, check, sign, save, reopen"        --self-test "$FIXTURES"
+
+if [ -n "$EXPECTED_KIND" ]; then
+    kind=$("$ROOT/MegaPDF" --install-kind 2>/dev/null | sed -n 's/^install-kind: //p')
+    if [ "$kind" = "$EXPECTED_KIND" ]; then ok "--install-kind: $kind, so About says where updates come from"
+    else fail "--install-kind says '${kind:-nothing}', expected $EXPECTED_KIND"; fi
+fi
 
 echo
 if [ "$failures" -eq 0 ]; then

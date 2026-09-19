@@ -39,6 +39,10 @@ echo "building $PKG $VERSION ($ARCH) from $TREE"
 # libpdfium.so beside itself, so splitting it into /usr/lib and /usr/bin the way a
 # distribution package would is the one thing that breaks it.
 cp -a "$TREE/bin/." "$STAGE$OPTDIR/"
+# What the app reads to know it came from a .deb, so its About window can say updates
+# arrive with the system's (when the APT repository is set up) rather than send a person
+# to the download page (MegaPDF.Core LinuxInstall).
+printf 'deb\n' > "$STAGE$OPTDIR/INSTALL-KIND"
 ln -sf "$OPTDIR/MegaPDF" "$STAGE/usr/bin/megapdf"
 
 # An absolute Exec, for the reason tools/linux/install.sh gives: a desktop entry is

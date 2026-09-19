@@ -119,5 +119,10 @@ chmod +x "$APP/install.sh" "$APP/uninstall.sh"
 
 printf '%s\n' "$VERSION" > "$APP/VERSION"
 
+# Beside the binary, where the app reads it (MegaPDF.Core LinuxInstall): this tree is
+# the tarball, and tools/linux/build-deb.sh rewrites it in the .deb's copy. The Flatpak
+# and the Snap are built from this tree too and are told apart by their environment.
+printf 'tarball\n' > "$APP/bin/INSTALL-KIND"
+
 echo "built: $APP"
 du -sh "$APP"

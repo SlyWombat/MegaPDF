@@ -1,21 +1,25 @@
-# The Linux tag build (#254 A3): the release tarball a Flathub manifest fetches, its
-# checksum, and the generated manifest — plus the proof that the manifest builds from
-# the tarball this run has just made.
+# The Linux tag build (#254 A3, #158): the release tarball, the .deb, the signed APT
+# repository built from that .deb, and the generated Flathub manifest, each one proved
+# by installing it and running the app out of it.
 #
-# Tag a commit `v2.0.0` (the tag the desktop releases in this repository already use)
-# and the artefacts are attached to that release. `workflow_dispatch` does everything
-# except the attaching, which is how this was written and dry-run before any tag
-# existed: run it on a branch and read the summary.
+# Tag a commit `linux-v2.0.0` and the tarball, the .deb and their checksums go into a
+# **draft** GitHub release of that name. The Linux series has a tag prefix of its own,
+# like ios-v* and android-v*, rather than the bare v* that v1.3.0 … v1.6.2 used for the
+# retired Windows sideload builds. Those builds' updater reads /releases/latest and
+# offers only a newer, parseable tag carrying a .msix, so a Linux release can never
+# reach it, whatever it is called (proved against the retired code on #158).
+# `workflow_dispatch` and pull requests do everything except the release.
 #
-# NOTHING HERE SUBMITS ANYTHING TO FLATHUB. The manifest is an artefact; opening the
-# pull request against flathub/flathub is a person's step and is listed in
-# tools/Linux-Packaging.md.
+# NOTHING HERE PUBLISHES ANYTHING. The release is a draft until a person publishes it.
+# The APT repository is an artefact that website/deploy.py uploads to electricrv.ca
+# when Dave says so (tools/Linux-Packaging.md, "Going live"). And opening a pull
+# request against flathub/flathub is a person's step.
 name: Linux release
 
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    tags: ['linux-v*']
   # The tag path cannot be rehearsed on a pull request, so everything up to it is
   # rehearsed instead, whenever any of the pieces change.
   pull_request:
@@ -26,13 +30,17 @@ on:
       - 'tools/linux/build-flathub-flatpak.sh'
       - 'tools/linux/flatpak/**'
       - 'tools/build-linux-app.sh'
+      - 'tools/linux/build-deb.sh'
+      - 'tools/linux/make-apt-repo.sh'
+      - 'tools/linux/check-apt-repo.sh'
+      - 'website/megapdf/apt/**'
 
 permissions:
   contents: read
 
 jobs:
   tarball:
-    name: Release tarball and Flathub manifest
+    name: Tarball, .deb, APT repository and Flathub manifest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +53,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq flatpak flatpak-builder appstream \
-            desktop-file-utils librsvg2-common xvfb dbus
+            desktop-file-utils librsvg2-common xvfb dbus apt-utils gnupg
 
       - name: Build the shared engine core and the app
         run: tools/build-linux-app.sh linux-x64 artifacts/linux
@@ -55,6 +63,22 @@ jobs:
       # previous version is wrong in a way nobody sees for years.
       - name: The release tarball and its checksum
         run: tools/linux/make-release-tarball.sh artifacts/linux/MegaPDF artifacts/release
+
+      # A tag names the version it releases. linux-v2.0.1 on a tree that says 2.0.0
+      # would publish a release whose files contradict its name.
+      - name: The tag matches the version
+        if: startsWith(github.ref, 'refs/tags/linux-v')
+        run: |
+          built="$(tr -d '[:space:]' < artifacts/linux/MegaPDF/VERSION)"
+          [ "linux-v$built" = "$GITHUB_REF_NAME" ] || {
+            echo "::error::tag $GITHUB_REF_NAME, but this tree builds $built"; exit 1; }
+
+      - name: The .deb and its checksum
+        run: |
+          set -e
+          tools/linux/build-deb.sh artifacts/linux/MegaPDF artifacts/deb
+          cp artifacts/deb/megapdf_*_amd64.deb artifacts/release/
+          (cd artifacts/release && for f in megapdf_*_amd64.deb; do sha256sum "$f" > "$f.sha256"; done)
 
       # Two manifests from one template: the one a Flathub pull request would contain,
       # naming the release URL, and the same thing pointed at the file on disk so this
@@ -91,6 +115,30 @@ jobs:
       - name: Install it and run the app inside its sandbox
         run: tools/linux/check-flatpak.sh artifacts/flathub/ca.electricrv.MegaPDF.flatpak "$RUNNER_TEMP/fixtures"
 
+      # Signed with the repository key, which the environment hands over and the script
+      # imports from stdin, never from a command line. A pull request from a fork has no
+      # secrets, so there this step says so and stops short.
+      - name: The signed APT repository
+        id: apt
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          if [ -z "$APT_SIGNING_KEY" ]; then
+            echo "::notice::no signing key here (a fork?), so no APT repository is built"
+            exit 0
+          fi
+          tools/linux/make-apt-repo.sh artifacts/apt artifacts/release/megapdf_*_amd64.deb
+          echo "built=1" >> "$GITHUB_OUTPUT"
+
+      # The repository the way a person meets it: subscribe as the website says, install,
+      # run the app, see a newer version arrive through apt upgrade, and see a stranger's
+      # signature refused. In clean Debian 12, Ubuntu 22.04 and Ubuntu 24.04 containers.
+      - name: Install from the APT repository, upgrade, and refuse a forgery
+        if: steps.apt.outputs.built == '1'
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: tools/linux/check-apt-repo.sh artifacts/apt "$RUNNER_TEMP/fixtures"
+
       - name: Flathub's linter, on the manifest that would be submitted
         run: |
           flatpak install -y --noninteractive --user flathub org.flatpak.Builder
@@ -106,7 +154,11 @@ jobs:
             ls -l artifacts/release
             echo '```'
             echo
-            echo "**sha256**: \`$(cut -d' ' -f1 artifacts/release/*.sha256)\`"
+            echo "**sha256**:"
+            echo
+            echo '```'
+            cat artifacts/release/*.sha256
+            echo '```'
             echo
             echo "The \`sources:\` block of the manifest a Flathub pull request would carry:"
             echo
@@ -121,17 +173,29 @@ jobs:
           path: |
             artifacts/release/megapdf-linux-x64-*.tar.gz
             artifacts/release/megapdf-linux-x64-*.tar.gz.sha256
+            artifacts/release/megapdf_*_amd64.deb
+            artifacts/release/megapdf_*_amd64.deb.sha256
             artifacts/release/ca.electricrv.MegaPDF.yml
             artifacts/flathub/ca.electricrv.MegaPDF.flatpak
           if-no-files-found: error
 
+      # What website/deploy.py uploads to electricrv.ca/megapdf/apt/ on the day: download
+      # it into website/megapdf/apt/ (tools/Linux-Packaging.md, "Going live").
+      - uses: actions/upload-artifact@v4
+        if: steps.apt.outputs.built == '1'
+        with:
+          name: MegaPDF-apt-repository
+          path: artifacts/apt
+          if-no-files-found: error
+
   # A job of its own, so the write permission exists only on a tag run and never on
-  # the pull-request rehearsal above. It builds nothing: it attaches what that job
-  # already made, and that this workflow already installed and ran.
+  # the pull-request rehearsal above. It builds nothing: it puts what that job already
+  # made, and already installed and ran, into a DRAFT release. Publishing it is a
+  # person's click (Dave's go-ahead; Linux ships after the other platforms).
   publish:
-    name: Attach to the release
+    name: Draft the release
     needs: tarball
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/linux-v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -142,19 +206,24 @@ jobs:
           path: artifacts
 
       # Neither creates a tag nor touches any other release. `--verify-tag` refuses a
-      # tag that is not already pushed, and the release is only created when it is not
-      # there — the macOS and Windows builds may well have made it first.
-      - name: Attach the tarball and its checksum
+      # tag that is not already pushed. A re-run of the same tag replaces the files in
+      # the draft rather than making a second release.
+      - name: The tarball, the .deb and their checksums, in a draft release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -e
           TAG="$GITHUB_REF_NAME"
+          VERSION="${TAG#linux-v}"
           gh release view "$TAG" >/dev/null 2>&1 || \
-            gh release create "$TAG" --verify-tag --title "MegaPDF $TAG" \
-              --notes "See docs/release-notes/. The Linux tarball below is what the Flathub manifest fetches; its sha256 is beside it."
+            gh release create "$TAG" --draft --verify-tag --title "MegaPDF $VERSION for Linux" \
+              --notes "MegaPDF $VERSION for Linux (x86-64). How to install it, including the APT repository that keeps it up to date: https://electricrv.ca/megapdf/linux/ — each file's sha256 is beside it."
           gh release upload "$TAG" \
             artifacts/release/megapdf-linux-x64-*.tar.gz \
             artifacts/release/megapdf-linux-x64-*.tar.gz.sha256 \
+            artifacts/release/megapdf_*_amd64.deb \
+            artifacts/release/megapdf_*_amd64.deb.sha256 \
             --clobber
+          gh release view "$TAG" --json isDraft,tagName,assets \
+            --jq '"draft=\(.isDraft) \(.tagName): \([.assets[].name] | join(", "))"'

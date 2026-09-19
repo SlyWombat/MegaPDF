@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Avalonia.Platform;
+using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia;
 
@@ -57,6 +58,21 @@ internal static partial class AppInfo
                 : Strings.VersionWithBuild(version, build);
         }
     }
+
+    /// <summary>
+    /// Where this Linux copy's updates come from, for the About window (#158), or null
+    /// where there is nothing to say: the Mac (the App Store updates it) and a
+    /// developer's build.
+    /// </summary>
+    internal static string? UpdatesLine(LinuxInstallKind kind) => kind switch
+    {
+        LinuxInstallKind.AptRepository => Strings.UpdatesFromApt,
+        LinuxInstallKind.Snap => Strings.UpdatesFromSnap,
+        LinuxInstallKind.Flatpak => Strings.UpdatesFromFlatpak,
+        LinuxInstallKind.DebFile => Strings.UpdatesFromDebFile,
+        LinuxInstallKind.Tarball => Strings.UpdatesFromTarball,
+        _ => null,
+    };
 
     private static string AssemblyVersion()
     {

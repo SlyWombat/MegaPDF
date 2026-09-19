@@ -1115,4 +1115,28 @@
     <value>Couldn't show {0} in the Finder.</value>
     <comment>Status line when Show in Finder fails: the file has moved, or its volume is gone (#165)</comment>
   </data>
+  <data name="UpdatesFromApt" xml:space="preserve">
+    <value>Updates arrive with your system's software updates.</value>
+    <comment>About window, Linux, installed from the MegaPDF APT repository: where updates come from (#158)</comment>
+  </data>
+  <data name="UpdatesFromSnap" xml:space="preserve">
+    <value>The Snap Store installs updates automatically.</value>
+    <comment>About window, Linux, installed from the Snap Store: where updates come from. "Snap Store" is a product name (#158)</comment>
+  </data>
+  <data name="UpdatesFromFlatpak" xml:space="preserve">
+    <value>Flatpak installs updates.</value>
+    <comment>About window, Linux, installed as a Flatpak: where updates come from. "Flatpak" is a product name (#158)</comment>
+  </data>
+  <data name="UpdatesFromDebFile" xml:space="preserve">
+    <value>This .deb gets no updates by itself. Add the MegaPDF repository to get them with your system's.</value>
+    <comment>About window, Linux, installed from a downloaded .deb with no repository: how to get updates. Followed by the download page link (#158)</comment>
+  </data>
+  <data name="UpdatesFromTarball" xml:space="preserve">
+    <value>MegaPDF doesn't check for updates. Newer versions are on the download page.</value>
+    <comment>About window, Linux, installed from the release tarball: MegaPDF makes no network connection, so it never checks. Followed by the download page link (#158)</comment>
+  </data>
+  <data name="LinuxDownloadPage" xml:space="preserve">
+    <value>Download page</value>
+    <comment>About window, Linux: the link to electricrv.ca/megapdf/linux/, opened in the person's browser (#158)</comment>
+  </data>
 </root>

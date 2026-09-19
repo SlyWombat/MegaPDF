@@ -33,6 +33,7 @@ internal static class Program
              : args.Contains("--portal-print-check") ? PortalPrintCheck(args)
              : args.Contains("--print-check") ? PrintCheck(args)
              : args.Contains("--language-check") ? LanguageCheck()
+             : args.Contains("--install-kind") ? InstallKind()
              : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
@@ -345,6 +346,17 @@ internal static class Program
     /// against a table rather than against the machine's own environment, so the
     /// check means the same thing on a French desktop and on an English CI runner.
     /// </summary>
+    /// <summary>
+    /// Which Linux package this is, as the About window decides it (#158). The package
+    /// checks assert it: a .deb that believed it was the tarball would send people to the
+    /// download page for updates their package manager already brings.
+    /// </summary>
+    private static int InstallKind()
+    {
+        Console.WriteLine($"install-kind: {MegaPDF.Core.Services.LinuxInstall.Current(AppContext.BaseDirectory)}");
+        return 0;
+    }
+
     private static int LanguageCheck()
     {
         Console.WriteLine($"language-check: the app would run in {CultureInfo.CurrentUICulture.Name} "
