@@ -398,9 +398,14 @@ def cmd_review(attachments):
         print(f"  review detail updated; contact {c.get('contactFirstName')} {c.get('contactLastName')} "
               f"{c.get('contactEmail')} {c.get('contactPhone')}")
     else:
+        # App Review calls this number if they need to. Never invent one: it comes
+        # from ASC_CONTACT_PHONE (the placeholder 18885551212 went out with 2.0).
+        phone = os.environ.get("ASC_CONTACT_PHONE", "").strip()
+        if not phone:
+            sys.exit("set ASC_CONTACT_PHONE to a real number before creating review details")
         attrs.update({"contactFirstName": "David", "contactLastName": "Seaman",
                       "contactEmail": "info@electricrv.ca",
-                      "contactPhone": "18885551212"})
+                      "contactPhone": phone})
         did = api("POST", "/v1/appStoreReviewDetails", {"data": {
             "type": "appStoreReviewDetails", "attributes": attrs,
             "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})["data"]["id"]
