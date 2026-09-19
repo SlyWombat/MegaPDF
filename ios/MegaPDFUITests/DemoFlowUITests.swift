@@ -325,10 +325,18 @@ final class DemoFlowUITests: XCTestCase {
     /// under it. The first review take drew two straight diagonals, which read as
     /// a cross-out rather than a name.
     private func drawSignature(_ app: XCUIApplication) {
-        let canvas = app.otherElements.matching(NSPredicate(format: "label == 'Signature canvas'")).firstMatch
-        let area: XCUIElement = canvas.exists ? canvas : app.windows.firstMatch
+        // The canvas has no accessibility element of its own: it is the 220 pt band
+        // directly under the sheet's navigation bar ("Draw your signature"), full
+        // width (DrawSignatureView). Fractions of the whole window, which the first
+        // take used, put most of every stroke below it, so only stubs were drawn.
+        let bar = app.navigationBars.firstMatch
+        XCTAssertTrue(bar.waitForExistence(timeout: 5), "no navigation bar over the canvas")
+        let window = app.windows.firstMatch
+        let top = bar.frame.maxY - window.frame.minY
+        let width = window.frame.width
         func pt(_ x: Double, _ y: Double) -> XCUICoordinate {
-            area.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y))
+            window.coordinate(withNormalizedOffset: .zero)
+                .withOffset(CGVector(dx: width * x, dy: top + 220 * y))
         }
         // Slow drags: at the default velocity the gesture samples so few points
         // that the canvas records dots, not a line.
