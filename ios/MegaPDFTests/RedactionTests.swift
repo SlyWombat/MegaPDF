@@ -143,7 +143,10 @@ final class RedactionTests: XCTestCase {
             for key in keys {
                 let value = bundle.localizedString(forKey: key, value: "\u{1}missing", table: nil)
                 XCTAssertNotEqual(value, "\u{1}missing", "\(lang): no entry for \(key)")
-                XCTAssertNotEqual(value, key, "\(lang): \(key) reads in English")
+                // "images" and "annotations" are the same word in French.
+                if !["%@ images", "%@ annotations"].contains(key) {
+                    XCTAssertNotEqual(value, key, "\(lang): \(key) reads in English")
+                }
             }
             let two = bundle.localizedString(forKey: "%@ areas redacted: %@", value: nil, table: nil)
             XCTAssertEqual(String(format: two, "2", "13 caractères"), "2 zones caviardées\u{00A0}: 13 caractères")
