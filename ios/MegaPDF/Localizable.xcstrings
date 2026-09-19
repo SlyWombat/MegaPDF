@@ -1,6 +1,103 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ annotations" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ annotations"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ annotations"
+          }
+        }
+      }
+    },
+    "%@ areas marked for redaction" : {
+      "comment" : "Screen-reader summary of the page's marks (#173)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zones marquées pour caviardage"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zones marquées pour caviardage"
+          }
+        }
+      }
+    },
+    "%@ areas redacted: %@" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ zones caviardées : %2$@"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ zones caviardées : %2$@"
+          }
+        }
+      }
+    },
+    "%@ characters" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ caractères"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ caractères"
+          }
+        }
+      }
+    },
+    "%@ form fields" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ champs de formulaire"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ champs de formulaire"
+          }
+        }
+      }
+    },
+    "%@ images" : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ images"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ images"
+          }
+        }
+      }
+    },
     "%@, in %@" : {
       "localizations" : {
         "fr" : {
@@ -130,19 +227,19 @@
         }
       }
     },
-    "1 area redacted: {0}" : {
+    "1 area redacted: %@" : {
       "comment" : "Shown after saving (#173); {0} is a list such as \"41 characters, 1 image\"",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 zone caviardée : {0}"
+            "value" : "1 zone caviardée : %@"
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1 zone caviardée : {0}"
+            "value" : "1 zone caviardée : %@"
           }
         }
       }
@@ -1261,19 +1358,19 @@
     "MegaPDF" : {
       "shouldTranslate" : false
     },
-    "MegaPDF couldn't remove everything you marked on page {0}, so it removed nothing and left the file as it was." : {
+    "MegaPDF couldn't remove everything you marked on page %@, so it removed nothing and left the file as it was." : {
       "comment" : "Refusal body (#173); {0} is a page number",
       "localizations" : {
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MegaPDF n'a pas pu tout retirer de la page {0} ; rien n'a été retiré et le fichier est resté intact."
+            "value" : "MegaPDF n'a pas pu tout retirer de la page %@ ; rien n'a été retiré et le fichier est resté intact."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "MegaPDF n'a pas pu tout retirer de la page {0}; rien n'a été retiré et le fichier est resté intact."
+            "value" : "MegaPDF n'a pas pu tout retirer de la page %@; rien n'a été retiré et le fichier est resté intact."
           }
         }
       }
@@ -3062,103 +3159,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "location"
-          }
-        }
-      }
-    },
-    "{0} annotations" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} annotations"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} annotations"
-          }
-        }
-      }
-    },
-    "{0} areas marked for redaction" : {
-      "comment" : "Screen-reader summary of the page's marks (#173)",
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} zones marquées pour caviardage"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} zones marquées pour caviardage"
-          }
-        }
-      }
-    },
-    "{0} areas redacted: {1}" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} zones caviardées : {1}"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} zones caviardées : {1}"
-          }
-        }
-      }
-    },
-    "{0} characters" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} caractères"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} caractères"
-          }
-        }
-      }
-    },
-    "{0} form fields" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} champs de formulaire"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} champs de formulaire"
-          }
-        }
-      }
-    },
-    "{0} images" : {
-      "localizations" : {
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} images"
-          }
-        },
-        "fr-CA" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{0} images"
           }
         }
       }

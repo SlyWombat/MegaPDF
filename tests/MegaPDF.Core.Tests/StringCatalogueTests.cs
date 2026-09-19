@@ -171,6 +171,26 @@ public class StringCatalogueTests
         AssertParity($"iOS {localization}", en, fr, ApplePlaceholder);
     }
 
+    /// <summary>
+    /// An iOS key is looked up by the literal the Swift code passes to
+    /// <c>String(localized:)</c>, and that code formats with <c>%@</c>. A key written
+    /// with .NET's <c>{0}</c> matches no lookup at all, so its French never shows. The
+    /// parity check above cannot see it (neither side has an Apple placeholder).
+    /// Seven redaction strings shipped that way (#282) and read in English in French.
+    /// </summary>
+    [Fact]
+    public void IosKeysUseApplePlaceholders()
+    {
+        using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(RepoRoot(), "ios/MegaPDF/Localizable.xcstrings")));
+        var dotnetStyle = doc.RootElement.GetProperty("strings").EnumerateObject()
+            .Select(e => e.Name)
+            .Where(k => Regex.IsMatch(k, @"\{\d+\}"))
+            .Order().ToList();
+        Assert.True(dotnetStyle.Count == 0,
+            "iOS keys with {0}-style placeholders, which no String(localized:) lookup can match: "
+            + string.Join(" | ", dotnetStyle));
+    }
+
     // --- Typography the glossary settles (docs/localisation-glossary.md) ---
 
     /// <summary>

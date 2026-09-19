@@ -127,4 +127,26 @@ final class RedactionTests: XCTestCase {
         let marked = await engine.redactionMarkCount(doc)
         XCTAssertEqual(marked, 1)
     }
+
+    /// The summary and the refusal are looked up by their `%@` literals, and in French they
+    /// have to find French. Written with `{0}` in the catalogue they matched nothing and read
+    /// in English (#282). Read out of the built app's own .lproj folders.
+    func testTheSummaryAndTheRefusalAreTranslated() throws {
+        let app = Bundle(for: ViewerModel.self)
+        let keys = ["1 area redacted: %@", "%@ areas redacted: %@", "%@ characters", "%@ images",
+                    "%@ form fields", "%@ annotations",
+                    "MegaPDF couldn't remove everything you marked on page %@, so it removed nothing and left the file as it was."]
+        for lang in ["fr-CA", "fr"] {
+            guard let path = app.path(forResource: lang, ofType: "lproj"), let bundle = Bundle(path: path) else {
+                XCTFail("no \(lang).lproj in the app"); continue
+            }
+            for key in keys {
+                let value = bundle.localizedString(forKey: key, value: "\u{1}missing", table: nil)
+                XCTAssertNotEqual(value, "\u{1}missing", "\(lang): no entry for \(key)")
+                XCTAssertNotEqual(value, key, "\(lang): \(key) reads in English")
+            }
+            let two = bundle.localizedString(forKey: "%@ areas redacted: %@", value: nil, table: nil)
+            XCTAssertEqual(String(format: two, "2", "13 caractères"), "2 zones caviardées\u{00A0}: 13 caractères")
+        }
+    }
 }
