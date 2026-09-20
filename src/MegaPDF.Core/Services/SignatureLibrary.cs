@@ -7,6 +7,12 @@ public sealed record SignatureEntry(Guid Id, string Name, string PngPath, DateTi
 /// <summary>
 /// The user's signature library (SDD §3.3): local-only PNGs with alpha plus a JSON index,
 /// stored per-user. Soft limit of 20 entries.
+/// <para>
+/// This is the reference the iOS and Android ports follow (#333), on the three points they
+/// had drifted on: the soft limit above, dropping index entries whose image has gone missing
+/// (see <see cref="SignatureLibrary.Load"/>), and the delete order in
+/// <see cref="SignatureLibrary.Remove"/>.
+/// </para>
 /// </summary>
 public interface ISignatureLibrary
 {
@@ -68,6 +74,12 @@ public sealed class SignatureLibrary : ISignatureLibrary
         SaveIndex();
     }
 
+    /// <summary>
+    /// Takes the entry out of the index and then deletes the PNG — the order all three
+    /// platforms use (#333). A failure between the two leaves an orphan image, which nothing
+    /// shows; the other order would leave an index entry naming a file that is gone, which
+    /// <see cref="Load"/> can only drop rather than repair.
+    /// </summary>
     public void Remove(Guid id)
     {
         var entry = _entries.Find(e => e.Id == id)

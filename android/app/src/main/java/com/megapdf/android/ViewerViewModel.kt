@@ -1386,6 +1386,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun importSignature(uri: Uri) {
         viewModelScope.launch {
             try {
+                if (libraryIsFull()) return@launch
                 val bitmap = withContext(Dispatchers.IO) {
                     getApplication<Application>().contentResolver.openInputStream(uri)
                         ?.use { android.graphics.BitmapFactory.decodeStream(it) }
@@ -1433,6 +1434,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun addDrawnSignature(bitmap: Bitmap) {
         viewModelScope.launch {
             try {
+                if (libraryIsFull()) return@launch
                 val result = withContext(Dispatchers.Default) {
                     val pixels = IntArray(bitmap.width * bitmap.height)
                     bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
@@ -1974,6 +1976,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** A user-facing string in the app's current locale, for toasts and statuses. */
     private fun str(id: Int, vararg args: Any): String =
         getApplication<Application>().getString(id, *args)
+
+    /**
+     * Says so and answers true when the library is at its soft limit (#333), which
+     * `add` would otherwise refuse as a bare `IllegalStateException` — reported to
+     * the user as a save failure, which is not what happened. Checked ahead of the
+     * work rather than after it: the library being full is not a reason to encode,
+     * cleanup and trim an image that will be refused.
+     */
+    private suspend fun libraryIsFull(): Boolean {
+        if (!withContext(Dispatchers.IO) { signatureStore.isFull() }) return false
+        statusMessage = str(R.string.signature_library_full, SignatureLibraryStore.SOFT_LIMIT)
+        return true
+    }
 
     /**
      * "Signature N" for a new library entry. The name is persisted at creation

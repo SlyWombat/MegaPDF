@@ -146,6 +146,7 @@
     <string name="signature_added">Signature ajoutée</string>
     <string name="signature_import_failed">Impossible d\'importer la signature.</string>
     <string name="signature_save_failed">Impossible d\'enregistrer la signature.</string>
+    <string name="signature_library_full">La bibliothèque de signatures est limitée à %1$d signatures.</string>
     <string name="signature_image_missing">L\'image de cette signature est introuvable</string>
     <string name="signature_image_unreadable">Impossible de lire l\'image de cette signature</string>
     <string name="signature_remove_failed">Impossible de retirer cette signature</string>

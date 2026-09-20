@@ -1487,6 +1487,13 @@ final class ViewerModel: ObservableObject {
     }
 
     private func storeSignature(pixels: [UInt32], width: Int, height: Int) {
+        // A full library is a limit, not a failure, and `add` says no to it the same
+        // way it says no to a write that failed (#333). Ask first, so the user is
+        // told which of the two happened.
+        guard !signatureStore.isFull else {
+            statusMessage = String(localized: "The signature library is limited to \(SignatureStore.softLimit) signatures.")
+            return
+        }
         // The default name is localised once, at creation, and persisted as-is in
         // the signature store: it does not re-translate if the device language
         // changes later. Catalog key "Signature %lld".
