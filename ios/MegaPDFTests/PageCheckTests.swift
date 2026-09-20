@@ -164,6 +164,18 @@ final class PageCheckTests: XCTestCase {
         XCTAssertEqual(result, .warn, "the waiting change still gets its answer")
     }
 
+    /// #332: the budget race. The budget ends the wait; it does not throw away an answer that
+    /// has already arrived, so a check that answers as the budget expires is still the answer.
+    /// The coordinator puts each answer aside as it comes back and the expiry reads it there;
+    /// C# and Kotlin decide the same race the same way.
+    func testAnAnswerThatLandsWithTheBudgetIsTheAnswer() async throws {
+        for _ in 0..<5 {
+            let checks = PageCheckCoordinator(budget: 0) { _ in .wouldChange }
+            let outcome = await checks.outcome(for: 0)
+            XCTAssertEqual(outcome, .warn, "a check that has answered is read, budget or no budget")
+        }
+    }
+
     func testResetAbandonsAChangeWaitingOnACheck() async throws {
         let check = HangingCheck()
         let checks = PageCheckCoordinator(budget: 10) { await check.run($0) }
@@ -173,6 +185,8 @@ final class PageCheckTests: XCTestCase {
         let result = await outcome
         XCTAssertEqual(result, .abandoned)
         XCTAssertFalse(checks.isSettled(0))
+        XCTAssertNil(checks.runningPage, "the coordinator holds nothing of the document that closed")
+        try await waitUntil("reset stops the check") { check.cancelled == [0] }
     }
 
     // MARK: - engine: the check off the actor

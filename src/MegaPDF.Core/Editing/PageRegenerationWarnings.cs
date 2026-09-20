@@ -13,6 +13,13 @@ public enum PageCheckAnswer
 
     /// <summary>The check did not answer within the budget: apply without a warning (#145).</summary>
     OverBudget,
+
+    /// <summary>
+    /// Another document opened while the change waited, so there is nothing to apply the change to.
+    /// The running check is stopped and the page is left unsettled, because the page now on screen
+    /// is a page of the new document (#332).
+    /// </summary>
+    Cancelled,
 }
 
 /// <summary>
@@ -36,8 +43,21 @@ public sealed class PageRegenerationWarnings
     public static TimeSpan Budget { get; } = TimeSpan.FromSeconds(1.5);
 
     private readonly HashSet<int> _settled = [];
-    private readonly Dictionary<int, RunningCheck> _running = [];
     private readonly object _gate = new();
+
+    /// <summary>
+    /// The one check running, for the page in front of the person (#332). One, not one per page:
+    /// "starting a check cancels an unfinished check for another page" is then true by
+    /// construction, and closing the document drops the only record of it, so nothing here keeps
+    /// a closed document's page alive.
+    /// </summary>
+    private RunningCheck? _running;
+
+    /// <summary>
+    /// The page a change is waiting on, if any. A check started for another page leaves it alone:
+    /// its answer is the one somebody is waiting for, and this page's turn comes later (#332).
+    /// </summary>
+    private int? _awaitedPage;
 
     /// <summary>Runs one page's check: the core's dry run, unless a test stands in for it.</summary>
     private readonly Func<IPdfDocument, int, CancellationToken, LayoutVerdict> _judge;
@@ -71,7 +91,7 @@ public sealed class PageRegenerationWarnings
     /// <summary>Bumped by <see cref="Reset"/>, so a check for the previous document settles nothing in the next.</summary>
     private int _generation;
 
-    private sealed record RunningCheck(IPdfDocument Document, Task<LayoutVerdict?> Task, CancellationTokenSource Cancel);
+    private sealed record RunningCheck(int PageIndex, IPdfDocument Document, Task<LayoutVerdict?> Task, CancellationTokenSource Cancel);
 
     /// <summary>
     /// Whether <paramref name="operation"/> regenerates its page's content without the text
@@ -120,9 +140,10 @@ public sealed class PageRegenerationWarnings
     /// <summary>
     /// Starts the page's check in the background, unless it is settled or already running
     /// (#145). Call when a page is first shown and when a tool that regenerates content is
-    /// armed, so the answer is usually ready by the change. Checks still running for other
-    /// pages are cancelled: the page in front of the person comes first, and a page left
-    /// behind is checked again when it comes back.
+    /// armed, so the answer is usually ready by the change. An unfinished check for another
+    /// page is cancelled — the page in front of the person comes first, and a page left behind
+    /// is checked again when it comes back — unless a change is waiting on that page's answer,
+    /// in which case this page waits its turn (#332).
     /// </summary>
     public void Prepare(IPdfDocument document, int pageIndex) => _ = Start(document, pageIndex);
 
@@ -131,30 +152,63 @@ public sealed class PageRegenerationWarnings
     /// Waits for the page's check (started now if <see cref="Prepare"/> was not called) at most
     /// <paramref name="budget"/>; past it the check is cancelled, the page settled, and the answer
     /// is <see cref="PageCheckAnswer.OverBudget"/>. A page the core cannot judge keeps its look.
+    /// A check that answers in the same breath as the budget is the answer (#332): the budget
+    /// stops the waiting, it does not discard what is already there.
     /// </summary>
     public async Task<PageCheckAnswer> AskAsync(IPdfDocument document, int pageIndex, TimeSpan budget)
     {
         if (IsSettled(pageIndex))
             return PageCheckAnswer.KeepsLook;
 
+        var generation = _generation;
         var check = Start(document, pageIndex);
-        // A check that has answered by the time the budget runs out wins: WhenAny prefers the
-        // first task in its list when both are done.
-        if (await Task.WhenAny(check, _waitBudget(budget)).ConfigureAwait(false) != check)
-        {
-            Cancel(pageIndex);
-            // The change regenerates the page now: a warning about it afterwards would be too late.
-            Settle(pageIndex);
+        if (!await WaitAsync(check, pageIndex, generation, budget).ConfigureAwait(false))
             return PageCheckAnswer.OverBudget;
-        }
 
         var verdict = await check.ConfigureAwait(false);
+        // The document went away while we waited: what is on screen now is another document's page,
+        // or nothing at all, so settle nothing in it (#332).
+        if (generation != _generation)
+            return PageCheckAnswer.Cancelled;
+
         if (verdict is not { Editable: false })
         {
             Settle(pageIndex);
             return PageCheckAnswer.KeepsLook;
         }
         return PageCheckAnswer.WouldChange;
+    }
+
+    /// <summary>
+    /// Waits out <paramref name="budget"/> for the check, with the page marked as the one a change is
+    /// on. True when the page has an answer to read, false when the budget ran out on a check with
+    /// nothing to say — in which case the check is stopped and the page settled, because the change
+    /// regenerates the page now and a warning about it afterwards would be too late.
+    /// </summary>
+    private async Task<bool> WaitAsync(Task<LayoutVerdict?> check, int pageIndex, int generation, TimeSpan budget)
+    {
+        lock (_gate)
+            _awaitedPage = pageIndex;
+        try
+        {
+            // A check that has answered by the time the budget runs out wins, whether or not the
+            // budget's task came back first (#332): the budget stops the waiting, it does not
+            // discard an answer that is already there.
+            if (await Task.WhenAny(check, _waitBudget(budget)).ConfigureAwait(false) == check || check.IsCompleted)
+                return true;
+
+            if (generation == _generation)
+                Settle(pageIndex); // also stops the check, which is still the one running
+            return false;
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                if (generation == _generation)
+                    _awaitedPage = null;
+            }
+        }
     }
 
     /// <summary><see cref="AskAsync(IPdfDocument, int, TimeSpan)"/> for an operation, with the default budget; anything that does not regenerate the page keeps its look.</summary>
@@ -170,22 +224,32 @@ public sealed class PageRegenerationWarnings
             return _settled.Contains(pageIndex);
     }
 
-    /// <summary>The person chose Continue: no more warnings for this page in this document.</summary>
+    /// <summary>
+    /// The person chose Continue, or a change went in unasked: no more warnings for this page in
+    /// this document, and a check still running for it has nothing left to say.
+    /// </summary>
     public void Settle(int pageIndex)
     {
         lock (_gate)
+        {
             _settled.Add(pageIndex);
+            if (_running is { } running && running.PageIndex == pageIndex)
+            {
+                _running = null;
+                running.Cancel.Cancel();
+            }
+        }
     }
 
-    /// <summary>Forgets every page and cancels every running check: call when another document is opened.</summary>
+    /// <summary>Forgets every page and cancels the running check: call when another document is opened.</summary>
     public void Reset()
     {
         lock (_gate)
         {
             _generation++;
-            foreach (var check in _running.Values)
-                check.Cancel.Cancel();
-            _running.Clear();
+            _running?.Cancel.Cancel();
+            _running = null;
+            _awaitedPage = null;
             _settled.Clear();
         }
     }
@@ -194,7 +258,7 @@ public sealed class PageRegenerationWarnings
     public bool IsChecking(int pageIndex)
     {
         lock (_gate)
-            return _running.TryGetValue(pageIndex, out var check) && !check.Task.IsCompleted;
+            return _running is { } running && running.PageIndex == pageIndex && !running.Task.IsCompleted;
     }
 
     private Task<LayoutVerdict?> Start(IPdfDocument document, int pageIndex)
@@ -203,22 +267,26 @@ public sealed class PageRegenerationWarnings
         {
             if (_settled.Contains(pageIndex))
                 return Task.FromResult<LayoutVerdict?>(null);
-            if (_running.TryGetValue(pageIndex, out var existing) && ReferenceEquals(existing.Document, document)
-                && !existing.Cancel.IsCancellationRequested)
-                return existing.Task;
-
-            foreach (var (page, other) in _running.Where(r => r.Key != pageIndex).ToList())
+            if (_running is { } existing)
             {
-                if (other.Task.IsCompleted)
-                    continue;
-                other.Cancel.Cancel();
-                _running.Remove(page);
+                if (existing.PageIndex == pageIndex && ReferenceEquals(existing.Document, document)
+                    && !existing.Cancel.IsCancellationRequested)
+                    return existing.Task;
+                // A change is waiting on that answer; this page's turn comes later (#332). Only
+                // Prepare passes through here: a change asks about the page it is already waiting on.
+                if (existing.PageIndex == _awaitedPage && !existing.Task.IsCompleted)
+                    return Task.FromResult<LayoutVerdict?>(null);
+                if (!existing.Task.IsCompleted)
+                {
+                    _running = null;
+                    existing.Cancel.Cancel();
+                }
             }
 
             var cancel = new CancellationTokenSource();
             var generation = _generation;
             var task = Task.Run(() => Judge(document, pageIndex, generation, cancel.Token));
-            _running[pageIndex] = new RunningCheck(document, task, cancel);
+            _running = new RunningCheck(pageIndex, document, task, cancel);
             return task;
         }
     }
@@ -254,16 +322,6 @@ public sealed class PageRegenerationWarnings
         catch (ArgumentOutOfRangeException)
         {
             return null;
-        }
-    }
-
-    private void Cancel(int pageIndex)
-    {
-        lock (_gate)
-        {
-            if (!_running.Remove(pageIndex, out var check))
-                return;
-            check.Cancel.Cancel();
         }
     }
 }

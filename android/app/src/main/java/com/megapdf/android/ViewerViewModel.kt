@@ -21,7 +21,6 @@ import com.megapdf.engine.PdfPasswordException
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfSecurity
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -351,7 +350,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * or password change runs. Further edits are blocked, never queued or dropped (#145).
      */
     val editingBlocked: Boolean
-        get() = editsInFlight > 0 || pageChecks.isDeciding || busy.locksDocument
+        get() = editsInFlight > 0 || pageRewriteDeciding || busy.locksDocument
 
     /**
      * Whether the toolbar's editing tools show disabled: during a save or password change, and
@@ -506,31 +505,57 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         private set
 
     /**
-     * The warning on screen before the first text-box change on a page PDFium's rewrite would
-     * alter (#139). The screen answers it with [answerPageRewrite]: Continue or Cancel.
+     * The warning before the first text-box change on a page PDFium's rewrite would alter (#139),
+     * and the person's answer to it, which is [answerPageRewrite]. It lives here rather than in
+     * the check gate (#332): the gate answers whether the page would change, and asking about it
+     * is the change's business.
      */
-    val pageRewriteQuestion: CompletableDeferred<Boolean>?
-        get() = pageChecks.question
+    private val pageRewriteQuestion = PageRewriteQuestion()
+
+    /** True while that warning is on screen. */
+    val pageRewriteWarningShown: Boolean
+        get() = pageRewriteQuestion.isUp
 
     fun answerPageRewrite(proceed: Boolean) {
-        pageChecks.answer(proceed)
+        pageRewriteQuestion.answer(proceed)
     }
+
+    /**
+     * True while a change waits on its page check or on the warning (#139, #145): further edits
+     * wait, and so do the tools. Never two warnings at once — the second change is refused rather
+     * than queued, and this is what refuses it.
+     */
+    var pageRewriteDeciding: Boolean by mutableStateOf(false)
+        private set
 
     /**
      * True when [operation] may go ahead: it leaves the page's content alone, the page was
      * already settled in this document, the page keeps its look when regenerated, its check
      * ran over budget, or the person chose Continue (#139, #145). The check started early is
-     * reused; while it is awaited the spinner shows at [spot]. A restricted document is left to
-     * [perform] to refuse.
+     * reused; while it is awaited the spinner shows at [spot], and while the warning is up the
+     * screen shows it. A restricted document is left to [perform] to refuse.
      */
     private suspend fun confirmPageRewrite(
         operation: PdfEditOperation, doc: PdfDocument, spot: BusySpot? = null,
     ): Boolean {
         if (!PageRewriteWarnings.regeneratesUnjudged(operation) || !capabilities.allows(operation)) return true
-        val pageIndex = operation.pageIndex
-        val proceed = pageChecks.confirm(pageIndex, busy, spot ?: BusySpot(pageIndex))
-        // The document may have been closed while the check ran or the question was up.
-        return proceed && document === doc
+        if (pageRewriteDeciding) return false
+        pageRewriteDeciding = true
+        try {
+            val pageIndex = operation.pageIndex
+            return when (pageChecks.confirm(pageIndex, busy, spot ?: BusySpot(pageIndex))) {
+                // The document may have been closed while the check ran.
+                PageCheckOutcome.APPLY -> document === doc
+                PageCheckOutcome.ABANDONED -> false
+                PageCheckOutcome.WARN ->
+                    // Continue settles the page, so it is never asked about again in this document;
+                    // Cancel applies nothing and leaves it unsettled, ready to ask again.
+                    pageRewriteQuestion.ask().also { if (it) pageChecks.settle(pageIndex) } &&
+                        document === doc
+            }
+        } finally {
+            pageRewriteDeciding = false
+        }
     }
 
     /** Starts the page's check in the background, when the open document allows the changes it guards (#145). */
@@ -1945,9 +1970,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // History belongs to the open document — never offer to undo an edit made
         // to a file that is no longer on screen.
         history.clear()
-        // So do the page checks and the pages already settled (#139, #145): every running
-        // check is stopped, and a question still up is answered Cancel.
+        // So do the page checks and the pages already settled (#139, #145): the running check is
+        // stopped, and a warning still up is answered Cancel — the change it was asking about
+        // belonged to the document that just went away.
         pageChecks.reset()
+        pageRewriteQuestion.abandon()
         // And its busy state (#145).
         busy.reset()
         currentPage = 0
@@ -2071,6 +2098,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // check still running before it closes the document (#145).
         renderJob?.cancel()
         pageChecks.reset()
+        pageRewriteQuestion.abandon()
         val doc = document
         document = null
         if (doc != null) {

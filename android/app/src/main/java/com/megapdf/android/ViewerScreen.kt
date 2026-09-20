@@ -184,7 +184,7 @@ fun ViewerScreen(
     onRemovePassword: () -> Unit = {},
     onCancelPasswordCommand: () -> Unit = {},
     // The warning before the first text-box change on a page that regenerating would alter (#139).
-    pageRewriteQuestion: Boolean = false,
+    pageRewriteWarningShown: Boolean = false,
     onAnswerPageRewrite: (proceed: Boolean) -> Unit = {},
     onClose: () -> Unit,
     // Busy feedback (#145): the strip and the page spinner, and what they disable.
@@ -394,7 +394,7 @@ fun ViewerScreen(
         )
     }
 
-    if (pageRewriteQuestion) {
+    if (pageRewriteWarningShown) {
         AlertDialog(
             onDismissRequest = { onAnswerPageRewrite(false) },
             title = { Text(stringResource(R.string.page_rewrite_warning_title)) },

@@ -31,6 +31,11 @@ enum PageCheckOutcome: Equatable {
 /// change is waiting on. Settled pages (they keep their look, the person chose Continue, or a
 /// change already went on without a warning) are never checked again. A change waits on the
 /// running check at most `budget`; past that the check is cancelled and the change applies.
+///
+/// The budget race — the check answers while the budget expires — is decided the same way
+/// here as on the desktop and Android (#332): the budget ends the *wait*, it does not discard
+/// an answer that is already there. Each check writes its answer into an `AnswerBox` the
+/// instant it arrives, and the expiry reads that box rather than assuming it has none.
 @MainActor
 final class PageCheckCoordinator {
     typealias Check = @MainActor (Int) async -> PageCheckAnswer
@@ -39,7 +44,7 @@ final class PageCheckCoordinator {
     var budget: TimeInterval
 
     private let check: Check
-    private var running: (page: Int, task: Task<PageCheckAnswer, Never>)?
+    private var running: (page: Int, task: Task<PageCheckAnswer, Never>, box: AnswerBox)?
     private(set) var settled: Set<Int> = []
     /// The page a change is waiting on; a check started for another page must not cancel it.
     private var awaitedPage: Int?
@@ -76,8 +81,15 @@ final class PageCheckCoordinator {
         }
         let generation = self.generation
         let check = self.check
-        let task = Task { await check(page) }
-        running = (page, task)
+        // The answer is put aside the instant it comes back, so the budget's expiry can find one
+        // that landed in the same breath as it did (#332). C# and Kotlin read it the same way.
+        let box = AnswerBox()
+        let task = Task {
+            let answer = await check(page)
+            box.put(answer)
+            return answer
+        }
+        running = (page, task, box)
         Task { [weak self] in
             let answer = await task.value
             self?.finished(page: page, task: task, answer: answer, generation: generation)
@@ -100,12 +112,12 @@ final class PageCheckCoordinator {
         defer { if self.generation == generation { awaitedPage = nil } }
         start(page)
         guard let running, running.page == page else { return .apply }
-        let task = running.task
-        let answer = await Self.first(of: task, within: budget)
+        let answer = await Self.first(of: running.task, box: running.box, within: budget)
         guard generation == self.generation else { return .abandoned }
         switch answer {
         case nil:
-            // Past the budget: a warning that arrives after the person has moved on helps nobody.
+            // Past the budget, with no answer waiting: a warning that arrives after the person
+            // has moved on helps nobody.
             settle(page)
             return .apply
         case .keepsLook, .unjudged:
@@ -129,13 +141,16 @@ final class PageCheckCoordinator {
     }
 
     /// The task's value, or nil when `seconds` pass first. The task itself is left running.
-    private static func first(of task: Task<PageCheckAnswer, Never>, within seconds: TimeInterval) async -> PageCheckAnswer? {
+    /// A check that answered by the time the timer fired gives its answer rather than nil (#332):
+    /// the budget ends the wait, it does not throw away what is already there.
+    private static func first(of task: Task<PageCheckAnswer, Never>, box: AnswerBox,
+                              within seconds: TimeInterval) async -> PageCheckAnswer? {
         await withCheckedContinuation { (continuation: CheckedContinuation<PageCheckAnswer?, Never>) in
             let once = ResumeOnce(continuation)
             let waiter = Task { @MainActor in once.resume(await task.value) }
             let timer = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
-                if !Task.isCancelled { once.resume(nil) }
+                if !Task.isCancelled { once.resume(box.answer) }
             }
             once.onResume = {
                 waiter.cancel()
@@ -143,6 +158,16 @@ final class PageCheckCoordinator {
             }
         }
     }
+}
+
+/// The check's answer, put aside the moment it comes back rather than only once it has been
+/// handed to the change waiting on it (#332). A check whose answer is already in here when the
+/// budget expires is the answer; an empty box means the budget genuinely ran out first.
+@MainActor
+private final class AnswerBox {
+    private(set) var answer: PageCheckAnswer?
+
+    func put(_ value: PageCheckAnswer) { answer = value }
 }
 
 /// Resumes a continuation exactly once, whichever of its racers gets there first.
