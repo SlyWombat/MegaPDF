@@ -5,6 +5,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -28,6 +29,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/**
+ * The tag a marketing-capture pose logs under, and the `::error::` convention the desktop
+ * apps write to stdout, on the Android side. `scripts/capture-screenshots.sh` clears logcat
+ * before each state and fails the run when one appears: the fr-CA `redact` shot of the
+ * 2026-09-20 run photographed a page with no mark on it and the run stayed green, because
+ * a pose that does not fire has nothing to say.
+ */
+private const val SCREENSHOT_TAG = "megapdf-screenshot"
 
 /** Width/height of a page in PDF points (1/72 inch). */
 data class PageSize(val widthPoints: Double, val heightPoints: Double)
@@ -307,6 +317,19 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
+     * Waits up to [limitMs] for a mark to be on page 0, so the capture pose never photographs
+     * a page whose mark has not landed yet — or one that never will. True when one is there.
+     */
+    private suspend fun awaitRedactionMark(limitMs: Long): Boolean {
+        var waited = 0L
+        while (redactionMarks[0].isNullOrEmpty() && waited < limitMs) {
+            delay(50)
+            waited += 50
+        }
+        return !redactionMarks[0].isNullOrEmpty()
+    }
+
+    /**
      * Reads every mark back from the core. This is the **only** function that writes the
      * marks, the count, and the selection that follows them — so it states the truth even
      * when the truth is that there is nothing (#329). It used to return early with no
@@ -544,20 +567,40 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                             val lines = doc.onPageForRedaction(0) { it.textLines() }
                             val line = lines.firstOrNull { it.text.contains(word) }
                                 ?: lines.maxByOrNull { it.text.length }
-                            if (line != null) {
-                                markForRedaction(0, line.rect)
-                                // The mark lands asynchronously, so this waits for it
-                                // rather than guessing at a delay: this pose is a store
-                                // capture, and a missed selection would be a different
-                                // picture from the one that was checked.
+                            if (line == null) {
+                                Log.e(SCREENSHOT_TAG, "::error:: redact pose: no text line on page 1")
+                            } else {
                                 viewModelScope.launch {
-                                    var waited = 0
-                                    while (redactionMarks[0].isNullOrEmpty() && waited < 5_000) {
-                                        kotlinx.coroutines.delay(50)
-                                        waited += 50
+                                    // markForRedaction says nothing while an edit is in flight,
+                                    // and this pose runs while the document's own open is still
+                                    // settling — so wait the gate out rather than lose the shot's
+                                    // mark to a busy moment and never hear about it.
+                                    var settle = 0
+                                    while (editingBlocked && settle < 2_000) {
+                                        delay(50)
+                                        settle += 50
                                     }
-                                    redactionMarks[0]?.firstOrNull()
-                                        ?.let { selectRedactionMark(0, it.markId) }
+                                    markForRedaction(0, line.rect)
+                                    // The mark lands asynchronously, so this waits for it rather
+                                    // than guessing at a delay: this pose is a store capture, and
+                                    // a missed selection would be a different picture from the one
+                                    // that was checked. Twice, because on 2026-09-20 the fr-CA
+                                    // leg placed no mark at all while en and fr-FR did, and the
+                                    // shot still reached the artifact between the two.
+                                    if (!awaitRedactionMark(3_000)) {
+                                        markForRedaction(0, line.rect)
+                                        awaitRedactionMark(3_000)
+                                    }
+                                    val mark = redactionMarks[0]?.firstOrNull()
+                                    if (mark == null) {
+                                        Log.e(
+                                            SCREENSHOT_TAG,
+                                            "::error:: redact pose: the mark was asked for twice and "
+                                                + "never landed (editingBlocked=$editingBlocked)",
+                                        )
+                                    } else {
+                                        selectRedactionMark(0, mark.markId)
+                                    }
                                 }
                             }
                         }
@@ -586,6 +629,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        Log.e(SCREENSHOT_TAG, "::error:: the '$state' pose failed: ${e.message}", e)
                         statusMessage = str(R.string.open_failed)
                     }
                 }

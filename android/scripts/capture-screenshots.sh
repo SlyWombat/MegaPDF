@@ -70,11 +70,31 @@ fi
 
 OUT="/tmp/shots/$LANG_TAG"
 mkdir -p "$OUT"
+MISSED=""
 for state in home viewer search sign draw text text-edit redact; do
     adb shell am force-stop ca.electricrv.megapdf || true
+    # The pose's verdict on itself, in the app's own log: cleared before the launch and read
+    # after the capture, so anything found can only have come from this state. This is the
+    # `::error::` convention the Mac and Linux scripts read from stdout, and it is here
+    # because a pose that does not fire has nothing to say: the fr-CA `redact` shot of
+    # 2026-09-20 came out with no mark on the page at all, twice, and the run was green.
+    adb logcat -c || true
     adb shell am start -n ca.electricrv.megapdf/com.megapdf.android.MainActivity --es screenshot "$state"
     sleep 10
     demo_status_bar
     adb exec-out screencap -p > "$OUT/android-$state.png"
+    if adb logcat -d -s megapdf-screenshot:E 2>/dev/null | grep -q '::error::'; then
+        echo "FAILED $state — the pose reported an error:" >&2
+        adb logcat -d -s megapdf-screenshot:E | grep '::error::' >&2
+        MISSED="$MISSED $state"
+    fi
 done
 ls -la "$OUT"
+
+# The images are still uploaded — a run that fails after the shots is more use than one
+# that dies at the first bad state — but the step goes red, so the set cannot be taken
+# for finished. Reviewing the folder means reading which states missed, above.
+if [ -n "$MISSED" ]; then
+    echo "the $LANG_TAG set is not ready:$MISSED" >&2
+    exit 1
+fi

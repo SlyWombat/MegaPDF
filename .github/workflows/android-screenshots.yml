@@ -51,8 +51,13 @@ jobs:
           working-directory: android
           script: MEGAPDF_LANG=${{ matrix.language }} bash scripts/capture-screenshots.sh
 
+      # Even when a state failed to pose: the images are what says how it failed, and the
+      # capture step has already gone red by then (scripts/capture-screenshots.sh fails on
+      # the app's own `::error::` line), so this cannot rescue a bad set.
       - name: Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: play-screenshots-${{ matrix.language }}
           path: /tmp/shots/${{ matrix.language }}/
+          if-no-files-found: warn

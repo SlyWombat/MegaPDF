@@ -60,6 +60,16 @@ Each of these has been a defect at least once, so each is named:
 - **The demo person.** `screenshot_text` per language — Jane Whitfield, Hélène
   Bélanger (fr-CA), Céline Lefèvre (fr-FR). It is the one string that differs
   between the two Frenches in this set; everything else is identical by design.
+- **The pose's word on itself.** `applyScreenshotMode` logs `::error::` under the tag
+  `megapdf-screenshot` when a state cannot do what it promises — the `redact` pose
+  finding no line to mark, or asking for a mark twice and getting none, or any state
+  throwing while it poses. The script clears logcat before each launch and reads it
+  after the capture, so a line it finds can only belong to that state, and the step
+  goes red naming it. The images are still uploaded (`if: always()`) — a failed run's
+  shots are what say how it failed — but the step is red, so a bad set cannot be taken
+  for a finished one. This exists because of 2026-09-20: the `fr-CA` `redact` image
+  came out with no mark on the page at all, byte-identical across two runs, and both
+  runs were green. A pose that does not fire has nothing to say on its own.
 
 ## The gate
 
@@ -82,6 +92,8 @@ Look at every image. A set ships only when all of this holds:
 7. **No stray dialogs** — only the one each state is posing.
 8. **Identical poses across the three languages.** `fr-CA` and `fr-FR` should differ
    only in `text`; `en` should differ from them everywhere but agree in layout.
+9. **No state missed its pose.** The step reports this itself, and names the states; a
+   red run still uploaded its images, so the ones it named are the ones not to read.
 
 `compare -metric AE` between the language sets is a quick way to check 8, and
 between two runs of the same language a quick way to check the set is reproducible
@@ -116,7 +128,10 @@ records the listing's slots — that is in the console too.
 `redact` is a listing shot now that #173 is finished. It poses a marked line and
 the mark's own selection chrome — the drag handles and the ✕ that take it off
 (#329) — so the shot shows both halves of the feature: the area about to be
-removed, and that nothing is removed until Save is answered.
+removed, and that nothing is removed until Save is answered. It waits for the edit
+gate to open before asking for the mark (the same call refuses silently while an
+edit is in flight), waits for the mark to land rather than guessing at a delay, and
+asks a second time before it gives up — and says so when it does.
 
 **Save is live (brand blue) in it** and grey in the seven others. That is not a
 dirty document, which is why the title carries no bullet and closing asks nothing:
