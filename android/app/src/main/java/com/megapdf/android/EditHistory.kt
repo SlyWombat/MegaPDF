@@ -20,6 +20,15 @@ interface PdfEditOperation {
     /** Plain-language name for the UI ("Undo mark"), per SDD §2.2. */
     val name: String
     val pageIndex: Int
+
+    /**
+     * True when applying this changes the file: the document becomes unsaved and the page is
+     * re-rendered. False for the redaction marks (#329), which the core keeps and never
+     * writes — so a mark must not make the document unsaved, must not write a journal entry,
+     * and must not spend a re-render, because the overlay draw *is* the visible change.
+     */
+    val changesDocument: Boolean get() = true
+
     suspend fun apply(doc: PdfDocument)
     suspend fun revert(doc: PdfDocument)
 }
@@ -37,13 +46,24 @@ class EditHistory(private val capacity: Int = 200) {
     /** Applies the operation and records it, clearing the redo history. */
     suspend fun perform(operation: PdfEditOperation, doc: PdfDocument) {
         operation.apply(doc)
+        record(operation)
+    }
+
+    /**
+     * Records an operation the caller has already applied.
+     *
+     * Marking for redaction is the one edit that cannot go through [perform]: it is the
+     * core's *text selection* that decides which marks a drag makes and where, and it makes
+     * them as it answers, so the caller applies it and hands back what it made (#329).
+     */
+    fun record(operation: PdfEditOperation) {
         done.addLast(operation)
         if (done.size > capacity) done.removeFirst()
         undone.clear()
     }
 
-    /** Reverts the last operation; returns the page that needs re-rendering. */
-    suspend fun undo(doc: PdfDocument): Int? {
+    /** Reverts the last operation; returns it — the caller needs to know if it changed the file. */
+    suspend fun undo(doc: PdfDocument): PdfEditOperation? {
         val operation = done.removeLastOrNull() ?: return null
         try {
             operation.revert(doc)
@@ -52,11 +72,11 @@ class EditHistory(private val capacity: Int = 200) {
             throw e
         }
         undone.addLast(operation)
-        return operation.pageIndex
+        return operation
     }
 
-    /** Re-applies the last undone operation; returns the page to re-render. */
-    suspend fun redo(doc: PdfDocument): Int? {
+    /** Re-applies the last undone operation; returns it. */
+    suspend fun redo(doc: PdfDocument): PdfEditOperation? {
         val operation = undone.removeLastOrNull() ?: return null
         try {
             operation.apply(doc)
@@ -65,7 +85,7 @@ class EditHistory(private val capacity: Int = 200) {
             throw e
         }
         done.addLast(operation)
-        return operation.pageIndex
+        return operation
     }
 
     fun clear() {
@@ -223,6 +243,110 @@ class TextBoxOperation(
         else doc.onPage(pageIndex) { it.addTextBox(text, fontSize, x, y, id, fontName) }
 
     private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { it.removeTextBox(id) }
+}
+
+// ---- Redaction marks (#329) -------------------------------------------------
+//
+// A mark is the core's own and is never written to the file, so every operation here says
+// `changesDocument = false`: a mark leaves the document clean, writes no journal entry and
+// re-renders nothing — the overlay draw is the visible change. They are in the history
+// because Undo has to be able to take a mark back, which is the whole of #329.
+//
+// Inverse pairs, one type each, as everywhere above.
+
+/**
+ * Marking areas for redaction, and removing them — each other's inverse.
+ *
+ * [rects] are the areas as they now exist in crop space: the marks a drag made, already
+ * grown to whole glyphs by the core, or the marks being removed. [adding] says which way
+ * round the operation goes.
+ *
+ * Redo replays the recorded rectangles rather than re-running the text selection: that
+ * would re-derive glyph runs from the page as it is *now*, and the person is owed the
+ * rectangle they saw. Re-marking a rectangle goes through the plain rect path — a mark is
+ * an area, and the glyph snapping only decided what the area was. The core never reuses an
+ * id for the life of a document, so a redo takes fresh ids; [ids] is what the page carries
+ * at this moment and is re-read after every apply.
+ */
+class RedactMarkOperation(
+    override val pageIndex: Int,
+    private val rects: List<PdfRect>,
+    ids: List<Int>,
+    private val adding: Boolean,
+) : PdfEditOperation {
+
+    private var ids: List<Int> = ids
+
+    override val name: String get() = if (adding) "redact" else "remove mark"
+    override val changesDocument: Boolean get() = false
+
+    override suspend fun apply(doc: PdfDocument) {
+        if (adding) mark(doc) else remove(doc)
+    }
+
+    override suspend fun revert(doc: PdfDocument) {
+        if (adding) remove(doc) else mark(doc)
+    }
+
+    private suspend fun mark(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+        ids = rects.mapNotNull { rect -> page.markForRedaction(rect).takeIf { it >= 0 } }
+    }
+
+    private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+        // Already gone counts as success on the core side, so an undo cannot fail.
+        ids.forEach { page.removeRedactionMark(it) }
+        ids = emptyList()
+    }
+}
+
+/**
+ * Moving or resizing a mark. The core moves an id in place, so undo and redo keep the same
+ * id — which is why this is not the remove-and-re-place that [MoveStampOperation] needs.
+ */
+class MoveRedactionMarkOperation(
+    override val pageIndex: Int,
+    private val markId: Int,
+    private val from: PdfRect,
+    private val to: PdfRect,
+) : PdfEditOperation {
+
+    override val name: String get() = "move mark"
+    override val changesDocument: Boolean get() = false
+
+    override suspend fun apply(doc: PdfDocument) {
+        doc.onPage(pageIndex) { it.moveRedactionMark(markId, to) }
+    }
+
+    override suspend fun revert(doc: PdfDocument) {
+        doc.onPage(pageIndex) { it.moveRedactionMark(markId, from) }
+    }
+}
+
+/**
+ * Clearing every mark on the document, as **one** undo step: a person who says "clear all
+ * marks" means one action, not one per mark or one per page, and Undo puts every one of
+ * them back where it was.
+ *
+ * [marksByPage] is the whole document's marks as they were. [pageIndex] is the page the UI
+ * treats as this operation's own — a clear can span pages, and the history wants one page.
+ */
+class ClearRedactionMarksOperation(
+    override val pageIndex: Int,
+    private val marksByPage: Map<Int, List<PdfRect>>,
+) : PdfEditOperation {
+
+    override val name: String get() = "clear marks"
+    override val changesDocument: Boolean get() = false
+
+    override suspend fun apply(doc: PdfDocument) {
+        doc.clearRedactionMarks()
+    }
+
+    override suspend fun revert(doc: PdfDocument) {
+        for ((page, rects) in marksByPage) {
+            doc.onPage(page) { p -> rects.forEach { p.markForRedaction(it) } }
+        }
+    }
 }
 
 /** How a text box is styled: what it says, how big, in which face. */

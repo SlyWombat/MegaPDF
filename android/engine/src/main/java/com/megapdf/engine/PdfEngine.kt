@@ -592,12 +592,15 @@ class PdfPage internal constructor(
 
     /**
      * Marks the text a drag selected: one mark per line it spans, each grown to the glyphs
-     * it touches, so a mark always covers whole glyphs. Returns how many were made; 0 means
-     * the selection covers no text, and the caller then marks the rectangle itself.
+     * it touches, so a mark always covers whole glyphs. Returns the ids of the marks it
+     * made — an empty list means the selection covered no text, and the caller then marks
+     * the rectangle itself. One drag is one list, and therefore one undo step (#329).
      */
-    suspend fun markTextForRedaction(rect: PdfRect): Int = withContext(engine.dispatcher) {
+    suspend fun markTextForRedaction(rect: PdfRect): List<Int> = withContext(engine.dispatcher) {
         check(!closed) { "page is closed" }
-        PdfiumNative.nativeMarkTextForRedaction(handle, rect.left, rect.bottom, rect.right, rect.top)
+        PdfiumNative
+            .nativeMarkTextForRedaction(handle, rect.left, rect.bottom, rect.right, rect.top)
+            .toList()
     }
 
     /** The redaction marks on this page, in the order they were made. */

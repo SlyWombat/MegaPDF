@@ -25,6 +25,34 @@ class DocumentCapabilitiesTest {
     private val mark = MarkOperation(0, rect, "mark:a", true)
     private val checkbox = FieldToggleOperation(0, 5.0, 5.0)
 
+    // Redaction marks (#329). They remove the document's own content when applied, so they
+    // follow the modify permission and nothing weaker.
+    private val redactMark = RedactMarkOperation(0, listOf(rect), listOf(7), adding = true)
+    private val removeMark = RedactMarkOperation(0, listOf(rect), listOf(7), adding = false)
+    private val moveMark = MoveRedactionMarkOperation(0, 7, rect, PdfRect(1.0, 1.0, 5.0, 5.0))
+    private val clearMarks = ClearRedactionMarksOperation(0, mapOf(0 to listOf(rect)))
+
+    /** The edits that change the document's own text, which is what modify buys. */
+    private val contentEdits: List<PdfEditOperation> =
+        listOf(bodyEdit, redactMark, removeMark, moveMark, clearMarks)
+
+    /** The edits that only touch the form, which annotate and fill forms buy. */
+    private val formEdits: List<PdfEditOperation> =
+        listOf(textBox, editTextBox, moveTextBox, signature, mark, checkbox)
+
+    @Test
+    fun `a mark is not a change to the document`() {
+        // #329: a mark lives in the core and is never written into the file, so nothing
+        // that touches one may dirty the document — no unsaved flag, no journal entry, no
+        // re-render. Everything else does; the default is the safe one.
+        listOf(redactMark, removeMark, moveMark, clearMarks).forEach {
+            assertFalse("${it.name} must not dirty the document", it.changesDocument)
+        }
+        formEdits.forEach {
+            assertTrue("${it.name} must dirty the document", it.changesDocument)
+        }
+    }
+
     @Test
     fun `an unprotected document allows everything`() {
         val c = DocumentCapabilities.fromSecurity(PdfSecurity.UNPROTECTED)
@@ -32,7 +60,7 @@ class DocumentCapabilitiesTest {
         assertFalse(c.isEncrypted)
         assertFalse(c.isRestricted)
         assertEquals(DocumentCapabilities.FULL, c)
-        listOf(bodyEdit, textBox, editTextBox, moveTextBox, signature, mark, checkbox).forEach { assertTrue(c.allows(it)) }
+        (contentEdits + formEdits).forEach { assertTrue(c.allows(it)) }
     }
 
     @Test
@@ -41,16 +69,17 @@ class DocumentCapabilitiesTest {
         assertFalse(c.canEditContent || c.canSign || c.canFillForms || c.canAddText || c.canChangeSecurity)
         assertTrue(c.isEncrypted)
         assertTrue(c.isRestricted)
-        listOf(bodyEdit, textBox, editTextBox, moveTextBox, signature, mark, checkbox).forEach { assertFalse(c.allows(it)) }
+        (contentEdits + formEdits).forEach { assertFalse(c.allows(it)) }
     }
 
     @Test
-    fun `modify allows body text and text boxes, but not filling in`() {
+    fun `modify allows body text, redaction and text boxes, but not filling in`() {
         val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.MODIFY))
         assertTrue(c.canEditContent && c.canAddText)
         assertFalse(c.canSign || c.canFillForms)
         assertTrue(c.allows(bodyEdit) && c.allows(textBox) && c.allows(editTextBox) && c.allows(moveTextBox))
         assertFalse(c.allows(signature) || c.allows(mark) || c.allows(checkbox))
+        contentEdits.forEach { assertTrue("${it.name} follows modify", c.allows(it)) }
         assertFalse(c.canChangeSecurity)
     }
 
@@ -59,8 +88,10 @@ class DocumentCapabilitiesTest {
         val c = DocumentCapabilities.fromSecurity(restricted(PdfPermissions.FILL_FORMS or PdfPermissions.PRINT))
         assertTrue(c.canFillForms && c.canSign && c.canAddText)
         assertFalse(c.canEditContent || c.canChangeSecurity)
-        listOf(checkbox, mark, signature, textBox, editTextBox, moveTextBox).forEach { assertTrue(c.allows(it)) }
+        formEdits.forEach { assertTrue(c.allows(it)) }
         assertFalse(c.allows(bodyEdit))
+        // Filling in a form does not buy removing the document's own content (#329).
+        contentEdits.forEach { assertFalse("${it.name} must not follow fill forms", c.allows(it)) }
     }
 
     @Test

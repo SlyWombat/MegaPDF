@@ -198,6 +198,11 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 redactionMarks = viewModel.redactionMarks,
                 onToggleRedact = viewModel::toggleRedactMode,
                 onMarkForRedaction = viewModel::markForRedaction,
+                selectedRedactionMark = viewModel.selectedRedactionMark,
+                onSelectRedactionMark = viewModel::selectRedactionMark,
+                onRemoveRedactionMark = viewModel::removeRedactionMark,
+                onClearRedactionMarks = viewModel::clearRedactionMarks,
+                onCommitRedactionMarkRect = viewModel::commitRedactionMarkRect,
             )
 
             // The confirmation #173 asks for, before either save path writes anything:

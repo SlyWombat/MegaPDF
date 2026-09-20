@@ -115,10 +115,13 @@ internal object PdfiumNative {
     external fun nativeMarkForRedaction(
         handle: Long, left: Double, bottom: Double, right: Double, top: Double,
     ): Int
-    /** NOT count-then-fill: this MAKES the marks, one per line, and returns how many. */
+    /**
+     * NOT count-then-fill: this MAKES the marks, one per line, and returns their ids —
+     * empty when the selection covered no text (#329: undo has to be able to name them).
+     */
     external fun nativeMarkTextForRedaction(
         handle: Long, left: Double, bottom: Double, right: Double, top: Double,
-    ): Int
+    ): IntArray
     /** [id, l, b, r, t] per mark. */
     external fun nativeRedactionMarksPacked(handle: Long): DoubleArray
     external fun nativeMoveRedactionMark(

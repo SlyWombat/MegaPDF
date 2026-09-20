@@ -38,7 +38,14 @@ struct ViewerView: View {
     var body: some View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
-                ScrollView(effectiveZoom > 1 ? [.vertical, .horizontal] : .vertical) {
+                // The axes follow the COMMITTED zoom, not the one the fingers are
+                // mid-way through (#336). Derived from `effectiveZoom`, the axis set
+                // changed on every tick of a pinch — and reconfiguring a scroll view's
+                // axes rebuilds it, which ends the very gesture asking for the change.
+                // The content is still laid out at `effectiveZoom`, so the page grows
+                // under the fingers and picks up its horizontal scrolling the moment the
+                // gesture ends.
+                ScrollView(zoom > 1 ? [.vertical, .horizontal] : .vertical) {
                     LazyVStack(spacing: 8) {
                         ForEach(pageSizes.indices, id: \.self) { index in
                             pageView(index: index, containerWidth: geo.size.width)
@@ -64,7 +71,15 @@ struct ViewerView: View {
                            alignment: .center)
                 }
                 .background(Brand.backdrop)
-                .gesture(
+                // Simultaneous, not exclusive (#336): a plain .gesture on a ScrollView
+                // competes with the scroll view's own pan gesture, and the pinch was
+                // losing that race — the magnify never started. Running alongside it lets
+                // the pinch scale while the scroll view keeps its scrolling.
+                //
+                // MagnificationGesture rather than iOS 17's MagnifyGesture: the
+                // deployment target is 16.0, and the old type is only deprecated, not
+                // removed. Switching means raising the floor, which is not this fix.
+                .simultaneousGesture(
                     MagnificationGesture()
                         .onChanged { gestureZoom = $0 }
                         .onEnded { value in
@@ -158,6 +173,35 @@ struct ViewerView: View {
                             .disabled(model.isUnlocking || model.fileCommandsBlocked)
                     }
                     Divider()
+                    // Redact lives here rather than on the bottom bar (#328): it is not an
+                    // everyday tool — it is the one command that destroys content — so it
+                    // keeps the company of the file-level commands instead of taking a
+                    // permanent place beside Sign and Add text. It is a labelled row, so
+                    // its name is in the list rather than guessed at from an icon, and the
+                    // name does not change with its state, so the row does not move under a
+                    // finger or rename itself on the way to being tapped.
+                    //
+                    // A Toggle, not a Button with a hand-swapped checkmark: in a menu the
+                    // state is the row's own (UIMenuElement's state, which is what draws the
+                    // checkmark and what a screen reader announces as selected), so the
+                    // platform owns both the drawing and the announcement.
+                    Toggle("Redact", isOn: Binding(get: { model.redactMode },
+                                                   set: { _ in model.toggleRedactMode() }))
+                        .disabled(!model.canRedact || model.fileCommandsBlocked)
+                        // And the state in words as well, which is how #173 defined it and
+                        // what Android says ("Activé" / "Désactivé"): it words both states,
+                        // where a checkmark only marks one. If the menu bridge drops a value
+                        // — the way the bottom bar dropped `.isSelected` — the toggle's own
+                        // state is what is left, and it says the same thing.
+                        .accessibilityValue(model.redactMode ? "On" : "Off")
+                        .accessibilityHint("Remove content from the file")
+                        .accessibilityIdentifier("viewerRedact")
+                    if model.redactionMarkCount > 0 {
+                        Button("Clear all marks", action: model.clearRedactionMarks)
+                            .disabled(!model.canRedact || model.fileCommandsBlocked)
+                            .accessibilityIdentifier("viewerClearRedactionMarks")
+                    }
+                    Divider()
                     Button("About MegaPDF") { aboutOpen = true }
                 } label: {
                     Label("More", systemImage: "ellipsis.circle")
@@ -175,26 +219,7 @@ struct ViewerView: View {
                     toolLabel("Add text", systemImage: "character.textbox")
                 }
                 .disabled(!model.capabilities.canAddText || model.fileCommandsBlocked)
-                // Redact with the creating tools (#173). The phone has no Whiteout —
-                // mobile's set is fill, check, sign, find, add text — so this arrives on
-                // its own, and its label says what it does: it removes.
-                Button { model.toggleRedactMode() } label: {
-                    toolLabel("Redact", systemImage: model.redactMode
-                        ? "rectangle.fill.badge.xmark" : "rectangle.badge.xmark")
-                }
-                .disabled(!model.capabilities.canEditContent || model.fileCommandsBlocked)
-                .accessibilityLabel("Redact")
-                .accessibilityHint("Remove content from the file")
-                // The armed state, as a value rather than a trait (#173). .isSelected is
-                // the right thing to say and it does not arrive: measured on a device
-                // element, the trait is dropped by the bottom-bar bridge whether it is
-                // added here or inside the label, while the label, hint, identifier and
-                // value all come through. The trait stays because it is correct and
-                // costs nothing if the bridge ever carries it; the value is what a
-                // screen reader actually reads today — "Redact, On".
-                .accessibilityValue(model.redactMode ? "On" : "Off")
-                .accessibilityAddTraits(model.redactMode ? .isSelected : [])
-                .accessibilityIdentifier("viewerRedact")
+                // Redact was the third button here; it is in the ⋯ menu now (#328).
                 Button {
                     if searchOpen { closeSearch() } else { searchOpen = true }
                 } label: {
@@ -504,10 +529,37 @@ struct ViewerView: View {
                                height: CGFloat(mark.rect.top - mark.rect.bottom) * scaleY)
                         .offset(x: CGFloat(mark.rect.left) * scaleX,
                                 y: CGFloat(Double(size.height) - mark.rect.top) * scaleY)
-                        .onTapGesture { model.removeRedactionMark(pageIndex: index, markId: mark.markId) }
+                        // No tap gesture here: the page's own tap does the hit test, so a
+                        // tap that lands on a mark cannot also fall through to a form field
+                        // or a line of text underneath it (#329). The gesture stays on the
+                        // page, and this view is the mark's accessibility node.
+                        .accessibilityElement()
                         .accessibilityLabel("Marked for redaction")
-                        .accessibilityHint("Double tap to remove this mark")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint("Double tap to select this mark")
+                        .accessibilityAction {
+                            model.selectRedactionMark(pageIndex: index, markId: mark.markId)
+                        }
+                        .accessibilityAction(named: "Remove mark") {
+                            model.removeRedactionMark(pageIndex: index, markId: mark.markId)
+                        }
+                        .accessibilityIdentifier("redactionMark-\(mark.markId)")
                 }
+            }
+            // The selected mark's chrome: drag to move, corner grip to resize, ✕ to remove.
+            // Not aspect-locked, unlike a signature: a redaction area is a rectangle by
+            // nature, and a wide strip of a line is the shape people want.
+            if let selected = model.selectedRedactionMark, selected.pageIndex == index {
+                SelectionOverlay(
+                    rect: selected.rect,
+                    pageSize: size,
+                    viewSize: CGSize(width: width, height: height),
+                    onCommit: { model.commitRedactionMarkRect(pageIndex: index,
+                                                              markId: selected.markId, rect: $0) },
+                    onRemove: model.removeSelectedRedactionMark,
+                    aspectLocked: false,
+                    removeLabel: "Remove mark"
+                )
             }
             if model.redactMode, let band = redactBand, band.pageIndex == index {
                 Rectangle()

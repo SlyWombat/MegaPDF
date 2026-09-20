@@ -46,6 +46,16 @@ data class SearchHit(
     val rects: List<com.megapdf.engine.PdfRect>,
 )
 
+/**
+ * A redaction mark currently selected for move/resize/remove (#329). Marks have no id of
+ * their own beyond the core's, so the pair identifies it and [rect] is what the chrome draws.
+ */
+data class SelectedRedactionMark(
+    val pageIndex: Int,
+    val markId: Int,
+    val rect: com.megapdf.engine.PdfRect,
+)
+
 /** A text box currently selected for drag/correct/remove (#36). */
 data class SelectedTextBox(
     val pageIndex: Int,
@@ -156,6 +166,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** Why a redaction refused, shown once and dismissed. Nothing was removed. */
     var redactionRefusal: com.megapdf.engine.RedactionRefusal? by mutableStateOf(null)
 
+    /** The mark the user has tapped, if any: it draws selection chrome with a removal ✕ (#329). */
+    var selectedRedactionMark: SelectedRedactionMark? by mutableStateOf(null)
+        private set
+
     fun toggleRedactMode() {
         redactMode = !redactMode
         if (redactMode) {
@@ -172,13 +186,30 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * Marks the dragged area. A drag across text marks the text, grown to whole glyphs, so
      * half a glyph is never left behind; a drag across a picture marks the rectangle.
      * Nothing is removed, and nothing on the page changes.
+     *
+     * The whole drag is **one** history entry carrying every mark it made (#329): a drag
+     * across six lines is six core marks, and six presses of Undo to take back one gesture
+     * is not what "undoable" means.
      */
     fun markForRedaction(pageIndex: Int, rect: com.megapdf.engine.PdfRect) {
         val doc = document ?: return
-        viewModelScope.launch {
-            doc.onPageForRedaction(pageIndex) { page ->
-                if (page.markTextForRedaction(rect) == 0) page.markForRedaction(rect)
+        launchEdit(R.string.redact_failed) {
+            // Not perform(): the core's text selection MAKES the marks as it answers, so the
+            // operation is built from what came back and recorded already-applied.
+            val made = busy.pageWork(BusyLabel.APPLYING, BusySpot(pageIndex)) {
+                doc.onPageForRedaction(pageIndex) { page ->
+                    val ids = page.markTextForRedaction(rect).ifEmpty {
+                        listOf(page.markForRedaction(rect)).filter { it >= 0 }
+                    }
+                    page.redactionMarks().filter { it.markId in ids }
+                }
             }
+            if (made.isEmpty()) return@launchEdit
+            history.record(
+                RedactMarkOperation(pageIndex, made.map { it.rect }, made.map { it.markId }, adding = true)
+            )
+            canUndo = history.canUndo
+            canRedo = history.canRedo
             refreshRedactionMarks()
             redactMode = false
             // Say that it landed (#173). A mark is a faint translucent band and the tool
@@ -190,12 +221,76 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Removes one mark, as an ordinary undoable step (#329). */
     fun removeRedactionMark(pageIndex: Int, markId: Int) {
         val doc = document ?: return
-        viewModelScope.launch {
-            doc.onPageForRedaction(pageIndex) { it.removeRedactionMark(markId) }
-            refreshRedactionMarks()
+        val rect = redactionMarks[pageIndex]?.firstOrNull { it.markId == markId }?.rect
+        launchEdit(R.string.redact_failed) {
+            // The rectangle is what an undo has to put back, and only the core knows it.
+            // An operation recorded without one could still remove the mark, but it could
+            // never bring it back, so this refuses rather than half-works.
+            if (rect == null) {
+                refreshRedactionMarks()
+                return@launchEdit
+            }
+            selectedRedactionMark = null
+            perform(RedactMarkOperation(pageIndex, listOf(rect), listOf(markId), adding = false), doc)
             statusMessage = str(R.string.redact_mark_removed)
+        }
+    }
+
+    /** Removes every mark on the document, as one undoable step (#329). */
+    fun clearRedactionMarks() {
+        val doc = document ?: return
+        if (redactionMarkCount == 0) return
+        launchEdit(R.string.redact_failed) {
+            val byPage = redactionMarks.mapValues { (_, marks) -> marks.map { it.rect } }
+            // The history wants one page; a clear can span several, so it takes the first.
+            val first = byPage.keys.minOrNull() ?: 0
+            selectedRedactionMark = null
+            perform(ClearRedactionMarksOperation(first, byPage), doc)
+            statusMessage = str(R.string.redact_marks_cleared)
+        }
+    }
+
+    /** Selects a mark, or clears the selection when the same one is tapped again (#329). */
+    fun selectRedactionMark(pageIndex: Int, markId: Int) {
+        val mark = redactionMarks[pageIndex]?.firstOrNull { it.markId == markId }
+        val already = selectedRedactionMark
+        selectedRedactionMark = when {
+            mark == null -> null
+            already?.markId == markId && already.pageIndex == pageIndex -> null
+            else -> SelectedRedactionMark(pageIndex, markId, mark.rect)
+        }
+        if (selectedRedactionMark != null) {
+            // One thing is selected at a time, as for stamps and text boxes.
+            selectedStamp = null
+            selectedTextBox = null
+        }
+    }
+
+    fun deselectRedactionMark() {
+        selectedRedactionMark = null
+    }
+
+    /** True when a restricted open forbids redaction, so the removal chrome can say so. */
+    val canRedact: Boolean get() = capabilities.canEditContent
+
+    /**
+     * Commits a dragged or resized mark, as one undoable step (#329). A resize is not a
+     * re-snap: growing or shrinking keeps the rectangle the person drew, because apply
+     * removes by intersection with the drawn area, and re-snapping on every drag tick would
+     * make the box jump under the finger.
+     */
+    fun commitRedactionMarkRect(pageIndex: Int, markId: Int, rect: com.megapdf.engine.PdfRect) {
+        val doc = document ?: return
+        val current = selectedRedactionMark ?: return
+        if (current.pageIndex != pageIndex || current.markId != markId) return
+        val size = (uiState as? ViewerUiState.Viewing)?.pageSizes?.getOrNull(pageIndex) ?: return
+        val clamped = clampToPage(rect, size)
+        if (clamped == current.rect) return
+        launchEdit(R.string.redact_failed) {
+            perform(MoveRedactionMarkOperation(pageIndex, markId, current.rect, clamped), doc)
         }
     }
 
@@ -211,14 +306,34 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Reads every mark back from the core. This is the **only** function that writes the
+     * marks, the count, and the selection that follows them — so it states the truth even
+     * when the truth is that there is nothing (#329). It used to return early with no
+     * document (`?: return`), which left the previous document's marks on screen and, worse,
+     * left `redactionMarkCount` non-zero, so Save asked about a redaction the new document
+     * did not have.
+     */
     private suspend fun refreshRedactionMarks() {
-        val doc = document ?: return
+        val doc = document
+        if (doc == null) {
+            redactionMarks = emptyMap()
+            selectedRedactionMark = null
+            return
+        }
         val byPage = mutableMapOf<Int, List<com.megapdf.engine.RedactionMark>>()
         for (index in 0 until doc.pageCount()) {
             val marks = doc.onPageForRedaction(index) { it.redactionMarks() }
             if (marks.isNotEmpty()) byPage[index] = marks
         }
         redactionMarks = byPage
+        // A selection the core no longer has is not a selection: undo, a removal and a clear
+        // all take marks away, and chrome left pointing at one would move a mark that is not
+        // there.
+        selectedRedactionMark = selectedRedactionMark?.let { selected ->
+            byPage[selected.pageIndex]?.firstOrNull { it.markId == selected.markId }
+                ?.let { SelectedRedactionMark(selected.pageIndex, selected.markId, it.rect) }
+        }
     }
 
     /**
@@ -242,6 +357,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         canUndo = false
         canRedo = false
         redactionMarks = emptyMap()
+        selectedRedactionMark = null
         redactionSummary = describeRedaction(report.counts)
         renderedWidths.clear()
         pageBitmaps.clear()
@@ -413,24 +529,35 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                             startSearch(app.getString(R.string.screenshot_search_term), debounceMs = 0L)
                         }
                         if (state == "redact") {
-                            // The state the feature has to be legible in (#173): the tool
-                            // armed, and a line of the demo document marked — a translucent
-                            // box you can still read through, over text you are about to
-                            // remove. The line is found by what it says rather than by a
-                            // rectangle that has to be right, so the shot lands on a
-                            // sentence in every language.
-                            redactMode = true
+                            // The state the feature has to be legible in (#173): a line of
+                            // the demo document marked — a translucent box you can still
+                            // read through, over text you are about to remove — with its
+                            // selection chrome, so the shot also shows that a mark can be
+                            // taken off (#329). The line is found by what it says rather
+                            // than by a rectangle that has to be right, so the shot lands
+                            // on a sentence in every language.
+                            //
+                            // Not armed, though the pose used to arm it: since #328 the
+                            // tool is a row in the ⋯ menu, so an armed tool draws nothing
+                            // on the page to photograph. A selected mark does.
                             val word = app.getString(R.string.screenshot_redacted_word)
                             val lines = doc.onPageForRedaction(0) { it.textLines() }
                             val line = lines.firstOrNull { it.text.contains(word) }
                                 ?: lines.maxByOrNull { it.text.length }
                             if (line != null) {
                                 markForRedaction(0, line.rect)
-                                // markForRedaction disarms the tool when it lands; arm it
-                                // again so the shot shows the tool on as well as the mark.
+                                // The mark lands asynchronously, so this waits for it
+                                // rather than guessing at a delay: this pose is a store
+                                // capture, and a missed selection would be a different
+                                // picture from the one that was checked.
                                 viewModelScope.launch {
-                                    kotlinx.coroutines.delay(400)
-                                    redactMode = true
+                                    var waited = 0
+                                    while (redactionMarks[0].isNullOrEmpty() && waited < 5_000) {
+                                        kotlinx.coroutines.delay(50)
+                                        waited += 50
+                                    }
+                                    redactionMarks[0]?.firstOrNull()
+                                        ?.let { selectRedactionMark(0, it.markId) }
                                 }
                             }
                         }
@@ -921,6 +1048,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     private fun attach(doc: PdfDocument, security: PdfSecurity) {
         document = doc
         capabilities = DocumentCapabilities.fromSecurity(security)
+        // Marks belong to the document that carries them, and the view model outlives it
+        // (#329): read them back from the document just adopted, which for a document that
+        // has never been marked means the map and the count both go to nothing.
+        viewModelScope.launch { refreshRedactionMarks() }
         // Each check runs off the engine's thread and stops when its coroutine is cancelled.
         pageChecks.open { pageIndex ->
             when (val result = doc.checkPageRegeneration(pageIndex)) {
@@ -996,6 +1127,9 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             val size = state.pageSizes[pageIndex]
             val x = xFraction * size.widthPoints
             val y = (1 - yFraction) * size.heightPoints  // view top-left → PDF bottom-left
+            // A tap that reaches the page is a tap that missed every mark: a mark's own node
+            // takes the tap first, so anything landing here deselects (#329).
+            selectedRedactionMark = null
 
             pendingSignature?.let { entry ->
                 pendingSignature = null
@@ -1394,15 +1528,23 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             // A change that regenerated the page already went in without a warning (#139, #145).
             pageChecks.settle(operation.pageIndex)
         }
-        afterHistoryChange(operation.pageIndex)
+        afterHistoryChange(operation)
     }
 
-    private fun afterHistoryChange(pageIndex: Int) {
+    private suspend fun afterHistoryChange(operation: PdfEditOperation) {
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = null
         selectedTextBox = null
-        markEditedAndRerender(pageIndex)
+        if (operation.changesDocument) {
+            markEditedAndRerender(operation.pageIndex)
+        } else {
+            // A mark changes nothing on disk, so it must not mark the document unsaved, must
+            // not write a journal entry and must not spend a re-render — the overlay draw is
+            // the visible change. What it does need is the core read back, because undo and
+            // redo have just changed which marks the core holds (#329).
+            refreshRedactionMarks()
+        }
     }
 
     // --- Signature library and placement (#16/#17) ---
@@ -1970,6 +2112,16 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // History belongs to the open document — never offer to undo an edit made
         // to a file that is no longer on screen.
         history.clear()
+        // So do the marks (#329, ADR-005 decision 1: "marks do not survive closing the
+        // document"). Nothing here reached disk, so this is not discarding work: it is
+        // dropping a view state the core has already dropped with the document. Left
+        // standing it was drawn over the next document at the same page indices, and made
+        // Save ask about a redaction the new document had never heard of.
+        redactionMarks = emptyMap()
+        selectedRedactionMark = null
+        redactMode = false
+        redactionSummary = null
+        redactionRefusal = null
         // So do the page checks and the pages already settled (#139, #145): the running check is
         // stopped, and a warning still up is answered Cancel — the change it was asking about
         // belonged to the document that just went away.

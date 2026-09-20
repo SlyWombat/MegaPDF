@@ -83,9 +83,13 @@ broken layout, a stray system dialog, the real clock instead of the demo one.
       `/UserUnit` banner, mixed sizes and `/Rotate` in one file (the `mixed-sizes`
       fixture), an off-origin MediaBox and a CropBox smaller than it.
 - [ ] **D8 Overflow menu (⋮)** — Save a copy · Password… · *(Unlock with owner
-      password…, restricted documents only)* · divider · About MegaPDF.
+      password…, restricted documents only)* · divider · **Redact** · *(Clear all
+      marks, only while there are marks)* · divider · About MegaPDF.
   - [ ] **D8a** every item disabled during a save.
   - [ ] **D8b** Password… disabled when the document has no file behind it.
+  - [ ] **D8c** Redact carries a check mark and reads "Activé" while it is armed, and
+        "Désactivé" while it is not (#328). It is **not** a bottom-bar icon any more;
+        an icon there is #328 coming back.
 - [ ] **D9 Tool tooltip** — long-press a bottom-bar icon.
 - [ ] **D10 Restricted document** — the tools the owner disallowed are greyed out.
 
@@ -126,6 +130,29 @@ Each appears only after 500 ms and stays at least 300 ms.
 - [ ] **D13u** `search_failed`
 - [ ] **D13v** `security_password_set` / `security_password_changed` /
       `security_password_removed`
+- [ ] **D13w** `redact_mark_placed` · `redact_mark_removed` · `redact_marks_cleared`
+
+### D14 Marks on the page (#173, #329)
+
+- [ ] **D14a Marked area** — a translucent band over the words, with an outline, still
+      readable through. Dragging **along** a line marks the line (the drag is flat by
+      nature); dragging a box marks the box; a tap marks nothing.
+- [ ] **D14b Selected** — tap the mark: corner handles, a ✕, and the same drag-to-move
+      a signature has. A redaction area is a rectangle by nature, so the corner grip
+      moves the sides independently — it is **not** aspect-locked like a signature.
+- [ ] **D14c TalkBack** — a mark is a node of its own: it reads "Marqué pour caviardage",
+      the page says "1 area marked for redaction" / "N areas marked for redaction", a
+      double tap selects the mark, and **Remove mark** is a custom action on it. The
+      action and the ✕ do the same thing — a mark has to be removable without a finger.
+- [ ] **D14d Clear all marks** — ⋯ ▸ Clear all marks, only while there are marks; one
+      step for every mark on every page, and the menu item is gone afterwards (#329).
+- [ ] **D14e Undo** — after a drag it takes back every mark that drag made (one gesture,
+      one step); after a ✕ or a Clear it puts the marks back exactly where they were.
+      Redo replays the rectangles, it does not re-run the selection.
+- [ ] **D14f A mark is not a change** — the title has **no** bullet, closing asks no
+      question, and Save is live anyway (`isDirty || hasMarks`).
+- [ ] **D14g Marks do not outlive the document** — close a marked document and reopen
+      it: no marks, and Undo has nothing to bring back.
 
 ## E. Find in document
 

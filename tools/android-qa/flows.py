@@ -255,12 +255,30 @@ def edit_flows(f: Flow) -> None:
             d.double_tap_fraction(0.5, 0.45)
             back = d.adb("exec-out", "screencap -p", binary=True)
             assert back == before, "a second double-tap did not come back to 1x"
+            # Pinch, in both directions and twice over (#336). Asserting only that
+            # something changed let "pinch works once" and "pinch-in does nothing"
+            # both pass: this flow used to pinch in and check nothing, and the page
+            # was left at 1x by the double-tap above rather than by the gesture.
             d.pinch_out()
             d.screencap(os.path.join(f.out, "03b-pinched.png"))
             pinched = d.adb("exec-out", "screencap -p", binary=True)
             assert pinched != before, "pinch did not zoom the page"
             d.pinch_in()
-            return "double-tap 1x -> 2x -> 1x, and pinch zooms; both at real touch events"
+            unpinched = d.adb("exec-out", "screencap -p", binary=True)
+            # Byte-equal to the 1x screen, the same assertion the double-tap gets:
+            # a pinch that scrolled the list, or that left the page at some other
+            # width, does not come back to this.
+            assert unpinched == before, "pinch-in did not come back to 1x"
+            # And again, because the second one arrives with the render window and
+            # the horizontal scroll both already live (#336).
+            d.pinch_out()
+            again = d.adb("exec-out", "screencap -p", binary=True)
+            assert again != before, "a second pinch did not zoom the page"
+            d.pinch_in()
+            back_again = d.adb("exec-out", "screencap -p", binary=True)
+            assert back_again == before, "the second pinch-in did not come back to 1x"
+            return ("double-tap 1x -> 2x -> 1x, and pinch out/in twice; "
+                    "both at real touch events")
         finally:
             f.restart_clean()
             f.open_file(FORM)
@@ -371,6 +389,12 @@ def redaction_flows(f: Flow) -> list[dict]:
     feature on Android and #173's real-window checks were done on Windows, the Mac
     and iOS. So this walks it: arm, mark, confirm, save a copy, and then check with
     qpdf and pdftotext that the marked words are gone and an unmarked one is not.
+
+    R6-R9 are #329's half of it, and the half that had no coverage anywhere on
+    Android: a mark can be taken back (Undo), taken off (the ✕ on the selected
+    mark), cleared in one action (the ⋯ item), and it does not outlive the document
+    it was made on. Every one of those reads the *page* rather than a count the app
+    keeps in its head, because the count is what lied in 2.0.1.
     """
     d, s = f.d, f.s
     result: dict = {}
@@ -388,28 +412,22 @@ def redaction_flows(f: Flow) -> list[dict]:
         # drag does not mark" when the drag was never made with the tool on.
         f.restart_clean()
         f.open_file(REDACT_FORM)
-        d.tap(desc=s["redact"], settle=1.5)
-        # The armed state has to be *in the tree*, not only in the fill (#173).
-        armed = _tool_state(d, s["redact"])
-        assert armed == "on", f"Redact armed but the accessibility tree says {armed!r}"
-        return "armed, and the node reports it"
+        # Two taps now, not one (#328): Redact is a named row in the ⋯ menu, and the
+        # armed state has to be *in the tree* while the menu is open (#173).
+        _arm_redact(d, s)
+        return "armed from the ⋯ menu, and the row reports it"
     f.step("R1-arm-redact", arm)
 
     def mark():
-        left, top, right, bottom = f.page_bounds()
-        # Straight along the subtitle line, which is how text is redacted — and which
-        # marked nothing at all until the flat-drag fix (#173).
-        y = top + ((FORM_H - SUBTITLE[1]) / FORM_H) * (bottom - top)
-        d.swipe(int(left + 0.10 * (right - left)), int(y),
-                int(left + 0.88 * (right - left)), int(y), 700, settle=3.0)
-        count = _mark_count(d, s)
+        count = _drag_along_subtitle(f)
         assert count, "a drag along the line made no mark"
         result["mark_note"] = count
         return f"dragged along the subtitle; the page reports {count!r}"
     f.step("R2-mark-a-line", mark)
 
     def disarms():
-        state = _tool_state(d, s["redact"])
+        state = _menu_state(d, s, s["redact"])
+        _close_menu(d, s)
         assert state == "off", f"Redact stayed armed after a mark landed ({state!r})"
         return "the tool disarms itself once the mark lands"
     f.step("R3-disarms-after-marking", disarms)
@@ -452,27 +470,165 @@ def redaction_flows(f: Flow) -> list[dict]:
         return f"marked words gone, unmarked text kept, qpdf: {qpdf}"
     f.step("R5-read-the-saved-file-back", read_it_back, shot=False)
 
+    def undo_the_mark():
+        # Marking used to go round the history entirely: the core's text selection is
+        # what decides which marks a drag makes, and it makes them as it answers, so
+        # nothing recorded the gesture and Undo could not take it back (#329). One
+        # press has to take the whole drag.
+        f.restart_clean()
+        f.open_file(REDACT_FORM)
+        _arm_redact(d, s)
+        assert _drag_along_subtitle(f), "a drag along the line made no mark"
+        d.tap(desc=s["undo"], settle=2.5)
+        left = _marks_on_screen(d, s)
+        assert left is None, f"Undo left the page saying {left!r}"
+        # And with nothing marked and nothing changed there is nothing to save, so
+        # Save — which a mark deliberately makes reachable — must not be offered.
+        save = d.find(text=s["save"])
+        assert save.get("enabled") != "true", \
+            f"Save is offered with nothing marked and nothing changed ({save.get('enabled')!r})"
+        return "one press of Undo took the whole drag back, and Save is not offered"
+    f.step("R6-undo-takes-back-the-mark", undo_the_mark)
+
+    def remove_one_mark():
+        # The other half of #329: a mark comes off without going near Undo. Tapping
+        # it selects it — the same chrome a signature gets — and the ✕ removes it.
+        f.restart_clean()
+        f.open_file(REDACT_FORM)
+        _arm_redact(d, s)
+        assert _drag_along_subtitle(f), "a drag along the line made no mark"
+        d.tap(desc=s["redact_mark_name"], settle=1.5)
+        d.tap(text="✕", settle=2.5)
+        left = _marks_on_screen(d, s)
+        assert left is None, f"the ✕ left the mark on the page: {left!r}"
+        # Removal is an edit, so one press of Undo puts it back where it was.
+        d.tap(desc=s["undo"], settle=2.5)
+        back = _marks_on_screen(d, s)
+        assert back, "Undo did not put the removed mark back"
+        return f"tapped the mark, the ✕ removed it, Undo put it back ({back!r})"
+    f.step("R7-remove-a-mark-with-the-button", remove_one_mark)
+
+    def clear_all_marks():
+        # "Clear all marks" is one ⋯ item and one undo step (#329) — and the item
+        # only exists while there is something to clear.
+        f.restart_clean()
+        f.open_file(REDACT_FORM)
+        _arm_redact(d, s)
+        assert _drag_along_subtitle(f), "a drag along the line made no mark"
+        # A second drag over blank paper: it marks the rectangle it was drawn as, so
+        # "all" is more than one without needing a second line's coordinates.
+        left, top, right, bottom = f.page_bounds()
+        blank = top + ((FORM_H - 200.0) / FORM_H) * (bottom - top)
+        d.swipe(int(left + 0.15 * (right - left)), int(blank),
+                int(left + 0.55 * (right - left)), int(blank), 700, settle=3.0)
+        two = s.format("redact_mark_count", 2)
+        counted = _mark_count(d, s)
+        assert counted == two, f"two drags should mark two areas, the page says {counted!r}"
+        d.tap(desc=s["more_options"], settle=1.0)
+        d.tap(text=s["redact_clear_marks"], settle=2.5)
+        gone = _marks_on_screen(d, s)
+        assert gone is None, f"clearing left marks on the page: {gone!r}"
+        d.tap(desc=s["undo"], settle=2.5)
+        back = _mark_count(d, s)
+        assert back == two, f"one press of Undo should bring both back, page says {back!r}"
+        # The menu offers clearing only while there is something to clear: it has to
+        # be gone once the marks are, or it is a dead item.
+        d.tap(desc=s["more_options"], settle=1.0)
+        assert not d.exists(text=s["redact_clear_marks"]), \
+            "the ⋯ menu still offers Clear all marks with no marks on the page"
+        _close_menu(d, s)
+        return "one item cleared both, one Undo brought both back, and the item went with them"
+    f.step("R8-clear-all-marks-is-one-step", clear_all_marks)
+
+    def marks_do_not_survive_closing():
+        # The bug Dave hit (#329): the view model outlives the document, and the marks
+        # were never cleared with it — so the last file's marks were drawn over the
+        # next one at the same page indices, and Save asked about a document that had
+        # never been marked. A *different* file is opened, because reopening the same
+        # one hides exactly this.
+        f.restart_clean()
+        f.open_file(REDACT_FORM)
+        _arm_redact(d, s)
+        assert _drag_along_subtitle(f), "a drag along the line made no mark"
+        d.tap(desc=s["close_document"], settle=3.0)
+        # A mark is not a change to the document, so nothing should be asked about
+        # saving it: "you have unsaved changes" is the wrong question here.
+        asked = d.exists(text=s["unsaved_changes"])
+        result["close_asked_to_save"] = asked
+        assert not asked, "closing with only a mark on the page asked to save it"
+        f.open_file(FORM)
+        left = _marks_on_screen(d, s)
+        result["marks_after_reopen"] = left
+        assert left is None, f"the closed document's marks are still on the page: {left!r}"
+        return "the mark did not survive closing, and the next document opened without it"
+    f.step("R9-marks-do-not-survive-closing", marks_do_not_survive_closing)
+
     return [result]
 
 
-def _tool_state(d: Device, label: str) -> str | None:
-    """A toolbar tool's on/off state as the accessibility tree reports it (#173).
+def _menu_state(d: Device, s: Strings, label: str) -> str:
+    """A ⋯-menu tool's on/off state, read while the menu is open (#328/#329).
 
-    Compose publishes a `selected` semantic as checkable/checked on the node that
-    takes the click, which is the parent of the one carrying the label — so this
-    matches by bounds rather than by walking a tree uiautomator flattens.
+    Redact is a menu row now rather than a toolbar button for two reasons, and both
+    of them change how its state is read: the row is only in the tree between
+    opening the menu and tapping a row, and a menu row is not the checkable node
+    the toolbar's tools are. Compose publishes the armed state as the `selected`
+    semantic, which is an attribute uiautomator dumps — a state description, which
+    is what a screen reader actually reads, is not.
+
+    Leaves the menu open: the caller closes it, and reading the state never changes
+    it.
     """
-    label_node = d.find(desc=label)
-    lx, ly, rx, ry = d._bounds(label_node)
-    for node in d.nodes():
-        if node.get("clickable") != "true":
-            continue
-        bx, by, bex, bey = d._bounds(node)
-        if bx <= lx and by <= ly and bex >= rx and bey >= ry:
-            if node.get("checkable") != "true":
-                return None            # no state at all: the gap this checks for
-            return "on" if node.get("checked") == "true" else "off"
-    return None
+    d.tap(desc=s["more_options"], settle=1.0)
+    node = d.wait_for(text=label)
+    return "on" if node.get("selected") == "true" else "off"
+
+
+def _close_menu(d: Device, s: Strings) -> None:
+    """Dismisses the ⋯ menu if it is open.
+
+    Back is the popup's while it is showing, so it dismisses the menu and never
+    reaches the viewer — where Back *is* Close. Guarded, because pressing it with
+    nothing open would close the document.
+    """
+    if d.exists(text=s["redact"]) or d.exists(text=s["redact_clear_marks"]):
+        d.back(settle=0.8)
+
+
+def _arm_redact(d: Device, s: Strings) -> None:
+    """Arms Redact the way a person now has to: ⋯ menu, then the row (#328)."""
+    d.tap(desc=s["more_options"], settle=1.0)
+    d.tap(text=s["redact"], settle=1.5)
+    armed = _menu_state(d, s, s["redact"])
+    assert armed == "on", f"Redact armed but the accessibility tree says {armed!r}"
+    _close_menu(d, s)
+
+
+def _drag_along_subtitle(f: Flow) -> str | None:
+    """The drag every redaction flow makes, and what the page says it marked.
+
+    Straight along the subtitle line, which is how text is redacted — and which
+    marked nothing at all until the flat-drag fix (#173).
+    """
+    d, s = f.d, f.s
+    left, top, right, bottom = f.page_bounds()
+    y = top + ((FORM_H - SUBTITLE[1]) / FORM_H) * (bottom - top)
+    d.swipe(int(left + 0.10 * (right - left)), int(y),
+            int(left + 0.88 * (right - left)), int(y), 700, settle=3.0)
+    return _mark_count(d, s)
+
+
+def _marks_on_screen(d: Device, s: Strings) -> str | None:
+    """Whatever on screen says a mark is there — its count, or a mark node itself.
+
+    Used for the assertions that a mark is *gone*: the count is what a person
+    reads, and the per-mark nodes are what a screen reader finds, so a stale map
+    that drew either one fails.
+    """
+    count = _mark_count(d, s)
+    if count:
+        return count
+    return s["redact_mark_name"] if d.exists(desc=s["redact_mark_name"]) else None
 
 
 def _mark_count(d: Device, s: Strings) -> str | None:

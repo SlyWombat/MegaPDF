@@ -565,6 +565,23 @@
         }
       }
     },
+    "Clear all marks" : {
+      "comment" : "The menu item that takes every mark away at once (#329)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effacer toutes les marques"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effacer toutes les marques"
+          }
+        }
+      }
+    },
     "Clients" : {
       "localizations" : {
         "fr" : {
@@ -1355,6 +1372,23 @@
         }
       }
     },
+    "Marks cleared." : {
+      "comment" : "Said after every mark has been taken away (#329)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marques effacées."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marques effacées."
+          }
+        }
+      }
+    },
     "MegaPDF" : {
       "shouldTranslate" : false
     },
@@ -2049,6 +2083,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retirer des récents"
+          }
+        }
+      }
+    },
+    "Remove mark" : {
+      "comment" : "The action that takes one mark away, said to a screen reader (#329)",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer la marque"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retirer la marque"
           }
         }
       }

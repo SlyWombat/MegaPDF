@@ -297,15 +297,19 @@ Whiteout covers.**
 
 #### Behavior
 
-1. **The Redact tool** sits beside Whiteout. Drag a box, or select text — a word, a line,
-   a range — and the selection becomes marks. On a phone the drag uses the loupe the
-   whiteout drag already uses.
+1. **The Redact tool** sits beside Whiteout on the desktop toolbars. On the phones it is a
+   named row in the **⋯ menu** rather than an icon on the bottom bar (#328): it is not an
+   everyday tool, and an icon nobody can name is not a place a destructive command belongs.
+   Drag a box, or select text — a word, a line, a range — and the selection becomes marks.
+   On a phone the drag uses the loupe the whiteout drag already uses.
 2. **Marks are marks.** They are translucent with an outline, so the user can still read
-   what they are about to remove; they are movable, removable and undoable; and until the
-   document is saved nothing has been removed. **A mark is never written to the file** —
-   the core owns them (§6.2 contract 8), so a document saved with marks on it cannot carry
-   them. That is the Acrobat failure made structurally impossible rather than left to a
-   rule someone has to remember.
+   what they are about to remove; they are movable, removable and undoable (behaviour 7);
+   and until the document is saved nothing has been removed. **A mark is never written to
+   the file** — the core owns them (§6.2 contract 5), so a document saved with marks on it
+   cannot carry them. That is the Acrobat failure made structurally impossible rather than
+   left to a rule someone has to remember. A mark is not a *change* either: marking, moving
+   a mark and taking one off leave the document clean — no unsaved flag, no journal entry,
+   no re-render — because what the user sees change is the overlay (behaviour 7).
 3. **On Save or Save As** a confirmation says *"Redaction permanently removes the marked
    content. This can't be undone after saving."* The default action is **Save as a copy**,
    offering `<name>-redacted.pdf`; overwrite is the second choice.
@@ -316,6 +320,20 @@ Whiteout covers.**
    announces that a redaction happened, because the announcement is itself a disclosure.
 6. **Permissions:** redaction changes the document, so it needs **modify** (ADR-004
    decision 2).
+7. **Working with a mark.** One gesture is one undo step, however many marks it made: Undo
+   after a drag takes back every rectangle that drag made, and Redo puts back exactly the
+   rectangles the user saw rather than re-running the selection — the selection would be
+   derived from the page as it is *now*, and the rectangles are what was actually marked.
+   Tapping a mark selects it and puts the same move / resize / remove chrome on it that a
+   signature gets, except that a redaction area is a rectangle by nature, so its corner
+   grip moves each side on its own. **✕** on the selection removes it, **Remove mark** is
+   the accessibility action on the mark itself, and **Clear all marks** in the ⋯ menu takes
+   every mark on every page as one step, offered only while there is something to clear.
+   Removal and clearing are edits, so Undo puts the marks back where they were. Marks
+   belong to the document that made them: closing clears them, and the next document opens
+   with none (ADR-005 decision 1).
+   *Phones as of 2.1 (Android and iOS); the desktops follow in their next release — ADR-005
+   decision 4.*
 
 #### What "removed" means
 
@@ -349,6 +367,10 @@ half-redacted file silently. ADR-005 records why that is the trade and not a lim
 - A partly covered run keeps every surviving glyph within 0.05 pt of where it was.
 - An apply that refuses leaves the document exactly as it was, with the marks still on it.
 - A document saved with unapplied marks carries no trace of them.
+- A mark is recoverable: Undo after marking takes it off, Undo after a removal puts it
+  back where it was, and Clear all marks is one undo step for every mark it cleared.
+- Marks do not outlive the document: closing with marks on it asks nothing — a mark is not
+  a change, so there is nothing to save — and the next document opens with none on it.
 - Whiteout's tooltip and first-use hint say it covers and does not remove, and point at
   Redact, in en, fr-CA and fr.
 
@@ -631,6 +653,27 @@ behaviors are contracts — a change on any platform is a breaking change everyw
    What *is* written is the result: after `megapdf_redact_apply`, a plain filled path
    where the content was, carrying no mark and no annotation, indistinguishable from any
    other filled rectangle.
+
+   **What an app may do with one** *(amendment — 2026-09-20, #329)*. A mark carries an id
+   that is stable for its life and never reused by the document, which is what lets an app
+   address a mark it drew a moment ago — and what lets an undo address the same one later.
+   Moving a mark and taking one off are per-page core calls
+   (`megapdf_redaction_move_mark`, `megapdf_redaction_remove_mark`) and clearing every mark
+   in the document is one call on the document (`megapdf_redaction_clear`), and none of the
+   three rewrites a page, regenerates content or invalidates a layout verdict — a mark was
+   never in the content to begin with. Removing a
+   mark that is already gone counts as success, so an undo cannot fail on one that is no
+   longer there. The apps keep their own copy of the rectangles to draw them, which is a
+   cache of core state and not a second truth: the core keeps the marks for as long as the
+   document is open, and the app reads them back after every operation and lets go of them
+   when the document closes (ADR-005 decision 4).
+
+   **Two numbers, one contract.** The engine's header (`core/megapdf_core.h`) numbers the
+   API surfaces it was split into for the shared-core migration (#106–#111, #173), where
+   redaction is **contract 8**; §6.2 numbers the cross-platform behaviours, where this is
+   **contract 5**. The code and its comments cite the engine's number, so a reader arriving
+   from `megapdf_redact_apply` and a reader arriving from here are describing the same
+   promise under different names.
 
 ---
 

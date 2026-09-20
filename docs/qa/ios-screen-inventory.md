@@ -104,6 +104,10 @@ French, where the labels are longest.
 
 There is **no zoom menu on iOS.** Zoom is gesture-only: pinch clamped 1×–4× and
 double-tap toggling 1× ↔ 2×. There is no zoom %, no Fit width and no Fit page.
+That was the intent, not the fact, until #336: the pinch did nothing, because the
+magnify gesture lost to the scroll view's own pan. Walk it on a device — a pinch
+out and back — rather than reading this table; the rig check is
+`ViewerZoomUITests` in the MegaPDFDemo scheme, which the CI scheme does not run.
 
 ## 5. Modes and the notice each shows
 
@@ -118,13 +122,28 @@ announces itself with a modal alert instead.
 | 5.4 | **Edit body text** | tap a line of the document's own text | opens the body-text sheet; a spinner sits on the line while the #139 verdict runs | Cancel / Save |
 | 5.5 | Tick / checkmark | tap an AcroForm field, an existing mark, or a detected square | none | — |
 
-**Redact does exist on iOS** (#173) — bottom bar ▸ Redact (id `viewerRedact`),
-armed state on the button's accessibility *value* ("On"/"Off"), a drag marks an
-area, the tool disarms itself once a mark lands, and Save raises a confirmation
-before anything is removed. A mark on its own does not change the document, so
-the title stays clean until it is applied. This line used to say redaction was
-absent, which was true when the inventory was written and stopped being true
-when #173 landed.
+**Redact lives in the ⋯ menu** (#173, moved by #328) — ⋯ ▸ **Redact** (id
+`viewerRedact`), a toggle row whose armed state is announced on the row itself
+(accessibility value "On"/"Off", and the row's own selected state, since the two
+come over different bridges and only one of them is measured on a device). A drag
+marks an area and the tool disarms itself once a mark lands; Save raises a
+confirmation before anything is removed. A mark on its own does not change the
+document, so the title stays clean until it is applied — and closing asks nothing
+for the same reason. It is no longer a bottom bar button: **a Redact icon on the
+bottom bar is #328 coming back.**
+
+**A mark can be taken off** (#329) — tap one to select it and it gets the
+signature chrome: drag to move, drag a corner handle to resize (not aspect-locked,
+a redaction area is a rectangle by nature), **✕** to remove. "Remove mark" is the
+accessibility action on the mark itself, and ⋯ ▸ **Clear all marks** takes every
+mark on every page as one step, shown only while there is something to clear.
+**Undo** takes back the last marking, move or removal as one step per gesture.
+Marks belong to the document that made them: close and reopen it and it has none,
+and the undo history does not bring them back.
+
+One line here came from a defect rather than from reading the app: redaction was
+listed as absent, which was true when the inventory was written and stopped being
+true when #173 landed.
 
 **Cover (whiteout) does not exist on iOS.** The mobile set is fill, check, sign,
 find, add text and redact (`ViewerView.swift:169`). Do not file its absence as a
@@ -193,8 +212,12 @@ square → body-text line → empty page (scanned hint).
 - [ ] add text
 - [ ] edit body text
 - [ ] undo and redo
-- [ ] **redact** — arm, drag, confirm, and read the saved copy back from outside
-      the app (the rule #173 sets: never ask PDFium whether PDFium removed it)
+- [ ] **redact** — arm (⋯ ▸ Redact), drag, confirm, and read the saved copy back
+      from outside the app (the rule #173 sets: never ask PDFium whether PDFium
+      removed it)
+- [ ] **the marks themselves** (#329) — tap one to select, ✕ to remove, Undo to put
+      it back, ⋯ Clear all marks for all of them at once, then close a marked
+      document: no unsaved prompt, and reopening it shows no marks
 - [ ] save, and save a copy
 - [ ] set protection, then remove it
 - [ ] close with unsaved changes

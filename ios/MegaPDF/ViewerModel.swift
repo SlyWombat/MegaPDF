@@ -43,6 +43,15 @@ struct SelectedTextBox: Equatable {
     let rect: PdfRect
 }
 
+/// An area marked for redaction, selected for drag/resize/remove (#329). The mark's own id
+/// comes from the core and is stable for the mark's life, so this holds it rather than an
+/// index into the overlay's list.
+struct SelectedRedactionMark: Equatable {
+    let pageIndex: Int
+    let markId: Int
+    let rect: PdfRect
+}
+
 /// Sizes offered for added text (#43). A short list, not a free-entry number box:
 /// the job is "match the form I am filling in", and six presets cover it.
 let textSizes: [Double] = [8, 10, 12, 14, 18, 24]
@@ -159,6 +168,9 @@ final class ViewerModel: ObservableObject {
     /// Every mark on the document, by page, for the overlay that draws them.
     @Published private(set) var redactionMarks: [Int: [PdfRedactionMark]] = [:]
 
+    /// The mark the user has selected for move, resize or removal (#329).
+    @Published private(set) var selectedRedactionMark: SelectedRedactionMark?
+
     /// The summary after a redaction, shown once and dismissed.
     @Published var redactionSummary: String?
     /// The same summary held for the save or the copy that follows: it goes out with "Saved"
@@ -170,6 +182,10 @@ final class ViewerModel: ObservableObject {
     @Published var redactionRefusal: String?
 
     /// How many areas are marked: what the save confirmation asks before it offers a copy.
+    ///
+    /// Derived from the overlay's map, which has exactly one writer and is cleared with the
+    /// document (#329) — the map is what asked about redacting a document that had no marks
+    /// when it outlived the core behind it.
     var redactionMarkCount: Int { redactionMarks.values.reduce(0) { $0 + $1.count } }
 
     func toggleRedactMode() {
@@ -178,31 +194,137 @@ final class ViewerModel: ObservableObject {
 
     func cancelRedactMode() { redactMode = false }
 
+    /// Whether this open may mark at all — what the Redact menu item asks before it offers
+    /// itself (#328).
+    var canRedact: Bool { capabilities.canEditContent }
+
     /// Marks the dragged area. A drag across text marks the text, grown to whole glyphs, so
     /// half a glyph is never left behind; a drag across a picture marks the rectangle.
+    ///
+    /// One drag is one undo step (#329), whatever the core made of it: a drag down six lines
+    /// is six marks and one press of Undo. The ids come back from the engine rather than a
+    /// count, which is what lets Undo name what the gesture made — and that is why this
+    /// **records** the operation instead of performing it: the engine already made the marks
+    /// as it answered "did that cross any text?".
     func markForRedaction(pageIndex: Int, rect: PdfRect) {
         guard let doc = document else { return }
         Task { @MainActor in
             let engine = PdfEngine.shared
-            let madeFromText = (try? await engine.markTextForRedaction(doc, pageIndex: pageIndex, rect: rect)) ?? 0
-            if madeFromText == 0 {
-                _ = try? await engine.markForRedaction(doc, pageIndex: pageIndex, rect: rect)
+            var made = (try? await engine.markTextForRedaction(doc, pageIndex: pageIndex, rect: rect)) ?? []
+            if made.isEmpty {
+                let id = try? await engine.markForRedaction(doc, pageIndex: pageIndex, rect: rect)
+                if let id, id >= 0 { made = [id] }
             }
             await refreshRedactionMarks()
             redactMode = false
+            guard !made.isEmpty else { return }
+            // The rectangles to remember are the ones the core ended up with, not the ones
+            // the drag asked for: the glyph snapping moved them, and redo has to put back
+            // what the person saw.
+            let rects = (redactionMarks[pageIndex] ?? [])
+                .filter { made.contains($0.markId) }
+                .map(\.rect)
+            history.record(RedactMarkOperation(pageIndex: pageIndex, rects: rects,
+                                               ids: made, adding: true))
+            canUndo = history.canUndo
+            canRedo = history.canRedo
         }
+    }
+
+    /// Selects a mark, or clears the selection when it is the one already selected (#329).
+    /// Removal is the ✕, the VoiceOver action or Delete — never a bare tap: a stray touch
+    /// putting a mark on a document with no way back is what this replaces.
+    func selectRedactionMark(pageIndex: Int, markId: Int) {
+        if selectedRedactionMark?.pageIndex == pageIndex, selectedRedactionMark?.markId == markId {
+            selectedRedactionMark = nil
+            return
+        }
+        guard let mark = redactionMarks[pageIndex]?.first(where: { $0.markId == markId }) else { return }
+        // One selection at a time, as with stamps and text boxes.
+        selectedStamp = nil
+        selectedTextBox = nil
+        selectedRedactionMark = SelectedRedactionMark(pageIndex: pageIndex, markId: markId,
+                                                     rect: mark.rect)
+    }
+
+    func deselectRedactionMark() {
+        selectedRedactionMark = nil
+    }
+
+    /// Removes the selected mark, through the history so Undo puts it back.
+    func removeSelectedRedactionMark() {
+        guard let selected = selectedRedactionMark else { return }
+        removeRedactionMark(pageIndex: selected.pageIndex, markId: selected.markId)
     }
 
     func removeRedactionMark(pageIndex: Int, markId: Int) {
-        guard let doc = document else { return }
+        guard let doc = document, canRedact else { return }
         Task { @MainActor in
-            try? await PdfEngine.shared.removeRedactionMark(doc, pageIndex: pageIndex, markId: markId)
-            await refreshRedactionMarks()
+            guard let rect = redactionMarks[pageIndex]?.first(where: { $0.markId == markId })?.rect
+            else { return }
+            selectedRedactionMark = nil
+            try? await perform(
+                RedactMarkOperation(pageIndex: pageIndex, rects: [rect], ids: [markId],
+                                    adding: false),
+                doc: doc)
+            announce(String(localized: "Mark removed."))
         }
     }
 
+    /// Removes every mark on the document, as one undo step (#329).
+    func clearRedactionMarks() {
+        guard let doc = document, canRedact, redactionMarkCount > 0 else { return }
+        let marksByPage = redactionMarks.mapValues { $0.map(\.rect) }
+        selectedRedactionMark = nil
+        Task { @MainActor in
+            try? await perform(
+                ClearRedactionMarksOperation(pageIndex: marksByPage.keys.min() ?? 0,
+                                             marksByPage: marksByPage),
+                doc: doc)
+            announce(String(localized: "Marks cleared."))
+        }
+    }
+
+    /// Moving or resizing the selected mark, one undo step per gesture, clamped to the page
+    /// (#329). A resize keeps the rectangle the person drew: it does not re-snap to glyphs,
+    /// because apply removes by intersection with the drawn area and re-snapping under a
+    /// finger would make the box jump.
+    func commitRedactionMarkRect(pageIndex: Int, markId: Int, rect: PdfRect) {
+        guard let doc = document, canRedact,
+              case let .viewing(_, pageSizes) = state, pageIndex < pageSizes.count,
+              let from = selectedRedactionMark,
+              from.pageIndex == pageIndex, from.markId == markId else { return }
+        let clamped = clampToPage(rect, pageSize: pageSizes[pageIndex])
+        guard clamped != from.rect else { return }
+        selectedRedactionMark = SelectedRedactionMark(pageIndex: pageIndex, markId: markId,
+                                                     rect: clamped)
+        Task { @MainActor in
+            try? await perform(
+                MoveRedactionMarkOperation(pageIndex: pageIndex, markId: markId,
+                                           from: from.rect, to: clamped),
+                doc: doc)
+        }
+    }
+
+    /// Says something to VoiceOver with nothing on screen: a removed mark is already visible
+    /// on the page, so a dialog over it would be noise.
+    private func announce(_ text: String) {
+        UIAccessibility.post(notification: .announcement, argument: text)
+    }
+
+    /// Reads every page's marks off the core and states the result.
+    ///
+    /// The one writer of `redactionMarks`, and it says the truth even when the truth is
+    /// "there is nothing": with no document open there are no marks (#329). Returning early
+    /// instead is what let a previous document's marks be drawn over the next one, and —
+    /// because the count is derived from this map — made Save ask about redacting a document
+    /// that had no marks at all.
     private func refreshRedactionMarks() async {
-        guard case let .viewing(_, pageSizes) = state, let doc = document else { return }
+        guard case let .viewing(_, pageSizes) = state, let doc = document else {
+            redactionMarks = [:]
+            selectedRedactionMark = nil
+            return
+        }
         var byPage: [Int: [PdfRedactionMark]] = [:]
         for index in 0..<pageSizes.count {
             if let found = try? await PdfEngine.shared.redactionMarks(doc, pageIndex: index), !found.isEmpty {
@@ -210,6 +332,18 @@ final class ViewerModel: ObservableObject {
             }
         }
         redactionMarks = byPage
+        // The selection is a view of a mark that may have moved, been removed or gone with
+        // the document; it is re-read from what the core actually carries.
+        if let selected = selectedRedactionMark {
+            guard let mark = byPage[selected.pageIndex]?.first(where: { $0.markId == selected.markId })
+            else {
+                selectedRedactionMark = nil
+                return
+            }
+            selectedRedactionMark = SelectedRedactionMark(pageIndex: selected.pageIndex,
+                                                         markId: selected.markId,
+                                                         rect: mark.rect)
+        }
     }
 
     /// Applies every mark. True when the document was redacted and may be saved; false when
@@ -233,6 +367,8 @@ final class ViewerModel: ObservableObject {
         canUndo = false
         canRedo = false
         redactionMarks = [:]
+        selectedRedactionMark = nil
+        redactMode = false
         if reportWithSave {
             summaryForSave = Self.describeRedaction(report.counts)
         } else {
@@ -391,22 +527,33 @@ final class ViewerModel: ObservableObject {
                     await open(source: .bytes(bytes), password: nil,
                                displayName: DemoContent.documentName, sourceURL: nil)
                     if mode == "redact", let doc = document {
-                        // The state the feature has to be legible in (#173): the tool armed,
-                        // and a line of the demo agreement marked — a translucent box you
-                        // can still read through, over text you are about to remove. The
-                        // line is found by what it says rather than by a rectangle that has
-                        // to be right, so the shot lands on a sentence in every language.
+                        // The state the feature has to be legible in (#173): a line of the
+                        // demo agreement marked — a translucent box you can still read
+                        // through, over text you are about to remove — with its selection
+                        // chrome, so the shot also shows that a mark can be taken off
+                        // (#329). The line is found by what it says rather than by a
+                        // rectangle that has to be right, so the shot lands on a sentence
+                        // in every language.
+                        //
+                        // Not armed, though the pose used to arm it: since #328 the tool is
+                        // a row in the ⋯ menu, so an armed tool draws nothing on the page to
+                        // photograph. A selected mark does.
                         let lines = (try? await PdfEngine.shared.textLines(doc, pageIndex: 0)) ?? []
                         let line = lines.first { $0.text.contains(DemoContent.redactedWord) }
                             ?? lines.max { $0.text.count < $1.text.count }
                         if let line {
-                            redactMode = true
                             markForRedaction(pageIndex: 0, rect: line.rect)
-                            // markForRedaction disarms the tool when it lands; arm it again
-                            // so the shot shows the tool on as well as the mark placed.
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 400_000_000)
-                                redactMode = true
+                            // The mark lands asynchronously, so this waits for it rather
+                            // than guessing at a delay: this pose is a store capture, and a
+                            // missed selection would be a different picture from the one
+                            // that was checked.
+                            var waited = 0
+                            while redactionMarks[0]?.isEmpty != false, waited < 5_000 {
+                                try? await Task.sleep(nanoseconds: 50_000_000)
+                                waited += 50
+                            }
+                            if let mark = redactionMarks[0]?.first {
+                                selectRedactionMark(pageIndex: 0, markId: mark.markId)
                             }
                         }
                     }
@@ -650,6 +797,11 @@ final class ViewerModel: ObservableObject {
                 unavailableRecentIDs.remove(bookmark.base64EncodedString())
             }
             state = .viewing(displayName: displayName, pageSizes: sizes)
+            // A fresh core carries no marks, and the refresh is what says so (#329): the map
+            // is what Save reads to decide whether to ask about redaction, so it states the
+            // truth from the moment a document is on screen rather than only after the first
+            // mark is made.
+            await refreshRedactionMarks()
             // A restricted open says so, and where the owner password goes (ADR-004 §3).
             if capabilities.isRestricted { showRestrictedNotice() }
         } catch PdfError.passwordRequired {
@@ -753,6 +905,18 @@ final class ViewerModel: ObservableObject {
         let size = pageSizes[index]
         let x = xFraction * size.width
         let y = (1 - yFraction) * size.height  // view top-left → PDF bottom-left
+
+        // A mark the user drew, which is drawn over the page, wins the tap (#329):
+        // selecting it is the way in to moving, resizing and removing it. No page work is
+        // involved — a mark is not page content — so this answers before the token, the
+        // page check and the spinner. Tapping it again deselects.
+        if let mark = redactionMarks[index]?.last(where: { $0.rect.contains(x: x, y: y) }) {
+            selectRedactionMark(pageIndex: index, markId: mark.markId)
+            return
+        }
+        // Anywhere else clears the selection, so the ✕ does not linger over a page the
+        // user has moved on from.
+        deselectRedactionMark()
 
         // Every branch that would change the document checks what this open may do
         // first (#131) and shows the restricted notice instead of editing.
@@ -1202,8 +1366,8 @@ final class ViewerModel: ObservableObject {
         Task {
             defer { busy.end(token) }
             do {
-                if let page = try await history.undo(PdfEngine.shared, doc) {
-                    afterHistoryChange(page)
+                if let operation = try await history.undo(PdfEngine.shared, doc) {
+                    await afterHistoryChange(operation)
                 }
             } catch {
                 statusMessage = String(localized: "Couldn't undo that.")
@@ -1217,8 +1381,8 @@ final class ViewerModel: ObservableObject {
         Task {
             defer { busy.end(token) }
             do {
-                if let page = try await history.redo(PdfEngine.shared, doc) {
-                    afterHistoryChange(page)
+                if let operation = try await history.redo(PdfEngine.shared, doc) {
+                    await afterHistoryChange(operation)
                 }
             } catch {
                 statusMessage = String(localized: "Couldn't redo that.")
@@ -1233,18 +1397,26 @@ final class ViewerModel: ObservableObject {
         // permission never reaches the engine, even if a tool forgot to check.
         guard capabilities.allows(operation) else { throw PdfError.restricted }
         try await history.perform(operation, PdfEngine.shared, doc)
-        afterHistoryChange(operation.pageIndex)
+        await afterHistoryChange(operation)
     }
 
-    private func afterHistoryChange(_ pageIndex: Int) {
-        // Deliberately conservative: any history movement leaves the document
-        // possibly different from the bytes on disk, so it stays dirty.
-        noteDocumentChanged()
+    private func afterHistoryChange(_ operation: PdfEditOperation) async {
         canUndo = history.canUndo
         canRedo = history.canRedo
         selectedStamp = nil
         selectedTextBox = nil
-        invalidatePage(pageIndex)
+        guard operation.changesDocument else {
+            // A mark (#329): nothing on disk changed, so the document is not unsaved, there
+            // is nothing to re-render and no page check to run — only the overlay moved.
+            // The mark's own state has to be re-read from the core, though, because a redo
+            // took fresh ids.
+            await refreshRedactionMarks()
+            return
+        }
+        // Deliberately conservative: any history movement leaves the document
+        // possibly different from the bytes on disk, so it stays dirty.
+        noteDocumentChanged()
+        invalidatePage(operation.pageIndex)
     }
 
     /// Every change to the document goes through here: it is unsaved, and a save already running
@@ -1908,6 +2080,17 @@ final class ViewerModel: ObservableObject {
         security = .unprotected
         securitySheet = nil
         securityError = nil
+        // Marks are the open document's too (#329, ADR-005 decision 1): they live in the
+        // core and are never written, so what is on screen after this belongs to the core
+        // that is about to be closed. Leaving the map up drew the previous file's marks
+        // over the next one at the same page indices — and, because the count is derived
+        // from it, made Save ask about redacting a document that had none.
+        redactionMarks = [:]
+        selectedRedactionMark = nil
+        redactMode = false
+        redactionSummary = nil
+        redactionRefusal = nil
+        summaryForSave = nil
         if let doc = document {
             document = nil
             Task { await PdfEngine.shared.close(doc) }

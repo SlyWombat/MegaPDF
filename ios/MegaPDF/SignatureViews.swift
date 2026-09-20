@@ -555,12 +555,16 @@ struct TextBoxSheet: View {
 }
 
 /// Selection chrome for something the user placed on the page: drag to move,
-/// corner handle to resize (aspect locked), ✕ to remove.
+/// corner handle to resize, ✕ to remove.
 ///
 /// Signatures and text boxes share it (#36) rather than growing a second
 /// interaction model — `resizable` and `onEdit` are the only differences between
 /// them. A text box has no resize handle because resizing one would mean changing
 /// its font size, and SDD §3.1 keeps formatting controls out of the app.
+/// Redaction marks share it too (#329), and `aspectLocked` is their difference: a
+/// signature stretched out of shape stops looking like a signature, while a
+/// redaction area is a rectangle by nature and a wide strip of one line is
+/// exactly what people want to draw.
 struct SelectionOverlay: View {
     let rect: PdfRect
     let pageSize: CGSize
@@ -571,9 +575,16 @@ struct SelectionOverlay: View {
     /// When set, a pencil appears alongside the ✕ — the discoverable way to
     /// correct a text box, since a quick second tap is taken by zoom.
     var onEdit: (() -> Void)?
+    /// The corner grip keeps the selection's shape unless this is false.
+    var aspectLocked = true
+    /// What VoiceOver calls the ✕. "Remove" wherever the selection itself says what it is,
+    /// and the thing's own name where it does not — a redaction mark is a translucent
+    /// rectangle over a page, so "Remove" alone would not say what is going away (#329).
+    var removeLabel: LocalizedStringKey = "Remove"
 
     @State private var drag: CGSize = .zero
     @State private var widthDelta: CGFloat = 0
+    @State private var heightDelta: CGFloat = 0
 
     var body: some View {
         let sx = viewSize.width / pageSize.width
@@ -582,9 +593,10 @@ struct SelectionOverlay: View {
         let baseY = (pageSize.height - CGFloat(rect.top)) * sy
         let baseW = CGFloat(rect.right - rect.left) * sx
         let baseH = CGFloat(rect.top - rect.bottom) * sy
-        // widthDelta only ever moves when the resize handle exists, so a
+        // The deltas only ever move when the resize handle exists, so a
         // non-resizable selection commits at scale 1 — a pure translation.
-        let scale = max((baseW + widthDelta) / baseW, 0.15)
+        let scaleX = max((baseW + widthDelta) / baseW, 0.15)
+        let scaleY = aspectLocked ? scaleX : max((baseH + heightDelta) / baseH, 0.15)
 
         ZStack(alignment: .topTrailing) {
             Rectangle()
@@ -596,7 +608,7 @@ struct SelectionOverlay: View {
                     .foregroundStyle(.white, .red)
                     .font(.title3)
             }
-            .accessibilityLabel("Remove")
+            .accessibilityLabel(Text(removeLabel))
             .offset(x: 10, y: -10)
             if let onEdit {
                 Button(action: onEdit) {
@@ -616,31 +628,38 @@ struct SelectionOverlay: View {
                            alignment: .bottomTrailing)
                     .gesture(
                         DragGesture()
-                            .onChanged { widthDelta = $0.translation.width }
-                            .onEnded { _ in commit(scale: scale) }
+                            .onChanged { value in
+                                widthDelta = value.translation.width
+                                // The grip is the bottom-right corner, so a free-shaped
+                                // selection grows taller as well as wider when it is pulled
+                                // down.
+                                if !aspectLocked { heightDelta = value.translation.height }
+                            }
+                            .onEnded { _ in commit(scaleX: scaleX, scaleY: scaleY) }
                     )
             }
         }
-        .frame(width: baseW * scale, height: baseH * scale)
+        .frame(width: baseW * scaleX, height: baseH * scaleY)
         .offset(x: baseX + drag.width, y: baseY + drag.height)
         .gesture(
             DragGesture()
                 .onChanged { drag = $0.translation }
-                .onEnded { _ in commit(scale: scale) }
+                .onEnded { _ in commit(scaleX: scaleX, scaleY: scaleY) }
         )
     }
 
-    private func commit(scale: CGFloat) {
+    private func commit(scaleX: CGFloat, scaleY: CGFloat) {
         let sx = viewSize.width / pageSize.width
         let sy = viewSize.height / pageSize.height
         let dxPt = Double(drag.width / sx)
         let dyPt = Double(drag.height / sy)
-        let newW = (rect.right - rect.left) * Double(scale)
-        let newH = (rect.top - rect.bottom) * Double(scale)
+        let newW = (rect.right - rect.left) * Double(scaleX)
+        let newH = (rect.top - rect.bottom) * Double(scaleY)
         let newLeft = rect.left + dxPt
         let newTop = rect.top - dyPt
         drag = .zero
         widthDelta = 0
+        heightDelta = 0
         onCommit(PdfRect(left: newLeft, bottom: newTop - newH,
                          right: newLeft + newW, top: newTop))
     }

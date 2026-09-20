@@ -189,10 +189,16 @@
     <string name="tool_off">Désactivé</string>
     <!-- Screen-reader name of a mark on the page (#173). #173 — new French, for francophone review -->
     <string name="redact_mark_name">Marqué pour caviardage</string>
+    <!-- The action that takes one mark away, said to a screen reader (#329). #329 — new French, for francophone review -->
+    <string name="redact_mark_remove">Retirer la marque</string>
     <!-- Announced after a mark is placed (#173). #173 — new French, for francophone review -->
     <string name="redact_mark_placed">Marqué pour caviardage.</string>
     <!-- #173 — new French, for francophone review -->
     <string name="redact_mark_removed">Marque retirée.</string>
+    <!-- The menu item that takes every mark away at once (#329). #329 — new French, for francophone review -->
+    <string name="redact_clear_marks">Effacer toutes les marques</string>
+    <!-- #329 — new French, for francophone review -->
+    <string name="redact_marks_cleared">Marques effacées.</string>
     <!-- Confirmation before a redaction is applied on save (#173). #173 — new French, for francophone review -->
     <string name="redact_confirm_title">Retirer le contenu marqué?</string>
     <!-- Confirmation body (#173) — the wording #173 specifies. #173 — new French, for francophone review -->

@@ -34,7 +34,7 @@ final class FilesEndToEndUITests: XCTestCase {
     /// leak searches over e2e-redact.pdf as it now sits in On My iPhone.
     func test1_redactAndOverwriteTheOriginal() {
         open("e2e-redact")
-        arm("viewerRedact")
+        armRedact()
         // The canary is alone on the line at y=600 (20 pt Helvetica, x 72..~222); the
         // KEEP lines sit at 700 and 500, well outside the drag.
         drag(from: (64, 626), to: (250, 590))
@@ -53,7 +53,7 @@ final class FilesEndToEndUITests: XCTestCase {
     /// beside the original, and the original stays as it was.
     func test2_redactAndSaveACopy() {
         open("e2e-redact2")
-        arm("viewerRedact")
+        armRedact()
         drag(from: (64, 626), to: (250, 590))
         XCTAssertTrue(app.descendants(matching: .any)["Marked for redaction"].waitForExistence(timeout: 5),
                       dump("the drag marked nothing"))
@@ -215,10 +215,14 @@ final class FilesEndToEndUITests: XCTestCase {
         }
     }
 
-    private func arm(_ identifier: String) {
-        let tool = app.buttons[identifier].firstMatch
-        XCTAssertTrue(tool.waitForExistence(timeout: 10), dump("no \(identifier)"))
-        tool.tap()
+    /// Arms Redact, which is a row in the ⋯ menu rather than a bottom-bar tool (#328).
+    private func armRedact() {
+        let more = app.buttons["viewerMore"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 10), dump("no More menu"))
+        more.tap()
+        let redact = app.buttons["Redact"].firstMatch
+        XCTAssertTrue(redact.waitForExistence(timeout: 5), dump("no Redact in the ⋯ menu"))
+        redact.tap()
         acknowledgeAlerts(until: nil, timeout: 2)
     }
 

@@ -47,6 +47,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -67,11 +68,14 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import com.megapdf.android.ui.Brand
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -171,6 +175,14 @@ fun ViewerScreen(
     redactionMarks: Map<Int, List<com.megapdf.engine.RedactionMark>> = emptyMap(),
     onToggleRedact: () -> Unit = {},
     onMarkForRedaction: (pageIndex: Int, rect: com.megapdf.engine.PdfRect) -> Unit = { _, _ -> },
+    // A mark is a thing the user put on the page, so it can be tapped, moved, resized and
+    // removed like a stamp (#329).
+    selectedRedactionMark: SelectedRedactionMark? = null,
+    onSelectRedactionMark: (pageIndex: Int, markId: Int) -> Unit = { _, _ -> },
+    onRemoveRedactionMark: (pageIndex: Int, markId: Int) -> Unit = { _, _ -> },
+    onClearRedactionMarks: () -> Unit = {},
+    onCommitRedactionMarkRect: (pageIndex: Int, markId: Int, rect: com.megapdf.engine.PdfRect) -> Unit =
+        { _, _, _ -> },
     // Document security (#131).
     capabilities: DocumentCapabilities = DocumentCapabilities.FULL,
     hasDocumentFile: Boolean = false,
@@ -480,6 +492,8 @@ fun ViewerScreen(
                             // the overflow's Save a copy. The Windows and Mac passes found
                             // exactly this; it was here too (#173).
                             val hasMarks = redactionMarks.values.any { it.isNotEmpty() }
+                            val toolOn = stringResource(R.string.tool_on)
+                            val toolOff = stringResource(R.string.tool_off)
                             TextButton(
                                 onClick = onSave,
                                 enabled = (isDirty || hasMarks) && !isSaving && !documentLocked,
@@ -505,6 +519,46 @@ fun ViewerScreen(
                                         text = { Text(stringResource(R.string.security_unlock_menu)) },
                                         enabled = hasDocumentFile && !isSaving && !documentLocked,
                                         onClick = { menuOpen = false; onStartUnlock() },
+                                    )
+                                }
+                                HorizontalDivider()
+                                // #328/#329: Redact is not an everyday tool — it removes
+                                // content for good — and its icon means nothing to someone who
+                                // has not been told what it is. In the menu it says its own
+                                // name, and a screen reader reads a label rather than guessing
+                                // at an icon. The armed state is a check mark, and a check
+                                // mark is not something a screen reader can read, so it is also
+                                // said as a state — the same pair the toolbar button carried.
+                                //
+                                // The state is said twice because it is read twice: the words
+                                // ("Activé" / "Désactivé", so an unarmed tool states that it is
+                                // off rather than saying nothing) and the `selected` trait,
+                                // which is what a checkmarked menu row carries everywhere else,
+                                // and which — unlike a state description — is an attribute the
+                                // QA rig can read out of the accessibility dump.
+                                val armedIcon: (@Composable () -> Unit)? = if (redactMode) {
+                                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                                } else {
+                                    null
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.redact)) },
+                                    leadingIcon = armedIcon,
+                                    modifier = Modifier.semantics {
+                                        selected = redactMode
+                                        stateDescription =
+                                            if (redactMode) toolOn else toolOff
+                                    },
+                                    enabled = capabilities.canEditContent && !toolsDisabled,
+                                    onClick = { menuOpen = false; onToggleRedact() },
+                                )
+                                // Clearing is one action and one undo step (#329), and it only
+                                // exists while there is something to clear.
+                                if (hasMarks) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.redact_clear_marks)) },
+                                        enabled = capabilities.canEditContent && !toolsDisabled,
+                                        onClick = { menuOpen = false; onClearRedactionMarks() },
                                     )
                                 }
                                 HorizontalDivider()
@@ -539,16 +593,9 @@ fun ViewerScreen(
                         enabled = capabilities.canAddText && !toolsDisabled,
                         onClick = onStartTextPlacement,
                     )
-                    // Redact beside the creating tools, because the pair is the point
-                    // (#173): Whiteout covers, Redact removes. The phone has no Whiteout,
-                    // so this is the only one of the two here — and it says what it does.
-                    ToolbarAction(
-                        icon = ToolbarIcons.Redact,
-                        label = stringResource(R.string.redact),
-                        enabled = capabilities.canEditContent && !toolsDisabled,
-                        armed = redactMode,
-                        onClick = onToggleRedact,
-                    )
+                    // Redact is not here (#328). It moved into the ⋮ menu, where it says its
+                    // own name: it is the one tool whose icon means nothing on its own, and
+                    // a bar of five icons has no room to explain one of them.
                     ToolbarAction(
                         icon = Icons.Filled.Search,
                         label = stringResource(R.string.search),
@@ -576,24 +623,38 @@ fun ViewerScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .background(Brand.Backdrop)
-                // Pinch zoom: only multi-touch is consumed, so single-finger
-                // vertical scrolling still belongs to the LazyColumn.
+                // Pinch zoom (#336). Only multi-touch is consumed, so single-finger
+                // vertical scrolling still belongs to the LazyColumn — and that is
+                // only true on the Initial pass. This box is the LazyColumn's
+                // *parent*, and the Main pass reaches the child first: read there,
+                // the event arrived after the list's scrollable had claimed the
+                // touch slop and consumed the pointers. `calculateZoom` skips
+                // consumed changes, so it was left working from one live pointer
+                // and a centroid computed over two — the ratio it produced was
+                // either 1 (nothing happened) or wrong (the page jumped), and
+                // whether the slop was crossed in time decided which. The Initial
+                // pass sees every pressed pointer before the list does, so a
+                // two-finger pinch is claimed here and a one-finger drag is never
+                // touched, which is what the comment always meant.
                 .pointerInput(Unit) {
                     awaitEachGesture {
-                        awaitFirstDown(requireUnconsumed = false)
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                         do {
-                            val event = awaitPointerEvent()
-                            if (event.changes.size >= 2) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            if (event.changes.count { it.pressed } >= 2) {
                                 val change = event.calculateZoom()
                                 if (change != 1f) {
                                     zoom = (zoom * change).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                                    // Claim the gesture: two fingers moving apart
+                                    // must not also scroll the list, and a pinch
+                                    // already at the zoom limit must not turn into
+                                    // a scroll either.
                                     event.changes.forEach { it.consume() }
                                 }
                             }
                         } while (event.changes.any { it.pressed })
                     }
-                }
-                ,
+                },
         ) {
             val density = LocalDensity.current
             val containerWidthPx = with(density) { maxWidth.toPx() }
@@ -782,10 +843,35 @@ fun ViewerScreen(
                         }
                         val marks = redactionMarks[index]
                         if (!marks.isNullOrEmpty()) {
-                            RedactionMarkOverlay(marks = marks, pageSize = size)
+                            RedactionMarkOverlay(
+                                marks = marks,
+                                pageSize = size,
+                                // While Redact is armed a drag across the page marks a new
+                                // area, so the existing marks step out of the way rather
+                                // than fight that gesture for the touch.
+                                selectable = !redactMode
+                                    && capabilities.canEditContent
+                                    && !toolsDisabled,
+                                onSelect = { onSelectRedactionMark(index, it) },
+                                onRemove = { onRemoveRedactionMark(index, it) },
+                            )
                         }
                         redactBand?.let { band ->
                             if (band.pageIndex == index) RedactionBandOverlay(band)
+                        }
+                        // The chrome for the selected mark (#329): the same box a selected
+                        // stamp or text box gets, minus the aspect lock — a redaction area is
+                        // a rectangle by nature, so its corner grip resizes each side freely.
+                        if (selectedRedactionMark != null && selectedRedactionMark.pageIndex == index) {
+                            SelectionOverlay(
+                                key = selectedRedactionMark,
+                                rect = selectedRedactionMark.rect,
+                                pageSize = size,
+                                aspectLocked = false,
+                                onCommit = { onCommitRedactionMarkRect(index, selectedRedactionMark.markId, it) },
+                                onRemove = { onRemoveRedactionMark(index, selectedRedactionMark.markId) },
+                                enabled = !editingBlocked,
+                            )
                         }
                         val pageHits = searchHits.withIndex()
                             .filter { it.value.pageIndex == index }
@@ -1071,34 +1157,55 @@ data class RedactBand(
 private fun RedactionMarkOverlay(
     marks: List<com.megapdf.engine.RedactionMark>,
     pageSize: PageSize,
+    selectable: Boolean,
+    onSelect: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
 ) {
-    // The marks had no accessible presence at all: a Canvas draws pixels and publishes
-    // no node, so a screen reader could hear "Marked for redaction." once and then find
-    // nothing on the page (#173, the same fault as the Mac's). The count rather than one
-    // node per mark, because "2 areas marked for redaction" is what someone needs to
-    // know before saving — which is also the wording the confirmation uses.
+    // The marks had no accessible presence at all: a Canvas draws pixels, and a Canvas
+    // publishes no node, so a screen reader could hear "Marked for redaction." once and then
+    // find nothing on the page (#173, the same fault as the Mac's). Each mark is now a node
+    // of its own (#329), because a mark can be tapped and removed, and removal has to be
+    // reachable by a screen reader as well as by a finger. The count stays on the container,
+    // so "2 areas marked for redaction" — the wording the save confirmation uses — is still
+    // what is heard before saving.
     val description = if (marks.size == 1) stringResource(R.string.redact_mark_count_one)
                       else stringResource(R.string.redact_mark_count, marks.size)
-    androidx.compose.foundation.Canvas(
-        Modifier.fillMaxSize().semantics { contentDescription = description },
-    ) {
-        val sx = size.width / pageSize.widthPoints.toFloat()
-        val sy = size.height / pageSize.heightPoints.toFloat()
+    val markName = stringResource(R.string.redact_mark_name)
+    val removeLabel = stringResource(R.string.redact_mark_remove)
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize().semantics { contentDescription = description }) {
+        val sx = constraints.maxWidth.toFloat() / pageSize.widthPoints.toFloat()
+        val sy = constraints.maxHeight.toFloat() / pageSize.heightPoints.toFloat()
         for (mark in marks) {
-            val topLeft = androidx.compose.ui.geometry.Offset(
-                (mark.rect.left * sx).toFloat(),
-                ((pageSize.heightPoints - mark.rect.top) * sy).toFloat(),
-            )
-            val boxSize = androidx.compose.ui.geometry.Size(
-                ((mark.rect.right - mark.rect.left) * sx).toFloat(),
-                ((mark.rect.top - mark.rect.bottom) * sy).toFloat(),
-            )
-            drawRect(color = REDACTION_MARK, topLeft = topLeft, size = boxSize)
-            drawRect(
-                color = REDACTION_MARK_OUTLINE,
-                topLeft = topLeft,
-                size = boxSize,
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
+            val left = (mark.rect.left * sx).toFloat()
+            val top = ((pageSize.heightPoints - mark.rect.top) * sy).toFloat()
+            val width = ((mark.rect.right - mark.rect.left) * sx).toFloat()
+            val height = ((mark.rect.top - mark.rect.bottom) * sy).toFloat()
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .offset { androidx.compose.ui.unit.IntOffset(left.roundToInt(), top.roundToInt()) }
+                    .size(
+                        with(density) { width.toDp() },
+                        with(density) { height.toDp() },
+                    )
+                    .background(REDACTION_MARK)
+                    // 2.dp is a stroke width, not layout spacing (docs/design-tokens.md §3).
+                    .border(2.dp, REDACTION_MARK_OUTLINE)
+                    .then(
+                        if (!selectable) Modifier else Modifier
+                            .clickable { onSelect(mark.markId) }
+                            .semantics {
+                                contentDescription = markName
+                                // The mark is already selected when its chrome is on it;
+                                // this is for the rest of them.
+                                customActions = listOf(
+                                    CustomAccessibilityAction(removeLabel) {
+                                        onRemove(mark.markId)
+                                        true
+                                    },
+                                )
+                            }
+                    )
             )
         }
     }
@@ -1185,6 +1292,11 @@ private fun SelectionOverlay(
     resizable: Boolean = true,
     onEdit: (() -> Unit)? = null,
     enabled: Boolean = true,
+    /**
+     * A signature keeps its shape when it is resized; a redaction area is a rectangle by
+     * nature and its corner grip moves each side on its own (#329).
+     */
+    aspectLocked: Boolean = true,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
@@ -1195,22 +1307,24 @@ private fun SelectionOverlay(
 
         var drag by remember(key) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
         var widthDelta by remember(key) { mutableFloatStateOf(0f) }
+        var heightDelta by remember(key) { mutableFloatStateOf(0f) }
 
         val baseX = (rect.left * sx).toFloat()
         val baseY = ((pageSize.heightPoints - rect.top) * sy).toFloat()
         val baseW = ((rect.right - rect.left) * sx).toFloat()
         val baseH = ((rect.top - rect.bottom) * sy).toFloat()
-        // widthDelta only ever moves when the resize handle exists, so a
-        // non-resizable selection commits at scale 1 — a pure translation.
-        val scale = ((baseW + widthDelta) / baseW).coerceAtLeast(0.15f)
+        // The deltas only ever move when the resize handle exists, so a non-resizable
+        // selection commits at scale 1 — a pure translation.
+        val scaleX = ((baseW + widthDelta) / baseW).coerceAtLeast(0.15f)
+        val scaleY = if (aspectLocked) scaleX else ((baseH + heightDelta) / baseH).coerceAtLeast(0.15f)
 
         fun commit() {
             val dxPt = drag.x / sx
             val dyPt = drag.y / sy
             val newLeft = rect.left + dxPt
             val newTop = rect.top - dyPt
-            val newW = (rect.right - rect.left) * scale
-            val newH = (rect.top - rect.bottom) * scale
+            val newW = (rect.right - rect.left) * scaleX
+            val newH = (rect.top - rect.bottom) * scaleY
             onCommit(com.megapdf.engine.PdfRect(newLeft, newTop - newH, newLeft + newW, newTop))
         }
 
@@ -1223,8 +1337,8 @@ private fun SelectionOverlay(
                     )
                 }
                 .size(
-                    with(density) { (baseW * scale).toDp() },
-                    with(density) { (baseH * scale).toDp() },
+                    with(density) { (baseW * scaleX).toDp() },
+                    with(density) { (baseH * scaleY).toDp() },
                 )
                 // 2.dp is a stroke width and 6/2 below is badge padding sized to
                 // its glyph — neither is layout spacing, so docs/design-tokens.md
@@ -1271,7 +1385,9 @@ private fun SelectionOverlay(
                             if (!enabled) return@pointerInput
                             detectDragGestures(
                                 onDrag = { change, delta ->
-                                    change.consume(); widthDelta += delta.x
+                                    change.consume()
+                                    widthDelta += delta.x
+                                    if (!aspectLocked) heightDelta += delta.y
                                 },
                                 onDragEnd = { commit() },
                             )

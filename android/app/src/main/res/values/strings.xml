@@ -207,9 +207,14 @@
     <string name="tool_off">Off</string>
     <!-- Screen-reader name of a mark on the page (#173) -->
     <string name="redact_mark_name">Marked for redaction</string>
+    <!-- The action that takes one mark away, said to a screen reader (#329) -->
+    <string name="redact_mark_remove">Remove mark</string>
     <!-- Announced after a mark is placed (#173) -->
     <string name="redact_mark_placed">Marked for redaction.</string>
     <string name="redact_mark_removed">Mark removed.</string>
+    <!-- The menu item that takes every mark away at once (#329) -->
+    <string name="redact_clear_marks">Clear all marks</string>
+    <string name="redact_marks_cleared">Marks cleared.</string>
     <!-- Confirmation before a redaction is applied on save (#173) -->
     <string name="redact_confirm_title">Remove the marked content?</string>
     <!-- Confirmation body (#173) — the wording #173 specifies -->

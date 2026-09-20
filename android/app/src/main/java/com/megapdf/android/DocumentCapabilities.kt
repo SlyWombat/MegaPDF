@@ -25,7 +25,11 @@ data class DocumentCapabilities(
 ) {
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
-        is BodyTextEditOperation, is BodyTextDeleteOperation -> canEditContent
+        // Redaction removes the document's own content, so it needs the same permission the
+        // Redact command itself does (#329).
+        is BodyTextEditOperation, is BodyTextDeleteOperation,
+        is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation,
+        -> canEditContent
         is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation -> canAddText
         is StampOperation, is MoveStampOperation, is MarkOperation -> canSign
         is FieldToggleOperation -> canFillForms

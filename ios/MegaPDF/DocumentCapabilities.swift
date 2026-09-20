@@ -46,7 +46,10 @@ struct DocumentCapabilities: Equatable {
     /// Whether this open may apply `operation` — the backstop behind every gated tool.
     func allows(_ operation: PdfEditOperation) -> Bool {
         switch operation {
-        case is BodyTextEditOperation, is BodyTextDeleteOperation:
+        case is BodyTextEditOperation, is BodyTextDeleteOperation,
+             is RedactMarkOperation, is MoveRedactionMarkOperation, is ClearRedactionMarksOperation:
+            // A redaction removes the document's own content, so it needs the same
+            // permission the Redact command itself does (#329).
             return canEditContent
         case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation:
             return canAddText

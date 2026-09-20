@@ -985,14 +985,40 @@ Java_com_megapdf_engine_PdfiumNative_nativeMarkForRedaction(JNIEnv*, jobject, jl
 }
 
 // Marks the text a selection covers, one mark per line, each grown to whole glyphs.
-// Returns how many were made; 0 when the selection covers no text, and the caller then
-// marks the rectangle itself. NOT count-then-fill: this call MAKES the marks.
-JNIEXPORT jint JNICALL
-Java_com_megapdf_engine_PdfiumNative_nativeMarkTextForRedaction(JNIEnv*, jobject, jlong handle, jdouble left,
+// Returns the ids of the marks it made — empty when the selection covers no text, and the
+// caller then marks the rectangle itself. NOT count-then-fill: this call MAKES the marks,
+// so asking it for a size first would make them twice.
+//
+// The ids matter (#329): a mark is an undoable operation, and undo has to be able to name
+// the marks a drag made. Room for more lines than a drag can select, and a selection across
+// more lines than the buffer holds reads the rest back, exactly as the desktop engine does
+// (PdfiumEngine.MarkTextForRedaction).
+JNIEXPORT jintArray JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeMarkTextForRedaction(JNIEnv* env, jobject, jlong handle, jdouble left,
                                                                 jdouble bottom, jdouble right, jdouble top) {
     auto* p = reinterpret_cast<Page*>(handle);
     megapdf_rect selection{left, bottom, right, top};
-    return static_cast<jint>(megapdf_redaction_mark_text(p->core, &selection, nullptr, 0));
+    constexpr size_t kBuffer = 64;
+    int ids[kBuffer];
+    const size_t made = megapdf_redaction_mark_text(p->core, &selection, ids, kBuffer);
+    std::vector<jint> out;
+    if (made > 0 && made <= kBuffer) {
+        out.assign(ids, ids + made);
+    } else if (made > kBuffer) {
+        // Marks come back in the order they were made, so the ones this call added are the
+        // last `made` of them.
+        const size_t total = megapdf_redaction_marks(p->core, nullptr, 0);
+        std::vector<megapdf_redaction_area> areas(total);
+        const size_t filled = megapdf_redaction_marks(p->core, areas.data(), total);
+        for (size_t i = filled > made ? filled - made : 0; i < filled; ++i) {
+            out.push_back(static_cast<jint>(areas[i].mark_id));
+        }
+    }
+    jintArray result = env->NewIntArray(static_cast<jsize>(out.size()));
+    if (result != nullptr && !out.empty()) {
+        env->SetIntArrayRegion(result, 0, static_cast<jsize>(out.size()), out.data());
+    }
+    return result;
 }
 
 JNIEXPORT jdoubleArray JNICALL

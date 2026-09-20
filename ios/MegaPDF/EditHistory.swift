@@ -20,6 +20,17 @@ protocol PdfEditOperation: AnyObject {
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws
 }
 
+extension PdfEditOperation {
+    /// Whether applying this leaves the file different from what is on disk (#329).
+    ///
+    /// True for everything that edits the document, which is why it defaults that way: the
+    /// safe answer is the one that keeps the unsaved flag honest. A redaction **mark** is
+    /// the exception — it lives in the core and is never written — so the operations that
+    /// only touch marks say so, and then set no unsaved flag, write no page check and
+    /// re-render nothing. The overlay draw is the whole visible change.
+    var changesDocument: Bool { true }
+}
+
 /// Bounded undo/redo stack. Mobile documents are single-session, so the desktop's
 /// crash-recovery journal has no counterpart here — only the in-memory history.
 @MainActor
@@ -38,13 +49,24 @@ final class EditHistory {
     func perform(_ operation: PdfEditOperation,
                  _ engine: PdfEngine, _ document: PdfDocument) async throws {
         try await operation.apply(engine, document)
+        record(operation)
+    }
+
+    /// Records an operation that has **already** been applied, clearing the redo history.
+    ///
+    /// For the one gesture that does its work before the history sees it: marking text for
+    /// redaction makes the marks as it answers "did that selection cover any text?" (#329),
+    /// so there is nothing left to apply — the ids it made just have to be recorded, or the
+    /// marks are outside the history and Undo takes back the wrong thing.
+    func record(_ operation: PdfEditOperation) {
         done.append(operation)
         if done.count > Self.capacity { done.removeFirst() }
         undone.removeAll()
     }
 
-    /// Reverts the last operation; returns the page that needs re-rendering.
-    func undo(_ engine: PdfEngine, _ document: PdfDocument) async throws -> Int? {
+    /// Reverts the last operation, and hands it back so the caller can see whether the
+    /// document changed.
+    func undo(_ engine: PdfEngine, _ document: PdfDocument) async throws -> PdfEditOperation? {
         guard let operation = done.popLast() else { return nil }
         do {
             try await operation.revert(engine, document)
@@ -53,11 +75,11 @@ final class EditHistory {
             throw error
         }
         undone.append(operation)
-        return operation.pageIndex
+        return operation
     }
 
-    /// Re-applies the last undone operation; returns the page that needs re-rendering.
-    func redo(_ engine: PdfEngine, _ document: PdfDocument) async throws -> Int? {
+    /// Re-applies the last undone operation, and hands it back for the same reason.
+    func redo(_ engine: PdfEngine, _ document: PdfDocument) async throws -> PdfEditOperation? {
         guard let operation = undone.popLast() else { return nil }
         do {
             try await operation.apply(engine, document)
@@ -66,7 +88,7 @@ final class EditHistory {
             throw error
         }
         done.append(operation)
-        return operation.pageIndex
+        return operation
     }
 
     func clear() {
@@ -402,5 +424,124 @@ final class MoveTextBoxOperation: PdfEditOperation {
 
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         try await engine.moveTextBox(document, pageIndex: pageIndex, id: id, x: from.x, y: from.y)
+    }
+}
+
+// MARK: - Redaction marks (#329)
+
+// A mark is the core's own and is never written to the file, so every operation here says
+// `changesDocument = false`: a mark leaves the document clean, sets no unsaved flag and
+// re-renders nothing — the overlay draw is the visible change. They are in the history
+// because Undo has to be able to take a mark back, which is the whole of #329.
+//
+// Inverse pairs, one type each, as everywhere above.
+
+/// Marking areas for redaction, and removing them — each other's inverse.
+///
+/// `rects` are the areas as they now exist in crop space: the marks a drag made, already
+/// grown to whole glyphs by the core, or the marks being removed. `adding` says which way
+/// round the operation goes.
+///
+/// Redo replays the recorded rectangles rather than re-running the text selection: that
+/// would re-derive glyph runs from the page as it is *now*, and the person is owed the
+/// rectangle they saw. Re-marking a rectangle goes through the plain rect path — a mark is
+/// an area, and the glyph snapping only decided what the area was. The core never reuses an
+/// id for the life of a document, so a redo takes fresh ids; `ids` is what the page carries
+/// at this moment and is re-read after every apply.
+final class RedactMarkOperation: PdfEditOperation {
+    let pageIndex: Int
+    private let rects: [PdfRect]
+    private var ids: [Int]
+    private let adding: Bool
+
+    init(pageIndex: Int, rects: [PdfRect], ids: [Int], adding: Bool) {
+        self.pageIndex = pageIndex
+        self.rects = rects
+        self.ids = ids
+        self.adding = adding
+    }
+
+    var name: String { adding ? "redact" : "remove mark" }
+    var changesDocument: Bool { false }
+
+    func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        if adding { try await mark(engine, document) } else { try await remove(engine, document) }
+    }
+
+    func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        if adding { try await remove(engine, document) } else { try await mark(engine, document) }
+    }
+
+    private func mark(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        ids = try rects.compactMap {
+            let id = try engine.markForRedaction(document, pageIndex: pageIndex, rect: $0)
+            return id >= 0 ? id : nil
+        }
+    }
+
+    private func remove(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        // Already gone counts as success on the core side, so an undo cannot fail.
+        for id in ids {
+            try engine.removeRedactionMark(document, pageIndex: pageIndex, markId: id)
+        }
+        ids = []
+    }
+}
+
+/// Moving or resizing a mark. The core moves an id in place, so undo and redo keep the same
+/// id — which is why this is not the remove-and-re-place that `MoveStampOperation` needs.
+final class MoveRedactionMarkOperation: PdfEditOperation {
+    let pageIndex: Int
+    private let markId: Int
+    private let from: PdfRect
+    private let to: PdfRect
+
+    init(pageIndex: Int, markId: Int, from: PdfRect, to: PdfRect) {
+        self.pageIndex = pageIndex
+        self.markId = markId
+        self.from = from
+        self.to = to
+    }
+
+    var name: String { "move mark" }
+    var changesDocument: Bool { false }
+
+    func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        try engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: to)
+    }
+
+    func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        try engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: from)
+    }
+}
+
+/// Clearing every mark on the document, as **one** undo step: a person who says "clear all
+/// marks" means one action, not one per mark or one per page, and Undo puts every one of
+/// them back where it was.
+///
+/// `marksByPage` is the whole document's marks as they were. `pageIndex` is the page the UI
+/// treats as this operation's own — a clear can span pages, and the history wants one page.
+final class ClearRedactionMarksOperation: PdfEditOperation {
+    let pageIndex: Int
+    private let marksByPage: [Int: [PdfRect]]
+
+    init(pageIndex: Int, marksByPage: [Int: [PdfRect]]) {
+        self.pageIndex = pageIndex
+        self.marksByPage = marksByPage
+    }
+
+    var name: String { "clear marks" }
+    var changesDocument: Bool { false }
+
+    func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        engine.clearRedactionMarks(document)
+    }
+
+    func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
+        for (page, rects) in marksByPage {
+            for rect in rects {
+                _ = try engine.markForRedaction(document, pageIndex: page, rect: rect)
+            }
+        }
     }
 }

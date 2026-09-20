@@ -111,8 +111,20 @@ records the listing's slots — that is in the console too.
 | `draw` | the draw-a-signature dialog |
 | `text` | Add text, with the size and face pickers (#43) |
 | `text-edit` | the body-text editor mid-correction (#114) |
-| `redact` | the redaction tool armed with a line marked (#173) |
+| `redact` | a line marked for redaction, with the mark selected (#173, #329) |
 
-`redact` is a listing shot now that #173 is finished. It poses a marked line, so
-**Save is live (brand blue) in it** and grey in the seven others. That's expected,
-not a defect: a marked area is an unsaved change.
+`redact` is a listing shot now that #173 is finished. It poses a marked line and
+the mark's own selection chrome — the drag handles and the ✕ that take it off
+(#329) — so the shot shows both halves of the feature: the area about to be
+removed, and that nothing is removed until Save is answered.
+
+**Save is live (brand blue) in it** and grey in the seven others. That is not a
+dirty document, which is why the title carries no bullet and closing asks nothing:
+a mark leaves the document exactly as it was. Save is live because a mark is
+something Save has to *finish* — `enabled = (isDirty || hasMarks)`, same as #173's
+Windows and Mac passes found.
+
+It used to pose the tool **armed** as well. Since #328 the tool is a row in the ⋯
+menu, so an armed tool draws nothing on the page to photograph — the pose selects
+its mark instead. The whole certified set is re-shot either way: moving Redact out
+of the bottom bar changes every viewer capture.

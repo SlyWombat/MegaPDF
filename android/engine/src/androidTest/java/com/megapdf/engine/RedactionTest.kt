@@ -80,6 +80,96 @@ class RedactionTest {
     }
 
     @Test
+    fun aDragReportsTheMarksItMadeAndTheyCanBeTakenBackAndPutBack() {
+        // #329. One drag is one undo step, so the page has to say which marks it made —
+        // that is why the text selection returns ids rather than a count. Undo takes them
+        // away by those ids and redo replays the recorded rectangles, because re-running
+        // the selection would derive glyph runs from the page as it is *now* rather than
+        // the rectangle the person saw.
+        runBlocking {
+            val doc = engine.open(asset("text-partial-run.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    // A drag across the middle of the line: it covers more than the glyphs
+                    // it touches, so the core grows it and says what it made.
+                    val made = page.markTextForRedaction(PdfRect(120.0, 694.0, 270.0, 718.0))
+                    assertTrue("a drag over text marks something", made.isNotEmpty())
+                    assertTrue("every mark has a real id", made.all { it >= 0 })
+                    assertEquals("each mark has its own id", made.size, made.toSet().size)
+
+                    val onPage = page.redactionMarks()
+                    assertEquals("the ids it reports are the page's own",
+                        made, onPage.map { it.markId })
+
+                    // Undo: away by the ids the page reported.
+                    made.forEach { page.removeRedactionMark(it) }
+                    assertEquals("taking them back leaves no marks", 0, page.redactionMarks().size)
+
+                    // Redo: the rectangles that were recorded go back, and the core never
+                    // reuses an id, so these are new ones.
+                    val rects = onPage.map { it.rect }
+                    val again = rects.map { page.markForRedaction(it) }
+                    val back = page.redactionMarks()
+                    assertEquals("re-marking puts every one of them back", rects.size, back.size)
+                    assertEquals("in the places they were", rects, back.map { it.rect })
+                    assertTrue("the core never reuses an id", again.none { it in made })
+                } finally {
+                    page.close()
+                }
+
+                // A drag over no text marks nothing and reports nothing, which is how the
+                // caller knows to mark the rectangle itself.
+                val blank = doc.openPage(0)
+                try {
+                    val before = blank.redactionMarks().size
+                    assertEquals("a selection over no text makes no marks",
+                        emptyList<Int>(), blank.markTextForRedaction(PdfRect(20.0, 20.0, 60.0, 40.0)))
+                    assertEquals("and leaves the page as it was", before, blank.redactionMarks().size)
+                } finally {
+                    blank.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
+    fun movingAMarkKeepsItsIdAndUndoPutsItBack() {
+        // The core moves an id in place, so a move or resize is one operation with the same
+        // id either way — which is what makes Undo of a resize exact rather than a
+        // remove-and-re-place that would need a new id (#329).
+        runBlocking {
+            val doc = engine.open(asset("text-partial-run.pdf"))
+            try {
+                val page = doc.openPage(0)
+                try {
+                    val from = PdfRect(120.0, 694.0, 270.0, 718.0)
+                    val to = PdfRect(200.0, 690.0, 400.0, 720.0)
+                    val id = page.markForRedaction(from)
+
+                    assertTrue("a mark moves", page.moveRedactionMark(id, to))
+                    val moved = page.redactionMarks()
+                    assertEquals("a move keeps its id", listOf(id), moved.map { it.markId })
+                    assertEquals("and is where it was put", listOf(to), moved.map { it.rect })
+
+                    assertTrue("it moves back", page.moveRedactionMark(id, from))
+                    assertEquals("undo puts it back exactly", listOf(from), page.redactionMarks().map { it.rect })
+
+                    // An id the page does not carry is refused rather than silently ignored.
+                    assertFalse("an unknown id is not moved", page.moveRedactionMark(id + 999, to))
+                    assertEquals("and nothing changed", listOf(from), page.redactionMarks().map { it.rect })
+                } finally {
+                    page.close()
+                }
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
     fun applyingRemovesTheCanaryAndKeepsWhatIsBesideIt() {
         runBlocking {
             val doc = engine.open(asset("text-partial-run.pdf"))

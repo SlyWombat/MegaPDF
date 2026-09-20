@@ -6,7 +6,9 @@ on every platform (#173).
 ## Context
 
 MegaPDF has had Whiteout since 1.0. It appends a white filled path over the page
-(`megapdf_add_whiteout`, SDD §6.2 contract 5). Everything under it stays in the file:
+(`megapdf_add_whiteout`, engine contract 5 — whiteouts, text boxes and detached objects;
+§6.2 has no whiteout contract, and its contract 5 is the one this ADR adds). Everything
+under it stays in the file:
 selectable, copyable, searchable, and extractable by any other reader, including ours once
 the whiteout is removed. Someone who "whites out" an account number and emails the PDF has
 emailed the account number.
@@ -17,7 +19,9 @@ leaks. So the feature is worth having, and it is only worth having if it is righ
 redaction tool that is *usually* right is worse than none, because it converts a careful
 user into a confident one.
 
-Three decisions shaped everything else.
+Three decisions shaped everything else, and a fourth followed three days later out
+of #329 — the first three are about what a redaction *does*, and the fourth is
+about what a person can do to a mark that is not done yet.
 
 ## Decision 1: a redaction mark is never written to the file
 
@@ -37,9 +41,14 @@ and the core hands over the rectangles. In exchange, marking costs no content
 regeneration, invalidates no layout verdict (#137), and is therefore instant on a page of
 thousands of objects — where a page-object mark would have cost seconds per word marked.
 
+The first of those two is a rule the apps owe rather than a property they get for free:
+the core forgets the marks when the document closes, and each app keeps its own copy of
+them to draw, so each has to forget its copy at the same moment. Decision 4 is what makes
+that binding on the apps, and #329 is what it cost to leave it implicit.
+
 **Alternative rejected:** a page-object mark, removed at apply time, like a whiteout. It
-would have matched contract 5 and been less code. It also would have shipped the exact bug
-we are fixing the first time anyone saved without applying.
+would have matched the whiteout contract and been less code. It also would have shipped
+the exact bug we are fixing the first time anyone saved without applying.
 
 ## Decision 2: a partly covered run is rebuilt from recorded character positions
 
@@ -96,11 +105,57 @@ stage with one addition, a mask over the marked areas. The budget, the renders a
 0.5 pt run check are unchanged, so a redaction is judged by exactly the machinery that
 already decides whether a text edit is safe.
 
+## Decision 4: a mark can be taken back, and does not outlive the document
+
+Added 2026-09-20 for #329, which found both halves promised and neither delivered.
+
+- **A mark has an id, and it is stable.** Stable for the mark's life and never reused by
+  the document, which is what lets an app address a mark it drew earlier and an undo
+  address the same one afterwards. Mark operations live in the undo history beside the
+  text-box operations that address objects the same way, and removing a mark that is
+  already gone counts as success, so an undo cannot fail on one that is no longer there.
+- **One gesture is one undo step.** A drag that marks three lines is a single entry in the
+  history, and Undo after it takes all three back. Redo puts back exactly the rectangles
+  the user saw rather than re-running the selection, which would be derived from the page
+  as it is *now* — and the rectangles are what was actually marked.
+- **A mark can be removed.** Tapping one selects it, and it carries the same move / resize
+  / remove chrome a signature carries — except that a redaction area is a rectangle by
+  nature, so the corner grip moves each side on its own rather than holding the aspect
+  ratio. **✕** on the selection removes it, **Remove mark** is the accessibility action on
+  the mark itself, and **Clear all marks** in the ⋯ menu takes every mark on every page as
+  one step, offered only while there is something to clear. Removal is an edit, so Undo
+  puts the mark back where it was.
+- **A mark is not a change.** Marking, moving and removing declare
+  `changesDocument = false`: no unsaved dot, no recovery-journal entry, no page check
+  (#137), no re-render. What changes is the overlay, and the overlay is the app's.
+- **Marks are document-scoped.** Closing a document clears them, and the next document
+  opens with none. This is decision 1's "marks do not survive closing" made concrete for
+  the apps, which is where it can actually be broken.
+
+**Why.** The SDD has promised marks that are "movable, removable and undoable" since 1.4,
+and only the moving was real: `markTextForRedaction` was a mutating engine call that the
+apps also used as a test, so it bypassed the undo history entirely — mark three times and
+Undo once left two on the page. The survivorship half is the sharper one. The core drops
+its marks when the document closes, but each app keeps its own copy of them to draw, and
+nothing made the app's copy go with the core's. Reopen a document whose redaction was
+abandoned and the marks are still on screen and still armed, and the next Save applies
+them. In a feature whose entire promise is that nothing happens until the user says so, a
+mark that cannot be taken off is the wrong kind of broken: it is the user's own earlier
+intent, executed later without being asked.
+
+**What we gave up.** Redo cannot re-derive what a gesture marked, so the rectangles are
+recorded with the history entry — a small amount of duplicate state in exchange for a redo
+that cannot disagree with the screen. And the desktops stage behind the phones: Android
+and iOS have this as of 2.1, and Windows and Avalonia in their next release, where the
+work rides with the mark chrome those apps already have. §3.8 F7 behaviour 7 carries the
+same note for readers who never open this file.
+
 ## Consequences
 
 - Undo cannot resurrect redacted content. Apply frees every `megapdf_detached` handle the
   document holds — those keep removed page objects alive so an undo can put them back
-  byte-identical (contract 5), which after a redaction is precisely what must not happen.
+  byte-identical (engine contract 5), which after a redaction is precisely what must not
+  happen.
   Restoring such a handle returns `MEGAPDF_ERR_REDACT` and says why, rather than quietly
   succeeding as a no-op and letting an app believe the undo worked.
 - The recovery journal (#145) is truncated and rewritten before the save completes, and a

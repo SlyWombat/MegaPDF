@@ -25,17 +25,6 @@ final class RedactionUITests: XCTestCase {
                                "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
-    /// Polls rather than reading once: the value follows a state change through a
-    /// SwiftUI update, which is not synchronous with the tap.
-    private func waitForValue(_ element: XCUIElement, _ expected: String, timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if element.value as? String == expected { return true }
-            Thread.sleep(forTimeInterval: 0.2)
-        }
-        return false
-    }
-
     /// A confirmation dialog's buttons are not always in `app.buttons` on every idiom —
     /// on the phone it is an action sheet — so they are looked for anywhere in the app.
     private func button(_ label: String) -> XCUIElement {
@@ -64,23 +53,72 @@ final class RedactionUITests: XCTestCase {
                       "the question does not say what it does")
     }
 
-    /// The tool says what it is, what it does, and whether it is armed.
+    /// The tool says what it is and whether it is armed — from the ⋯ menu, which is where
+    /// it lives now (#328) — and it is armed the way a person arms it, through the menu,
+    /// rather than posed by the launch state: the row's own state is what is under test.
     ///
-    /// The last of those was missing, and this is the check that keeps it: a mode with
-    /// no announced state is a mode a screen-reader user gets stuck in. `.isSelected`
-    /// is the right trait and does not survive the bottom-bar bridge — measured both on
-    /// the button and inside its label — so the state rides on the accessibility value,
-    /// which does arrive. If the trait ever starts working, this still passes.
-    func testTheRedactToolSaysWhatItIsAndWhetherItIsArmed() {
+    /// Two checks in one, because #328 moves the tool and must not lose the state #173
+    /// added: it is not on the bottom bar any more, and it is still legible.
+    ///
+    /// The armed state used to ride on the bottom-bar button's accessibility value,
+    /// which was measured to arrive there while `.isSelected` was dropped. A menu row
+    /// is a different bridge — the state is the row's own (a Toggle's, in the platform's
+    /// menu vocabulary) — so the row now says it twice, and this accepts either: the
+    /// promise is that a screen-reader user is told, not which API carries it. A row
+    /// that said nothing at all fails, in both directions: off is a state too.
+    ///
+    /// Not measured on a device yet: this file is in the MegaPDFDemo scheme, which CI
+    /// does not build. The first Mac run of it is what proves the menu bridge.
+    func testTheRedactToolIsInTheMenuAndSaysWhetherItIsArmed() {
         app.launch()
-        let redact = app.buttons["viewerRedact"]
-        XCTAssertTrue(redact.waitForExistence(timeout: 20), "no Redact tool")
-        XCTAssertEqual(redact.label, "Redact")
-        // -screenshot redact leaves the tool armed.
-        XCTAssertEqual(redact.value as? String, "On",
-                       "the armed Redact tool does not tell a screen reader it is armed")
-        redact.tap()
-        XCTAssertTrue(waitForValue(redact, "Off", timeout: 5),
+
+        // The move itself: a bottom bar with Redact on it again is #328 coming back.
+        XCTAssertFalse(app.buttons["viewerRedact"].exists,
+                       "Redact is on the bottom bar again; it belongs in the ⋯ menu (#328)")
+
+        let page = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
+        XCTAssertTrue(page.waitForExistence(timeout: 30), "the demo document did not open")
+
+        XCTAssertTrue(waitForArmed(false),
+                      "an unarmed Redact row says nothing about its state")
+        openMore().tap()                       // the row: arm it
+        XCTAssertTrue(waitForArmed(true),
+                      "arming Redact does not tell a screen reader it is armed")
+        openMore().tap()                       // the row again: disarm
+        XCTAssertTrue(waitForArmed(false),
                       "disarming Redact does not reach a screen reader either")
+    }
+
+    // MARK: - the ⋯ menu
+
+    /// Opens the More menu and returns its Redact row.
+    ///
+    /// Found by its name rather than by identifier: a menu row's title is what the menu
+    /// is built from, so it is the one thing the bridge always carries. `viewerRedact`
+    /// is set on the row as well, for anything that can use it.
+    private func openMore() -> XCUIElement {
+        let more = app.buttons["viewerMore"]
+        XCTAssertTrue(more.waitForExistence(timeout: 20), "no More menu")
+        more.tap()
+        let redact = app.buttons["Redact"]
+        XCTAssertTrue(redact.waitForExistence(timeout: 10), "the ⋯ menu has no Redact row")
+        return redact
+    }
+
+    /// Waits for the row to report its state, reopening the menu between reads: the row
+    /// exists only while the menu is open, and the armed state arrives with a SwiftUI
+    /// update after the tap or after the launch arms the tool.
+    private func waitForArmed(_ want: Bool, timeout: TimeInterval = 20) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let row = openMore()
+            if (row.isSelected || row.value as? String == "On") == want { return true }
+            // Anywhere closes the menu. On the page a plain tap marks nothing: a mark
+            // is a drag, and a tap that short makes none.
+            app.tap()
+            Thread.sleep(forTimeInterval: 0.4)
+        }
+        return false
     }
 }

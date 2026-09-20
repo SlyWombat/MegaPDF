@@ -102,32 +102,63 @@ extension PdfEngine {
     }
 
     /// Marks the text a drag selected: one mark per line it spans, each grown to the glyphs
-    /// it touches, so a mark always covers whole glyphs. Returns how many were made; 0 means
-    /// the selection covers no text, and the caller then marks the rectangle itself.
+    /// it touches, so a mark always covers whole glyphs. Returns the ids of the marks it
+    /// made; an empty list means the selection covered no text, and the caller then marks
+    /// the rectangle itself.
     ///
     /// Not count-then-fill, unlike everything else here: this call MAKES the marks, so
-    /// asking it for a size first would make them twice.
-    @discardableResult
-    func markTextForRedaction(_ document: PdfDocument, pageIndex: Int, rect: PdfRect) throws -> Int {
+    /// asking it for a size first would make them twice. One drag is one list, and so one
+    /// undo step (#329) — which is why the ids come back rather than a count: Undo has to
+    /// be able to name what the gesture made.
+    ///
+    /// The buffer is the desktop's, for the same reason: a drag down a page makes one mark
+    /// per line, and past the buffer's length the ids of the last marks made are read back
+    /// off the page rather than the whole list being re-derived.
+    func markTextForRedaction(_ document: PdfDocument, pageIndex: Int, rect: PdfRect) throws -> [Int] {
         try withCorePage(document, index: pageIndex) { page in
             var selection = megapdf_rect(left: rect.left, bottom: rect.bottom,
                                          right: rect.right, top: rect.top)
-            return Int(megapdf_redaction_mark_text(page, &selection, nil, 0))
+            let capacity = 64
+            var ids = [Int32](repeating: 0, count: capacity)
+            let made = Int(megapdf_redaction_mark_text(page, &selection, &ids, capacity))
+            if made == 0 { return [] }
+            if made <= capacity { return ids.prefix(made).map { Int($0) } }
+            // More lines than the buffer holds: the page carries every mark there is, and
+            // the ones this drag made are the last ones on it.
+            return redactionMarks(on: page).map { $0.markId }.suffix(made).map { $0 }
         }
     }
 
     /// The marks on a page, in the order they were made.
     func redactionMarks(_ document: PdfDocument, pageIndex: Int) throws -> [PdfRedactionMark] {
+        try withCorePage(document, index: pageIndex) { redactionMarks(on: $0) }
+    }
+
+    /// The marks on a page handle already loaded, so a call that is mid-page can read them
+    /// back without loading the page a second time.
+    private func redactionMarks(on page: OpaquePointer) -> [PdfRedactionMark] {
+        let count = megapdf_redaction_marks(page, nil, 0)
+        guard count > 0 else { return [] }
+        var buffer = [megapdf_redaction_area](repeating: megapdf_redaction_area(), count: count)
+        let filled = megapdf_redaction_marks(page, &buffer, count)
+        return buffer.prefix(filled).map {
+            PdfRedactionMark(markId: Int($0.mark_id),
+                             rect: PdfRect(left: $0.bounds.left, bottom: $0.bounds.bottom,
+                                           right: $0.bounds.right, top: $0.bounds.top))
+        }
+    }
+
+    /// Moves or resizes a mark. The core moves an id in place, so undo and redo keep the
+    /// same id — unlike a stamp, which has to be removed and re-placed (#329).
+    ///
+    /// False means the page carries no such mark; nothing then changed.
+    @discardableResult
+    func moveRedactionMark(_ document: PdfDocument, pageIndex: Int, markId: Int,
+                           rect: PdfRect) throws -> Bool {
         try withCorePage(document, index: pageIndex) { page in
-            let count = megapdf_redaction_marks(page, nil, 0)
-            guard count > 0 else { return [] }
-            var buffer = [megapdf_redaction_area](repeating: megapdf_redaction_area(), count: count)
-            let filled = megapdf_redaction_marks(page, &buffer, count)
-            return buffer.prefix(filled).map {
-                PdfRedactionMark(markId: Int($0.mark_id),
-                                 rect: PdfRect(left: $0.bounds.left, bottom: $0.bounds.bottom,
-                                               right: $0.bounds.right, top: $0.bounds.top))
-            }
+            var area = megapdf_rect(left: rect.left, bottom: rect.bottom,
+                                    right: rect.right, top: rect.top)
+            return megapdf_redaction_move_mark(page, Int32(markId), &area) == MEGAPDF_OK
         }
     }
 
