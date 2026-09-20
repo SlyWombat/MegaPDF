@@ -134,7 +134,8 @@ final class RedactionTests: XCTestCase {
 
     /// The summary and the refusal are looked up by their `%@` literals, and in French they
     /// have to find French. Written with `{0}` in the catalogue they matched nothing and read
-    /// in English (#282). Read out of the built app's own .lproj folders.    func testTheSummaryAndTheRefusalAreTranslated() throws {
+    /// in English (#282). Read out of the built app's own .lproj folders.
+    func testTheSummaryAndTheRefusalAreTranslated() throws {
         let app = Bundle(for: ViewerModel.self)
         let keys = ["1 area redacted: %@", "%@ areas redacted: %@", "%@ characters", "%@ images",
                     "%@ form fields", "%@ annotations",
