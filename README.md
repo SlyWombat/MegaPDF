@@ -3,7 +3,7 @@
 </p>
 <p align="center"><em>Open. Fix. Save. Done.</em></p>
 
-A free, open-source, lightweight PDF editor for Windows 11 — built for people who find Acrobat too bloated and complex.
+A free, open-source, lightweight PDF editor for all platforms — built for people who find Acrobat too bloated and complex.
 
 MegaPDF does four things exceptionally well and deliberately nothing else:
 
