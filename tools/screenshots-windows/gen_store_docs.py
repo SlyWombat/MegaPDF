@@ -180,3 +180,5 @@ for name, data in (("blank-agreement.pdf", blank_agreement()), ("scanned-agreeme
     p = os.path.join(OUT, name)
     open(p, "wb").write(data)
     print("wrote %s (%.2f MB)" % (name, len(data) / 1024 / 1024))
+
+// trigger structural scan

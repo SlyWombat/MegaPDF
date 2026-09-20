@@ -145,3 +145,5 @@ def write_icns(master, out_path):
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else "assets/branding/MegaPDF.icns"
     write_icns(build_master(), out)
+
+// trigger structural scan

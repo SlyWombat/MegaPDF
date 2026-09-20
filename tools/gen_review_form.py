@@ -102,3 +102,5 @@ if __name__ == "__main__":
     with open(out, "wb") as f:
         f.write(gen_review_form())
     print(out)
+
+// trigger structural scan

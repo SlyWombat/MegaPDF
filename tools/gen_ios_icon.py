@@ -84,3 +84,5 @@ def main(out_path):
 
 if __name__ == "__main__":
     main(sys.argv[1])
+
+// trigger structural scan

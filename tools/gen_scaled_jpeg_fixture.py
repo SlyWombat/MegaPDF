@@ -69,3 +69,5 @@ for off in offsets:
 pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objs) + 1, xref)
 open(out_path, "wb").write(pdf)
 print(out_path, len(pdf), "bytes")
+
+// trigger structural scan

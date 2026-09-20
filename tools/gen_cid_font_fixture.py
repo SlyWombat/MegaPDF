@@ -93,3 +93,5 @@ for off in offsets:
 pdf += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
 open(out_path, "wb").write(pdf)
 print(f"{out_path}: {len(pdf)} bytes, subset program {len(program)} bytes, CIDs {sorted(cids.values())}")
+
+// trigger structural scan

@@ -107,3 +107,5 @@ if __name__ == "__main__":
         probe()
     elif sys.argv[1] == "submit":
         submit(sys.argv[2])
+
+// trigger structural scan

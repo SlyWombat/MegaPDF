@@ -61,3 +61,5 @@ top = next((yy for yy in range(70, h) if white(left + 8, yy)), None)
 if top is None:
     sys.exit(f"no page top found in {shot} up the left margin at x={left + 8}")
 print(left, top, (right - left) / 612.0)
+
+// trigger structural scan
