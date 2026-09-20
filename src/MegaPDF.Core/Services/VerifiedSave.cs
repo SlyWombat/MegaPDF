@@ -28,8 +28,9 @@ namespace MegaPDF.Core.Services;
 /// the person was actually saving to. The destination's own folder is a directory we
 /// are about to write the document into anyway, is on the same filesystem as the
 /// destination by definition — so <see cref="AtomicFileWriter"/>'s swap stays a
-/// rename, and stays atomic — and is where that writer already puts its own temp
-/// file. The system temp folder remains the fallback for a destination folder that
+/// rename, and stays atomic — and since #334 the staged copy *is* the file that is
+/// renamed into place, so a save to a path holds one copy of the document on disk
+/// rather than two. The system temp folder remains the fallback for a destination folder that
 /// cannot be written to, and remains the only choice for
 /// <see cref="ToStream(IPdfEngine, IPdfDocument, Stream, Action{SaveStage}?)"/> and
 /// <see cref="ToStagedFile"/>, which have no destination path: those are the macOS
@@ -112,7 +113,7 @@ public static class VerifiedSave
     public static void ToPath(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.Save, OpenLike(engine, document),
-            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage, path);
+            staged => Put(path, staged), onStage, path);
     }
 
     /// <summary>
@@ -134,7 +135,7 @@ public static class VerifiedSave
         string userPassword, string? ownerPassword, PdfPermissions permissions, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, target => document.SaveWithSecurity(target, userPassword, ownerPassword, permissions),
-            OpenWith(engine, userPassword), staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage, path);
+            OpenWith(engine, userPassword), staged => Put(path, staged), onStage, path);
     }
 
     /// <inheritdoc cref="ToPathWithSecurity"/>
@@ -152,7 +153,7 @@ public static class VerifiedSave
     public static void ToPathWithoutSecurity(IPdfEngine engine, IPdfDocument document, string path, Action<SaveStage>? onStage = null)
     {
         Stage(engine, document, document.SaveWithoutSecurity, OpenWith(engine, null),
-            staged => AtomicFileWriter.Write(path, CopyFrom(staged)), onStage, path);
+            staged => Put(path, staged), onStage, path);
     }
 
     /// <inheritdoc cref="ToPathWithoutSecurity"/>
@@ -198,6 +199,27 @@ public static class VerifiedSave
         using var staged = new FileStream(stagedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         staged.CopyTo(target);
     };
+
+    /// <summary>
+    /// Puts the verified staged copy at <paramref name="destinationPath"/> (#334).
+    ///
+    /// The staged copy is beside the destination in the ordinary case (#193), and then it *is*
+    /// the file to swap: renaming it into place holds one copy of the document on disk for the
+    /// whole save, where copying it into <see cref="AtomicFileWriter"/>'s own temp file held two.
+    ///
+    /// It is not beside the destination when that folder would not take it — read-only, gone, not
+    /// ours — and the copy went to the system temp folder instead. Then a swap from there would
+    /// cross file systems and stop being a rename, so the copy stands, through
+    /// <see cref="AtomicFileWriter.Write"/>, which is where it can still stage beside the
+    /// destination: under the snap's `home` plug (#158) that is the visible-name retry.
+    /// </summary>
+    private static void Put(string destinationPath, string stagedPath)
+    {
+        if (AtomicFileWriter.SameDirectory(destinationPath, stagedPath))
+            AtomicFileWriter.SwapInPlace(destinationPath, stagedPath);
+        else
+            AtomicFileWriter.Write(destinationPath, CopyFrom(stagedPath));
+    }
 
     // Opened like the document, because a protected document's copy is still protected
     // and needs the same password to read back (#132).

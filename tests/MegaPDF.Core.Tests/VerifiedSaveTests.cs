@@ -273,9 +273,48 @@ public class VerifiedSaveTests : IDisposable
         Assert.False(Directory.Exists(gone));
     }
 
+    /// <summary>
+    /// #334: the staged copy is beside the destination and it is the file that is renamed into
+    /// place, so a save to a path holds one copy of the document on disk rather than two. The
+    /// staging file is the only temp file, it is the one that becomes the destination, and
+    /// <see cref="AtomicFileWriter"/>'s own temp file is never made.
+    /// </summary>
     [Fact]
-    public void ToPath_WhenTheDestinationsFolderRefusesNewFiles_FallsBackToTheTempFolder()
+    public void ToPath_SwapsTheStagedCopy_MakingNoSecondTempFile()
     {
+        var into = Directory.CreateDirectory(Path.Combine(_dir, "into")).FullName;
+        var destination = Path.Combine(into, "out.pdf");
+        var source = WriteSample();
+        using var document = _engine.Open(source);
+
+        string[] beside = [];
+        var made = new List<string>();
+        AtomicFileWriter.TempFileCreatedForTests = made.Add;
+        try
+        {
+            VerifiedSave.ToPath(_engine, document, destination, stage =>
+            {
+                if (stage == VerifiedSave.SaveStage.Verifying)
+                    beside = Directory.GetFiles(into);
+            });
+        }
+        finally
+        {
+            AtomicFileWriter.TempFileCreatedForTests = null;
+        }
+
+        var staged = Assert.Single(beside);
+        Assert.Empty(made);
+        Assert.Contains("megapdf-verify", Path.GetFileName(staged));
+        // Renamed into place, not copied and left: nothing of the staged file is still there.
+        Assert.False(File.Exists(staged));
+        Assert.True(File.Exists(destination));
+        using var reopened = _engine.Open(destination);
+        Assert.Equal(document.PageCount, reopened.PageCount);
+    }
+
+    [Fact]
+    public void ToPath_WhenTheDestinationsFolderRefusesNewFiles_FallsBackToTheTempFolder()    {
         // The Linux shape of the same thing: a folder that is read-only to us. Windows denies
         // through an ACL rather than a mode, and a user who overrides the mode (root in a
         // container) is not denied at all, so this proves the folder really does refuse
