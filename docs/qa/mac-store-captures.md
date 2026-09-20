@@ -111,15 +111,15 @@ run; the rest are read by eye.
 (#338).** Before them, 2.1 wrote no image for this state in any language — the
 pose asked for a mark and read it before the placement had run, so the run failed
 the slot on `::error::`. (2.0 did write one: `docs/qa/linux-fr/redact.png`, the
-armed tool over a marked line and no chrome, which is what 2.0's pose posed.) And
-the ✕ that
-takes a mark off was drawn at the *page's* top-right corner, half of it cut off
-above the page, instead of at the mark's. Both are fixed on the desktops branch
-and were verified by shooting all six slots with the Avalonia build on a Windows
-machine, in en and fr-CA; the images are the three things to read in slot 5 — the
-translucent band across the line, the four corner handles, and the ✕ on the
-mark's top-right corner, with the status line under the page reading "Drag to
-move, corners to resize, Delete to remove" in the set's language.
+armed tool over a marked line and no chrome, which is what 2.0's pose posed.)
+And the ✕ that takes a mark off was drawn at the *page's* top-right corner, half
+of it cut off above the page, instead of at the mark's. Both are fixed on the
+desktops branch and were verified by shooting all six slots with the Avalonia
+build on a Windows machine, in en and fr-CA; the images are the three things to
+read in slot 5 — the translucent band across the line, the four corner handles,
+and the ✕ on the mark's top-right corner, with the status line under the page
+reading "Drag to move, corners to resize, Delete to remove" in the set's
+language.
 
 ### iOS — `listing/` and `review/`
 
