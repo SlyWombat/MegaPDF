@@ -16,11 +16,24 @@ namespace MegaPDF.Core.Tests;
 /// </summary>
 public class RedactionMarkTests : IDisposable
 {
+    private readonly string _dir = Directory.CreateTempSubdirectory("megapdf-redactmark-tests-").FullName;
     private readonly PdfiumEngine _engine = new();
 
-    public void Dispose() => _engine.Dispose();
+    public void Dispose()
+    {
+        _engine.Dispose();
+        Directory.Delete(_dir, recursive: true);
+    }
 
-    private IPdfDocument Open() => _engine.Open(SamplePdf.Build());
+    /// <summary>The engine opens files, not bytes, so a fixture is written out first.</summary>
+    private string WritePdf(byte[] bytes)
+    {
+        var path = Path.Combine(_dir, $"sample-{Guid.NewGuid():N}.pdf");
+        File.WriteAllBytes(path, bytes);
+        return path;
+    }
+
+    private IPdfDocument Open() => _engine.Open(WritePdf(SamplePdf.Build()));
 
     // "Hello MegaPDF" is drawn at 36pt from PDF 72,700 — one line of text with room
     // below it, and an empty area to the right of it for the no-text case.
@@ -255,7 +268,7 @@ public class RedactionMarkTests : IDisposable
     [Fact]
     public void MarksAreCountedAcrossTheDocument_NotPerPage()
     {
-        using var doc = _engine.Open(SamplePdf.BuildTwoPages());
+        using var doc = _engine.Open(WritePdf(SamplePdf.BuildTwoPages()));
         var pageOne = MarkForRedactionOperation.Place(doc, 0, OverTheLine(doc))!;
 
         Assert.Equal(pageOne.MarkIds.Count, doc.RedactionMarkCount);
