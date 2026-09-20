@@ -105,17 +105,13 @@ Open PDFs from Files, Google Drive, or any storage app through MegaPDF's file pi
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Release notes** [500] (495) — 2.0, from `docs/release-notes/2.0/google-play.md`
+**Release notes** [500] (388) — 2.1, from `docs/release-notes/2.1/google-play.md`
 ```
-MegaPDF speaks French, and does a great deal more.
+Redaction marks you can take back: select one, move it, reshape it, or remove it, and clear every mark at once. Undo puts them back, a drag is one step, and a mark no longer outlives the document it was made on.
 
-• Correct the document's own text — tap a line and retype it
-• Redact — text or pictures, gone for good
-• Type a name to make a signature, and rename the ones you keep
-• Open password-protected PDFs, and set, change or remove a password
-• One row of tools along the bottom, file commands under More
-• The app says what it is doing: opening, saving, searching, applying
-• Huge PDFs open straight away, and pages full of pictures draw far faster
+Redact is now a named row in the menu, with an on/off state a screen reader reads out. A pinch zooms the page.
+
+The signature library holds twenty and says so when it is full.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -166,17 +162,13 @@ Ouvrez des PDF depuis Fichiers, Google Drive ou toute application de stockage, a
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (493) — 2.0, from `docs/release-notes/2.0/google-play.md`
+**Release notes** [500] (487) — 2.1, from `docs/release-notes/2.1/google-play.md`
 ```
-MegaPDF parle français, et fait bien plus encore.
+Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne fait qu'une étape, et une marque ne survit plus au document d'origine.
 
-• Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviardez texte et images : retirés pour de bon
-• Tapez un nom pour créer une signature, et renommez celles que vous gardez
-• Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
-• Une rangée d'outils en bas, les commandes de fichier sous Plus
-• L'application dit ce qu'elle fait : ouverture, enregistrement
-• Les PDF très volumineux s'ouvrent aussitôt
+Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
+
+La bibliothèque de signatures en garde vingt et le dit quand elle est pleine.
 ```
 
 ### Français (France) — `fr-FR`
@@ -227,17 +219,13 @@ Ouvrez des PDF depuis Fichiers, Google Drive ou toute application de stockage, a
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (493) — 2.0, from `docs/release-notes/2.0/google-play.md`
+**Release notes** [500] (487) — 2.1, from `docs/release-notes/2.1/google-play.md`
 ```
-MegaPDF parle français, et fait bien plus encore.
+Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne fait qu'une étape, et une marque ne survit plus au document d'origine.
 
-• Corrigez le texte du document : touchez une ligne et retapez-la
-• Caviardez texte et images : retirés pour de bon
-• Tapez un nom pour créer une signature, et renommez celles que vous gardez
-• Ouvrez les PDF protégés, et définissez, changez ou retirez un mot de passe
-• Une rangée d'outils en bas, les commandes de fichier sous Plus
-• L'application dit ce qu'elle fait : ouverture, enregistrement
-• Les PDF très volumineux s'ouvrent aussitôt
+Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
+
+La bibliothèque de signatures en garde vingt et le dit quand elle est pleine.
 ```
 
 <!-- /copy-by-language -->

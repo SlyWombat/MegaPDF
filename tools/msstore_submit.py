@@ -43,7 +43,7 @@ APP_ID = "9PF4TRRH4M76"          # Store ID of "Mega PDF"
 TITLE = "Mega PDF"               # must match the name reserved in Partner Center
 API = "https://manage.devcenter.microsoft.com/v1.0/my"
 RESOURCE = "https://manage.devcenter.microsoft.com"
-VERSION = "2.0.0.0"
+VERSION = "2.1.0.0"
 REPO = Path(__file__).resolve().parent.parent
 
 # Partner Center listing language -> the screenshot set and the release-notes block

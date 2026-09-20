@@ -333,7 +333,7 @@ Whiteout covers.**
    something to clear. Removal and clearing are edits, so Undo puts the marks back where
    they were. Marks belong to the document that made them: closing clears them, and the
    next document opens with none (ADR-005 decision 1).
-   *Android and iOS as of 2.1, Windows and Avalonia as of 2.0 — ADR-005 decision 4.*
+   *All four platforms as of 2.1 — ADR-005 decision 4.*
 
 #### What "removed" means
 

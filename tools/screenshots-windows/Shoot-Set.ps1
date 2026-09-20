@@ -14,7 +14,7 @@
 param(
     [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US',
     [string]$Dir = 'en',
-    [string]$Version = '2.0.0.0'
+    [string]$Version = '2.1.0.0'
 )
 $ErrorActionPreference = 'Continue'
 $H = $PSScriptRoot

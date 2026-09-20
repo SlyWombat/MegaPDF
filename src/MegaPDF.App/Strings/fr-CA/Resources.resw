@@ -841,7 +841,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   </data>
   <data name="RedactMarksCleared" xml:space="preserve">
     <value>Toutes les marques sont effacées. Annuler les remet en place.</value>
-    <comment>Announced after ⋮ → Clear all marks (#329). #329 — new French, for francophone review</comment>
+    <comment>Announced after … (More options) → Clear all marks (#329). #329 — new French, for francophone review</comment>
   </data>
   <data name="RedactMarkSelectedKeyHint" xml:space="preserve">
     <value>Marque sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la relâche.</value>
@@ -849,7 +849,7 @@ Enregistrée sous {2}, prête pour le courriel.</value>
   </data>
   <data name="ToolbarClearMarks" xml:space="preserve">
     <value>Effacer toutes les marques</value>
-    <comment>Toolbar overflow (#329): label of the ⋮ item. #329 — new French, for francophone review</comment>
+    <comment>Toolbar overflow (#329): label of the … (More options) item. #329 — new French, for francophone review</comment>
   </data>
   <data name="ToolbarClearMarksTip" xml:space="preserve">
     <value>Retirer toutes les marques de caviardage du document</value>

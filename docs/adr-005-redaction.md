@@ -149,9 +149,10 @@ recorded with the history entry — a small amount of duplicate state in exchang
 that cannot disagree with the screen. The desktops also had to give up a shortcut they had
 taken: a mark's chrome is now the selection, the one the ✕ and Delete read, rather than a
 second selection of its own — two ways to be selected on one page is how the chrome and
-the mark come to disagree. Android and iOS shipped this in 2.1; Windows and Avalonia have
-it as of 2.0, riding the mark chrome those apps already had. §3.8 F7 behaviour 7 carries
-the same note for readers who never open this file.
+the mark come to disagree. All four platforms ship it in 2.1: the phones by giving the mark
+the chrome a signature already had, the desktops by giving it *the* selection rather than a
+second one, so the ✕ and Delete that move a signature move a mark. §3.8 F7 behaviour 7
+carries the same note for readers who never open this file.
 
 ## Consequences
 

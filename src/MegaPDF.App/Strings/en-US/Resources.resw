@@ -874,7 +874,7 @@ Saved as {2} — ready to email.</value>
   </data>
   <data name="RedactMarksCleared" xml:space="preserve">
     <value>All marks cleared. Undo puts them back.</value>
-    <comment>Announced after ⋮ → Clear all marks (#329)</comment>
+    <comment>Announced after … (More options) → Clear all marks (#329)</comment>
   </data>
   <data name="RedactMarkSelectedKeyHint" xml:space="preserve">
     <value>Mark selected. Arrow keys move it, Delete removes it, Esc lets it go.</value>
