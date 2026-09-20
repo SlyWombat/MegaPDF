@@ -122,7 +122,7 @@ SIG="$ROOT/tools/assets/megawoman-sig.jpg"
 #   text    a typed name on the blank line, nothing selected
 #   search  the find bar with a term and a hit count
 #   sign    the signature library flyout
-#   redact  the tool armed with a line marked (2.0's headline feature)
+#   redact  a line marked and selected, with the chrome that takes it off (2.1, #329)
 #   home    the empty window with a recents list
 shoot() {
     local slot="$1" state="$2" doc="$3" sig="${4:-}"

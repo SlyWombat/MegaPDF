@@ -376,9 +376,12 @@ omission.** 2.1's work on Windows is the redaction *mark's* lifecycle (#329, #33
 a mark can be selected, moved, reshaped and removed. Of the six images, the only one
 that has anything to do with a mark is `06-redact.png`, and that photographs the
 *result* of the save — the black bar and the summary bar — which 2.1 does not
-change. The marked state, with its new selection chrome, is `s6a-redact-marked` in
-the set's `work\` folder, and `work\` is not uploaded. Nothing else 2.1 does on
-Windows reaches the screen in these six states.
+change. The marked state is `s6a-redact-marked` in the set's `work\` folder — shot
+on 2026-09-19, and `work\` is not uploaded. It is a mark *placed*, not selected:
+on Windows a finished drag adds the mark and returns
+(`MainWindow.xaml.cs:OnPagePointerReleased`), and the selection chrome is a
+separate click. Nothing else 2.1 does on Windows reaches the screen in these six
+states.
 
 Shot 6's flow still holds under the new code, which was worth checking before
 keeping the image: the redaction drag is released through the same handler that
@@ -396,8 +399,10 @@ start unless the installed package's version matches its `-Version`, which is
 
 If a seventh image is wanted for 2.1, the one to add is a **selected redaction
 mark** — the affordance 2.1's copy leads with, the way `06-redact.png` was added for
-2.0's. It shoots from `Shot-Redact.ps1` in `-Save`'s absence, which stops at
-`s6a-redact-marked`; the pose wants a 07- step of its own and the same capture run.
+2.0's. `Shot-Redact.ps1` does not reach that state as it stands: it stops at
+`s6a-redact-marked`, and the chrome only appears when the mark is clicked, so the
+pose needs a click on the freshly drawn mark after the drag — either before the
+`-Save` branch, to replace s6a, or as a 07- step of the same capture run.
 
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the

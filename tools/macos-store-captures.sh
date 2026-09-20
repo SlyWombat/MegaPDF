@@ -85,7 +85,7 @@ SIG="$ROOT/tools/assets/megawoman-sig.jpg"
 #   text    a typed name on the blank line, nothing selected
 #   search  the find bar with a term and a hit count
 #   sign    the signature library flyout
-#   redact  the tool armed with an area marked (2.0's headline feature)
+#   redact  a line marked and selected, with the chrome that takes it off (2.1, #329)
 #   home    the empty window with a recents list
 shoot() {
     # Two statements, not one `local a= b=$a`: bash 3.2 declares every name in a

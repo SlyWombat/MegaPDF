@@ -184,10 +184,11 @@ public partial class App : Application
                 }, TimeSpan.FromSeconds(1));
                 return true;
 
-            // Redact (#173): the tool armed and a line of the demo document marked, which is
-            // the state the feature has to be legible in — a translucent box you can still
-            // read through, over text you are about to remove. The mark is placed through
-            // the same call a drag makes, so the capture is of the real thing.
+            // Redact (#173): a line of the demo document marked and selected, which is the
+            // state the feature has to be legible in — a translucent box you can still read
+            // through, over text you are about to remove, with the chrome that takes it off
+            // (#329). The mark is placed through the same call a drag makes, so the capture
+            // is of the real thing.
             case "redact":
                 if (!viewModel.IsDocumentOpen)
                 {
@@ -222,8 +223,19 @@ public partial class App : Application
                     Console.Error.WriteLine("::error::--screenshot-state redact: nothing was marked.");
                     return false;
                 }
-                // Armed again, so the shot shows the tool on as well as the mark placed.
-                viewModel.ToggleRedactCommand.Execute(null);
+                // Selected, not armed (#329), which is what 2.1's copy is about: a mark you can
+                // take back, so the shot has to carry the chrome that takes it off — the box
+                // and its ✕. 2.0's pose armed the tool again instead, and marking already
+                // leaves the tool (PlaceRedactionMarkAsync sets PageMode.Select), so there is
+                // nothing to disarm. The phones' pose moved to the selected mark for 2.1, and
+                // a set where only one platform shows the affordance is worse than either.
+                if (!viewModel.SelectRedactionMarkAt(0, markedLine.Bounds.Center))
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state redact: the mark was placed but did not select, "
+                        + "so the shot would show a mark with no chrome.");
+                    return false;
+                }
                 return true;
 
             // The busy strip under the toolbar (#145), as it shows 0.5 s into a slow save's

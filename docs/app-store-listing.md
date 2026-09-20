@@ -504,6 +504,14 @@ things the 2.0 copy leads with — correcting the document's own text, and
 redaction — come straight after it (#146 §3, 2026-09-19). The App Store takes up
 to ten per device.
 
+**The set is re-shot for 2.1, and `redact` is the image that changes.** 2.0's
+pose armed the tool and marked a line; since #328 the tool is a row in the ⋮
+menu, so an armed tool draws nothing on the page to photograph. 2.1's pose shows
+the mark **selected** instead — its chrome, and the ✕ that takes it off (#329) —
+which is what the 2.1 notes say Redact now does. The other seven poses are
+unchanged by 2.1, and the run still shoots all eight so that the set is one
+build, one language and one status bar rather than eight images from two dates.
+
 Each shot only exists once its screenshot state ships. `search` is not in the
 1.0 builds, and `text` is newer still (#43) — upload each with the update that
 actually carries the feature, or the listing promises something the binary does

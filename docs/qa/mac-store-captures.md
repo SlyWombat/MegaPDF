@@ -100,7 +100,7 @@ run; the rest are read by eye.
 | 2 | `light-02-text.png` | A typed name on the blank line, nothing selected. |
 | 3 | `light-03-search.png` | The find bar with a term typed and "1 of 3". |
 | 4 | `light-04-sign.png` | The signature library flyout, one card. |
-| 5 | `light-05-redact.png` | Redact armed with an area marked — 2.0's headline feature. |
+| 5 | `light-05-redact.png` | A line marked and selected, with the chrome that takes it off — 2.1's headline (#329). Changed for 2.1: 2.0's pose armed the tool instead. |
 | 6 | `light-06-home.png` | The empty window and its recents list. |
 
 ### iOS — `listing/` and `review/`
