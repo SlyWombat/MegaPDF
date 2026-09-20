@@ -98,35 +98,29 @@ MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you
 pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign
 ```
 
-**What's new** [4000] (1760) — 2.0, from `docs/release-notes/2.0/app-store.md`
+**What's new** [4000] (1305) — 2.1, from `docs/release-notes/2.1/app-store.md`
 ```
-Correct the document's own text
+Redaction marks you can take back
 
-Tap a line in the document and retype it. Wrong date, misspelled name, the wrong amount — you no longer have to cover it up and write beside it. MegaPDF keeps the line's own font where it can and tells you when it had to use a similar one, and Undo puts the original back exactly. If a change would disturb the rest of the page, it says so instead of quietly moving things.
+Whether something has to come out for good is a decision, and people change their minds. A mark can now be selected, moved, reshaped, and taken off again — Remove mark, the ✕, or Clear all marks. Undo puts it back, Redo takes it away, and one drag is one step however many areas it marked.
 
-Redact, and it really is gone
+A mark no longer outlives the document it was made on. Close a file that still had marks on it and the next one opens clean. Until now those abandoned marks stayed armed, and the next save would have applied them without being asked.
 
-Mark what has to come out — a name, an address, a picture — and MegaPDF takes it out of the file rather than covering it over. What was underneath is gone: no other app can copy it or search for it.
+Redact, where you can find it
 
-Protected PDFs
+Redact is a named row in the menu now, with an on/off state a screen reader reads out, rather than an unlabelled icon. Marking something that is meant to be gone for good should not be a guess.
 
-Open a PDF that asks for a password. If its owner restricted what may be changed, MegaPDF respects that and tells you, and the owner password unlocks it. You can also set a password on a document, change it, or remove it.
+A pinch zooms
 
-One row of tools
+Pinching the page zooms it, and while you are zoomed the page pans the way you would expect instead of fighting you.
 
-The tools now sit in a single row along the bottom, where a thumb reaches them, and everything done to the file as a whole is under More at the top.
+Signatures
 
-It tells you what it is doing
-
-Opening, saving, checking the saved file, searching, checking a page, applying a change: each says so while it works, and repeat taps are ignored rather than queued. Anything quicker than half a second still says nothing at all.
-
-Very large PDFs
-
-A 2.5 GB, thousand-page file used to be out of reach. It now opens straight away and stays well inside what a phone can hold. Banner-size pages measure at their real size, and pages full of pictures draw several times faster.
+The library holds twenty and says so when it is full, rather than failing quietly. A signature whose image has gone is dropped from the list instead of being left behind as a broken thumbnail.
 
 Smaller things
 
-Lines a document draws twice — the old trick for fake bold — now edit cleanly instead of leaving a ghost. Search reaches the match itself when the page is zoomed in, not just the page it is on.
+A save holds one copy of the document on disk instead of two. A page check can no longer be tangled by a second one, or by the document being closed while it runs.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -199,35 +193,29 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
 ```
 
-**What's new** [4000] (2130) — 2.0, from `docs/release-notes/2.0/app-store.md`
+**What's new** [4000] (1529) — 2.1, from `docs/release-notes/2.1/app-store.md`
 ```
-Corrigez le texte du document
+Des marques de caviardage que vous pouvez reprendre
 
-Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
+Décider qu'une chose doit disparaître pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne fait qu'une seule étape, peu importe le nombre de zones qu'il a marquées.
 
-Caviardez, et c'est parti pour de bon
+Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre propre. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
+Caviarder, là où on le trouve
 
-PDF protégés
+Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être une devinette.
 
-Ouvrez un PDF qui demande un mot de passe. Si son propriétaire a restreint les modifications, MegaPDF le respecte et vous le dit, et le mot de passe du propriétaire le déverrouille. Vous pouvez aussi définir un mot de passe sur un document, le changer ou le retirer.
+Un pincement zoome
 
-Une seule rangée d'outils
+Pincez la page pour l'agrandir, et une fois agrandie, la page se déplace comme on s'y attend au lieu de résister.
 
-Les outils tiennent maintenant sur une seule rangée en bas, là où le pouce les atteint, et tout ce qui touche au fichier dans son ensemble se trouve sous Plus, en haut.
+Signatures
 
-Il vous dit ce qu'il fait
-
-Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente. Ce qui prend moins d'une demi-seconde continue de ne rien dire.
-
-PDF très volumineux
-
-Un fichier de 2,5 Go et mille pages était hors de portée. Il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
+La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là en vignette brisée.
 
 Et aussi
 
-Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le gras — se modifient maintenant proprement, sans laisser de fantôme. La recherche atteint le résultat lui-même quand la page est agrandie, et non seulement la page où il se trouve.
+Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être embrouillée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -300,35 +288,29 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
 ```
 
-**What's new** [4000] (2130) — 2.0, from `docs/release-notes/2.0/app-store.md`
+**What's new** [4000] (1529) — 2.1, from `docs/release-notes/2.1/app-store.md`
 ```
-Corrigez le texte du document
+Des marques de caviardage que vous pouvez reprendre
 
-Touchez une ligne du document et retapez-la. Mauvaise date, nom mal orthographié, mauvais montant : vous n'avez plus à le masquer et à écrire à côté. MegaPDF garde la police de la ligne quand il le peut et vous prévient quand il a dû en utiliser une semblable, et Annuler remet l'original exactement. Si une modification devait perturber le reste de la page, il vous le dit plutôt que de déplacer les choses en silence.
+Décider qu'une chose doit disparaître pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne fait qu'une seule étape, peu importe le nombre de zones qu'il a marquées.
 
-Caviardez, et c'est parti pour de bon
+Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre propre. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
-Marquez ce qui doit disparaître — un nom, une adresse, une image — et MegaPDF le retire du fichier au lieu de le recouvrir. Ce qui était dessous n'y est plus : aucune autre application ne peut le copier ni le retrouver par une recherche.
+Caviarder, là où on le trouve
 
-PDF protégés
+Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être une devinette.
 
-Ouvrez un PDF qui demande un mot de passe. Si son propriétaire a restreint les modifications, MegaPDF le respecte et vous le dit, et le mot de passe du propriétaire le déverrouille. Vous pouvez aussi définir un mot de passe sur un document, le changer ou le retirer.
+Un pincement zoome
 
-Une seule rangée d'outils
+Pincez la page pour l'agrandir, et une fois agrandie, la page se déplace comme on s'y attend au lieu de résister.
 
-Les outils tiennent maintenant sur une seule rangée en bas, là où le pouce les atteint, et tout ce qui touche au fichier dans son ensemble se trouve sous Plus, en haut.
+Signatures
 
-Il vous dit ce qu'il fait
-
-Ouverture, enregistrement, vérification du fichier enregistré, recherche, vérification d'une page, application de la modification : chaque tâche s'annonce pendant qu'elle travaille, et les touchers répétés sont ignorés plutôt que mis en file d'attente. Ce qui prend moins d'une demi-seconde continue de ne rien dire.
-
-PDF très volumineux
-
-Un fichier de 2,5 Go et mille pages était hors de portée. Il s'ouvre maintenant tout de suite et reste bien en deçà de ce qu'un téléphone peut contenir. Les pages de format bannière sont mesurées à leur taille réelle, et les pages pleines d'images s'affichent plusieurs fois plus vite.
+La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là en vignette brisée.
 
 Et aussi
 
-Les lignes qu'un document dessine deux fois — la vieille astuce pour imiter le gras — se modifient maintenant proprement, sans laisser de fantôme. La recherche atteint le résultat lui-même quand la page est agrandie, et non seulement la page où il se trouve.
+Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être embrouillée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order

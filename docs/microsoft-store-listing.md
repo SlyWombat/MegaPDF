@@ -371,6 +371,34 @@ summary bar reads "1 area redacted: 15 characters". The saved copy was read back
 outside the app with qpdf, and the name is gone from every decoded stream while the
 unredacted control still carries it.
 
+**The 2.0 set is still the set for 2.1, and that is a finding rather than an
+omission.** 2.1's work on Windows is the redaction *mark's* lifecycle (#329, #338):
+a mark can be selected, moved, reshaped and removed. Of the six images, the only one
+that has anything to do with a mark is `06-redact.png`, and that photographs the
+*result* of the save — the black bar and the summary bar — which 2.1 does not
+change. The marked state, with its new selection chrome, is `s6a-redact-marked` in
+the set's `work\` folder, and `work\` is not uploaded. Nothing else 2.1 does on
+Windows reaches the screen in these six states.
+
+Shot 6's flow still holds under the new code, which was worth checking before
+keeping the image: the redaction drag is released through the same handler that
+calls `ViewModel.CancelPlacementModes()`, so the tool disarms itself on release and
+the click that clears the focus ring afterwards
+(`MainWindow.xaml.cs:814`, `Shot-Redact.ps1:67`) can no longer mark anything.
+
+Re-shooting would need an interactive Windows desktop with the **2.1.0.0** package
+installed: `Shoot-Set.ps1` photographs the screen with `CopyFromScreen` and drives
+it with the mouse, so neither CI (no compositor — the app writes a zero-byte PNG and
+the step still goes green) nor a headless or locked session (pure black, which the
+script's own brightness check reports) can shoot it. `Shoot-Set.ps1` also refuses to
+start unless the installed package's version matches its `-Version`, which is
+`2.1.0.0` since the 2.1 bump. The 2.0 set was shot on GPD-DAVE.
+
+If a seventh image is wanted for 2.1, the one to add is a **selected redaction
+mark** — the affordance 2.1's copy leads with, the way `06-redact.png` was added for
+2.0's. It shoots from `Shot-Redact.ps1` in `-Save`'s absence, which stops at
+`s6a-redact-marked`; the pose wants a 07- step of its own and the same capture run.
+
 They are 2482×1541 rather than the old 3038×1989: that machine's display tops out
 at 2560×1600, and windows are hard-clamped to the display. Still roughly 1.8× the
 Store's minimum on both axes, and all six share one frame.
