@@ -176,7 +176,8 @@ public sealed class ClearRedactionMarksOperation : IPageEditOperation
     }
 
     public JournalEntry ToJournalEntry(bool inverse) =>
-        new RedactionMarkClearEntry(PageIndex, [.. _marksByPage.SelectMany(p => p.Value.Select(r => (p.Key, r)))]);
+        new RedactionMarkClearEntry(PageIndex,
+            [.. _marksByPage.SelectMany(p => p.Value.Select(r => new MarkRect(p.Key, r.X, r.Y, r.Width, r.Height)))]);
 }
 
 /// <summary>
