@@ -522,13 +522,15 @@ struct ViewerView: View {
                 let scaleX = width / size.width
                 let scaleY = height / size.height
                 ForEach(marks) { mark in
+                    let markWidth = CGFloat(mark.rect.right - mark.rect.left) * scaleX
+                    let markHeight = CGFloat(mark.rect.top - mark.rect.bottom) * scaleY
+                    let markX = CGFloat(mark.rect.left) * scaleX
+                    let markY = CGFloat(Double(size.height) - mark.rect.top) * scaleY
                     Rectangle()
                         .fill(Brand.redactionMark)
                         .overlay(Rectangle().stroke(Brand.redactionMarkOutline, lineWidth: 1))
-                        .frame(width: CGFloat(mark.rect.right - mark.rect.left) * scaleX,
-                               height: CGFloat(mark.rect.top - mark.rect.bottom) * scaleY)
-                        .offset(x: CGFloat(mark.rect.left) * scaleX,
-                                y: CGFloat(Double(size.height) - mark.rect.top) * scaleY)
+                        .frame(width: markWidth, height: markHeight)
+                        .offset(x: markX, y: markY)
                         // No tap gesture here: the page's own tap does the hit test, so a
                         // tap that lands on a mark cannot also fall through to a form field
                         // or a line of text underneath it (#329). The gesture stays on the
@@ -540,7 +542,13 @@ struct ViewerView: View {
                         .accessibilityAction {
                             model.selectRedactionMark(pageIndex: index, markId: mark.markId)
                         }
-                        .accessibilityAction(named: "Remove mark") {
+                        // Text(...) rather than a bare literal: `accessibilityAction(named:)`
+                        // has Text, LocalizedStringKey and StringProtocol overloads, and a
+                        // string literal matches all three. In a chain this long the compiler
+                        // gave up on the whole expression — "unable to type-check this
+                        // expression in reasonable time" — which is what the other call site
+                        // in SignatureViews.swift avoids the same way.
+                        .accessibilityAction(named: Text("Remove mark")) {
                             model.removeRedactionMark(pageIndex: index, markId: mark.markId)
                         }
                         .accessibilityIdentifier("redactionMark-\(mark.markId)")
