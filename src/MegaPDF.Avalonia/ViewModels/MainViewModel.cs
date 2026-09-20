@@ -2009,10 +2009,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>
     /// The same mark, with everything done when this returns — for the capture runs, which read
     /// the result in the next statement (the self-test's route is the synchronous <see cref="Open"/>
-    /// and friends, so this is the pattern it already uses). <see cref="AddRedactionMark"/> starts
-    /// the work and returns (#145), so the redact pose checked for a mark that had not been placed
-    /// yet and refused to shoot: `--screenshot-state redact` has never written an image on the
-    /// Avalonia apps, in any language, since #173 landed two days after #145 did.
+    /// and friends, so this is the pattern it already uses).
+    ///
+    /// <see cref="AddRedactionMark"/> starts the work and returns (#145), and the mark is counted
+    /// only once that work has finished — the count is the core's (#329), refreshed after the
+    /// call. So a caller that reads the mark in the next statement reads none: the redact pose
+    /// checked `HasRedactionMarks`, saw false, and refused to shoot, which is why no
+    /// `--screenshot-state redact` image was written on the Avalonia apps anywhere in 2.1. In
+    /// 2.0 the placement ran inline and the refresh followed it in the same call, so the pose's
+    /// next statement saw the mark; the state's last image is that one
+    /// (`docs/qa/linux-fr/redact.png`, which does carry its mark).
     /// </summary>
     public void AddRedactionMarkNow(int pageIndex, PdfRect bounds) =>
         PlaceRedactionMark(pageIndex, bounds, inline: true);

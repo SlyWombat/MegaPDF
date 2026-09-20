@@ -56,15 +56,19 @@ Every image, every language. The script checks the first two itself and fails th
 run; the rest are read by eye.
 
 1. **The size is exact.** Mac 1440×900; iPhone 6.9" 1320×2868; iPad 13" 2064×2752.
-2. **Six listing slots, all present**, and review shots are not among them.
+2. **Every listing slot is present** — six for the Mac, the eight
+   `docs/app-store-listing.md` maps for iOS — and review shots are not among them.
 3. **The UI language matches the set.** No English in a French shot, no French
    caption on an English one, including the status line and the window title.
 4. **The demo person is right**: Jane Whitfield (en), Hélène Bélanger (fr-CA),
    Céline Lefèvre (fr). Accents whole — nothing drawn across them.
 5. **The toolbar is the current one**: Open / Save / Sign / Add text / Cover /
    Redact / Undo / Redo / zoom / More. If Redact is missing, the set predates 2.0.
-6. **Nothing transient**: no selection chrome, no first-boot banner, no accelerator
-   badge, no stray dialog, no spinner.
+6. **Nothing transient**: nothing *selected* in the wrong place, no first-boot
+   banner, no accelerator badge, no stray dialog, no spinner. Slot 5's chrome is
+   the exception and is the point of that image: the mark, its box, its four
+   corner handles, and the ✕ at the mark's own top-right corner — see the note
+   under the slot table for what changed in 2.1.
 7. **Nothing from this machine**: no container path, no real file name, no library
    entry that is not "Mega W.".
 8. **The zoom reads 100%.**
@@ -103,10 +107,25 @@ run; the rest are read by eye.
 | 5 | `light-05-redact.png` | A line marked and selected, with the chrome that takes it off — 2.1's headline (#329). Changed for 2.1: 2.0's pose armed the tool instead. |
 | 6 | `light-06-home.png` | The empty window and its recents list. |
 
+**Slot 5 changed twice on 2026-09-20, and the set has to be shot after both
+(#338).** Before them, 2.1 wrote no image for this state in any language — the
+pose asked for a mark and read it before the placement had run, so the run failed
+the slot on `::error::`. (2.0 did write one: `docs/qa/linux-fr/redact.png`, the
+armed tool over a marked line and no chrome, which is what 2.0's pose posed.) And
+the ✕ that
+takes a mark off was drawn at the *page's* top-right corner, half of it cut off
+above the page, instead of at the mark's. Both are fixed on the desktops branch
+and were verified by shooting all six slots with the Avalonia build on a Windows
+machine, in en and fr-CA; the images are the three things to read in slot 5 — the
+translucent band across the line, the four corner handles, and the ✕ on the
+mark's top-right corner, with the status line under the page reading "Drag to
+move, corners to resize, Delete to remove" in the set's language.
+
 ### iOS — `listing/` and `review/`
 
-`listing/` holds the six slots `docs/app-store-listing.md` maps, per device
-(`iphone-6_9-*`, `ipad-13-*`): viewer, text, search, sign, draw, home.
+`listing/` holds the eight slots `docs/app-store-listing.md` maps, per device
+(`iphone-6_9-*`, `ipad-13-*`): viewer, text-edit, redact, text, search, sign,
+draw, home — in that order, which is the order they are uploaded in.
 
 `review/` holds everything else — `text-edit`, `redact`, and the dark-mode
 `search`, `sign` and `redact`. They are for looking at, not for uploading. They

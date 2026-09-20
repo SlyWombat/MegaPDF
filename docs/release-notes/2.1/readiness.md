@@ -3,7 +3,7 @@
 Audited on 2026-09-20 against `c8f645d` (**desktops**, PR #338) and `0b4fd35`
 (**phones**, PR #337), which merge upward from `main`'s `3c6f8f3`. Two Avalonia
 defects were found by the capture pass during the audit and are fixed on the
-desktops branch (`1555702`, `88cdd74`, §4). Every claim below was read out of the
+desktops branch (`57aa5e5`, `0cfd93b`, §4). Every claim below was read out of the
 repository, the two pull requests' check runs, or a capture run's own artifacts —
 not taken from a comment. **Nothing has been published**: no tag, no release, no
 store submission and no packaging artifact has been produced, and none may be
@@ -178,21 +178,30 @@ fr-FR does. A green run no longer means "the pose said nothing"; it means the ma
 was placed or the run went red. What a green run still cannot say is whether the
 *image* is right — every state is read by eye as well (last risk in this section).
 
-**The Avalonia app had never shot its `redact` slot — in any language, since the
-state was added.** The first local run of `--screenshot-state redact` on the
-Avalonia build printed `nothing was marked` and wrote no image; every run since
-#173 had done the same, so **the Mac and Linux slot 5 has no 2.1 image and could
-not have had one** — the capture script fails the slot on `::error::`, so this
-would have gone red on the in-house Mac rather than shipping a wrong picture.
+**The Avalonia app writes no 2.1 `redact` image — in any language.** The first
+local run of `--screenshot-state redact` on the Avalonia build printed `nothing
+was marked` and wrote no image, and every 2.1 run does the same, so **the Mac and
+Linux slot 5 has no 2.1 image and could not have had one** — the capture script
+fails the slot on `::error::`, so this would have gone red on the in-house Mac
+rather than shipping a wrong picture.
 
-The cause is #145, two days older than the pose. With a window open the view model
-runs work in the background (`RunsInBackground`), so `AddRedactionMark` starts the
-placement and returns; the pose's next statement read `HasRedactionMarks` before
-the mark existed. The mark was placed a moment later, on the right page and the
-right rectangle: the feature was never broken, the pose was. `AddRedactionMarkNow`
-takes the synchronous route the view model already uses for the self-test and the
-capture runs, and the pose now writes the image (verified in fr-CA:
-`artifacts/pose-check/`).
+The state itself has written images; it is 2.1 that stopped. 2.0's image is on
+disk: `docs/qa/linux-fr/redact.png`, which the 2.0 French review pack captions
+"the Redact tool armed, its banner, and a marked line", and whose band measures
+(199,206,213) — `#3D16324F` over white, the mark, to the digit. What 2.1 changed
+is where the mark is *counted*: in 2.0 the placement ran inline and
+`RefreshRedactionMarks()` followed it inside the same call, so the pose's next
+statement saw the mark. #329 moved the count to the core, and it is refreshed
+after `PlaceRedactionMarkAsync` has finished.
+
+The cause of the silence is #145, two days older than the pose. With a window open
+the view model runs work in the background (`RunsInBackground`), so
+`AddRedactionMark` starts the placement and returns; the pose's next statement
+read `HasRedactionMarks` before the mark existed. The mark was placed a moment
+later, on the right page and the right rectangle: the feature was never broken,
+the pose was. `AddRedactionMarkNow` takes the synchronous route the view model
+already uses for the self-test and the capture runs, and the pose now writes the
+image (verified in fr-CA: `artifacts/pose-check/`).
 
 **And the ✕ that takes a mark off was drawn at the page's corner, not the mark's.**
 The chip was right-aligned in the chrome panel — but that panel is the whole page
@@ -208,7 +217,7 @@ handles, and `ApplyChromeRect` carries it along a drag. That is what Windows doe
 the source; the before/after pair differs in exactly two places per capture, the
 chip leaving the page's top edge and arriving at the selection's top-right corner.
 
-**Both are Avalonia-side and both are fixed on the branch** (`1555702`, `88cdd74`).
+**Both are Avalonia-side and both are fixed on the branch** (`57aa5e5`, `0cfd93b`).
 They were found by running the Avalonia build on this machine (Windows, the
 Avalonia renderer): the *code path* the Mac app runs is the same, the renderer
 platform is not, so the Mac and Linux sets are still to be re-shot — and now must
