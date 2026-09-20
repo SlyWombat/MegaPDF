@@ -37,6 +37,19 @@ public partial class MainWindow
 
     private const double HandleSize = 10;
 
+    /// <summary>The ✕ that removes the selection; the same 22 DIP chip the Windows app uses.</summary>
+    private const double ChipSize = 22;
+
+    /// <summary>
+    /// How much further right of the body's top-right corner the chip stands over added text
+    /// (Windows' -26 right margin against -11), whose tight glyph box would otherwise put the
+    /// chip on the last letters.
+    /// </summary>
+    private const double ChipStandOff = 15;
+
+    /// <summary>The stand-off in force for the current chrome; the chip is re-placed on every drag.</summary>
+    private double _chipOffset;
+
     /// <summary>Nothing smaller than this is a signature; it is a mis-drag.</summary>
     private const double MinSizeDip = 16;
 
@@ -113,7 +126,7 @@ public partial class MainWindow
 
         // The ✕ that takes it off, outside the body's top-right corner — standing further
         // off added text, whose tight glyph box would otherwise put the chip on the letters.
-        RemoveChip(host, vm, standOff: sel.Kind == MainViewModel.SelectionKind.TextBox);
+        RemoveChip(host, vm, rect, standOff: sel.Kind == MainViewModel.SelectionKind.TextBox);
 
         _chrome = new Border { Child = host };
         _chromeHost = presenter;
@@ -125,22 +138,33 @@ public partial class MainWindow
     /// should not have to know that Delete takes off what they selected. It sits outside the
     /// body's top-right corner so it never covers the thing it removes — over added text it
     /// would otherwise land on the last letters.
+    ///
+    /// It is placed from <paramref name="rect"/>, not from the panel's own corner. The chrome
+    /// Border has no size of its own, so the panel it wraps is the whole page (the body and the
+    /// handles are laid out from the page's origin): a Right-aligned chip lands on the *page's*
+    /// top-right corner instead of the selection's, and half of it above the page's top edge is
+    /// clipped away. That is what the 2.1 capture pass photographed: the shot that is supposed
+    /// to show the ✕ that takes a mark off had it floating at the top of the sheet, nowhere near
+    /// the mark. Windows lays its chip inside a selection-sized Grid, and this is that same
+    /// position in the panel's coordinates (#338).
     /// </summary>
-    private void RemoveChip(Panel host, MainViewModel vm, bool standOff)
+    private void RemoveChip(Panel host, MainViewModel vm, Rect rect, bool standOff)
     {
+        _chipOffset = standOff ? ChipStandOff : 0;
         var chip = new Button
         {
+            Name = "SelectionRemoveChip",
             Content = "✕",
-            Width = 22,
-            Height = 22,
+            Width = ChipSize,
+            Height = ChipSize,
             MinWidth = 0,
             Padding = new Thickness(0),
             FontSize = 10,
             HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
             VerticalContentAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
-            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
-            Margin = new Thickness(0, -11, standOff ? -26 : -11, 0),
+            Margin = ChipMargin(rect, _chipOffset),
         };
         AutomationProperties.SetName(chip, Strings.RemoveSelectionName);
         // The page must not read this press as a click of its own: without this, the chip
@@ -190,7 +214,15 @@ public partial class MainWindow
         ApplyChromeRect(panel, r);
     }
 
-    private static void ApplyChromeRect(Panel panel, Rect r)
+    /// <summary>
+    /// Where the ✕ chip goes for a selection at <paramref name="r"/>: its centre on the body's
+    /// top-right corner, so it straddles the corner rather than covering the thing it removes,
+    /// plus <paramref name="offset"/> more to stand clear of a text box's glyphs.
+    /// </summary>
+    private static Thickness ChipMargin(Rect r, double offset) => new(
+        r.Right - (ChipSize / 2) + offset, r.Y - (ChipSize / 2), 0, 0);
+
+    private void ApplyChromeRect(Panel panel, Rect r)
     {
         if (panel.Children.FirstOrDefault() is not Border body)
             return;
@@ -209,6 +241,11 @@ public partial class MainWindow
                 (left ? r.X : r.Right) - (HandleSize / 2),
                 (top ? r.Y : r.Bottom) - (HandleSize / 2), 0, 0);
         }
+
+        // The chip follows the body, so a drag or a resize carries it the way Windows' does
+        // (there the chip is a child of the chrome Grid, which moves as one).
+        if (panel.Children.OfType<Button>().FirstOrDefault() is { } chip)
+            chip.Margin = ChipMargin(r, _chipOffset);
     }
 
     private void OnSelectionPointerReleased(PointerReleasedEventArgs e)
