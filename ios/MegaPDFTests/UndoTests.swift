@@ -30,15 +30,19 @@ final class UndoTests: XCTestCase {
         XCTAssertEqual(marks.count, 1)
         XCTAssertTrue(history.canUndo)
 
-        let undonePage = try await history.undo(engine, doc)
-        XCTAssertEqual(undonePage, 0)
+        // The history hands the operation back (#329) so the caller can ask it which page to
+        // re-render and whether the file changed: the undo gives back the mark's own operation.
+        let undone = try await history.undo(engine, doc)
+        XCTAssertTrue(undone === op)
+        XCTAssertEqual(undone?.pageIndex, 0)
         marks = try await engine.stamps(doc, pageIndex: 0).filter { $0.id.hasPrefix("mark:") }
         XCTAssertTrue(marks.isEmpty, "undo must remove the mark")
         XCTAssertFalse(history.canUndo)
         XCTAssertTrue(history.canRedo)
 
-        let redonePage = try await history.redo(engine, doc)
-        XCTAssertEqual(redonePage, 0)
+        let redone = try await history.redo(engine, doc)
+        XCTAssertTrue(redone === op)
+        XCTAssertEqual(redone?.pageIndex, 0)
         marks = try await engine.stamps(doc, pageIndex: 0).filter { $0.id.hasPrefix("mark:") }
         XCTAssertEqual(marks.count, 1, "redo must put it back")
         XCTAssertEqual(marks.first?.id, "mark:undo-1", "under the same id")
