@@ -473,16 +473,21 @@ final class RedactMarkOperation: PdfEditOperation {
     }
 
     private func mark(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        ids = try rects.compactMap {
-            let id = try engine.markForRedaction(document, pageIndex: pageIndex, rect: $0)
-            return id >= 0 ? id : nil
+        // A loop, not `compactMap`: the engine is an actor, so each call is an await, and
+        // a `map` closure is synchronous — the marks would have to be made off the actor
+        // to fit in one, which is not possible and not what this wants anyway.
+        var made: [Int] = []
+        for rect in rects {
+            let id = try await engine.markForRedaction(document, pageIndex: pageIndex, rect: rect)
+            if id >= 0 { made.append(id) }
         }
+        ids = made
     }
 
     private func remove(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         // Already gone counts as success on the core side, so an undo cannot fail.
         for id in ids {
-            try engine.removeRedactionMark(document, pageIndex: pageIndex, markId: id)
+            try await engine.removeRedactionMark(document, pageIndex: pageIndex, markId: id)
         }
         ids = []
     }
@@ -507,11 +512,11 @@ final class MoveRedactionMarkOperation: PdfEditOperation {
     var changesDocument: Bool { false }
 
     func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: to)
+        try await engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: to)
     }
 
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: from)
+        try await engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: from)
     }
 }
 
@@ -534,13 +539,13 @@ final class ClearRedactionMarksOperation: PdfEditOperation {
     var changesDocument: Bool { false }
 
     func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        engine.clearRedactionMarks(document)
+        await engine.clearRedactionMarks(document)
     }
 
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         for (page, rects) in marksByPage {
             for rect in rects {
-                _ = try engine.markForRedaction(document, pageIndex: page, rect: rect)
+                _ = try await engine.markForRedaction(document, pageIndex: page, rect: rect)
             }
         }
     }
