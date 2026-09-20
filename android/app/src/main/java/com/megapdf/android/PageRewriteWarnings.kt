@@ -49,20 +49,33 @@ class PageRewriteWarnings {
     }
 }
 
+/** What a change waiting on a page check should do (#332). */
+enum class PageCheckOutcome {
+    /** Apply: the page keeps its look, could not be judged, was settled already, or ran past its budget. */
+    APPLY,
+
+    /** Ask first: the page would change. */
+    WARN,
+
+    /** Apply nothing: the document closed, or another change is still deciding. */
+    ABANDONED,
+}
+
 /**
- * One shared page check per page, started early, with a time budget (#139 follow-up, #145).
+ * One shared page check, started early, with a time budget (#139 follow-up, #145). One *running*
+ * check, not one per page: "starting a check for a page stops an unfinished check for another"
+ * is then true by construction, and closing the document drops the only record of one, so nothing
+ * here keeps a closed document alive (#332).
  *
  * The check starts in the background when a page is first shown or a tool that regenerates the
  * page is armed ([prepare]), so its answer is usually in by the time the change comes. At the
  * first such change on a page, [confirm] reuses the running check and waits at most [budgetMs]:
  * - the page keeps its look: settle it and apply;
- * - it would change: ask ([question]) — Continue settles and applies, Cancel applies nothing;
+ * - it would change: [PageCheckOutcome.WARN] — the caller asks, Continue settles and applies;
  * - no answer in time: stop the check, settle the page and apply with no warning.
+ * [confirm] itself never asks anybody anything; the warning and its Continue/Cancel belong to the
+ * caller ([PageRewriteQuestion]), which is what "one question at a time" is really about (#332).
  * Nothing is ever refused. A settled page is never checked or asked about again.
- *
- * Never two questions at once: while one change waits on its check or its question, [isDeciding]
- * is true and the view model blocks further edits; [confirm] refuses a second one outright rather
- * than replacing the first.
  *
  * Call it from one thread (the main thread in the app); the checks themselves run wherever
  * [open]'s check function sends them.
@@ -72,17 +85,20 @@ class PageCheckGate(
     private val budgetMs: Long = BUDGET_MS,
 ) {
     private val warnings = PageRewriteWarnings()
-    private val checks = HashMap<Int, Deferred<LayoutVerdict?>>()
+    private var running: Running? = null
     private var check: (suspend (Int) -> LayoutVerdict?)? = null
     private var generation = 0
 
-    /** The warning waiting for Continue (true) or Cancel (false); answered with [answer]. */
-    var question: CompletableDeferred<Boolean>? by mutableStateOf(null)
-        private set
+    /**
+     * The page a change is waiting on, if any. A check started for another page leaves it alone:
+     * its answer is the one somebody is waiting for, and this page's turn comes later (#332).
+     */
+    private var awaitedPage: Int? = null
 
-    /** True while a change waits on its page check or on the person's answer. */
-    var isDeciding: Boolean by mutableStateOf(false)
-        private set
+    /** True while a change is inside [confirm]. */
+    private var deciding = false
+
+    private class Running(val pageIndex: Int, val job: Deferred<LayoutVerdict?>)
 
     /**
      * A document opened: [check] judges a page, returning null when it cannot, and must stop
@@ -93,43 +109,56 @@ class PageCheckGate(
         this.check = check
     }
 
-    /** The document closed: stop every check and answer any question with Cancel. */
+    /** The document closed: stop the check and forget every page. */
     fun reset() {
         generation++
-        checks.values.forEach { it.cancel() }
-        checks.clear()
+        running?.job?.cancel()
+        running = null
+        awaitedPage = null
         warnings.reset()
         check = null
-        question?.complete(false)
-        question = null
-        isDeciding = false
+        deciding = false
     }
 
     fun isSettled(pageIndex: Int): Boolean = warnings.isSettled(pageIndex)
 
-    /** No check or question for this page again: it passed, Continue was chosen, or a change already went in unasked. */
+    /**
+     * No check for this page again: it passed, Continue was chosen, or a change already went in
+     * unasked. A check still running for it is stopped, having nothing left to say.
+     */
     fun settle(pageIndex: Int) {
         warnings.settle(pageIndex)
-        checks.remove(pageIndex)?.cancel()
+        running?.takeIf { it.pageIndex == pageIndex }?.let {
+            running = null
+            it.job.cancel()
+        }
     }
 
-    /** Starts [pageIndex]'s check unless it is settled or already started; stops unfinished checks of other pages. */
+    /**
+     * Starts [pageIndex]'s check unless it is settled or already running; stops an unfinished
+     * check of another page, unless a change is waiting on that page's answer, in which case this
+     * page waits its turn ([confirm] on the page being waited for always finds its own check).
+     */
     fun prepare(pageIndex: Int) {
-        startCheck(pageIndex)
+        start(pageIndex)
     }
 
-    /** Whether a check for [pageIndex] is running or has answered (for tests and diagnostics). */
-    fun hasCheck(pageIndex: Int): Boolean = checks.containsKey(pageIndex)
+    /** Whether a check for [pageIndex] is running (for tests and diagnostics). */
+    fun isChecking(pageIndex: Int): Boolean = running?.pageIndex == pageIndex && running?.job?.isCompleted == false
 
-    private fun startCheck(pageIndex: Int): Deferred<LayoutVerdict?>? {
+    private fun start(pageIndex: Int): Deferred<LayoutVerdict?>? {
         val run = check ?: return null
         if (warnings.isSettled(pageIndex)) return null
-        val others = checks.entries.filter { it.key != pageIndex && !it.value.isCompleted }
-        for (entry in others) {
-            entry.value.cancel()
-            checks.remove(entry.key)
+        running?.let { current ->
+            if (current.pageIndex == pageIndex) return current.job
+            // A change is waiting on that answer; this page's turn comes later (#332).
+            if (current.pageIndex == awaitedPage && !current.job.isCompleted) return null
+            if (!current.job.isCompleted) {
+                running = null
+                current.job.cancel()
+            }
         }
-        checks[pageIndex]?.takeIf { !it.isCancelled }?.let { return it }
+        val generation = this.generation
         val job = scope.async {
             val verdict = try {
                 run(pageIndex)
@@ -138,75 +167,113 @@ class PageCheckGate(
             } catch (e: Exception) {
                 null
             }
-            if (verdict?.editable == true) warnings.settle(pageIndex)
+            // A check whose document has gone settles nothing in the one that came after it (#332).
+            if (verdict?.editable == true && generation == this@PageCheckGate.generation) {
+                warnings.settle(pageIndex)
+            }
             verdict
         }
-        checks[pageIndex] = job
+        running = Running(pageIndex, job)
         return job
     }
 
     /**
-     * True when a change that regenerates [pageIndex] may go ahead now, false when it must not be
-     * applied: Cancel, the document closed, or another change is still deciding. While the check
-     * is awaited, [busy] shows Checking this page… at [spot].
+     * What a change that regenerates [pageIndex] should do (#332): [PageCheckOutcome.APPLY] to go
+     * ahead, [PageCheckOutcome.WARN] to ask the person first, [PageCheckOutcome.ABANDONED] to apply
+     * nothing — the document closed, or another change is still deciding. While the check is
+     * awaited, [busy] shows Checking this page… at [spot].
      */
-    suspend fun confirm(pageIndex: Int, busy: BusyState? = null, spot: BusySpot? = BusySpot(pageIndex)): Boolean {
-        if (warnings.isSettled(pageIndex)) return true
-        if (isDeciding) return false
+    suspend fun confirm(pageIndex: Int, busy: BusyState? = null, spot: BusySpot? = BusySpot(pageIndex)): PageCheckOutcome {
+        if (warnings.isSettled(pageIndex)) return PageCheckOutcome.APPLY
+        if (deciding) return PageCheckOutcome.ABANDONED
         val started = generation
-        isDeciding = true
+        deciding = true
+        awaitedPage = pageIndex
         try {
-            val job = startCheck(pageIndex)
+            val job = start(pageIndex)
             if (job == null) {
                 // No document to judge with; nothing is refused for want of an answer.
                 warnings.settle(pageIndex)
-                return true
+                return PageCheckOutcome.APPLY
             }
             val token = busy?.beginPage(BusyLabel.CHECKING_PAGE, spot)
-            val answer = try {
-                withTimeoutOrNull(budgetMs) { Answer(awaitVerdict(job)) }
+            val waited: LayoutVerdict? = try {
+                withTimeoutOrNull(budgetMs) { awaitVerdict(job) }
             } finally {
                 token?.end()
             }
-            if (generation != started) return false
-            val verdict = answer?.verdict
-            if (answer == null || verdict == null || verdict.editable) {
-                // Over budget (the check stops), not judgeable, or keeps its look: apply unasked.
+            if (generation != started) return PageCheckOutcome.ABANDONED
+            // The budget's expiry ends the wait; the check's answer is read afterwards, so one that
+            // landed in the same breath as the budget is used rather than thrown away (#332). C#
+            // and Swift decide it the same way, and the desktop test pins the rule for all three.
+            val verdict = waited ?: verdictIfAnswered(job)
+            if (verdict == null || verdict.editable) {
+                // Past the budget or stopped by someone else (either way the check stops here),
+                // not judgeable, or keeps its look: apply unasked.
                 settle(pageIndex)
-                return true
+                return PageCheckOutcome.APPLY
             }
-            val asked = CompletableDeferred<Boolean>()
-            question = asked
-            val proceed = try {
-                asked.await()
-            } finally {
-                if (question === asked) question = null
-            }
-            if (generation != started) return false
-            if (proceed) settle(pageIndex)
-            return proceed
+            return PageCheckOutcome.WARN
         } finally {
-            if (generation == started) isDeciding = false
+            if (generation == started) {
+                deciding = false
+                awaitedPage = null
+            }
         }
-    }
-
-    fun answer(proceed: Boolean) {
-        question?.complete(proceed)
-    }
-
-    private class Answer(val verdict: LayoutVerdict?)
-
-    /** The check's verdict; null when it was stopped by someone else (another page's check, a close). */
-    private suspend fun awaitVerdict(job: Deferred<LayoutVerdict?>): LayoutVerdict? = try {
-        job.await()
-    } catch (e: CancellationException) {
-        // Our own cancellation (the budget running out) goes on up.
-        currentCoroutineContext().ensureActive()
-        null
     }
 
     companion object {
         /** How long a change waits on its page check before it is applied without a warning. */
         const val BUDGET_MS = 1_500L
+    }
+}
+
+/**
+ * The verdict of a check that has finished, or null when it has nothing to give: still running, or
+ * stopped by someone else. The budget's expiry only ends the *wait* — the answer is read from the
+ * check afterwards, so one that landed in the same breath as the budget counts (#332).
+ */
+internal fun verdictIfAnswered(job: Deferred<LayoutVerdict?>): LayoutVerdict? =
+    if (job.isCompleted && !job.isCancelled) job.getCompleted() else null
+
+/** The check's verdict; null when it was stopped by someone else (another page's check, a close). */
+private suspend fun awaitVerdict(job: Deferred<LayoutVerdict?>): LayoutVerdict? = try {
+    job.await()
+} catch (e: CancellationException) {
+    // Our own cancellation (the budget running out) goes on up.
+    currentCoroutineContext().ensureActive()
+    null
+}
+
+/**
+ * The warning a change puts up before it regenerates a page that would change, and the person's
+ * answer to it (#139, #332). The gate never asks; the change asks this, which is why "never two
+ * questions at once" is the view model's to keep.
+ */
+class PageRewriteQuestion {
+    private var pending: CompletableDeferred<Boolean>? by mutableStateOf(null)
+
+    /** True while the warning is on screen. */
+    val isUp: Boolean get() = pending != null
+
+    /** Puts the warning up and waits: true Continue, false Cancel. */
+    suspend fun ask(): Boolean {
+        val asked = CompletableDeferred<Boolean>()
+        pending = asked
+        return try {
+            asked.await()
+        } finally {
+            if (pending === asked) pending = null
+        }
+    }
+
+    /** Continue or Cancel, from the screen. Does nothing when no warning is up. */
+    fun answer(proceed: Boolean) {
+        pending?.complete(proceed)
+    }
+
+    /** The document closed: a warning still up is answered Cancel. */
+    fun abandon() {
+        pending?.complete(false)
     }
 }

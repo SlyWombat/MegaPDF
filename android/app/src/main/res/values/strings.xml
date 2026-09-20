@@ -157,6 +157,7 @@
     <string name="signature_added">Signature added</string>
     <string name="signature_import_failed">Couldn\'t import the signature.</string>
     <string name="signature_save_failed">Couldn\'t save the signature.</string>
+    <string name="signature_library_full">The signature library is limited to %1$d signatures.</string>
     <string name="signature_image_missing">That signature\'s image is missing</string>
     <string name="signature_image_unreadable">Couldn\'t read this signature\'s image</string>
     <string name="signature_remove_failed">Couldn\'t remove this signature</string>

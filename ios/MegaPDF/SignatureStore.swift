@@ -14,6 +14,10 @@ struct SignatureEntry: Codable, Equatable, Identifiable {
 }
 
 final class SignatureStore {
+    /// The desktop store's `SoftLimit`: the 21st signature is refused, and `add`
+    /// returning nil is how this store refuses (#333).
+    static let softLimit = 20
+
     private let dir: URL
     private var indexURL: URL { dir.appendingPathComponent("index.json") }
 
@@ -31,10 +35,16 @@ final class SignatureStore {
         guard let data = try? Data(contentsOf: indexURL),
               let entries = try? JSONDecoder().decode([SignatureEntry].self, from: data)
         else { return [] }
-        return entries
+        // An entry whose image has gone is a broken thumbnail; the desktop store
+        // drops it on load and so does this one (#333).
+        return entries.filter { FileManager.default.fileExists(atPath: url(for: $0).path) }
     }
 
+    /// Whether the library is full: [add] will refuse another one (#333).
+    var isFull: Bool { load().count >= Self.softLimit }
+
     func add(displayName: String, image: CGImage) -> SignatureEntry? {
+        guard !isFull else { return nil }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let id = UUID().uuidString
         let fileName = "\(id).png"
@@ -46,16 +56,25 @@ final class SignatureStore {
             id: id, displayName: displayName, fileName: fileName,
             pixelWidth: image.width, pixelHeight: image.height,
             createdEpochMs: Int64(Date().timeIntervalSince1970 * 1000))
-        write(load() + [entry])
+        // The index must not name an image that is not there: if it cannot be written,
+        // the image goes rather than becoming a broken row (#333).
+        guard write(load() + [entry]) else {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(fileName))
+            return nil
+        }
         return entry
     }
 
+    /// Takes the entry out of the index and then deletes the image — the desktop
+    /// store's order, and the one all three platforms use (#333). The image is only
+    /// removed once the index no longer names it, so a failed index write leaves the
+    /// pair intact rather than a row pointing at nothing.
     func delete(id: String) {
         let entries = load()
+        guard write(entries.filter { $0.id != id }) else { return }
         if let entry = entries.first(where: { $0.id == id }) {
-            try? FileManager.default.removeItem(at: dir.appendingPathComponent(entry.fileName))
+            try? FileManager.default.removeItem(at: url(for: entry))
         }
-        write(entries.filter { $0.id != id })
     }
 
     /// Renames an entry in place; order and the PNG are untouched (#100).
@@ -70,12 +89,22 @@ final class SignatureStore {
     }
 
     func loadImage(_ entry: SignatureEntry) -> CGImage? {
-        UIImage(contentsOfFile: dir.appendingPathComponent(entry.fileName).path)?.cgImage
+        UIImage(contentsOfFile: url(for: entry).path)?.cgImage
     }
 
-    private func write(_ entries: [SignatureEntry]) {
-        guard let data = try? JSONEncoder().encode(entries) else { return }
-        try? data.write(to: indexURL, options: .atomic)
+    private func url(for entry: SignatureEntry) -> URL {
+        dir.appendingPathComponent(entry.fileName)
+    }
+
+    @discardableResult
+    private func write(_ entries: [SignatureEntry]) -> Bool {
+        guard let data = try? JSONEncoder().encode(entries) else { return false }
+        do {
+            try data.write(to: indexURL, options: .atomic)
+            return true
+        } catch {
+            return false
+        }
     }
 }
 

@@ -197,11 +197,79 @@ public sealed class LayoutGuardTests : IDisposable
         Assert.Equal(PageCheckAnswer.WouldChange, await warnings.AskAsync(doc, 0, PageRegenerationWarnings.Budget));
         Assert.False(warnings.IsSettled(0));
 
-        // Both done by the time the change asks: the answer wins over the spent budget.
+        // Both done by the time the change asks: the answer wins over the spent budget — the rule
+        // all three platforms share (#332).
         var both = new PageRegenerationWarnings(judge: (_, _, _) => judged, waitBudget: _ => Task.CompletedTask);
         both.Prepare(doc, 0);
         await WaitUntil(() => !both.IsChecking(0));
         Assert.Equal(PageCheckAnswer.WouldChange, await both.AskAsync(doc, 0, PageRegenerationWarnings.Budget));
+    }
+
+    /// <summary>
+    /// #332: a document closed while a change waits on its page's check. The change must be told so
+    /// (rather than applying to a page that is no longer on screen), the check must be stopped, and
+    /// nothing may be carried over: the page of that number in the *next* document is a different
+    /// page and still needs asking about.
+    /// </summary>
+    [Fact]
+    public async Task ClosingTheDocumentWhileAChangeWaits_CancelsTheCheck_AndSettlesNothingInTheNext()
+    {
+        var doc = Open(FormPdf(), "close-while-waiting.pdf");
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var never = new TaskCompletionSource();
+        var warnings = new PageRegenerationWarnings(
+            judge: (_, _, token) =>
+            {
+                started.SetResult();
+                token.WaitHandle.WaitOne();
+                stopped.SetResult();
+                throw new OperationCanceledException(token);
+            },
+            waitBudget: _ => never.Task); // only the close can end this wait
+
+        var answer = warnings.AskAsync(doc, 0, PageRegenerationWarnings.Budget);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        warnings.Reset(); // another document opened, or the document closed
+
+        Assert.Equal(PageCheckAnswer.Cancelled, await answer);
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.False(warnings.IsChecking(0), "the check was stopped");
+        Assert.False(warnings.IsSettled(0), "nothing was settled for the document that came next");
+    }
+
+    /// <summary>
+    /// #332: the page a change is waiting on keeps its check. Scrolling on, or arming a tool for
+    /// another page, starts that page's check — it does not throw away the answer the change is
+    /// about to be told, which is what happened while the checks were one per page.
+    /// </summary>
+    [Fact]
+    public async Task APageAChangeIsWaitingOn_KeepsItsCheck_WhenAnotherPageIsPrepared()
+    {
+        using var doc = Open(FormPdf(), "awaited.pdf");
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new ManualResetEventSlim();
+        var judged = new LayoutVerdict(false, LayoutCause.Render, LayoutArea.NonText, 100, 1000, 0);
+        var never = new TaskCompletionSource();
+        var warnings = new PageRegenerationWarnings(
+            judge: (_, _, token) =>
+            {
+                started.SetResult();
+                release.Wait(TimeSpan.FromSeconds(30));
+                token.ThrowIfCancellationRequested(); // a check that was stopped says nothing
+                return judged;
+            },
+            waitBudget: _ => never.Task);
+
+        var answer = warnings.AskAsync(doc, 0, PageRegenerationWarnings.Budget);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        warnings.Prepare(doc, 1); // the person scrolled on, or armed a tool, while the change waited
+
+        Assert.True(warnings.IsChecking(0), "the check a change is waiting on is left alone");
+        Assert.False(warnings.IsChecking(1), "the other page's check waits its turn");
+        release.Set();
+        Assert.Equal(PageCheckAnswer.WouldChange, await answer);
     }
 
     private static async Task WaitUntil(Func<bool> condition)

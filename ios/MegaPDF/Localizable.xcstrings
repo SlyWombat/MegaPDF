@@ -2632,6 +2632,22 @@
         }
       }
     },
+    "The signature library is limited to %lld signatures." : {
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bibliothèque de signatures est limitée à %lld signatures."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La bibliothèque de signatures est limitée à %lld signatures."
+          }
+        }
+      }
+    },
     "The text there is in a font MegaPDF can't redraw around your marks." : {
       "localizations" : {
         "fr" : {
