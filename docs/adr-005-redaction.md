@@ -118,13 +118,14 @@ Added 2026-09-20 for #329, which found both halves promised and neither delivere
   history, and Undo after it takes all three back. Redo puts back exactly the rectangles
   the user saw rather than re-running the selection, which would be derived from the page
   as it is *now* — and the rectangles are what was actually marked.
-- **A mark can be removed.** Tapping one selects it, and it carries the same move / resize
-  / remove chrome a signature carries — except that a redaction area is a rectangle by
-  nature, so the corner grip moves each side on its own rather than holding the aspect
-  ratio. **✕** on the selection removes it, **Remove mark** is the accessibility action on
-  the mark itself, and **Clear all marks** in the ⋯ menu takes every mark on every page as
-  one step, offered only while there is something to clear. Removal is an edit, so Undo
-  puts the mark back where it was.
+- **A mark can be removed.** Selecting one — a tap on a phone, a click on a desktop —
+  gives it the same move / resize / remove chrome a signature carries, except that a
+  redaction area is a rectangle by nature, so the corner grip moves each side on its own
+  rather than holding the aspect ratio. The selection's **✕** removes it, so do Delete and
+  Backspace, **Remove mark** is the accessibility action on the mark itself, and **Clear
+  all marks** (⋯ on the phones; the toolbar's More overflow and the Tools menu on the
+  desktops) takes every mark on every page as one step, offered only while there is
+  something to clear. Removal is an edit, so Undo puts the mark back where it was.
 - **A mark is not a change.** Marking, moving and removing declare
   `changesDocument = false`: no unsaved dot, no recovery-journal entry, no page check
   (#137), no re-render. What changes is the overlay, and the overlay is the app's.
@@ -145,10 +146,12 @@ intent, executed later without being asked.
 
 **What we gave up.** Redo cannot re-derive what a gesture marked, so the rectangles are
 recorded with the history entry — a small amount of duplicate state in exchange for a redo
-that cannot disagree with the screen. And the desktops stage behind the phones: Android
-and iOS have this as of 2.1, and Windows and Avalonia in their next release, where the
-work rides with the mark chrome those apps already have. §3.8 F7 behaviour 7 carries the
-same note for readers who never open this file.
+that cannot disagree with the screen. The desktops also had to give up a shortcut they had
+taken: a mark's chrome is now the selection, the one the ✕ and Delete read, rather than a
+second selection of its own — two ways to be selected on one page is how the chrome and
+the mark come to disagree. Android and iOS shipped this in 2.1; Windows and Avalonia have
+it as of 2.0, riding the mark chrome those apps already had. §3.8 F7 behaviour 7 carries
+the same note for readers who never open this file.
 
 ## Consequences
 

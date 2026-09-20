@@ -49,8 +49,12 @@ another app can copy or search it. That is what Redact is for, and the tooltip s
 
 **Redact** — the Redact button, beside Whiteout, then drag across what you want *gone*,
 or drag across text to mark the words. The marked areas show translucent with an outline,
-so you can still read what you are about to remove. Click a mark to select it; ✕ or
-Delete removes it; Ctrl+Z undoes it. **Nothing is removed until you save.**
+so you can still read what you are about to remove. Click a mark to select it: drag it to
+move it, drag a corner to resize it (a mark is an area, so a corner moves its edges on its
+own rather than keeping a shape), ✕ or Delete removes it, and Ctrl+Z undoes it. Marking,
+moving and removing leave the document clean — no unsaved dot, because a mark is not in
+the file. **Clear all marks** in the More menu drops every mark on every page at once, and
+one Ctrl+Z puts them all back. **Nothing is removed until you save.**
 
 Ctrl+S or Save As then asks, and offers **Save as a copy** ("…-redacted.pdf") as the
 default — redaction cannot be undone once saved. Afterwards a short summary says what

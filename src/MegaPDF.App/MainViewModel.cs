@@ -528,7 +528,10 @@ public partial class MainViewModel(Window window) : ObservableObject
         // Permissions first, so nothing bound to the new path sees the old document's (#131).
         Capabilities = DocumentCapabilities.From(doc.Security);
         if (!Capabilities.CanEditContent)
+        {
             IsWhiteoutMode = false;
+            IsRedactMode = false;
+        }
         if (!Capabilities.CanAddText)
             IsTextBoxMode = false;
         if (!Capabilities.CanSign)
@@ -541,6 +544,12 @@ public partial class MainViewModel(Window window) : ObservableObject
         HasUnsavedChanges = false;
         _undoStack.Clear();
         _pageWarnings.Reset();
+        // Marks belong to the document that carried them (#329): the old count and the old
+        // overlays must not outlive it. Set rather than refreshed off the new document, which
+        // `Pages` does not describe yet — a redraw now would ask a stale page canvas for a
+        // page the new document may not have.
+        RedactionMarkCount = 0;
+        RedactionMarksChanged?.Invoke(this, EventArgs.Empty);
         ClearSearch(); // matches belong to the previous document
         // Not journaled when opened with a password: its text must not reach disk
         // unencrypted (#135). The notice above says so (ADR-004 §7).
@@ -1222,66 +1231,81 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public bool HasRedactionMarks => RedactionMarkCount > 0;
 
-    private (int PageIndex, int MarkId, PdfRect Bounds)? _selectedRedactionMark;
+    /// <summary>
+    /// Raised whenever the document's marks may have changed, so the overlays redraw (#329).
+    /// The marks are not part of the page's raster, so nothing else would tell the view.
+    /// </summary>
+    public event EventHandler? RedactionMarksChanged;
 
     /// <summary>
     /// Marks the dragged area (#173). Nothing is removed and nothing on the page changes: a
     /// mark is the core's own and is never written to the file.
+    ///
+    /// One gesture is one undo step however many marks it made (#329): a drag across six
+    /// lines is six core marks and one press of Undo.
     /// </summary>
     public async Task AddRedactionMarkAsync(int pageIndex, PdfRect bounds)
     {
-        if (_document is null || bounds.Width < 4 || bounds.Height < 4)
+        if (_document is not { } document || bounds.Width < 4 || bounds.Height < 4)
             return;
-        // A drag across text marks the text, grown to whole glyphs; a drag across a picture
-        // marks the rectangle.
-        var marked = false;
-        using (var page = _document.GetPage(pageIndex))
-            marked = page.MarkTextForRedaction(bounds).Count > 0;
-        if (!marked)
-            await DoEditAsync(new MarkForRedactionOperation(_document, pageIndex, bounds));
-        RefreshRedactionMarks();
+        await DoMarkEditAsync(document, () => MarkForRedactionOperation.Place(document, pageIndex, bounds));
     }
 
     /// <summary>The marks on a page, for the overlay that draws them.</summary>
     public IReadOnlyList<RedactionMark> RedactionMarksOn(int pageIndex)
     {
-        if (_document is null)
+        // A redraw can be asked for while the pages are changing under it (a document being
+        // adopted), so a page the document no longer has is answered with nothing rather
+        // than by throwing out of a page canvas.
+        if (_document is not { } document || pageIndex < 0 || pageIndex >= document.PageCount)
             return [];
-        using var page = _document.GetPage(pageIndex);
+        using var page = document.GetPage(pageIndex);
         return page.GetRedactionMarks();
     }
 
-    public void RefreshRedactionMarks() =>
+    public void RefreshRedactionMarks()
+    {
         RedactionMarkCount = _document?.RedactionMarkCount ?? 0;
+        RedactionMarksChanged?.Invoke(this, EventArgs.Empty);
+    }
 
-    /// <summary>Selects the mark under the point, so ✕ or Delete removes the right one.</summary>
-    public bool SelectRedactionMarkAt(int pageIndex, PdfPoint point)
+    /// <summary>The mark under the point, if any — what a click on a page selects (#329).</summary>
+    public (int PageIndex, int MarkId, PdfRect Bounds)? RedactionMarkAt(int pageIndex, PdfPoint point)
     {
         if (_document is null)
-            return false;
+            return null;
         using var page = _document.GetPage(pageIndex);
         foreach (var mark in page.GetRedactionMarks())
         {
-            if (point.X < mark.Bounds.X || point.X > mark.Bounds.X + mark.Bounds.Width ||
-                point.Y < mark.Bounds.Y || point.Y > mark.Bounds.Y + mark.Bounds.Height)
-            {
-                continue;
-            }
-            _selectedRedactionMark = (pageIndex, mark.MarkId, mark.Bounds);
-            return true;
+            var b = mark.Bounds;
+            if (point.X >= b.X && point.X <= b.X + b.Width && point.Y >= b.Y && point.Y <= b.Y + b.Height)
+                return (pageIndex, mark.MarkId, b);
         }
-        return false;
+        return null;
     }
 
-    public async Task<bool> RemoveSelectedRedactionMarkAsync()
-    {
-        if (_document is null || _selectedRedactionMark is not { } mark)
-            return false;
-        await DoEditAsync(new RemoveRedactionMarkOperation(_document, mark.PageIndex, mark.MarkId, mark.Bounds));
-        _selectedRedactionMark = null;
-        RefreshRedactionMarks();
-        return true;
-    }
+    /// <summary>
+    /// Takes a mark off the page (#329). Nothing is removed from the document — a mark was
+    /// never in it — so this is undoable and leaves the file untouched.
+    /// </summary>
+    public async Task<bool> RemoveRedactionMarkAsync(int pageIndex, int markId, PdfRect bounds) =>
+        _document is { } document && await DoMarkEditAsync(document,
+            () => new RemoveRedactionMarkOperation(document, pageIndex, markId, bounds));
+
+    /// <summary>Moves or resizes a mark, as one undo step like every other edit.</summary>
+    public async Task<bool> MoveRedactionMarkAsync(int pageIndex, int markId, PdfRect from, PdfRect to) =>
+        _document is { } document && await DoMarkEditAsync(document,
+            () => new MoveRedactionMarkOperation(document, pageIndex, markId, from, to));
+
+    /// <summary>
+    /// Drops every mark on the document as one step (#329), the ⋮ item's action. Undo puts
+    /// them all back where they were.
+    /// </summary>
+    public async Task<bool> ClearRedactionMarksAsync(int pageIndex) =>
+        _document is { } document && await DoMarkEditAsync(document,
+            // Captured before the clear: only the core knows the rectangles, and a clear
+            // that could not be undone would be the bug this exists to fix.
+            () => ClearRedactionMarksOperation.Capture(document, pageIndex));
 
     /// <summary>
     /// Sizes offered for added text (#43). A short list, not a free-entry number box:
@@ -1522,6 +1546,56 @@ public partial class MainViewModel(Window window) : ObservableObject
         return true;
     }
 
+    /// <summary>
+    /// An edit that does not change the file (#329): a redaction mark placed, moved, removed
+    /// or cleared. Everything else goes through <see cref="DoEditAsync"/>.
+    ///
+    /// The mark is made **inside here** rather than by the caller, because the engine call
+    /// that answers "did this drag cover text?" makes the marks as it answers — so the work
+    /// is done by the time the operation exists, and the operation is recorded as already
+    /// applied rather than applied on top of itself.
+    ///
+    /// What a mark deliberately does not do: raise the unsaved flag, write a recovery entry,
+    /// or spend a re-render. A mark lives in the core and is never written to the file
+    /// (ADR-005 decision 1), so the overlay redraw is the whole visible change. It is still
+    /// an undo step, so Save stays live through <c>HasRedactionMarks</c>.
+    ///
+    /// <paramref name="make"/> runs off the UI thread and returns null when the gesture made
+    /// nothing — a gesture to forget rather than an entry in the history that undoes to nothing.
+    /// </summary>
+    private async Task<bool> DoMarkEditAsync(IPdfDocument document, Func<IPageEditOperation?> make)
+    {
+        if (!Capabilities.CanEditContent)
+        {
+            IsRestrictedNoticeOpen = true;
+            return false;
+        }
+        if (Busy.IsBusy || !ReferenceEquals(document, _document))
+            return false;
+
+        IPageEditOperation? op;
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: -1))
+        {
+            try
+            {
+                op = await Task.Run(make);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(Strings.CouldNotEditTitle, UserFacing.Describe(ex));
+                return false;
+            }
+        }
+        if (op is null || !ReferenceEquals(document, _document))
+            return false;
+
+        _undoStack.Record(op);
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        RefreshRedactionMarks();
+        return true;
+    }
+
     /// <summary>The #139 warning: Continue applies the change, Cancel leaves the page as it is.</summary>
     private async Task<bool> ConfirmPageRewriteAsync()
     {
@@ -1677,7 +1751,6 @@ public partial class MainViewModel(Window window) : ObservableObject
             _undoStack.Clear();
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
-            _selectedRedactionMark = null;
             RefreshRedactionMarks();
             await RefreshPagesAfterRedactionAsync();
             RedactionSummaryText = DescribeRedaction(report.Counts);
@@ -1989,15 +2062,9 @@ public partial class MainViewModel(Window window) : ObservableObject
                 return;
             }
         }
-        _editCount++;
-        UndoCommand.NotifyCanExecuteChanged();
-        RedoCommand.NotifyCanExecuteChanged();
-        HasUnsavedChanges = true;
-        if (op is IPageEditOperation pageEdit)
-        {
-            _journal.Record(pageEdit.ToJournalEntry(inverse: true));
+        AfterHistoryChange(op, inverse: true);
+        if (op is IPageEditOperation pageEdit && pageEdit.ChangesTheFile)
             await RefreshPageAsync(pageEdit.PageIndex);
-        }
     }
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
@@ -2018,15 +2085,31 @@ public partial class MainViewModel(Window window) : ObservableObject
                 return;
             }
         }
-        _editCount++;
+        AfterHistoryChange(op, inverse: false);
+        if (op is IPageEditOperation pageEdit && pageEdit.ChangesTheFile)
+            await RefreshPageAsync(pageEdit.PageIndex);
+    }
+
+    /// <summary>
+    /// The bookkeeping an undo or a redo owes, split on whether the operation reaches the
+    /// file (#329). A redaction mark never does: it is not written, so it raises no unsaved
+    /// flag and writes no recovery entry — but it did change, so its overlay is redrawn.
+    /// Undoing a mark is how a mis-drag is taken back, and it must not leave a dot on the tab.
+    /// </summary>
+    private void AfterHistoryChange(IEditOperation? op, bool inverse)
+    {
         UndoCommand.NotifyCanExecuteChanged();
         RedoCommand.NotifyCanExecuteChanged();
-        HasUnsavedChanges = true;
-        if (op is IPageEditOperation pageEdit)
+        var pageEdit = op as IPageEditOperation;
+        if (pageEdit is { ChangesTheFile: false })
         {
-            _journal.Record(pageEdit.ToJournalEntry(inverse: false));
-            await RefreshPageAsync(pageEdit.PageIndex);
+            RefreshRedactionMarks();
+            return;
         }
+        _editCount++;
+        HasUnsavedChanges = true;
+        if (pageEdit is not null)
+            _journal.Record(pageEdit.ToJournalEntry(inverse));
     }
 
     // --- Crash recovery (SDD §3.4) ---

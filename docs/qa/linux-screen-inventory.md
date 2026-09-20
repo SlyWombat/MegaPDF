@@ -155,7 +155,7 @@ it is the only pointer-driven way out of find.
 | 5.1 | Add text | "Click where the new text goes — Esc cancels" | ✅ `--screenshot-state mode` |
 | 5.2 | Sign — placing | "Click where the signature goes — Esc cancels" | ✅ via `sign` then place |
 | 5.3 | Cover | "Drag across what you want to hide. Esc cancels. Cover removes nothing: Redact does" | hands |
-| 5.4 | **Redact** (#173) | "Drag across what you want removed, or select text — Esc cancels", with a mark placed | ✅ `--screenshot-state redact` |
+| 5.4 | **Redact** (#173) | "Drag across what you want removed, select text, or press Enter on the focused item — Esc cancels", with a mark placed | ✅ `--screenshot-state redact` |
 | 5.5 | A selected text box — move, edit, delete hint on the status line | | ✅ `--screenshot-state textbox` |
 | 5.6 | The keyboard focus ring on a page region | | ✅ `--screenshot-state focus` |
 
@@ -168,6 +168,9 @@ it is the only pointer-driven way out of find.
 | 6.3 | Line-level spinner | ✅ `busy-line` — the toolbar disables; the indicator itself is too brief to catch in a still |
 | 6.4 | Search hits — cyan for every match, brand blue for the current one, "1 of 3" | ✅ `find`, en and fr |
 | 6.5 | Restricted-document banner | hands |
+| 6.6 | **Redaction mark** — translucent fill + outline, drawn over the page (not in it) | ✅ `redact` |
+| 6.7 | A **mark selected** (#329) — the chrome with its four free-aspect corner grips and the ✕ chip outside the top-right corner, status line "Drag to move, corners to resize, Delete to remove." | hands |
+| 6.8 | A mark dragged (status "Mark moved.") and removed (✕, or Delete/Backspace — "Mark removed."); **Clear all marks** in the **⋯ More** menu, greyed while there is nothing to clear | hands |
 
 ## 7. Errors (all via the status line unless noted)
 
@@ -200,6 +203,7 @@ the outcome rather than photographing it.
 - [x] add text — placement, the face and size pickers, restyle, undo (**self-test**)
 - [x] cover (**self-test**)
 - [x] **redact** (#173) — arm, mark, the guard's verdict, save-with-marks carries none, apply (**self-test**), and posed
+- [x] **the mark lifecycle** (#329) — one gesture is one undo step, Undo takes the mark off the core, Redo puts the same rectangles back, a mark moves and resizes, the ✕ and Delete take one off, Clear all marks is one step, a mark never sets the unsaved dot, and the next document opens with none (**self-test**)
 - [x] edit body text — 22,267 line edits across the corpus with 0 changes against the baseline (§11)
 - [x] undo and redo (**self-test**)
 - [x] save, and save as (**self-test**, including a save that fails while making the bytes and leaves the original untouched)

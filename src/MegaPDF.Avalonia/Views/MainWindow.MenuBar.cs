@@ -147,6 +147,12 @@ public partial class MainWindow
         tools.Items.Add(Toggle("RedactButton", Strings.ToolbarRedact,
             () => ViewModel?.CanEditContent == true, () => ViewModel?.IsRedactMode == true,
             () => ViewModel?.ToggleRedactCommand.Execute(null)));
+        // Clearing marks is not a mode and not part of marking (#329): it sits after Redact
+        // as a plain command, for a document that has been over-marked and wants to start
+        // again. Disabled while there is nothing to drop.
+        tools.Items.Add(Command("ClearMarksButton", Strings.ToolbarClearMarks, null,
+            () => ViewModel?.HasRedactionMarks == true,
+            () => ViewModel?.ClearRedactionMarksCommand.Execute(null)));
         tools.Items.Add(new NativeMenuItemSeparator());
         tools.Items.Add(Submenu("FontBox", Strings.TextFontName, TextPickerEnabled,
             ViewModel?.TextFontChoices.Cast<object>().ToList() ?? [],

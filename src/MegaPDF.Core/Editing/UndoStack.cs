@@ -32,6 +32,23 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// Records an operation the caller has already carried out, without applying it again.
+    ///
+    /// For the marks a redaction gesture makes (#329): the engine call that answers "did
+    /// this drag cover text?" *makes* the marks as it answers, so the work is done by the
+    /// time the operation exists and applying it would mark the page twice. The caller
+    /// reads back what was made and records the operation that can take it back.
+    /// </summary>
+    public void Record(IEditOperation operation)
+    {
+        _done.Add(operation);
+        if (_done.Count > capacity)
+            _done.RemoveAt(0);
+        _undone.Clear();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     public void Undo()
     {
         if (!CanUndo)

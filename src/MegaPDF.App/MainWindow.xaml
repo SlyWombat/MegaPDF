@@ -198,6 +198,12 @@
                 <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE721;" /></AppBarButton.Icon>
                 </AppBarButton>
+                <!-- Marks accumulate as you drag and are dropped as one step (#329), so the
+                     tidying action is here rather than on the toolbar: it is not part of
+                     marking. Offered only while there is something to drop. -->
+                <AppBarButton x:Name="ClearMarksButton" Click="OnClearRedactionMarksClicked" IsEnabled="{x:Bind ViewModel.HasRedactionMarks, Mode=OneWay}" AutomationProperties.AutomationId="ClearMarksButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE894;" /></AppBarButton.Icon>
+                </AppBarButton>
                 <AppBarSeparator />
                 <AppBarButton x:Name="SettingsButton" Click="OnSettingsClicked" AutomationProperties.AutomationId="SettingsButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE713;" /></AppBarButton.Icon>

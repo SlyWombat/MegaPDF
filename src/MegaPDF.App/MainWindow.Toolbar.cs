@@ -82,6 +82,7 @@ public sealed partial class MainWindow
         SetLabels(PrintButton, Strings.ToolbarPrint, Strings.ToolbarPrintTip);
         SetLabels(ShrinkButton, Strings.ToolbarShrink, Strings.ToolbarShrinkTip, Strings.ToolbarShrinkName);
         SetLabels(FindButton, Strings.ToolbarFind, Strings.ToolbarFindTip);
+        SetLabels(ClearMarksButton, Strings.ToolbarClearMarks, Strings.ToolbarClearMarksTip);
         SetLabels(SettingsButton, Strings.ToolbarSettings, Strings.ToolbarSettings);
 
         InitializeTextPickers();

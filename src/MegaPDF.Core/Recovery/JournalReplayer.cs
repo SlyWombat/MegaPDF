@@ -83,6 +83,14 @@ public static class JournalReplayer
                     break;
                 }
 
+                // #329: a clear drops every mark on the document, so it is applied to the
+                // document and not to the entry's page. What is left is the rectangles the
+                // entry carries, which are for an undo rather than for a replay.
+                case RedactionMarkClearEntry:
+                    document.ClearRedactionMarks();
+                    applied++;
+                    break;
+
                 case WhiteoutAddEntry whiteout:
                     page.AppendWhiteout(new PdfRect(whiteout.X, whiteout.Y, whiteout.Width, whiteout.Height));
                     applied++;

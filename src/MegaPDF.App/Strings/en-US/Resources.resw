@@ -872,6 +872,22 @@ Saved as {2} — ready to email.</value>
   <data name="RedactMarkRemoved" xml:space="preserve">
     <value>Mark removed.</value>
   </data>
+  <data name="RedactMarksCleared" xml:space="preserve">
+    <value>All marks cleared. Undo puts them back.</value>
+    <comment>Announced after ⋮ → Clear all marks (#329)</comment>
+  </data>
+  <data name="RedactMarkSelectedKeyHint" xml:space="preserve">
+    <value>Mark selected. Arrow keys move it, Delete removes it, Esc lets it go.</value>
+    <comment>Keyboard hint once a mark is selected (#329)</comment>
+  </data>
+  <data name="ToolbarClearMarks" xml:space="preserve">
+    <value>Clear all marks</value>
+    <comment>More (…) menu (#329): label of the item</comment>
+  </data>
+  <data name="ToolbarClearMarksTip" xml:space="preserve">
+    <value>Drop every redaction mark on the document</value>
+    <comment>More (…) menu (#329): tooltip</comment>
+  </data>
   <data name="RedactConfirmTitle" xml:space="preserve">
     <value>Remove the marked content?</value>
     <comment>Confirmation before a redaction is applied on save (#173)</comment>

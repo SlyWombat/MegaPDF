@@ -331,6 +331,11 @@ public partial class MainWindow
             vm?.PrintCommand.CanExecute(null) == true, () => vm?.PrintCommand.Execute(null)));
         entries.Add(CommandEntry(Strings.Shrink, "IconShrink", null,
             vm?.CanShrink == true, () => _ = ShrinkForEmailAsync()));
+        // Marks accumulate as you drag and are dropped as one step (#329), so tidying is
+        // here rather than on the row: it is not part of marking. The row belongs to the
+        // tools, and this is not a tool.
+        entries.Add(CommandEntry(Strings.ToolbarClearMarks, "IconClearMarks", null,
+            vm?.HasRedactionMarks == true, () => vm?.ClearRedactionMarksCommand.Execute(null)));
         entries.Add(new Separator());
         entries.Add(CommandEntry(Strings.Options, "IconOptions", OptionsGesture, true, ShowOptions));
         return entries;

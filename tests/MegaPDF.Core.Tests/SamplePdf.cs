@@ -63,6 +63,25 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// Two pages drawing the same line, for the checks that something is counted across the
+    /// document while belonging to the page it was put on — a redaction mark (#329).
+    /// </summary>
+    public static byte[] BuildTwoPages(string text = "Hello MegaPDF")
+    {
+        var content = $"BT /F1 36 Tf 72 700 Td ({text}) Tj ET\n";
+        return Assemble(
+        [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n",
+            $"7 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// A page whose text is drawn in a SUBSET font — a BaseFont carrying the
     /// six-letter prefix real producers emit when they embed only the glyphs a
     /// document uses.

@@ -210,15 +210,8 @@ public partial class MainWindow : Window
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        // A selected redaction mark comes off the same way anything else selected does
-        // (#173). It is checked first because a mark is not a page Selection: nothing was
-        // put on the page, so there is nothing for the selection model to hold.
-        if (e.Key is Key.Delete or Key.Back && ViewModel is { } marked && marked.RemoveSelectedRedactionMark())
-        {
-            e.Handled = true;
-            return;
-        }
-
+        // Delete takes off whatever is selected, and a redaction mark is one of those things
+        // now (#329): it rides the same chrome as a signature, so it comes off the same way.
         if (e.Key is Key.Delete or Key.Back && ViewModel is { Selection: not null } selected)
         {
             selected.DeleteSelection();

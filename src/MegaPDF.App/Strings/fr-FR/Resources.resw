@@ -837,6 +837,22 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Marque retirée.</value>
     <comment>#173 — new French, for francophone review</comment>
   </data>
+  <data name="RedactMarksCleared" xml:space="preserve">
+    <value>Toutes les marques sont effacées. Annuler les remet en place.</value>
+    <comment>Announced after ⋮ → Clear all marks (#329). #329 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkSelectedKeyHint" xml:space="preserve">
+    <value>Marque sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la relâche.</value>
+    <comment>Keyboard hint once a mark is selected (#329). #329 — new French, for francophone review</comment>
+  </data>
+  <data name="ToolbarClearMarks" xml:space="preserve">
+    <value>Effacer toutes les marques</value>
+    <comment>Toolbar overflow (#329): label of the ⋮ item. #329 — new French, for francophone review</comment>
+  </data>
+  <data name="ToolbarClearMarksTip" xml:space="preserve">
+    <value>Retirer toutes les marques de caviardage du document</value>
+    <comment>Toolbar overflow (#329): tooltip. #329 — new French, for francophone review</comment>
+  </data>
   <data name="RedactConfirmTitle" xml:space="preserve">
     <value>Retirer le contenu marqué ?</value>
     <comment>Confirmation before a redaction is applied on save (#173). #173 — new French, for francophone review</comment>

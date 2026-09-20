@@ -459,6 +459,15 @@ internal static class Program
         return page.GetTextRuns().Any(r => r.Text.Contains("CANARY", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// Whether two rectangles are the same area. A mark's rectangle goes through the core as
+    /// a float, so an undo that restores it exactly is asked for within half a point (#329)
+    /// rather than by equality — what the person is owed is the area they saw.
+    /// </summary>
+    private static bool SameRect(PdfRect a, PdfRect b) =>
+        Math.Abs(a.X - b.X) < 0.5 && Math.Abs(a.Y - b.Y) < 0.5
+        && Math.Abs(a.Width - b.Width) < 0.5 && Math.Abs(a.Height - b.Height) < 0.5;
+
     private static int SelfTest(string[] args)
     {
         // Where the checks save their documents: the temp folder, unless `--save-dir
@@ -1360,6 +1369,120 @@ internal static class Program
             {
                 if (Directory.Exists(keyboardState))
                     Directory.Delete(keyboardState, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        // --- The mark lifecycle: undo, clear, and scope (#329) ---
+        //
+        // The phones had this and the desktops did not: every check above marks and then
+        // applies, so none of them could see that one gesture is one press of Undo, that
+        // Undo takes the mark off the core rather than only off the screen, that clearing
+        // every mark is one step rather than one per mark, or that a mark never makes the
+        // document look unsaved. All of them are invisible in the file, which is exactly
+        // why they are checked here instead of by eye.
+        Console.WriteLine("redaction mark lifecycle (#329):");
+        var markState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-marks-{Guid.NewGuid():N}");
+        try
+        {
+            using var vm = new MainViewModel(markState);
+            vm.Open(Path.Combine(dir, "text-partial-run.pdf"));
+            Check("the fixture opened", vm.IsDocumentOpen);
+
+            // The canary sits in the middle of the line — the same drag the redaction
+            // section above makes.
+            var centre = new PdfPoint(195, 86);
+            vm.ToggleRedactCommand.Execute(null);
+            vm.AddRedactionMark(0, new PdfRect(120, 74, 150, 24));
+            var gesture = vm.RedactionMarkCount;
+            Check($"a drag leaves a mark ({gesture})", gesture > 0);
+            Check("  and leaves the tool, as it does for a person", !vm.IsRedactMode);
+            Check("the mark is an undo step", vm.CanUndo);
+            Check("but the document is not dirty: a mark is not a change", !vm.IsDirty);
+
+            Check("the mark selects where it was drawn", vm.SelectRedactionMarkAt(0, centre));
+            var marked = vm.Selection!.Bounds;
+
+            vm.UndoCommand.Execute(null);
+            Check("Undo takes the mark off the core", vm.RedactionMarkCount == 0 && !vm.HasRedactionMarks);
+            Check("  without dirtying the document either", !vm.IsDirty);
+            Check("  and the chrome lets go of a mark that is gone", vm.Selection is null);
+
+            vm.RedoCommand.Execute(null);
+            Check("Redo puts it back", vm.RedactionMarkCount == gesture);
+            Check("  in the same place", vm.SelectRedactionMarkAt(0, centre)
+                                        && SameRect(vm.Selection!.Bounds, marked));
+
+            // Dragging one is a move like any other, and it costs nothing: still unwritten.
+            var moved = new PdfRect(marked.X + 40, marked.Y + 25, marked.Width, marked.Height);
+            vm.CommitSelectionBounds(moved);
+            Check("a mark can be dragged", vm.RedactionMarkCount == gesture && !vm.IsDirty);
+            Check("  and its chrome follows the core",
+                  vm.Selection is not null && SameRect(vm.Selection!.Bounds, moved));
+
+            vm.UndoCommand.Execute(null);
+            Check("Undo takes the drag back", vm.SelectRedactionMarkAt(0, centre)
+                                            && SameRect(vm.Selection!.Bounds, marked));
+
+            // A corner drags its edges on their own (#329): an area is what the person is
+            // deciding to cover, so a mark is not held to the shape it was drawn with.
+            var resized = new PdfRect(marked.X, marked.Y, marked.Width * 2, marked.Height + 30);
+            vm.CommitSelectionBounds(resized);
+            Check("a mark resizes without keeping its shape",
+                  vm.RedactionMarkCount == gesture
+                  && vm.Selection is not null && SameRect(vm.Selection!.Bounds, resized));
+            vm.UndoCommand.Execute(null);
+            Check("  and that is undoable too", vm.SelectRedactionMarkAt(0, centre)
+                                               && SameRect(vm.Selection!.Bounds, marked));
+
+            // ✕ and Delete go through the one removal path (#329), and Undo puts the mark
+            // back — under a fresh id, which is why a chrome must not keep the old one.
+            Check("the mark is selected", vm.SelectRedactionMarkAt(0, centre));
+            Check("Delete takes it off", vm.RemoveSelectedRedactionMark()
+                                        && vm.RedactionMarkCount == gesture - 1);
+            Check("  and the selection went with it", vm.Selection is null);
+            vm.UndoCommand.Execute(null);
+            Check("Undo puts it back", vm.RedactionMarkCount == gesture);
+            Check("  with no chrome left holding the id it had", vm.Selection is null);
+
+            // Clearing every mark is one action, not one per mark and not one per page.
+            vm.ToggleRedactCommand.Execute(null);
+            vm.AddRedactionMark(0, new PdfRect(120, 36, 150, 22));
+            var both = vm.RedactionMarkCount;
+            Check($"a second gesture adds more ({both})", both > gesture);
+            Check("Clear all marks is live while there are marks",
+                  vm.ClearRedactionMarksCommand.CanExecute(null));
+
+            vm.ClearRedactionMarksCommand.Execute(null);
+            Check("Clear all marks empties the core", vm.RedactionMarkCount == 0 && !vm.HasRedactionMarks);
+            Check("  without dirtying the document", !vm.IsDirty);
+            Check("  and the chrome lets go with it", vm.Selection is null);
+
+            vm.UndoCommand.Execute(null);
+            Check("one Undo brings every one of them back", vm.RedactionMarkCount == both);
+
+            // And a mark belongs to the document that carries it (#329): the next document
+            // starts clean, whatever the last one had marked — and the tool that marks does
+            // not come over with it.
+            vm.ToggleRedactCommand.Execute(null);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            Check("another document carries none of them",
+                  vm.RedactionMarkCount == 0 && !vm.HasRedactionMarks);
+            Check("  and the tool is not left armed over it", !vm.IsRedactMode);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::redaction mark lifecycle: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(markState))
+                    Directory.Delete(markState, recursive: true);
             }
             catch (IOException)
             {

@@ -19,6 +19,7 @@ namespace MegaPDF.Core.Recovery;
 [JsonDerivedType(typeof(RedactionMarkAddEntry), "redactionMarkAdd")]
 [JsonDerivedType(typeof(RedactionMarkRemoveEntry), "redactionMarkRemove")]
 [JsonDerivedType(typeof(RedactionMarkMoveEntry), "redactionMarkMove")]
+[JsonDerivedType(typeof(RedactionMarkClearEntry), "redactionMarkClear")]
 [JsonDerivedType(typeof(WhiteoutAddEntry), "whiteoutAdd")]
 [JsonDerivedType(typeof(WhiteoutRemoveEntry), "whiteoutRemove")]
 [JsonDerivedType(typeof(FormTextEntry), "formText")]
@@ -78,6 +79,15 @@ public sealed record RedactionMarkRemoveEntry(int PageIndex, double X, double Y,
 public sealed record RedactionMarkMoveEntry(int PageIndex, int MarkId, double FromX, double FromY, double FromWidth,
                                             double FromHeight, double ToX, double ToY, double ToWidth,
                                             double ToHeight) : JournalEntry(PageIndex);
+
+/// <summary>
+/// Every mark on the document dropped (#329), as one step. The rectangles travel with the
+/// entry so an undo — or a replay — can put them back where they were.
+/// </summary>
+public sealed record RedactionMarkClearEntry(int PageIndex, MarkRect[] Marks) : JournalEntry(PageIndex);
+
+/// <summary>One mark's page and rectangle, for <see cref="RedactionMarkClearEntry"/>.</summary>
+public sealed record MarkRect(int PageIndex, double X, double Y, double Width, double Height);
 
 public sealed record WhiteoutAddEntry(int PageIndex, double X, double Y, double Width, double Height) : JournalEntry(PageIndex);
 

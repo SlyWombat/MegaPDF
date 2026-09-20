@@ -970,6 +970,18 @@
     <value>Retirer du contenu du fichier</value>
     <comment>Toolbar (#173): tooltip. #173 — new French, for francophone review</comment>
   </data>
+  <data name="ToolbarClearMarks" xml:space="preserve">
+    <value>Effacer toutes les marques</value>
+    <comment>More menu and Tools menu (#329): label. #329 — new French, for francophone review</comment>
+  </data>
+  <data name="ToolbarClearMarksTip" xml:space="preserve">
+    <value>Retirer toutes les marques de caviardage du document</value>
+    <comment>More menu and Tools menu (#329): tooltip. #329 — new French, for francophone review</comment>
+  </data>
+  <data name="RemoveSelectionName" xml:space="preserve">
+    <value>Retirer</value>
+    <comment>Screen-reader name of the ✕ on a selection's chrome (#329). #329 — new French, for francophone review</comment>
+  </data>
   <data name="RedactHint" xml:space="preserve">
     <value>Glissez sur ce qui doit être retiré, sélectionnez du texte ou appuyez sur Entrée sur l'élément actif. Échap pour annuler</value>
     <comment>Status hint while the Redact tool is armed (#173). #173 — new French, for francophone review</comment>
@@ -993,6 +1005,18 @@
   <data name="RedactMarkRemoved" xml:space="preserve">
     <value>Marque retirée.</value>
     <comment>#173 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarksCleared" xml:space="preserve">
+    <value>Toutes les marques sont effacées. Annuler les remet en place.</value>
+    <comment>Status after More → Clear all marks (#329). #329 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkMoved" xml:space="preserve">
+    <value>Marque déplacée.</value>
+    <comment>Status after a mark is dragged or resized (#329). #329 — new French, for francophone review</comment>
+  </data>
+  <data name="RedactMarkSelectedHint" xml:space="preserve">
+    <value>Glissez pour déplacer, les coins pour redimensionner, Supprimer pour retirer.</value>
+    <comment>Status once a mark is selected (#329). #329 — new French, for francophone review</comment>
   </data>
   <data name="RedactConfirmTitle" xml:space="preserve">
     <value>Retirer le contenu marqué?</value>

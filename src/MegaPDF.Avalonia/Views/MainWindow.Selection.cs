@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Input;
@@ -110,9 +111,44 @@ public partial class MainWindow
             }
         }
 
+        // The ✕ that takes it off, outside the body's top-right corner — standing further
+        // off added text, whose tight glyph box would otherwise put the chip on the letters.
+        RemoveChip(host, vm, standOff: sel.Kind == MainViewModel.SelectionKind.TextBox);
+
         _chrome = new Border { Child = host };
         _chromeHost = presenter;
         overlay.Children.Add(_chrome);
+    }
+
+    /// <summary>
+    /// The ✕ chip every selection carries, the way the Windows chrome does: a pointer user
+    /// should not have to know that Delete takes off what they selected. It sits outside the
+    /// body's top-right corner so it never covers the thing it removes — over added text it
+    /// would otherwise land on the last letters.
+    /// </summary>
+    private void RemoveChip(Panel host, MainViewModel vm, bool standOff)
+    {
+        var chip = new Button
+        {
+            Content = "✕",
+            Width = 22,
+            Height = 22,
+            MinWidth = 0,
+            Padding = new Thickness(0),
+            FontSize = 10,
+            HorizontalContentAlignment = global::Avalonia.Layout.HorizontalAlignment.Center,
+            VerticalContentAlignment = global::Avalonia.Layout.VerticalAlignment.Center,
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Right,
+            VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, -11, standOff ? -26 : -11, 0),
+        };
+        AutomationProperties.SetName(chip, Strings.RemoveSelectionName);
+        // The page must not read this press as a click of its own: without this, the chip
+        // and the page both act on one press, and the click that removes the selection also
+        // makes another one.
+        chip.PointerPressed += (_, e) => e.Handled = true;
+        chip.Click += (_, _) => vm.DeleteSelection();
+        host.Children.Add(chip);
     }
 
     private void BeginDrag(PointerPressedEventArgs e, Control host, (bool Left, bool Top)? corner)

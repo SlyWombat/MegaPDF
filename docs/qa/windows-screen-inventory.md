@@ -22,9 +22,9 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
 - [ ] **File pickers:** Open, Save as, and the Shrink save picker "Save a smaller copy" (system UI, packaged build only). H
 
 ## Toolbar (one CommandBar row, #144)
-- [ ] **Primary commands:** Open, Save (with the unsaved dot), Signatures, Add text, Whiteout, Undo, Redo, Zoom out, the zoom level drop-down, Zoom in. At each width, check the labels (right, collapsed) and what moves into More. R `doc` at each width
+- [ ] **Primary commands:** Open, Save (with the unsaved dot), Signatures, Add text, Whiteout, Redact (#173), Undo, Redo, Zoom out, the zoom level drop-down, Zoom in. At each width, check the labels (right, collapsed) and what moves into More. R `doc` at each width
 - [ ] **Font and size pickers** on the row while Add text is armed or a text box is selected. R `mode`, `textbox`
-- [ ] **More (…) overflow menu:** Save as, Password…, Print, Shrink for email, Find, separator, Settings, plus any primary commands a narrow window pushed there. H (`more` render state + `--hold`, or `Open-More`)
+- [ ] **More (…) overflow menu:** Save as, Password…, Print, Shrink for email, Find, separator, **Clear all marks** (greyed until the document carries a mark, #329), separator, Settings, plus any primary commands a narrow window pushed there. H (`more` render state + `--hold`, or `Open-More`)
 - [ ] **Zoom menu:** Actual size, Fit width, Fit page, separator, preset levels. H (`Click-Zoom`)
 - [ ] **Disabled states:** every editing command off on a restricted document (#131), and everything off while busy. M
 
@@ -48,6 +48,9 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
 - [ ] **Added text box:** selected, editing, moved, with font and size. R `textbox`
 - [ ] **Check marks:** ticking a printed box in each mark style. H
 - [ ] **Form fields:** text entry, checkbox and radio on `forms.pdf` and `review-form.pdf`. H
+- [ ] **Redact mode** (#173): the banner ("Drag across what you want removed, select text, or press Enter on the focused item — Esc cancels"), the rubber-band rectangle, and the marks it leaves — translucent fill with an outline, drawn over the page rather than written into it. H
+- [ ] **A redaction mark selected** (#329): the chrome with four free-aspect corner grips and the ✕ chip outside the top-right corner; a drag moves it, a corner resizes it without holding its shape, the ✕ and Delete take it off, and none of that sets the unsaved dot (a mark is not a change). Reached **from the keyboard** (Enter on a focused region) the mark announces "Mark selected. Arrow keys move it, Delete removes it, Esc lets it go."; a **click** selects silently, the way a click on a signature does — the Windows app announces no move or removal for any stamp. H
+- [ ] **Clear all marks** from the More menu with marks on the document — announced as "All marks cleared. Undo puts them back.", one Undo brings every one of them back — and greyed with none. H
 
 ## Busy states (#145)
 - [ ] **Busy strip** under the toolbar (indeterminate bar with its label): opening, saving, checking the saved file, searching, shrinking, printing, restoring, applying, checking a page. R `busy`
@@ -94,6 +97,6 @@ Check every surface in en, fr-CA and fr-FR, light and dark, at effective widths 
   M
 
 ## Flows walked in the QA pass
-Open, scroll, zoom, find, tick, sign, add text, cover (whiteout), edit text, undo and redo, save and save as, set and remove protection, shrink, print (to Microsoft Print to PDF), close with unsaved changes, and recovery after the app is killed.
+Open, scroll, zoom, find, tick, sign, add text, cover (whiteout), redact (#173, #329 — arm, mark, select a mark, move and resize it, remove it with the ✕ and Delete, Clear all marks, and undo each step: a mark is not a change, so none of it sets the unsaved dot, and a save with marks on the document carries none), edit text, undo and redo, save and save as, set and remove protection, shrink, print (to Microsoft Print to PDF), close with unsaved changes, and recovery after the app is killed.
 
 Use `review-form.pdf` (`tools/gen_review_form.py`), the fixtures (`tools/gen_test_fixtures.py`) and the large files in `D:\megapdf-large`. Also do a basic Narrator pass over the toolbar and More.

@@ -568,6 +568,18 @@ public static partial class Strings
     /// <summary>Mark removed.</summary>
     public static string RedactMarkRemoved => Get("RedactMarkRemoved");
 
+    /// <summary>All marks cleared. Undo puts them back.</summary>
+    public static string RedactMarksCleared => Get("RedactMarksCleared");
+
+    /// <summary>Mark selected. Arrow keys move it, Delete removes it, Esc lets it go.</summary>
+    public static string RedactMarkSelectedKeyHint => Get("RedactMarkSelectedKeyHint");
+
+    /// <summary>Clear all marks</summary>
+    public static string ToolbarClearMarks => Get("ToolbarClearMarks");
+
+    /// <summary>Drop every redaction mark on the document</summary>
+    public static string ToolbarClearMarksTip => Get("ToolbarClearMarksTip");
+
     /// <summary>Remove the marked content?</summary>
     public static string RedactConfirmTitle => Get("RedactConfirmTitle");
 

@@ -785,6 +785,15 @@ public static partial class Strings
     /// <summary>Remove content from the file</summary>
     public static string ToolbarRedactTip => Get("ToolbarRedactTip");
 
+    /// <summary>Clear all marks</summary>
+    public static string ToolbarClearMarks => Get("ToolbarClearMarks");
+
+    /// <summary>Drop every redaction mark on the document</summary>
+    public static string ToolbarClearMarksTip => Get("ToolbarClearMarksTip");
+
+    /// <summary>Remove</summary>
+    public static string RemoveSelectionName => Get("RemoveSelectionName");
+
     /// <summary>Drag across what you want removed, select text, or press Enter on the focused item — Esc cancels</summary>
     public static string RedactHint => Get("RedactHint");
 
@@ -802,6 +811,15 @@ public static partial class Strings
 
     /// <summary>Mark removed.</summary>
     public static string RedactMarkRemoved => Get("RedactMarkRemoved");
+
+    /// <summary>All marks cleared. Undo puts them back.</summary>
+    public static string RedactMarksCleared => Get("RedactMarksCleared");
+
+    /// <summary>Mark moved.</summary>
+    public static string RedactMarkMoved => Get("RedactMarkMoved");
+
+    /// <summary>Drag to move, corners to resize, Delete to remove.</summary>
+    public static string RedactMarkSelectedHint => Get("RedactMarkSelectedHint");
 
     /// <summary>Remove the marked content?</summary>
     public static string RedactConfirmTitle => Get("RedactConfirmTitle");

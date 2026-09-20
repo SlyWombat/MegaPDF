@@ -309,6 +309,7 @@ public sealed partial class MainWindow
     private static string SelectionKeyHint(StampSelection selection) =>
         selection.Id.StartsWith("textbox:", StringComparison.Ordinal) ? Strings.TextBoxSelectedKeyHint
         : selection.Id.StartsWith("whiteout:", StringComparison.Ordinal) ? Strings.CoverSelectedKeyHint
+        : selection.Id.StartsWith("redaction:", StringComparison.Ordinal) ? Strings.RedactMarkSelectedKeyHint
         : Strings.SignatureSelectedKeyHint;
 
     /// <summary>

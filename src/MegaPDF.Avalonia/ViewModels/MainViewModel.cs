@@ -708,8 +708,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 return;
             // Journalled after Apply, because an operation's entry can only be written
             // once it knows what it did — a placed stamp's id, for instance.
-            _journal.Record(operation.ToJournalEntry(inverse: false));
-            AfterEdit(operation.PageIndex, doneMessage);
+            if (operation.ChangesTheFile)
+                _journal.Record(operation.ToJournalEntry(inverse: false));
+            AfterEdit(operation.PageIndex, doneMessage, operation.ChangesTheFile);
             applied?.Invoke();
         }
         catch (TextEditException ex) when (ex.Reason == TextEditFailure.LayoutWouldChange)
@@ -724,8 +725,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void AfterEdit(int pageIndex, string message)
+    /// <summary>
+    /// What an applied change owes the window, split on whether it reaches the file (#329).
+    /// A redaction mark never does: it is not written, so there is no unsaved dot, no recovery
+    /// entry and no re-render — the overlay redraw is the whole visible change (ADR-005
+    /// decision 4). It is still an undo step, so Save stays live through <c>HasRedactionMarks</c>.
+    /// </summary>
+    private void AfterEdit(int pageIndex, string message, bool changesTheFile = true)
     {
+        if (!changesTheFile)
+        {
+            RefreshRedactionMarks();
+            Status = message;
+            RaiseUndoRedo();
+            return;
+        }
         _editCount++;
         IsDirty = true;
         Status = message;
@@ -760,9 +774,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             return;
         // An undo is journalled as its own inverse entry: replaying the journal
         // after a crash must reproduce what was on screen, not what was ever done.
-        if (op is not null)
-            _journal.Record(op.ToJournalEntry(inverse: true));
-        AfterEdit(op?.PageIndex ?? 0, Strings.Undone);
+        // A mark is the exception — see AfterHistoryChange.
+        AfterHistoryChange(op, inverse: true, Strings.Undone);
     }
 
     [RelayCommand(CanExecute = nameof(CanRedoNow))]
@@ -786,9 +799,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         }
         if (!ReferenceEquals(document, _document))
             return;
+        AfterHistoryChange(op, inverse: false, Strings.Redone);
+    }
+
+    /// <summary>
+    /// The bookkeeping an undo or a redo owes, split on whether the operation reaches the
+    /// file (#329). A redaction mark never does: undoing a mis-drag must not leave the
+    /// document looking unsaved, and must not put a mark into the recovery journal, which is
+    /// a record of what the file should be. What it does owe is a redraw of the marks.
+    /// </summary>
+    private void AfterHistoryChange(IPageEditOperation? op, bool inverse, string message)
+    {
+        if (op is { ChangesTheFile: false })
+        {
+            AfterEdit(op.PageIndex, message, changesTheFile: false);
+            return;
+        }
         if (op is not null)
-            _journal.Record(op.ToJournalEntry(inverse: false));
-        AfterEdit(op?.PageIndex ?? 0, Strings.Redone);
+            _journal.Record(op.ToJournalEntry(inverse));
+        AfterEdit(op?.PageIndex ?? 0, message);
     }
 
     private void RaiseUndoRedo()
@@ -1340,22 +1369,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     // --- Selection (SDD §3.3: place it, then adjust it) ---
 
-    public enum SelectionKind { Signature, TextBox, Whiteout }
+    public enum SelectionKind { Signature, TextBox, Whiteout, RedactionMark }
 
     /// <summary>
     /// Something placed on the page that the user has selected. One record for all
-    /// three kinds because the chrome is one mechanism — what differs is which
+    /// four kinds because the chrome is one mechanism — what differs is which
     /// handles it offers and what committing a drag calls.
     /// </summary>
     public sealed record PageSelection(
         int PageIndex, SelectionKind Kind, PdfRect Bounds,
-        string? AnnotationId = null, int ObjectIndex = -1, PdfTextRun? Run = null)
+        string? AnnotationId = null, int ObjectIndex = -1, PdfTextRun? Run = null, int MarkId = -1)
     {
-        /// <summary>Only a signature has a rectangle worth resizing.</summary>
-        public bool CanResize => Kind == SelectionKind.Signature;
+        /// <summary>
+        /// A signature has a rectangle worth resizing, and so does a redaction mark (#329):
+        /// the mark is an area, and the person is deciding what it covers, so it wants the
+        /// same corner handles rather than the drag the core happened to grow.
+        /// </summary>
+        public bool CanResize => Kind is SelectionKind.Signature or SelectionKind.RedactionMark;
 
-        /// <summary>A cover is redrawn rather than nudged.</summary>
-        public bool CanMove => Kind is SelectionKind.Signature or SelectionKind.TextBox;
+        /// <summary>A cover is redrawn rather than nudged, and a mark moves like a signature.</summary>
+        public bool CanMove => Kind is SelectionKind.Signature or SelectionKind.TextBox or SelectionKind.RedactionMark;
     }
 
     [ObservableProperty]
@@ -1470,6 +1503,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             SelectionKind.Signature => Strings.SignatureSelectedHint,
             SelectionKind.TextBox => Strings.TextBoxSelectedHint,
+            SelectionKind.RedactionMark => Strings.RedactMarkSelectedHint,
             _ => Strings.CoverSelectedHint,
         };
     }
@@ -1488,6 +1522,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 new RemoveSignatureOperation(_document, sel.PageIndex, sel.AnnotationId!, sel.Bounds),
             SelectionKind.Whiteout =>
                 new RemoveWhiteoutOperation(_document, sel.PageIndex, sel.ObjectIndex, sel.Bounds),
+            SelectionKind.RedactionMark =>
+                new RemoveRedactionMarkOperation(_document, sel.PageIndex, sel.MarkId, sel.Bounds),
             _ => new RemoveTextBoxOperation(_document, sel.PageIndex, sel.Run!.ObjectIndex, sel.Run),
         };
 
@@ -1496,6 +1532,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             SelectionKind.Signature => Strings.SignatureRemoved,
             SelectionKind.Whiteout => Strings.CoverRemoved,
+            SelectionKind.RedactionMark => Strings.RedactMarkRemoved,
             _ => Strings.TextRemoved,
         });
     }
@@ -1510,6 +1547,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         {
             case SelectionKind.Signature:
                 MoveSignature(sel.PageIndex, sel.AnnotationId!, sel.Bounds, newBounds);
+                break;
+            case SelectionKind.RedactionMark:
+                MoveRedactionMark(sel.PageIndex, sel.MarkId, sel.Bounds, newBounds);
                 break;
             case SelectionKind.TextBox:
                 // Cancel on the #139 warning leaves the box where it was: so does the selection.
@@ -1903,6 +1943,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
               Strings.SignatureMoved);
     }
 
+    /// <summary>
+    /// Moves or resizes a redaction mark (#329). A mark's id survives the move, so the
+    /// selection still points at it afterwards — and nothing here reaches the file.
+    /// </summary>
+    public void MoveRedactionMark(int pageIndex, int markId, PdfRect oldBounds, PdfRect newBounds)
+    {
+        if (_document is null || newBounds == oldBounds)
+            return;
+
+        Apply(new MoveRedactionMarkOperation(_document, pageIndex, markId, oldBounds, newBounds),
+              Strings.RedactMarkMoved);
+    }
+
     /// <summary>Adds a text box with the current face and size (SDD §3.1).</summary>
     public void AddTextBox(int pageIndex, PdfPoint topLeft, string text)
     {
@@ -1937,40 +1990,76 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasRedactionMarks))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ClearRedactionMarksCommand))]
     private int _redactionMarkCount;
 
     public bool HasRedactionMarks => RedactionMarkCount > 0;
-
-    /// <summary>The mark the user has selected, so ✕ or Delete removes the right one.</summary>
-    private (int PageIndex, int MarkId, PdfRect Bounds)? _selectedMark;
 
     /// <summary>
     /// Marks the dragged area (#173). Nothing is removed: a mark is a mark until the
     /// document is saved, and it is never written to the file, so this is free and
     /// completely undoable.
+    ///
+    /// One gesture is one undo step however many marks it made (#329): a drag across six
+    /// lines is six core marks and one press of Undo.
     /// </summary>
     public void AddRedactionMark(int pageIndex, PdfRect bounds)
     {
         // A stray click while the tool is armed should not mark an invisible speck.
-        if (_document is null || bounds.Width < 2 || bounds.Height < 2)
+        if (_document is not { } document || bounds.Width < 2 || bounds.Height < 2)
+        {
+            SetMode(PageMode.Select);
+            return;
+        }
+        Start(() => PlaceRedactionMarkAsync(document, pageIndex, bounds));
+    }
+
+    /// <summary>
+    /// Places a gesture's marks and records them as one step (#329). The engine call that
+    /// answers "did this drag cover text?" *makes* the marks as it answers, so the operation
+    /// is built from what came back and recorded already-applied rather than applied on top
+    /// of itself.
+    ///
+    /// Nothing here reaches the file: a mark is never written (ADR-005 decision 1), so there
+    /// is no unsaved dot, no recovery entry and no re-render — the overlay redraw is the whole
+    /// visible change. Undo is still how a mis-drag is taken back.
+    /// </summary>
+    private async Task PlaceRedactionMarkAsync(IPdfDocument document, int pageIndex, PdfRect bounds)
+    {
+        if (!Capabilities.CanEditContent)
+        {
+            Status = Strings.ActionRestricted;
+            SetMode(PageMode.Select);
+            return;
+        }
+        if (Busy.IsBusy)
         {
             SetMode(PageMode.Select);
             return;
         }
 
-        // A drag across text marks the text, grown to whole glyphs, rather than the
-        // rectangle: it is what the user meant, and it is what stops half a glyph being
-        // left behind. A drag across a picture marks the rectangle.
-        var marked = false;
-        using (var page = _document.GetPage(pageIndex))
+        IPageEditOperation? op;
+        using (Busy.Begin(Strings.BusyApplying, scope: BusyScope.Page, pageIndex: pageIndex))
         {
-            marked = page.MarkTextForRedaction(bounds).Count > 0;
+            try
+            {
+                op = await OffUiThread(() => MarkForRedactionOperation.Place(document, pageIndex, bounds));
+            }
+            catch (Exception ex)
+            {
+                Status = Strings.WithDetail(Strings.ChangeFailed, ex.Message);
+                SetMode(PageMode.Select);
+                return;
+            }
         }
-        if (!marked)
-            Apply(new MarkForRedactionOperation(_document, pageIndex, bounds), Strings.RedactMarkPlaced);
-        else
-            Status = Strings.RedactMarkPlaced;
+        if (!ReferenceEquals(document, _document))
+            return;
 
+        if (op is not null)
+        {
+            _undoStack.Record(op);
+            RaiseUndoRedo();
+        }
         RefreshRedactionMarks();
         SetMode(PageMode.Select);
         // Last, and it has to be: SetMode(Select) puts "Ready." in the status line, so
@@ -1986,23 +2075,66 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_document is null)
         {
             RedactionMarkCount = 0;
+            Selection = null;
             return;
         }
         RedactionMarkCount = _document.RedactionMarkCount;
+
+        // The core is the truth for a mark's rectangle, and the only thing that knows which
+        // ids still exist (#329). A chrome left on a mark that has gone would let the ✕ remove
+        // nothing — and its undo would re-mark from a rectangle nobody asked for — while one
+        // left on a mark that has moved would record the wrong "from" for the next drag. So a
+        // selection whose mark is gone lets go here, and one whose mark has moved follows it.
+        // Both happen on the same paths: undoing a clear, or undoing a drag.
+        var selected = SelectedMarkId();
+        if (selected is { } current)
+        {
+            if (current.PageIndex < 0 || current.PageIndex >= _document.PageCount)
+            {
+                Selection = null;
+            }
+            else
+            {
+                using var page = _document.GetPage(current.PageIndex);
+                RedactionMark? live = null;
+                foreach (var mark in page.GetRedactionMarks())
+                {
+                    if (mark.MarkId == current.MarkId)
+                    {
+                        live = mark;
+                        break;
+                    }
+                }
+                if (live is not { } found)
+                    Selection = null;
+                else if (Selection is { } held && held.Bounds != found.Bounds)
+                    Selection = held with { Bounds = found.Bounds };
+            }
+        }
+
+        var keep = SelectedMarkId();
         foreach (var page in Pages)
         {
             if (page.Image is null && page.Highlights.Count == 0 && RedactionMarkCount == 0)
                 continue;
+            if (page.Index < 0 || page.Index >= _document.PageCount)
+                continue;
             using var handle = _document.GetPage(page.Index);
             page.SetRedactionMarks(handle.GetRedactionMarks(),
-                _selectedMark?.PageIndex == page.Index ? _selectedMark.Value.MarkId : -1);
+                keep is { } sel && sel.PageIndex == page.Index ? sel.MarkId : -1);
         }
     }
 
-    /// <summary>The mark under the point, if any — how a click selects one to remove.</summary>
+    /// <summary>The selected mark, from the one selection the chrome and the ✕ both read.</summary>
+    private (int PageIndex, int MarkId)? SelectedMarkId() =>
+        Selection is { Kind: SelectionKind.RedactionMark, MarkId: >= 0 } mark
+            ? (mark.PageIndex, mark.MarkId)
+            : null;
+
+    /// <summary>The mark under the point, if any — how a click selects one to move or remove.</summary>
     public bool SelectRedactionMarkAt(int pageIndex, PdfPoint point)
     {
-        if (_document is null)
+        if (_document is null || pageIndex < 0 || pageIndex >= _document.PageCount)
             return false;
         using var page = _document.GetPage(pageIndex);
         foreach (var mark in page.GetRedactionMarks())
@@ -2012,8 +2144,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             {
                 continue;
             }
-            _selectedMark = (pageIndex, mark.MarkId, mark.Bounds);
-            Selection = null;
+            Select(new PageSelection(pageIndex, SelectionKind.RedactionMark, mark.Bounds,
+                                     MarkId: mark.MarkId));
             RefreshRedactionMarks();
             return true;
         }
@@ -2021,17 +2153,32 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Removes the selected mark. Nothing was removed from the document, so this
-    /// is a plain undoable edit.</summary>
+    /// is a plain undoable edit — and Delete goes through the one removal path like every
+    /// other kind of selection.</summary>
     public bool RemoveSelectedRedactionMark()
     {
-        if (_document is null || _selectedMark is not { } mark)
+        if (Selection is not { Kind: SelectionKind.RedactionMark })
             return false;
-        Apply(new RemoveRedactionMarkOperation(_document, mark.PageIndex, mark.MarkId, mark.Bounds),
-              Strings.RedactMarkRemoved);
-        _selectedMark = null;
-        RefreshRedactionMarks();
+        DeleteSelection();
         return true;
     }
+
+    /// <summary>
+    /// Drops every mark on the document as **one** undo step (#329) — a person who says
+    /// "clear all marks" means one action, not one per mark and not one per page.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanClearRedactionMarks))]
+    private void ClearRedactionMarks()
+    {
+        // Capture reads every mark's rectangle first, because only the core knows them and
+        // the clear is about to take them away: an ordinary Apply then runs the clear, and
+        // the operation that is recorded can put them all back.
+        if (_document is not { } document || ClearRedactionMarksOperation.Capture(document, 0) is not { } op)
+            return;
+        Apply(op, Strings.RedactMarksCleared);
+    }
+
+    private bool CanClearRedactionMarks() => HasRedactionMarks && !Busy.IsBusy;
 
     /// <summary>What the summary says after a redaction, from the report's counts.</summary>
     internal static string DescribeRedaction(RedactionCounts counts)
@@ -2083,7 +2230,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             RaiseUndoRedo();
             if (DocumentPath is { Length: > 0 } path)
                 _journal.MarkSaved(path);
-            _selectedMark = null;
+            // Every mark is gone, and so is whatever was selected — a chrome around a mark
+            // that no longer exists would let a person drag nothing (#329).
+            Selection = null;
             RefreshRedactionMarks();
             Status = DescribeRedaction(report.Counts);
             return true;
@@ -2920,6 +3069,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         IsDocumentOpen = false;
         IsDirty = false;
         Capabilities = DocumentCapabilities.Unprotected;
+        // Marks belong to the document that carried them (#329): the old count and the old
+        // overlays must not outlive it, and neither must the mode that places them.
+        RedactionMarkCount = 0;
+        SetMode(PageMode.Select);
         OnPropertyChanged(nameof(ShowEmptyState));
     }
 

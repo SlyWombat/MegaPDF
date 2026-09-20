@@ -324,16 +324,16 @@ Whiteout covers.**
    after a drag takes back every rectangle that drag made, and Redo puts back exactly the
    rectangles the user saw rather than re-running the selection — the selection would be
    derived from the page as it is *now*, and the rectangles are what was actually marked.
-   Tapping a mark selects it and puts the same move / resize / remove chrome on it that a
-   signature gets, except that a redaction area is a rectangle by nature, so its corner
-   grip moves each side on its own. **✕** on the selection removes it, **Remove mark** is
-   the accessibility action on the mark itself, and **Clear all marks** in the ⋯ menu takes
-   every mark on every page as one step, offered only while there is something to clear.
-   Removal and clearing are edits, so Undo puts the marks back where they were. Marks
-   belong to the document that made them: closing clears them, and the next document opens
-   with none (ADR-005 decision 1).
-   *Phones as of 2.1 (Android and iOS); the desktops follow in their next release — ADR-005
-   decision 4.*
+   Selecting a mark — a tap on a phone, a click on a desktop — puts the same move / resize
+   / remove chrome on it that a signature gets, except that a redaction area is a rectangle
+   by nature, so its corner grip moves each side on its own. The selection's **✕** removes
+   it, so do Delete and Backspace, **Remove mark** is the accessibility action on the mark
+   itself, and **Clear all marks** (⋯ on the phones; the toolbar's More overflow and the Tools
+   menu on the desktops) takes every mark on every page as one step, offered only while there is
+   something to clear. Removal and clearing are edits, so Undo puts the marks back where
+   they were. Marks belong to the document that made them: closing clears them, and the
+   next document opens with none (ADR-005 decision 1).
+   *Android and iOS as of 2.1, Windows and Avalonia as of 2.0 — ADR-005 decision 4.*
 
 #### What "removed" means
 

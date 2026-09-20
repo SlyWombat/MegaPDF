@@ -72,7 +72,7 @@ so re-measure with `tools/macos-measure-page.py` after arming a mode).
 | 3.1 | Menu bar **File** | Open a PDF… · Save · Save As · — · Protection… · Save a smaller copy for email · — · Print | real window |
 | 3.2 | Menu bar **Edit** | Undo · Redo · — · Find in document | real window |
 | 3.3 | Menu bar **View** | Zoom in · Zoom out · — · Actual size · Fit width · Fit page · Zoom level ▸ (8 presets, radio) | real window |
-| 3.4 | Menu bar **Tools** | Sign · Add text ☑ · Cover ☑ · — · Text font ▸ · Text size ▸ · — · Options | real window |
+| 3.4 | Menu bar **Tools** | Sign · Add text ☑ · Cover ☑ · Redact ☑ · Clear all marks (greyed until there is a mark) · — · Text font ▸ · Text size ▸ · — · Options | real window |
 | 3.5 | Tools ▸ Text font / Text size **disabled outside Add text** (stand-in item, no submenu) | greyed, no arrow | real window |
 | 3.6 | **More (⋯) menu**, nothing overflowed (1280) | the fixed tail only | `--screenshot-state more --window 1280x800` |
 | 3.7 | **More (⋯) menu**, overflowed (800 and 480) | the overflowed commands first, then the fixed tail | `--screenshot-state more --window 800x600` / `480x360` |
@@ -112,6 +112,8 @@ check 4.1–4.3 in all three languages, not just English.
 | 5.10 | Find bar — "Not found" | | real window, search for nonsense |
 | 5.11 | Tick / checkmark (a plain click, not a mode) | status line only | real window |
 | 5.12 | **Restricted banner** — "The owner of this document restricted it…" + Unlock… | | real window, `encrypted.pdf` |
+| 5.13 | **Redact** (#173) — "Drag across what you want removed, select text, or press Enter on the focused item — Esc cancels" | | real window (Tools ▸ Redact) |
+| 5.14 | Redact — rubber-band rectangle mid-drag, then the marks it left | | real window |
 
 The mode banner pushes the page down about 30 px. Re-measure the page with
 `tools/macos-measure-page.py` after arming a mode before mapping any click.
@@ -131,6 +133,9 @@ The mode banner pushes the page down about 30 px. Re-measure the page with
 | 6.9 | Quarter-size preview raster before a page renders | real window, scroll fast in a long file |
 | 6.10 | Page render failure — "This page couldn't be displayed." | real window, a damaged page |
 | 6.11 | Status bar left (`Status`, ellipsised) and right (`Page 3 of 12`) | every shot |
+| 6.12 | **Redaction mark** — translucent fill + outline, drawn over the page (not in it) | real window, Redact ▸ drag |
+| 6.13 | A **mark selected** (#329) — the chrome with its four free-aspect corner grips and the ✕ chip outside the top-right corner, status line "Drag to move, corners to resize, Delete to remove." | real window, click a mark |
+| 6.14 | A mark dragged (status "Mark moved.") and removed (✕, or Delete/Backspace — "Mark removed."), and Clear all marks with none left (greyed) | real window |
 
 ## 7. Errors (all via the status line unless noted)
 
@@ -163,6 +168,7 @@ Use the review test form (`tools/gen_review_form.py`), the fixtures
 - [ ] sign (draw, type, import; place, move, resize, delete)
 - [ ] add text
 - [ ] cover
+- [ ] redact (#173, #329) — arm, drag a mark, select it, move it, resize it by a corner, take it off with the ✕ and Delete, clear every mark, and undo each one: a mark is not a change, so none of it sets the unsaved dot (**self-test**)
 - [ ] edit body text
 - [ ] undo and redo
 - [ ] save, and save as

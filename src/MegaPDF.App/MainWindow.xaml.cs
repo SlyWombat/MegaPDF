@@ -41,6 +41,10 @@ public sealed partial class MainWindow : Window
             DispatcherQueue.TryEnqueue(() => PagesScroll.ChangeView(null, offset, null, disableAnimation: true));
         ViewModel.SearchScrollRequested += target =>
             DispatcherQueue.TryEnqueue(() => ScrollMatchIntoView(target));
+        // A mark lives in the core and is never drawn into the page (#329), so nothing else
+        // tells the view the overlays are stale: placed, undone, redone and cleared marks all
+        // arrive here.
+        ViewModel.RedactionMarksChanged += (_, _) => DispatcherQueue.TryEnqueue(RefreshRedactionOverlays);
         AppWindow.Closing += OnAppWindowClosing;
         InitializePageKeyboard();
         WireOverflowTooltip();
@@ -214,6 +218,16 @@ public sealed partial class MainWindow : Window
                     ? Task.CompletedTask
                     : ViewModel.AddTextBoxAsync(pageView.Index, pagePoint, newText,
                         style!.FontName, style.FontSize));
+            return;
+        }
+
+        // A redaction mark is an overlay the hit test knows nothing about (#329), so it is
+        // looked for before the hit test rather than in it: a click on a mark selects it to
+        // move, resize or remove, and does not reach the content underneath — the mark is what
+        // the person can see, and it is what they mean.
+        if (ViewModel.IsEditingAllowed && ViewModel.RedactionMarkAt(pageView.Index, pagePoint) is { } mark)
+        {
+            SelectStamp(pageGrid, pageView, $"{RedactionIdPrefix}{mark.MarkId}", mark.Bounds);
             return;
         }
 
@@ -501,6 +515,10 @@ public sealed partial class MainWindow : Window
 
         var accent = Brand.Brush("BrandAccentBrush");
         var aspect = bounds.Height / bounds.Width;
+        // Signatures and text boxes resize proportionally (SDD §3.3 — a face may not be
+        // stretched). A redaction mark is the exception (#329): it is an area, and the person
+        // is deciding what it covers, so its corner handle drags each edge on its own.
+        var aspectLocked = !annotationId.StartsWith("redaction:", StringComparison.Ordinal);
 
         var chrome = new Grid
         {
@@ -520,7 +538,8 @@ public sealed partial class MainWindow : Window
             CornerRadius = new CornerRadius(2),
         });
 
-        // Corner handle: proportional-only resize (SDD §3.3 — no distortion possible).
+        // Corner handle: proportional-only resize (SDD §3.3 — no distortion possible),
+        // except for a redaction mark, which keeps the free aspect it was given (#329).
         var handle = new Border
         {
             Width = 14,
@@ -572,7 +591,9 @@ public sealed partial class MainWindow : Window
             args.Handled = true;
             var newWidth = Math.Max(24, chrome.Width + args.Delta.Translation.X);
             chrome.Width = newWidth;
-            chrome.Height = newWidth * aspect;
+            chrome.Height = aspectLocked
+                ? newWidth * aspect
+                : Math.Max(18, chrome.Height + args.Delta.Translation.Y);
         };
         handle.ManipulationCompleted += async (_, args) =>
         {
@@ -602,7 +623,7 @@ public sealed partial class MainWindow : Window
         UpdateTextPickers();
     }
 
-    /// <summary>✕ chip / Delete key: whiteouts and stamps remove through different operations.</summary>
+    /// <summary>✕ chip / Delete key: whiteouts, marks and stamps remove through different operations.</summary>
     private async Task RemoveSelectedAsync(StampSelection selection)
     {
         if (selection.Id.StartsWith("whiteout:", StringComparison.Ordinal))
@@ -611,9 +632,20 @@ public sealed partial class MainWindow : Window
         else if (selection.Id.StartsWith("textbox:", StringComparison.Ordinal))
             await ViewModel.RemoveTextBoxAsync(selection.Page.Index,
                 int.Parse(selection.Id.AsSpan("textbox:".Length)), selection.Bounds);
+        else if (selection.Id.StartsWith(RedactionIdPrefix, StringComparison.Ordinal))
+            // A mark is not in the file (#329), so this is undoable and dirties nothing.
+            await ViewModel.RemoveRedactionMarkAsync(selection.Page.Index, MarkIdOf(selection.Id), selection.Bounds);
         else
             await ViewModel.RemoveStampAsync(selection.Page.Index, selection.Id, selection.Bounds);
     }
+
+    private const string RedactionIdPrefix = "redaction:";
+
+    /// <summary>The mark id behind a chrome id, or -1 when the id is not a redaction mark's.</summary>
+    private static int MarkIdOf(string chromeId) =>
+        chromeId.StartsWith(RedactionIdPrefix, StringComparison.Ordinal)
+            ? int.Parse(chromeId.AsSpan(RedactionIdPrefix.Length))
+            : -1;
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _nudgeTimer;
 
@@ -659,10 +691,17 @@ public sealed partial class MainWindow : Window
 
         Deselect();
         var isTextBox = selection.Id.StartsWith("textbox:", StringComparison.Ordinal);
+        var isMark = selection.Id.StartsWith(RedactionIdPrefix, StringComparison.Ordinal);
         var moved = true;
         if (isTextBox)
             moved = await ViewModel.MoveTextBoxAsync(selection.Page.Index,
                 int.Parse(selection.Id.AsSpan("textbox:".Length)), selection.Bounds, newBounds);
+        else if (isMark)
+            // A mark moves and resizes without the file noticing and without a re-render
+            // (#329): the container below is still there, which is why this one always
+            // re-selects.
+            await ViewModel.MoveRedactionMarkAsync(selection.Page.Index, MarkIdOf(selection.Id),
+                selection.Bounds, newBounds);
         else
             await ViewModel.MoveSignatureAsync(selection.Page.Index, selection.Id, selection.Bounds, newBounds);
 
@@ -787,8 +826,9 @@ public sealed partial class MainWindow : Window
         if (_dragIsRedaction)
         {
             _dragIsRedaction = false;
+            // The overlay redraw comes from the document's own marks-changed signal, so a
+            // gesture that marked nothing needs no redraw either (#329).
             await ViewModel.AddRedactionMarkAsync(pageView.Index, rect);
-            RefreshRedactionOverlay(canvas, pageView);
             return;
         }
         await ViewModel.AddWhiteoutAsync(pageView.Index, rect);
@@ -824,6 +864,46 @@ public sealed partial class MainWindow : Window
     }
 
     private const string RedactionMarkTag = "redaction-mark";
+
+    /// <summary>
+    /// Redraws every page's marks after the document's marks changed (#329), and brings a
+    /// mark's chrome back in step with the core — undo, redo and Clear all marks each take
+    /// marks away or move them, and a chrome left on a mark that is no longer there would let
+    /// a person drag nothing.
+    /// </summary>
+    private void RefreshRedactionOverlays()
+    {
+        for (var i = 0; i < ViewModel.Pages.Count; i++)
+        {
+            if (FindPageCanvas(i) is { } canvas)
+                RefreshRedactionOverlay(canvas, ViewModel.Pages[i]);
+        }
+
+        if (_selection is not { } selection
+            || !selection.Id.StartsWith(RedactionIdPrefix, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // The core is the truth for a mark's rectangle, and the only thing that knows which
+        // ids still exist: a mark is re-made under a fresh id when its removal is undone. So a
+        // selection whose mark is gone lets go, and one whose mark has moved — an undo of a
+        // drag — is re-anchored onto the core's rectangle rather than the one it had, which is
+        // what the next drag would otherwise record as its "from".
+        RedactionMark? live = null;
+        foreach (var mark in ViewModel.RedactionMarksOn(selection.Page.Index))
+        {
+            if (mark.MarkId == MarkIdOf(selection.Id))
+            {
+                live = mark;
+                break;
+            }
+        }
+        if (live is not { } current)
+            Deselect();
+        else if (current.Bounds != selection.Bounds)
+            SelectStamp(selection.Canvas, selection.Page, selection.Id, current.Bounds);
+    }
 
     /// <summary>
     /// A page's container is rebuilt whenever its slot is replaced — a render, a zoom step,
@@ -1015,6 +1095,17 @@ public sealed partial class MainWindow : Window
 
     /// <summary>Toolbar Find button: the visible twin of Ctrl+F (SDD §2.2 — a labelled control for every capability).</summary>
     private void OnFindClicked(object sender, RoutedEventArgs e) => ShowFindBar();
+
+    /// <summary>
+    /// ⋮ → Clear all marks (#329): drops every mark on the document as **one** undo step, so
+    /// a person who over-marked starts again with one press of Undo to regret it.
+    /// </summary>
+    private async void OnClearRedactionMarksClicked(object sender, RoutedEventArgs e)
+    {
+        var pageIndex = Math.Clamp(ViewModel.CurrentPage - 1, 0, Math.Max(0, ViewModel.PageCount - 1));
+        if (await ViewModel.ClearRedactionMarksAsync(pageIndex))
+            Announce(Strings.RedactMarksCleared);
+    }
 
     /// <summary>
     /// Opens the find bar, or refocuses and reselects it when it is already open — it never toggles the bar
