@@ -201,7 +201,8 @@ read `HasRedactionMarks` before the mark existed. The mark was placed a moment
 later, on the right page and the right rectangle: the feature was never broken,
 the pose was. `AddRedactionMarkNow` takes the synchronous route the view model
 already uses for the self-test and the capture runs, and the pose now writes the
-image (verified in fr-CA: `artifacts/pose-check/`).
+image (verified in fr-CA: `artifacts/pose-check/` — untracked scratch, `artifacts/`
+is ignored, so that path is on the machine that shot it and not in this repo).
 
 **And the ✕ that takes a mark off was drawn at the page's corner, not the mark's.**
 The chip was right-aligned in the chrome panel — but that panel is the whole page
@@ -224,7 +225,8 @@ platform is not, so the Mac and Linux sets are still to be re-shot — and now m
 be, since slot 5's chrome changed after the last run that could have shot it.
 
 **All six Avalonia slots were then posed in one pass, in en and in fr-CA**
-(`artifacts/pose-check/audit/`, `audit-en/`): viewer, text, search, sign, redact and
+(`artifacts/pose-check/audit/`, `audit-en/` — again untracked scratch, kept with
+`audit.ps1` and each slot's console log): viewer, text, search, sign, redact and
 home all wrote a 1440x900 image with no `::error::`. The two states that mattered —
 the marked-and-selected mark, and the find bar with its count — were read as images,
 not as file sizes.
