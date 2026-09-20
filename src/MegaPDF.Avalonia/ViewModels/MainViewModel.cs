@@ -2003,7 +2003,21 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// One gesture is one undo step however many marks it made (#329): a drag across six
     /// lines is six core marks and one press of Undo.
     /// </summary>
-    public void AddRedactionMark(int pageIndex, PdfRect bounds)
+    public void AddRedactionMark(int pageIndex, PdfRect bounds) =>
+        PlaceRedactionMark(pageIndex, bounds, inline: false);
+
+    /// <summary>
+    /// The same mark, with everything done when this returns — for the capture runs, which read
+    /// the result in the next statement (the self-test's route is the synchronous <see cref="Open"/>
+    /// and friends, so this is the pattern it already uses). <see cref="AddRedactionMark"/> starts
+    /// the work and returns (#145), so the redact pose checked for a mark that had not been placed
+    /// yet and refused to shoot: `--screenshot-state redact` has never written an image on the
+    /// Avalonia apps, in any language, since #173 landed two days after #145 did.
+    /// </summary>
+    public void AddRedactionMarkNow(int pageIndex, PdfRect bounds) =>
+        PlaceRedactionMark(pageIndex, bounds, inline: true);
+
+    private void PlaceRedactionMark(int pageIndex, PdfRect bounds, bool inline)
     {
         // A stray click while the tool is armed should not mark an invisible speck.
         if (_document is not { } document || bounds.Width < 2 || bounds.Height < 2)
@@ -2011,7 +2025,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             SetMode(PageMode.Select);
             return;
         }
-        Start(() => PlaceRedactionMarkAsync(document, pageIndex, bounds));
+        // Inline means no synchronization context and no thread hop, so the whole placement —
+        // including the core call — runs on this thread and has finished when this returns.
+        if (inline)
+            RunSynchronously(() => PlaceRedactionMarkAsync(document, pageIndex, bounds));
+        else
+            Start(() => PlaceRedactionMarkAsync(document, pageIndex, bounds));
     }
 
     /// <summary>

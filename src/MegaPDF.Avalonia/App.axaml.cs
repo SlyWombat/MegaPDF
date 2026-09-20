@@ -217,10 +217,16 @@ public partial class App : Application
                         "::error::--screenshot-state redact: the document has no line to mark.");
                     return false;
                 }
-                viewModel.AddRedactionMark(0, markedLine.Bounds);
+                // AddRedactionMarkNow, not AddRedactionMark: with a window the latter starts the
+                // work and returns (#145), so the check below read the marks before they were
+                // placed and this state never wrote an image (#329's capture pass).
+                viewModel.AddRedactionMarkNow(0, markedLine.Bounds);
                 if (!viewModel.HasRedactionMarks)
                 {
-                    Console.Error.WriteLine("::error::--screenshot-state redact: nothing was marked.");
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state redact: nothing was marked for "
+                        + $"({markedLine.Bounds.X:0.#},{markedLine.Bounds.Y:0.#} "
+                        + $"{markedLine.Bounds.Width:0.#}x{markedLine.Bounds.Height:0.#}).");
                     return false;
                 }
                 // Selected, not armed (#329), which is what 2.1's copy is about: a mark you can
