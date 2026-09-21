@@ -58,12 +58,11 @@ LIMITS = {"description": 10000, "shortDescription": 1000, "releaseNotes": 1500,
           "keywordWords": 21, "caption": 200, "copyright": 200}
 
 CERT_NOTES = (
-    "MegaPDF 2.0 is a local PDF editor: no account, no sign-in, no network use. "
+    "MegaPDF 2.1 is a local PDF editor: no account, no sign-in, no network use. "
     "To try it, open any PDF with the toolbar's Open button (Ctrl+O), or double-click a "
     ".pdf once MegaPDF is the default app. Click text to edit it, click an empty square "
-    "to tick it, use Redact on the toolbar to remove a name from the file, and Save. This submission replaces both 1.7 packages: "
-    "the new ARM64 package carries ARM64 native libraries (the 1.7 ARM64 package did not "
-    "and could not open documents)."
+    "to tick it, use Redact on the toolbar to mark a name (click the mark to select, move "
+    "or remove it), and Save. This update replaces the 2.0 x64 and ARM64 packages."
 )
 
 

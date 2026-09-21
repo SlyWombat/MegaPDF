@@ -36,6 +36,13 @@ Start-Sleep -Seconds 1
 Drag-InShot $h $X1 $Y1 $X2 $Y2
 Park $h
 Shot $h "s6a-redact-marked"
+# 2.1 (#329, #338): a mark can be selected, and that is the listing image. A finished
+# drag adds the mark and disarms the tool; a click on the mark selects it and draws
+# its chrome, the remove chip (the X) at the top-right corner (#344).
+Click-InShot $h ([int](($X1 + $X2) / 2)) ([int](($Y1 + $Y2) / 2))
+Start-Sleep -Milliseconds 800
+Park $h
+Shot $h "06-redact"
 if (-not $Save) { return }
 
 $resw = Join-Path $PSScriptRoot "..\..\src\MegaPDF.App\Strings\$Lang\Resources.resw"
@@ -66,4 +73,4 @@ $h = (Get-Process -Name MegaPDF | Where-Object { $_.MainWindowHandle -ne 0 } | S
 # summary bar up.
 Click-InShot $h 1700 1250
 Park $h
-Shot $h "06-redact"
+Shot $h "s6c-redact-result"
