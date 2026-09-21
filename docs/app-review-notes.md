@@ -50,15 +50,17 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
 6. **Search:** the magnifier → type a word; the arrows step through the matches.
 7. **Save:** **Save** writes back to the original file ("Saved" confirms);
    **Save a copy** (under **More**) writes a new file through the Files picker.
-8. **Redact:** **Redact** → drag across what must come out → **Save**. A
-   confirmation says redaction permanently removes the content and offers
-   **Overwrite the original** or **Save as a copy**, then says what was removed.
-   The content is taken out of the file, not covered.
+8. **Redact:** **More** (the ⋯ button) → **Redact** → drag across what must come
+   out. A mark can be tapped to select it, then moved, reshaped, or taken off
+   with its × (**Clear all marks** is under **More**); Undo puts it back. Then
+   **Save**: a confirmation says redaction permanently removes the content and
+   offers **Overwrite the original** or **Save as a copy**, then says what was
+   removed. The content is taken out of the file, not covered.
 9. **Protect:** **More** → **Password…** sets, changes or removes a
    document password. A protected PDF asks for it when opened.
 
 **1. Screen recording**
-Attached: MegaPDF 2.0.0 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
+Attached: MegaPDF 2.1.0 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
 launch, open the form from Files, tick and clear boxes, draw and place a
 signature, search, save, reopen from Recents, and the Photos picker opening and
 closing. Steps 8 and 9 are not in it; they need only an open PDF.
