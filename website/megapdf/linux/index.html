@@ -181,9 +181,9 @@ sudo apt update</code></pre>
         <section class="way" id="deb">
             <h2>Just the .deb</h2>
             <p class="for">Debian and Ubuntu, if you'd rather not add a repository</p>
-            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0-2/megapdf_2.0.0-2_amd64.deb">megapdf_2.0.0-2_amd64.deb</a>
+            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.1.0/megapdf_2.1.0_amd64.deb">megapdf_2.1.0_amd64.deb</a>
                and install it, which also pulls in anything it needs:</p>
-<pre><code>sudo apt install ./megapdf_2.0.0-2_amd64.deb</code></pre>
+<pre><code>sudo apt install ./megapdf_2.1.0_amd64.deb</code></pre>
             <div class="note">
                 <p><strong>This copy won't update itself.</strong> For updates, add the
                    repository as shown <a href="#apt">above</a>. It takes over this install
@@ -196,10 +196,10 @@ sudo apt update</code></pre>
         <section class="way" id="tarball">
             <h2>The tarball</h2>
             <p class="for">Any distribution. Installs into your home folder, no root needed.</p>
-            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.0.0-2/megapdf-linux-x64-2.0.0-2.tar.gz">megapdf-linux-x64-2.0.0-2.tar.gz</a>,
+            <p>Download <a href="https://github.com/SlyWombat/MegaPDF/releases/download/linux-v2.1.0/megapdf-linux-x64-2.1.0.tar.gz">megapdf-linux-x64-2.1.0.tar.gz</a>,
                then:</p>
-<pre><code>tar -xzf megapdf-linux-x64-2.0.0-2.tar.gz
-cd megapdf-linux-x64-2.0.0-2
+<pre><code>tar -xzf megapdf-linux-x64-2.1.0.tar.gz
+cd megapdf-linux-x64-2.1.0
 ./install.sh</code></pre>
             <p>That puts MegaPDF in <code>~/.local</code>, in your applications menu, and on
                your <code>PATH</code> as <code>megapdf</code>. If a terminal then says
@@ -222,9 +222,9 @@ cd megapdf-linux-x64-2.0.0-2
         <section class="way" id="checksums">
             <h2>Checksums</h2>
             <p>Each download on the
-               <a href="https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.0.0-2">release page</a>
+               <a href="https://github.com/SlyWombat/MegaPDF/releases/tag/linux-v2.1.0">release page</a>
                has a <code>.sha256</code> file beside it. Save both in the same folder and run:</p>
-<pre><code>sha256sum -c megapdf_2.0.0-2_amd64.deb.sha256</code></pre>
+<pre><code>sha256sum -c megapdf_2.1.0_amd64.deb.sha256</code></pre>
             <p>Packages from the APT repository<!--snap:live--> and the Snap Store<!--snap:soon snap:end-->
                are checked automatically.</p>
         </section>
