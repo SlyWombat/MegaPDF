@@ -9,6 +9,16 @@ not taken from a comment. **Nothing has been published**: no tag, no release, no
 store submission and no packaging artifact has been produced, and none may be
 until Dave says so.
 
+**The desktops branch has since been pushed to `a62f4f2`**, nine commits past the
+audited head, and every workflow run on it is green: CI `35547372466`, Android CI
+`35547372465` (including `instrumented-test`), iOS CI `35547372431`, Snap
+`35547372462`, macOS app `35547147852` (`Build on Windows`, `Core tests on macOS`,
+both `MegaPDF.app` legs, `App Sandbox viability`) and macOS screenshots
+`35547147859` (`What the app looks like`), all on 2026-09-21. That is the first
+CI to compile the two Avalonia fixes — and it is not evidence for slot 5: the
+design-review workflow shoots `find`, `focus`, `mode`, the dark variants, `sign`,
+`about` and `notices`, and never `redact`.
+
 **Verdict: the engineering and the copy for 2.1 are done; the submission package
 is not complete, and two things outside this machine block it.** Both store
 capture sets that must come from a real desktop — the Microsoft Store's and the
@@ -70,8 +80,8 @@ judgement in each.
 
 | | Engineering | Tests | Store captures | Outstanding |
 |---|---|---|---|---|
-| **Windows** | merged to the branch, `Build on Windows` green on the PR | Core tests, including the new `RedactionMarkTests` | **conformance set only** — six states shot locally on 2026-09-20 from a build of this branch (`artifacts/windows-screenshots/`); the **Store set is still 2.0's** | the 2.1.0.0 Store set needs an interactive desktop (GPD-DAVE); the installed package here is 2.0.0.0, and `Shoot-Set.ps1` refuses unless the version matches. WACK at 2.1.0.0 has not run |
-| **macOS and Linux** | merged to the branch; `What the app looks like`, `App Sandbox viability`, `MegaPDF.app` (arm64, x64), `Snap` green on the PR | Core tests on macOS | **none for 2.1 — and 2.1's `redact` slot could not have been shot at all until the pose was fixed on 2026-09-20** (below). All six poses now fire, shot from the Avalonia build on this machine in en and fr-CA | the Mac Store set needs the in-house Mac (`tools/macos-store-captures.sh`): the workflow named "macOS screenshots" is design-review only and says so, and the set must be re-shot anyway — two Avalonia fixes landed on 2026-09-20 (§4) |
+| **Windows** | merged to the branch, `Build on Windows` green on the PR and re-run green on `a62f4f2` | Core tests, including the new `RedactionMarkTests` | **conformance set only** — six states shot locally on 2026-09-20 from a build of this branch (`artifacts/windows-screenshots/`); the **Store set is still 2.0's** | the 2.1.0.0 Store set needs an interactive desktop (GPD-DAVE); the installed package here is 2.0.0.0, and `Shoot-Set.ps1` refuses unless the version matches. WACK at 2.1.0.0 has not run |
+| **macOS and Linux** | merged to the branch; `What the app looks like`, `App Sandbox viability`, `MegaPDF.app` (arm64, x64), `Snap` green on the PR and re-run green on `a62f4f2` | Core tests on macOS | **none for 2.1 — and 2.1's `redact` slot could not have been shot at all until the pose was fixed on 2026-09-20** (below). All six poses now fire, shot from the Avalonia build on this machine in en and fr-CA | the Mac Store set needs the in-house Mac (`tools/macos-store-captures.sh`): the workflow named "macOS screenshots" is design-review only and says so, and the set must be re-shot anyway — two Avalonia fixes landed on 2026-09-20 (§4) |
 | **iOS** | fixed on the phones branch — `ViewerView.swift`'s mark overlay was one expression the Swift type-checker refused | `UndoTests` updated for the history's new hand-back; iOS CI green after the fix | **CI** (`iOS Screenshots`, `35539723837`, dispatched from `6762d77`), en / fr-CA / fr — all three green | #172, the iPad's own layout, is **not** in 2.1 and no copy names it |
 | **Android** | merged to the phones branch; `build-and-test` and `instrumented-test` green on the PR | Core tests cover the mark lifecycle | **CI** (`Android Screenshots`, `35540445344`, dispatched from `febf0d7`), en / fr-CA / fr-FR — all three green, and fr-CA carries the mark (§4) | the app module still has no `androidTest` harness (**#346**); Play Console's aspect-ratio and tablet questions from 2.0 are unanswered (**#345**) |
 | **Linux** | merged to the branch | Core tests | not a store; `Snap` and `Linux packages` green | #314 (publishing to the Snap Store) waits on Dave's Snap account |
