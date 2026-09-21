@@ -16,7 +16,7 @@ whiteout, no Shrink for email and no Print on iOS, so none of them appears.
 ```
 Redaction marks you can take back
 
-Whether something has to come out for good is a decision, and people change their minds. A mark can now be selected, moved, reshaped, and taken off again — Remove mark, the ✕, or Clear all marks. Undo puts it back, Redo takes it away, and one drag is one step however many areas it marked.
+Whether something has to come out for good is a decision, and people change their minds. A mark can now be selected, moved, reshaped, and taken off again — Remove mark, the ×, or Clear all marks. Undo puts it back, Redo takes it away, and one drag is one step however many areas it marked.
 
 A mark no longer outlives the document it was made on. Close a file that still had marks on it and the next one opens clean. Until now those abandoned marks stayed armed, and the next save would have applied them without being asked.
 
@@ -44,7 +44,7 @@ A save holds one copy of the document on disk instead of two. A page check can n
 ```
 Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le × ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
 Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
@@ -72,7 +72,7 @@ Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deu
 ```
 Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le × ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
 Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 

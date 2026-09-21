@@ -17,7 +17,7 @@ drag to move, corner grips — is described in English only.
 ```
 Redaction marks you can take back
 
-Whether something has to come out for good is a decision, and people change their minds. A click on a mark selects it, a drag moves it, and its corner grips reshape it — each side on its own, because the area is what you are deciding to cover. ✕ or Delete takes it off, Undo puts it back, and one drag is one step however many areas it marked.
+Whether something has to come out for good is a decision, and people change their minds. A click on a mark selects it, a drag moves it, and its corner grips reshape it — each side on its own, because the area is what you are deciding to cover. The × or Delete takes it off, Undo puts it back, and one drag is one step however many areas it marked.
 
 A mark no longer outlives the document it was made on. Close a file that still had marks on it and the next one opens clean. Until now those abandoned marks stayed armed, and the next save would have applied them without being asked.
 
@@ -41,7 +41,7 @@ A save to a file holds one copy of the document instead of two. A page check can
 ```
 Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Faire disparaître une chose pour de bon est une décision, et on change d'avis. Un clic sur une marque la sélectionne, un glissement la déplace, et ses poignées de coin la redimensionnent : chaque côté indépendamment, parce que ce que vous décidez, c'est la zone à couvrir. Le ✕ ou Supprimer la retire, Annuler la remet en place, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Un clic sur une marque la sélectionne, un glissement la déplace, et ses poignées de coin la redimensionnent : chaque côté indépendamment, parce que ce que vous décidez, c'est la zone à couvrir. Le × ou Supprimer la retire, Annuler la remet en place, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
 Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
@@ -65,7 +65,7 @@ Un enregistrement dans un fichier ne garde qu'une copie du document au lieu de d
 ```
 Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Faire disparaître une chose pour de bon est une décision, et on change d'avis. Un clic sur une marque la sélectionne, un glissement la déplace, et ses poignées de coin la redimensionnent : chaque côté indépendamment, parce que ce que vous décidez, c'est la zone à couvrir. Le ✕ ou Supprimer la retire, Annuler la remet en place, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Un clic sur une marque la sélectionne, un glissement la déplace, et ses poignées de coin la redimensionnent : chaque côté indépendamment, parce que ce que vous décidez, c'est la zone à couvrir. Le × ou Supprimer la retire, Annuler la remet en place, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
 Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
