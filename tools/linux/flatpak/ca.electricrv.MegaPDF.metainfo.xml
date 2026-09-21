@@ -218,6 +218,21 @@
        tag build is where that is enforced (#254 A3) rather than left to whoever
        remembers. -->
   <releases>
+    <release version="2.1.0" date="2026-09-21">
+      <url type="details">https://github.com/SlyWombat/MegaPDF/blob/main/docs/release-notes/2.1/release-notes-2.1.md</url>
+      <description>
+        <p>A redaction mark you can take back:</p>
+        <ul>
+          <li>Select a mark, move it, reshape each side on its own, and remove it with
+          the ✕ or Delete.</li>
+          <li>Undo puts a removed mark back, and one drag is one step in the history.</li>
+          <li>Clear all marks drops every mark in the document as one step.</li>
+          <li>A mark no longer outlives the document it was made on.</li>
+          <li>Saving to a path holds one copy of the document in memory, not two, and
+          the page check runs one check at a time.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.0.0" date="2026-09-19">
       <url type="details">https://github.com/SlyWombat/MegaPDF/blob/main/docs/release-notes/2.0/release-notes-2.0.md</url>
       <description>
