@@ -9,7 +9,7 @@ from one point release to the next and can spend every character on what changed
 `tools/play_submit.py` uploads binaries only; this text is pasted by hand, or
 sent in the `releaseNotes` of an `edits/.../tracks` call.
 
-*The French copy is new for 2.1 and has not been reviewed. It follows `docs/localisation-glossary.md`; [README](README.md) lists it beside the strings the app itself gained, for a francophone to read.*
+*The French copy is new for 2.1 and was reviewed on 2026-09-20 (#343; what changed is in the [README](README.md)). It follows `docs/localisation-glossary.md`.*
 
 ## English (Canada) — `en-CA`
 
@@ -25,24 +25,24 @@ The signature library holds twenty and says so when it is full.
 
 ## Français (Canada) — `fr-CA`
 
-**Notes de version** [500] (487)
+**Notes de version** [500] (496)
 
 ```
-Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne fait qu'une étape, et une marque ne survit plus au document d'origine.
+Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne compte que pour une étape, et une marque ne survit plus au document d'origine.
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
 
 La bibliothèque de signatures en garde vingt et le dit quand elle est pleine.
 ```
 
 ## Français (France) — `fr-FR`
 
-**Notes de version** [500] (487)
+**Notes de version** [500] (496)
 
 ```
-Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne fait qu'une étape, et une marque ne survit plus au document d'origine.
+Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne compte que pour une étape, et une marque ne survit plus au document d'origine.
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
 
 La bibliothèque de signatures en garde vingt et le dit quand elle est pleine.
 ```

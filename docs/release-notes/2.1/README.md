@@ -9,10 +9,13 @@ into a console; this is the text to paste when 2.1 is submitted.
 so the copy is short. The Microsoft Store field uses 1102 of 1500 characters and
 the Google Play field 388 of 500; only the Play French comes close to its limit.
 
-> **The French is not signed off yet.** 2.0's French was reviewed by a
-> francophone and signed off (Dave, 2026-09-18); 2.1's is new, and both the store
-> copy and the app's own new strings are listed below for the same read. It
-> follows `docs/localisation-glossary.md` — *redact* is **Caviarder**, *mark* is
+> **The French was reviewed on 2026-09-20** by an AI reviewer at Dave's
+> instruction (#343): every new string and every French block below, for
+> correctness, register, consistency with the glossary and with 2.0's shipped
+> French, platform idiom and length. What changed is in
+> [the review section](#french-review-2026-09-20) at the end. 2.0's French was
+> reviewed by a francophone and signed off (Dave, 2026-09-18). It follows
+> `docs/localisation-glossary.md` — *redact* is **Caviarder**, *mark* is
 > **marque**, *Clear all marks* is **Effacer toutes les marques**, *Undo* is
 > **Annuler**, *Redo* is **Rétablir**, and the delete key is **Suppr** on Windows
 > and **Supprimer** on the Mac.
@@ -86,16 +89,19 @@ those by `tools/gen_strings.py fr-fr` and must not be edited directly.
 | Marks cleared. | Marques effacées. | phones | the same sentence with the room a phone status line has |
 | Remove mark | Retirer la marque | phones | *Retirer*, the glossary's word for taking something off a page |
 | Drop every redaction mark on the document | Retirer toutes les marques de caviardage du document | Windows, Mac and Linux | the tooltip; *caviardage* is spelled out because the tooltip has room |
-| Mark selected. Arrow keys move it, Delete removes it, Esc lets it go. | Marque sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la relâche. | Windows | the key is **Suppr** on a French Windows keyboard |
+| Mark selected. Arrow keys move it, Delete removes it, Esc lets it go. | Marque sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la désélectionne. | Windows | the key is **Suppr** on a French Windows keyboard; *désélectionne* is what 2.0's three sibling hints (signature, text, cover) already say for *lets it go* |
 | Drag to move, the corners to resize, Delete to remove. | Glissez pour déplacer, les coins pour redimensionner, Supprimer pour retirer. | Mac and Linux | **Supprimer** here, because that is the Mac's key |
 | Mark moved. | Marque déplacée. | Mac and Linux | the Mac's status line after a drag |
 | Remove | Retirer | Mac and Linux | the screen-reader name of the ✕ |
 
-**In this copy.** The four French blocks are each the same text as their
-Canadian counterpart: nothing in 2.1's copy is one of the words the derivation
-table changes, and the punctuation France spaces differently from Quebec is
-already spaced the same way — a non-breaking space before `:`. That is a
-property of this copy, not a claim that the two locales agree.
+**In this copy.** The four store blocks are each the same text as their
+Canadian counterpart: nothing in the store copy is one of the words the
+derivation table changes, and the punctuation France spaces differently from
+Quebec is already spaced the same way — a non-breaking space before `:`. The
+long form is the one exception: its Redact section names the check mark, which
+is *un crochet* in Canada and *une coche* in France, so its two blocks differ
+by that one word. That is a property of this copy, not a claim that the two
+locales agree.
 
 ## House rules these follow
 
@@ -109,5 +115,52 @@ property of this copy, not a claim that the two locales agree.
 - Sentence case, the glossary's vocabulary, and no version numbers in the body —
   the store shows the version itself.
 - Each block's character count is beside it, counted the way the field counts it.
-  The Play French is the tight one at 487 of 500; anything added there has to
+  The Play French is the tight one at 496 of 500; anything added there has to
   come out of it first.
+
+## French review, 2026-09-20
+
+Reviewed by an AI reviewer at Dave's instruction (#343), against the glossary,
+the shipped 2.0 French and each platform's keyboard idiom. The France blocks
+were regenerated with `tools/gen_strings.py fr-fr` after the Canadian edit, and
+the derived diff is the one string.
+
+**App strings.** Twelve of the thirteen are kept as written. One changed, on
+Windows: *Échap la relâche* → **Échap la désélectionne**, because that is what
+the three 2.0 hints it sits beside (signature, text, cover) already say for
+*lets it go*, and *relâcher* reads as releasing a grip. One note, not a change:
+the Mac and Linux hint says *Supprimer* because the Avalonia catalogue is shared
+and the Mac's key is called that; a French Linux keycap reads *Suppr* like
+Windows, and splitting the string would be a code change.
+
+**Store copy** (the same edit in every file that carries the block:
+`docs/release-notes/2.1/*.md`, `docs/app-store-listing.md`,
+`android/RELEASING.md`):
+
+| Was | Now | Why |
+|---|---|---|
+| Des marques de caviardage que vous pouvez reprendre | Des marques de caviardage sur lesquelles vous pouvez revenir | *reprendre* is to take an object back or resume; *revenir sur* is to take back a decision, which is the English |
+| Décider qu'une chose doit disparaître pour de bon est une décision | Faire disparaître une chose pour de bon est une décision | the French had made a tautology of *whether … is a decision* |
+| avec ✕, Suppr ou | avec le ✕, Suppr ou | the article, as the other blocks already have |
+| un glissement ne fait qu'une (seule) étape | un glissement ne compte que pour une (seule) étape | *one drag is one step* is a count |
+| le suivant s'ouvre propre | le suivant s'ouvre sans aucune marque | *propre* is not an adverb; says what *clean* means |
+| partent en une seule étape | sont retirées en une seule étape | *partir* is colloquial for marks |
+| n'allument aucun point de modification | n'affichent aucun point de modification non enregistrée | the unsaved dot is shown, not lit, and named |
+| embrouillée | perturbée | *tangled* for a process |
+| une ligne nommée du menu | une entrée nommée du menu | a menu has *entrées*, not *lignes* |
+| ne devrait pas être une devinette | ne devrait pas être un jeu de devinettes | the idiom |
+| laissée là en vignette brisée | laissée là sous forme de vignette brisée | *en vignette* does not construe |
+| chaque bord de son côté, parce que c'est la zone qu'on décide de masquer | chaque côté indépendamment, parce que ce que vous décidez, c'est la zone à couvrir | *each side on its own*; and *masquer* is the whiteout verb, which a redaction area must not be confused with |
+
+The long form (`release-notes-2.1.md`) also had a dozen prose fixes of the same
+kind — *et les décisions changent*, *sans rien pour l'obliger à s'en défaire*,
+*cédait le pas au défilement*, *libère la sélection*, *le journal de
+récupération*, *nouveau rendu*, *qui n'existe plus* — and one locale fix: its
+Canadian block said *une coche* for the check mark, which is France's word; it
+now says *un crochet*, and the France block keeps *coche*.
+
+Not changed, on purpose: *Caviarder* and *marque* (glossary); *bogue* (the
+Académie's word too, so both locales); *zoome* (OQLF and Larousse both accept
+*zoomer*); the Play block's *réversibles* headline, which is the short form the
+500-character field needs. Counts after the review: Microsoft Store 1465 of
+1500, App Store 1565, Mac App Store 1455, Google Play 496 of 500.

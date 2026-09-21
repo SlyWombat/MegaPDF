@@ -164,9 +164,9 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 
 **Release notes** [500] (487) — 2.1, from `docs/release-notes/2.1/google-play.md`
 ```
-Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne fait qu'une étape, et une marque ne survit plus au document d'origine.
+Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne compte que pour une étape, et une marque ne survit plus au document d'origine.
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
 
 La bibliothèque de signatures en garde vingt et le dit quand elle est pleine.
 ```
@@ -221,9 +221,9 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 
 **Release notes** [500] (487) — 2.1, from `docs/release-notes/2.1/google-play.md`
 ```
-Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne fait qu'une étape, et une marque ne survit plus au document d'origine.
+Des marques de caviardage réversibles : sélectionnez-en une, déplacez-la, redimensionnez-la ou retirez-la, et effacez toutes les marques d'un coup. Annuler les remet en place, un glissement ne compte que pour une étape, et une marque ne survit plus au document d'origine.
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé annoncé par un lecteur d'écran. Un pincement zoome la page.
 
 La bibliothèque de signatures en garde vingt et le dit quand elle est pleine.
 ```

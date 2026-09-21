@@ -842,7 +842,7 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <comment>Announced after … (More options) → Clear all marks (#329). #329 — new French, for francophone review</comment>
   </data>
   <data name="RedactMarkSelectedKeyHint" xml:space="preserve">
-    <value>Marque sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la relâche.</value>
+    <value>Marque sélectionnée. Les flèches la déplacent, Suppr la retire, Échap la désélectionne.</value>
     <comment>Keyboard hint once a mark is selected (#329). #329 — new French, for francophone review</comment>
   </data>
   <data name="ToolbarClearMarks" xml:space="preserve">

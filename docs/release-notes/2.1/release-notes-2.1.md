@@ -4,13 +4,13 @@ The long form: everything 2.1 changes, per platform, for the GitHub release body
 and the website. The store fields are the short versions of this, in the other
 files in this folder.
 
-Written from `git log 3c6f8f3..HEAD` — the merges of #332, #333 and #334, and the
-branches for #337 (the phones) and #338 (the desktops). 2.0 went out on every
-store on 2026-09-18 and 2026-09-19, so unlike 2.0's notes these cover the same
-span for all four.
+Written from `git log 3c6f8f3..HEAD` — the merges of #332, #333 and #334, and
+the branches for #337 (the phones) and #338 (the desktops). 2.0 went out on
+every store on 2026-09-18 and 2026-09-19, so unlike 2.0's notes these cover the
+same span for all four.
 
-*The French is not signed off yet; see [README](README.md), which lists both this
-copy and the app's own new strings for a francophone to read.*
+*The French was reviewed on 2026-09-20 (#343); the [README](README.md) lists
+what changed, here and in the app's own new strings.*
 
 ---
 
@@ -23,11 +23,11 @@ file* rather than covering it over. What it could not do was let you change your
 mind.
 
 A mark is a decision — this name, this address, this picture — and decisions
-change. A mark can now be selected by tapping or clicking it, dragged to move it,
-and reshaped: each side on its own, because the area is what you are deciding to
-cover, not the shape you happened to draw. The ✕ or Delete takes it off, Undo
-puts it back, Redo takes it away again, and one drag is one step in the history
-however many areas it marked.
+change. A mark can now be selected by tapping or clicking it, dragged to move
+it, and reshaped: each side on its own, because the area is what you are
+deciding to cover, not the shape you happened to draw. The ✕ or Delete takes it
+off, Undo puts it back, Redo takes it away again, and one drag is one step in
+the history however many areas it marked.
 
 **Clear all marks**, in the phones' More menu and the desktops' More and Tools
 menus, drops every mark on every page as one step, and Undo brings them all back
@@ -50,8 +50,8 @@ before it applies what you marked.
 
 On both phones, Redact was an unlabelled icon on the bottom bar — no place for a
 command that removes content for good, since nobody can guess what the icon
-means and the bar has no room to say. It is a named row in the menu now, with its
-own armed state: a check mark, and an on/off state a screen reader reads out
+means and the bar has no room to say. It is a named row in the menu now, with
+its own armed state: a check mark, and an on/off state a screen reader reads out
 rather than leaving you to infer it from a glyph.
 
 ### A pinch zooms
@@ -118,68 +118,69 @@ there.
 
 ## Français (Canada)
 
-### Des marques de caviardage que vous pouvez reprendre
+### Des marques de caviardage sur lesquelles vous pouvez revenir
 
 Le caviardage existe dans MegaPDF depuis la 2.0, et il retire du fichier ce que
 vous marquez plutôt que de le recouvrir. Ce qu'il ne permettait pas, c'était de
 changer d'avis.
 
-Une marque est une décision — ce nom, cette adresse, cette image — et on change
-d'avis. Une marque peut maintenant être sélectionnée en la touchant ou en
-cliquant dessus, déplacée en la glissant, et redimensionnée : chaque bord de son
-côté, parce que c'est la zone qu'on décide de masquer, et non la forme qu'on a
-dessinée par hasard. Le ✕ ou Supprimer la retire, Annuler la remet en place,
-Rétablir la retire de nouveau, et un glissement ne fait qu'une seule étape, peu
-importe le nombre de zones qu'il a marquées.
+Une marque est une décision — ce nom, cette adresse, cette image — et les
+décisions changent. Une marque peut maintenant être sélectionnée en la touchant
+ou en cliquant dessus, déplacée en la glissant, et redimensionnée : chaque côté
+indépendamment, parce que ce qu'on décide, c'est la zone à couvrir, et non la
+forme qu'on a dessinée au départ. Le ✕ ou Supprimer la retire, Annuler la remet
+en place, Rétablir la retire de nouveau, et un glissement ne compte que pour une
+seule étape, peu importe le nombre de zones qu'il a marquées.
 
-**Effacer toutes les marques**, dans le menu Plus des téléphones et dans les menus
-Plus et Outils des ordinateurs, retire toutes les marques de toutes les pages en
-une seule étape, et Annuler les remet toutes en place.
+**Effacer toutes les marques**, dans le menu Plus des téléphones et dans les
+menus Plus et Outils des ordinateurs, retire toutes les marques de toutes les
+pages en une seule étape, et Annuler les remet toutes en place.
 
-**Le bogue derrière tout cela.** Une marque survivait au document sur lequel elle
-avait été faite. Le moteur oublie ses marques quand un document se ferme, et
-chaque application gardait sa propre copie pour les dessiner, sans rien qui
-l'oblige à lâcher prise : ouvrir un fichier dont le caviardage avait été
+**Le bogue derrière tout cela.** Une marque survivait au document sur lequel
+elle avait été faite. Le moteur oublie ses marques quand un document se ferme,
+et chaque application gardait sa propre copie pour les dessiner, sans rien pour
+l'obliger à s'en défaire : ouvrir un fichier dont le caviardage avait été
 abandonné laissait les marques à l'écran et toujours armées, et l'enregistrement
 suivant les aurait appliquées. Rien ne se produit tant que vous ne le demandez
-pas, c'est la promesse même d'un outil de caviardage, et une marque qu'on ne peut
-pas retirer la brisait de la pire façon : elle exécutait votre propre intention
-d'avant, plus tard, sans rien demander.
+pas, c'est la promesse même d'un outil de caviardage, et une marque qu'on ne
+peut pas retirer la brisait de la pire façon : elle exécutait plus tard, sans
+rien demander, ce que vous aviez décidé plus tôt.
 
 **Une marque n'est toujours pas une modification.** Marquer, déplacer et retirer
-n'allument aucun point de modification, n'écrivent aucune entrée de récupération,
-ne déclenchent aucune vérification de page et ne forcent aucun réaffichage,
-parce que rien dans le fichier n'a changé. Enregistrer reste actif et demande
-confirmation avant d'appliquer ce qui est marqué.
+n'affichent aucun point de modification non enregistrée, n'écrivent rien dans le
+journal de récupération, ne déclenchent aucune vérification de page et ne
+forcent aucun nouveau rendu, parce que rien dans le fichier n'a changé.
+Enregistrer reste actif et demande confirmation avant d'appliquer ce qui est
+marqué.
 
 ### Caviarder, là où on le trouve
 
 Sur les deux téléphones, Caviarder était une icône sans étiquette dans la barre
 du bas : ce n'est pas la place d'une commande qui retire du contenu pour de bon,
-puisque personne ne peut deviner ce que l'icône veut dire et que la barre n'a pas
-la place de l'expliquer. C'est maintenant une ligne nommée du menu, avec son
-propre état armé : une coche, et un état activé ou désactivé qu'un lecteur
+puisque personne ne peut deviner ce que l'icône veut dire et que la barre n'a
+pas la place de l'expliquer. C'est maintenant une entrée nommée du menu, avec
+son propre état armé : un crochet, et un état activé ou désactivé qu'un lecteur
 d'écran annonce, au lieu de laisser deviner à partir d'un glyphe.
 
 ### Un pincement zoome
 
 Pincer la page ne faisait rien sur aucun des deux téléphones : le geste
-d'agrandissement perdait contre le défilement de la vue. Il fonctionne
-maintenant, et une fois la page agrandie, elle se déplace horizontalement au lieu
-de résister au geste.
+d'agrandissement cédait le pas au défilement de la vue. Il fonctionne
+maintenant, et une fois la page agrandie, elle se déplace horizontalement au
+lieu de résister au geste.
 
 ### Signatures
 
 La bibliothèque garde vingt signatures et le dit quand elle est pleine, au lieu
 d'échouer en silence à la vingt et unième. Une signature dont l'image a disparu
-est retirée de la liste plutôt que laissée là en vignette brisée, et une
-suppression qui échoue à mi-chemin ne peut plus laisser l'index nommer un fichier
-qui n'est pas là.
+est retirée de la liste plutôt que laissée là sous forme de vignette brisée, et
+une suppression qui échoue à mi-chemin ne peut plus laisser l'index nommer un
+fichier qui n'existe plus.
 
 ### Et aussi
 
 - **Une seule vérification de page à la fois.** Les quatre applications posent la
-  même question avant une modification qui toucherait des parties d'une page que
+  même question avant une modification qui modifierait des parties d'une page que
   vous n'avez pas touchées (#139), et chacune gardait son propre registre de ce
   qui était en cours. C'est le cœur qui s'en charge maintenant : lancer une
   vérification sur une page arrête donc une vérification inachevée sur une autre,
@@ -190,8 +191,8 @@ qui n'est pas là.
   puis créait un second fichier temporaire pour écrire à partir d'elle : un
   enregistrement gardait donc deux copies complètes sur le disque et lisait et
   écrivait le document une fois de plus. C'est maintenant la copie vérifiée qui
-  prend la place, et l'échange binaire est refusé plutôt que transformé en
-  silence en copie quand les deux fichiers ne sont pas sur le même système de
+  est mise en place, et l'échange binaire est refusé plutôt que converti en
+  silence en une copie quand les deux fichiers ne sont pas sur le même système de
   fichiers.
 
 ### Mac
@@ -200,7 +201,7 @@ qui n'est pas là.
   clic pour sélectionner, un glissement pour déplacer, les poignées de coin pour
   redimensionner chaque côté, le ✕ ou Supprimer pour retirer, et Effacer toutes
   les marques dans les menus Plus et Outils.
-- Une marque disparue laisse la sélection aller, et une marque déplacée se
+- Une marque disparue libère la sélection, et une marque déplacée se
   raccroche au rectangle du moteur : le ✕ agit donc toujours sur la marque à
   l'écran, et le glissement suivant ne note jamais un mauvais point de départ.
 - La limite de signatures, le ménage des vignettes et la copie unique à
@@ -235,73 +236,75 @@ qui n'est pas là.
 ## Français (France)
 
 > Derived from the Canadian French above by the same rules
-> `tools/gen_strings.py fr-fr` applies. The two are identical here: none of the
-> words the derivation table changes appears, and the punctuation France spaces
-> differently from Quebec — `:`, `;`, `?`, `!` — is already spaced the way both
-> do, with a non-breaking space.
+> `tools/gen_strings.py fr-fr` applies. The two differ by one word: the check
+> mark in the Redact section is *un crochet* in Canada and *une coche* in France
+> (the glossary's derivation table). The punctuation France spaces differently
+> from Quebec — `:`, `;`, `?`, `!` — is already spaced the way both do, with a
+> non-breaking space.
 
-### Des marques de caviardage que vous pouvez reprendre
+### Des marques de caviardage sur lesquelles vous pouvez revenir
 
 Le caviardage existe dans MegaPDF depuis la 2.0, et il retire du fichier ce que
 vous marquez plutôt que de le recouvrir. Ce qu'il ne permettait pas, c'était de
 changer d'avis.
 
-Une marque est une décision — ce nom, cette adresse, cette image — et on change
-d'avis. Une marque peut maintenant être sélectionnée en la touchant ou en
-cliquant dessus, déplacée en la glissant, et redimensionnée : chaque bord de son
-côté, parce que c'est la zone qu'on décide de masquer, et non la forme qu'on a
-dessinée par hasard. Le ✕ ou Supprimer la retire, Annuler la remet en place,
-Rétablir la retire de nouveau, et un glissement ne fait qu'une seule étape, peu
-importe le nombre de zones qu'il a marquées.
+Une marque est une décision — ce nom, cette adresse, cette image — et les
+décisions changent. Une marque peut maintenant être sélectionnée en la touchant
+ou en cliquant dessus, déplacée en la glissant, et redimensionnée : chaque côté
+indépendamment, parce que ce qu'on décide, c'est la zone à couvrir, et non la
+forme qu'on a dessinée au départ. Le ✕ ou Supprimer la retire, Annuler la remet
+en place, Rétablir la retire de nouveau, et un glissement ne compte que pour une
+seule étape, peu importe le nombre de zones qu'il a marquées.
 
-**Effacer toutes les marques**, dans le menu Plus des téléphones et dans les menus
-Plus et Outils des ordinateurs, retire toutes les marques de toutes les pages en
-une seule étape, et Annuler les remet toutes en place.
+**Effacer toutes les marques**, dans le menu Plus des téléphones et dans les
+menus Plus et Outils des ordinateurs, retire toutes les marques de toutes les
+pages en une seule étape, et Annuler les remet toutes en place.
 
-**Le bogue derrière tout cela.** Une marque survivait au document sur lequel elle
-avait été faite. Le moteur oublie ses marques quand un document se ferme, et
-chaque application gardait sa propre copie pour les dessiner, sans rien qui
-l'oblige à lâcher prise : ouvrir un fichier dont le caviardage avait été
+**Le bogue derrière tout cela.** Une marque survivait au document sur lequel
+elle avait été faite. Le moteur oublie ses marques quand un document se ferme,
+et chaque application gardait sa propre copie pour les dessiner, sans rien pour
+l'obliger à s'en défaire : ouvrir un fichier dont le caviardage avait été
 abandonné laissait les marques à l'écran et toujours armées, et l'enregistrement
 suivant les aurait appliquées. Rien ne se produit tant que vous ne le demandez
-pas, c'est la promesse même d'un outil de caviardage, et une marque qu'on ne peut
-pas retirer la brisait de la pire façon : elle exécutait votre propre intention
-d'avant, plus tard, sans rien demander.
+pas, c'est la promesse même d'un outil de caviardage, et une marque qu'on ne
+peut pas retirer la brisait de la pire façon : elle exécutait plus tard, sans
+rien demander, ce que vous aviez décidé plus tôt.
 
 **Une marque n'est toujours pas une modification.** Marquer, déplacer et retirer
-n'allument aucun point de modification, n'écrivent aucune entrée de récupération,
-ne déclenchent aucune vérification de page et ne forcent aucun réaffichage,
-parce que rien dans le fichier n'a changé. Enregistrer reste actif et demande
-confirmation avant d'appliquer ce qui est marqué.
+n'affichent aucun point de modification non enregistrée, n'écrivent rien dans le
+journal de récupération, ne déclenchent aucune vérification de page et ne
+forcent aucun nouveau rendu, parce que rien dans le fichier n'a changé.
+Enregistrer reste actif et demande confirmation avant d'appliquer ce qui est
+marqué.
 
 ### Caviarder, là où on le trouve
 
 Sur les deux téléphones, Caviarder était une icône sans étiquette dans la barre
 du bas : ce n'est pas la place d'une commande qui retire du contenu pour de bon,
-puisque personne ne peut deviner ce que l'icône veut dire et que la barre n'a pas
-la place de l'expliquer. C'est maintenant une ligne nommée du menu, avec son
-propre état armé : une coche, et un état activé ou désactivé qu'un lecteur
+puisque personne ne peut deviner ce que l'icône veut dire et que la barre n'a
+pas la place de l'expliquer. C'est maintenant une entrée nommée du menu, avec
+son propre état armé : une coche, et un état activé ou désactivé qu'un lecteur
 d'écran annonce, au lieu de laisser deviner à partir d'un glyphe.
 
 ### Un pincement zoome
 
 Pincer la page ne faisait rien sur aucun des deux téléphones : le geste
-d'agrandissement perdait contre le défilement de la vue. Il fonctionne
-maintenant, et une fois la page agrandie, elle se déplace horizontalement au lieu
-de résister au geste.
+d'agrandissement cédait le pas au défilement de la vue. Il fonctionne
+maintenant, et une fois la page agrandie, elle se déplace horizontalement au
+lieu de résister au geste.
 
 ### Signatures
 
 La bibliothèque garde vingt signatures et le dit quand elle est pleine, au lieu
 d'échouer en silence à la vingt et unième. Une signature dont l'image a disparu
-est retirée de la liste plutôt que laissée là en vignette brisée, et une
-suppression qui échoue à mi-chemin ne peut plus laisser l'index nommer un fichier
-qui n'est pas là.
+est retirée de la liste plutôt que laissée là sous forme de vignette brisée, et
+une suppression qui échoue à mi-chemin ne peut plus laisser l'index nommer un
+fichier qui n'existe plus.
 
 ### Et aussi
 
 - **Une seule vérification de page à la fois.** Les quatre applications posent la
-  même question avant une modification qui toucherait des parties d'une page que
+  même question avant une modification qui modifierait des parties d'une page que
   vous n'avez pas touchées (#139), et chacune gardait son propre registre de ce
   qui était en cours. C'est le cœur qui s'en charge maintenant : lancer une
   vérification sur une page arrête donc une vérification inachevée sur une autre,
@@ -312,8 +315,8 @@ qui n'est pas là.
   puis créait un second fichier temporaire pour écrire à partir d'elle : un
   enregistrement gardait donc deux copies complètes sur le disque et lisait et
   écrivait le document une fois de plus. C'est maintenant la copie vérifiée qui
-  prend la place, et l'échange binaire est refusé plutôt que transformé en
-  silence en copie quand les deux fichiers ne sont pas sur le même système de
+  est mise en place, et l'échange binaire est refusé plutôt que converti en
+  silence en une copie quand les deux fichiers ne sont pas sur le même système de
   fichiers.
 
 ### Mac
@@ -322,7 +325,7 @@ qui n'est pas là.
   clic pour sélectionner, un glissement pour déplacer, les poignées de coin pour
   redimensionner chaque côté, le ✕ ou Supprimer pour retirer, et Effacer toutes
   les marques dans les menus Plus et Outils.
-- Une marque disparue laisse la sélection aller, et une marque déplacée se
+- Une marque disparue libère la sélection, et une marque déplacée se
   raccroche au rectangle du moteur : le ✕ agit donc toujours sur la marque à
   l'écran, et le glissement suivant ne note jamais un mauvais point de départ.
 - La limite de signatures, le ménage des vignettes et la copie unique à

@@ -7,7 +7,7 @@ No other platform is named anywhere in this copy (App Review 2.3.10), and no
 feature is named that the iPhone and iPad app does not have — there is no
 whiteout, no Shrink for email and no Print on iOS, so none of them appears.
 
-*The French copy is new for 2.1 and has not been reviewed. It follows `docs/localisation-glossary.md`; [README](README.md) lists it beside the strings the app itself gained, for a francophone to read.*
+*The French copy is new for 2.1 and was reviewed on 2026-09-20 (#343; what changed is in the [README](README.md)). It follows `docs/localisation-glossary.md`.*
 
 ## English (Canada) — `en-CA`
 
@@ -39,18 +39,18 @@ A save holds one copy of the document on disk instead of two. A page check can n
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (1529)
+**Quoi de neuf** [4000] (1565)
 
 ```
-Des marques de caviardage que vous pouvez reprendre
+Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Décider qu'une chose doit disparaître pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne fait qu'une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
-Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre propre. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
+Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
 Caviarder, là où on le trouve
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être une devinette.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être un jeu de devinettes.
 
 Un pincement zoome
 
@@ -58,27 +58,27 @@ Pincez la page pour l'agrandir, et une fois agrandie, la page se déplace comme 
 
 Signatures
 
-La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là en vignette brisée.
+La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là sous forme de vignette brisée.
 
 Et aussi
 
-Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être embrouillée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
+Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être perturbée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
 ```
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (1529)
+**Quoi de neuf** [4000] (1565)
 
 ```
-Des marques de caviardage que vous pouvez reprendre
+Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Décider qu'une chose doit disparaître pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne fait qu'une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
-Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre propre. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
+Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
 Caviarder, là où on le trouve
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être une devinette.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être un jeu de devinettes.
 
 Un pincement zoome
 
@@ -86,11 +86,11 @@ Pincez la page pour l'agrandir, et une fois agrandie, la page se déplace comme 
 
 Signatures
 
-La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là en vignette brisée.
+La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là sous forme de vignette brisée.
 
 Et aussi
 
-Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être embrouillée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
+Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être perturbée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
 ```
 
 > Apple's French locale for France is `fr`, not `fr-FR`. The two French blocks

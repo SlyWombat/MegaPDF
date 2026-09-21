@@ -61,10 +61,11 @@ read (`docs/app-store-listing.md` ×3 languages, `docs/microsoft-store-listing.m
 so `tools/msstore_submit.py`, `tools/asc_publish.py` and `tools/play_listing.py`
 would carry 2.1's text and not 2.0's if either were run today.
 
-**The French of 2.1's new strings is not signed off.** 2.0's was reviewed by a
+**The French of 2.1's new strings and store copy was reviewed on 2026-09-20**
+by an AI reviewer at Dave's instruction (#343): one Windows string and a dozen
+store-copy phrases changed, all listed in `README.md`. 2.0's was reviewed by a
 francophone and signed off; 2.1 adds four strings on Windows, six on Mac and
-Linux, three each on Android and iOS, all new. `README.md` lists them with the
-judgement in each.
+Linux, three each on Android and iOS. #343 stays open for Dave to close.
 
 ## 2. Per platform
 

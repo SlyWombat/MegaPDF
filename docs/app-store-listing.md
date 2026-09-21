@@ -195,15 +195,15 @@ pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,
 
 **What's new** [4000] (1529) — 2.1, from `docs/release-notes/2.1/app-store.md`
 ```
-Des marques de caviardage que vous pouvez reprendre
+Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Décider qu'une chose doit disparaître pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne fait qu'une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
-Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre propre. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
+Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
 Caviarder, là où on le trouve
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être une devinette.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être un jeu de devinettes.
 
 Un pincement zoome
 
@@ -211,11 +211,11 @@ Pincez la page pour l'agrandir, et une fois agrandie, la page se déplace comme 
 
 Signatures
 
-La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là en vignette brisée.
+La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là sous forme de vignette brisée.
 
 Et aussi
 
-Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être embrouillée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
+Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être perturbée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -290,15 +290,15 @@ pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,
 
 **What's new** [4000] (1529) — 2.1, from `docs/release-notes/2.1/app-store.md`
 ```
-Des marques de caviardage que vous pouvez reprendre
+Des marques de caviardage sur lesquelles vous pouvez revenir
 
-Décider qu'une chose doit disparaître pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne fait qu'une seule étape, peu importe le nombre de zones qu'il a marquées.
+Faire disparaître une chose pour de bon est une décision, et on change d'avis. Une marque peut maintenant être sélectionnée, déplacée, redimensionnée, puis retirée — Retirer la marque, le ✕ ou Effacer toutes les marques. Annuler la remet en place, Rétablir la retire, et un glissement ne compte que pour une seule étape, peu importe le nombre de zones qu'il a marquées.
 
-Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre propre. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
+Une marque ne survit plus au document sur lequel elle a été faite. Fermez un fichier qui portait encore des marques : le suivant s'ouvre sans aucune marque. Jusqu'ici, ces marques abandonnées restaient armées, et l'enregistrement suivant les aurait appliquées sans qu'on le demande.
 
 Caviarder, là où on le trouve
 
-Caviarder est maintenant une ligne nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être une devinette.
+Caviarder est maintenant une entrée nommée du menu, avec un état activé ou désactivé qu'un lecteur d'écran annonce, plutôt qu'une icône sans étiquette. Marquer ce qui doit disparaître pour de bon ne devrait pas être un jeu de devinettes.
 
 Un pincement zoome
 
@@ -306,11 +306,11 @@ Pincez la page pour l'agrandir, et une fois agrandie, la page se déplace comme 
 
 Signatures
 
-La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là en vignette brisée.
+La bibliothèque en garde vingt et le dit quand elle est pleine, au lieu d'échouer en silence. Une signature dont l'image a disparu est retirée de la liste plutôt que laissée là sous forme de vignette brisée.
 
 Et aussi
 
-Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être embrouillée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
+Un enregistrement ne garde qu'une copie du document sur le disque au lieu de deux. Une vérification de page ne peut plus être perturbée par une deuxième, ni par la fermeture du document pendant qu'elle s'exécute.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
