@@ -160,6 +160,61 @@ public class RecoveryJournalTests : IDisposable
     }
 
     [Fact]
+    public void TwoLiveSessionsOnDifferentPaths_InOneProcess_AThirdInstancesScanSeesNeither()
+    {
+        // #348 phase 1: with tabs, one process can hold several live sessions at once
+        // (one RecoveryJournal per open tab). The scan that finds crashed sessions moves
+        // from "per window" to "once per app launch", so it must still see none of the
+        // journals that this same process is actively writing — the exclusive lock that
+        // already excludes another *process*'s live journal excludes another *tab*'s too.
+        var docA = WriteFormPdf();
+        var docB = WriteFormPdf();
+        using var tabA = new RecoveryJournal(_journalDir);
+        using var tabB = new RecoveryJournal(_journalDir);
+        tabA.BeginSession(docA);
+        tabA.Record(new CheckToggleEntry(0, "Agree"));
+        tabB.BeginSession(docB);
+        tabB.Record(new FormTextEntry(0, "FullName", "Tab B"));
+
+        using var scanner = new RecoveryJournal(_journalDir);
+        Assert.Empty(scanner.FindRecoverableSessions());
+    }
+
+    [Fact]
+    public void EndSession_OnOneTab_LeavesAnotherTabsJournalFileUntouched()
+    {
+        // #348 phase 1: closing one dirty tab (Save/Don't Save answered, or a clean close)
+        // must not disturb a sibling tab's still-live journal — a Cancel on tab 2's close
+        // question, or simply tab 1 finishing first, must leave tab 2 fully recoverable.
+        var docA = WriteFormPdf();
+        var docB = WriteFormPdf();
+        using var tabA = new RecoveryJournal(_journalDir);
+        using var tabB = new RecoveryJournal(_journalDir);
+        tabA.BeginSession(docA);
+        tabA.Record(new CheckToggleEntry(0, "Agree"));
+        tabB.BeginSession(docB);
+        tabB.Record(new FormTextEntry(0, "FullName", "Tab B"));
+        var tabAPath = tabA.JournalPath!;
+        var tabBPath = tabB.JournalPath!;
+
+        tabA.EndSession(); // tab A closed cleanly (or its unsaved changes were discarded)
+
+        Assert.False(File.Exists(tabAPath)); // tab A's own journal is gone
+        Assert.True(File.Exists(tabBPath)); // tab B's file was not touched by A's close
+
+        // Tab B is still a live session for anyone else scanning, and still crashes
+        // recoverably once it, too, is abandoned without EndSession — with exactly the
+        // one entry it recorded, proving A's close never wrote through B's handle.
+        using (var scanner = new RecoveryJournal(_journalDir))
+            Assert.Empty(scanner.FindRecoverableSessions());
+        tabB.Dispose();
+        using var after = new RecoveryJournal(_journalDir);
+        var session = Assert.Single(after.FindRecoverableSessions());
+        Assert.Equal(docB, session.DocumentPath);
+        Assert.Equal(1, session.EntryCount);
+    }
+
+    [Fact]
     public void AJournalAnotherProcessHolds_IsSkipped_NeverTruncated()
     {
         var docPath = WriteFormPdf();

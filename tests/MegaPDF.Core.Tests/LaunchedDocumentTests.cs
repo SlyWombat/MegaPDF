@@ -43,6 +43,30 @@ public class LaunchedDocumentTests : IDisposable
     }
 
     [Fact]
+    public void MultiplePathsOpen_NothingMatches_TheLaunchedFileIsOpened()
+    {
+        // #348 phase 1: several crashed sessions can restore into several tabs at once launch;
+        // the launched file must still open when it matches none of them.
+        var lease = Pdf("lease.pdf");
+        var open = new[] { Pdf("invoice.pdf"), Pdf("statement.pdf") };
+        Assert.True(LaunchedDocument.NeedsOpening(lease, open));
+    }
+
+    [Fact]
+    public void MultiplePathsOpen_TheLaunchedFileMatchesOneTab_ItIsNotOpenedAgain()
+    {
+        var lease = Pdf("lease.pdf");
+        var open = new[] { Pdf("invoice.pdf"), lease, Pdf("statement.pdf") };
+        Assert.False(LaunchedDocument.NeedsOpening(lease, open));
+    }
+
+    [Fact]
+    public void NoTabsOpen_TheLaunchedFileIsOpened()
+    {
+        Assert.True(LaunchedDocument.NeedsOpening(Pdf("lease.pdf"), Array.Empty<string>()));
+    }
+
+    [Fact]
     public void SameFile_SeesThroughRelativeAndDottedPaths()
     {
         var lease = Pdf("lease.pdf");
