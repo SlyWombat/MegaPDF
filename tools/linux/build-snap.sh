@@ -73,7 +73,12 @@ python3 "$SRC/make-snapcraft-yaml.py" "$SRC/snapcraft.yaml.in" "$METAINFO" \
 mkdir -p "$OUT"
 SNAP_FILE="$OUT/megapdf_${APP_VERSION}_amd64.snap"
 rm -f "$SNAP_FILE"
-( cd "$CONTEXT" && snapcraft pack --destructive-mode --output "$SNAP_FILE" )
+# A newer snapcraft refuses to write outside its project tree, which is $CONTEXT (the
+# cwd holding snap/snapcraft.yaml) — not $OUT, its parent. Pack inside $CONTEXT, then
+# move the result out to $SNAP_FILE, which is the contract callers rely on.
+BUILT_SNAP="$CONTEXT/megapdf_${APP_VERSION}_amd64.snap"
+( cd "$CONTEXT" && snapcraft pack --destructive-mode --output "$BUILT_SNAP" )
+mv "$BUILT_SNAP" "$SNAP_FILE"
 
 [ -s "$SNAP_FILE" ] || { echo "::error::snapcraft finished without writing $SNAP_FILE" >&2; exit 1; }
 
