@@ -205,6 +205,63 @@ save is the size of its source and an incremental one is twice that. The saved c
 deleted unless `MEGAPDF_LARGE_KEEP` is set. They are *not* in CI: generating a 4.5 GB
 fixture and writing a 9.7 GB copy is not something to do on every push.
 
+Document structure (#142, #353) — headings, paragraphs, lists, fields, furniture, reading
+order over columns — is `megapdf_structure_load()`'s own contract, exercised by golden block
+dumps (`core/tests/expected/structure/*.blocks`) over the fixtures
+`tools/gen_structure_fixtures.py` builds (`columns.pdf`, `furniture.pdf`, `lists.pdf`,
+`headings.pdf`, `xobject-text.pdf`, `scan.pdf`, `mixed.pdf`) plus the existing `demo`/`forms`/
+`formtext`/`userunit` fixtures and the #98 schematic, and validated against the corpus by
+`tools/stress/structure-battery.sh` (`megapdf_structure_check` driving contract 9 the way
+`tools/leakcheck` drives redaction) — see that script's own header comment for the four
+measures and their gates.
+
+### megapdf-cli (#142, #355)
+
+`megapdf-cli extract <file.pdf>` is a small, self-contained native binary — no .NET runtime,
+no Store package — that turns a PDF's text into plain text from a shell: `PowerShell`, `cmd`,
+`bash`, whatever the machine has. It is built as part of the shared engine core, not as part
+of any app:
+
+```bash
+cmake -S core -B core/build/linux-x64 -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build core/build/linux-x64 --target megapdf_cli
+core/build/linux-x64/megapdf-cli extract report.pdf > report.txt
+```
+
+(On Windows, `-A x64` in place of `-G Ninja`, and the output is `megapdf-cli.exe` under the
+build's `Release\` folder; on macOS, the same as Linux. Building the core needs the pinned
+PDFium prebuilt — `tools/fetch-pdfium-linux.sh` / `tools/fetch-pdfium-mac.sh`, or
+`tools/pdfium/install-release.sh` on Windows — fetched first, same as `MEGAPDF_CORE_TESTS`.)
+
+`--help` lists every option (`--pages`, `--out`, `--password-file`/`--password-stdin`,
+`--keep-lines`, `--page-marker`/`--no-page-breaks`, `--keep-furniture`, `--all-fields`/
+`--no-fields`, `--heuristic`, `--strict`, `--quiet`). There is deliberately no `--password`
+flag — the password is a file's first line or stdin's first line, never a command-line
+argument, matching the rest of the repo's own practice (`tools/gen_security_fixtures.sh`,
+`MEGAPDF_STRESS_UNLOCK_LIST`). Exit codes are part of the contract, not an afterthought:
+
+| exit | meaning |
+|------|---------|
+| 0 | text written |
+| 1 | usage error (a bad option, a bad `--pages` range, both password options given) |
+| 2 | the file could not be opened (missing, unreadable, not a PDF) |
+| 3 | a password is required, or the one given is wrong |
+| 4 | the document uses a security handler this build cannot open |
+| 5 | none of the requested pages had a text layer |
+| 6 | `--strict` was given and at least one requested page had no text layer |
+| 7 | `--out` could not be written |
+| 130 | interrupted (Ctrl+C) |
+
+A page with no text layer never silences the run — MegaPDF does not do OCR, and says so once
+on stderr, plus one `page N: no text layer` line per such page (`--quiet` silences these two
+notes; errors always print regardless). `core-tests.yml` runs the built binary against the
+structure fixtures above on all three OSes and diffs its output against the same goldens the
+internal API test compares against, plus an informational, Linux-only token comparison
+against `pdftotext`. `tools/stress/structure-battery.sh --cli <megapdf-cli path>` re-runs the
+corpus battery's token-fidelity measure through the real binary (`--page-marker`, not the
+default form feed, because a real document's text can itself contain a stray form-feed
+character from a bad font mapping) rather than only through the internal API call.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
