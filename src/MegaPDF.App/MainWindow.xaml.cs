@@ -247,15 +247,22 @@ public sealed partial class MainWindow : Window
     }
 
     // --- Crash recovery offer (SDD §3.4: one-click restore after an unclean exit) ---
-    // Still per window for phase 1 (#348) — see App.xaml.cs's OnLaunched.
+    // Once per app launch (#348 phase 1, plan §5.3) — App.xaml.cs's OnLaunched calls this
+    // once, on the first window, before any launched/reopened file opens. Loops every
+    // crashed session newest-first, each into its own new tab; a redirected launch, the
+    // Linux socket path and a Finder open to a running app are all out of phase 1's scope
+    // (no single-instance redirection yet), so "once per launch" and "once per window" are
+    // the same thing today — this only had to stop being "only sessions[0]".
 
     public async Task OfferCrashRecoveryAsync()
     {
+        // A session-less scan (no BeginSession): this process's own live tabs, once any
+        // exist, exclude themselves from FindRecoverableSessions by holding their journals
+        // with FileShare.None, not by identity — see RecoveryJournalTests.
         var scan = new Core.Recovery.RecoveryJournal();
         var sessions = scan.FindRecoverableSessions();
         if (sessions.Count == 0)
             return;
-        var session = sessions[0];
 
         // Right after Activate the visual tree may not be loaded yet, and
         // ContentDialog needs a live XamlRoot.
@@ -266,24 +273,27 @@ public sealed partial class MainWindow : Window
             await loaded.Task;
         }
 
-        var dialog = new ContentDialog
+        foreach (var session in sessions)
         {
-            Title = Strings.RestoreTitle,
-            Content = Strings.RestoreBody(DocumentViewModel.AppName, Path.GetFileName(session.DocumentPath)),
-            PrimaryButtonText = Strings.Restore,
-            CloseButtonText = Strings.Discard,
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = Content.XamlRoot,
-        };
+            var dialog = new ContentDialog
+            {
+                Title = Strings.RestoreTitle,
+                Content = Strings.RestoreBody(DocumentViewModel.AppName, Path.GetFileName(session.DocumentPath)),
+                PrimaryButtonText = Strings.Restore,
+                CloseButtonText = Strings.Discard,
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot,
+            };
 
-        if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
-        {
-            var doc = Shell.AddDocument();
-            await doc.RestoreSessionAsync(session);
-        }
-        else
-        {
-            Core.Recovery.RecoveryJournal.Discard(session.JournalPath);
+            if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
+            {
+                var doc = Shell.AddDocument();
+                await doc.RestoreSessionAsync(session);
+            }
+            else
+            {
+                Core.Recovery.RecoveryJournal.Discard(session.JournalPath);
+            }
         }
     }
 
