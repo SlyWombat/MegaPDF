@@ -281,6 +281,9 @@ std::unordered_map<FPDF_PAGEOBJECT, int> IndexPageObjects(FPDF_PAGE page) {
     return map;
 }
 
+// (std::min) and (std::max) in parentheses throughout this file: <windef.h>, which pdfium
+// pulls in on Windows, defines min and max macros (see megapdf_core.cpp's PaintBox comment).
+//
 // Reads every character of `page` into crop space and splits real content from generated
 // separators (design §1.2 "Words": "generated characters are ignored").
 void ReadChars(const megapdf_page* page, PageWork* out) {
@@ -290,7 +293,7 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
     const double unit = PageUnit(page);
     const auto obj_index = IndexPageObjects(raw);
     const int count = FPDFText_CountChars(tp);
-    out->chars.reserve(static_cast<size_t>(std::max(0, count)));
+    out->chars.reserve(static_cast<size_t>((std::max)(0, count)));
     bool pending_break = false;   // a generated or whitespace character was skipped since the last real one
     for (int i = 0; i < count; i++) {
         if (FPDFText_IsGenerated(tp, i) == 1) { pending_break = true; continue; }
@@ -370,10 +373,10 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
             cur.l = c.l; cur.b = c.b; cur.r = c.r; cur.t = c.t; cur.font_size = c.font_size;
             have = true;
         } else {
-            cur.l = std::min(cur.l, c.l);
-            cur.b = std::min(cur.b, c.b);
-            cur.r = std::max(cur.r, c.r);
-            cur.t = std::max(cur.t, c.t);
+            cur.l = (std::min)(cur.l, c.l);
+            cur.b = (std::min)(cur.b, c.b);
+            cur.r = (std::max)(cur.r, c.r);
+            cur.t = (std::max)(cur.t, c.t);
         }
         cur_loose_r = c.loose_r;
         cur.chars.push_back(i);
@@ -401,7 +404,7 @@ std::vector<Line> BuildLines(const std::vector<Word>& words) {
         used[i] = true;
         for (size_t j = i + 1; j < words.size(); j++) {
             if (used[j]) continue;
-            const double tol = std::max(WordHeight(words[i]), WordHeight(words[j])) * kLineCentreOverlapFactor;
+            const double tol = (std::max)(WordHeight(words[i]), WordHeight(words[j])) * kLineCentreOverlapFactor;
             if (std::fabs(WordCentre(words[i]) - WordCentre(words[j])) <= tol) {
                 members.push_back(j);
                 used[j] = true;
@@ -416,10 +419,10 @@ std::vector<Line> BuildLines(const std::vector<Word>& words) {
             line.l = first.l; line.b = first.b; line.r = first.r; line.t = first.t;
             for (size_t k = 1; k < current.size(); k++) {
                 const auto& w = words[current[k]];
-                line.l = std::min(line.l, w.l);
-                line.b = std::min(line.b, w.b);
-                line.r = std::max(line.r, w.r);
-                line.t = std::max(line.t, w.t);
+                line.l = (std::min)(line.l, w.l);
+                line.b = (std::min)(line.b, w.b);
+                line.r = (std::max)(line.r, w.r);
+                line.t = (std::max)(line.t, w.t);
             }
             lines.push_back(std::move(line));
         };
@@ -427,7 +430,7 @@ std::vector<Line> BuildLines(const std::vector<Word>& words) {
             const auto& prev = words[current.back()];
             const auto& next = words[members[k]];
             const double gap = next.l - prev.r;
-            const double bigger = std::max(prev.font_size, next.font_size);
+            const double bigger = (std::max)(prev.font_size, next.font_size);
             if (gap > bigger * kLineSplitFontSizeFactor) {
                 flush();
                 current.clear();
@@ -521,7 +524,7 @@ std::vector<FurnitureLine> DetectFurniture(std::vector<PageWork>& pages) {
         }
     }
     const int page_count = static_cast<int>(pages.size());
-    const int required = std::max(2, std::min(3, (page_count + 1) / 2));
+    const int required = (std::max)(2, (std::min)(3, (page_count + 1) / 2));
     for (auto& entry : groups) {
         if (static_cast<int>(entry.second.size()) >= required) {
             furniture.insert(furniture.end(), entry.second.begin(), entry.second.end());
@@ -587,8 +590,8 @@ struct XyCutter {
         });
         double lo = 1e18, hi = -1e18;
         for (int i : *idx) {
-            lo = std::min(lo, lines[static_cast<size_t>(i)].l);
-            hi = std::max(hi, lines[static_cast<size_t>(i)].r);
+            lo = (std::min)(lo, lines[static_cast<size_t>(i)].l);
+            hi = (std::max)(hi, lines[static_cast<size_t>(i)].r);
         }
         const double width = idx->empty() ? 0 : (hi - lo);
         for (int i : *idx) column_width[static_cast<size_t>(i)] = width;
@@ -814,7 +817,7 @@ std::vector<Piece> BuildPieces(const PageWork& pw, const std::vector<int>& line_
     bool suppress_next_separator = false;
     for (size_t li = 0; li < line_indices.size(); li++) {
         const Line& line = pw.lines[static_cast<size_t>(line_indices[li])];
-        const size_t wstart = (li == 0) ? std::min(first_word_offset, line.words.size()) : 0;
+        const size_t wstart = (li == 0) ? (std::min)(first_word_offset, line.words.size()) : 0;
         for (size_t wi = wstart; wi < line.words.size(); wi++) {
             if (any_emitted && !suppress_next_separator) AppendSeparator(&pieces, ' ');
             suppress_next_separator = false;
@@ -876,9 +879,9 @@ std::vector<SpanImpl> SliceIntoSpans(const std::vector<Piece>& pieces) {
             if (p.has_bounds) {
                 const bool same_style = p.object_index == anchor.object_index && p.bold == anchor.bold &&
                     p.italic == anchor.italic && p.mono == anchor.mono &&
-                    std::fabs(p.font_size - anchor.font_size) <= kFontSizeSpanToleranceRatio * std::max(1.0, anchor.font_size);
+                    std::fabs(p.font_size - anchor.font_size) <= kFontSizeSpanToleranceRatio * (std::max)(1.0, anchor.font_size);
                 if (!same_style) break;
-                l = std::min(l, p.l); b = std::min(b, p.b); r = std::max(r, p.r); t = std::max(t, p.t);
+                l = (std::min)(l, p.l); b = (std::min)(b, p.b); r = (std::max)(r, p.r); t = (std::max)(t, p.t);
                 any_bounds = true;
             }
             cps.push_back(p.cp);
@@ -995,7 +998,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
     // kMaxSingleLinePitchToBodySizeRatio's comment explains why: the page-relative median
     // alone cannot tell isolated lines from a wrapped paragraph when every line on the page
     // is equally isolated.
-    const double median_pitch = std::min(raw_median_pitch, body_size * kMaxSingleLinePitchToBodySizeRatio);
+    const double median_pitch = (std::min)(raw_median_pitch, body_size * kMaxSingleLinePitchToBodySizeRatio);
 
     // --- Heading: size-based, up to kHeadingMaxLines lines ---
     if (LineQualifiesBySize(line_size, body_size)) {
@@ -1024,7 +1027,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
         for (int gi : group) {
             const Line& gl = pw.lines[static_cast<size_t>(gi)];
-            l = std::min(l, gl.l); b = std::min(b, gl.b); r = std::max(r, gl.r); t = std::max(t, gl.t);
+            l = (std::min)(l, gl.l); b = (std::min)(b, gl.b); r = (std::max)(r, gl.r); t = (std::max)(t, gl.t);
         }
         out->info.bounds = megapdf_rect{l, b, r, t};
         return group.size();
@@ -1083,7 +1086,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
         for (int gi : group) {
             const Line& gl = pw.lines[static_cast<size_t>(gi)];
-            l = std::min(l, gl.l); b = std::min(b, gl.b); r = std::max(r, gl.r); t = std::max(t, gl.t);
+            l = (std::min)(l, gl.l); b = (std::min)(b, gl.b); r = (std::max)(r, gl.r); t = (std::max)(t, gl.t);
         }
         out->info.bounds = megapdf_rect{l, b, r, t};
         return group.size();
@@ -1116,7 +1119,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
         for (int gi : group) {
             const Line& gl = pw.lines[static_cast<size_t>(gi)];
-            l = std::min(l, gl.l); b = std::min(b, gl.b); r = std::max(r, gl.r); t = std::max(t, gl.t);
+            l = (std::min)(l, gl.l); b = (std::min)(b, gl.b); r = (std::max)(r, gl.r); t = (std::max)(t, gl.t);
         }
         out->info.bounds = megapdf_rect{l, b, r, t};
         return group.size();
@@ -1154,7 +1157,7 @@ bool BuildLeftoverParagraph(const PageWork& pw, int page_index, BlockImpl* out) 
     double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
     for (int gi : all) {
         const Line& gl = leftover_lines[static_cast<size_t>(gi)];
-        l = std::min(l, gl.l); b = std::min(b, gl.b); r = std::max(r, gl.r); t = std::max(t, gl.t);
+        l = (std::min)(l, gl.l); b = (std::min)(b, gl.b); r = (std::max)(r, gl.r); t = (std::max)(t, gl.t);
     }
     out->info.bounds = megapdf_rect{l, b, r, t};
     return true;
@@ -1257,7 +1260,7 @@ int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vect
             }
         }
     }
-    return std::max(0, std::min(100, score));
+    return (std::max)(0, (std::min)(100, score));
 }
 
 struct PageResult {
@@ -1298,7 +1301,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
                                                page_index, &block);
         block.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
         content.push_back(std::move(block));
-        i += std::max<size_t>(1, consumed);
+        i += (std::max<size_t>)(1, consumed);
     }
     BlockImpl leftover;
     if (BuildLeftoverParagraph(*pw, page_index, &leftover)) {
@@ -1355,8 +1358,8 @@ void AssignHeadingLevels(std::vector<BlockImpl>* blocks) {
     sizes.erase(std::unique(sizes.begin(), sizes.end(), [](double a, double bb) { return std::fabs(a - bb) < 0.01; }),
                sizes.end());
     std::vector<std::pair<double, int>> level_of;   // size -> level, largest first
-    for (size_t i = 0; i < sizes.size(); i++) level_of.emplace_back(sizes[i], std::min(static_cast<int>(i) + 1, kMaxHeadingLevel));
-    const int bold_level = std::min(static_cast<int>(sizes.size()) + 1, kMaxHeadingLevel);
+    for (size_t i = 0; i < sizes.size(); i++) level_of.emplace_back(sizes[i], (std::min)(static_cast<int>(i) + 1, kMaxHeadingLevel));
+    const int bold_level = (std::min)(static_cast<int>(sizes.size()) + 1, kMaxHeadingLevel);
     for (auto& b : *blocks) {
         if (b.info.kind != MEGAPDF_BLOCK_HEADING) continue;
         if (b.heading_bold_at_body) {
@@ -1557,7 +1560,7 @@ MEGAPDF_API size_t megapdf_block_string(const megapdf_structure* s, size_t index
         default: return 0;
     }
     if (out != nullptr) {
-        const size_t n = std::min(str->size(), capacity);
+        const size_t n = (std::min)(str->size(), capacity);
         for (size_t i = 0; i < n; i++) out[i] = (*str)[i];
     }
     return str->size();
@@ -1583,7 +1586,7 @@ MEGAPDF_API size_t megapdf_block_span_string(const megapdf_structure* s, size_t 
     if (span >= spans.size()) return 0;
     const U16& str = spans[span].text;
     if (out != nullptr) {
-        const size_t n = std::min(str.size(), capacity);
+        const size_t n = (std::min)(str.size(), capacity);
         for (size_t i = 0; i < n; i++) out[i] = str[i];
     }
     return str.size();
