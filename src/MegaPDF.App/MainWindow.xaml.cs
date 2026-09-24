@@ -100,7 +100,15 @@ public sealed partial class MainWindow : Window
             previouslyActive.EvictBackgroundRenders();
         _lastActiveDocument = Shell.Active;
         if (Shell.Active is { } nowActive)
+        {
             _ = nowActive.ReactivateRendersAsync();
+            // SignatureLibrary is one shared instance per process, but each tab keeps its
+            // own Signatures ObservableCollection built from it (the flyout binds to
+            // Shell.Active, a DocumentViewModel) — a signature added in tab A would not
+            // show in tab B's flyout until B reloaded it. Reload on every activation, the
+            // same point Avalonia's Adopt already does this (plan §4).
+            nowActive.LoadSignatures();
+        }
 
         var view = ActiveDocumentView;
         _wiredView = view;
