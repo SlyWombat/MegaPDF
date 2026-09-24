@@ -282,6 +282,74 @@ public class RecoveryJournalTests : IDisposable
         Assert.Equal(plainDoc, Assert.Single(scanner.FindRecoverableSessions()).DocumentPath);
     }
 
+    // --- #348 phase 1: tabs put more than one live session in ONE process. The scan
+    // (RecoveryJournal.FindRecoverableSessions) already excludes only the CALLING
+    // instance's own _journalPath by identity, and relies on the exclusive
+    // FileShare.None lock for every other live session — including a sibling in the
+    // same process, which takes that lock exactly as a live session in a different
+    // process would. These two tests are what the plan asked for: prove that
+    // reasoning rather than merely assert it, for the specific shape tabs create —
+    // two DIFFERENT documents, two DIFFERENT DocumentViewModel-equivalent
+    // RecoveryJournal instances, one process. ---
+
+    [Fact]
+    public void TwoLiveSessionsOnTwoPathsInOneProcess_AThirdInstancesScanSeesNeither()
+    {
+        var pathA = WriteFormPdf();
+        var pathB = WriteFormPdf();
+        using var tabA = new RecoveryJournal(_journalDir);
+        using var tabB = new RecoveryJournal(_journalDir);
+        tabA.BeginSession(pathA);
+        tabA.Record(new CheckToggleEntry(0, "Agree"));
+        tabB.BeginSession(pathB);
+        tabB.Record(new FormTextEntry(0, "FullName", "Second tab"));
+
+        Assert.NotNull(tabA.JournalPath);
+        Assert.NotNull(tabB.JournalPath);
+        Assert.NotEqual(tabA.JournalPath, tabB.JournalPath);
+
+        // A session-less scanner — the shape ShellViewModel.FindRecoverableSessions
+        // uses at app launch, before any tab exists — sees neither: both journals are
+        // still held exclusively by their own live tab.
+        using var scanner = new RecoveryJournal(_journalDir);
+        Assert.Empty(scanner.FindRecoverableSessions());
+    }
+
+    [Fact]
+    public void EndSessionOnOneTab_LeavesTheOtherTabsJournalUntouched()
+    {
+        var pathA = WriteFormPdf();
+        var pathB = WriteFormPdf();
+        using var tabA = new RecoveryJournal(_journalDir);
+        using var tabB = new RecoveryJournal(_journalDir);
+        tabA.BeginSession(pathA);
+        tabA.Record(new CheckToggleEntry(0, "Agree"));
+        tabB.BeginSession(pathB);
+        tabB.Record(new FormTextEntry(0, "FullName", "Still open"));
+
+        var pathBJournal = tabB.JournalPath!;
+
+        // Tab A closes cleanly (Save, or Don't Save) and ends its own session. Tab B's
+        // file is still there under the same name — not truncated onto, not deleted,
+        // not re-opened under a sibling name — and tab B goes on writing to it exactly
+        // as it was before tab A did anything.
+        tabA.EndSession();
+        Assert.Null(tabA.JournalPath);
+        Assert.True(File.Exists(pathBJournal));
+        tabB.Record(new FormTextEntry(0, "Email", "still-open@example.com"));
+        Assert.Equal(pathBJournal, tabB.JournalPath);
+
+        // Tab B then "crashes" (disposed without EndSession, as an unconsented exit
+        // leaves it, #145 D1): its own two edits are still there, and it is the only
+        // session offered — tab A's clean close left nothing to recover for it, and
+        // did not touch tab B's.
+        tabB.Dispose();
+        using var scanner = new RecoveryJournal(_journalDir);
+        var session = Assert.Single(scanner.FindRecoverableSessions());
+        Assert.Equal(pathB, session.DocumentPath);
+        Assert.Equal(2, session.EntryCount);
+    }
+
     private string WriteFormPdf()
     {
         var path = Path.Combine(_dir, $"form-{Guid.NewGuid():N}.pdf");

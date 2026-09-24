@@ -8,9 +8,18 @@ GenericName[fr_CA]=Éditeur PDF
 Comment=Open. Fix. Save. Done.
 Comment[fr]=Ouvrir. Corriger. Enregistrer. Terminé.
 Comment[fr_CA]=Ouvrir. Corriger. Enregistrer. Terminé.
-# %f, not %F or %U: MegaPDF opens one document per window, and it reads a path
-# rather than a URI — %U would hand it "file:///…" on some launchers, which
-# File.Exists cannot open.
+# %f, not %F or %U: it reads a path rather than a URI — %U would hand it
+# "file:///…" on some launchers, which File.Exists cannot open. %f (lower case)
+# also means a launcher that has several files selected starts megapdf once per
+# file rather than passing them all to one invocation — each of those starts a
+# new *process* today, one window per process, exactly as double-clicking each
+# file individually would (#348 phase 1: the app now opens several documents as
+# tabs in one window once it is *already running* — File ▸ Open, drag-and-drop,
+# recents — but nothing yet makes a second `megapdf <path>` launch join that
+# running instance instead of starting its own; that is the Linux single-instance
+# socket, #348 phase 2). Once that lands, %f could become %F to hand every
+# selected file to the single new process a first launch starts, which would
+# then route them into tabs of one window the same way an in-app multi-open does.
 Exec=megapdf %f
 Icon=megapdf
 Terminal=false
