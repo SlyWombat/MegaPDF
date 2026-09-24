@@ -31,6 +31,10 @@ public partial class MainWindow
     private Rectangle? _focusRing;
     private Control? _focusRingHost;
 
+    /// <summary>Rebuilds the keyboard focus ring for the active tab's <c>PageFocus</c>. Torn
+    /// down by <c>MainWindow.CancelTransientViewState</c> (via <see cref="RemoveFocusRing"/>) —
+    /// and the VM's own <c>PageFocus</c> cleared alongside <c>Selection</c> — when the active
+    /// tab changes; see there.</summary>
     private void OnPageFocusChanged()
     {
         RemoveFocusRing();
