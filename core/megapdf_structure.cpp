@@ -58,7 +58,27 @@ using U16 = std::vector<unsigned short>;
 // Named, corpus-tuned constants (design §1.2).
 // ---------------------------------------------------------------------------
 
-constexpr double kWordGapEm = 0.2;                     // Words: gap > 0.2 em ends a word.
+// Words: gap > kWordGapEm ends a word. Design §1.2 states 0.2 em; #363's corpus-scale
+// investigation (2026-09-24) found that value does not survive contact with
+// FPDFText_GetLooseCharBox's real-world behaviour: measured over a sample of the pdf-test
+// corpus, the loose-box gap between two CONSECUTIVE characters of the SAME text run (same
+// page object, weight, italic, mono and font size -- not a style change, not a different
+// line) exceeded 0.2 em for tens of thousands of character pairs per few hundred documents,
+// with a median just above the threshold (~0.31 em) and a long tail. Comparing every
+// "invented" excess token (present in the heuristic output but nowhere in FPDFText_GetText
+// for that page, per #354's measure 1) against the page's own raw token stream showed 100%
+// of them are a SUBSTRING of some real raw token -- i.e. this is real single words being
+// chopped into multiple fragments by exactly this test, not fabricated or duplicated text.
+// A controlled sweep (kWordGapEm alone, `structure_check diag`, #363) found F1 improving
+// from 0.962 to 0.987 by 0.8 em with sharply diminishing returns beyond it (1.5 em: 0.988),
+// and the reverse-direction mismatch (raw tokens with no heuristic match) *falling* at every
+// step rather than rising, i.e. no sign this trades over-splitting for over-merging. 0.8 is
+// therefore a corpus-measured recalibration of design's own constant for the box
+// representation actually in use, not a free hyperparameter tweak: the file header's own
+// note that these values await #354's corpus battery is exactly what ran here. A further,
+// smaller contributor (same-run characters split by the baseline test despite a normal
+// horizontal gap) was investigated and left alone -- see #363's PR description for why.
+constexpr double kWordGapEm = 0.8;
 constexpr double kLineCentreOverlapFactor = 0.5;        // Lines: BuildLines' own constant, reused (megapdf_core.h:292-295).
 constexpr double kLineSplitFontSizeFactor = 2.0;        // ...and its horizontal-gap line split, mirrored.
 
