@@ -1507,6 +1507,23 @@ internal static class Program
             failures++;
         }
 
+        // --- Tabs, in one window (#348 phase 1) ---
+        //
+        // Every check above (bar this file) drives a single document through a single
+        // window. This is new behaviour none of them could exercise: two tabs open
+        // at once, each with its own zoom, undo stack and dirty flag, switching
+        // between them, closing one and finding the other untouched.
+        Console.WriteLine("tabs, in one window (#348):");
+        try
+        {
+            CheckTabs(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::tabs: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- The window at its declared minimum (#237) ---
         //
         // 480×360 is a size the app offers, so it is a size the app has to draw. It
@@ -2573,6 +2590,83 @@ internal static class Program
 
         window.Close();
         Pump();
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Two documents open as tabs in one window (#348 phase 1): opening a second does
+    /// not replace the first, each tab's state (zoom, at least — the state actually
+    /// scoped per DocumentViewModel) is independent, opening an already-open path
+    /// activates its tab instead of duplicating it, Show Next/Previous Tab wraps, and
+    /// closing a tab leaves the others exactly as they were.
+    /// </summary>
+    private static void CheckTabs(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        Pump();
+
+        window.OpenFromSystem(fixtureA);
+        PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+        check("opening a document creates one tab", shell.Documents.Count == 1);
+        var tabA = shell.Active;
+        check("  and it is active and open", ReferenceEquals(shell.Active, tabA) && tabA is { IsDocumentOpen: true });
+
+        window.OpenFromSystem(fixtureB);
+        PumpUntil(() => shell.Documents.Count == 2, TimeSpan.FromSeconds(5));
+        check("opening a second document adds a second tab, not replacing the first",
+              shell.Documents.Count == 2);
+        var tabB = shell.Active;
+        check("  the new tab is active", !ReferenceEquals(tabB, tabA) && tabB is { IsDocumentOpen: true });
+        check("  the first tab is still open, untouched",
+              tabA is { IsDocumentOpen: true } && SamePath(tabA.DocumentPath, fixtureA));
+
+        // Independent per-tab state: zooming tab B must not move tab A.
+        tabB!.SetZoomCommand.Execute(2.0);
+        Pump();
+        check($"zoom is independent per tab (A={tabA!.Zoom * 100:F0}%, B={tabB.Zoom * 100:F0}%)",
+              Math.Abs(tabB.Zoom - 2.0) < 0.001 && Math.Abs(tabA.Zoom - 1.0) < 0.001);
+
+        // Opening a path already open activates its tab (#348 plan §1) instead of
+        // opening a duplicate — the decision that sidesteps two tabs on one file.
+        window.OpenFromSystem(fixtureA);
+        PumpUntil(() => ReferenceEquals(shell.Active, tabA), TimeSpan.FromSeconds(5));
+        check("opening a path already open activates its tab instead of duplicating it",
+              shell.Documents.Count == 2 && ReferenceEquals(shell.Active, tabA));
+
+        // Switching tabs directly (what the tab strip's SelectedItem binding does).
+        shell.ActivateTab(tabB);
+        Pump();
+        check("ActivateTab switches Active", ReferenceEquals(shell.Active, tabB));
+
+        // Show Next/Previous Tab (#348: Ctrl+Tab/Ctrl+Shift+Tab on Linux, ⌃Tab/⌃⇧Tab on
+        // the Mac's real menu bar) — both wrap with exactly two tabs.
+        shell.ActivateNextTab();
+        Pump();
+        check("Show Next Tab wraps from the last tab back to the first", ReferenceEquals(shell.Active, tabA));
+        shell.ActivatePreviousTab();
+        Pump();
+        check("Show Previous Tab wraps from the first tab to the last", ReferenceEquals(shell.Active, tabB));
+
+        // Closing one tab leaves the other's state untouched.
+        _ = window.CloseTabAsync(tabA);
+        PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+        check("closing a tab removes only that tab",
+              shell.Documents.Count == 1 && ReferenceEquals(shell.Documents[0], tabB));
+        check("  the remaining tab's state is untouched", Math.Abs(tabB.Zoom - 2.0) < 0.001);
+
+        // Closing the last tab closes the window (Safari/Preview/GNOME convention, #348 plan §1).
+        _ = window.CloseActiveTabOrWindowAsync();
+        PumpUntil(() => !window.IsVisible, TimeSpan.FromSeconds(5));
+        check("closing the last tab closes the window", !window.IsVisible);
 
         static void Pump() => MenuProbe.Pump();
     }
