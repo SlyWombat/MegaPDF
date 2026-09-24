@@ -45,6 +45,7 @@
 // personal (#151, #173, #354).
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -897,6 +898,289 @@ int RunDiag(const std::vector<std::string>& pdfs) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// diagbaseline mode (#363 follow-up investigation only -- not part of the #354 battery/gate).
+//
+// PR #364 fixed the dominant token-over-splitting mechanism (kWordGapEm 0.2 -> 0.8) and left
+// a smaller, distinct one open: some same-run (no PDFium-generated break) character pairs
+// pass the horizontal word-gap test but fail BuildWords' baseline test
+// (core/megapdf_structure.cpp:387, |origin_y delta| <= 0.35 em) despite a small horizontal
+// gap -- which should rule out "these are on different lines". This mode replicates that
+// exact walk (ReadChars + BuildStructure's normal_idx/rotated_idx split + BuildWords' per-pair
+// test, core/megapdf_structure.cpp:309-406,1466-1472) over raw PDFium calls -- this tool is
+// built standalone against core headers, not against megapdf_structure.cpp's internals (see
+// the kSoftHyphen comment above) -- and, for every pair that lands in that residual bucket,
+// tallies numeric characteristics only: no text, no filenames, no paths (corpus privacy, same
+// discipline as the diag mode above).
+//
+// Two things this mode got wrong in an earlier version, caught by a sanity check against the
+// real pipeline before trusting any of its numbers (kept here as the reason, not just fixed
+// silently): BuildWords never tests object identity between consecutive characters (only
+// preceded_by_break and the gap/baseline tests) -- a "run" can cross a text-object boundary
+// as long as PDFium inserted no generated break -- and adjacency is over BuildStructure's
+// *filtered* normal_idx (rotated characters, kRotationSkewTolerance-flagged, are pulled into
+// a wholly separate leftover_words pass, so a normal character's "previous" character is the
+// previous NON-ROTATED one, which can be several real characters back in the raw stream).
+// Skipping the rotation split inflated the first measurement's fail count with pairs the real
+// BuildWords(normal_idx) walk never actually forms.
+//
+// kWordGapEm/kBaselineEm/kRotationSkewTolerance below mirror core/megapdf_structure.cpp's
+// kWordGapEm (line 81), the 0.35 literal in BuildWords (line 387), and kRotationSkewTolerance
+// (line 134) -- kept in sync by hand, same as kSoftHyphen.
+// ---------------------------------------------------------------------------
+struct BaselineChar {
+    unsigned int unicode = 0;
+    double loose_l = 0, loose_r = 0;
+    double origin_x = 0, origin_y = 0;
+    double font_size = 0;
+    FPDF_PAGEOBJECT obj = nullptr;
+    double skew_b = 0, skew_c = 0;  // relative to |a|, same test as megapdf_structure.cpp's kRotationSkewTolerance
+    bool rotated = false;
+    bool preceded_by_break = false;
+};
+
+constexpr double kWordGapEmMirror = 0.8;
+constexpr double kBaselineEmMirror = 0.35;
+constexpr double kRotationSkewToleranceMirror = 0.02;
+
+bool IsWhitespaceCpBaseline(unsigned int c) { return IsWhitespaceCpLocal(c); }
+
+std::vector<BaselineChar> ReadBaselineChars(FPDF_TEXTPAGE tp) {
+    std::vector<BaselineChar> out;
+    const int count = FPDFText_CountChars(tp);
+    out.reserve(static_cast<size_t>((std::max)(count, 0)));
+    bool pending_break = false;
+    for (int i = 0; i < count; i++) {
+        if (FPDFText_IsGenerated(tp, i) == 1) { pending_break = true; continue; }
+        const unsigned int u = FPDFText_GetUnicode(tp, i);
+        if (u == 0 || IsWhitespaceCpBaseline(u)) { pending_break = true; continue; }
+        BaselineChar c;
+        c.unicode = u;
+        double ox = 0, oy = 0;
+        FPDFText_GetCharOrigin(tp, i, &ox, &oy);
+        c.origin_x = ox;
+        c.origin_y = oy;
+        c.font_size = FPDFText_GetFontSize(tp, i);
+        FS_RECTF loose{};
+        if (FPDFText_GetLooseCharBox(tp, i, &loose)) {
+            c.loose_l = (std::min)(loose.left, loose.right);
+            c.loose_r = (std::max)(loose.left, loose.right);
+        }
+        c.obj = FPDFText_GetTextObject(tp, i);
+        FS_MATRIX m{1, 0, 0, 1, 0, 0};
+        if (FPDFText_GetMatrix(tp, i, &m)) {
+            const double a = std::fabs(m.a) > 1e-6 ? std::fabs(m.a) : 1.0;
+            c.skew_b = m.b / a;
+            c.skew_c = m.c / a;
+            c.rotated = std::fabs(c.skew_b) > kRotationSkewToleranceMirror ||
+                        std::fabs(c.skew_c) > kRotationSkewToleranceMirror;
+        }
+        c.preceded_by_break = pending_break;
+        pending_break = false;
+        out.push_back(c);
+    }
+    return out;
+}
+
+struct BaselineTotals {
+    long long docs = 0, pages = 0;
+    long long rotated_chars = 0, normal_chars = 0;  // BuildStructure's own split, before any pairing
+    long long same_run_pairs = 0;       // no break, gap test candidates (within normal_idx only)
+    long long gap_ok_baseline_fail = 0; // the residual population this mode exists to describe
+    // Direction of the origin_y jump (current - previous), in the page's own y-up space.
+    long long dir_up = 0, dir_down = 0;
+    // |delta| buckets, in em of the CURRENT character's font size.
+    long long bucket_035_05 = 0, bucket_05_1 = 0, bucket_1_2 = 0, bucket_2_5 = 0, bucket_5_plus = 0;
+    // The horizontal gap itself (c.loose_l - prev.loose_r), in em -- the word-gap test only
+    // has an upper bound (BuildWords: `gap > kWordGapEm * em` starts a new word), never a
+    // lower one, so a character whose loose box starts well to the LEFT of the previous
+    // character's loose box (a large NEGATIVE gap -- consistent with a line wrapping back to
+    // the page's left margin after a line that ran far to the right) passes this "small gap"
+    // test just as trivially as a genuine near-zero gap does. Bucketed to tell the two apart.
+    long long gap_very_negative = 0;   // < -1 em -- consistent with a real line-wrap, not one word
+    long long gap_negative = 0;        // -1 em .. 0
+    long long gap_small_positive = 0;  // 0 .. 0.2 em -- a normal intra-word gap
+    long long gap_near_threshold = 0;  // 0.2 .. 0.8 em -- close to kWordGapEm itself
+    // Same delta/direction/font breakdown, restricted to gap_small_positive only -- the only
+    // gap bucket a genuine same-line, same-word continuation (superscript, subscript, kerning
+    // jitter) can plausibly fall in; a negative gap cannot be "the next glyph of this word".
+    long long fwd_pairs = 0;
+    long long fwd_dir_up = 0, fwd_dir_down = 0;
+    long long fwd_bucket_035_05 = 0, fwd_bucket_05_1 = 0, fwd_bucket_1_2 = 0, fwd_bucket_2_5 = 0, fwd_bucket_5_plus = 0;
+    long long fwd_fsize_equal = 0, fwd_fsize_smaller = 0, fwd_fsize_much_smaller = 0;
+    // Font-size ratio min/max between the pair.
+    long long fsize_equal = 0;      // ratio > 0.95 -- same size
+    long long fsize_smaller = 0;    // 0.5 < ratio <= 0.95 -- modestly smaller (either side, see fsize_current_*)
+    long long fsize_much_smaller = 0; // ratio <= 0.5 -- current or previous much smaller than the other
+    long long fsize_current_smaller = 0; // of the non-equal ones, which side was smaller
+    long long fsize_current_larger = 0;
+    long long same_object = 0, diff_object = 0;
+    long long skew_nonzero = 0;   // either character's |skew_b| or |skew_c| > 0.001 (near-zero floor)
+    long long skew_near_rotation_threshold = 0;  // > 0.01 -- half of kRotationSkewToleranceMirror (0.02), still passing but close
+    // Excursion-and-return: the NEXT same-run pair (current -> next) jumps back within 0.15 em
+    // of cancelling this one's delta -- the signature of a brief baseline excursion (one glyph,
+    // or a short run, offset and then rejoining the main baseline) rather than a sustained one.
+    long long excursion_return = 0;
+    long long excursion_return_font_restored = 0;  // ...and the font size also returns to the pre-jump size
+    // Position on the page (thirds), to rule out a running-header/footer artifact.
+    long long pos_top_third = 0, pos_mid_third = 0, pos_bottom_third = 0;
+};
+
+void RunDiagBaselineOnDoc(const std::string& pdf, BaselineTotals* totals) {
+    FPDF_DOCUMENT doc = FPDF_LoadDocument(pdf.c_str(), nullptr);
+    if (doc == nullptr) return;
+    totals->docs++;
+    const int pages = FPDF_GetPageCount(doc);
+    for (int p = 0; p < pages; p++) {
+        FPDF_PAGE page = FPDF_LoadPage(doc, p);
+        if (page == nullptr) continue;
+        FPDF_TEXTPAGE tp = FPDFText_LoadPage(page);
+        if (tp == nullptr) { FPDF_ClosePage(page); continue; }
+        const double page_h = FPDF_GetPageHeight(page);
+        const std::vector<BaselineChar> chars = ReadBaselineChars(tp);
+        totals->pages++;
+
+        // BuildStructure's own split (core/megapdf_structure.cpp:1466-1472): only non-rotated
+        // characters feed the normal BuildWords/BuildLines/BuildPieces path this residual
+        // bucket is about. `normal_idx` mirrors that filtered index list exactly, so adjacency
+        // below is "previous NORMAL character", not "previous character in the raw stream".
+        std::vector<size_t> normal_idx;
+        normal_idx.reserve(chars.size());
+        for (size_t ci = 0; ci < chars.size(); ci++) {
+            if (!chars[ci].rotated) normal_idx.push_back(ci);
+        }
+        totals->rotated_chars += static_cast<long long>(chars.size() - normal_idx.size());
+        totals->normal_chars += static_cast<long long>(normal_idx.size());
+
+        for (size_t k = 1; k < normal_idx.size(); k++) {
+            const BaselineChar& c = chars[normal_idx[k]];
+            const BaselineChar& prev = chars[normal_idx[k - 1]];
+            if (c.preceded_by_break) continue;
+            if (c.obj == prev.obj) totals->same_object++; else totals->diff_object++;  // stat only -- BuildWords does not gate on this
+            const double em = c.font_size > 0 ? c.font_size : (prev.font_size > 0 ? prev.font_size : 1.0);
+            const double gap = c.loose_l - prev.loose_r;
+            const bool gap_ok = gap <= kWordGapEmMirror * em;
+            if (!gap_ok) continue;
+            totals->same_run_pairs++;
+            const double delta = c.origin_y - prev.origin_y;
+            const double delta_em = std::fabs(delta) / em;
+            if (delta_em <= kBaselineEmMirror) continue;
+            totals->gap_ok_baseline_fail++;
+
+            if (delta > 0) totals->dir_up++; else totals->dir_down++;
+            if (delta_em <= 0.5) totals->bucket_035_05++;
+            else if (delta_em <= 1.0) totals->bucket_05_1++;
+            else if (delta_em <= 2.0) totals->bucket_1_2++;
+            else if (delta_em <= 5.0) totals->bucket_2_5++;
+            else totals->bucket_5_plus++;
+
+            const double gap_em = gap / em;
+            const bool fwd = gap_em >= 0.0 && gap_em <= 0.2;
+            if (gap_em < -1.0) totals->gap_very_negative++;
+            else if (gap_em < 0.0) totals->gap_negative++;
+            else if (gap_em <= 0.2) totals->gap_small_positive++;
+            else totals->gap_near_threshold++;
+            if (fwd) {
+                totals->fwd_pairs++;
+                if (delta > 0) totals->fwd_dir_up++; else totals->fwd_dir_down++;
+                if (delta_em <= 0.5) totals->fwd_bucket_035_05++;
+                else if (delta_em <= 1.0) totals->fwd_bucket_05_1++;
+                else if (delta_em <= 2.0) totals->fwd_bucket_1_2++;
+                else if (delta_em <= 5.0) totals->fwd_bucket_2_5++;
+                else totals->fwd_bucket_5_plus++;
+            }
+
+            const double fmin = (std::min)(c.font_size, prev.font_size);
+            const double fmax = (std::max)(c.font_size, prev.font_size);
+            const double fratio = fmax > 0 ? fmin / fmax : 1.0;
+            if (fratio > 0.95) totals->fsize_equal++;
+            else if (fratio > 0.5) totals->fsize_smaller++;
+            else totals->fsize_much_smaller++;
+            if (fratio <= 0.95) {
+                if (c.font_size < prev.font_size) totals->fsize_current_smaller++;
+                else totals->fsize_current_larger++;
+            }
+            if (fwd) {
+                if (fratio > 0.95) totals->fwd_fsize_equal++;
+                else if (fratio > 0.5) totals->fwd_fsize_smaller++;
+                else totals->fwd_fsize_much_smaller++;
+            }
+
+            const double sb = (std::max)(std::fabs(c.skew_b), std::fabs(prev.skew_b));
+            const double sc = (std::max)(std::fabs(c.skew_c), std::fabs(prev.skew_c));
+            if (sb > 0.001 || sc > 0.001) totals->skew_nonzero++;
+            // Both characters are, by construction (normal_idx), already below
+            // kRotationSkewToleranceMirror individually -- this checks whether EITHER's skew
+            // sits in the upper part of that still-passing range (a near-miss on the rotation
+            // test), not a contradiction of the filter above.
+            if (sb > 0.01 || sc > 0.01) totals->skew_near_rotation_threshold++;
+
+            if (k + 1 < normal_idx.size()) {
+                const BaselineChar& n = chars[normal_idx[k + 1]];
+                if (!n.preceded_by_break) {
+                    const double gap2 = n.loose_l - c.loose_r;
+                    const double em2 = n.font_size > 0 ? n.font_size : em;
+                    if (gap2 <= kWordGapEmMirror * em2) {
+                        const double delta2 = n.origin_y - c.origin_y;
+                        if (std::fabs(delta + delta2) <= 0.15 * em2) {
+                            totals->excursion_return++;
+                            const double f0 = prev.font_size, f2 = n.font_size;
+                            const double rmax = (std::max)(f0, f2), rmin = (std::min)(f0, f2);
+                            if (rmax <= 0 || rmin / rmax > 0.9) totals->excursion_return_font_restored++;
+                        }
+                    }
+                }
+            }
+
+            const double y_frac = page_h > 0 ? (c.origin_y / page_h) : 0.5;  // 0 = bottom, 1 = top
+            if (y_frac > 2.0 / 3.0) totals->pos_top_third++;
+            else if (y_frac > 1.0 / 3.0) totals->pos_mid_third++;
+            else totals->pos_bottom_third++;
+        }
+        FPDFText_ClosePage(tp);
+        FPDF_ClosePage(page);
+    }
+    FPDF_CloseDocument(doc);
+}
+
+int RunDiagBaseline(const std::vector<std::string>& pdfs) {
+    // Unlike every other mode here, this one never calls a megapdf_* entry point (RunDiag's
+    // own raw FPDF_LoadDocument call, above, piggybacks on megapdf_open_file's lazy
+    // FPDF_InitLibrary()) -- it talks to PDFium directly from the first document, so it must
+    // initialize the library itself.
+    FPDF_InitLibrary();
+    BaselineTotals t;
+    for (const auto& pdf : pdfs) RunDiagBaselineOnDoc(pdf, &t);
+    std::printf("diagbaseline docs=%lld pages=%lld\n", t.docs, t.pages);
+    std::printf("chars rotated=%lld normal=%lld\n", t.rotated_chars, t.normal_chars);
+    std::printf("pairs same_object=%lld diff_object=%lld same_run_pairs(gap_ok)=%lld "
+                "gap_ok_baseline_fail=%lld\n",
+                t.same_object, t.diff_object, t.same_run_pairs, t.gap_ok_baseline_fail);
+    std::printf("direction up=%lld down=%lld\n", t.dir_up, t.dir_down);
+    std::printf("delta_em_buckets 0.35-0.5=%lld 0.5-1=%lld 1-2=%lld 2-5=%lld 5+=%lld\n",
+                t.bucket_035_05, t.bucket_05_1, t.bucket_1_2, t.bucket_2_5, t.bucket_5_plus);
+    std::printf("gap_em_buckets very_negative(<-1)=%lld negative(-1..0)=%lld small_positive(0..0.2)=%lld "
+                "near_threshold(0.2..0.8)=%lld\n",
+                t.gap_very_negative, t.gap_negative, t.gap_small_positive, t.gap_near_threshold);
+    std::printf("fwd(gap 0..0.2em only) pairs=%lld dir_up=%lld dir_down=%lld\n", t.fwd_pairs, t.fwd_dir_up,
+                t.fwd_dir_down);
+    std::printf("fwd delta_em_buckets 0.35-0.5=%lld 0.5-1=%lld 1-2=%lld 2-5=%lld 5+=%lld\n",
+                t.fwd_bucket_035_05, t.fwd_bucket_05_1, t.fwd_bucket_1_2, t.fwd_bucket_2_5, t.fwd_bucket_5_plus);
+    std::printf("fwd font_size_ratio equal(>0.95)=%lld smaller(0.5-0.95)=%lld much_smaller(<=0.5)=%lld\n",
+                t.fwd_fsize_equal, t.fwd_fsize_smaller, t.fwd_fsize_much_smaller);
+    std::printf("font_size_ratio equal(>0.95)=%lld smaller(0.5-0.95)=%lld much_smaller(<=0.5)=%lld\n",
+                t.fsize_equal, t.fsize_smaller, t.fsize_much_smaller);
+    std::printf("font_size_side current_smaller=%lld current_larger=%lld\n",
+                t.fsize_current_smaller, t.fsize_current_larger);
+    std::printf("skew nonzero=%lld near_rotation_threshold=%lld\n", t.skew_nonzero,
+                t.skew_near_rotation_threshold);
+    std::printf("excursion_return=%lld (of gap_ok_baseline_fail=%lld) font_restored=%lld\n",
+                t.excursion_return, t.gap_ok_baseline_fail, t.excursion_return_font_restored);
+    std::printf("position top_third=%lld mid_third=%lld bottom_third=%lld\n", t.pos_top_third, t.pos_mid_third,
+                t.pos_bottom_third);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -920,6 +1204,14 @@ int main(int argc, char** argv) {
         std::vector<std::string> pdfs;
         for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
         return RunDiag(pdfs);
+    }
+    if (argc >= 3 && std::strcmp(argv[1], "diagbaseline") == 0) {
+        // #363 follow-up investigation only: structure_check diagbaseline <pdf> [<pdf> ...]
+        // Characterizes the residual same-run, small-gap, large-baseline-offset pairs left
+        // after PR #364's kWordGapEm fix (see the BaselineTotals comment above).
+        std::vector<std::string> pdfs;
+        for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
+        return RunDiagBaseline(pdfs);
     }
     std::printf("usage:\n"
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
