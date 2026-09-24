@@ -53,6 +53,29 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# macOS ships no `timeout` (it is GNU coreutils); Homebrew's is `gtimeout` unless coreutils'
+# gnubin is on PATH. Without either, hangs cannot be bounded — the run still produces
+# numbers, but a hang no longer gets a TIMEOUT line, it gets no line at all and the run never
+# finishes, which is worse. Warn once and fall back to running unbounded rather than fail
+# outright, since a document that never hung on any run so far is more likely on a fresh
+# machine than "no timeout binary" is worth aborting for.
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_CMD=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD=gtimeout
+else
+    TIMEOUT_CMD=""
+    echo "warning: no 'timeout' or 'gtimeout' on PATH — hangs will not be bounded. On macOS: brew install coreutils." >&2
+fi
+run_with_timeout() {  # <seconds> <command...> — echoes output, returns 124 on our own timeout
+    if [ -n "$TIMEOUT_CMD" ]; then
+        "$TIMEOUT_CMD" "$@"
+        return $?
+    fi
+    shift  # drop the seconds argument; nothing enforces it without a timeout binary
+    "$@"
+}
+
 mkdir -p "$OUT/scratch"
 [ -n "$DUMP" ] && mkdir -p "$DUMP"
 MODE=check
@@ -94,9 +117,9 @@ while IFS= read -r pdf; do
     [ -n "$DUMP" ] && [ "$CENSUS" -eq 0 ] && dumparg=(--dump "$DUMP" --dump-id "$id")
 
     if [ "$CENSUS" -eq 1 ]; then
-        out=$(timeout "$TIMEOUT" "$CHECK" census "$pdf" 2>&1)
+        out=$(run_with_timeout "$TIMEOUT" "$CHECK" census "$pdf" 2>&1)
     else
-        out=$(timeout "$TIMEOUT" "$CHECK" check "$pdf" "${dumparg[@]}" "${refarg[@]}" 2>&1)
+        out=$(run_with_timeout "$TIMEOUT" "$CHECK" check "$pdf" "${dumparg[@]}" "${refarg[@]}" 2>&1)
     fi
     rc=$?
     [ -n "${reffile:-}" ] && rm -f "$reffile"
