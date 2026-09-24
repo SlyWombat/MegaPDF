@@ -13,26 +13,26 @@
          the grid a tooltip of its first one. That was the stray "Ctrl+F" chip (#226): it
          surfaced when the pointer rested over the window and could outlive the More menu.
          The toolbar tooltips already name each shortcut, in the app's language. -->
-    <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged" KeyboardAcceleratorPlacementMode="Hidden">
-        <Grid.Resources>
-            <!-- The keyboard focus ring on a page region (SDD §2.2, #2; MainWindow.Keyboard.cs).
-                 The system focus-visual pair, so a high-contrast theme swaps in its own
-                 colours; ThemeResource in a style setter follows theme changes live. -->
-            <Style x:Key="PageFocusRingOuterStyle" TargetType="Border">
-                <Setter Property="BorderBrush" Value="{ThemeResource FocusStrokeColorOuterBrush}" />
-                <Setter Property="BorderThickness" Value="2" />
-                <Setter Property="CornerRadius" Value="4" />
-            </Style>
-            <Style x:Key="PageFocusRingInnerStyle" TargetType="Border">
-                <Setter Property="BorderBrush" Value="{ThemeResource FocusStrokeColorInnerBrush}" />
-                <Setter Property="BorderThickness" Value="2" />
-                <Setter Property="CornerRadius" Value="2" />
-                <Setter Property="Margin" Value="2" />
-            </Style>
-        </Grid.Resources>
+    <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged" KeyboardAcceleratorPlacementMode="Hidden"
+          AllowDrop="True" DragOver="OnDocumentAreaDragOver" Drop="OnDocumentAreaDrop">
         <Grid.KeyboardAccelerators>
             <KeyboardAccelerator Modifiers="Control" Key="F" Invoked="OnFindAccelerator" />
+            <!-- Tab/window commands (#348 phase 1, plan §1 decision): closes the active tab,
+                 or the window when it is the last one — TabView's own Ctrl+Tab, Ctrl+Shift+Tab,
+                 Ctrl+1…9 and Ctrl+F4 are left as built-in. -->
+            <KeyboardAccelerator Modifiers="Control" Key="W" Invoked="OnCloseTabAccelerator" />
+            <KeyboardAccelerator Modifiers="Control,Shift" Key="N" Invoked="OnNewWindowAccelerator" />
         </Grid.KeyboardAccelerators>
+
+        <!-- Declared first and before any Grid.Row-tagged sibling: with a CommandBar
+             among those siblings, a XamlCompiler pass in this WinAppSDK toolchain
+             crashes outright (not a diagnosable error) if RowDefinitions comes later,
+             which it harmlessly did before this file had a CommandBar this elaborate. -->
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
         <!-- The toolbar (#144): one CommandBar row, the same height at every width.
 
@@ -51,20 +51,18 @@
              Undo, Add text, Signatures and Save. Open never leaves.
 
              The shortcuts are on RootGrid rather than on the buttons, so they keep
-             working for a command that has overflowed (MainWindow.Toolbar.cs). -->
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+             working for a command that has overflowed (MainWindow.Toolbar.cs).
 
-        <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
-             preparation, restoring and searching. Shown only 0.5 s into the work and kept at
-             least 0.3 s (BusyState in MegaPDF.Core), so quick work never flickers it. -->
+             Every command below acts on Shell.Active — the tab the tab strip has
+             selected — not on a fixed ViewModel (#348 phase 1). x:Bind defaults to
+             OneTime, so every one of these is explicitly Mode=OneWay: the plan's §6.4
+             sharp edge. Shell.Active can be null with zero tabs open; x:Bind null-checks
+             every step of a path automatically, so these simply evaluate to null/false
+             rather than throwing. -->
         <Grid
             x:Name="BusyStrip"
             Grid.Row="1"
-            Visibility="{x:Bind ViewModel.Busy.ShowsStrip, Mode=OneWay}"
+            Visibility="{x:Bind Shell.Active.Busy.ShowsStrip, Mode=OneWay}"
             Background="{ThemeResource LayerFillColorDefaultBrush}"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
@@ -72,10 +70,10 @@
             <StackPanel Spacing="{ThemeResource SpaceXs}">
                 <TextBlock
                     x:Name="BusyLabel"
-                    Text="{x:Bind ViewModel.Busy.Label, Mode=OneWay}"
+                    Text="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}"
                     FontSize="{ThemeResource TypeCaption}"
                     AutomationProperties.LiveSetting="Polite" />
-                <ProgressBar IsIndeterminate="True" AutomationProperties.Name="{x:Bind ViewModel.Busy.Label, Mode=OneWay}" />
+                <ProgressBar IsIndeterminate="True" AutomationProperties.Name="{x:Bind Shell.Active.Busy.Label, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 
@@ -89,32 +87,32 @@
             IsDynamicOverflowEnabled="True"
             OverflowButtonVisibility="Visible"
             AutomationProperties.AutomationId="Toolbar">
-            <AppBarButton x:Name="OpenButton" Command="{x:Bind ViewModel.OpenCommand}" AccessKey="O" KeyboardAcceleratorTextOverride="Ctrl+O" DynamicOverflowOrder="100" AutomationProperties.AutomationId="OpenButton">
+            <AppBarButton x:Name="OpenButton" Command="{x:Bind Shell.OpenCommand}" AccessKey="O" KeyboardAcceleratorTextOverride="Ctrl+O" DynamicOverflowOrder="100" AutomationProperties.AutomationId="OpenButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE8E5;" /></AppBarButton.Icon>
             </AppBarButton>
             <!-- The visible label carries the unsaved-changes dot; the UIA name
                  stays plain "Save" so Narrator announces a stable control name. -->
-            <AppBarButton x:Name="SaveButton" Command="{x:Bind ViewModel.SaveCommand}" Label="{x:Bind ViewModel.SaveButtonLabel, Mode=OneWay}" AccessKey="S" KeyboardAcceleratorTextOverride="Ctrl+S" DynamicOverflowOrder="90" AutomationProperties.AutomationId="SaveButton">
+            <AppBarButton x:Name="SaveButton" Command="{x:Bind Shell.Active.SaveCommand, Mode=OneWay}" Label="{x:Bind Shell.Active.SaveButtonLabel, Mode=OneWay}" AccessKey="S" KeyboardAcceleratorTextOverride="Ctrl+S" DynamicOverflowOrder="90" AutomationProperties.AutomationId="SaveButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE74E;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarSeparator DynamicOverflowOrder="80" />
 
             <!-- The three editing tools follow the document's permissions (#131):
                  annotate for signatures, modify for whiteout and added text. -->
-            <AppBarButton x:Name="SignaturesToolbarButton" Click="OnSignaturesClicked" IsEnabled="{x:Bind ViewModel.IsSigningAllowed, Mode=OneWay}" DynamicOverflowOrder="80" AutomationProperties.AutomationId="SignaturesButton">
+            <AppBarButton x:Name="SignaturesToolbarButton" Click="OnSignaturesClicked" IsEnabled="{x:Bind Shell.Active.IsSigningAllowed, Mode=OneWay}" DynamicOverflowOrder="80" AutomationProperties.AutomationId="SignaturesButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xEE56;" /></AppBarButton.Icon>
             </AppBarButton>
-            <local:ArmableAppBarButton x:Name="AddTextButton" IsArmed="{x:Bind ViewModel.IsTextBoxMode, Mode=OneWay}" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind ViewModel.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
+            <local:ArmableAppBarButton x:Name="AddTextButton" IsArmed="{x:Bind Shell.Active.IsTextBoxMode, Mode=OneWay}" Click="OnTextBoxModeClicked" IsEnabled="{x:Bind Shell.Active.IsTextBoxAllowed, Mode=OneWay}" DynamicOverflowOrder="70" AutomationProperties.AutomationId="AddTextButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE8D2;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
-            <local:ArmableAppBarButton x:Name="WhiteoutButton" IsArmed="{x:Bind ViewModel.IsWhiteoutMode, Mode=OneWay}" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
+            <local:ArmableAppBarButton x:Name="WhiteoutButton" IsArmed="{x:Bind Shell.Active.IsWhiteoutMode, Mode=OneWay}" Click="OnWhiteoutModeClicked" IsEnabled="{x:Bind Shell.Active.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="40" AutomationProperties.AutomationId="WhiteoutButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE75C;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
             <!-- Redact beside Whiteout, because the pair is the point (#173): one covers,
                  the other removes, and each tooltip says which. Glyph E7BA is Segoe Fluent's
                  Warning triangle, not a block-out mark: it reads as "careful", and it stays
                  for 2.0 (#146 §3). It overflows before Whiteout does, not after. -->
-            <local:ArmableAppBarButton x:Name="RedactButton" IsArmed="{x:Bind ViewModel.IsRedactMode, Mode=OneWay}" Click="OnRedactModeClicked" IsEnabled="{x:Bind ViewModel.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
+            <local:ArmableAppBarButton x:Name="RedactButton" IsArmed="{x:Bind Shell.Active.IsRedactMode, Mode=OneWay}" Click="OnRedactModeClicked" IsEnabled="{x:Bind Shell.Active.IsEditingAllowed, Mode=OneWay}" DynamicOverflowOrder="41" AutomationProperties.AutomationId="RedactButton">
                 <local:ArmableAppBarButton.Icon><FontIcon Glyph="&#xE7BA;" /></local:ArmableAppBarButton.Icon>
             </local:ArmableAppBarButton>
             <!-- Contextual (#144): shown while Add text is armed, or an added text box is
@@ -134,10 +132,10 @@
             </AppBarElementContainer>
             <AppBarSeparator DynamicOverflowOrder="50" />
 
-            <AppBarButton x:Name="UndoButton" Command="{x:Bind ViewModel.UndoCommand}" KeyboardAcceleratorTextOverride="Ctrl+Z" DynamicOverflowOrder="50" AutomationProperties.AutomationId="UndoButton">
+            <AppBarButton x:Name="UndoButton" Command="{x:Bind Shell.Active.UndoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Z" DynamicOverflowOrder="50" AutomationProperties.AutomationId="UndoButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE7A7;" /></AppBarButton.Icon>
             </AppBarButton>
-            <AppBarButton x:Name="RedoButton" Command="{x:Bind ViewModel.RedoCommand}" KeyboardAcceleratorTextOverride="Ctrl+Y" DynamicOverflowOrder="10" AutomationProperties.AutomationId="RedoButton">
+            <AppBarButton x:Name="RedoButton" Command="{x:Bind Shell.Active.RedoCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Y" DynamicOverflowOrder="10" AutomationProperties.AutomationId="RedoButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE7A6;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarSeparator DynamicOverflowOrder="20" />
@@ -145,7 +143,7 @@
             <!-- One zoom control (#144): −, the level with a menu of Actual size, the
                  two fits and preset levels, and +. Icons only, even when the row is
                  labelled: the level itself is the label. -->
-            <AppBarButton x:Name="ZoomOutButton" LabelPosition="Collapsed" Command="{x:Bind ViewModel.ZoomOutCommand}" KeyboardAcceleratorTextOverride="Ctrl+−" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomOutButton">
+            <AppBarButton x:Name="ZoomOutButton" LabelPosition="Collapsed" Command="{x:Bind Shell.Active.ZoomOutCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+−" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomOutButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE738;" /></AppBarButton.Icon>
             </AppBarButton>
             <AppBarElementContainer x:Name="ZoomMenuItem" DynamicOverflowOrder="20"
@@ -157,8 +155,8 @@
                     VerticalAlignment="Center"
                     Background="Transparent"
                     BorderThickness="0"
-                    Content="{x:Bind ViewModel.ZoomLabel, Mode=OneWay}"
-                    IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}"
+                    Content="{x:Bind Shell.Active.ZoomLabel, Mode=OneWay}"
+                    IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}"
                     AutomationProperties.AutomationId="ZoomMenuButton">
                     <DropDownButton.Flyout>
                         <MenuFlyout x:Name="ZoomMenu" Placement="BottomEdgeAlignedLeft" Opening="OnZoomMenuOpening">
@@ -176,34 +174,38 @@
                     </DropDownButton.Flyout>
                 </DropDownButton>
             </AppBarElementContainer>
-            <AppBarButton x:Name="ZoomInButton" LabelPosition="Collapsed" Command="{x:Bind ViewModel.ZoomInCommand}" KeyboardAcceleratorTextOverride="Ctrl+Plus" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomInButton">
+            <AppBarButton x:Name="ZoomInButton" LabelPosition="Collapsed" Command="{x:Bind Shell.Active.ZoomInCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Plus" DynamicOverflowOrder="20" AutomationProperties.AutomationId="ZoomInButton">
                 <AppBarButton.Icon><FontIcon Glyph="&#xE710;" /></AppBarButton.Icon>
             </AppBarButton>
 
             <CommandBar.SecondaryCommands>
-                <AppBarButton x:Name="SaveAsButton" Command="{x:Bind ViewModel.SaveAsCommand}" KeyboardAcceleratorTextOverride="Ctrl+Shift+S" AutomationProperties.AutomationId="SaveAsButton">
+                <AppBarButton x:Name="SaveAsButton" Command="{x:Bind Shell.Active.SaveAsCommand, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+Shift+S" AutomationProperties.AutomationId="SaveAsButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE792;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <!-- Set, change or remove the document's password; on a restricted
                      document, offers the owner password instead (#131, ADR-004). -->
-                <AppBarButton x:Name="SecurityButton" Command="{x:Bind ViewModel.SecurityCommand}" AutomationProperties.AutomationId="SecurityButton">
+                <AppBarButton x:Name="SecurityButton" Command="{x:Bind Shell.Active.SecurityCommand, Mode=OneWay}" AutomationProperties.AutomationId="SecurityButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE72E;" /></AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="PrintButton" Click="OnPrintClicked" IsEnabled="{x:Bind ViewModel.IsPrintAllowed, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+P" AutomationProperties.AutomationId="PrintButton">
+                <AppBarButton x:Name="PrintButton" Click="OnPrintClicked" IsEnabled="{x:Bind Shell.Active.IsPrintAllowed, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+P" AutomationProperties.AutomationId="PrintButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE749;" /></AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="ShrinkButton" Command="{x:Bind ViewModel.ShrinkForEmailCommand}" AutomationProperties.AutomationId="ShrinkButton">
+                <AppBarButton x:Name="ShrinkButton" Command="{x:Bind Shell.Active.ShrinkForEmailCommand, Mode=OneWay}" AutomationProperties.AutomationId="ShrinkButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE715;" /></AppBarButton.Icon>
                 </AppBarButton>
-                <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind ViewModel.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
+                <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE721;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <!-- Marks accumulate as you drag and are dropped as one step (#329), so the
                      tidying action is here rather than on the toolbar: it is not part of
                      marking. Offered only while there is something to drop. -->
-                <AppBarButton x:Name="ClearMarksButton" Click="OnClearRedactionMarksClicked" IsEnabled="{x:Bind ViewModel.HasRedactionMarks, Mode=OneWay}" AutomationProperties.AutomationId="ClearMarksButton">
+                <AppBarButton x:Name="ClearMarksButton" Click="OnClearRedactionMarksClicked" IsEnabled="{x:Bind Shell.Active.HasRedactionMarks, Mode=OneWay}" AutomationProperties.AutomationId="ClearMarksButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE894;" /></AppBarButton.Icon>
                 </AppBarButton>
+                <AppBarSeparator />
+                <!-- Tab/window commands (#348 phase 1). -->
+                <AppBarButton x:Name="CloseTabButton" x:Uid="CloseTabMenuItem" Click="OnCloseTabClicked" IsEnabled="{x:Bind Shell.HasDocuments, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+W" AutomationProperties.AutomationId="CloseTabButton" />
+                <AppBarButton x:Name="NewWindowButton" x:Uid="NewWindowMenuItem" Click="OnNewWindowClicked" KeyboardAcceleratorTextOverride="Ctrl+Shift+N" AutomationProperties.AutomationId="NewWindowButton" />
                 <AppBarSeparator />
                 <AppBarButton x:Name="SettingsButton" Click="OnSettingsClicked" AutomationProperties.AutomationId="SettingsButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE713;" /></AppBarButton.Icon>
@@ -221,7 +223,7 @@
                     <!-- The library itself lives in SignatureLibraryPanel (#100), shared
                          with the `sign` screenshot state's in-tree copy below. -->
                     <local:SignatureLibraryPanel
-                        ViewModel="{x:Bind ViewModel}"
+                        ViewModel="{x:Bind Shell.Active, Mode=OneWay}"
                         Picked="OnSignaturePicked"
                         RenameRequested="OnRenameSignatureRequested"
                         DeleteRequested="OnDeleteSignatureRequested"
@@ -306,223 +308,109 @@
             </FlyoutBase.AttachedFlyout>
         </Border>
 
-        <!-- Document area: empty-state drop zone until a document is open (SDD §2.2) -->
-        <Grid
-            Grid.Row="2"
-            AllowDrop="True"
-            DragOver="OnDocumentAreaDragOver"
-            Drop="OnDocumentAreaDrop">
+        <!-- The tab strip and the tabs' pages areas (#348 phase 1). Each tab's Content is a
+             DocumentView, created once by the item template and never rebound — TabView keeps
+             every realized tab's content alive whether or not it is the selected one, which is
+             what lets a background tab's scroll position, inline editor and selection survive
+             a switch away and back without this window saving or restoring any of it. -->
+        <Grid Grid.Row="2">
+            <TabView
+                x:Name="DocumentsTabView"
+                TabItemsSource="{x:Bind Shell.Documents}"
+                SelectedItem="{x:Bind Shell.Active, Mode=TwoWay}"
+                CanReorderTabs="True"
+                CanDragTabs="True"
+                IsAddTabButtonVisible="False"
+                TabCloseRequested="OnTabCloseRequested"
+                SelectionChanged="OnDocumentsTabViewSelectionChanged">
+                <TabView.TabItemTemplate>
+                    <DataTemplate x:DataType="local:DocumentViewModel">
+                        <TabViewItem
+                            Header="{x:Bind TabTitle, Mode=OneWay}"
+                            IsClosable="True"
+                            AutomationProperties.Name="{x:Bind TabAccessibleName, Mode=OneWay}">
+                            <TabViewItem.Content>
+                                <local:DocumentView ViewModel="{x:Bind}" />
+                            </TabViewItem.Content>
+                        </TabViewItem>
+                    </DataTemplate>
+                </TabView.TabItemTemplate>
+            </TabView>
 
-            <StackPanel
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Spacing="{ThemeResource SpaceM}"
-                Visibility="{x:Bind ViewModel.EmptyStateVisibility, Mode=OneWay}">
-                <FontIcon Glyph="&#xE8A5;" FontSize="{ThemeResource TypeDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <TextBlock
-                    x:Uid="EmptyStateText"
-                    Style="{StaticResource SubtitleTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    HorizontalAlignment="Center" />
-
-                <StackPanel Spacing="{ThemeResource SpaceXs}" Margin="0,20,0,0" Visibility="{x:Bind ViewModel.RecentDocumentsVisibility, Mode=OneWay}">
+            <!-- Empty state: zero tabs (SDD §2.2) — not per document any more (#348 phase 1).
+                 Collapsed (not merely covered) when a tab is open, so it never intercepts
+                 pointer input meant for the tab strip or the page beneath it. Drag-and-drop
+                 is handled once, on RootGrid, which covers this and the tab strip alike. -->
+            <Grid Visibility="{x:Bind Shell.EmptyStateVisibility, Mode=OneWay}">
+                <StackPanel
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Spacing="{ThemeResource SpaceM}">
+                    <FontIcon Glyph="&#xE8A5;" FontSize="{ThemeResource TypeDisplay}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock
-                        x:Uid="RecentHeading"
-                        FontSize="{ThemeResource TypeCaption}"
-                        CharacterSpacing="80"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        HorizontalAlignment="Center"
-                        Margin="0,0,0,6" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.RecentDocuments}" HorizontalAlignment="Center" MaxWidth="420">
-                        <ItemsControl.ItemTemplate>
-                            <!-- Name on top, folder underneath (#165), the way Explorer and
-                                 Office list recent files: the names repeat, the folders do not. -->
-                            <DataTemplate x:DataType="local:RecentDocument">
-                                <HyperlinkButton
-                                    Click="OnRecentDocumentClicked"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Left"
-                                    ToolTipService.ToolTip="{x:Bind Path}"
-                                    AutomationProperties.Name="{x:Bind AccessibleName}">
-                                    <HyperlinkButton.ContextFlyout>
-                                        <MenuFlyout>
-                                            <MenuFlyoutItem
-                                                x:Uid="RemoveFromRecentItem"
-                                                Click="OnRemoveFromRecentClicked"
-                                                AutomationProperties.AutomationId="RemoveFromRecentItem" />
-                                        </MenuFlyout>
-                                    </HyperlinkButton.ContextFlyout>
-                                    <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                                        <FontIcon
-                                            Glyph="&#xE8A5;"
-                                            FontSize="{ThemeResource TypeBody}"
-                                            VerticalAlignment="Top"
-                                            Margin="0,2,0,0"
-                                            Opacity="{x:Bind MissingOpacity}" />
-                                        <StackPanel>
-                                            <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" Opacity="{x:Bind MissingOpacity}" />
-                                            <TextBlock
-                                                Text="{x:Bind LocationLine}"
-                                                FontSize="{ThemeResource TypeCaption}"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </HyperlinkButton>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </StackPanel>
+                        x:Uid="EmptyStateText"
+                        Style="{StaticResource SubtitleTextBlockStyle}"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        HorizontalAlignment="Center" />
 
-            <!-- A tab stop (SDD §2.2, #2): Tab onto the pages lands on the first field,
-                 checkbox or line of the page on screen, and walks on from there. Focus
-                 stays here while the ring moves; see MainWindow.Keyboard.cs. -->
-            <ScrollViewer
-                x:Name="PagesScroll"
-                x:Uid="PagesScroll"
-                AutomationProperties.AutomationId="PagesScroll"
-                IsTabStop="True"
-                GettingFocus="OnPagesGettingFocus"
-                GotFocus="OnPagesGotFocus"
-                Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}"
-                HorizontalScrollBarVisibility="Auto"
-                VerticalScrollBarVisibility="Auto"
-                ViewChanged="OnPagesScrollViewChanged"
-                PointerWheelChanged="OnPagesPointerWheel">
-                <ItemsControl x:Name="PagesItems" ItemsSource="{x:Bind ViewModel.Pages}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Spacing="{ThemeResource SpaceL}" Padding="24" HorizontalAlignment="Center" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local:PageView">
-                            <local:PageCanvas
-                                Width="{x:Bind Width}"
-                                Height="{x:Bind Height}"
-                                Background="White"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                AutomationProperties.Name="{x:Bind AccessibleName}"
-                                Loaded="OnPageCanvasLoaded"
-                                Tapped="OnPageTapped"
-                                DoubleTapped="OnPageDoubleTapped"
-                                PointerPressed="OnPagePointerPressed"
-                                PointerReleased="OnPagePointerReleased"
-                                PointerMoved="OnPagePointerMoved"
-                                PointerExited="OnPagePointerExited">
-                                <Image Source="{x:Bind Source}" Stretch="Uniform" />
-                                <!-- A page the engine refused to rasterise says so (#93) rather than
-                                     staying a blank sheet the user cannot tell from "still loading". -->
-                                <TextBlock
-                                    Text="{x:Bind FailedMessage}"
-                                    Visibility="{x:Bind FailedVisibility}"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    TextAlignment="Center"
-                                    TextWrapping="Wrap"
-                                    Margin="24"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                <!-- Find-match highlights (issue #26); Grid panel so Margin positions each rect. -->
-                                <ItemsControl ItemsSource="{x:Bind Highlights}" IsHitTestVisible="False">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <Grid />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="local:SearchHighlight">
-                                            <Rectangle
-                                                Width="{x:Bind Width}"
-                                                Height="{x:Bind Height}"
-                                                Margin="{x:Bind Margin}"
-                                                HorizontalAlignment="Left"
+                    <StackPanel Spacing="{ThemeResource SpaceXs}" Margin="0,20,0,0" Visibility="{x:Bind Shell.RecentDocumentsVisibility, Mode=OneWay}">
+                        <TextBlock
+                            x:Uid="RecentHeading"
+                            FontSize="{ThemeResource TypeCaption}"
+                            CharacterSpacing="80"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            HorizontalAlignment="Center"
+                            Margin="0,0,0,6" />
+                        <ItemsControl ItemsSource="{x:Bind Shell.RecentDocuments}" HorizontalAlignment="Center" MaxWidth="420">
+                            <ItemsControl.ItemTemplate>
+                                <!-- Name on top, folder underneath (#165), the way Explorer and
+                                     Office list recent files: the names repeat, the folders do not. -->
+                                <DataTemplate x:DataType="local:RecentDocument">
+                                    <HyperlinkButton
+                                        Click="OnRecentDocumentClicked"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        ToolTipService.ToolTip="{x:Bind Path}"
+                                        AutomationProperties.Name="{x:Bind AccessibleName}">
+                                        <HyperlinkButton.ContextFlyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem
+                                                    x:Uid="RemoveFromRecentItem"
+                                                    Click="OnRemoveFromRecentClicked"
+                                                    AutomationProperties.AutomationId="RemoveFromRecentItem" />
+                                            </MenuFlyout>
+                                        </HyperlinkButton.ContextFlyout>
+                                        <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                                            <FontIcon
+                                                Glyph="&#xE8A5;"
+                                                FontSize="{ThemeResource TypeBody}"
                                                 VerticalAlignment="Top"
-                                                Fill="{x:Bind Fill}"
-                                                Stroke="{x:Bind Stroke}"
-                                                StrokeThickness="{x:Bind StrokeThickness}"
-                                                RadiusX="1.5"
-                                                RadiusY="1.5" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </local:PageCanvas>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+                                                Margin="0,2,0,0"
+                                                Opacity="{x:Bind MissingOpacity}" />
+                                            <StackPanel>
+                                                <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" Opacity="{x:Bind MissingOpacity}" />
+                                                <TextBlock
+                                                    Text="{x:Bind LocationLine}"
+                                                    FontSize="{ThemeResource TypeCaption}"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </HyperlinkButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
 
-            <!-- These InfoBars float over the document page, not over app chrome,
-                 and InfoBar's severity backgrounds are translucent: #80F6F6F6 in
-                 light, #08FFFFFF in dark. Over a white PDF page the light one
-                 survives by luck and the dark one does not — 3% white over white
-                 paper, with white text on it, so the message is invisible (#87).
-                 An opaque background makes them chrome, which is what the find bar
-                 below already does. -->
-            <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="{ThemeResource SpaceS}">
-                <InfoBar
-                    x:Uid="FontNoticeBar"
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
-                    Severity="Informational"
-                    IsClosable="True" />
-                <InfoBar
-                    x:Uid="ScannedHintBar"
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsScannedHintOpen, Mode=TwoWay}"
-                    Severity="Informational"
-                    IsClosable="True" />
-                <!-- Document security (#131, ADR-004 §3, §7): a restricted open says so
-                     and offers the owner password; a password open says crash recovery
-                     is off; the Password command reports what it did. -->
-                <InfoBar
-                    x:Uid="RestrictedNoticeBar"
-                    AutomationProperties.AutomationId="RestrictedNoticeBar"
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsRestrictedNoticeOpen, Mode=TwoWay}"
-                    Severity="Informational"
-                    IsClosable="True">
-                    <InfoBar.ActionButton>
-                        <Button x:Uid="UnlockButton" Click="OnUnlockClicked" />
-                    </InfoBar.ActionButton>
-                </InfoBar>
-                <InfoBar
-                    x:Uid="RecoveryOffNoticeBar"
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsRecoveryOffNoticeOpen, Mode=TwoWay}"
-                    Severity="Informational"
-                    IsClosable="True" />
-                <InfoBar
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsSecurityNoticeOpen, Mode=TwoWay}"
-                    Message="{x:Bind ViewModel.SecurityNotice, Mode=OneWay}"
-                    Severity="Success"
-                    IsClosable="True" />
-                <!-- What a redaction removed (#173). The view model has said this since the
-                     feature landed; on Windows nothing showed it, so a redaction finished in
-                     silence. -->
-                <InfoBar
-                    AutomationProperties.AutomationId="RedactionSummaryBar"
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsRedactionSummaryOpen, Mode=TwoWay}"
-                    Message="{x:Bind ViewModel.RedactionSummaryText, Mode=OneWay}"
-                    Severity="Success"
-                    IsClosable="True" />
-            </StackPanel>
-
+            <!-- First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — window-level, not
+                 per tab (#348 phase 1). -->
             <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
-                <InfoBar
-                    Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
-                    IsOpen="True"
-                    Severity="Informational"
-                    Message="{x:Bind ViewModel.PlacementHint, Mode=OneWay}"
-                    CloseButtonClick="OnCancelPlacementClicked" />
                 <InfoBar
                     x:Uid="DefaultAppBar"
                     Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                    IsOpen="{x:Bind ViewModel.IsDefaultAppCardOpen, Mode=OneWay}"
+                    IsOpen="{x:Bind Shell.IsDefaultAppCardOpen, Mode=OneWay}"
                     Severity="Informational"
                     CloseButtonClick="OnDefaultAppCardClosed">
                     <InfoBar.ActionButton>
@@ -530,71 +418,8 @@
                     </InfoBar.ActionButton>
                 </InfoBar>
             </StackPanel>
-
-            <!-- Which page is in view (#144). It used to sit at the end of the toolbar
-                 row; the row now holds commands only, so it floats over the document's
-                 corner, clear of the scroll bar and of the notices centred below. -->
-            <Border
-                x:Name="PageIndicatorPill"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Bottom"
-                Margin="0,0,28,14"
-                Padding="10,3"
-                CornerRadius="12"
-                IsHitTestVisible="False"
-                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}">
-                <TextBlock
-                    Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Border>
-
-            <!-- Ctrl+F find bar: compact Edge-style overlay (issue #26 simple search) -->
-            <Border
-                x:Name="FindBar"
-                Visibility="Collapsed"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                Margin="0,8,24,0"
-                Padding="8,8"
-                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8"
-                PreviewKeyDown="OnFindBarKeyDown">
-                <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
-                    <TextBox
-                        x:Name="FindQuery"
-                        x:Uid="FindQuery"
-                        AutomationProperties.AutomationId="FindQuery"
-                        IsSpellCheckEnabled="False"
-                        MinWidth="180"
-                        TextChanged="OnFindQueryChanged" />
-                    <TextBlock
-                        Text="{x:Bind ViewModel.SearchStatus, Mode=OneWay}"
-                        VerticalAlignment="Center"
-                        MinWidth="64"
-                        TextAlignment="Center"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        AutomationProperties.LiveSetting="Polite" />
-                    <Button Click="OnFindPreviousClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindPreviousButton" AutomationProperties.AutomationId="FindPreviousButton" />
-                    <Button Click="OnFindNextClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindNextButton" AutomationProperties.AutomationId="FindNextButton" />
-                    <Button Click="OnFindCloseClicked" Content="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindCloseButton" AutomationProperties.AutomationId="FindCloseButton" />
-                </StackPanel>
-            </Border>
-
-            <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). -->
-            <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
-                <!-- 64 is outside the type scale on purpose: this is sample ink at signature
-                     size, not UI type. Foreground is the SDD §6.2 contract value, the same
-                     #202020 a drawn signature and a check mark are stroked in. -->
-                <TextBlock x:Name="TypedSignatureText" FontFamily="Segoe Script" FontSize="64"
-                           Foreground="#FF202020" Padding="16,8" />
-            </Border>
         </Grid>
+
         <!-- The signature library drawn inside the window tree, for the `sign`
              screenshot state only (#100): RenderTargetBitmap cannot see the popup
              layer a real Flyout lives in, so the capture shows this copy, styled
@@ -609,7 +434,17 @@
                 BorderThickness="1"
                 CornerRadius="{ThemeResource OverlayCornerRadius}"
                 Padding="12">
-            <local:SignatureLibraryPanel ViewModel="{x:Bind ViewModel}" />
+            <local:SignatureLibraryPanel ViewModel="{x:Bind Shell.Active, Mode=OneWay}" />
+        </Border>
+
+        <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). Window-level,
+             not per tab: no document state involved, just a scratch surface (#348 phase 1). -->
+        <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
+            <!-- 64 is outside the type scale on purpose: this is sample ink at signature
+                 size, not UI type. Foreground is the SDD §6.2 contract value, the same
+                 #202020 a drawn signature and a check mark are stroked in. -->
+            <TextBlock x:Name="TypedSignatureText" FontFamily="Segoe Script" FontSize="64"
+                       Foreground="#FF202020" Padding="16,8" />
         </Border>
     </Grid>
 </Window>
