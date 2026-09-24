@@ -33,6 +33,15 @@ public partial class MainWindow : Window
     private readonly Dictionary<DocumentViewModel, IStorageFile?> _openedFiles = [];
 
     /// <summary>
+    /// Whether <paramref name="document"/> has its own file handle for Save to write
+    /// through (#348 phase 2) — for the self-test, which cannot read
+    /// <see cref="_openedFiles"/> directly: the race this exists to catch left an
+    /// earlier tab with no entry at all, not a wrong one, so a plain null check on
+    /// <c>OpenedFile</c> (which only ever reads the *active* tab) could not see it.
+    /// </summary>
+    internal bool HasFileHandleForTest(DocumentViewModel document) => _openedFiles.ContainsKey(document);
+
+    /// <summary>
     /// Each tab's own place in the shared <c>PageScroller</c> (#348 plan §4 — the plan's own
     /// scroll-offset row, missing from the first pass of this branch). With one `ScrollViewer`
     /// shared across every tab, switching away and back left whatever offset the OUTGOING tab
@@ -150,51 +159,14 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>A file the person chose, waiting for its document to finish opening before Save writes through it.</summary>
-    private IStorageFile? _pendingFile;
-
-    /// <summary>The tab <see cref="_pendingFile"/> belongs to, so a slower-opening tab cannot adopt a faster one's file.</summary>
-    private DocumentViewModel? _pendingFileOwner;
-
-    /// <summary>
-    /// The storage file follows the open document (#145). Opening is async now, and a document
-    /// that fails to open leaves the previous one on screen, so the file handle is adopted only
-    /// once its document is the one open — or Save would write the old document into the new file.
-    /// </summary>
-    private void FollowDocumentPath(DocumentViewModel document, string documentPath)
-    {
-        if (_pendingFile is { } pending && ReferenceEquals(_pendingFileOwner, document)
-            && SamePath(pending.TryGetLocalPath(), documentPath))
-        {
-            _openedFiles[document] = pending;
-            _pendingFile = null;
-            _pendingFileOwner = null;
-        }
-        else if (_openedFiles.TryGetValue(document, out var current) && current is { } file
-                 && !SamePath(file.TryGetLocalPath(), documentPath))
-        {
-            // A document opened by path alone has no handle to write through: Save says so.
-            _openedFiles[document] = null;
-        }
-    }
-
     /// <summary>Drops a closed tab's file handle and Save-related bookkeeping (#348).</summary>
     private void ForgetTab(DocumentViewModel document)
     {
         _openedFiles.Remove(document);
-        if (ReferenceEquals(_pendingFileOwner, document))
-        {
-            _pendingFile = null;
-            _pendingFileOwner = null;
-        }
         _scrollOffsets.Remove(document);
         if (ReferenceEquals(_scrollRestorePending, document))
             _scrollRestorePending = null;
     }
-
-    private static bool SamePath(string? a, string? b) =>
-        a is not null && b is not null
-        && string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -376,8 +348,6 @@ public partial class MainWindow : Window
         // An editor writing new text shows the face and size it will be written in.
         if (args.PropertyName is nameof(DocumentViewModel.TextFont) or nameof(DocumentViewModel.TextSize))
             FollowPickersInEditor();
-        if (args.PropertyName is nameof(DocumentViewModel.DocumentPath) && vm.DocumentPath is { } documentPath)
-            FollowDocumentPath(vm, documentPath);
         RefreshMenuBar();
     }
 
@@ -2108,17 +2078,30 @@ public partial class MainWindow : Window
     /// see the comment on the same pattern in <see cref="OpenPathIntoTabAsync"/> — and
     /// removed again if the open fails outright rather than merely waiting on a
     /// password, so a failed open never leaves an "Untitled" tab behind (#348 §1).
+    ///
+    /// The file handle is put straight into <see cref="_openedFiles"/> against this
+    /// brand-new <paramref name="document"/>, not through an "adopt once the document's
+    /// path settles" indirection (#348 phase 2). That indirection — a single shared
+    /// pending-file slot, adopted only once <see cref="OnActiveDocumentPropertyChanged"/>
+    /// saw <c>DocumentPath</c> change on whichever tab happened to be Active — broke as
+    /// soon as more than one file could be handed over from a single macOS Activated
+    /// call: a second call here overwrote the slot before the first tab's open had
+    /// finished, so the first tab's Save silently had no file to write through, and
+    /// since a newly added tab is made Active immediately (<see cref="ShellViewModel.AddTab"/>),
+    /// a second tab opening concurrently could even unsubscribe the handler the first
+    /// tab's own change would have needed. Keyed by this call's own <paramref name="document"/>
+    /// reference instead, which nothing else touches, there is nothing left to race.
     /// </summary>
     private async Task OpenIntoNewTabAsync(ShellViewModel shell, IStorageFile file, string path)
     {
         var document = shell.CreateDocument();
         shell.AddTab(document);
         document.DpiScale = RenderScaling;
-        _pendingFile = file;
-        _pendingFileOwner = document;
+        _openedFiles[document] = file;
         await document.OpenAsync(path);
         if (!document.IsDocumentOpen && document.PendingPasswordPath is null)
         {
+            _openedFiles.Remove(document);
             shell.CloseTab(document);
             return;
         }
@@ -2353,14 +2336,7 @@ public partial class MainWindow : Window
             // and DocumentPath follows the copy (#68). The file is opened — and so
             // truncated — only once the verified bytes exist (#145).
             if (await vm.SaveAsThroughAsync(async () => await file.OpenWriteAsync(), file.TryGetLocalPath(), file.Name))
-            {
                 OpenedFile = file;
-                if (ReferenceEquals(_pendingFileOwner, vm))
-                {
-                    _pendingFile = null;
-                    _pendingFileOwner = null;
-                }
-            }
         }
         catch (Exception ex)
         {

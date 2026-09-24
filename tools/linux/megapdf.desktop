@@ -8,19 +8,20 @@ GenericName[fr_CA]=Éditeur PDF
 Comment=Open. Fix. Save. Done.
 Comment[fr]=Ouvrir. Corriger. Enregistrer. Terminé.
 Comment[fr_CA]=Ouvrir. Corriger. Enregistrer. Terminé.
-# %f, not %F or %U: it reads a path rather than a URI — %U would hand it
-# "file:///…" on some launchers, which File.Exists cannot open. %f (lower case)
-# also means a launcher that has several files selected starts megapdf once per
-# file rather than passing them all to one invocation — each of those starts a
-# new *process* today, one window per process, exactly as double-clicking each
-# file individually would (#348 phase 1: the app now opens several documents as
-# tabs in one window once it is *already running* — File ▸ Open, drag-and-drop,
-# recents — but nothing yet makes a second `megapdf <path>` launch join that
-# running instance instead of starting its own; that is the Linux single-instance
-# socket, #348 phase 2). Once that lands, %f could become %F to hand every
-# selected file to the single new process a first launch starts, which would
-# then route them into tabs of one window the same way an in-app multi-open does.
-Exec=megapdf %f
+# %F, not %f or %U: %F hands every selected file to one invocation of megapdf
+# (%f would start the app once per file), and a path rather than a URI — %U
+# would hand it "file:///…" on some launchers, which File.Exists cannot open.
+#
+# A launcher that has several files selected now starts megapdf ONCE, with every
+# path as its own argument, and — since #348 phase 2 — a `megapdf <path>...`
+# launch while the app is already running hands those paths to the running
+# process over a Unix domain socket (Platform/SingleInstance.cs) instead of
+# starting a second one: each path either joins its own tab or activates one
+# already open on it, the same find-or-activate rule File ▸ Open, drag-and-drop
+# and recents already use. Only a cold start — nothing running yet — still opens
+# its own process, exactly once, with every selected file arriving as tabs of
+# that one new window.
+Exec=megapdf %F
 Icon=megapdf
 Terminal=false
 # application/pdf is a standard shared-mime-info type, so there is no MIME XML to
