@@ -643,6 +643,29 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         }
     }
 
+    /// <summary>
+    /// Frees this tab's rendered bitmaps when it stops being the active one (#348 phase
+    /// 1, plan §6.2): every realized page becomes a placeholder again and the capped-
+    /// render cache is dropped, the same eviction <see cref="RestoreSessionAsync"/> and a
+    /// viewport move already do — wired to tab deactivation here rather than only to
+    /// those two call sites. A background tab keeps its scroll position and geometry
+    /// (<see cref="_viewFirst"/>/<see cref="_viewLast"/>), just not its pixels.
+    /// </summary>
+    internal void EvictBackgroundRenders()
+    {
+        if (Pages.Count == 0)
+            return;
+        for (var i = 0; i < Pages.Count; i++)
+        {
+            if (Pages[i].Source is not null)
+                Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
+        }
+        _cappedRenders.Clear();
+    }
+
+    /// <summary>Re-renders this tab's viewport after it becomes the active one again.</summary>
+    internal Task ReactivateRendersAsync() => UpdateViewportAsync(_viewFirst, _viewLast);
+
     private async Task<PageView> RenderPageAsync(IPdfDocument doc, int pageIndex, bool preview = false)
     {
         // Render at monitor rasterization scale × zoom so pages stay crisp.
