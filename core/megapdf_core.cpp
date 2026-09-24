@@ -6,6 +6,7 @@
 // three bindings.
 
 #include "megapdf_core.h"
+#include "megapdf_core_internal.h"
 #include "megapdf_core_testing.h"
 
 #include <algorithm>
@@ -619,6 +620,24 @@ void ClosePageUnlocked(megapdf_page* p) {
 }
 
 }  // namespace
+
+// megapdf_core_internal.h: thin accessors so megapdf_structure.cpp (#353) can read a page's
+// raw PDFium handle and take the core's mutex without megapdf_page's fields, or the
+// crop-space transform, living in two places.
+namespace megapdf_internal {
+
+std::recursive_mutex& Lock() { return CoreLock(); }
+FPDF_PAGE PageHandle(const megapdf_page* p) { return p ? p->page : nullptr; }
+FPDF_DOCUMENT DocumentHandle(const megapdf_document* d) { return d ? d->doc : nullptr; }
+FPDF_FORMHANDLE FormHandle(const megapdf_document* d) { return d ? d->form : nullptr; }
+double PageUnit(const megapdf_page* p) { return p ? p->unit : 1.0; }
+double ToCropX(const megapdf_page* p, double x) { return OutX(p, x); }
+double ToCropY(const megapdf_page* p, double y) { return OutY(p, y); }
+megapdf_rect ToCropRect(const megapdf_page* p, double l, double b, double r, double t) { return OutRect(p, l, b, r, t); }
+void SetLastError(unsigned long code, const char* message) { SetError(code, message); }
+bool IsCancelled(const megapdf_cancel* c) { return c != nullptr && c->raised.load(std::memory_order_relaxed) != 0; }
+
+}  // namespace megapdf_internal
 
 extern "C" {
 

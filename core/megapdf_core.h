@@ -1080,6 +1080,124 @@ MEGAPDF_API size_t megapdf_redaction_refusal_message(const megapdf_redaction_rep
  */
 MEGAPDF_API int megapdf_redaction_poisoned(const megapdf_document* document);
 
+/* --------------------------------------------------------------------------
+ * Contract 9: document structure (#142, #353, #168; SDD §3.9, §6.2 contract 6).
+ * Blocks in reading order over a page range, from the structure tree when the
+ * document is tagged and trustworthy (a later phase, #358), otherwise inferred
+ * from PDFium's text page — the heuristic path this phase ships.
+ *
+ * A page range, not a page: body-size estimation, running header/footer
+ * detection and paragraph continuation all need more than one page. A
+ * one-page load is legal and gives page-local answers (only the page-number
+ * furniture rule, no running-header detection, no cross-page continuation).
+ *
+ * The text comes from FPDF_TEXTPAGE — the same source megapdf_search_page
+ * reads — not from megapdf_text_load's page-level text objects, which miss
+ * text a form XObject draws (megapdf_core.cpp's ReadObjectTexts reads only
+ * page objects; see tools/leakcheck's OccurrencesInText for the same trap
+ * documented from the redaction side). megapdf_text_load and its line-building
+ * are unchanged: existing text_runs.txt goldens stay valid.
+ *
+ * A block's text is canonical (SDD §6.2 contract 6): exactly the
+ * concatenation of its spans, with word spacing, hyphen-joining and #136's
+ * hidden-copy removal already applied. No consumer re-joins it.
+ * ----------------------------------------------------------------------- */
+
+typedef struct megapdf_structure megapdf_structure;
+
+/** Flags for megapdf_structure_load(). */
+enum {
+    MEGAPDF_STRUCTURE_DEFAULT = 0,
+    MEGAPDF_STRUCTURE_HEURISTIC_ONLY = 1,   /* ignore the structure tree even when present (measurement, --heuristic) */
+    MEGAPDF_STRUCTURE_KEEP_FURNITURE = 2,   /* headers, footers and page numbers stay as blocks instead of being dropped */
+    MEGAPDF_STRUCTURE_ALL_FIELDS = 4        /* FIELD blocks for empty text fields and unchecked boxes too */
+};
+
+typedef enum megapdf_block_kind {
+    MEGAPDF_BLOCK_HEADING = 1,     /* level 1..6 */
+    MEGAPDF_BLOCK_PARAGRAPH = 2,
+    MEGAPDF_BLOCK_LIST_ITEM = 3,   /* level = nesting depth from 1; marker string separate from text */
+    MEGAPDF_BLOCK_TABLE_ROW = 4,   /* reserved: tagged-only, unused until #358 */
+    MEGAPDF_BLOCK_FIGURE = 5,      /* an image object: object_index set (megapdf_render_image works on it); alt text when tagged */
+    MEGAPDF_BLOCK_PAGE_IMAGE = 6,  /* a page with no usable text: the consumer shows the page itself */
+    MEGAPDF_BLOCK_FURNITURE = 7,   /* a running header/footer/page number (only present with MEGAPDF_STRUCTURE_KEEP_FURNITURE) */
+    MEGAPDF_BLOCK_FIELD = 8        /* a form field, from the existing megapdf_form_fields_load (contract 3) */
+} megapdf_block_kind;
+
+/** megapdf_structure_page_source(): which path produced a page's blocks. */
+enum {
+    MEGAPDF_STRUCTURE_SOURCE_HEURISTIC = 0,
+    MEGAPDF_STRUCTURE_SOURCE_TAGGED = 1     /* unused until #358; every page is HEURISTIC in this phase */
+};
+
+typedef struct megapdf_block {
+    int kind;             /* megapdf_block_kind */
+    int level;            /* heading level (1..6), list nesting depth (from 1), or 0 */
+    int page;             /* source page index, relative to the document, not the loaded range */
+    megapdf_rect bounds;  /* crop space on that page; the whole page for PAGE_IMAGE */
+    int object_index;     /* FIGURE: the image object's index; -1 otherwise */
+    int continues;        /* 1 when this block continues the previous one (a paragraph split across a column or page) */
+    int source;           /* MEGAPDF_STRUCTURE_SOURCE_* for the page this block is on */
+    int confidence;       /* 0..100 for the page this block is on; see megapdf_structure_page_confidence() */
+} megapdf_block;
+
+/** megapdf_span.flags. */
+enum {
+    MEGAPDF_SPAN_BOLD = 1,
+    MEGAPDF_SPAN_ITALIC = 2,
+    MEGAPDF_SPAN_MONOSPACE = 4,
+    MEGAPDF_SPAN_CELL_START = 8,   /* reserved: tagged-only, unused until #358 */
+    MEGAPDF_SPAN_LINK = 16         /* reserved: tagged-only, unused until #358 */
+};
+
+typedef struct megapdf_span {
+    int flags;            /* MEGAPDF_SPAN_* */
+    double font_size;     /* points, crop space (/UserUnit applied) */
+    double size_ratio;    /* font_size over megapdf_structure_body_size() */
+    megapdf_rect bounds;  /* crop space, on the block's page */
+    int object_index;     /* the page-level text object this span's characters belong to; -1 for a form-XObject run */
+} megapdf_span;
+
+/** Which string megapdf_block_string() returns. */
+typedef enum megapdf_block_field {
+    MEGAPDF_BLOCK_TEXT = 0,    /* the block's whole text: exactly the concatenation of its spans */
+    MEGAPDF_BLOCK_MARKER = 1,  /* the list marker as drawn ("•", "3.", "(b)"); a FIELD's fully qualified name; "" otherwise */
+    MEGAPDF_BLOCK_ALT = 2      /* FIGURE alt text (tagged only); "" otherwise */
+} megapdf_block_field;
+
+/**
+ * Infers document structure over pages [first_page, first_page + page_count), in reading
+ * order. Returns NULL for a NULL document, an out-of-range or non-positive range, or when
+ * the core cannot allocate. `cancel` may be NULL; a cancelled load returns NULL with
+ * megapdf_last_error() unset and nothing leaked (#145's pattern — see megapdf_last_error()
+ * for other failures, which set it).
+ */
+MEGAPDF_API megapdf_structure* megapdf_structure_load(megapdf_document* document, int first_page, int page_count,
+                                                       unsigned int flags, const megapdf_cancel* cancel);
+MEGAPDF_API void megapdf_structure_free(megapdf_structure* s);
+
+/** The modal, character-count-weighted body font size over the loaded range, rounded to 0.5 pt. */
+MEGAPDF_API double megapdf_structure_body_size(const megapdf_structure* s);
+
+/** 0..100 for `page` (a document-relative index); MEGAPDF_ERR_ARGUMENT for a page outside the loaded range. */
+MEGAPDF_API int megapdf_structure_page_confidence(const megapdf_structure* s, int page);
+
+/** MEGAPDF_STRUCTURE_SOURCE_* for `page`; MEGAPDF_ERR_ARGUMENT for a page outside the loaded range. */
+MEGAPDF_API int megapdf_structure_page_source(const megapdf_structure* s, int page);
+
+MEGAPDF_API size_t megapdf_block_count(const megapdf_structure* s);
+/** MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a bad handle, index or NULL `out`. */
+MEGAPDF_API int megapdf_block_get(const megapdf_structure* s, size_t index, megapdf_block* out);
+/** UTF-16 code units, no terminator, count-then-fill. 0 for a bad handle, index or field. */
+MEGAPDF_API size_t megapdf_block_string(const megapdf_structure* s, size_t index, megapdf_block_field which,
+                                        unsigned short* out, size_t capacity);
+
+MEGAPDF_API size_t megapdf_block_span_count(const megapdf_structure* s, size_t index);
+/** MEGAPDF_OK, or MEGAPDF_ERR_ARGUMENT for a bad handle, block index, span index or NULL `out`. */
+MEGAPDF_API int megapdf_block_span_get(const megapdf_structure* s, size_t index, size_t span, megapdf_span* out);
+/** UTF-16 code units, no terminator, count-then-fill. 0 for a bad handle, block index or span index. */
+MEGAPDF_API size_t megapdf_block_span_string(const megapdf_structure* s, size_t index, size_t span,
+                                             unsigned short* out, size_t capacity);
 
 #ifdef __cplusplus
 }  /* extern "C" */

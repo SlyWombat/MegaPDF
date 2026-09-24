@@ -30,7 +30,7 @@ set(MEGAPDF_PDFIUM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/pdfium/linux-x64" CA
 option(MEGAPDF_CORE_TESTS "Build and register the core test target (#104)" OFF)
 option(MEGAPDF_ASAN "AddressSanitizer for the core and its tests (GCC/Clang only)" OFF)
 
-add_library(megapdf_core SHARED megapdf_core.cpp megapdf_core.h)
+add_library(megapdf_core SHARED megapdf_core.cpp megapdf_structure.cpp megapdf_core.h megapdf_core_internal.h)
 # One header set for every platform: the prebuilts are all the same pdfium-binaries
 # release (libs/pdfium/*/VERSION), and only the Android tree vendors the headers.
 #
