@@ -119,7 +119,12 @@ while IFS= read -r pdf; do
     if [ "$CENSUS" -eq 1 ]; then
         out=$(run_with_timeout "$TIMEOUT" "$CHECK" census "$pdf" 2>&1)
     else
-        out=$(run_with_timeout "$TIMEOUT" "$CHECK" check "$pdf" "${dumparg[@]}" "${refarg[@]}" 2>&1)
+        # "${arr[@]}" on a still-empty array is an "unbound variable" error under `set -u`
+        # on bash 3.2 (macOS's system bash — fixed in bash 4.4, not present here). The
+        # ${arr[@]+"${arr[@]}"} idiom below is the portable way to expand "zero or more
+        # words, or nothing" under nounset on every bash from 3.2 up.
+        out=$(run_with_timeout "$TIMEOUT" "$CHECK" check "$pdf" ${dumparg[@]+"${dumparg[@]}"} \
+                  ${refarg[@]+"${refarg[@]}"} 2>&1)
     fi
     rc=$?
     [ -n "${reffile:-}" ] && rm -f "$reffile"
