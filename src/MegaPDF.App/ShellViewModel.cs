@@ -216,8 +216,10 @@ public sealed partial class ShellViewModel : ObservableObject
     /// <summary>
     /// Find-or-activate (plan §1, decision 1): a path already open in this shell's tabs is
     /// activated instead of opened a second time; otherwise a new tab opens it. This is the
-    /// per-window half of the router the plan describes — the part that also has to reach
-    /// across every window in the process is app-level work the TabView commit adds.
+    /// per-window half of the router the plan describes; the part that reaches across every
+    /// window in the process — an external open, redirected from another launch — is
+    /// <c>App.OpenExternalPathsAsync</c> (#348 phase 2, App.Activation.cs), which calls back
+    /// into this same method once it has picked which window a new tab belongs in.
     /// </summary>
     public async Task<DocumentViewModel> OpenInTabAsync(string path, string? initialPassword = null)
     {
