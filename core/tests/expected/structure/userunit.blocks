@@ -1,0 +1,8 @@
+body_size 36
+page 0 confidence 100 source 0
+blocks 4
+block 0 kind=2 level=0 page=0 bounds=74.77 542.12 325.04 575.85 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=00480065006c006c006f0020004d006500670061005000440046
+  span 0 flags=0 font_size=36 size_ratio=1 bounds=74.77 542.12 325.04 575.85 object_index=0 text=00480065006c006c006f0020004d006500670061005000440046
+block 1 kind=8 level=0 page=0 bounds=100.00 300.00 300.00 320.00 object_index=-1 continues=0 source=0 confidence=100 marker=00660075006c006c006e0061006d0065 alt=- text=-
+block 2 kind=8 level=0 page=0 bounds=100.00 260.00 115.00 275.00 object_index=-1 continues=0 source=0 confidence=100 marker=00610067007200650065 alt=- text=004f00660066
+block 3 kind=5 level=0 page=0 bounds=300.00 100.00 400.00 150.00 object_index=2 continues=0 source=0 confidence=100 marker=- alt=- text=-
