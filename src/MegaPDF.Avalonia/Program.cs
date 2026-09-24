@@ -1547,6 +1547,24 @@ internal static class Program
             failures++;
         }
 
+        // --- A password prompt surviving a tab switch mid-load (#348) ---
+        //
+        // Not a view-only gesture like the ones above — DocumentViewModel.OpenAsync's own
+        // async race, independent of which tab is active when it resolves. Fable's PR #351
+        // review found the catch filter that starts the password prompt read a field this
+        // window only wires up for the active tab, so a switch mid-load could unsubscribe it
+        // before the filter ran and silently close the tab instead of asking.
+        Console.WriteLine("a password prompt surviving a tab switch mid-load (#348):");
+        try
+        {
+            CheckPasswordPromptAcrossTabSwitch(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::password prompt across tab switch: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- The window at its declared minimum (#237) ---
         //
         // 480×360 is a size the app offers, so it is a size the app has to draw. It
@@ -2877,6 +2895,166 @@ internal static class Program
             Pump();
         }
 
+        // --- 3b: pointer-capture symmetry with CancelBand (#348, Fable's PR #351 review
+        // point 5) ---
+        //
+        // RemoveChrome used to leave a dragging pointer's capture in place on a tab switch —
+        // harmless only because Avalonia already drops capture on an ordinary pointer-up,
+        // which a tab switch never delivers, unlike CancelBand's explicit _bandPointer
+        // release above. Driven through a REAL pointer press on the chrome body
+        // (Name="SelectionChromeBody"), not BeginChromeDragForTest: that helper sets
+        // _dragging directly and never goes through BeginDrag, so it never captures a
+        // pointer at all and cannot exercise this (noted in the commit that added it).
+        if (dragBox is not null)
+        {
+            tabA.HandlePageClick(0, new PdfPoint(dragBox.Bounds.X + (dragBox.Bounds.Width / 2), dragBox.Bounds.Y + (dragBox.Bounds.Height / 2)));
+            PumpUntil(() => tabA.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox }, TimeSpan.FromSeconds(5));
+            Pump();
+
+            if (global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window)
+                    .OfType<Border>().FirstOrDefault(b => b.Name == "SelectionChromeBody") is { } chromeBody
+                && chromeBody.TranslatePoint(new Point(chromeBody.Bounds.Width / 2, chromeBody.Bounds.Height / 2), window) is { } chromeCentre)
+            {
+                HeadlessWindowExtensions.MouseDown(window, chromeCentre, MouseButton.Left);
+                Pump();
+                check("a real pointer press on the chrome body starts a drag and captures the pointer",
+                      window.IsDraggingChromeForTest && window.IsChromePointerCapturedForTest);
+
+                shell.ActivateTab(tabB);
+                Pump();
+                check("switching tabs mid-drag releases the pointer capture too, the same way CancelBand releases the band's",
+                      !window.IsChromePointerCapturedForTest);
+
+                // The release lands wherever the pointer physically is now — over tab B's
+                // page, same as the band check above. If capture had survived the switch,
+                // this MouseUp would still be routed to the torn-down chrome.
+                HeadlessWindowExtensions.MouseUp(window, chromeCentre, MouseButton.Left);
+                PumpFor(TimeSpan.FromMilliseconds(50));
+                check("  and the release did not resurrect the chrome or reselect anything on tab B",
+                      !window.HasChromeForTest && tabB.Selection is null);
+
+                shell.ActivateTab(tabA);
+                Pump();
+                tabA.ClearSelection();
+                Pump();
+            }
+            else
+            {
+                check("the chrome body is found in the visual tree for the pointer-capture check", false);
+            }
+        }
+
+        // --- 4: a live Selection/PageFocus surviving a full switch away and back ---
+        //
+        // Not a mid-gesture race like the others above — this is the "half a rule" gap
+        // Fable's PR #351 review found (point 1): OnActiveDocumentChanged tore down the
+        // shared CHROME on every switch (RemoveChrome/RemoveFocusRing), but never cleared
+        // the VM's own Selection/PageFocus, which are deliberately per-tab and so survive a
+        // switch by design. Select something on tab A, switch away and back, and — before
+        // the fix — Selection was still set with no chrome on screen to show it, so
+        // OnKeyDown's Delete/Backspace handling (which reads Active.Selection directly,
+        // not the chrome) could still act on something the user could no longer see.
+        shell.ActivateTab(tabA);
+        Pump();
+        tabA.AddTextBox(0, new PdfPoint(200, 350), "select me");
+        PumpUntil(() => !tabA.Busy.IsBusy && tabA.BoxesOn(0).Any(b => b.Text == "select me"), TimeSpan.FromSeconds(5));
+        var staleBox = tabA.BoxesOn(0).FirstOrDefault(b => b.Text == "select me");
+        check("a third box is placed, to check what a full switch-and-back does to its selection", staleBox is not null);
+        if (staleBox is not null)
+        {
+            tabA.HandlePageClick(0, new PdfPoint(staleBox.Bounds.X + (staleBox.Bounds.Width / 2), staleBox.Bounds.Y + (staleBox.Bounds.Height / 2)));
+            PumpUntil(() => tabA.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox }, TimeSpan.FromSeconds(5));
+            Pump();
+            check("the box is selected, with its chrome up", tabA.Selection is not null && window.HasChromeForTest);
+
+            // Away, with nothing left mid-gesture — a plain switch, not a drag or an edit.
+            shell.ActivateTab(tabB);
+            Pump();
+            check("switching away tears down the chrome", !window.HasChromeForTest);
+
+            // And back — a full round trip, the thing users actually do.
+            shell.ActivateTab(tabA);
+            Pump();
+            check("switching back finds nothing selected — cancelled on the way out, not resurrected",
+                  tabA.Selection is null);
+            check("  and no chrome is shown for a selection that no longer exists",
+                  !window.HasChromeForTest);
+
+            var marksBefore = tabA.RedactionMarkCount;
+            var boxesBefore = tabA.BoxesOn(0).Count;
+            HeadlessWindowExtensions.KeyPress(window, Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+            HeadlessWindowExtensions.KeyRelease(window, Key.Delete, RawInputModifiers.None, PhysicalKey.Delete, null);
+            Pump();
+            check("  Delete is a no-op: the box the user can no longer see is not silently removed",
+                  tabA.BoxesOn(0).Count == boxesBefore && tabA.RedactionMarkCount == marksBefore
+                  && tabA.BoxesOn(0).Any(b => b.Text == "select me"));
+
+            tabA.ClearSelection();
+            Pump();
+        }
+
+        // --- 4b: a real pointer click on the tab strip (the testing critique) ---
+        //
+        // Every switch above goes through shell.ActivateTab() — never a real pointer
+        // click on a TabStripItem, which moves focus before SelectedItem's binding
+        // updates Active. An open in-place editor's LostFocus handler (ShowInlineEditor)
+        // then COMMITS it, a different outcome from CancelTransientViewState's
+        // DismissInlineEditor, which DISCARDS it — DismissInlineEditor nulls
+        // _inlineEditor before removing the control, so the very LostFocus its own
+        // removal raises finds the guard already false and does not commit. The two
+        // are indistinguishable from the outside unless something was actually typed,
+        // which is why InlineEditorTextForTest exists: without it, both paths leave
+        // the box reading its original text and this check would pass by accident
+        // either way. The headless platform's MouseDown/MouseUp do reach a real
+        // TabStripItem and do drive TabStrip's own selection handling, so this is not
+        // a case the harness can't simulate — it is exercised here for real.
+        shell.ActivateTab(tabA);
+        Pump();
+        tabA.AddTextBox(0, new PdfPoint(250, 250), "before click");
+        PumpUntil(() => !tabA.Busy.IsBusy && tabA.BoxesOn(0).Any(b => b.Text == "before click"), TimeSpan.FromSeconds(5));
+        var clickBox = tabA.BoxesOn(0).FirstOrDefault(b => b.Text == "before click");
+        check("a fourth box is placed, to edit and commit via a real tab-strip click", clickBox is not null);
+        if (clickBox is not null)
+        {
+            tabA.HandlePageClick(0, new PdfPoint(clickBox.Bounds.X + (clickBox.Bounds.Width / 2), clickBox.Bounds.Y + (clickBox.Bounds.Height / 2)));
+            PumpUntil(() => tabA.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox }, TimeSpan.FromSeconds(5));
+            window.BeginEditingSelectedTextBoxForTest();
+            Pump();
+            check("the shared in-place editor is open, with the box's original text", window.HasOpenInlineEditor);
+
+            // As if typed: a real KeyPress into the TextBox would work identically, but
+            // this is simpler and exercises the same LostFocus/DismissInlineEditor fork.
+            window.InlineEditorTextForTest = "edited by real click";
+            Pump();
+
+            var tabBIndex = shell.Documents.IndexOf(tabB);
+            if (window.DocumentTabStrip.ContainerFromIndex(tabBIndex) is Control tabBItem
+                && tabBItem.TranslatePoint(new Point(tabBItem.Bounds.Width / 2, tabBItem.Bounds.Height / 2), window) is { } centre)
+            {
+                HeadlessWindowExtensions.MouseDown(window, centre, MouseButton.Left);
+                HeadlessWindowExtensions.MouseUp(window, centre, MouseButton.Left);
+                Pump();
+
+                check("a real click on another tab's strip item switches Active to it",
+                      ReferenceEquals(shell.Active, tabB));
+                check("  and commits the open editor via LostFocus rather than discarding the edit "
+                      + "(DismissInlineEditor, the programmatic-switch path, would have left the box's "
+                      + "original text)",
+                      !window.HasOpenInlineEditor
+                      && tabA.BoxesOn(0).Any(b => b.Text == "edited by real click")
+                      && !tabA.BoxesOn(0).Any(b => b.Text == "before click"));
+            }
+            else
+            {
+                check("tab B's TabStripItem is found in the visual tree for a real click", false);
+            }
+
+            shell.ActivateTab(tabA);
+            Pump();
+            tabA.ClearSelection();
+            Pump();
+        }
+
         // --- 5: an active find search with an unsettled debounce timer ---
         //
         // The find box is one shared TextBox across every tab (it is not bound to
@@ -2911,6 +3089,148 @@ internal static class Program
 
         tabA.CloseFind();
         Pump();
+
+        // --- 6: scroll position across a full tab switch and back (#348 plan §4) ---
+        //
+        // Not in the plan's list of view-only gestures — this is the "should fix" the
+        // plan's own §4 table asks for and the first pass omitted entirely (Fable's PR
+        // #351 review point 3). One shared PageScroller across every tab means switching
+        // away and back used to leave whatever offset the OUTGOING tab happened to have,
+        // clamped to the incoming tab's extent — not the incoming tab's own remembered
+        // position, which is what "tabs keep your place" means. Zoomed in first so tab A's
+        // page is taller than the viewport: at 100% two Letter pages might already fit
+        // within it, and an offset of zero would pass this check by accident.
+        shell.ActivateTab(tabA);
+        Pump();
+        tabA.SetZoomCommand.Execute(3.0);
+        PumpUntil(() => window.PageScroller.Extent.Height > window.PageScroller.Viewport.Height + 100,
+                  TimeSpan.FromSeconds(5));
+        check("tab A is zoomed in enough for its page to scroll",
+              window.PageScroller.Extent.Height > window.PageScroller.Viewport.Height);
+
+        var target = new Vector(0, Math.Min(300, window.PageScroller.Extent.Height - window.PageScroller.Viewport.Height));
+        window.PageScroller.Offset = target;
+        Pump();
+        check("tab A is scrolled down, to give the round trip below something to lose",
+              window.PageScroller.Offset.Y > 0);
+
+        // Away — tab B has its own (different) scroll state, at the origin.
+        shell.ActivateTab(tabB);
+        Pump();
+        check("switching away shows tab B's own scroll position, not tab A's",
+              Math.Abs(window.PageScroller.Offset.Y) < 1.0);
+
+        // And back — a full round trip, the thing users mean by "tabs keep my place".
+        shell.ActivateTab(tabA);
+        PumpUntil(() => Math.Abs(window.PageScroller.Offset.Y - target.Y) < 1.0, TimeSpan.FromSeconds(5));
+        check("switching back restores tab A's own scroll position, not wherever tab B left off",
+              Math.Abs(window.PageScroller.Offset.Y - target.Y) < 1.0);
+
+        tabA.SetZoomCommand.Execute(1.0);
+        Pump();
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Answering the password prompt regardless of which tab is active when it is needed
+    /// (#348, Fable's PR #351 review point 2). `DocumentViewModel.OpenAsync`'s catch filter
+    /// used to read `PasswordRequested` — a field this window subscribes to only for the
+    /// ACTIVE tab (`OnActiveDocumentChanged`) — after the `await` that loads the document.
+    /// Switching tabs while an encrypted file was still loading unsubscribed that handler
+    /// before the filter ran, so the filter missed the password case entirely, fell through
+    /// to the generic catch, and `OpenIntoNewTabAsync` then saw neither `IsDocumentOpen` nor
+    /// `PendingPasswordPath` set and silently closed the tab — no prompt, no document, no
+    /// error the user could see. Exercised end to end, through the real window and the real
+    /// async race, using `AnswerPasswordForTest` in place of the modal `PasswordWindow`
+    /// dialog headless self-test has no substitution point for.
+    /// </summary>
+    private static void CheckPasswordPromptAcrossTabSwitch(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var encrypted = Path.Combine(dir, "encrypted.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+
+        var askedFor = new List<string>();
+        window.AnswerPasswordForTest = async fileName =>
+        {
+            askedFor.Add(fileName);
+            // A real PasswordWindow's ShowDialog never resolves synchronously — it waits on
+            // an actual person. Answering instantly here (a plain Task.FromResult) let
+            // RetryWithPasswordAsync's fire-and-forget continuation run fully re-entrantly —
+            // inside OpenAsync's OWN still-open `using (Busy.Begin(...))` scope — a timing no
+            // real dialog can ever produce, and a different (pre-existing, dialog-timing-only)
+            // gap from the one #348 is about. A short real delay keeps this test on the one
+            // race Fable's review actually found.
+            await Task.Delay(20);
+            return "u123";   // tools/gen_test_fixtures.py's gen_encrypted()
+        };
+
+        window.Show();
+        Pump();
+
+        window.OpenFromSystem(fixtureA);
+        PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+        var tabA = shell.Active!;
+
+        // Switched away at the narrowest possible point: after OpenAsync has captured its
+        // PasswordRequested snapshot (the fix) but before LoadDocument's background
+        // Task.Run has thrown — timed off Busy.IsBusy turning true, which OpenAsync sets
+        // (via `using (Busy.Begin(...))`) strictly AFTER the snapshot line and strictly
+        // BEFORE `await OffUiThread(() => LoadDocument(...))` — rather than off a poll or
+        // a timer, which could just as easily land before the snapshot (proving nothing)
+        // or after the exception is already caught (also proving nothing). Both
+        // shell.PropertyChanged (Active) and Busy.PropertyChanged (IsBusy) fire
+        // synchronously, so this whole handshake runs re-entrantly, nested inside
+        // OpenIntoNewTabAsync's own `await document.OpenAsync(path)` call, before that
+        // call ever truly suspends — no timing race to get unlucky on.
+        DocumentViewModel? loadingTab = null;
+        void WatchForTheNewTabsBusyState(object? _, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(ShellViewModel.Active) || loadingTab is not null)
+                return;
+            if (shell.Active is { } active && !ReferenceEquals(active, tabA))
+            {
+                loadingTab = active;
+                loadingTab.Busy.PropertyChanged += SwitchAwayOnceLoadingStarts;
+            }
+        }
+        void SwitchAwayOnceLoadingStarts(object? _, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (loadingTab is not { } lt || !lt.Busy.IsBusy)
+                return;
+            lt.Busy.PropertyChanged -= SwitchAwayOnceLoadingStarts;
+            shell.ActivateTab(tabA);
+        }
+        shell.PropertyChanged += WatchForTheNewTabsBusyState;
+        try
+        {
+            window.OpenFromSystem(encrypted);
+            PumpUntil(() => loadingTab is not null, TimeSpan.FromSeconds(5));
+        }
+        finally
+        {
+            shell.PropertyChanged -= WatchForTheNewTabsBusyState;
+        }
+        check("a new tab for the encrypted document is added, and switched away from the moment it starts loading",
+              loadingTab is not null && !ReferenceEquals(loadingTab, tabA));
+        check("  and the window's Active tab is back on the one the user is actually looking at",
+              ReferenceEquals(shell.Active, tabA));
+
+        PumpUntil(() => askedFor.Count > 0 || (loadingTab is not null && loadingTab.IsDocumentOpen),
+                  TimeSpan.FromSeconds(5));
+        check("the password prompt is not lost: it is still asked even though its tab lost focus before it could even finish loading",
+              askedFor.Count == 1 && askedFor[0] == "encrypted.pdf");
+
+        PumpUntil(() => loadingTab is { IsDocumentOpen: true }, TimeSpan.FromSeconds(5));
+        check("  and the tab is not silently closed — it opens once the (correct) password answers",
+              loadingTab is { IsDocumentOpen: true } && shell.Documents.Contains(loadingTab));
+        check("  the other tab was left alone throughout", tabA.IsDocumentOpen && SamePath(tabA.DocumentPath, fixtureA));
 
         static void Pump() => MenuProbe.Pump();
     }

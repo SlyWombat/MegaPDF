@@ -966,6 +966,18 @@ public partial class MainWindow : Window
     /// <summary>Whether the shared in-place editor is open, for the self-test (#348 — CheckTabTransitionSafety).</summary>
     internal bool HasOpenInlineEditor => _inlineEditor is not null;
 
+    /// <summary>
+    /// The open in-place editor's text, for the self-test — set to type into it without a real
+    /// keyboard event, read to tell a LostFocus commit (see <see cref="ShowInlineEditor"/>) apart
+    /// from a DismissInlineEditor discard, which otherwise look identical from the outside when
+    /// nothing was ever typed (#348 — CheckTabTransitionSafety's real-tab-strip-click case).
+    /// </summary>
+    internal string? InlineEditorTextForTest
+    {
+        get => _inlineEditor?.Text;
+        set { if (_inlineEditor is { } editor) editor.Text = value; }
+    }
+
     /// <summary>Whether a whiteout/redaction drag is in progress, for the self-test.</summary>
     internal bool HasBandInProgress => _band is not null;
 
