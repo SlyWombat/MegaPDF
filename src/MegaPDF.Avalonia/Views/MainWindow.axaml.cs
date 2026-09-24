@@ -32,6 +32,31 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly Dictionary<DocumentViewModel, IStorageFile?> _openedFiles = [];
 
+    /// <summary>
+    /// Each tab's own place in the shared <c>PageScroller</c> (#348 plan §4 — the plan's own
+    /// scroll-offset row, missing from the first pass of this branch). With one `ScrollViewer`
+    /// shared across every tab, switching away and back left whatever offset the OUTGOING tab
+    /// happened to leave, clamped to the incoming tab's extent — not the incoming tab's own
+    /// remembered position, which is what "tabs keep your place" means. Saved in the outgoing
+    /// branch of <see cref="OnActiveDocumentChanged"/>, restored (once layout has caught up —
+    /// see <see cref="TryRestoreScrollOffset"/>) in the incoming one. Dropped in <see cref="ForgetTab"/>.
+    /// </summary>
+    private readonly Dictionary<DocumentViewModel, Vector> _scrollOffsets = [];
+
+    /// <summary>
+    /// The tab whose saved <see cref="_scrollOffsets"/> entry is still waiting to be applied to
+    /// <c>PageScroller</c>. Set when a tab becomes active; cleared once <c>PageScroller</c>
+    /// actually reports the saved offset back. Not applied just once and forgotten: at the
+    /// moment a switch happens, <c>PageList.ItemsSource</c> has been rebound to the incoming
+    /// tab's pages, but Avalonia's layout pass that resizes <c>PageScroller</c>'s extent to
+    /// match has not necessarily run yet, so an immediate assignment is silently clamped to
+    /// whatever extent the OUTGOING tab left behind. <see cref="TryRestoreScrollOffset"/> is
+    /// retried from <see cref="UpdateViewport"/>, which already runs on every
+    /// <c>ScrollChanged</c>/<c>SizeChanged</c> — the same deferral <c>FitOnOpen</c> uses for the
+    /// same reason.
+    /// </summary>
+    private DocumentViewModel? _scrollRestorePending;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -162,6 +187,9 @@ public partial class MainWindow : Window
             _pendingFile = null;
             _pendingFileOwner = null;
         }
+        _scrollOffsets.Remove(document);
+        if (ReferenceEquals(_scrollRestorePending, document))
+            _scrollRestorePending = null;
     }
 
     private static bool SamePath(string? a, string? b) =>
@@ -216,9 +244,83 @@ public partial class MainWindow : Window
             old.PageRewriteConfirmationRequested -= ConfirmPageRewriteAsync;
             old.PrintDestinationRequested -= ChoosePrinterAsync;
             old.PropertyChanged -= OnActiveDocumentPropertyChanged;
+
+            // "Cancel, don't restore" applies to VM state that drives shared chrome,
+            // not only to the view-only gesture state CancelTransientViewState deals
+            // with below (#348 — Fable's PR #351 review, point 1). Selection and
+            // PageFocus are deliberately per-tab and survive a switch on the VM, but
+            // the chrome that shows them (RemoveChrome/RemoveFocusRing) is shared and
+            // is about to be torn down regardless of whose Selection it was showing.
+            // Left set, a live Selection with no chrome on screen meant Delete/Backspace
+            // (OnKeyDown) or Enter/Space (HandlePageKey) could still act on something
+            // the user switched away from and can no longer see. Cleared here, on the
+            // tab's way OUT, so switching back finds nothing selected — the same rule
+            // every other piece of state below follows: cancelled, never resurrected.
+            old.ClearSelection();
+            old.ClearPageFocus();
+
+            // Scroll position is per-tab state the #348 plan's §4 table asks for that
+            // the shared PageScroller cannot hold for more than one tab at a time.
+            // Saved on the way out; the incoming branch below restores it (or the
+            // pending-restore retry in UpdateViewport does, once layout has caught up
+            // with the incoming tab's own page sizes).
+            _scrollOffsets[old] = PageScroller.Offset;
         }
 
         _wiredDocument = Active;
+        CancelTransientViewState();
+
+        if (Active is { } vm)
+        {
+            // A window: engine work runs off the UI thread from here on (#145).
+            vm.RunsInBackground = true;
+            vm.Busy.PropertyChanged += OnActiveBusyChanged;
+            vm.SaveRequested += OnActiveSaveRequested;
+            vm.ScrollToRequested += ScrollToMatch;
+            // The focused region is brought into view by the same rules a search hit
+            // is — tabbing to something off screen has to show it (#2, #32).
+            vm.FocusScrollRequested += ScrollToMatch;
+            vm.EditLineRequested += ShowLineEditor;
+            vm.PasswordRequested += AskForPasswordAsync;
+            vm.EditFieldRequested += ShowFieldEditor;
+            vm.RenameSignatureRequested += OnRenameSignatureRequested;
+            vm.DeleteSignatureRequested += OnDeleteSignatureRequested;
+            vm.PageRewriteConfirmationRequested += ConfirmPageRewriteAsync;
+            vm.PrintDestinationRequested += ChoosePrinterAsync;
+            vm.PropertyChanged += OnActiveDocumentPropertyChanged;
+
+            // Tried at once by UpdateViewport() below, and retried from there on every
+            // ScrollChanged/SizeChanged until it succeeds — see TryRestoreScrollOffset.
+            _scrollRestorePending = vm;
+        }
+
+        ApplyToolbarLayout();
+        UpdateViewport();
+        RefreshMenuBar();
+    }
+
+    /// <summary>
+    /// The one choke point every tab switch runs through (<see cref="OnActiveDocumentChanged"/>),
+    /// and the only place that catches every kind of view-only state that spans more than a
+    /// single input event: an open in-place text editor, a whiteout/redaction band mid-drag,
+    /// selection chrome mid-drag/resize, the keyboard focus ring, and an unsettled find
+    /// debounce (#348 §2b/§4). None of these five has anywhere of its own to live once `Active`
+    /// repoints at a different tab — the pages area, chrome and find bar are one shared control
+    /// set, not a `DocumentView` per tab — so each is cancelled here rather than left to resolve
+    /// against whatever tab happens to be active by the time it would otherwise fire.
+    ///
+    /// RULE, for whoever adds a sixth: any view-only field on this window that outlives a
+    /// single input event — an in-progress drag, a debounce timer, an open editor, anything
+    /// that is not simply read off the active <see cref="DocumentViewModel"/> — must be
+    /// cancelled or committed here the moment it is introduced. This is the only method a tab
+    /// switch is guaranteed to run through; nothing else sees every switch. Mark the gesture's
+    /// own Begin*/Show*-style entry point with a one-line comment pointing back here (see
+    /// <see cref="BeginBand"/>, <see cref="BeginDrag"/>, <see cref="ShowInlineEditor"/>,
+    /// <see cref="OnPageFocusChanged"/>, and <c>WireFind</c>'s debounce) so the rule is
+    /// discoverable from the gesture's own code, not only from here.
+    /// </summary>
+    private void CancelTransientViewState()
+    {
         // Chrome tied to the previously active tab's page list does not belong to the
         // one now on screen (#348 §4 — the transient view state a full per-tab
         // DocumentView would otherwise keep separate; see the PR description for why
@@ -248,30 +350,6 @@ public partial class MainWindow : Window
         {
             _syncingFindBox = false;
         }
-
-        if (Active is { } vm)
-        {
-            // A window: engine work runs off the UI thread from here on (#145).
-            vm.RunsInBackground = true;
-            vm.Busy.PropertyChanged += OnActiveBusyChanged;
-            vm.SaveRequested += OnActiveSaveRequested;
-            vm.ScrollToRequested += ScrollToMatch;
-            // The focused region is brought into view by the same rules a search hit
-            // is — tabbing to something off screen has to show it (#2, #32).
-            vm.FocusScrollRequested += ScrollToMatch;
-            vm.EditLineRequested += ShowLineEditor;
-            vm.PasswordRequested += AskForPasswordAsync;
-            vm.EditFieldRequested += ShowFieldEditor;
-            vm.RenameSignatureRequested += OnRenameSignatureRequested;
-            vm.DeleteSignatureRequested += OnDeleteSignatureRequested;
-            vm.PageRewriteConfirmationRequested += ConfirmPageRewriteAsync;
-            vm.PrintDestinationRequested += ChoosePrinterAsync;
-            vm.PropertyChanged += OnActiveDocumentPropertyChanged;
-        }
-
-        ApplyToolbarLayout();
-        UpdateViewport();
-        RefreshMenuBar();
     }
 
     private void OnActiveBusyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshMenuBar();
@@ -906,6 +984,8 @@ public partial class MainWindow : Window
     /// An editor placed where the user clicked, showing the face and size the text
     /// will actually be written in. Typing into a dialog and hoping is the thing
     /// SDD §2.2 is against — you should see the words land where they will sit.
+    /// Dismissed by <see cref="CancelTransientViewState"/> (via <see cref="DismissInlineEditor"/>)
+    /// if the active tab changes while it is open — see there.
     /// </summary>
     private void ShowInlineEditor(
         Control container, Point at, double fontSizePoints, string fontFamily,
@@ -1128,6 +1208,12 @@ public partial class MainWindow : Window
         // A document that opened before the window was laid out is fitted now (#143).
         vm.FitOnOpen();
 
+        // Same deferral as FitOnOpen above, same reason: this can run before the
+        // incoming tab's Pages have actually been laid out into PageScroller's
+        // extent (#348 §4 — see the field doc on _scrollRestorePending).
+        if (ReferenceEquals(_scrollRestorePending, vm))
+            TryRestoreScrollOffset(vm);
+
         if (vm.Pages.Count == 0)
             return;
 
@@ -1146,6 +1232,26 @@ public partial class MainWindow : Window
             }
         }
         vm.CurrentPage = vm.Pages.Count;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="vm"/>'s own remembered scroll position back into the shared
+    /// <c>PageScroller</c> (#348 plan §4). Assigning <c>Offset</c> is clamped at once against
+    /// whatever extent <c>PageScroller</c> currently reports — which, right after a switch, can
+    /// still be the OUTGOING tab's, because rebinding <c>PageList.ItemsSource</c> does not
+    /// itself force a layout pass. So this is tried on every call, not just the first: once the
+    /// incoming tab's own pages have actually been measured and the extent catches up, the
+    /// assignment below stops being clamped, the read-back matches what was asked for, and only
+    /// then is <see cref="_scrollRestorePending"/> cleared. A tab with no saved offset (its
+    /// first ever activation) restores to <c>default</c> — the origin — which is already where
+    /// a freshly bound `PageScroller` sits, so this is a no-op for it.
+    /// </summary>
+    private void TryRestoreScrollOffset(DocumentViewModel vm)
+    {
+        var target = _scrollOffsets.TryGetValue(vm, out var saved) ? saved : default;
+        PageScroller.Offset = target;
+        if (PageScroller.Offset == target)
+            _scrollRestorePending = null;
     }
 
     /// <summary>
@@ -1306,6 +1412,8 @@ public partial class MainWindow : Window
 
     // --- Whiteout drag ---
 
+    /// <summary>Starts a whiteout/redaction band drag. Cancelled by <see cref="CancelTransientViewState"/>
+    /// (via <see cref="CancelBand"/>) if the active tab changes before it is released — see there.</summary>
     private void BeginBand(Control container, Point origin, PointerPressedEventArgs e, bool redaction)
     {
         if (container is not ContentPresenter presenter || OverlayOf(presenter) is not { } overlay)
@@ -1594,7 +1702,8 @@ public partial class MainWindow : Window
     /// pdfium handle per page, on the UI thread — so without this, an eight-letter
     /// word typed into a 200-page document is 1,600 sequential page opens and the
     /// UI cannot repaint between them. The WinUI app has used 250ms for the same
-    /// reason since F6 landed.
+    /// reason since F6 landed. Stopped by <see cref="CancelTransientViewState"/> if
+    /// the active tab changes before it fires — see there.
     /// </summary>
     private DispatcherTimer? _findDebounce;
 
@@ -2355,8 +2464,20 @@ public partial class MainWindow : Window
     private string? _passwordAskedFor;
     private bool _passwordRetry;
 
+    /// <summary>
+    /// Substituted by the headless self-test, which has no message loop and would hang on a
+    /// modal rather than answer it — the same reason <see cref="AnswerRecoveryForTest"/> exists.
+    /// This is what makes it possible to prove #348's password-prompt-survives-a-tab-switch fix
+    /// end to end, through the real window and the real <see cref="DocumentViewModel.OpenAsync"/>
+    /// race, rather than only at the view-model level.
+    /// </summary>
+    internal Func<string, Task<string?>>? AnswerPasswordForTest { get; set; }
+
     private async Task<string?> AskForPasswordAsync(string fileName)
     {
+        if (AnswerPasswordForTest is { } answerForTest)
+            return await answerForTest(fileName);
+
         // Scoped to the file, not to the window. The flag used to persist for the
         // window's lifetime, so after unlocking one document the FIRST prompt for
         // the next one claimed a password had failed that was never entered (#65).
