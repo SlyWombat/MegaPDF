@@ -35,6 +35,18 @@ public partial class MainWindow
     private Rect _dragOriginal;
     private bool _dragging;
 
+    /// <summary>
+    /// The pointer <see cref="BeginDrag"/> captured, released explicitly by
+    /// <see cref="RemoveChrome"/> — the same symmetry <c>CancelBand</c> already has with
+    /// <c>_bandPointer</c> (#348, Fable's PR #351 review point 5). Harmless on an ordinary
+    /// release, where Avalonia drops capture on pointer-up regardless; it matters on a tab
+    /// switch mid-drag, which never delivers one.
+    /// </summary>
+    private IPointer? _chromePointer;
+
+    /// <summary>Whether the chrome believes it still holds pointer capture, for the self-test.</summary>
+    internal bool IsChromePointerCapturedForTest => _chromePointer is not null;
+
     private const double HandleSize = 10;
 
     /// <summary>The ✕ that removes the selection; the same 22 DIP chip the Windows app uses.</summary>
@@ -90,6 +102,10 @@ public partial class MainWindow
 
         var body = new Border
         {
+            // Named the way "PageSurface" and "SelectionRemoveChip" are (#173, #338):
+            // a real pointer press has somewhere to aim at in the self-test, rather than
+            // only BeginChromeDragForTest's shortcut, which bypasses BeginDrag entirely.
+            Name = "SelectionChromeBody",
             BorderThickness = new Thickness(1.5),
             BorderBrush = Brand.Brush("BrandAccent"),
             Background = Brushes.Transparent,
@@ -196,6 +212,8 @@ public partial class MainWindow
         host.Children.Add(chip);
     }
 
+    /// <summary>Starts a chrome body/handle drag. Torn down by <c>MainWindow.CancelTransientViewState</c>
+    /// (via <see cref="RemoveChrome"/>) if the active tab changes before it is released — see there.</summary>
     private void BeginDrag(PointerPressedEventArgs e, Control host, (bool Left, bool Top)? corner)
     {
         if (_chrome?.Child is not Panel panel || panel.Children.FirstOrDefault() is not Border body)
@@ -205,6 +223,7 @@ public partial class MainWindow
         _resizingCorner = corner;
         _dragStart = e.GetPosition(host);
         _dragOriginal = new Rect(body.Margin.Left, body.Margin.Top, body.Width, body.Height);
+        _chromePointer = e.Pointer;
         e.Pointer.Capture(host);
         e.Handled = true;   // do not let the page treat this as a fresh click
     }
@@ -277,6 +296,7 @@ public partial class MainWindow
         _dragging = false;
         _resizingCorner = null;
         e.Pointer.Capture(null);
+        _chromePointer = null;
 
         if (_chrome?.Child is not Panel panel || panel.Children.FirstOrDefault() is not Border body)
             return;
@@ -306,6 +326,13 @@ public partial class MainWindow
         _chromeHost = null;
         _dragging = false;
         _resizingCorner = null;
+        // Symmetric with CancelBand's explicit _bandPointer release (#348, Fable's
+        // PR #351 review point 5): an ordinary pointer-up already drops capture on
+        // its own, but a tab switch mid-drag never delivers one, and without this
+        // the page container this pointer was captured to kept routing move/release
+        // events to chrome that no longer exists, for a document that is no longer active.
+        _chromePointer?.Capture(null);
+        _chromePointer = null;
     }
 
     /// <summary>
