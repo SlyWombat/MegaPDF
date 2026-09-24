@@ -376,6 +376,78 @@ half-redacted file silently. ADR-005 records why that is the trade and not a lim
 
 ---
 
+### 3.9 F8 — Text out *(scope amendment — 2026-09-24, #142, #353)*
+
+**User story:** *"I need the words out of this PDF, in the order a person reads them, so
+another tool — a script, a search index, a diff, an LLM prompt — can use them. I don't want
+a screenshot of the page, and I don't want Ctrl+A jumbling two columns into one paragraph."*
+
+This is not Pat's story. §1.4 scopes MegaPDF to four things Pat does by hand on her own
+document; F8 is read-only infrastructure for someone who already has the document and wants
+its content somewhere else, the same relationship `tools/stress` has to the corpus. It does
+not reopen §1.4's non-goals: **no OCR** (a scanned page still has no text layer, and F8 says
+so — one `PAGE_IMAGE` block, never a guess); **no untagged-table extraction in v1** (an
+untagged table reads row by row, which is what every other extractor does, until the
+tagged-tree path of a later phase hands over real cells for free); **no image-file output**
+(a figure's bounds and object index are enough to render it through the existing image
+contract, but writing files is deferred). MegaPDF still does not create, assemble, merge or
+split PDFs (§1.4) — F8 only reads one that is already open.
+
+**Phased delivery (design: the 2026-09-24 staged-design comment on #142).** F8 is one shared
+core capability — document structure inference — consumed by two things in turn: a
+plain-text/Markdown writer and the standalone `megapdf-cli extract` shell that puts them on
+disk (#355–#357), and later #168's reflow reading view. This amendment covers the
+capability as a whole; only the first phase, **contract 9** below, lands with it. The
+writers, the CLI and the tagged-PDF path (structure trees, better answers on tagged files)
+follow in the issues #142 tracks, with no change to this section.
+
+#### Behavior (contract 9: `megapdf_structure_*`)
+
+1. **Blocks, not lines.** The core reads a page range and returns a flat, ordered list of
+   blocks: headings (levels 1–6), paragraphs, list items (with nesting depth and marker),
+   figures, a page-image fallback for a page with no text, furniture (running headers,
+   footers, page numbers — kept only on request) and form fields (from the existing AcroForm
+   contract, placed in reading order with the page's text). A block's text is canonical:
+   exactly the concatenation of its spans, word spacing, hyphen-joining and duplicate-copy
+   removal already done, so no consumer re-joins it differently from another.
+2. **Reading order survives columns.** A page is cut recursively into regions by whitespace
+   gutters (design §1.2); each region is read top to bottom, and the regions themselves in
+   the same order a person's eye would take them, not top-to-bottom-then-column-two. A page
+   that is really a table or a form — more cuts than a column layout should need — falls back
+   to row-by-row order with a lower confidence rather than guessing wrong with confidence.
+3. **Nothing is silently dropped.** A page with no characters at all is one `PAGE_IMAGE`
+   block; text the heuristic cannot classify (rotated, overlapping) still becomes a trailing
+   paragraph on its page, at a lower confidence, rather than vanishing. Furniture is dropped
+   by default and kept on request; nothing else is ever left out by default.
+4. **Confidence is the core's answer, not a guess left to the consumer.** Every page gets a
+   0–100 score a caller can act on — #168 shows its reflow view only above a threshold chosen
+   from the corpus census (#354); this amendment does not fix that threshold.
+5. **Heuristic first, tagged later.** This phase infers structure from `FPDF_TEXTPAGE`
+   characters alone (the same source `megapdf_search_page` reads, not the page-object text
+   `megapdf_text_load` reads — see design §1 item 2 for why the two differ and why the choice
+   matters for text a form XObject draws). A later phase adds the tagged-PDF path with a
+   trust rule, and a page falls back to heuristics whenever the tree cannot be trusted; the
+   two are never merged on one page.
+
+#### Acceptance criteria (this phase)
+
+- `microbit-v2-schematic.pdf` (#98) reads column by column, not row-interleaved.
+- `xobject-text.pdf`'s form-XObject text is present in its block; `doubled.pdf`'s second,
+  hidden copies are not.
+- Every term the search parity tests assert on the #98 schematic (4/6/2 hits for "the",
+  page by page) is found the same number of times in that page's extracted text.
+- Golden block files are byte-exact on ubuntu, macos and windows — the fixtures this phase
+  adds embed their fonts precisely so that is possible (contrast `text_runs.txt`, whose
+  base-14, non-embedded fixtures only regenerate exactly on the platform that captured them).
+- A cancelled load returns promptly with nothing leaked; ASan proves the second half on the
+  Linux CI leg.
+
+The plain-text content-fidelity bar (every glyph search can find comes out exactly once) and
+the Markdown acceptance line are a later phase's (#355, #357); this phase has no writer to
+hold to them yet. The README's mention of a command line waits for the CLI itself (#356).
+
+---
+
 ## 4. Technical Architecture & UI Framework
 
 ### 4.1 Technology stack summary
@@ -674,6 +746,18 @@ behaviors are contracts — a change on any platform is a breaking change everyw
    **contract 5**. The code and its comments cite the engine's number, so a reader arriving
    from `megapdf_redact_apply` and a reader arriving from here are describing the same
    promise under different names.
+
+6. **Block text is canonical** *(amendment — 2026-09-24, #142, #353)*. `megapdf_structure_*`
+   (§3.9) returns one block's text as exactly the concatenation of its spans — word spacing,
+   hyphen-joining and duplicate-copy removal already applied. Every consumer (the plain-text
+   and Markdown writers, #168's reflow view, a future "Share as text") reads the same string
+   for the same block; none of them re-joins spans a different way. `source` on each page
+   says whether a block came from the structure tree or the heuristic (this phase ships the
+   heuristic only); the two are never mixed on one page, so a consumer never has to reconcile
+   disagreeing halves of a page.
+
+   **Two numbers, one contract.** The header numbers this **contract 9**; §6.2 numbers it
+   **contract 6**, for the reason given above.
 
 ---
 
