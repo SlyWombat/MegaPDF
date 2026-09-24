@@ -27,12 +27,31 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// The arguments that mean "a rig is driving this, not a person". Only the ones that
-    /// reach a window: --brand-check shuts down before there is one, and --render-check,
-    /// --print-check, --language-check and --self-test never start Avalonia at all.
+    /// Every argument that means "a rig is driving this, not a person" (#348 phase 2
+    /// §6.10): a capture or diagnostic run must never be offered crash recovery for a
+    /// journal some earlier run of the same rig left behind, and — since this list also
+    /// gates <see cref="Platform.SingleInstance"/> — must never be silently redirected
+    /// into an unrelated already-running instance, or CI's "run it and read stdout"
+    /// shape would read a different process's window (or none at all) instead of the
+    /// one it just launched.
+    ///
+    /// Internal, not private, because <see cref="Program"/>'s <c>Main</c> reads it before
+    /// <see cref="BuildAvaloniaApp"/> is even called — before there is an <c>App</c>
+    /// instance to ask — which is also why every entry here is a literal rather than
+    /// something that needs one. Four of these (<c>--screenshot</c>,
+    /// <c>--screenshot-state</c>, <c>--story</c>, <c>--desktop-check</c>) are the ones
+    /// that reach a window and were the original list; <c>--brand-check</c> shuts down
+    /// before there is one; <c>--render-check</c>, <c>--print-check</c>,
+    /// <c>--portal-print-check</c>, <c>--language-check</c>, <c>--install-kind</c> and
+    /// <c>--self-test</c> are intercepted in <c>Program.Main</c> and never start Avalonia
+    /// at all, so this app never sees them either way — listed anyway so one place
+    /// answers "is this a rig?" for every caller, including <see cref="Platform.SingleInstance"/>,
+    /// rather than each keeping its own partial copy.
     /// </summary>
-    private static bool IsAutomationArgument(string argument) =>
-        argument is "--screenshot" or "--screenshot-state" or "--story" or "--desktop-check";
+    internal static bool IsAutomationArgument(string argument) =>
+        argument is "--screenshot" or "--screenshot-state" or "--story" or "--desktop-check"
+                  or "--brand-check" or "--render-check" or "--print-check" or "--portal-print-check"
+                  or "--language-check" or "--install-kind" or "--self-test";
 
     /// <summary>
     /// Drives the app into a state worth photographing, for --screenshot.
@@ -1024,6 +1043,23 @@ public partial class App : Application
         desktop.Shutdown();
     }
 
+    /// <summary>
+    /// The find-or-activate router every external open beyond the first file lands in
+    /// (#348 phase 2 Part C): a cold launch's non-automation command-line arguments
+    /// above, and the Linux single-instance socket's redirected paths. Each path
+    /// either joins its own tab or activates one already open on it — exactly what
+    /// <see cref="Views.MainWindow.OpenFromSystem(string)"/> already does for Finder
+    /// and for a bare command-line path — so the three entry points share this one
+    /// call rather than three copies of the same loop. Internal, not private: the
+    /// self-test calls it directly to exercise the routing without a second real
+    /// process (<c>Program.CheckSingleInstanceRouting</c>).
+    /// </summary>
+    internal static void RouteExternalPaths(MainWindow window, IReadOnlyList<string> paths)
+    {
+        foreach (var path in paths)
+            window.OpenFromSystem(path);
+    }
+
     /// <summary>Shows a window over the main one when there is one up, else on its own.</summary>
     private static void Present(Window window, Window? owner = null)
     {
@@ -1061,13 +1097,59 @@ public partial class App : Application
             var window = new MainWindow { DataContext = shell };
             desktop.MainWindow = window;
 
+            // Computed once, reused below for the recovery offer, the command-line
+            // open and (Linux) the single-instance routing target: all three need the
+            // same answer to "is a rig driving this, or a person?" (#348 phase 2).
+            var isAutomationRun = desktop.Args?.Any(IsAutomationArgument) == true;
+
             // A capture or diagnostic run is nobody's session, so it is never offered
             // crash recovery (#145): there is nobody to answer, and the journal the offer
             // would name was left by an earlier run of the rig. #153 watched that happen —
             // a `--story` run's journal prompting on every later launch. Said out loud
             // now, because the offer comes before the launched document rather than after
             // it, so it is no longer stood down by a document already being open.
-            window.SkipRecoveryOffer = desktop.Args?.Any(IsAutomationArgument) == true;
+            window.SkipRecoveryOffer = isAutomationRun;
+
+            // Linux single-instance (#348 phase 2 Part B): Program.cs's Main already
+            // decided, before BuildAvaloniaApp, whether this process is the one other
+            // `megapdf <path>` launches redirect to (never for an automation run —
+            // Program.cs skips the whole mechanism for the same IsAutomationArgument
+            // list). This is where the paths a later launch sends actually land, once
+            // there is a window to put them in: the active window if one is, else the
+            // first, through the same find-or-activate entry point Finder and the
+            // command line below use. Sets it unconditionally on Linux — harmless when
+            // Program.cs never started listening (an automation run, or a socket that
+            // could not bind) because then nothing ever calls it.
+            if (OperatingSystem.IsLinux())
+            {
+                Platform.SingleInstance.RoutePaths = paths =>
+                {
+                    var target = desktop.Windows.OfType<MainWindow>().FirstOrDefault(w => w.IsActive)
+                                 ?? desktop.Windows.OfType<MainWindow>().FirstOrDefault();
+                    if (target is null)
+                        return;
+                    if (paths.Count == 0)
+                    {
+                        // A bare `megapdf` relaunch with no file: every other
+                        // single-instance desktop app answers a second launch by
+                        // bringing its window to the front rather than doing nothing.
+                        Console.WriteLine("single-instance: redirected launch carried no file — activating the window");
+                        target.Activate();
+                        return;
+                    }
+                    Console.WriteLine($"single-instance: routing {paths.Count} path(s) from a redirected launch into tabs");
+                    RouteExternalPaths(target, paths);
+                };
+
+                // Posted, not called directly — from the UI thread, posting to the UI
+                // thread is always safe, and the posted job running at all is the
+                // proof Dispatcher.MainLoop has genuinely started pumping its queue,
+                // which is what MarkDispatcherRunning needs to be sure of (see its own
+                // doc for the crash a background thread's own Post could hit before
+                // that was true). Nothing waits on this; it fires as soon as the loop
+                // starts, which for an ordinary launch is a matter of milliseconds.
+                Dispatcher.UIThread.Post(Platform.SingleInstance.MarkDispatcherRunning);
+            }
 
             // Opening a PDF from Finder (#143): a double-click, a drop on the Dock
             // icon, Open With. macOS sends these as an Apple Event, not as arguments,
@@ -1075,13 +1157,24 @@ public partial class App : Application
             // them here. Subscribed before the run loop starts, because Avalonia does
             // not hold on to an event nobody was listening for — and a cold launch's
             // file arrives as the run loop starts. The window queues it until it is open.
+            //
+            // Every file LaunchServices hands over, not just the first (#348 phase 2):
+            // this used to take Files.OfType<IStorageFile>().FirstOrDefault() alone, so
+            // selecting several PDFs in Finder and choosing Open, or a multi-file "Open
+            // With", silently dropped every file but one. window.OpenFromSystem(file)
+            // is the same find-or-activate entry point Finder's single-file open, the
+            // Linux single-instance socket and the command-line path below all share —
+            // each file either joins its own tab or activates one already open on it,
+            // and the window's own pending-opens list (not a single slot any more,
+            // since the same #348 pass) keeps every one of them if they arrive before
+            // the launch sequence has settled.
             if (TryGetFeature(typeof(IActivatableLifetime)) is IActivatableLifetime activatable)
             {
                 activatable.Activated += (_, e) =>
                 {
-                    if (e is FileActivatedEventArgs { Files: var items }
-                        && items.OfType<IStorageFile>().FirstOrDefault() is { } file)
-                        window.OpenFromSystem(file);
+                    if (e is FileActivatedEventArgs { Files: var items })
+                        foreach (var file in items.OfType<IStorageFile>())
+                            window.OpenFromSystem(file);
                 };
             }
 
@@ -1119,22 +1212,44 @@ public partial class App : Application
             };
 
             // A PDF passed on the command line (the Windows file association, the
-            // capture scripts, `open --args`) opens as soon as the window does. Finder
-            // does not pass files this way; see the activation handler above.
+            // capture scripts, `open --args`, a dev build launched from a terminal, a
+            // path handed over by the Linux single-instance redirect below) opens as
+            // soon as the window does. Finder does not pass files this way; see the
+            // activation handler above.
             //
-            // Opened directly into `viewModel` rather than through the window's
-            // find-or-open-a-tab router: the capture/diagnostic rigs below (RunStory,
-            // ApplyScreenshotState, DesktopCheckAsync) hold this one reference and
-            // expect it to be THE document, and opening it synchronously — the same
-            // RunSynchronously path the self-test uses — is what lets them proceed
-            // without a wait for an async open they do not otherwise coordinate with.
-            var path = desktop.Args?.FirstOrDefault(a =>
-                a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
-            if (path is not null)
+            // Two routes, on purpose (#348 phase 2 §6.10 / Part C):
+            //
+            // A capture or diagnostic run (any IsAutomationArgument present) opens its
+            // one file directly into `viewModel` rather than through the window's
+            // find-or-activate router: RunStory, ApplyScreenshotState and
+            // DesktopCheckAsync below hold this one reference and expect it to be THE
+            // document, and opening it synchronously — the same RunSynchronously path
+            // the self-test uses — is what lets them proceed without a wait for an
+            // async open they do not otherwise coordinate with. Unchanged from before
+            // this phase.
+            //
+            // Anything else — the ordinary way this app is launched with a file, or
+            // several — goes through window.OpenFromSystem for every .pdf argument,
+            // the same entry point Finder opens and the Linux single-instance socket
+            // (Program.cs) use, so a cold start with N files ends with N tabs the same
+            // way those two do, and still waits for the app-level recovery offer
+            // (RunLaunchSequenceAsync, started from OnOpened) rather than racing it.
+            if (isAutomationRun)
             {
-                viewModel.Open(path);
-                if (viewModel.IsDocumentOpen)
-                    shell.AddTab(viewModel);
+                var path = desktop.Args?.FirstOrDefault(a =>
+                    a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
+                if (path is not null)
+                {
+                    viewModel.Open(path);
+                    if (viewModel.IsDocumentOpen)
+                        shell.AddTab(viewModel);
+                }
+            }
+            else
+            {
+                var cliPaths = desktop.Args?.Where(a =>
+                    a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a)).ToList() ?? [];
+                RouteExternalPaths(window, cliPaths);
             }
 
             // --screenshot <out.png>: render the window to a file and quit.
