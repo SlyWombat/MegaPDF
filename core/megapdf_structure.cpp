@@ -78,6 +78,17 @@ constexpr double kParagraphPitchFactor = 1.4;                  // consecutive li
 constexpr double kParagraphLeftEdgeToleranceEm = 1.0;          // left edges within 1 em: same paragraph.
 constexpr double kParagraphIndentEm = 1.0;                     // indent >= 1 em starts a new paragraph.
 constexpr double kParagraphGapPitchFactor = 1.5;               // gap >= 1.5x pitch ends a paragraph.
+// Not in design §1.2: "median pitch" is measured from the page's own lines, so a page whose
+// every line sits in isolation (a form, a list of one-line fields — `doubled.pdf`'s six
+// unrelated single lines, each 40 pt apart, is the fixture that found this) has no small
+// pitch on it to be the outlier against, and the median IS the isolated gap, so nothing
+// merges that should not, but nothing SHOULD merge either — every "paragraph" candidate then
+// measures within its own (large) median and wrongly reads as one block. Ordinary single
+// line spacing is rarely more than about 2x the font size in practice, so block-grouping
+// caps the pitch it compares against at that multiple of the body size, never trusting a
+// bigger page-median than that. #354's corpus measurement may move the multiple; it does not
+// remove the need for some absolute anchor alongside the page-relative one design §1.2 gives.
+constexpr double kMaxSingleLinePitchToBodySizeRatio = 1.5;
 
 constexpr double kListMarkerGapEm = 0.5;                       // marker -> body text gap >= 0.5 em.
 constexpr double kListDepthClusterEm = 1.0;                    // marker x-clusters, 1 em tolerance.
@@ -184,12 +195,22 @@ U16 EncodeUtf16(const std::vector<unsigned int>& cps) {
 
 struct Char {
     unsigned int unicode = 0;
-    double l = 0, b = 0, r = 0, t = 0;   // crop space
+    double l = 0, b = 0, r = 0, t = 0;                    // crop space, tight ink box (display/span bounds)
+    double loose_l = 0, loose_r = 0;                       // crop space, FPDFText_GetLooseCharBox (word-gap test)
     double origin_x = 0, origin_y = 0;   // crop space
     double font_size = 0;                // crop space points
     int object_index = -1;               // the page-level text object, -1 for a form-XObject run
     bool bold = false, italic = false, mono = false;
     bool rotated = false;
+    // PDFium inserted at least one generated character (a space or a CR/LF pair) between
+    // this character and the previous real one, so it judged this NOT a continuation of the
+    // same run even when the two sit close together geometrically — found on the #98
+    // schematic, whose producer draws every glyph as its own text-showing object: PDFium
+    // generates a CR/LF between consecutive same-line, same-object-boundary characters, and
+    // its own FPDFText_FindNext (and so search parity, design §2 bar 2) never matches across
+    // one. Design §1.2 says a generated character's TEXT is ignored ("spacing is ours"); this
+    // is the read that its BREAK is not — PDFium already decided these are not one run.
+    bool preceded_by_break = false;
 };
 
 // A run of consecutive (PDFium's own character order) real characters joined while the
@@ -264,10 +285,11 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
     const auto obj_index = IndexPageObjects(raw);
     const int count = FPDFText_CountChars(tp);
     out->chars.reserve(static_cast<size_t>(std::max(0, count)));
+    bool pending_break = false;   // a generated or whitespace character was skipped since the last real one
     for (int i = 0; i < count; i++) {
-        if (FPDFText_IsGenerated(tp, i) == 1) continue;
+        if (FPDFText_IsGenerated(tp, i) == 1) { pending_break = true; continue; }
         const unsigned int u = FPDFText_GetUnicode(tp, i);
-        if (u == 0 || IsWhitespaceCp(u)) continue;
+        if (u == 0 || IsWhitespaceCp(u)) { pending_break = true; continue; }
         double l = 0, r = 0, b = 0, t = 0;
         if (!FPDFText_GetCharBox(tp, i, &l, &r, &b, &t)) continue;
         double ox = 0, oy = 0;
@@ -283,10 +305,26 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         c.origin_x = ToCropX(page, ox);
         c.origin_y = ToCropY(page, oy);
         c.font_size = FPDFText_GetFontSize(tp, i) * unit;
+        // The tight ink box (above) understates many glyphs' true advance — "l", "i", a
+        // narrow numeral — so gapping words on it alone over-splits exactly those words
+        // (measured on the #98 schematic while building this: "Hardware" split into five
+        // words). FPDFText_GetLooseCharBox covers the glyph's full advance rather than its
+        // ink, and is what BuildWords compares against kWordGapEm.
+        FS_RECTF loose{};
+        if (FPDFText_GetLooseCharBox(tp, i, &loose)) {
+            c.loose_l = ToCropX(page, loose.left);
+            c.loose_r = ToCropX(page, loose.right);
+            if (c.loose_r < c.loose_l) std::swap(c.loose_l, c.loose_r);
+        } else {
+            c.loose_l = c.l;
+            c.loose_r = c.r;
+        }
         FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(tp, i);
         const auto it = obj != nullptr ? obj_index.find(obj) : obj_index.end();
         c.object_index = it != obj_index.end() ? it->second : -1;
         ClassifyStyle(tp, i, &c.bold, &c.italic, &c.mono);
+        c.preceded_by_break = pending_break;
+        pending_break = false;
         FS_MATRIX m{1, 0, 0, 1, 0, 0};
         if (FPDFText_GetMatrix(tp, i, &m)) {
             const double a = std::fabs(m.a) > 1e-6 ? std::fabs(m.a) : 1.0;
@@ -306,14 +344,15 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
 std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<int>& indices) {
     std::vector<Word> words;
     Word cur;
+    double cur_loose_r = 0;   // the loose (advance) box, tracked separately from cur's tight display bounds
     bool have = false;
     int prev = -1;
     for (int i : indices) {
         const Char& c = chars[static_cast<size_t>(i)];
-        bool start_new = !have;
-        if (have) {
+        bool start_new = !have || c.preceded_by_break;   // PDFium's own generated break, respected (see Char::preceded_by_break)
+        if (have && !start_new) {
             const Char& p = chars[static_cast<size_t>(prev)];
-            const double gap = c.l - cur.r;
+            const double gap = c.loose_l - cur_loose_r;
             const double em = Em(c.font_size > 0 ? c.font_size : cur.font_size);
             const bool same_baseline = std::fabs(c.origin_y - p.origin_y) <= 0.35 * em;
             if (!same_baseline || gap > kWordGapEm * em) start_new = true;
@@ -329,6 +368,7 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
             cur.r = std::max(cur.r, c.r);
             cur.t = std::max(cur.t, c.t);
         }
+        cur_loose_r = c.loose_r;
         cur.chars.push_back(i);
         prev = i;
     }
@@ -338,6 +378,7 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
 
 double WordHeight(const Word& w) { return w.t - w.b; }
 double WordCentre(const Word& w) { return (w.t + w.b) / 2.0; }
+double LineCentre(const Line& l) { return (l.t + l.b) / 2.0; }
 
 // design §1.2 "Lines": the same rule BuildLines uses (megapdf_core.h:292-295), reused here at
 // word granularity so the two policies never drift apart: words whose vertical centres are
@@ -684,12 +725,12 @@ std::vector<int> OrderLines(const std::vector<Line>& lines, bool* too_many_colum
 // ---------------------------------------------------------------------------
 
 struct SpanImpl {
-    megapdf_span info;
+    megapdf_span info{};
     U16 text;
 };
 
 struct BlockImpl {
-    megapdf_block info;
+    megapdf_block info{};   // zero-initialised: every construction site sets only the fields it needs
     U16 text;
     U16 marker;
     U16 alt;
@@ -912,7 +953,7 @@ bool LineQualifiesBySize(double line_size, double body_size) { return line_size 
 // content block, dispatching to a heading, a list item or a paragraph. Returns the number of
 // lines consumed (always >= 1).
 size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t i, double body_size,
-                      double median_pitch, const std::vector<double>& column_width,
+                      double raw_median_pitch, const std::vector<double>& column_width,
                       const std::vector<double>& list_clusters, int page_index, BlockImpl* out) {
     const int li = order[i];
     const Line& line = pw.lines[static_cast<size_t>(li)];
@@ -920,6 +961,10 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
     const double col_w = (li < static_cast<int>(column_width.size()) && column_width[static_cast<size_t>(li)] > 0)
                               ? column_width[static_cast<size_t>(li)]
                               : pw.width;
+    // kMaxSingleLinePitchToBodySizeRatio's comment explains why: the page-relative median
+    // alone cannot tell isolated lines from a wrapped paragraph when every line on the page
+    // is equally isolated.
+    const double median_pitch = std::min(raw_median_pitch, body_size * kMaxSingleLinePitchToBodySizeRatio);
 
     // --- Heading: size-based, up to kHeadingMaxLines lines ---
     if (LineQualifiesBySize(line_size, body_size)) {
@@ -929,8 +974,8 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
             const int nli = order[j];
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
             const double nsize = LineFontSize(pw, nline);
-            const double pitch = pw.lines[static_cast<size_t>(group.back())].b - nline.t;
-            if (LineQualifiesBySize(nsize, body_size) && pitch >= -0.5 * median_pitch && pitch < kParagraphPitchFactor * median_pitch) {
+            const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
+            if (LineQualifiesBySize(nsize, body_size) && pitch >= 0.5 * median_pitch && pitch < kParagraphPitchFactor * median_pitch) {
                 group.push_back(nli);
                 j++;
             } else {
@@ -959,7 +1004,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
     double next_gap = -1;
     if (i + 1 < order.size()) {
         const Line& nxt = pw.lines[static_cast<size_t>(order[i + 1])];
-        next_gap = line.b - nxt.t;
+        next_gap = LineCentre(line) - LineCentre(nxt);
     }
     const double line_width = line.r - line.l;
     if (line_bold && line_size >= body_size - 0.01 && line_width < kHeadingBoldColumnWidthFactor * col_w &&
@@ -990,7 +1035,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
             if (LineStartsListItem(pw, nline)) break;
             if (LineQualifiesBySize(LineFontSize(pw, nline), body_size)) break;
             if (std::fabs(nline.l - item_text_left) > kParagraphLeftEdgeToleranceEm * Em(body_size)) break;
-            const double pitch = pw.lines[static_cast<size_t>(group.back())].b - nline.t;
+            const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
             if (pitch >= kParagraphGapPitchFactor * median_pitch) break;
             group.push_back(nli);
             j++;
@@ -1023,7 +1068,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
             const Line& nline = pw.lines[static_cast<size_t>(nli)];
             if (LineQualifiesBySize(LineFontSize(pw, nline), body_size)) break;
             if (LineStartsListItem(pw, nline)) break;
-            const double pitch = pw.lines[static_cast<size_t>(group.back())].b - nline.t;
+            const double pitch = LineCentre(pw.lines[static_cast<size_t>(group.back())]) - LineCentre(nline);
             if (pitch >= kParagraphGapPitchFactor * median_pitch || pitch >= kParagraphPitchFactor * median_pitch) break;
             const double left_diff = nline.l - first_left;
             if (left_diff > kParagraphIndentEm * Em(body_size)) break;   // a first-line indent starts a new paragraph
@@ -1202,6 +1247,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
         b.info.page = page_index;
         b.info.bounds = megapdf_rect{0, 0, pw->width, pw->height};
         b.info.object_index = -1;
+        b.info.confidence = 100;
         result.blocks.push_back(std::move(b));
         result.confidence = 100;
         return result;
@@ -1238,7 +1284,10 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
 
     SpliceByPosition(&content, BuildFigures(page, page_index));
     SpliceByPosition(&content, BuildFields(page, page_index, flags));
-    for (auto& b : content) b.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
+    for (auto& b : content) {
+        b.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
+        b.info.confidence = result.confidence;   // one score per page (design §1 item 6); every block on it carries it
+    }
     result.blocks = std::move(content);
     return result;
 }
