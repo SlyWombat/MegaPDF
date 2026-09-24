@@ -309,10 +309,11 @@ public sealed partial class MainWindow : Window
 
     /// <summary>
     /// Waits for work still running — a save, a change — and then asks about unsaved changes
-    /// per dirty tab, ask-then-close-one-at-a-time (#348 phase 1, plan §5.6): a Cancel on one
-    /// tab stops the window closing but leaves every tab answered so far closed and their
-    /// journals ended — it never re-asks a tab already answered, and it never touches a tab
-    /// that was never asked.
+    /// per dirty tab, ask-all-then-close-all (#348 phase 1, plan §5.6): every dirty tab is
+    /// asked before any journal is touched, so a Cancel on tab 2 leaves tab 1's journal
+    /// exactly as it was — including when tab 1's answer was "Don't Save", which leaves it
+    /// dirty in memory and therefore still needing its journal, not merely saved-and-safe.
+    /// Only once every dirty tab has answered (none cancelled) does any journal end.
     /// </summary>
     private async Task ConfirmCloseAsync()
     {
@@ -321,18 +322,19 @@ public sealed partial class MainWindow : Window
         _confirmingClose = true;
         try
         {
-            foreach (var doc in Shell.Documents.ToList())
+            var documents = Shell.Documents.ToList();
+            foreach (var doc in documents)
                 await doc.Busy.WhenIdleAsync();
 
-            foreach (var doc in Shell.Documents.ToList())
+            foreach (var doc in documents)
             {
-                if (!doc.HasUnsavedChanges)
-                    continue;
-                if (!await doc.ConfirmSaveChangesAsync())
-                    return; // Cancel — stop here; tabs already confirmed above stay as they are
-                doc.EndJournalSession();
+                if (doc.HasUnsavedChanges && !await doc.ConfirmSaveChangesAsync())
+                    return; // Cancel — nothing answered so far is undone, no journal touched
             }
-            foreach (var doc in Shell.Documents.Where(d => !d.HasUnsavedChanges))
+
+            // Every tab is now either clean (saved, or was already) or "Don't Save"d — the
+            // window is really closing, so every journal ends here, not before.
+            foreach (var doc in documents)
                 doc.EndJournalSession();
 
             _allowClose = true;
