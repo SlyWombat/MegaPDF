@@ -684,6 +684,219 @@ int RunCensus(const std::string& pdf) {
     return RunCheck(opt);
 }
 
+// ---------------------------------------------------------------------------
+// diag mode (#363 investigation only -- not part of the #354 battery/gate; a numbers-only
+// breakdown of measure 1's "heuristic side has more tokens than the raw side" excess, by
+// block kind and by two non-exclusive signals:
+//   - "dup": this exact token text occurs more than once among ALL of the page's heuristic
+//     tokens (across any block) -- a sign the SAME content was read into the heuristic
+//     output more times than it exists in the page at all.
+//   - "crossblock": stronger version of "dup" -- the token occurs in >= 2 DISTINCT blocks on
+//     the page (not just repeated within one block's own running text, e.g. "the"), which is
+//     what an actual duplication bug (furniture kept twice, a field's value re-read as page
+//     text, a continuation re-emitting a join) would produce. Paired with the OTHER block
+//     kind that also carries the token, tallied as an unordered (kind, other_kind) matrix.
+//   - "invented": the token never appears in the page's raw (FPDFText_GetText) token multiset
+//     at all -- not merely short of copies, but absent -- suggesting synthesized text (a list
+//     marker or separator leaking into block text) rather than a re-read of real content.
+// A token can be both "dup"/"crossblock" and "invented" (e.g. a synthetic marker repeated on
+// every block of a run). Every unmatched (excess) heuristic-side token occurrence is counted
+// in exactly one kind bucket and is independently tallied against each signal it satisfies,
+// so kind totals sum to the overall excess count but the signal counts do not have to.
+// Numbers only, per design's corpus-privacy discipline: no filenames, paths or text.
+// ---------------------------------------------------------------------------
+struct DiagTotals {
+    long long pages_seen = 0;
+    long long excess_total = 0;
+    long long kind_excess[9] = {0};   // index by megapdf_block_kind (1..8)
+    long long dup_excess = 0;
+    long long invented_excess = 0;
+    long long crossblock_excess = 0;
+    long long crossblock_pair[9][9] = {{0}};  // (min kind, max kind) -> count
+    // Of the "invented" (R==0) occurrences: how many equal the literal concatenation of two
+    // (or three) CONSECUTIVE raw tokens with nothing between them -- i.e. the heuristic word-
+    // gap test failed to see a real inter-word gap the raw side's own generated-break/space
+    // handling did see, so two (or three) real words were read as one "word" and therefore one
+    // token. Not printed with the token text itself: a boolean per occurrence, tallied.
+    long long invented_merge2 = 0;
+    long long invented_merge3 = 0;
+    // Of the "invented" occurrences: how many are a SUBSTRING of some single raw token (or
+    // vice versa) -- i.e. the heuristic word-gap test OVER-split one real word into several
+    // pieces (kWordGapEm / the loose-char-box advance not covering some glyph's true width),
+    // so a whole word's real characters get counted as two-or-more separate, shorter,
+    // "invented" tokens that individually never occur in the raw stream, which only ever
+    // produces the whole word.
+    long long invented_substring_of_raw = 0;
+    // Same three numbers `check` reports (fid_a/fid_b/fid_match), so this mode's F1 can be
+    // compared directly against a battery run without a second invocation.
+    long long fid_a = 0, fid_b = 0, fid_match = 0;
+};
+
+void RunDiagOnDoc(const std::string& pdf, DiagTotals* totals) {
+    megapdf_document* doc = megapdf_open_file(pdf.c_str(), nullptr);
+    if (doc == nullptr) return;
+    const int pages = megapdf_page_count(doc);
+    if (pages <= 0) { megapdf_close(doc); return; }
+
+    megapdf_structure* s = megapdf_structure_load(doc, 0, pages, MEGAPDF_STRUCTURE_KEEP_FURNITURE |
+                                                                       MEGAPDF_STRUCTURE_ALL_FIELDS, nullptr);
+    if (s == nullptr) { megapdf_close(doc); return; }
+
+    struct BlockToks {
+        int kind = 0;
+        std::vector<Token> tokens;
+    };
+    const size_t n_blocks = megapdf_block_count(s);
+    std::vector<std::vector<BlockToks>> by_page(static_cast<size_t>(pages));
+    for (size_t i = 0; i < n_blocks; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (b.page < 0 || b.page >= pages) continue;
+        if (b.kind == MEGAPDF_BLOCK_FIELD) continue;  // measure 1 excludes FIELD blocks
+        BlockToks bt;
+        bt.kind = b.kind;
+        const std::vector<unsigned short> text16 = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+        bt.tokens = Tokenize(Utf16ToCodepoints(text16));
+        by_page[static_cast<size_t>(b.page)].push_back(std::move(bt));
+    }
+
+    FPDF_DOCUMENT raw = FPDF_LoadDocument(pdf.c_str(), nullptr);
+    for (int p = 0; p < pages; p++) {
+        FPDF_PAGE raw_page = raw != nullptr ? FPDF_LoadPage(raw, p) : nullptr;
+        FPDF_TEXTPAGE textpage = raw_page != nullptr ? FPDFText_LoadPage(raw_page) : nullptr;
+        if (textpage == nullptr) {
+            if (raw_page != nullptr) FPDF_ClosePage(raw_page);
+            continue;
+        }
+        const int chars = FPDFText_CountChars(textpage);
+        const std::vector<Token> pdfium_tokens = Tokenize(JoinLineWrapHyphens(textpage, chars));
+        FPDFText_ClosePage(textpage);
+        FPDF_ClosePage(raw_page);
+        totals->pages_seen++;
+
+        const auto& blocks = by_page[static_cast<size_t>(p)];
+
+        // H: heuristic-side multiset count per token, over the whole page.
+        // BlockSet: which block indices (within `blocks`) carry each token, up to a small cap
+        // (we only need "how many distinct blocks", not an exhaustive list, and a token like
+        // "the" can legitimately recur in dozens of blocks on a text-heavy page).
+        std::map<Token, int> H;
+        std::map<Token, std::vector<int>> block_set;
+        for (size_t bi = 0; bi < blocks.size(); bi++) {
+            for (const Token& t : blocks[bi].tokens) {
+                H[t]++;
+                auto& v = block_set[t];
+                if (v.empty() || v.back() != static_cast<int>(bi)) {
+                    if (v.size() < 8) v.push_back(static_cast<int>(bi));
+                }
+            }
+        }
+        std::map<Token, int> R;
+        for (const Token& t : pdfium_tokens) R[t]++;
+
+        {
+            long long a_page = 0;
+            for (const auto& kv : H) a_page += kv.second;
+            long long matched_page = 0;
+            for (const auto& kv : H) {
+                const auto it = R.find(kv.first);
+                matched_page += (std::min)(kv.second, it != R.end() ? it->second : 0);
+            }
+            totals->fid_a += a_page;
+            totals->fid_b += static_cast<long long>(pdfium_tokens.size());
+            totals->fid_match += matched_page;
+        }
+
+        // Adjacent-token concatenations of the RAW side's own ordered token stream, so an
+        // "invented" heuristic token can be tested against "is this just two/three real words
+        // the raw side kept apart, that we ran together?".
+        std::map<Token, int> merge2, merge3;
+        for (size_t k = 0; k + 1 < pdfium_tokens.size(); k++) {
+            merge2[pdfium_tokens[k] + pdfium_tokens[k + 1]]++;
+        }
+        for (size_t k = 0; k + 2 < pdfium_tokens.size(); k++) {
+            merge3[pdfium_tokens[k] + pdfium_tokens[k + 1] + pdfium_tokens[k + 2]]++;
+        }
+        std::vector<const Token*> raw_keys;
+        raw_keys.reserve(R.size());
+        for (const auto& kv : R) raw_keys.push_back(&kv.first);
+
+        std::map<Token, int> remaining = R;
+        for (size_t bi = 0; bi < blocks.size(); bi++) {
+            const int kind = blocks[bi].kind;
+            for (const Token& t : blocks[bi].tokens) {
+                int& rem = remaining[t];
+                if (rem > 0) { rem--; continue; }
+                // Excess: this occurrence has no raw-side counterpart left to match.
+                totals->excess_total++;
+                if (kind >= 1 && kind <= 8) totals->kind_excess[kind]++;
+                const int h_count = H[t];
+                const int r_count = R.count(t) ? R[t] : 0;
+                const bool dup = h_count > 1;
+                const bool invented = r_count == 0;
+                if (dup) totals->dup_excess++;
+                if (invented) totals->invented_excess++;
+                if (invented) {
+                    if (merge2.count(t)) totals->invented_merge2++;
+                    else if (merge3.count(t)) totals->invented_merge3++;
+                    for (const Token* rk : raw_keys) {
+                        const bool t_in_rk = rk->size() > t.size() && rk->find(t) != Token::npos;
+                        const bool rk_in_t = t.size() > rk->size() && t.find(*rk) != Token::npos;
+                        if (t_in_rk || rk_in_t) { totals->invented_substring_of_raw++; break; }
+                    }
+                }
+                const auto& holders = block_set[t];
+                if (holders.size() > 1) {
+                    totals->crossblock_excess++;
+                    int other_kind = kind;
+                    for (int hb : holders) {
+                        if (hb != static_cast<int>(bi)) { other_kind = blocks[static_cast<size_t>(hb)].kind; break; }
+                    }
+                    if (kind >= 1 && kind <= 8 && other_kind >= 1 && other_kind <= 8) {
+                        const int lo = (std::min)(kind, other_kind), hi = (std::max)(kind, other_kind);
+                        totals->crossblock_pair[lo][hi]++;
+                    }
+                }
+            }
+        }
+    }
+    if (raw != nullptr) FPDF_CloseDocument(raw);
+    megapdf_structure_free(s);
+    megapdf_close(doc);
+}
+
+int RunDiag(const std::vector<std::string>& pdfs) {
+    DiagTotals totals;
+    for (const auto& pdf : pdfs) RunDiagOnDoc(pdf, &totals);
+    std::printf("diag docs=%zu pages=%lld excess_total=%lld\n", pdfs.size(), totals.pages_seen, totals.excess_total);
+    const double f1 = (totals.fid_a + totals.fid_b) > 0
+                           ? 2.0 * static_cast<double>(totals.fid_match) / static_cast<double>(totals.fid_a + totals.fid_b)
+                           : 1.0;
+    std::printf("fid_a=%lld fid_b=%lld fid_match=%lld f1=%.6f\n", totals.fid_a, totals.fid_b, totals.fid_match, f1);
+    std::printf("excess_by_kind heading=%lld paragraph=%lld list_item=%lld table_row=%lld figure=%lld "
+                "page_image=%lld furniture=%lld field=%lld\n",
+                totals.kind_excess[MEGAPDF_BLOCK_HEADING], totals.kind_excess[MEGAPDF_BLOCK_PARAGRAPH],
+                totals.kind_excess[MEGAPDF_BLOCK_LIST_ITEM], totals.kind_excess[MEGAPDF_BLOCK_TABLE_ROW],
+                totals.kind_excess[MEGAPDF_BLOCK_FIGURE], totals.kind_excess[MEGAPDF_BLOCK_PAGE_IMAGE],
+                totals.kind_excess[MEGAPDF_BLOCK_FURNITURE], totals.kind_excess[MEGAPDF_BLOCK_FIELD]);
+    std::printf("signals dup=%lld invented=%lld crossblock=%lld\n", totals.dup_excess, totals.invented_excess,
+                totals.crossblock_excess);
+    std::printf("invented_explained_by_adjacent_raw_merge merge2=%lld merge3=%lld of invented=%lld\n",
+                totals.invented_merge2, totals.invented_merge3, totals.invented_excess);
+    std::printf("invented_substring_of_raw=%lld of invented=%lld\n", totals.invented_substring_of_raw,
+                totals.invented_excess);
+    static const char* kKindName[9] = {"", "heading", "paragraph", "list_item", "table_row",
+                                        "figure", "page_image", "furniture", "field"};
+    for (int a = 1; a <= 8; a++) {
+        for (int b = a; b <= 8; b++) {
+            if (totals.crossblock_pair[a][b] > 0) {
+                std::printf("crossblock_pair %s+%s=%lld\n", kKindName[a], kKindName[b], totals.crossblock_pair[a][b]);
+            }
+        }
+    }
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -700,8 +913,17 @@ int main(int argc, char** argv) {
         }
         return RunCheck(opt);
     }
+    if (argc >= 3 && std::strcmp(argv[1], "diag") == 0) {
+        // #363 investigation only: structure_check diag <pdf> [<pdf> ...]
+        // One aggregate numbers-only report over all documents given (see the DiagTotals
+        // comment above) -- not part of the #354 battery or gate.
+        std::vector<std::string> pdfs;
+        for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
+        return RunDiag(pdfs);
+    }
     std::printf("usage:\n"
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
-                "  structure_check census <pdf>\n");
+                "  structure_check census <pdf>\n"
+                "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n");
     return 64;
 }
