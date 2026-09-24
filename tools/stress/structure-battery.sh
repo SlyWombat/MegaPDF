@@ -5,6 +5,7 @@
 #
 #   tools/stress/structure-battery.sh <megapdf_structure_check> <corpus-dir> <out-dir>
 #       [--limit N] [--seed N] [--dump <dir>] [--reference] [--census] [--ms-budget MS]
+#       [--cli <megapdf-cli path>]
 #
 # Required of a run: 0 crashes, 0 hangs, aggregate token-fidelity F1 >= 0.998. Order
 # agreement and poppler agreement are reported but only gate when the corpus has enough
@@ -37,6 +38,21 @@
 # file name. Nothing under <dir> or <out-dir> is committed, uploaded or pasted: the corpus is
 # personal (#151, #173, #354).
 #
+# --cli <megapdf-cli path> (#355): drives the real megapdf-cli binary over the corpus too, not
+# only the internal megapdf_structure_load() call above. Per document (--census excluded, same
+# as --reference): `megapdf-cli extract <pdf> --keep-furniture --no-fields --page-marker --quiet`
+# — the same KEEP_FURNITURE flag and FIELD-block exclusion measure 1 itself uses, and
+# --page-marker rather than the default form feed (a real document's text occasionally contains
+# a literal U+000C from a bad ToUnicode mapping, which silently corrupts a form-feed-based page
+# split; structure_check.cpp's split_on_page_markers() comment has the corpus evidence) — into
+# a scratch file handed to `megapdf_structure_check check --cli-reference`, which computes the
+# identical token-multiset F1 against megapdf-cli's own output. Its exit code is also checked: only 0
+# (text on at least one requested page) or 5 (none) are legitimate outcomes for a plain
+# `extract` with no --strict; anything else (a crash, an unexpected usage/open failure on a
+# document the internal call just opened fine) is counted as a CLI-side failure and fails the
+# run, exactly as a crashed or hung megapdf_structure_check does. Only meaningful together with
+# `check` mode; ignored under --census.
+#
 # --seed is accepted for parity with redaction-battery.sh's option shape; this battery visits
 # every document deterministically (sorted find order) and does not sample within a document,
 # so it is otherwise unused today.
@@ -53,6 +69,7 @@ DUMP=""
 REFERENCE=0
 CENSUS=0
 MS_BUDGET=0
+CLI=""
 TIMEOUT=${TIMEOUT:-120}
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -62,9 +79,14 @@ while [ $# -gt 0 ]; do
         --reference) REFERENCE=1; shift ;;
         --census) CENSUS=1; shift ;;
         --ms-budget) MS_BUDGET=$2; shift 2 ;;
+        --cli) CLI=$2; shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
+if [ -n "$CLI" ] && [ ! -x "$CLI" ]; then
+    echo "--cli: $CLI is not an executable file" >&2
+    exit 2
+fi
 
 # macOS ships no `timeout` (it is GNU coreutils); Homebrew's is `gtimeout` unless coreutils'
 # gnubin is on PATH. Without either, hangs cannot be bounded — the run still produces
@@ -106,6 +128,7 @@ MS_FILE="$OUT/scratch/ms_per_page.txt"
 opened=0; ok=0; encrypted=0; format=0; crashed=0; hung=0
 sum_pages=0; sum_tagged=0; sum_textless=0; sum_multicol=0; sum_manycut=0
 sum_fid_matched=0; sum_fid_a=0; sum_fid_b=0; sum_fid_low09=0
+sum_cli_fid_matched=0; sum_cli_fid_a=0; sum_cli_fid_b=0; cli_bad_exit=0
 max_rss=0
 started=$(date +%s)
 
@@ -129,6 +152,31 @@ while IFS= read -r pdf; do
     dumparg=()
     [ -n "$DUMP" ] && [ "$CENSUS" -eq 0 ] && dumparg=(--dump "$DUMP" --dump-id "$id")
 
+    # #355: the real megapdf-cli binary's own output for this document, handed to
+    # `check --cli-reference` below. A bad exit code (anything but 0 or 5 for a plain
+    # `extract` with no --strict) is this document's own failure signal and is recorded before
+    # the internal check() call even runs, exactly like a crash.
+    cliarg=()
+    cli_this_doc_bad=0
+    if [ -n "$CLI" ] && [ "$CENSUS" -eq 0 ]; then
+        clifile="$OUT/scratch/cli-$id.txt"
+        cli_out=$(run_with_timeout "$TIMEOUT" "$CLI" extract "$pdf" --keep-furniture --no-fields --page-marker \
+                      --quiet >"$clifile" 2>/dev/null)
+        cli_rc=$?
+        if [ "$cli_rc" -eq 124 ]; then
+            hung=$((hung + 1))
+            echo "$id cli-hung" >>"$LOG"
+            rm -f "$clifile"
+            continue
+        fi
+        if [ "$cli_rc" -ne 0 ] && [ "$cli_rc" -ne 5 ]; then
+            cli_bad_exit=$((cli_bad_exit + 1))
+            cli_this_doc_bad=1
+            echo "$id cli-bad-exit rc=$cli_rc" >>"$LOG"
+        fi
+        [ -s "$clifile" ] && cliarg=(--cli-reference "$clifile")
+    fi
+
     if [ "$CENSUS" -eq 1 ]; then
         out=$(run_with_timeout "$TIMEOUT" "$CHECK" census "$pdf" 2>&1)
     else
@@ -137,10 +185,11 @@ while IFS= read -r pdf; do
         # ${arr[@]+"${arr[@]}"} idiom below is the portable way to expand "zero or more
         # words, or nothing" under nounset on every bash from 3.2 up.
         out=$(run_with_timeout "$TIMEOUT" "$CHECK" check "$pdf" ${dumparg[@]+"${dumparg[@]}"} \
-                  ${refarg[@]+"${refarg[@]}"} 2>&1)
+                  ${refarg[@]+"${refarg[@]}"} ${cliarg[@]+"${cliarg[@]}"} 2>&1)
     fi
     rc=$?
     [ -n "${reffile:-}" ] && rm -f "$reffile"
+    [ -n "${clifile:-}" ] && rm -f "$clifile"
 
     if [ $rc -eq 124 ]; then
         hung=$((hung + 1))
@@ -170,6 +219,11 @@ while IFS= read -r pdf; do
                 sum_fid_a=$((sum_fid_a + $(field "$line" fid_a 2>/dev/null || echo 0)))
                 sum_fid_b=$((sum_fid_b + $(field "$line" fid_b 2>/dev/null || echo 0)))
                 sum_fid_low09=$((sum_fid_low09 + $(field "$line" fid_low09 2>/dev/null || echo 0)))
+                if [ -n "$CLI" ]; then
+                    sum_cli_fid_matched=$((sum_cli_fid_matched + $(field "$line" cli_fid_match 2>/dev/null || echo 0)))
+                    sum_cli_fid_a=$((sum_cli_fid_a + $(field "$line" cli_fid_a 2>/dev/null || echo 0)))
+                    sum_cli_fid_b=$((sum_cli_fid_b + $(field "$line" cli_fid_b 2>/dev/null || echo 0)))
+                fi
                 rss=$(field "$line" rss_kb); [ -n "$rss" ] && [ "$rss" -gt "$max_rss" ] && max_rss=$rss
                 msv=$(field "$line" ms_per_page); [ -n "$msv" ] && echo "$msv" >>"$MS_FILE"
                 tt=$(field "$line" tau_tree); [ -n "$tt" ] && printf '%s\n' "${tt//,/$'\n'}" >>"$TAU_TREE_FILE"
@@ -194,6 +248,11 @@ pctl() {  # <file> <p 0-100> -> value at that percentile, or "n/a"
 agg_f1="n/a"
 if [ "$CENSUS" -eq 0 ] && [ $((sum_fid_a + sum_fid_b)) -gt 0 ]; then
     agg_f1=$(awk -v m="$sum_fid_matched" -v a="$sum_fid_a" -v b="$sum_fid_b" 'BEGIN{printf "%.6f", 2*m/(a+b)}')
+fi
+cli_agg_f1="n/a"
+if [ -n "$CLI" ] && [ "$CENSUS" -eq 0 ] && [ $((sum_cli_fid_a + sum_cli_fid_b)) -gt 0 ]; then
+    cli_agg_f1=$(awk -v m="$sum_cli_fid_matched" -v a="$sum_cli_fid_a" -v b="$sum_cli_fid_b" \
+                     'BEGIN{printf "%.6f", 2*m/(a+b)}')
 fi
 tau_tree_median=$(median "$TAU_TREE_FILE")
 tau_ref_median=$(median "$TAU_REF_FILE")
@@ -245,6 +304,11 @@ order_gates=0
         echo "--- measure 3: agreement with pdftotext -layout (poppler, informational only) ---"
         echo "pages measured:        $tau_ref_n"
         echo "tau median:            $tau_ref_median_h"
+        if [ -n "$CLI" ]; then
+            echo "--- #355: measure 1 through the real megapdf-cli binary ---"
+            echo "cli aggregate F1:      $cli_agg_f1 (gate: >= 0.998, same as the internal-API measure above)"
+            echo "cli bad exit codes:    $cli_bad_exit (gate: must be 0 -- extract with no --strict is only ever 0 or 5)"
+        fi
     fi
 } | tee "$SUMMARY"
 
@@ -270,6 +334,20 @@ if [ "$CENSUS" -eq 0 ] && [ "$MS_BUDGET" != "0" ] && [ "$ms_p95" != "n/a" ]; the
     awk -v v="$ms_p95" -v b="$MS_BUDGET" 'BEGIN{exit !(v<=b)}'
     gate_ms=$?
 fi
+# --cli's two gates: 0 only when --cli was given (otherwise there is nothing to gate, same as
+# every other measure above when its own precondition is not met).
+gate_cli_fidelity=0
+gate_cli_exit=0
+if [ -n "$CLI" ] && [ "$CENSUS" -eq 0 ]; then
+    if [ "$cli_agg_f1" != "n/a" ]; then
+        awk -v f="$cli_agg_f1" 'BEGIN{exit !(f>=0.998)}'
+        gate_cli_fidelity=$?
+    else
+        gate_cli_fidelity=1
+    fi
+    [ "$cli_bad_exit" -eq 0 ] || gate_cli_exit=1
+fi
 
 [ "$crashed" -eq 0 ] && [ "$hung" -eq 0 ] && [ "$gate_fidelity" -eq 0 ] && \
-    [ "$gate_order" -eq 0 ] && [ "$gate_ms" -eq 0 ]
+    [ "$gate_order" -eq 0 ] && [ "$gate_ms" -eq 0 ] && \
+    [ "$gate_cli_fidelity" -eq 0 ] && [ "$gate_cli_exit" -eq 0 ]

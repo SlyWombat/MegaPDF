@@ -6,6 +6,7 @@
 // over the corpus, one document per process, the way redaction-battery.sh drives leakcheck.
 //
 //   structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <file>]
+//                               [--cli-reference <file>]
 //       One line of numbers on stdout ("result=..."): outcome, pages, tagged/textless/
 //       multi-column/many-cut page counts (the #354 census, computed the same way --census
 //       does), confidence deciles, block counts by kind, ms/page, peak RSS, and the four
@@ -26,6 +27,12 @@
 //            out). Informational only.
 //         4. robustness — timing and memory; crashes and hangs are the caller's business
 //            (a segfault or a timeout means this process does not get to print anything).
+//       --cli-reference <file> (#355): the same measure 1, but against megapdf-cli's own
+//            stdout for this document (run with --page-marker, not the default form feed — see
+//            split_on_page_markers()'s comment for why) instead of this process's own
+//            megapdf_structure_load() call — printed as cli_fid_match/cli_fid_a/cli_fid_b, so
+//            tools/stress/structure-battery.sh --cli can gate the fidelity measure through the
+//            real shipped binary.
 //       --dump <dir> --dump-id <id> writes the extracted block text to <dir>/<id>.txt and
 //       creates <dir>/PRIVATE — never on stdout, never keyed by the document's real name.
 //
@@ -482,6 +489,7 @@ struct Options {
     std::string dump_dir;
     std::string dump_id;
     std::string reference_file;
+    std::string cli_reference_file;   // #355: megapdf-cli's own extracted text, for measure 1 through the real binary
     bool census_only = false;
 };
 
@@ -544,24 +552,83 @@ int RunCheck(const Options& opt) {
     FPDF_DOCUMENT raw = FPDF_LoadDocument(opt.pdf.c_str(), nullptr);
 
     // --reference: split pdftotext -layout's output on form feed, one chunk per page.
-    std::vector<std::string> reference_pages;
-    if (!opt.reference_file.empty()) {
-        std::ifstream f(opt.reference_file, std::ios::binary);
+    auto split_on_form_feed = [](const std::string& path) {
+        std::vector<std::string> out;
+        std::ifstream f(path, std::ios::binary);
         if (f.good()) {
             std::string all((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
             std::string cur;
             for (char c : all) {
-                if (c == '\f') { reference_pages.push_back(cur); cur.clear(); }
+                if (c == '\f') { out.push_back(cur); cur.clear(); }
                 else cur.push_back(c);
             }
-            reference_pages.push_back(cur);
+            out.push_back(cur);
         }
+        return out;
+    };
+    const std::vector<std::string> reference_pages = split_on_form_feed(opt.reference_file);
+
+    // --cli-reference (#355): megapdf-cli's own output for this document, run by the battery
+    // with --page-marker rather than the default form feed. A page separator that is a
+    // multi-word line ("--- page N ---") cannot be confused with real page content the way a
+    // single control character can: a real document's text occasionally DOES contain a literal
+    // U+000C (a bad ToUnicode mapping is enough), which silently shifts every later page's
+    // split by one and was observed corrupting this exact comparison on a real corpus document
+    // before this was changed to marker-based splitting. Lines are matched against the writer's
+    // exact format (megapdf_write_text.cpp / megapdf_cli.cpp's WriteSeparator) with sscanf's "no
+    // trailing characters" idiom (the `%n`-free "%d %c" pair below only matches when nothing
+    // follows the number and the word "page").
+    auto split_on_page_markers = [](const std::string& path) {
+        std::vector<std::string> out;
+        std::ifstream f(path, std::ios::binary);
+        if (!f.good()) return out;
+        std::string line, cur;
+        while (std::getline(f, line)) {
+            if (!line.empty() && line.back() == '\r') line.pop_back();
+            int page_number = 0;
+            char extra = 0;
+            const int parsed = std::sscanf(line.c_str(), "--- page %d ---%c", &page_number, &extra);
+            if (parsed == 1) {
+                out.push_back(cur);
+                cur.clear();
+                continue;
+            }
+            cur += line;
+            cur += '\n';
+        }
+        out.push_back(cur);
+        return out;
+    };
+    // The writer's PAGE_IMAGE placeholder (design §2/§5, "[Page N has no text layer]") is
+    // synthesised text, not a contract-9 block's own TEXT field -- the internal fidelity
+    // measure above never sees it (it reads megapdf_block_string() directly), so it must be
+    // stripped from the CLI's actual stdout before tokenizing or a textless page would count as
+    // an "invented" mismatch against the raw side's correctly-empty token set.
+    auto strip_page_image_placeholder = [](std::string text) {
+        const std::string prefix = "[Page ";
+        const std::string suffix = " has no text layer]";
+        for (size_t at = text.find(prefix); at != std::string::npos; at = text.find(prefix, at)) {
+            size_t digits_end = at + prefix.size();
+            while (digits_end < text.size() && text[digits_end] >= '0' && text[digits_end] <= '9') digits_end++;
+            if (digits_end == at + prefix.size() || text.compare(digits_end, suffix.size(), suffix) != 0) {
+                at += prefix.size();
+                continue;
+            }
+            text.erase(at, digits_end + suffix.size() - at);
+        }
+        return text;
+    };
+    std::vector<std::string> cli_reference_pages;
+    if (!opt.cli_reference_file.empty()) {
+        cli_reference_pages = split_on_page_markers(opt.cli_reference_file);
+        for (std::string& page : cli_reference_pages) page = strip_page_image_placeholder(page);
     }
 
     std::vector<int> confidences;
     std::vector<double> ms_per_page;
     int tagged_pages = 0, textless_pages = 0, multicol_pages = 0, manycut_pages = 0;
     FidelityCounts fidelity_total;
+    FidelityCounts cli_fidelity_total;   // #355: the same measure 1, through megapdf-cli's own output
     int fidelity_low09 = 0;
     std::vector<long long> tau_tree_x1000, tau_ref_x1000;
 
@@ -587,6 +654,21 @@ int RunCheck(const Options& opt) {
             fidelity_total.a += fc.a;
             fidelity_total.b += fc.b;
             if (F1(fc) < 0.9) fidelity_low09++;
+
+            // #355: the same measure 1, but with the real megapdf-cli binary's own output
+            // (--cli-reference) standing in for tokens_by_page -- so the fidelity gate is
+            // proven through the shipped tool, not only through this process's direct
+            // megapdf_structure_load() call. The CLI run this compares against uses
+            // --keep-furniture --no-fields --page-marker, i.e. the same KEEP_FURNITURE flag
+            // and the same FIELD-block exclusion measure 1 itself uses (see
+            // split_on_page_markers()'s comment for --page-marker's own reason).
+            if (static_cast<size_t>(p) < cli_reference_pages.size()) {
+                const std::vector<Token> cli_tokens = Tokenize(Utf8ToCodepoints(cli_reference_pages[static_cast<size_t>(p)]));
+                const FidelityCounts cli_fc = MultisetF1(cli_tokens, pdfium_tokens);
+                cli_fidelity_total.matched += cli_fc.matched;
+                cli_fidelity_total.a += cli_fc.a;
+                cli_fidelity_total.b += cli_fc.b;
+            }
 
             if (!opt.census_only) {
                 std::vector<int> mcids;
@@ -670,11 +752,14 @@ int RunCheck(const Options& opt) {
 
     std::printf("result=ok pages=%d tagged=%d tree=0 textless=%d multicol=%d manycut=%d ms_per_page=%.3f rss_kb=%lld "
                 "conf_deciles=%s %s fid_match=%lld fid_a=%lld fid_b=%lld fid_low09=%d "
+                "cli_fid_match=%lld cli_fid_a=%lld cli_fid_b=%lld "
                 "tau_tree_n=%zu tau_tree=%s tau_ref_n=%zu tau_ref=%s\n",
                 pages, tagged_pages, textless_pages, multicol_pages, manycut_pages, ms_avg, PeakRssKb(),
                 ConfidenceDeciles(confidences).c_str(), blocks_field.str().c_str(), fidelity_total.matched,
-                fidelity_total.a, fidelity_total.b, fidelity_low09, tau_tree_x1000.size(),
-                JoinInts(tau_tree_x1000).c_str(), tau_ref_x1000.size(), JoinInts(tau_ref_x1000).c_str());
+                fidelity_total.a, fidelity_total.b, fidelity_low09,
+                cli_fidelity_total.matched, cli_fidelity_total.a, cli_fidelity_total.b,
+                tau_tree_x1000.size(), JoinInts(tau_tree_x1000).c_str(), tau_ref_x1000.size(),
+                JoinInts(tau_ref_x1000).c_str());
     return 0;
 }
 
@@ -1200,6 +1285,7 @@ int main(int argc, char** argv) {
             if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) opt.dump_dir = argv[++i];
             else if (std::strcmp(argv[i], "--dump-id") == 0 && i + 1 < argc) opt.dump_id = argv[++i];
             else if (std::strcmp(argv[i], "--reference") == 0 && i + 1 < argc) opt.reference_file = argv[++i];
+            else if (std::strcmp(argv[i], "--cli-reference") == 0 && i + 1 < argc) opt.cli_reference_file = argv[++i];
         }
         return RunCheck(opt);
     }
@@ -1221,6 +1307,7 @@ int main(int argc, char** argv) {
     }
     std::printf("usage:\n"
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
+                "                              [--cli-reference <megapdf-cli-output-file>]\n"
                 "  structure_check census <pdf>\n"
                 "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n");
     return 64;
