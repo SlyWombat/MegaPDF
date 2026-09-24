@@ -5359,9 +5359,345 @@ void test_large_xref_stream_opens_from_its_table() {
               std::to_string(static_cast<int>(table_ms)) + " ms for the same document with a table");
 }
 
+// --------------------------------------------------------------------------
+// Contract 9 (#142, #353): document structure. Golden block dumps follow text_runs.txt's
+// discipline (regenerate only when the contract is meant to change): set
+// MEGAPDF_WRITE_STRUCTURE_GOLDENS=1 to (re)write core/tests/expected/structure/*.blocks
+// instead of comparing against them.
+// --------------------------------------------------------------------------
+
+namespace {
+
+std::string hex_utf16_s(const unsigned short* s, size_t n) {
+    if (n == 0) return "-";
+    static const char kDigits[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(n * 4);
+    for (size_t i = 0; i < n; i++) {
+        const unsigned short c = s[i];
+        out += kDigits[(c >> 12) & 0xF];
+        out += kDigits[(c >> 8) & 0xF];
+        out += kDigits[(c >> 4) & 0xF];
+        out += kDigits[c & 0xF];
+    }
+    return out;
+}
+
+std::string block_string_hex(const megapdf_structure* s, size_t i, megapdf_block_field which) {
+    const size_t n = megapdf_block_string(s, i, which, nullptr, 0);
+    std::vector<unsigned short> buf(n);
+    if (n > 0) megapdf_block_string(s, i, which, buf.data(), n);
+    return hex_utf16_s(buf.data(), n);
+}
+
+std::string span_string_hex(const megapdf_structure* s, size_t bi, size_t si) {
+    const size_t n = megapdf_block_span_string(s, bi, si, nullptr, 0);
+    std::vector<unsigned short> buf(n);
+    if (n > 0) megapdf_block_span_string(s, bi, si, buf.data(), n);
+    return hex_utf16_s(buf.data(), n);
+}
+
+std::string fmt_rect_2(const megapdf_rect& r) {
+    char buf[128];
+    std::snprintf(buf, sizeof buf, "%.2f %.2f %.2f %.2f", r.left, r.bottom, r.right, r.top);
+    return buf;
+}
+
+// Every block (and its spans) of `s` in a stable text format, plus the two per-page facts
+// (confidence, source) that are not otherwise pinned by any one block. Coordinates round to
+// 0.01 pt: embedded fonts (tools/gen_structure_fixtures.py) make the glyph metrics behind
+// them exact across OSes, so this is generous rounding for float formatting, not a tolerance.
+std::string dump_structure(const megapdf_structure* s, int first_page, int page_count) {
+    std::ostringstream out;
+    out << "body_size " << megapdf_structure_body_size(s) << "\n";
+    for (int p = first_page; p < first_page + page_count; p++) {
+        out << "page " << p << " confidence " << megapdf_structure_page_confidence(s, p) << " source "
+            << megapdf_structure_page_source(s, p) << "\n";
+    }
+    const size_t n = megapdf_block_count(s);
+    out << "blocks " << n << "\n";
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        out << "block " << i << " kind=" << b.kind << " level=" << b.level << " page=" << b.page << " bounds="
+            << fmt_rect_2(b.bounds) << " object_index=" << b.object_index << " continues=" << b.continues
+            << " source=" << b.source << " confidence=" << b.confidence
+            << " marker=" << block_string_hex(s, i, MEGAPDF_BLOCK_MARKER)
+            << " alt=" << block_string_hex(s, i, MEGAPDF_BLOCK_ALT)
+            << " text=" << block_string_hex(s, i, MEGAPDF_BLOCK_TEXT) << "\n";
+        const size_t sn = megapdf_block_span_count(s, i);
+        for (size_t si = 0; si < sn; si++) {
+            megapdf_span sp{};
+            megapdf_block_span_get(s, i, si, &sp);
+            out << "  span " << si << " flags=" << sp.flags << " font_size=" << sp.font_size << " size_ratio="
+                << sp.size_ratio << " bounds=" << fmt_rect_2(sp.bounds) << " object_index=" << sp.object_index
+                << " text=" << span_string_hex(s, i, si) << "\n";
+        }
+    }
+    return out.str();
+}
+
+bool write_structure_goldens() {
+    const char* v = std::getenv("MEGAPDF_WRITE_STRUCTURE_GOLDENS");
+    return v != nullptr && *v != '\0' && std::string(v) != "0";
+}
+
+// Loads `path`, infers structure over [first_page, first_page + page_count) (page_count <= 0
+// means the whole document) and either compares the dump against
+// `expected_dir`/`name`.blocks or (MEGAPDF_WRITE_STRUCTURE_GOLDENS=1) writes it. Returns the
+// structure's block count so callers that also want content assertions are not left re-doing
+// the load; NULL through `out_doc`/`out_structure` on any failure (already checked here).
+size_t test_structure_golden(const std::string& name, const std::string& path, int first_page, int page_count,
+                             unsigned int flags, const std::string& expected_dir) {
+    auto bytes = read_file(path);
+    megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+    check(d != nullptr, "structure " + name + ": document opens", path);
+    if (d == nullptr) return 0;
+    const int total = megapdf_page_count(d);
+    const int count = page_count > 0 ? page_count : total;
+    megapdf_structure* s = megapdf_structure_load(d, first_page, count, flags, nullptr);
+    check(s != nullptr, "structure " + name + ": loads");
+    size_t blocks = 0;
+    if (s != nullptr) {
+        blocks = megapdf_block_count(s);
+        const std::string dump = dump_structure(s, first_page, count);
+        const std::string expected_path = expected_dir + "/" + name + ".blocks";
+        if (write_structure_goldens()) {
+            std::ofstream out(expected_path, std::ios::binary);
+            out << dump;
+            std::printf("wrote %s (%zu bytes, %zu blocks)\n", expected_path.c_str(), dump.size(), blocks);
+        } else {
+            std::ifstream in(expected_path, std::ios::binary);
+            check(in.good(), "structure " + name + ": golden file exists", expected_path);
+            if (in.good()) {
+                const std::string expected((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+                check(expected == dump, "structure " + name + ": matches its golden block dump exactly",
+                      expected_path);
+            }
+        }
+        megapdf_structure_free(s);
+    }
+    megapdf_close(d);
+    return blocks;
+}
+
+}  // namespace
+
+void test_structure_goldens(const std::string& fixtures, const std::string& schematic, const std::string& repo,
+                            const std::string& expected_dir) {
+    struct Case { const char* name; std::string path; int first_page, page_count; unsigned int flags; };
+    const Case cases[] = {
+        // Existing shared fixtures the issue names (#353): a real prose page, the #136
+        // hidden-copy fixtures, forms with and without a text field, /UserUnit, and the #98
+        // schematic. ALL_FIELDS keeps forms.pdf/formtext.pdf's goldens independent of the
+        // default omission rule for empty/unchecked fields, so that rule gets its own,
+        // separate assertion in test_structure_fields() instead.
+        {"demo", fixtures + "/demo.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"doubled", fixtures + "/doubled.pdf", 0, 0, 0},
+        {"doubled-far", fixtures + "/doubled-far.pdf", 0, 0, 0},
+        {"forms", fixtures + "/forms.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"formtext", fixtures + "/formtext.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"userunit", fixtures + "/userunit.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
+        {"microbit-v2-schematic", schematic, 0, 0, 0},
+        // New fixtures (design §7, tools/gen_structure_fixtures.py). furniture.pdf's golden
+        // keeps the furniture blocks (KEEP_FURNITURE) so the dump documents what the default
+        // drops; test_structure_furniture() below asserts the drop itself, separately.
+        {"columns", repo + "/structure/columns.pdf", 0, 0, 0},
+        {"furniture", repo + "/structure/furniture.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
+        {"lists", repo + "/structure/lists.pdf", 0, 0, 0},
+        {"headings", repo + "/structure/headings.pdf", 0, 0, 0},
+        {"xobject-text", repo + "/structure/xobject-text.pdf", 0, 0, 0},
+        {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
+        {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
+    };
+    for (const Case& c : cases) test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir);
+}
+
+// design §2 bar 2 / this issue's own acceptance criterion: every term SearchParityTests
+// asserts on the #98 schematic (4/6/2 hits for "the", page by page) is found the same number
+// of times, as a whitespace-normalised substring, in that page's extracted block text.
+void test_structure_findability(const std::string& schematic) {
+    Doc d(schematic);
+    if (!d.doc) { check(false, "structure findability: schematic opens"); return; }
+    const int pages = megapdf_page_count(d.doc);
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, pages, 0, nullptr);
+    check(s != nullptr, "structure findability: schematic loads");
+    if (s == nullptr) return;
+    const size_t n = megapdf_block_count(s);
+    const int expected[3] = {4, 6, 2};
+    for (int p = 0; p < pages && p < 3; p++) {
+        std::string joined;
+        for (size_t i = 0; i < n; i++) {
+            megapdf_block b{};
+            megapdf_block_get(s, i, &b);
+            if (b.page != p) continue;
+            const size_t tn = megapdf_block_string(s, i, MEGAPDF_BLOCK_TEXT, nullptr, 0);
+            std::vector<unsigned short> buf(tn);
+            if (tn > 0) megapdf_block_string(s, i, MEGAPDF_BLOCK_TEXT, buf.data(), tn);
+            for (unsigned short c : buf) joined += (c < 128) ? static_cast<char>(std::tolower(c)) : '?';
+            joined += ' ';
+        }
+        int count = 0;
+        for (size_t at = joined.find("the"); at != std::string::npos; at = joined.find("the", at + 1)) count++;
+        check(count == expected[p], "structure findability: schematic 'the' count matches SearchParityTests",
+              "page " + std::to_string(p + 1) + ": " + std::to_string(count) + " vs " + std::to_string(expected[p]));
+    }
+    megapdf_structure_free(s);
+}
+
+// #136, restated for contract 9: the hidden second copies doubled.pdf and doubled-far.pdf
+// draw must not appear in any block's text, because FPDF_TEXTPAGE already hides them (design
+// §1.2 "Duplicates") and nothing here re-adds them.
+void test_structure_no_doubled_copies(const std::string& fixtures) {
+    struct Case { const char* file; std::vector<const char*> needles; };
+    const Case cases[] = {
+        // gen_doubled(): a fake-bold heading, a filled-then-stroked line and a two-run line
+        // each drawn twice (megapdf_core.h's TextRun docs and the fixture's own comment).
+        {"doubled.pdf", {"Fake bold heading", "Filled then stroked", "Two runs", "drawn twice"}},
+        // gen_doubled_far(): the same seven words drawn four times each (before, at, and two
+        // "far" offsets after their real run) — PDFium hides the copies character by
+        // character here, not object by object, which is the harder case (#136).
+        {"doubled-far.pdf", {"One", "two", "red", "fox", "ran", "far", "off"}},
+    };
+    for (const Case& c : cases) {
+        Doc d(fixtures + "/" + c.file);
+        if (!d.doc) { check(false, std::string("structure doubled: ") + c.file + " opens"); continue; }
+        megapdf_structure* s = megapdf_structure_load(d.doc, 0, megapdf_page_count(d.doc), 0, nullptr);
+        check(s != nullptr, std::string("structure doubled: ") + c.file + " loads");
+        if (s == nullptr) continue;
+        std::string all;
+        const size_t n = megapdf_block_count(s);
+        for (size_t i = 0; i < n; i++) {
+            const size_t tn = megapdf_block_string(s, i, MEGAPDF_BLOCK_TEXT, nullptr, 0);
+            std::vector<unsigned short> buf(tn);
+            if (tn > 0) megapdf_block_string(s, i, MEGAPDF_BLOCK_TEXT, buf.data(), tn);
+            for (unsigned short ch : buf) all += (ch < 128) ? static_cast<char>(ch) : '?';
+            all += '\n';
+        }
+        for (const char* needle : c.needles) {
+            int count = 0;
+            for (size_t at = all.find(needle); at != std::string::npos; at = all.find(needle, at + 1)) count++;
+            check(count == 1, std::string("structure doubled: ") + c.file + " '" + needle + "' appears once, not " +
+                  std::to_string(count) + " times", all);
+        }
+        megapdf_structure_free(s);
+    }
+}
+
+// design §1 item 2: xobject-text.pdf's form-XObject text must be present (megapdf_text_load
+// would miss it — the reason contract 9 reads FPDF_TEXTPAGE instead) with object_index -1 on
+// its span (a form-XObject run has no page-level text object of its own).
+void test_structure_xobject_text(const std::string& repo) {
+    Doc d(repo + "/structure/xobject-text.pdf");
+    if (!d.doc) { check(false, "structure xobject-text: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+    check(s != nullptr, "structure xobject-text: loads");
+    if (s == nullptr) return;
+    const size_t n = megapdf_block_count(s);
+    bool found = false;
+    bool has_negative_object_index = false;
+    for (size_t i = 0; i < n && !found; i++) {
+        const size_t tn = megapdf_block_string(s, i, MEGAPDF_BLOCK_TEXT, nullptr, 0);
+        std::vector<unsigned short> buf(tn);
+        if (tn > 0) megapdf_block_string(s, i, MEGAPDF_BLOCK_TEXT, buf.data(), tn);
+        std::string text;
+        for (unsigned short c : buf) text += (c < 128) ? static_cast<char>(c) : '?';
+        if (text.find("form XObject") == std::string::npos) continue;
+        found = true;
+        const size_t sn = megapdf_block_span_count(s, i);
+        for (size_t si = 0; si < sn; si++) {
+            megapdf_span sp{};
+            megapdf_block_span_get(s, i, si, &sp);
+            if (sp.object_index < 0) has_negative_object_index = true;
+        }
+    }
+    check(found, "structure xobject-text: the form XObject's text is in some block's text");
+    check(has_negative_object_index,
+          "structure xobject-text: a span drawn by the XObject has object_index -1 (no page-level object)");
+    megapdf_structure_free(s);
+}
+
+// design §1 item 7: FIELD blocks come from megapdf_form_fields_load; an empty text field and
+// an unchecked box are omitted by default and present with MEGAPDF_STRUCTURE_ALL_FIELDS.
+void test_structure_fields(const std::string& fixtures) {
+    Doc d(fixtures + "/forms.pdf");   // one checkbox, unchecked (/AS /Off)
+    if (!d.doc) { check(false, "structure fields: forms.pdf opens"); return; }
+    megapdf_structure* default_s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+    megapdf_structure* all_s = megapdf_structure_load(d.doc, 0, 1, MEGAPDF_STRUCTURE_ALL_FIELDS, nullptr);
+    check(default_s != nullptr && all_s != nullptr, "structure fields: forms.pdf loads both ways");
+    if (default_s == nullptr || all_s == nullptr) { megapdf_structure_free(default_s); megapdf_structure_free(all_s); return; }
+    auto count_fields = [&](const megapdf_structure* s) {
+        size_t n = megapdf_block_count(s), fields = 0;
+        for (size_t i = 0; i < n; i++) {
+            megapdf_block b{};
+            megapdf_block_get(s, i, &b);
+            if (b.kind == MEGAPDF_BLOCK_FIELD) fields++;
+        }
+        return fields;
+    };
+    check(count_fields(default_s) == 0, "structure fields: an unchecked box is omitted by default",
+          std::to_string(count_fields(default_s)));
+    check(count_fields(all_s) == 1, "structure fields: MEGAPDF_STRUCTURE_ALL_FIELDS includes it",
+          std::to_string(count_fields(all_s)));
+    megapdf_structure_free(default_s);
+    megapdf_structure_free(all_s);
+}
+
+// design §1.2 "Furniture": the running header and "Page N of 3" footer are dropped by
+// default and kept with MEGAPDF_STRUCTURE_KEEP_FURNITURE — furniture.pdf's own three pages.
+void test_structure_furniture(const std::string& repo) {
+    Doc d(repo + "/structure/furniture.pdf");
+    if (!d.doc) { check(false, "structure furniture: opens"); return; }
+    const int pages = megapdf_page_count(d.doc);
+    megapdf_structure* dropped = megapdf_structure_load(d.doc, 0, pages, 0, nullptr);
+    megapdf_structure* kept = megapdf_structure_load(d.doc, 0, pages, MEGAPDF_STRUCTURE_KEEP_FURNITURE, nullptr);
+    check(dropped != nullptr && kept != nullptr, "structure furniture: loads both ways");
+    if (dropped == nullptr || kept == nullptr) { megapdf_structure_free(dropped); megapdf_structure_free(kept); return; }
+    auto count_furniture = [&](const megapdf_structure* s) {
+        size_t n = megapdf_block_count(s), f = 0;
+        for (size_t i = 0; i < n; i++) {
+            megapdf_block b{};
+            megapdf_block_get(s, i, &b);
+            if (b.kind == MEGAPDF_BLOCK_FURNITURE) f++;
+        }
+        return f;
+    };
+    check(count_furniture(dropped) == 0, "structure furniture: dropped by default");
+    check(count_furniture(kept) == 2 * static_cast<size_t>(pages),
+          "structure furniture: header and footer kept on every page with MEGAPDF_STRUCTURE_KEEP_FURNITURE",
+          std::to_string(count_furniture(kept)));
+    check(megapdf_structure_body_size(dropped) > 10.5,
+          "structure furniture: body size reflects the body text, not the smaller furniture text",
+          std::to_string(megapdf_structure_body_size(dropped)));
+    megapdf_structure_free(dropped);
+    megapdf_structure_free(kept);
+}
+
+// #145's cancellation pattern: a cancel raised before the call returns NULL, with
+// megapdf_last_error() reading back MEGAPDF_ERR_CANCELLED (cast to unsigned — the same
+// extension of that field MEGAPDF_OPEN_ERR_TOO_LARGE already makes for megapdf_open_file()).
+// Run under ASan (core-tests.yml's Linux leg) this also proves the partially-built structure
+// leaks nothing.
+void test_structure_cancel(const std::string& schematic) {
+    Doc d(schematic);
+    if (!d.doc) { check(false, "structure cancel: schematic opens"); return; }
+    megapdf_cancel* c = megapdf_cancel_new();
+    check(c != nullptr, "structure cancel: megapdf_cancel_new succeeds");
+    if (c == nullptr) return;
+    megapdf_cancel_raise(c);
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, megapdf_page_count(d.doc), 0, c);
+    check(s == nullptr, "structure cancel: a load cancelled before it starts returns NULL");
+    check(megapdf_last_error() == static_cast<unsigned int>(MEGAPDF_ERR_CANCELLED),
+          "structure cancel: megapdf_last_error() reads back MEGAPDF_ERR_CANCELLED",
+          std::to_string(megapdf_last_error()));
+    megapdf_structure_free(s);   // NULL is fine; exercises the free-of-NULL path under ASan too
+    megapdf_cancel_free(c);
+}
+
 int main(int argc, char** argv) {
-    if (argc < 4) {
-        std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt>\n", argv[0]);
+    if (argc < 5) {
+        std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt> <structure-expected-dir>\n",
+                     argv[0]);
         return 2;
     }
     test_null_handles();
@@ -5409,6 +5745,13 @@ int main(int argc, char** argv) {
     test_xref_entries_are_findable(argv[1]);
     test_large_file_xref();
     test_large_xref_stream_opens_from_its_table();
+    test_structure_goldens(argv[1], argv[2], std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_structure_findability(argv[2]);
+    test_structure_no_doubled_copies(argv[1]);
+    test_structure_xobject_text(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_fields(argv[1]);
+    test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_cancel(argv[2]);
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;

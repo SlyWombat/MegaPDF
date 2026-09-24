@@ -192,6 +192,8 @@ if(MEGAPDF_CORE_TESTS)
 
     set(MEGAPDF_TEXT_EXPECTED "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/text_runs.txt" CACHE FILEPATH
         "The desktop engine's text runs and lines for every fixture, captured before #106 moved them into the core")
+    set(MEGAPDF_STRUCTURE_EXPECTED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/tests/expected/structure" CACHE PATH
+        "Golden megapdf_structure_* block dumps, one per fixture (#353)")
     add_executable(megapdf_core_tests tests/core_tests.cpp)
     target_include_directories(megapdf_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${REPO}/tools/leakcheck
         ${MEGAPDF_PDFIUM_HEADERS})
@@ -249,5 +251,6 @@ if(MEGAPDF_CORE_TESTS)
 
     add_test(NAME core
         COMMAND megapdf_core_tests ${MEGAPDF_FIXTURES_DIR} ${MEGAPDF_SCHEMATIC} ${MEGAPDF_TEXT_EXPECTED}
+            ${MEGAPDF_STRUCTURE_EXPECTED_DIR}
         WORKING_DIRECTORY $<TARGET_FILE_DIR:megapdf_core_tests>)
 endif()

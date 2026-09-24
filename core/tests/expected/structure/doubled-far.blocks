@@ -1,0 +1,13 @@
+body_size 14
+page 0 confidence 100 source 0
+blocks 2
+block 0 kind=2 level=0 page=0 bounds=72.55 699.75 327.34 710.32 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=004f006e0065002000740077006f002000720065006400200066006f0078002000720061006e00200066006100720020006f00660066
+  span 0 flags=0 font_size=14 size_ratio=1 bounds=72.55 699.75 97.90 710.32 object_index=7 text=004f006e00650020
+  span 1 flags=0 font_size=14 size_ratio=1 bounds=112.20 699.82 133.29 709.37 object_index=8 text=00740077006f0020
+  span 2 flags=0 font_size=14 size_ratio=1 bounds=153.08 699.80 171.43 710.05 object_index=9 text=0072006500640020
+  span 3 flags=0 font_size=14 size_ratio=1 bounds=192.20 699.82 210.54 710.19 object_index=10 text=0066006f00780020
+  span 4 flags=0 font_size=14 size_ratio=1 bounds=233.08 699.80 251.32 707.53 object_index=11 text=00720061006e0020
+  span 5 flags=0 font_size=14 size_ratio=1 bounds=272.20 699.80 288.32 710.19 object_index=12 text=0066006100720020
+  span 6 flags=0 font_size=14 size_ratio=1 bounds=312.49 699.82 327.34 710.19 object_index=13 text=006f00660066
+block 1 kind=2 level=0 page=0 bounds=72.20 656.93 168.70 670.05 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=00540068006500200063006c006f00730069006e00670020006c0069006e0065
+  span 0 flags=0 font_size=14 size_ratio=1 bounds=72.20 656.93 168.70 670.05 object_index=28 text=00540068006500200063006c006f00730069006e00670020006c0069006e0065
