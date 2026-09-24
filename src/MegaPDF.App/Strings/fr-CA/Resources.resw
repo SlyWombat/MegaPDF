@@ -207,7 +207,7 @@
     <value>Document PDF</value>
   </data>
 
-  <!-- ===== Code (MainViewModel.cs) ===== -->
+  <!-- ===== Code (DocumentViewModel.cs) ===== -->
   <data name="PageN" xml:space="preserve">
     <value>Page {0}</value>
   </data>

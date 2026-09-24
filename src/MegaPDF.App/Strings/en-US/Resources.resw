@@ -218,7 +218,7 @@
     <value>PDF document</value>
   </data>
 
-  <!-- ===== Code (MainViewModel.cs) ===== -->
+  <!-- ===== Code (DocumentViewModel.cs) ===== -->
   <data name="PageN" xml:space="preserve">
     <value>Page {0}</value>
     <comment>UIA name of a page surface</comment>
