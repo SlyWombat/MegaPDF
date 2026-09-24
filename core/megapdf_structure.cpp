@@ -77,8 +77,27 @@ using U16 = std::vector<unsigned short>;
 // representation actually in use, not a free hyperparameter tweak: the file header's own
 // note that these values await #354's corpus battery is exactly what ran here. A further,
 // smaller contributor (same-run characters split by the baseline test despite a normal
-// horizontal gap) was investigated and left alone -- see #363's PR description for why.
+// horizontal gap) was investigated in a follow-up round -- see the kBaselineEm/
+// kSuperscriptGapEm comment just below.
 constexpr double kWordGapEm = 0.8;
+// #363 follow-up (2026-09-24): the baseline test itself (BuildWords, below) also splits some
+// same-run pairs that pass the word-gap test above. `structure_check diagbaseline`'s corpus
+// evidence found that residual population dominated -- roughly 9 in 10 of a 500-document
+// sample's 2,011 such pairs -- by a coincidentally small (often NEGATIVE) horizontal gap
+// between the last character of one line and the first of a wholly unrelated next line or
+// paragraph, not a genuine same-word offset: matrix skew measured EXACTLY zero on every one
+// of them (ruling out a rotated line outright) and font size was within 5% on 78% (ruling out
+// a classic shrink-based superscript as the dominant cause). The baseline test is CORRECTLY
+// keeping those apart; the prior round's broad loosening attempts mostly admitted more of
+// that false-join majority, which is why they under-delivered, and comparing against the
+// word's start instead of its immediate predecessor (widening the effective net further)
+// actively hurt F1. A narrow minority is different in kind: a genuinely TIGHT forward gap (a
+// coincidental different-line proximity is never this tight -- it clusters at 0.2-0.8 em or
+// is negative) together with a moderate vertical offset, which the two constants below admit
+// as the same word without touching the majority case above.
+constexpr double kBaselineEm = 0.35;
+constexpr double kSuperscriptGapEm = 0.2;     // tight forward gap only -- a letter-spacing range, not kWordGapEm's line-proximity range.
+constexpr double kSuperscriptOffsetEm = 1.0;  // vertical offset ceiling for that tight-gap case only.
 constexpr double kLineCentreOverlapFactor = 0.5;        // Lines: BuildLines' own constant, reused (megapdf_core.h:292-295).
 constexpr double kLineSplitFontSizeFactor = 2.0;        // ...and its horizontal-gap line split, mirrored.
 
@@ -384,7 +403,15 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
             const Char& p = chars[static_cast<size_t>(prev)];
             const double gap = c.loose_l - cur_loose_r;
             const double em = Em(c.font_size > 0 ? c.font_size : cur.font_size);
-            const bool same_baseline = std::fabs(c.origin_y - p.origin_y) <= 0.35 * em;
+            const double baseline_delta = std::fabs(c.origin_y - p.origin_y);
+            bool same_baseline = baseline_delta <= kBaselineEm * em;
+            // #363 follow-up: a tight forward gap with a moderate vertical offset (see the
+            // kSuperscriptGapEm/kSuperscriptOffsetEm comment above) is treated as one word even
+            // though the plain baseline test above rejects it.
+            if (!same_baseline && gap >= 0.0 && gap <= kSuperscriptGapEm * em &&
+                baseline_delta <= kSuperscriptOffsetEm * em) {
+                same_baseline = true;
+            }
             if (!same_baseline || gap > kWordGapEm * em) start_new = true;
         }
         if (start_new) {
