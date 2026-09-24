@@ -16,6 +16,18 @@
     <UseWinUI>true</UseWinUI>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Custom Program.cs (#348 phase 2): the generated Main starts a fresh App for every
+         launch unconditionally, which is what let every Explorer double-click and "Open
+         with" spawn its own process. Program.cs decides, before any window exists, whether
+         this launch should redirect into an already-running instance instead.
+         DisableXamlGeneratedMain is the documented property name, but this toolchain's
+         App.g.i.cs only ever emits its generated Program class behind
+         "#if !DISABLE_XAML_GENERATED_MAIN" — a plain C# preprocessor guard, not something
+         any MSBuild target reads back out of the property — so the constant is what
+         actually has to be defined; the property is kept alongside it in case a future
+         SDK version wires it through directly. -->
+    <DisableXamlGeneratedMain>true</DisableXamlGeneratedMain>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!-- Unpackaged by default for development. Build the MSIX (SDD §5) with:
          dotnet build -p:Platform=x64 -p:WindowsPackageType=MSIX -p:AppxPackageSigningEnabled=false
          Package.appxmanifest declares the .pdf association and the full tile/icon set. -->
