@@ -96,6 +96,55 @@ jobs:
           fi
           cd "$RUNNER_TEMP/core-build" && ctest -C Debug --output-on-failure
 
+      # #355: the built megapdf-cli binary, run as a plain user would run it (no MEGAPDF_*
+      # env vars, no test harness), against #353's fixtures, diffed byte-for-byte against the
+      # goldens core_tests.cpp itself compares megapdf_write_text()'s return value against.
+      # ctest above already proves the writer's own output is right and that the CLI's stdout
+      # matches it exactly for one fixture (test_cli_smoke); this proves the *shipped binary*
+      # gives the same answer for every #353 fixture, on every OS's own shell and line
+      # endings -- the acceptance criterion in #355 itself ("works on Windows (PowerShell and
+      # cmd), macOS and Linux from a plain shell").
+      - name: megapdf-cli smoke against the structure fixtures
+        shell: bash
+        run: |
+          set -uo pipefail
+          BIN="$RUNNER_TEMP/core-build/megapdf-cli"
+          [ "$RUNNER_OS" = "Windows" ] && BIN="$RUNNER_TEMP/core-build/Debug/megapdf-cli.exe"
+          [ -x "$BIN" ] || { echo "::error::$BIN is missing"; exit 1; }
+          fail=0
+          for name in columns furniture lists headings xobject-text scan mixed; do
+            pdf="tests/MegaPDF.Core.Tests/Fixtures/structure/$name.pdf"
+            golden="core/tests/expected/structure/$name.txt"
+            got="$RUNNER_TEMP/$name.cli.txt"
+            "$BIN" extract "$pdf" --quiet > "$got"
+            rc=$?
+            # scan.pdf exits 5 (no text on any page); every other fixture here exits 0. A
+            # nonzero rc past that is the real failure signal; the golden diff below is the
+            # content check either way.
+            if [ "$name" = "scan" ]; then
+              [ "$rc" -eq 5 ] || { echo "::error title=exit code::$name expected 5, got $rc"; fail=1; }
+            else
+              [ "$rc" -eq 0 ] || { echo "::error title=exit code::$name expected 0, got $rc"; fail=1; }
+            fi
+            if ! diff -u "$golden" "$got"; then
+              echo "::error title=megapdf-cli output does not match its golden::$name"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then exit 1; fi
+          echo "megapdf-cli: 7 fixtures match their goldens"
+
+      # Informational only (design #142 §7 measure 3's own precedent: poppler is another
+      # heuristic, not truth): a rough token-multiset overlap between megapdf-cli's plain-text
+      # output and `pdftotext`'s, over the same fixtures, so a large divergence is visible in
+      # the log without gating the build on it (poppler and this heuristic are free to
+      # disagree on wrapping/reading order; #354's own battery is where the real fidelity gate
+      # lives, against PDFium's own text, not against a second heuristic).
+      - name: megapdf-cli vs pdftotext token overlap (informational)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: python3 tools/compare_cli_pdftotext.py "$RUNNER_TEMP/core-build/megapdf-cli" "$(pwd)"
+
       # #126: what the core writes must be a valid PDF by an independent reader, not only
       # by PDFium reopening its own output. qpdf --check exits 2 on errors (the job fails)
       # and 3 on warnings (reported, not failed). A document that needs a password to open
