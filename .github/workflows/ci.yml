@@ -180,7 +180,7 @@ jobs:
           entry="$fake/.local/share/applications/megapdf.desktop"
           test -f "$entry" || { echo "::error::no desktop entry was installed"; exit 1; }
           desktop-file-validate "$entry"
-          grep -q "^Exec=$fake/.local/lib/megapdf/MegaPDF %f$" "$entry" \
+          grep -q "^Exec=$fake/.local/lib/megapdf/MegaPDF %F$" "$entry" \
             || { echo "::error::Exec was not rewritten to the installed path:"; grep '^Exec=' "$entry"; exit 1; }
           # In the Open With menu for a PDF — which is update-desktop-database
           # writing the entry under application/pdf in mimeinfo.cache. NOT the
