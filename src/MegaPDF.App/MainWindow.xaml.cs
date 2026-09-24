@@ -73,6 +73,14 @@ public sealed partial class MainWindow : Window
     /// </summary>
     private DocumentView? _wiredView;
 
+    /// <summary>
+    /// The document last wired as active, tracked separately from <see cref="_wiredView"/>
+    /// because a brand-new tab becomes Active before its DocumentView is loaded (plan §4's
+    /// background-tab eviction, #348 phase 1 item 7) — this must still know which document
+    /// just stopped being active even on the call where the new one has no view yet.
+    /// </summary>
+    private DocumentViewModel? _lastActiveDocument;
+
     private void OnActiveDocumentChanged()
     {
         if (_wiredView is { } old)
@@ -83,6 +91,16 @@ public sealed partial class MainWindow : Window
             old.IsFocusMovingToPickers = null;
             old.RequestPickerFocusCallback = null;
         }
+
+        // A background tab's bitmaps are freed the moment it stops being active, and the
+        // newly active one's viewport re-renders — the eviction/re-render code paths
+        // already existed (RestoreSessionAsync's placeholder loop, UpdateViewportAsync);
+        // this is what wires them to a tab switch rather than only to restore.
+        if (_lastActiveDocument is { } previouslyActive && previouslyActive != Shell.Active)
+            previouslyActive.EvictBackgroundRenders();
+        _lastActiveDocument = Shell.Active;
+        if (Shell.Active is { } nowActive)
+            _ = nowActive.ReactivateRendersAsync();
 
         var view = ActiveDocumentView;
         _wiredView = view;
