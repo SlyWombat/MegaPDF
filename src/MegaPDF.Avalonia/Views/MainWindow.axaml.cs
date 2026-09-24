@@ -58,6 +58,15 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         AddHandler(KeyUpEvent, OnPreviewKeyUp, RoutingStrategies.Tunnel);
 
+        // Drag-and-drop (#348 — the issue asks for it and it did not exist at all:
+        // `grep DragDrop src/MegaPDF.Avalonia` was empty). On the whole window, so
+        // the tab strip and the empty state both accept a drop, not just the page
+        // area. Each .pdf routes the same way File > Open does: its own tab, or the
+        // existing one activated if it is already open.
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, OnWindowDragOver);
+        AddHandler(DragDrop.DropEvent, OnWindowDrop);
+
         BindShortcuts();
         WireToolbar();
         WireSignatures();
@@ -680,6 +689,10 @@ public partial class MainWindow : Window
         if (await ConfirmCloseAsync())
             desktop.Shutdown();
     }
+
+    /// <summary>This window's every tab confirmed (Save/Don't Save/Cancel each), for App.axaml.cs's
+    /// multi-window quit — see <see cref="App.ConfirmThenQuitAllAsync"/>. True when this window may close.</summary>
+    internal Task<bool> ConfirmCloseForQuitAsync() => ConfirmCloseAsync();
 
     /// <summary>
     /// Asks the application to quit — Ctrl+Q on Linux (#158), and exactly what the Mac's
@@ -1777,6 +1790,34 @@ public partial class MainWindow : Window
         Key.D0 => "0",
         _ => key.ToString(),
     };
+
+    // --- Drag-and-drop (#348) ---
+
+    private void OnWindowDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = PdfFilesIn(e.Data).Any() ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnWindowDrop(object? sender, DragEventArgs e)
+    {
+        var files = PdfFilesIn(e.Data).ToList();
+        e.Handled = true;
+        if (files.Count == 0)
+            return;
+        _ = GuardedAsync(async () =>
+        {
+            foreach (var file in files)
+                await OpenStorageFileAsync(file);
+        });
+    }
+
+    private static IEnumerable<IStorageFile> PdfFilesIn(global::Avalonia.Input.IDataObject data) =>
+        (data.GetFiles() ?? []).OfType<IStorageFile>().Where(IsPdfFile);
+
+    private static bool IsPdfFile(IStorageFile file) =>
+        file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
+        || (file.TryGetLocalPath() is { } path && path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
 
     // --- Files ---
 
