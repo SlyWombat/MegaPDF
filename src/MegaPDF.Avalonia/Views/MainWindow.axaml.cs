@@ -222,10 +222,32 @@ public partial class MainWindow : Window
         // Chrome tied to the previously active tab's page list does not belong to the
         // one now on screen (#348 §4 — the transient view state a full per-tab
         // DocumentView would otherwise keep separate; see the PR description for why
-        // this pass shares one page host across tabs instead).
+        // this pass shares one page host across tabs instead). Every one of these
+        // cancels rather than commits: none of the gestures below have a document
+        // to commit *to* here, because by this point `Active` already IS the new
+        // tab, and blindly committing to whatever is now active would be exactly
+        // the cross-tab corruption a switch must not cause.
         DismissInlineEditor();
+        CancelBand();
         RemoveChrome();
         RemoveFocusRing();
+        // The find box is one shared control across every tab: its typed text and
+        // the debounce that applies it belong to whichever tab was typed into, not
+        // to whatever tab happens to be active when the debounce fires (#348 — a
+        // still-running debounce from the outgoing tab used to search the incoming
+        // tab's document with the outgoing tab's text, once the timer ticked after
+        // the switch). Stopped, then resynced to the incoming tab's own term so the
+        // box never shows one tab's text over another tab's match count.
+        _findDebounce?.Stop();
+        _syncingFindBox = true;
+        try
+        {
+            FindBox.Text = Active?.SearchTerm ?? "";
+        }
+        finally
+        {
+            _syncingFindBox = false;
+        }
 
         if (Active is { } vm)
         {
@@ -844,13 +866,41 @@ public partial class MainWindow : Window
     /// <summary>The in-place editor, while one is open. Only ever one at a time.</summary>
     private TextBox? _inlineEditor;
 
+    /// <summary>
+    /// The document the open editor belongs to (#348) — captured when it opens, not
+    /// read back off <see cref="Active"/> when it closes. A tab switch changes what
+    /// <c>Active</c> means out from under an editor that is still open, so tearing
+    /// the editor down on the switch must clear the state of the document that was
+    /// actually being edited, not of whatever tab is active by the time the teardown
+    /// runs.
+    /// </summary>
+    private DocumentViewModel? _inlineEditorOwner;
+
     /// <summary>Rubber band for the whiteout and redaction drags, and where it started.</summary>
     private Rectangle? _band;
     private Point _bandOrigin;
     private Control? _bandHost;
+    private IPointer? _bandPointer;
 
     /// <summary>Whether the band in progress marks a redaction rather than covering.</summary>
     private bool _bandIsRedaction;
+
+    /// <summary>Whether the shared in-place editor is open, for the self-test (#348 — CheckTabTransitionSafety).</summary>
+    internal bool HasOpenInlineEditor => _inlineEditor is not null;
+
+    /// <summary>Whether a whiteout/redaction drag is in progress, for the self-test.</summary>
+    internal bool HasBandInProgress => _band is not null;
+
+    /// <summary>
+    /// Opens the in-place editor on the selected added text box, the way a double-tap
+    /// does, for the self-test — headless pointer input does not raise a real
+    /// <c>DoubleTapped</c> gesture reliably enough to drive this from a click pair.
+    /// </summary>
+    internal void BeginEditingSelectedTextBoxForTest()
+    {
+        if (Active is { Selection: { Kind: DocumentViewModel.SelectionKind.TextBox, Run: { } run, PageIndex: var pageIndex } })
+            ShowTextBoxEditor(pageIndex, run);
+    }
 
     /// <summary>
     /// An editor placed where the user clicked, showing the face and size the text
@@ -923,6 +973,7 @@ public partial class MainWindow : Window
         {
             overlay.Children.Add(editor);
             _inlineEditor = editor;
+            _inlineEditorOwner = vm;
             editor.Focus();
             editor.SelectAll();
         }
@@ -1023,9 +1074,18 @@ public partial class MainWindow : Window
         // Cleared first: removing a focused editor raises LostFocus, which must find it gone.
         var editor = _inlineEditor;
         _inlineEditor = null;
+        // The owner captured when the editor opened, not `Active` (#348): a tab switch
+        // is exactly what runs this path, and by the time it does, `Active` already IS
+        // the incoming tab. Clearing the *outgoing* tab's IsEditingTextBox against
+        // `Active` cleared the wrong document's flag and left the one that was actually
+        // being edited stuck true forever — its font/size pickers silently stopped
+        // restyling a selected box because RestyleSelectedTextBox declines while
+        // IsEditingTextBox reads true (see CheckTabTransitionSafety).
+        var owner = _inlineEditorOwner;
+        _inlineEditorOwner = null;
         _editorFollowsPickers = false;
         (editor.Parent as Panel)?.Children.Remove(editor);
-        if (Active is { } vm)
+        if (owner is { } vm)
             vm.IsEditingTextBox = false;
     }
 
@@ -1274,6 +1334,7 @@ public partial class MainWindow : Window
             Height = 0,
         };
         overlay.Children.Add(_band);
+        _bandPointer = e.Pointer;
         e.Pointer.Capture(container);
     }
 
@@ -1316,6 +1377,30 @@ public partial class MainWindow : Window
         _bandHost = null;
         _bandIsRedaction = false;
         e.Pointer.Capture(null);
+        _bandPointer = null;
+    }
+
+    /// <summary>
+    /// Cancels a whiteout/redaction drag in progress without committing it (#348).
+    /// A tab switch runs this, not just an escape key: the band's geometry, its
+    /// host container and the pointer capture that is still routing move/release
+    /// events to it all belong to the document that was on screen when the drag
+    /// started. Releasing on whatever container is now active — after the
+    /// ItemsControl has rebound that same container's DataContext to the incoming
+    /// tab's page — would otherwise paint a mark sized and positioned for the
+    /// outgoing tab's page onto the incoming tab's document (see
+    /// CheckTabTransitionSafety).
+    /// </summary>
+    private void CancelBand()
+    {
+        if (_band is null)
+            return;
+        (_band.Parent as Panel)?.Children.Remove(_band);
+        _band = null;
+        _bandHost = null;
+        _bandIsRedaction = false;
+        _bandPointer?.Capture(null);
+        _bandPointer = null;
     }
 
     // --- Signatures (SDD §3.3) ---
@@ -1513,6 +1598,14 @@ public partial class MainWindow : Window
     /// </summary>
     private DispatcherTimer? _findDebounce;
 
+    /// <summary>
+    /// True while <see cref="OnActiveDocumentChanged"/> is resyncing the shared find
+    /// box to the incoming tab's own <c>SearchTerm</c> (#348): that assignment must
+    /// not itself be read as a keystroke and restart the debounce for a search the
+    /// incoming tab already has the results of.
+    /// </summary>
+    private bool _syncingFindBox;
+
     private void WireFind()
     {
         _findDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -1524,6 +1617,8 @@ public partial class MainWindow : Window
 
         FindBox.TextChanged += (_, _) =>
         {
+            if (_syncingFindBox)
+                return;
             // Restarted on each keystroke, so the search runs once the typing
             // pauses rather than once per character.
             _findDebounce!.Stop();

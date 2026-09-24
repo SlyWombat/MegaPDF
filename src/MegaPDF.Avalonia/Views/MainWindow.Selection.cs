@@ -53,6 +53,27 @@ public partial class MainWindow
     /// <summary>Nothing smaller than this is a signature; it is a mis-drag.</summary>
     private const double MinSizeDip = 16;
 
+    /// <summary>Whether a signature/mark's chrome is currently being dragged or resized, for the self-test.</summary>
+    internal bool IsDraggingChromeForTest => _dragging;
+
+    /// <summary>Whether selection chrome is on screen at all, for the self-test.</summary>
+    internal bool HasChromeForTest => _chrome is not null;
+
+    /// <summary>
+    /// Starts a chrome drag the way a pointer press on the body would, for the
+    /// self-test — headless pointer input can hit the page but not reliably the
+    /// chrome's body Border once it depends on a live pointer-captured element.
+    /// </summary>
+    internal void BeginChromeDragForTest()
+    {
+        if (_chrome?.Child is not Panel panel || panel.Children.FirstOrDefault() is not Border body)
+            return;
+        _dragging = true;
+        _resizingCorner = null;
+        _dragStart = default;
+        _dragOriginal = new Rect(body.Margin.Left, body.Margin.Top, body.Width, body.Height);
+    }
+
     private void OnSelectionChanged()
     {
         RemoveChrome();
