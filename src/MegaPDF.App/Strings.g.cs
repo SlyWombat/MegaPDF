@@ -669,4 +669,19 @@ public static partial class Strings
 
     /// <summary>Close more options</summary>
     public static string CloseMoreOptions => Get("CloseMoreOptions");
+
+    /// <summary>Close tab</summary>
+    public static string CloseTab => Get("CloseTab");
+
+    /// <summary>Close window</summary>
+    public static string CloseWindow => Get("CloseWindow");
+
+    /// <summary>New window</summary>
+    public static string NewWindow => Get("NewWindow");
+
+    /// <summary>{0}, tab</summary>
+    public static string TabAccessibleName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabAccessibleName"), arg0);
+
+    /// <summary>{0}, unsaved changes, tab</summary>
+    public static string TabAccessibleNameUnsaved(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabAccessibleNameUnsaved"), arg0);
 }

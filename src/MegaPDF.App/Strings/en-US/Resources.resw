@@ -993,4 +993,25 @@ Saved as {2} — ready to email.</value>
     <value>Close more options</value>
     <comment>Narrator name for the same button while its menu is open; WinUI's own name is "Less app bar" (#170)</comment>
   </data>
+
+  <!-- ===== Tabs (#348) ===== -->
+  <data name="CloseTab" xml:space="preserve">
+    <value>Close tab</value>
+    <comment>Ctrl+W; closes the window instead when it is the last tab</comment>
+  </data>
+  <data name="CloseWindow" xml:space="preserve">
+    <value>Close window</value>
+  </data>
+  <data name="NewWindow" xml:space="preserve">
+    <value>New window</value>
+    <comment>Ctrl+Shift+N; opens a second MainWindow</comment>
+  </data>
+  <data name="TabAccessibleName" xml:space="preserve">
+    <value>{0}, tab</value>
+    <comment>Narrator name for a tab header; {0} is the document's file name</comment>
+  </data>
+  <data name="TabAccessibleNameUnsaved" xml:space="preserve">
+    <value>{0}, unsaved changes, tab</value>
+    <comment>Narrator name for a tab header with the unsaved dot showing; {0} is the document's file name</comment>
+  </data>
 </root>
