@@ -2886,16 +2886,45 @@ internal static class Program
             // What the UI-thread-posted job in App.axaml.cs running for the first
             // time proves: the dispatcher loop is genuinely pumping. Only past this
             // point does Deliver ever call Dispatcher.UIThread.Post for real.
+            //
+            // MarkDispatcherRunning's own flush (SingleInstance.FlushIfReady) calls
+            // RoutePaths synchronously, on this thread, rather than through
+            // Dispatcher.UIThread.Post the way a real incoming connection's Deliver
+            // does once the dispatcher is confirmed running — correctly: App.axaml.cs
+            // only ever calls MarkDispatcherRunning from inside its own UI-thread
+            // Post, so the flush is already running on the UI thread and a second
+            // hop through Post would buy nothing. That means the tab this call opens
+            // is added to shell.Documents (ShellViewModel.AddTab, synchronously, before
+            // DocumentViewModel.OpenAsync's real off-UI-thread load) before this very
+            // call to MarkDispatcherRunning even returns — so waiting on Documents.Count
+            // alone is not waiting at all: it is already true, PumpUntil's loop body
+            // never runs once, and the single RunJobs() call left after the loop has
+            // had no wall-clock time in which the background load could finish and post
+            // DocumentPath back. That race is real, but it is the test's own — the
+            // routing this section exists to check already happened correctly by the
+            // time Count reached 1; the document's path just has not caught up yet,
+            // exactly as it would not for a real person a few milliseconds after a
+            // second launch redirects in. Waiting on the same condition the check below
+            // asserts (path included, not just count) gives PumpUntil something to
+            // actually poll for, the way every other buffered-open check in this file
+            // already does.
             Platform.SingleInstance.MarkDispatcherRunning();
-            PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+            PumpUntil(() => shell.Documents.Count == 1
+                            && SamePath(shell.Documents.FirstOrDefault()?.DocumentPath, fixtureA),
+                      TimeSpan.FromSeconds(5));
             check("the buffered path is delivered the moment the dispatcher is confirmed running",
                   shell.Documents.Count == 1 && SamePath(shell.Documents[0].DocumentPath, fixtureA));
 
             // A second "connection" with a different file, now that routing is live:
             // its own tab, not a replacement of the first — the same rule the Linux
-            // socket, Finder and the command line all share.
+            // socket, Finder and the command line all share. Waited out the same way as
+            // above and for the same reason: DeliverForTest's Post lands the new tab in
+            // shell.Documents before its own document load has necessarily finished.
             Platform.SingleInstance.DeliverForTest([fixtureB]);
-            PumpUntil(() => shell.Documents.Count == 2, TimeSpan.FromSeconds(5));
+            PumpUntil(() => shell.Documents.Count == 2
+                            && shell.Documents.Any(d => SamePath(d.DocumentPath, fixtureA))
+                            && shell.Documents.Any(d => SamePath(d.DocumentPath, fixtureB)),
+                      TimeSpan.FromSeconds(5));
             check("a path delivered once routing is live opens as its own tab, not replacing the first",
                   shell.Documents.Count == 2
                   && shell.Documents.Any(d => SamePath(d.DocumentPath, fixtureA))
