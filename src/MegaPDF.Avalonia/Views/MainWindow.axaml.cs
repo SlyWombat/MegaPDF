@@ -604,16 +604,32 @@ public partial class MainWindow : Window
     /// </summary>
     internal bool SkipRecoveryOffer { get; set; }
 
+    /// <summary>
+    /// Whether any window has already offered crash recovery this process launch
+    /// (#348 §5.3/§5.4: the scan and the offer are a once-per-process-launch thing,
+    /// not once per window — File ▸ New Window must not offer it again). Reset only
+    /// by the self-test, which constructs a fresh "process" (fresh statics do not
+    /// reset between self-test scenarios the way a real process boundary would).
+    /// </summary>
+    private static bool _recoveryOfferedForProcess;
+
+    /// <summary>For the self-test: each scenario is its own simulated process launch.</summary>
+    internal static void ResetRecoveryOfferForTest() => _recoveryOfferedForProcess = false;
+
     private async Task OfferRecoveryOnLaunchAsync()
     {
-        if (SkipRecoveryOffer || Shell is not { } shell)
+        if (SkipRecoveryOffer || Shell is not { } shell || _recoveryOfferedForProcess)
             return;
 
         // The ordinary case — no crashed session — costs nothing: no wait, no dialog,
-        // and the launched document opens as immediately as it always did.
+        // and the launched document opens as immediately as it always did. Not marked
+        // "offered" in this case either: an empty scan costs so little that a window
+        // opened moments later (a fast File ▸ New Window during startup) may as well
+        // scan again rather than risk skipping a session written in between.
         var sessions = shell.FindRecoverableSessions();
         if (sessions.Count == 0)
             return;
+        _recoveryOfferedForProcess = true;
 
         if (WaitsForHandedOverDocument && _pendingOpens.Count == 0)
             await WaitForHandedOverDocumentAsync();

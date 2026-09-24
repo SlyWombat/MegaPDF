@@ -1808,6 +1808,12 @@ internal static class Program
                                Action<Views.MainWindow, DocumentViewModel?, bool?, Core.Recovery.RecoverableSession?> assert,
                                bool capture = false)
     {
+        // Each Launch() call is its own simulated process launch: the recovery offer's
+        // "once per process" guard (#348) is a static, so it has to be told a new one
+        // is starting, or every scenario after the first that found a crashed session
+        // would silently skip its own offer.
+        Views.MainWindow.ResetRecoveryOfferForTest();
+
         // Its own state directory, wiped afterwards: these runs write recovery journals
         // and recents, and none of that belongs in the real per-user files.
         var state = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-launch-{Guid.NewGuid():N}");
