@@ -903,15 +903,19 @@ int RunDiag(const std::vector<std::string>& pdfs) {
 //
 // PR #364 fixed the dominant token-over-splitting mechanism (kWordGapEm 0.2 -> 0.8) and left
 // a smaller, distinct one open: some same-run (no PDFium-generated break) character pairs
-// pass the horizontal word-gap test but fail BuildWords' baseline test
-// (core/megapdf_structure.cpp:387, |origin_y delta| <= 0.35 em) despite a small horizontal
+// pass the horizontal word-gap test but fail BuildWords' baseline test (core/
+// megapdf_structure.cpp's kBaselineEm, |origin_y delta| <= 0.35 em) despite a small horizontal
 // gap -- which should rule out "these are on different lines". This mode replicates that
 // exact walk (ReadChars + BuildStructure's normal_idx/rotated_idx split + BuildWords' per-pair
-// test, core/megapdf_structure.cpp:309-406,1466-1472) over raw PDFium calls -- this tool is
-// built standalone against core headers, not against megapdf_structure.cpp's internals (see
-// the kSoftHyphen comment above) -- and, for every pair that lands in that residual bucket,
-// tallies numeric characteristics only: no text, no filenames, no paths (corpus privacy, same
-// discipline as the diag mode above).
+// test) over raw PDFium calls -- this tool is built standalone against core headers, not
+// against megapdf_structure.cpp's internals (see the kSoftHyphen comment above) -- and, for
+// every pair that lands in that residual bucket, tallies numeric characteristics only: no
+// text, no filenames, no paths (corpus privacy, same discipline as the diag mode above).
+//
+// This mode's own fix for the residual bucket it measures landed in the SAME PR as this
+// comment (megapdf_structure.cpp's kSuperscriptGapEm/kSuperscriptOffsetEm) -- kept here
+// afterwards, not deleted, because it is still the tool that would characterize the NEXT
+// residual bucket, the same way #364's diag mode (above) still is.
 //
 // Two things this mode got wrong in an earlier version, caught by a sanity check against the
 // real pipeline before trusting any of its numbers (kept here as the reason, not just fixed
@@ -924,9 +928,11 @@ int RunDiag(const std::vector<std::string>& pdfs) {
 // Skipping the rotation split inflated the first measurement's fail count with pairs the real
 // BuildWords(normal_idx) walk never actually forms.
 //
-// kWordGapEm/kBaselineEm/kRotationSkewTolerance below mirror core/megapdf_structure.cpp's
-// kWordGapEm (line 81), the 0.35 literal in BuildWords (line 387), and kRotationSkewTolerance
-// (line 134) -- kept in sync by hand, same as kSoftHyphen.
+// kWordGapEmMirror/kBaselineEmMirror/kRotationSkewToleranceMirror below mirror core/
+// megapdf_structure.cpp's kWordGapEm/kBaselineEm/kRotationSkewTolerance -- kept in sync by
+// hand, same as kSoftHyphen (deliberately not pinned to line numbers here: that file's own
+// kSuperscriptGapEm/kSuperscriptOffsetEm fix already shifted every one of them once, which is
+// what caught this comment's first, now-corrected, stale line-number set).
 // ---------------------------------------------------------------------------
 struct BaselineChar {
     unsigned int unicode = 0;
