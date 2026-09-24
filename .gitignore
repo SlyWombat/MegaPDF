@@ -40,6 +40,11 @@ BundleArtifacts/
 
 # Private local documents — never committed
 tests/Private/
+# #354: structure-battery.sh --out and --dump default to living under tests/Private/ (already
+# covered by the rule above); this line names the convention explicitly, the way the corpus
+# battery's own README says to, so a --dump run left at the default path is never one accidental
+# `git add -A` away from being committed.
+tests/Private/structure/
 
 # Logs and OS cruft
 *.log

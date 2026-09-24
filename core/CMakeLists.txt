@@ -223,6 +223,22 @@ if(MEGAPDF_CORE_TESTS)
         set_target_properties(megapdf_leakcheck PROPERTIES BUILD_RPATH "$ORIGIN")
     endif()
 
+    # The #354 corpus structure-battery tool: contract 9 (#353) driven the same way
+    # megapdf_leakcheck drives the redaction contract, so the checks the core tests make on
+    # the structure fixtures are the checks the battery makes on the corpus. Built with the
+    # tests for the same reason leakcheck is: a change to one is a change to both.
+    add_executable(megapdf_structure_check ${REPO}/tools/structure-check/structure_check.cpp)
+    target_include_directories(megapdf_structure_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
+        ${MEGAPDF_PDFIUM_HEADERS})
+    target_link_libraries(megapdf_structure_check PRIVATE megapdf_core ${PDFIUM_LINK})
+    if(APPLE)
+        set_target_properties(megapdf_structure_check PROPERTIES BUILD_RPATH "@loader_path")
+        add_custom_command(TARGET megapdf_structure_check POST_BUILD
+            COMMAND install_name_tool -change ./libpdfium.dylib @loader_path/libpdfium.dylib $<TARGET_FILE:megapdf_structure_check>)
+    elseif(UNIX)
+        set_target_properties(megapdf_structure_check PROPERTIES BUILD_RPATH "$ORIGIN")
+    endif()
+
     # pdfium beside the binaries, and each binary looking beside itself. The copy is its
     # own target because both executables want it in the same directory and link at the
     # same time: as a POST_BUILD on each, the two copies raced on the macOS runner and one
@@ -241,6 +257,7 @@ if(MEGAPDF_CORE_TESTS)
         COMMENT "pdfium beside the test binaries")
     add_dependencies(megapdf_core_tests megapdf_pdfium_runtime)
     add_dependencies(megapdf_leakcheck megapdf_pdfium_runtime)
+    add_dependencies(megapdf_structure_check megapdf_pdfium_runtime)
     if(APPLE)
         set_target_properties(megapdf_core_tests PROPERTIES BUILD_RPATH "@loader_path")
         add_custom_command(TARGET megapdf_core_tests POST_BUILD

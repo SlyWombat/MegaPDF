@@ -15,6 +15,7 @@ on:
       - 'tools/gen_test_fixtures.py'
       - 'tools/gen_redaction_fixtures.py'
       - 'tools/leakcheck/**'
+      - 'tools/structure-check/**'
       - 'tests/MegaPDF.Core.Tests/Fixtures/**'
       - '.github/workflows/core-tests.yml'
   pull_request:
@@ -26,6 +27,7 @@ on:
       - 'tools/gen_test_fixtures.py'
       - 'tools/gen_redaction_fixtures.py'
       - 'tools/leakcheck/**'
+      - 'tools/structure-check/**'
       - 'tests/MegaPDF.Core.Tests/Fixtures/**'
       - '.github/workflows/core-tests.yml'
   workflow_dispatch:
