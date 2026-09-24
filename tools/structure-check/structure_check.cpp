@@ -12,6 +12,10 @@
 //       measures (design #142 comment, 2026-09-24, section 7):
 //         1. token fidelity  — per-page token-multiset F1 of the heuristic blocks' text
 //            (KEEP_FURNITURE | ALL_FIELDS, FIELD blocks excluded) against FPDFText_GetText.
+//            #360: a line-wrap hyphen is joined into one token on the raw side too before this
+//            comparison (JoinLineWrapHyphens), mirroring megapdf_structure.cpp's own join --
+//            see that function's comment. This affects measure 1 only; measures 2-3 below
+//            still tokenize FPDFText_GetUnicode literally.
 //         2. order agreement — Kendall tau between the heuristic blocks' token order and the
 //            structure tree's own token order (from its marked-content IDs), on pages the
 //            census finds tagged. Contract 9 has no tagged path until #358, so this reimplements
@@ -66,6 +70,14 @@
 
 namespace {
 
+// Same code point as core/megapdf_structure.cpp:116 (kSoftHyphen) -- kept in sync by hand
+// (this tool builds standalone against the core headers, not against megapdf_structure.cpp's
+// internals) since #360's join must match that file's join exactly. megapdf_structure.cpp
+// also names kHyphenMinus/kHyphenChar (U+002D/U+2010) as literal-character fallbacks for a
+// line-end hyphen FPDFText_IsHyphen missed; JoinLineWrapHyphens's own comment explains why
+// this tool does not replicate that fallback (no line geometry here to gate it safely on).
+constexpr unsigned int kSoftHyphen = 0x00AD;
+
 // ---------------------------------------------------------------------------
 // Peak RSS, cross-platform (leakcheck has no equivalent: a battery run is one process per
 // document there too, but nothing before #354 needed memory numbers).
@@ -116,6 +128,67 @@ std::vector<Token> Tokenize(const std::vector<unsigned int>& codepoints) {
         }
     }
     if (!cur.empty()) out.push_back(cur);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
+// #360: measure 1's raw (FPDFText_GetText) side does no hyphen-joining, while
+// megapdf_structure.cpp's heuristic side joins a line-wrap hyphen into the surrounding word
+// (core/megapdf_structure.cpp:838-855, design §1.2 "Hyphenation") -- e.g. "encod-" + "ings"
+// becomes the single token "encodings" there, but stays "encod" + "ings" (two tokens) here, so
+// the two can never multiset-match under this tool's own token definition. This mirrors that
+// same join, in the fidelity comparison only, so the raw side counts it the same way:
+//   - a soft hyphen (U+00AD) is always joinable, exactly like core/megapdf_structure.cpp.
+//   - a character PDFium itself flags as a hyphen (FPDFText_IsHyphen -- the exact test
+//     megapdf_structure.cpp's own ReadChars uses to set Char::is_hyphen, and the reason such a
+//     character's own GetUnicode often reads back as 2, not its real code point) is joinable
+//     only when the next real character is ASCII lowercase -- the same "next line starts
+//     lowercase" test BuildPieces uses to decide `strip`.
+// A literal ASCII hyphen (U+002D) or Unicode hyphen (U+2010) that FPDFText_IsHyphen does NOT
+// flag is deliberately left alone, even when the following character is lowercase: without
+// megapdf_structure.cpp's own line geometry, this tool cannot otherwise tell a true line-wrap
+// apart from a mid-line hyphen in a genuine compound word ("well-known", "state-of-the-art")
+// -- exactly the over-generalization #360 itself warns against. (An earlier version of this
+// fix treated every literal hyphen as a candidate whenever the next letter was lowercase; on
+// the full corpus that merged compound-word halves that BuildPieces never touches, so it
+// *lowered* the aggregate F1 instead of raising it -- gating on FPDFText_IsHyphen instead
+// fixed that regression.) BuildPieces' own literal-hyphen fallback (used when a line's last
+// character is a plain '-'/U+2010 that PDFium's IsHyphen missed) has no raw-side equivalent
+// here for the same reason; those rarer cases are left unmatched, same as before this fix.
+bool IsAsciiLowerCp(unsigned int c) { return c >= 'a' && c <= 'z'; }
+
+bool IsWhitespaceCpLocal(unsigned int c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0x00A0 || c == 0x2028 || c == 0x2029 ||
+           (c >= 0x2000 && c <= 0x200B) || c == 0x202F || c == 0x205F || c == 0x3000;
+}
+
+std::vector<unsigned int> JoinLineWrapHyphens(FPDF_TEXTPAGE textpage, int char_count) {
+    std::vector<unsigned int> out;
+    out.reserve(static_cast<size_t>((std::max)(char_count, 0)));
+    for (int i = 0; i < char_count; i++) {
+        const unsigned int cp = FPDFText_GetUnicode(textpage, i);
+        if (cp == 0) continue;
+        const bool is_soft_hyphen = cp == kSoftHyphen;
+        const bool hyphen_like = is_soft_hyphen || FPDFText_IsHyphen(textpage, i) == 1;
+        if (!hyphen_like) {
+            out.push_back(cp);
+            continue;
+        }
+        bool join = is_soft_hyphen;
+        if (!join) {
+            // Next real (non-generated, non-whitespace) character -- the continuation's first
+            // letter, the same value megapdf_structure.cpp's `next_cps[0]` names.
+            for (int j = i + 1; j < char_count; j++) {
+                if (FPDFText_IsGenerated(textpage, j) == 1) continue;
+                const unsigned int next_cp = FPDFText_GetUnicode(textpage, j);
+                if (next_cp == 0 || IsWhitespaceCpLocal(next_cp)) continue;
+                join = IsAsciiLowerCp(next_cp);
+                break;
+            }
+        }
+        if (!join) out.push_back(cp);  // not a line-wrap join: keep it as its own separator
+        // else: drop the hyphen so the tokenizer merges the surrounding runs into one token.
+    }
     return out;
 }
 
@@ -504,13 +577,10 @@ int RunCheck(const Options& opt) {
         if (textpage != nullptr) {
             const int chars = FPDFText_CountChars(textpage);
             if (chars <= 0) textless_pages++;
-            std::vector<unsigned int> page_codepoints;
-            page_codepoints.reserve(static_cast<size_t>((std::max)(chars, 0)));
-            for (int i = 0; i < chars; i++) {
-                const unsigned int cp = FPDFText_GetUnicode(textpage, i);
-                if (cp != 0) page_codepoints.push_back(cp);
-            }
-            const std::vector<Token> pdfium_tokens = Tokenize(page_codepoints);
+            // #360: line-wrap hyphens joined the same way megapdf_structure.cpp joins them,
+            // so measure 1 compares "encodings" (one token) to "encodings" (one token), not to
+            // "encod"+"ings" (two).
+            const std::vector<Token> pdfium_tokens = Tokenize(JoinLineWrapHyphens(textpage, chars));
             const FidelityCounts fc = MultisetF1(tokens_by_page[static_cast<size_t>(p)], pdfium_tokens);
             fidelity_total.matched += fc.matched;
             fidelity_total.a += fc.a;
