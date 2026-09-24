@@ -1199,6 +1199,72 @@ MEGAPDF_API int megapdf_block_span_get(const megapdf_structure* s, size_t index,
 MEGAPDF_API size_t megapdf_block_span_string(const megapdf_structure* s, size_t index, size_t span,
                                              unsigned short* out, size_t capacity);
 
+/* --------------------------------------------------------------------------
+ * Text writer (#142, #355), over contract 9's blocks. `format` picks the output kind so a
+ * second writer (#357, Markdown) can be added as another enum value and `megapdf_write_options`
+ * field, without breaking this signature or any existing caller — the same "frozen struct,
+ * grown by new fields/enum values, never new parameters" shape contract 9 itself uses.
+ * `megapdf_cli extract` (core/cli/megapdf_cli.cpp) is a thin shell over this one call.
+ * ----------------------------------------------------------------------- */
+
+/** megapdf_write_options.format. MEGAPDF_WRITE_MARKDOWN is reserved for #357. */
+enum { MEGAPDF_WRITE_TEXT = 0 };
+
+/** megapdf_write_options.page_break: how pages are separated in the output. */
+typedef enum megapdf_page_break {
+    MEGAPDF_PAGE_BREAK_FORM_FEED = 0,  /* U+000C between pages (default; pdftotext's own convention) */
+    MEGAPDF_PAGE_BREAK_MARKER = 1,     /* "--- page N ---" lines (txt); "<!-- page N -->" for #357's Markdown */
+    MEGAPDF_PAGE_BREAK_NONE = 2        /* no separator at all: a blank line, as between any two blocks */
+} megapdf_page_break;
+
+/** megapdf_write_options.fields: which FIELD blocks (contract 9) the writer includes. */
+typedef enum megapdf_write_fields {
+    MEGAPDF_WRITE_FIELDS_FILLED = 0,  /* default: a checked box, or a text field with a value (contract 9's own default) */
+    MEGAPDF_WRITE_FIELDS_ALL = 1,     /* every field: empty text fields and unchecked boxes too (MEGAPDF_STRUCTURE_ALL_FIELDS) */
+    MEGAPDF_WRITE_FIELDS_NONE = 2     /* no FIELD blocks: page text only */
+} megapdf_write_fields;
+
+/** Options for megapdf_write_text(). Zero-initialise and set what differs from the defaults. */
+typedef struct megapdf_write_options {
+    int keep_lines;       /* 1: keep the PDF's own line breaks inside a block; 0 (default): unwrap to one line */
+    int page_break;       /* megapdf_page_break; 0 (MEGAPDF_PAGE_BREAK_FORM_FEED) is the default */
+    int keep_furniture;   /* 1: running headers/footers/page numbers stay as blocks (MEGAPDF_STRUCTURE_KEEP_FURNITURE) */
+    int fields;           /* megapdf_write_fields; 0 (MEGAPDF_WRITE_FIELDS_FILLED) is the default */
+    int heuristic_only;   /* 1: MEGAPDF_STRUCTURE_HEURISTIC_ONLY -- ignore the structure tree even when present */
+} megapdf_write_options;
+
+/**
+ * Writes the document's text over pages [first_page, first_page + page_count) through `write`,
+ * in the shape megapdf_save() already uses (one abort-able callback, no file I/O in the core).
+ * `format` must be MEGAPDF_WRITE_TEXT (Markdown is #357); `options` may be NULL for the defaults
+ * above.
+ *
+ * Output is UTF-8, LF line endings, no BOM, built over contract 9's blocks (design §2, the
+ * 2026-09-24 comment on #142): one block per line by default (paragraphs unwrapped; a
+ * `continues` paragraph is joined to the one before it with a space, not a break), a blank
+ * line between blocks, headings bare, list items "marker text" indented two spaces per nesting
+ * level, fields as "[x] name" / "[ ] name" (a checkbox or radio) or "name: value" (a text
+ * field), a page with no text as one "[Page N has no text layer]" line, and U+000C between
+ * pages by default (`page_break`). `keep_lines` restores line breaks inside a block on a
+ * best-effort basis: contract 9 does not expose per-line boundaries (a span is a same-style
+ * run, which commonly spans several visual lines), so a break is only recovered where two
+ * consecutive spans' vertical centres do not overlap (BuildLines' own rule, reused); a plain,
+ * unstyled paragraph's internal line breaks are not recoverable from the contract and stay
+ * unwrapped even with this option. A FIGURE block with no alt text (every FIGURE in this
+ * phase — alt text needs the tagged path, #358) is skipped; TABLE_ROW (tagged only, unused
+ * before #358) would print as its cells joined by tabs.
+ *
+ * Returns the count of pages in the range that had a text layer (i.e. did not become a lone
+ * PAGE_IMAGE block) — what megapdf-cli's exit code is chosen from — or a negative MEGAPDF_ERR_*:
+ * MEGAPDF_ERR_ARGUMENT for a NULL document, a bad range, an unknown format or an unknown
+ * `options` enum value; MEGAPDF_ERR_CANCELLED when `cancel` was raised before or during the
+ * write (the #145 pattern every cancellable contract uses); MEGAPDF_ERR_PDFIUM when `write`
+ * returns 0 (the #145/#110 abort convention megapdf_save() already uses).
+ */
+MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, int page_count, int format,
+                                   const megapdf_write_options* options, megapdf_write_fn write, void* context,
+                                   const megapdf_cancel* cancel);
+
 #ifdef __cplusplus
 }  /* extern "C" */
 #endif

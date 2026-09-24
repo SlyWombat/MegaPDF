@@ -30,7 +30,8 @@ set(MEGAPDF_PDFIUM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../libs/pdfium/linux-x64" CA
 option(MEGAPDF_CORE_TESTS "Build and register the core test target (#104)" OFF)
 option(MEGAPDF_ASAN "AddressSanitizer for the core and its tests (GCC/Clang only)" OFF)
 
-add_library(megapdf_core SHARED megapdf_core.cpp megapdf_structure.cpp megapdf_core.h megapdf_core_internal.h)
+add_library(megapdf_core SHARED megapdf_core.cpp megapdf_structure.cpp megapdf_write_text.cpp megapdf_core.h
+    megapdf_core_internal.h)
 # One header set for every platform: the prebuilts are all the same pdfium-binaries
 # release (libs/pdfium/*/VERSION), and only the Android tree vendors the headers.
 #
@@ -177,6 +178,41 @@ if(MEGAPDF_ASAN AND NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# megapdf-cli (#142, #355): a standalone native binary built with the core proper, not gated
+# behind MEGAPDF_CORE_TESTS the way the test-only tools below are -- a fresh checkout with no
+# test fixtures can still `cmake --build core/build/<rid> --target megapdf_cli`. Same
+# $ORIGIN/@loader_path handling as megapdf_leakcheck/megapdf_structure_check below, but it links
+# only megapdf_core: it calls no FPDF_* function directly, only megapdf_* entry points and
+# PDFium's FPDF_ERR_* constants (header macros, not link symbols), so it needs no direct pdfium
+# link -- only pdfium and megapdf_core beside it at runtime, exactly as every consumer of this
+# library needs.
+# ---------------------------------------------------------------------------
+add_executable(megapdf_cli cli/megapdf_cli.cpp)
+target_include_directories(megapdf_cli PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${MEGAPDF_PDFIUM_HEADERS})
+target_link_libraries(megapdf_cli PRIVATE megapdf_core)
+set_target_properties(megapdf_cli PROPERTIES OUTPUT_NAME megapdf-cli)
+if(MEGAPDF_ASAN AND NOT MSVC)
+    target_compile_options(megapdf_cli PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+    target_link_options(megapdf_cli PRIVATE -fsanitize=address)
+endif()
+
+# pdfium beside megapdf-cli. One shared custom target for every binary that needs it (below,
+# the test tools add themselves as dependents too) rather than a POST_BUILD per consumer: two
+# POST_BUILD copies to the same destination raced on the macOS runner the one time this was
+# tried that way (see the make_directory-first comment this target's original copy carried,
+# kept below where the test tools now just depend on this one).
+add_custom_target(megapdf_pdfium_runtime
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:megapdf_cli>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_cli>
+    COMMENT "pdfium beside megapdf-cli")
+add_dependencies(megapdf_cli megapdf_pdfium_runtime)
+if(APPLE)
+    set_target_properties(megapdf_cli PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+    set_target_properties(megapdf_cli PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+endif()
+
+# ---------------------------------------------------------------------------
 # Test target (#104): the assertions the platform suites make, run against the
 # implementation itself on every CI OS. Needs the generated fixtures and the
 # #98 schematic; see .github/workflows/core-tests.yml for the invocation.
@@ -239,22 +275,13 @@ if(MEGAPDF_CORE_TESTS)
         set_target_properties(megapdf_structure_check PROPERTIES BUILD_RPATH "$ORIGIN")
     endif()
 
-    # pdfium beside the binaries, and each binary looking beside itself. The copy is its
-    # own target because both executables want it in the same directory and link at the
-    # same time: as a POST_BUILD on each, the two copies raced on the macOS runner and one
-    # failed with "No such file or directory" against a file that was plainly there.
-    # make_directory first (#220). `cmake -E copy_if_different <file> <dir>` where the
-    # directory does not exist writes a *file* with that name, and with a multi-config
-    # generator — Visual Studio's, which is what Windows uses — the destination is
-    # build/Release, which this target runs before anything has created: the test binary
-    # that would create it is the one that depends on *us*. The result was a file called
-    # `Release` where a directory belongs, and MSB3191 on every build after that until it
-    # was deleted by hand. Single-config generators never saw it, because there
-    # TARGET_FILE_DIR is the build root.
-    add_custom_target(megapdf_pdfium_runtime
-        COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:megapdf_core_tests>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_core_tests>
-        COMMENT "pdfium beside the test binaries")
+    # pdfium beside the binaries, and each binary looking beside itself. megapdf_pdfium_runtime
+    # (defined above, beside the megapdf_cli target: every binary here builds to the same
+    # directory, so one copy serves all of them) is its own target rather than a POST_BUILD on
+    # each consumer because two POST_BUILD copies to the same destination raced on the macOS
+    # runner once, and one failed with "No such file or directory" against a file that was
+    # plainly there. That target's own make_directory-first comment (#220) explains why the
+    # directory has to be created before the copy on a multi-config generator.
     add_dependencies(megapdf_core_tests megapdf_pdfium_runtime)
     add_dependencies(megapdf_leakcheck megapdf_pdfium_runtime)
     add_dependencies(megapdf_structure_check megapdf_pdfium_runtime)
@@ -266,8 +293,9 @@ if(MEGAPDF_CORE_TESTS)
         set_target_properties(megapdf_core_tests PROPERTIES BUILD_RPATH "$ORIGIN")
     endif()
 
+    add_dependencies(megapdf_core_tests megapdf_cli)
     add_test(NAME core
         COMMAND megapdf_core_tests ${MEGAPDF_FIXTURES_DIR} ${MEGAPDF_SCHEMATIC} ${MEGAPDF_TEXT_EXPECTED}
-            ${MEGAPDF_STRUCTURE_EXPECTED_DIR}
+            ${MEGAPDF_STRUCTURE_EXPECTED_DIR} $<TARGET_FILE:megapdf_cli>
         WORKING_DIRECTORY $<TARGET_FILE_DIR:megapdf_core_tests>)
 endif()
