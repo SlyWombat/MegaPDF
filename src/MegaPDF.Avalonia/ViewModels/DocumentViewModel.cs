@@ -421,6 +421,16 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         if (Busy.IsBusy)
             return;
 
+        // Snapshotted before the await below, not read from the field in the catch
+        // filter (#348 — a tab switch while this document is still loading unwires
+        // this window's PasswordRequested subscription, since OnActiveDocumentChanged
+        // only listens to the Active tab; a filter that reads the field after the
+        // await then sees null, the password case is missed entirely, and the tab
+        // silently closes as if the open had failed outright). ApplyAsync's
+        // PageRewriteConfirmationRequested capture (~line 729) already does this;
+        // this is the same one-line fix for the same shape of bug.
+        var passwordAsk = PasswordRequested;
+
         (IPdfDocument Document, IReadOnlyList<(double Width, double Height)> Sizes) loaded;
         using (Busy.Begin(Strings.BusyOpening))
         {
@@ -428,7 +438,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             {
                 loaded = await OffUiThread(() => LoadDocument(path, password));
             }
-            catch (PdfLoadException ex) when (ex.IsPasswordError && PasswordRequested is { } ask)
+            catch (PdfLoadException ex) when (ex.IsPasswordError && passwordAsk is { } ask)
             {
                 // Ask, then retry. Deliberately not a loop here — the view keeps
                 // asking, so a wrong password re-prompts with the reason showing
