@@ -1711,10 +1711,10 @@ internal static class Program
         {
             check("  nothing was open when recovery was offered", openAtOffer == false);
             check($"  the journal still held its edit ({session?.EntryCount} entries)", session?.EntryCount == 1);
-            check("  the crashed document is open", SamePath(vm.DocumentPath, crashed));
+            check("  the crashed document is open", SamePath(vm!.DocumentPath, crashed));
             check("  with the recovered tick back on the page",
-                  vm.HitTest(0, agree).Field is { IsChecked: true });
-            check("  and unsaved, so the tick is not on disk yet", vm.IsDirty);
+                  vm!.HitTest(0, agree).Field is { IsChecked: true });
+            check("  and unsaved, so the tick is not on disk yet", vm!.IsDirty);
             // Opening it a second time would have asked to save the edits just recovered,
             // or replaced them with the file from disk.
             check("  it was not opened a second time", window.OpenedFromSystemCount == 0);
@@ -1725,21 +1725,27 @@ internal static class Program
                (window, vm, openAtOffer, _) =>
         {
             check("  nothing was open when recovery was offered", openAtOffer == false);
-            check("  the launched document is open", SamePath(vm.DocumentPath, crashed));
+            check("  the launched document is open", SamePath(vm!.DocumentPath, crashed));
             check("  clean: the discarded edit is not on the page",
-                  vm.HitTest(0, agree).Field is { IsChecked: false });
+                  vm!.HitTest(0, agree).Field is { IsChecked: false });
             check("  and it was opened once, after the offer", window.OpenedFromSystemCount == 1);
         });
 
-        // Launched with a different document, and the crashed one restored. Both survive:
-        // the open asks about the recovered document's unsaved changes (D5).
+        // Launched with a different document, and the crashed one restored. Both survive
+        // AS TWO TABS (#348): nothing is being replaced any more, so — unlike before
+        // tabs, when the launch asked Save/Don't Save/Cancel about the recovered
+        // document before dropping it for the launched one (D5) — nothing is asked at
+        // all. The window ends up with both tabs open, the launched one (opened last,
+        // after the restore) active.
         Launch(other, withCrashOf: crashed, answer: Views.RecoveryWindow.Decision.Restore, late: false,
                (window, vm, openAtOffer, _) =>
         {
             check("  nothing was open when recovery was offered", openAtOffer == false);
-            check("  the launched document ends up open", SamePath(vm.DocumentPath, other));
-            check("  and the recovered one was asked about first, not dropped",
-                  window.UnsavedChangesAsked == 1);
+            check("  the launched document ends up active", SamePath(vm?.DocumentPath, other));
+            check("  the recovered document is open too, as its own tab, not asked about",
+                  window.Shell is { } shell2 && shell2.Documents.Count == 2
+                  && shell2.Documents.Any(d => SamePath(d.DocumentPath, crashed))
+                  && window.UnsavedChangesAsked == 0);
         });
 
         // Decide later: the journal is left alone and the launched file still opens.
@@ -1747,7 +1753,7 @@ internal static class Program
                (window, vm, openAtOffer, _) =>
         {
             check("  nothing was open when 'Decide later' was offered", openAtOffer == false);
-            check("  the launched document is open", SamePath(vm.DocumentPath, crashed));
+            check("  the launched document is open", SamePath(vm!.DocumentPath, crashed));
             check("  and it was opened once, after the offer", window.OpenedFromSystemCount == 1);
         });
 
@@ -1757,7 +1763,7 @@ internal static class Program
                (window, vm, openAtOffer, _) =>
         {
             check("  no crash: nothing was offered", openAtOffer is null);
-            check("  and the launched document is open", SamePath(vm.DocumentPath, other));
+            check("  and the launched document is open", SamePath(vm!.DocumentPath, other));
         });
 
         // A capture run: a journal an earlier run of the rig left behind is not the
@@ -1766,7 +1772,7 @@ internal static class Program
                (window, vm, openAtOffer, _) =>
         {
             check("  a capture run is not offered recovery", openAtOffer is null);
-            check("  and the document it was launched with opens", SamePath(vm.DocumentPath, other));
+            check("  and the document it was launched with opens", SamePath(vm!.DocumentPath, other));
         }, capture: true);
 
         // The macOS order (#153): the document is handed over *after* the window has
@@ -1780,7 +1786,7 @@ internal static class Program
             check("  handed over late: nothing was open when recovery was offered", openAtOffer == false);
             check($"  the journal still held its edit ({session?.EntryCount} entries)", session?.EntryCount == 1);
             check("  the crashed document is open with its recovered tick",
-                  SamePath(vm.DocumentPath, crashed) && vm.HitTest(0, agree).Field is { IsChecked: true });
+                  SamePath(vm!.DocumentPath, crashed) && vm!.HitTest(0, agree).Field is { IsChecked: true });
             check("  it was not opened a second time", window.OpenedFromSystemCount == 0);
             // The wait ends when the document arrives, not when the clock runs out. The
             // grace below is five seconds and the hand-over is at about a tenth of one.
@@ -1799,7 +1805,7 @@ internal static class Program
     /// </summary>
     private static void Launch(string launched, string? withCrashOf, Views.RecoveryWindow.Decision answer,
                                bool late,
-                               Action<Views.MainWindow, DocumentViewModel, bool?, Core.Recovery.RecoverableSession?> assert,
+                               Action<Views.MainWindow, DocumentViewModel?, bool?, Core.Recovery.RecoverableSession?> assert,
                                bool capture = false)
     {
         // Its own state directory, wiped afterwards: these runs write recovery journals
@@ -1816,8 +1822,11 @@ internal static class Program
                 // Disposed without EndSession: the journal stays behind, as after a kill.
             }
 
-            using var vm = new DocumentViewModel(state);
-            var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+            // #348: DataContext is the shell now, not a single document — window.Active is
+            // read after the launch settles, wherever it lands (the restored tab, the
+            // launched one, or null if neither opened).
+            using var shell = new ShellViewModel(state);
+            var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
 
             // Read at the moment of the offer, not after the run: whether a document was
             // open *then* is the thing under test. Null when nothing was ever offered.
@@ -1825,7 +1834,7 @@ internal static class Program
             Core.Recovery.RecoverableSession? offered = null;
             window.AnswerRecoveryForTest = session =>
             {
-                openAtOffer = vm.IsDocumentOpen;
+                openAtOffer = shell.HasDocuments;
                 offered = session;
                 return answer;
             };
@@ -1846,7 +1855,7 @@ internal static class Program
                     window.OpenFromSystem(launched);
                 }
                 PumpUntil(() => window.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(30));
-                assert(window, vm, openAtOffer, offered);
+                assert(window, window.Active, openAtOffer, offered);
             }
             finally
             {
@@ -1893,9 +1902,11 @@ internal static class Program
     {
         EnsureHeadlessPlatform();
 
-        using var vm = new DocumentViewModel(state);
+        using var shell = new ShellViewModel(state);
+        var vm = shell.CreateDocument();
         vm.Open(Path.Combine(dir, "fixture.pdf"));
-        var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+        shell.AddTab(vm);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
         window.Show();
         MenuProbe.Pump();
 
@@ -2064,9 +2075,15 @@ internal static class Program
         // so none of them can be reused afterwards.
         (DocumentViewModel Vm, Views.MainWindow Window) Open()
         {
-            var vm = new DocumentViewModel(state);
+            // One tab (#348): Ctrl+W closes the window itself, exactly as it always
+            // did — the plan's decision that closing the *last* tab closes the window
+            // (Safari/Preview/GNOME convention) makes every existing row below still
+            // mean what it always meant.
+            var shell = new ShellViewModel(state);
+            var vm = shell.CreateDocument();
             vm.Open(fixture);
-            var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+            shell.AddTab(vm);
+            var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
             window.Show();
             MenuProbe.Pump();
             return (vm, window);
@@ -2319,9 +2336,11 @@ internal static class Program
     {
         EnsureHeadlessPlatform();
 
-        using var vm = new DocumentViewModel(state);
+        using var shell = new ShellViewModel(state);
+        var vm = shell.CreateDocument();
         vm.Open(Path.Combine(dir, "fixture.pdf"));
-        var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
+        shell.AddTab(vm);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
         window.Show();
         Pump();
 

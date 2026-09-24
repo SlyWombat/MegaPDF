@@ -37,7 +37,7 @@
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
-          <CheckBox IsChecked="{Binding Active.FlattenOnSave}"
+          <CheckBox IsChecked="{Binding Active.FlattenOnSave, FallbackValue=False}"
                     Content="{x:Static loc:Strings.FlattenWhenSaving}" />
           <TextBlock Text="{x:Static loc:Strings.FlattenExplanation}"
                      TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
@@ -79,7 +79,7 @@
           </Style>
         </StackPanel.Styles>
 
-        <Button Name="OpenButton" IsEnabled="{Binding Active.IsIdle}">
+        <Button Name="OpenButton" IsEnabled="{Binding Active.IsIdle, FallbackValue=False}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -99,7 +99,7 @@
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
              placement, and the next click on the page puts it there. -->
-        <Button Name="SignButton" IsEnabled="{Binding Active.CanSign}">
+        <Button Name="SignButton" IsEnabled="{Binding Active.CanSign, FallbackValue=False}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconSign}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -125,7 +125,7 @@
                              FontSize="{DynamicResource TypeBody}" />
                 </Border>
 
-                <ScrollViewer MaxHeight="300" IsVisible="{Binding Active.HasSignatures}"
+                <ScrollViewer MaxHeight="300" IsVisible="{Binding Active.HasSignatures, FallbackValue=False}"
                               HorizontalScrollBarVisibility="Disabled">
                   <ItemsControl Name="SignatureList" ItemsSource="{Binding Active.Signatures}">
                     <ItemsControl.ItemsPanel>
@@ -241,7 +241,7 @@
           </Button.Flyout>
         </Button>
         <ToggleButton Name="AddTextButton"
-                      IsChecked="{Binding Active.IsAddingText, Mode=OneWay}"
+                      IsChecked="{Binding Active.IsAddingText, Mode=OneWay, FallbackValue=False}"
                       Command="{Binding Active.ToggleAddTextCommand}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconText}" Width="18" Height="18"
@@ -251,7 +251,7 @@
           </StackPanel>
         </ToggleButton>
         <ToggleButton Name="WhiteoutButton"
-                      IsChecked="{Binding Active.IsWhiteoutMode, Mode=OneWay}"
+                      IsChecked="{Binding Active.IsWhiteoutMode, Mode=OneWay, FallbackValue=False}"
                       Command="{Binding Active.ToggleWhiteoutCommand}"
                       ToolTip.Tip="{x:Static loc:Strings.WhiteoutCoversOnlyBody}"
                       AutomationProperties.HelpText="{x:Static loc:Strings.WhiteoutCoversOnlyBody}">
@@ -265,7 +265,7 @@
         <!-- Redact sits beside Cover, because the pair is the point (#173): one covers,
              the other removes, and each tooltip says which. -->
         <ToggleButton Name="RedactButton"
-                      IsChecked="{Binding Active.IsRedactMode, Mode=OneWay}"
+                      IsChecked="{Binding Active.IsRedactMode, Mode=OneWay, FallbackValue=False}"
                       Command="{Binding Active.ToggleRedactCommand}"
                       ToolTip.Tip="{x:Static loc:Strings.ToolbarRedactTip}"
                       AutomationProperties.Name="{x:Static loc:Strings.ToolbarRedact}"
@@ -284,7 +284,7 @@
         <!-- ToolbarPicker is a ComboBox that leaves an unnamed template part out of the
              accessibility tree (Views/ToolbarPicker.cs). -->
         <views:ToolbarPicker Name="FontBox" Width="120" ItemsSource="{Binding Active.TextFontChoices}"
-                  SelectedItem="{Binding Active.SelectedTextFont}" IsEnabled="{Binding Active.CanAddText}">
+                  SelectedItem="{Binding Active.SelectedTextFont}" IsEnabled="{Binding Active.CanAddText, FallbackValue=False}">
           <ComboBox.ItemTemplate>
             <DataTemplate DataType="vm:FontChoice">
               <TextBlock Text="{Binding Label}" />
@@ -292,7 +292,7 @@
           </ComboBox.ItemTemplate>
         </views:ToolbarPicker>
         <views:ToolbarPicker Name="SizeBox" Width="70" ItemsSource="{Binding Active.TextSizes}"
-                  SelectedItem="{Binding Active.TextSize}" IsEnabled="{Binding Active.CanAddText}" />
+                  SelectedItem="{Binding Active.TextSize}" IsEnabled="{Binding Active.CanAddText, FallbackValue=False}" />
         <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
         <Button Name="UndoButton" Command="{Binding Active.UndoCommand}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
@@ -320,7 +320,7 @@
                 StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
         </Button>
         <Button Name="ZoomMenuButton" Width="84" HorizontalContentAlignment="Center"
-                IsEnabled="{Binding Active.IsDocumentOpen}">
+                IsEnabled="{Binding Active.IsDocumentOpen, FallbackValue=False}">
           <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceXs}">
             <TextBlock Text="{Binding Active.ZoomPercentLabel}" VerticalAlignment="Center"
                        FontSize="{DynamicResource TypeBody}" />
@@ -379,7 +379,7 @@
     <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
          preparation, restoring and searching. Shown only 0.5 s into the work and kept at least
          0.3 s (BusyState), so quick work never flickers it. -->
-    <Border Name="BusyStrip" DockPanel.Dock="Top" Padding="8,6,8,0" IsVisible="{Binding Active.Busy.ShowsStrip}"
+    <Border Name="BusyStrip" DockPanel.Dock="Top" Padding="8,6,8,0" IsVisible="{Binding Active.Busy.ShowsStrip, FallbackValue=False}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             Background="{DynamicResource BrandAccentSubtle}">
@@ -392,17 +392,17 @@
     </Border>
 
     <!-- What the next click will do, and how to get out of it. -->
-    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsModeActive}"
+    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsModeActive, FallbackValue=False}"
             Background="{DynamicResource BrandAccent}">
       <TextBlock Text="{Binding Active.ModeHint}" Foreground="{DynamicResource BrandAccentOn}" />
     </Border>
 
     <!-- A restricted open says so and offers the owner password (#131, ADR-004 §3).
          Not dismissable: it describes the document for as long as it is open. -->
-    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsRestricted}"
+    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsRestricted, FallbackValue=False}"
             Background="{DynamicResource BrandAccentSubtle}">
       <DockPanel>
-        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0" IsEnabled="{Binding Active.IsIdle}"
+        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0" IsEnabled="{Binding Active.IsIdle, FallbackValue=False}"
                 Content="{x:Static loc:Strings.UnlockEllipsis}" />
         <TextBlock Text="{x:Static loc:Strings.RestrictedBanner}" VerticalAlignment="Center"
                    TextWrapping="Wrap" />
@@ -424,7 +424,7 @@
          Each of the two buttons carries both its word and its glyph and shows one of
          them; the accessible name and the tooltip are the word either way
          (WireFindBar), so nothing is lost to a screen reader at the narrow step. -->
-    <Border Name="FindBarHost" DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsFindOpen}"
+    <Border Name="FindBarHost" DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsFindOpen, FallbackValue=False}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <StackPanel Name="FindBarItems" Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
