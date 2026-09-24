@@ -144,7 +144,8 @@ public class UserDataPathsTests : IDisposable
     [InlineData("journal")]
     public void AServiceWithNoPathOfItsOwn_LandsUnderTheDataFolder_NotBesideTheExecutable(string service)
     {
-        // What actually crashed: MainViewModel builds all four with no path. Each used to
+        // What actually crashed: DocumentViewModel (MainViewModel before #348) builds all
+        // four with no path. Each used to
         // resolve "" into a relative path and the first CreateDirectory hit the apphost.
         if (!TheDataFolderCanBeMoved)
             return;
