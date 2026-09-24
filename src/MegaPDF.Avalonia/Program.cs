@@ -1524,6 +1524,29 @@ internal static class Program
             failures++;
         }
 
+        // --- Switching tabs mid-gesture (#348 §2b/§4) ---
+        //
+        // The pages area, find bar and in-place editor are one shared control set
+        // driven by whichever tab is Active, not a persistent DocumentView per tab.
+        // The plan's own worry about that shape is exactly this: a gesture that is
+        // "in progress" across more than one input event — an open text editor, a
+        // whiteout/redaction drag mid-rubber-band, an unsettled find debounce — has
+        // nowhere of its own to live when the active tab changes out from under it.
+        // Each of these switches the active tab mid-gesture and checks that the
+        // gesture is cleanly cancelled against the document it actually belongs to,
+        // never silently committed or applied to whichever tab is active by the
+        // time it resolves.
+        Console.WriteLine("switching tabs mid-gesture (#348):");
+        try
+        {
+            CheckTabTransitionSafety(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::tab transitions: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- The window at its declared minimum (#237) ---
         //
         // 480×360 is a size the app offers, so it is a size the app has to draw. It
@@ -2667,6 +2690,227 @@ internal static class Program
         _ = window.CloseActiveTabOrWindowAsync();
         PumpUntil(() => !window.IsVisible, TimeSpan.FromSeconds(5));
         check("closing the last tab closes the window", !window.IsVisible);
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// The shared-control deviation from the #348 plan (§2b/§4): one pages-area/find-bar/
+    /// in-place-editor control set driven by whichever tab is <c>Active</c>, instead of a
+    /// persistent <c>DocumentView</c> per tab. That is exactly the shape the plan warns
+    /// costs "transient per-document view state" — an in-progress inline edit, a mid-drag
+    /// rubber band, a selected mark being dragged, an unsettled find debounce — because
+    /// none of it has anywhere of its own to live once the active tab changes under it.
+    ///
+    /// Each check below starts a gesture that spans more than one input event, switches
+    /// the active tab before it resolves, and asserts the gesture is cancelled against
+    /// the document it actually belongs to — never silently committed, and never leaked
+    /// into whichever tab happens to be active by the time it would have resolved.
+    /// </summary>
+    private static void CheckTabTransitionSafety(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        Pump();
+
+        window.OpenFromSystem(fixtureA);
+        PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+        var tabA = shell.Active!;
+
+        window.OpenFromSystem(fixtureB);
+        PumpUntil(() => shell.Documents.Count == 2, TimeSpan.FromSeconds(5));
+        var tabB = shell.Active!;
+
+        shell.ActivateTab(tabA);
+        Pump();
+
+        // --- 1: an added text box's in-place editor, open and being typed into ---
+        //
+        // Editing an EXISTING box (double-click, ShowTextBoxEditor) rather than typing a
+        // brand new one: that path is the one that sets IsEditingTextBox, which is the
+        // flag #348 got wrong — cleared against whatever tab was Active when the editor
+        // closed, rather than the tab the editor actually belonged to.
+        // AddTextBox (like every edit, once a window has set RunsInBackground) applies off
+        // the UI thread and returns before it is done (#145) — waited out here rather than
+        // a single Pump(), or the click right after it races the box's own placement and
+        // finds Busy.IsBusy still true, which HandlePageClick answers by doing nothing.
+        tabA.TextFont = MegaPDF.Core.Engine.StandardTextBoxFonts.Sans;
+        tabA.TextSize = 12;
+        tabA.AddTextBox(0, new PdfPoint(100, 300), "before switch");
+        PumpUntil(() => !tabA.Busy.IsBusy && tabA.BoxesOn(0).Any(b => b.Text.Contains("before switch", StringComparison.Ordinal)),
+                  TimeSpan.FromSeconds(5));
+        var box = tabA.BoxesOn(0).FirstOrDefault(b => b.Text.Contains("before switch", StringComparison.Ordinal));
+        check("a text box is placed, to edit in place", box is not null);
+        if (box is not null)
+        {
+            tabA.HandlePageClick(0, new PdfPoint(box.Bounds.X + (box.Bounds.Width / 2), box.Bounds.Y + (box.Bounds.Height / 2)));
+            PumpUntil(() => tabA.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox }, TimeSpan.FromSeconds(5));
+            window.BeginEditingSelectedTextBoxForTest();
+            Pump();
+            check("double-clicking the selected box opens the shared in-place editor", window.HasOpenInlineEditor);
+            check("  and marks the tab as having a box under edit", tabA.IsEditingTextBox);
+
+            // Switch away mid-edit — no Enter, no click-away, nothing that would commit it.
+            shell.ActivateTab(tabB);
+            Pump();
+
+            check("switching tabs mid-edit closes the shared editor", !window.HasOpenInlineEditor);
+            check("  the tab the edit belonged to has its IsEditingTextBox cleared (#348 — this used to be "
+                  + "set on whichever tab was Active when the editor closed, i.e. the tab just switched TO, "
+                  + "leaving the tab actually being edited stuck with it true forever)",
+                  !tabA.IsEditingTextBox);
+            check("  the tab switched to is untouched by the dismissal", !tabB.IsEditingTextBox);
+            check("  the box's text is unchanged — the edit was cancelled, not silently committed",
+                  tabA.BoxesOn(0).Any(b => b.Text == "before switch"));
+            check("  and nothing leaked onto the tab switched to",
+                  !tabB.BoxesOn(0).Any(b => b.Text.Contains("before switch", StringComparison.Ordinal)));
+
+            // The concrete symptom of the stuck flag: back on the tab, the size picker
+            // would silently stop restyling the selected box forever (RestyleSelectedTextBox
+            // declines while IsEditingTextBox reads true).
+            shell.ActivateTab(tabA);
+            Pump();
+            tabA.HandlePageClick(0, new PdfPoint(box.Bounds.X + (box.Bounds.Width / 2), box.Bounds.Y + (box.Bounds.Height / 2)));
+            PumpUntil(() => tabA.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox }, TimeSpan.FromSeconds(5));
+            tabA.TextSize = 20;
+            PumpUntil(() => !tabA.Busy.IsBusy, TimeSpan.FromSeconds(5));
+            var restyled = tabA.BoxesOn(0).FirstOrDefault(b => b.Text == "before switch");
+            check("  back on that tab, the size picker still restyles the box (IsEditingTextBox is not stuck true)",
+                  restyled is not null && Math.Abs(restyled.FontSize - 20) < 0.5);
+            tabA.ClearSelection();
+            Pump();
+        }
+
+        // --- 2: a whiteout/redaction rubber-band drag in progress ---
+        shell.ActivateTab(tabA);
+        Pump();
+        tabA.ToggleRedactCommand.Execute(null);
+        Pump();
+        check("arming Redact puts the tab in Redact mode", tabA.Mode == DocumentViewModel.PageMode.Redact);
+
+        if (window.PageList.ContainerFromIndex(0) is Control firstPage
+            && global::Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(firstPage)
+                   .OfType<Border>().FirstOrDefault(b => b.Name == "PageSurface") is { } surface
+            && surface.TranslatePoint(new Point(20, 20), window) is { } dragStart
+            && surface.TranslatePoint(new Point(90, 70), window) is { } dragEnd)
+        {
+            var countABefore = tabA.RedactionMarkCount;
+            var countBBefore = tabB.RedactionMarkCount;
+
+            HeadlessWindowExtensions.MouseDown(window, dragStart, MouseButton.Left);
+            Pump();
+            check("pressing on the page under Redact starts a band drag", window.HasBandInProgress);
+
+            HeadlessWindowExtensions.MouseMove(window, dragEnd);
+            Pump();
+
+            // Switched before mouse-up — a keyboard shortcut (Ctrl+Tab) or a click on
+            // another tab both do this without ever delivering a PointerReleased for
+            // the drag that is still in progress.
+            shell.ActivateTab(tabB);
+            Pump();
+            check("switching tabs mid-drag cancels the band rather than leaving it live",
+                  !window.HasBandInProgress);
+
+            // Release lands wherever the pointer physically is now — on/over whatever
+            // tab B's page happens to show. If the band had survived the switch, this is
+            // the release that would have painted tab A's drag onto tab B's document.
+            HeadlessWindowExtensions.MouseUp(window, dragEnd, MouseButton.Left);
+            PumpFor(TimeSpan.FromMilliseconds(200));
+
+            check("no mark is added to the tab the drag started on",
+                  tabA.RedactionMarkCount == countABefore);
+            check("  and none leaks onto the tab the drag ended on",
+                  tabB.RedactionMarkCount == countBBefore);
+        }
+        else
+        {
+            check("the first page is realised for the band-drag check", false);
+        }
+
+        shell.ActivateTab(tabA);
+        Pump();
+        if (tabA.Mode == DocumentViewModel.PageMode.Redact)
+            tabA.ToggleRedactCommand.Execute(null);
+        Pump();
+
+        // --- 3: a selected signature/mark's chrome being dragged ---
+        //
+        // Unlike the band, this one's teardown (RemoveChrome, called from
+        // OnActiveDocumentChanged since before #348's tab work) already resets
+        // `_dragging` as well as the chrome itself — checked here to confirm that
+        // holds now that a switch can happen mid-drag, not assumed from reading it.
+        tabA.AddTextBox(0, new PdfPoint(150, 400), "drag me");
+        PumpUntil(() => !tabA.Busy.IsBusy && tabA.BoxesOn(0).Any(b => b.Text == "drag me"), TimeSpan.FromSeconds(5));
+        var dragBox = tabA.BoxesOn(0).FirstOrDefault(b => b.Text == "drag me");
+        check("a second box is placed, to drag its chrome", dragBox is not null);
+        if (dragBox is not null)
+        {
+            tabA.HandlePageClick(0, new PdfPoint(dragBox.Bounds.X + (dragBox.Bounds.Width / 2), dragBox.Bounds.Y + (dragBox.Bounds.Height / 2)));
+            PumpUntil(() => tabA.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox }, TimeSpan.FromSeconds(5));
+            Pump();
+            check("selecting the box raises its chrome", window.HasChromeForTest);
+
+            window.BeginChromeDragForTest();
+            Pump();
+            check("dragging the chrome's body starts a chrome drag", window.IsDraggingChromeForTest);
+
+            shell.ActivateTab(tabB);
+            Pump();
+            check("switching tabs mid-drag ends the chrome drag", !window.IsDraggingChromeForTest);
+            check("  and takes the chrome down with it", !window.HasChromeForTest);
+            check("  the box being dragged is at its original position — nothing was committed",
+                  tabA.BoxesOn(0).FirstOrDefault(b => b.Text == "drag me") is { } settled
+                  && Math.Abs(settled.Bounds.X - dragBox.Bounds.X) < 0.01
+                  && Math.Abs(settled.Bounds.Y - dragBox.Bounds.Y) < 0.01);
+
+            shell.ActivateTab(tabA);
+            Pump();
+            tabA.ClearSelection();
+            Pump();
+        }
+
+        // --- 5: an active find search with an unsettled debounce timer ---
+        //
+        // The find box is one shared TextBox across every tab (it is not bound to
+        // Active.SearchTerm — MainWindow.axaml has no Text="{Binding ...}" on it at
+        // all), so nothing before #348's own OnActiveDocumentChanged fix resynced it
+        // on a switch, and nothing stopped a debounce armed by one tab's typing from
+        // searching whatever tab was Active 250ms later.
+        shell.ActivateTab(tabA);
+        Pump();
+        tabA.IsFindOpen = true;
+        Pump();
+        check("tab B has not searched for anything yet", tabB.SearchTerm == "");
+
+        window.FindBox.Text = "castle";   // as if typed — TextChanged starts the 250ms debounce
+        Pump();
+
+        // Switched before the debounce fires.
+        shell.ActivateTab(tabB);
+        Pump();
+        PumpFor(TimeSpan.FromMilliseconds(400));   // past the 250ms the debounce would have fired at
+
+        check("switching tabs mid-debounce does not run tab A's search against tab B",
+              tabB.SearchTerm == "");
+        check("  the find box shows tab B's own (empty) term, not tab A's stale typing",
+              window.FindBox.Text == "");
+
+        shell.ActivateTab(tabA);
+        Pump();
+        PumpFor(TimeSpan.FromMilliseconds(400));
+        check("  tab A's own abandoned debounce did not fire late either (stopped, not deferred)",
+              tabA.SearchTerm == "");
+
+        tabA.CloseFind();
+        Pump();
 
         static void Pump() => MenuProbe.Pump();
     }
