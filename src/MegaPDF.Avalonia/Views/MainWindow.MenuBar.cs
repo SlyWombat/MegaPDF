@@ -84,35 +84,70 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// <see cref="ActiveWindow"/>, typed — Close Tab, Close Window, New Window and
+    /// tab switching (#348) are <see cref="MainWindow"/>-specific, but the menu bar
+    /// is the whole application's and must act on whichever document window is in
+    /// front, not necessarily this one (a dialog or the About window can be active
+    /// instead, neither of which is a <see cref="MainWindow"/>).
+    /// </summary>
+    private MainWindow ActiveMainWindow() =>
+        ActiveWindow() as MainWindow
+        ?? (global::Avalonia.Application.Current?.ApplicationLifetime
+            as global::Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?
+            .Windows.OfType<MainWindow>().FirstOrDefault()
+        ?? this;
+
+    /// <summary>⇧⌘W: Close Window, always the whole window regardless of tab count (#348).</summary>
+    private static KeyGesture CloseWindowGesture => Shortcut(Key.W, KeyModifiers.Shift);
+
+    /// <summary>⌘N on macOS. Linux reaches New Window through Ctrl+Shift+N in <see cref="BindLinuxWindowShortcuts"/> instead,
+    /// the same reason ⌘Q is Mac-menu-only and Ctrl+Q is a Linux window binding.</summary>
+    private static KeyGesture NewWindowGestureMac => Shortcut(Key.N);
+
+    /// <summary>⌃Tab: the next tab, wrapping (#348).</summary>
+    private static KeyGesture NextTabGesture => new(Key.Tab, KeyModifiers.Control);
+
+    /// <summary>⌃⇧Tab: the previous tab, wrapping (#348).</summary>
+    private static KeyGesture PreviousTabGesture => new(Key.Tab, KeyModifiers.Control | KeyModifiers.Shift);
+
+    /// <summary>
     /// Called once the view model has arrived (OnDataContextChanged): the font and size
     /// submenus list its choices.
     /// </summary>
     private void BuildMenuBar()
     {
-        if (_menuBarItems.Count > 0 || ViewModel is null)
+        if (_menuBarItems.Count > 0 || Shell is null)
             return;
 
         var file = new NativeMenu();
         file.Items.Add(Command("OpenButton", Strings.OpenAPdfEllipsis, OpenGesture, () => true,
             () => _ = OpenDocumentAsync()));
+        file.Items.Add(Command("NewWindowItem", Strings.NewWindow, NewWindowGestureMac, () => true,
+            () => ActiveMainWindow().NewWindow()));
+        file.Items.Add(new NativeMenuItemSeparator());
         // Closing already asked the right questions from the red button and ⌘Q; only
-        // the menu and keyboard routes to it were missing (#176). Close() runs the
-        // same OnClosing path, so unsaved changes are still put to the person first.
-        file.Items.Add(Command("Close", Strings.Close, CloseGesture, () => true,
-            () => ActiveWindow().Close()));
+        // the menu and keyboard routes to it were missing (#176). Close tab/window run
+        // the same OnClosing path, so unsaved changes are still put to the person first
+        // (#348: ⌘W closes the active tab, or the window itself when it is the last
+        // one — the standard Safari/Preview convention — and ⇧⌘W always closes the
+        // whole window).
+        file.Items.Add(Command("Close", Strings.CloseTab, CloseGesture, () => true,
+            () => _ = ActiveMainWindow().CloseActiveTabOrWindowAsync()));
+        file.Items.Add(Command("CloseWindowItem", Strings.CloseWindow, CloseWindowGesture, () => true,
+            () => ActiveMainWindow().CloseWindow()));
         file.Items.Add(new NativeMenuItemSeparator());
         file.Items.Add(Command("SaveButton", Strings.Save, SaveGesture,
-            () => ViewModel?.SaveCommand.CanExecute(null) == true, () => ViewModel?.SaveCommand.Execute(null)));
+            () => Active?.SaveCommand.CanExecute(null) == true, () => Active?.SaveCommand.Execute(null)));
         file.Items.Add(Command("SaveAs", Strings.SaveAs, SaveAsGesture,
-            () => ViewModel?.IsDocumentOpen == true, () => _ = SaveAsAsync()));
+            () => Active?.IsDocumentOpen == true, () => _ = SaveAsAsync()));
         file.Items.Add(new NativeMenuItemSeparator());
         file.Items.Add(Command("Password", Strings.SecurityToolbar, null,
-            () => ViewModel?.IsDocumentOpen == true, () => _ = ChangeSecurityAsync()));
+            () => Active?.IsDocumentOpen == true, () => _ = ChangeSecurityAsync()));
         file.Items.Add(Command("Shrink", Strings.SaveSmallerCopyForEmail, null,
-            () => ViewModel?.CanShrink == true, () => _ = ShrinkForEmailAsync()));
+            () => Active?.CanShrink == true, () => _ = ShrinkForEmailAsync()));
         file.Items.Add(new NativeMenuItemSeparator());
         file.Items.Add(Command("Print", Strings.Print, PrintGesture,
-            () => ViewModel?.PrintCommand.CanExecute(null) == true, () => ViewModel?.PrintCommand.Execute(null)));
+            () => Active?.PrintCommand.CanExecute(null) == true, () => Active?.PrintCommand.Execute(null)));
 
         var edit = new NativeMenu();
         // With the in-place editor focused, Undo and Redo mean the typing, not the document.
@@ -121,69 +156,69 @@ public partial class MainWindow
             if (FocusManager?.GetFocusedElement() is TextBox box)
                 box.Undo();
             else
-                ViewModel?.UndoCommand.Execute(null);
+                Active?.UndoCommand.Execute(null);
         }));
         edit.Items.Add(Command("RedoButton", Strings.Redo, RedoGesture, () => true, () =>
         {
             if (FocusManager?.GetFocusedElement() is TextBox box)
                 box.Redo();
             else
-                ViewModel?.RedoCommand.Execute(null);
+                Active?.RedoCommand.Execute(null);
         }));
         edit.Items.Add(new NativeMenuItemSeparator());
         edit.Items.Add(Command("Find", Strings.FindInDocument, FindGesture,
-            () => ViewModel?.IsDocumentOpen == true, OpenFind));
+            () => Active?.IsDocumentOpen == true, OpenFind));
 
         var tools = new NativeMenu();
-        tools.Items.Add(Command("SignButton", Strings.Sign, null, () => ViewModel?.CanSign == true, ShowSignFlyout));
+        tools.Items.Add(Command("SignButton", Strings.Sign, null, () => Active?.CanSign == true, ShowSignFlyout));
         tools.Items.Add(Toggle("AddTextButton", Strings.AddText,
-            () => ViewModel?.CanAddText == true, () => ViewModel?.IsAddingText == true,
-            () => ViewModel?.ToggleAddTextCommand.Execute(null)));
+            () => Active?.CanAddText == true, () => Active?.IsAddingText == true,
+            () => Active?.ToggleAddTextCommand.Execute(null)));
         tools.Items.Add(Toggle("WhiteoutButton", Strings.Cover,
-            () => ViewModel?.CanEditContent == true, () => ViewModel?.IsWhiteoutMode == true,
-            () => ViewModel?.ToggleWhiteoutCommand.Execute(null)));
+            () => Active?.CanEditContent == true, () => Active?.IsWhiteoutMode == true,
+            () => Active?.ToggleWhiteoutCommand.Execute(null)));
         // Redact next to Cover, because the pair is the point (#173): one covers, the
         // other removes.
         tools.Items.Add(Toggle("RedactButton", Strings.ToolbarRedact,
-            () => ViewModel?.CanEditContent == true, () => ViewModel?.IsRedactMode == true,
-            () => ViewModel?.ToggleRedactCommand.Execute(null)));
+            () => Active?.CanEditContent == true, () => Active?.IsRedactMode == true,
+            () => Active?.ToggleRedactCommand.Execute(null)));
         // Clearing marks is not a mode and not part of marking (#329): it sits after Redact
         // as a plain command, for a document that has been over-marked and wants to start
         // again. Disabled while there is nothing to drop.
         tools.Items.Add(Command("ClearMarksButton", Strings.ToolbarClearMarks, null,
-            () => ViewModel?.HasRedactionMarks == true,
-            () => ViewModel?.ClearRedactionMarksCommand.Execute(null)));
+            () => Active?.HasRedactionMarks == true,
+            () => Active?.ClearRedactionMarksCommand.Execute(null)));
         tools.Items.Add(new NativeMenuItemSeparator());
         tools.Items.Add(Submenu("FontBox", Strings.TextFontName, TextPickerEnabled,
-            ViewModel?.TextFontChoices.Cast<object>().ToList() ?? [],
+            Active?.TextFontChoices.Cast<object>().ToList() ?? [],
             choice => ((FontChoice)choice).Label,
-            choice => ViewModel?.TextFont == ((FontChoice)choice).PostScriptName,
-            choice => { if (ViewModel is { } vm) vm.SelectedTextFont = (FontChoice)choice; }));
+            choice => Active?.TextFont == ((FontChoice)choice).PostScriptName,
+            choice => { if (Active is { } vm) vm.SelectedTextFont = (FontChoice)choice; }));
         tools.Items.Add(Submenu("SizeBox", Strings.TextSizeName, TextPickerEnabled,
             SizeChoices,
             choice => ((double)choice).ToString(System.Globalization.CultureInfo.CurrentCulture),
-            choice => ViewModel is { } vm && Math.Abs(vm.TextSize - (double)choice) < 0.01,
-            choice => { if (ViewModel is { } vm) vm.TextSize = (double)choice; }));
+            choice => Active is { } vm && Math.Abs(vm.TextSize - (double)choice) < 0.01,
+            choice => { if (Active is { } vm) vm.TextSize = (double)choice; }));
         tools.Items.Add(new NativeMenuItemSeparator());
         tools.Items.Add(Command("Options", Strings.Options, OptionsGesture, () => true, ShowOptions));
 
         var view = new NativeMenu();
         view.Items.Add(Command("ZoomInButton", Strings.ZoomIn, ZoomInGesture,
-            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.ZoomInCommand.Execute(null)));
+            () => Active?.IsDocumentOpen == true, () => Active?.ZoomInCommand.Execute(null)));
         view.Items.Add(Command("ZoomOutButton", Strings.ZoomOut, ZoomOutGesture,
-            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.ZoomOutCommand.Execute(null)));
+            () => Active?.IsDocumentOpen == true, () => Active?.ZoomOutCommand.Execute(null)));
         view.Items.Add(new NativeMenuItemSeparator());
         view.Items.Add(Command("ActualSize", Strings.ActualSize, ActualSizeGesture,
-            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.ZoomResetCommand.Execute(null)));
+            () => Active?.IsDocumentOpen == true, () => Active?.ZoomResetCommand.Execute(null)));
         view.Items.Add(Command("FitWidth", Strings.FitWidth, null,
-            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.FitWidthCommand.Execute(null)));
+            () => Active?.IsDocumentOpen == true, () => Active?.FitWidthCommand.Execute(null)));
         view.Items.Add(Command("FitPage", Strings.FitPage, null,
-            () => ViewModel?.IsDocumentOpen == true, () => ViewModel?.FitPageCommand.Execute(null)));
-        var presets = Submenu("ZoomMenuButton", Strings.ZoomMenuName, () => ViewModel?.IsDocumentOpen == true,
-            MainViewModel.ZoomPresets.Cast<object>().ToList(),
+            () => Active?.IsDocumentOpen == true, () => Active?.FitPageCommand.Execute(null)));
+        var presets = Submenu("ZoomMenuButton", Strings.ZoomMenuName, () => Active?.IsDocumentOpen == true,
+            DocumentViewModel.ZoomPresets.Cast<object>().ToList(),
             choice => Strings.ZoomPercent((int)Math.Round((double)choice * 100)),
-            choice => ViewModel is { } vm && Math.Abs(vm.Zoom - (double)choice) < 0.005,
-            choice => ViewModel?.SetZoomCommand.Execute((double)choice));
+            choice => Active is { } vm && Math.Abs(vm.Zoom - (double)choice) < 0.005,
+            choice => Active?.SetZoomCommand.Execute((double)choice));
         _menuBarItems["ZoomPresets"] = presets;
         view.Items.Add(presets);
 
@@ -200,6 +235,15 @@ public partial class MainWindow
                 ? WindowState.Normal
                 : WindowState.Maximized;
         }));
+        window.Items.Add(new NativeMenuItemSeparator());
+        // The standard AppKit item names (#348) — enabled only with more than one tab,
+        // since with one there is nowhere to switch to.
+        window.Items.Add(Command("ShowNextTab", Strings.ShowNextTab, NextTabGesture,
+            () => ActiveMainWindow().Shell is { Documents.Count: > 1 },
+            () => ActiveMainWindow().Shell?.ActivateNextTab()));
+        window.Items.Add(Command("ShowPreviousTab", Strings.ShowPreviousTab, PreviousTabGesture,
+            () => ActiveMainWindow().Shell is { Documents.Count: > 1 },
+            () => ActiveMainWindow().Shell?.ActivatePreviousTab()));
 
         var help = new NativeMenu();
         help.Items.Add(Command("Notices", Strings.ThirdPartyNoticesEllipsis, null, () => true,
@@ -223,9 +267,9 @@ public partial class MainWindow
         RefreshMenuBar();
     }
 
-    private IReadOnlyList<object> SizeChoices => ViewModel?.TextSizes.Cast<object>().ToList() ?? [];
+    private IReadOnlyList<object> SizeChoices => Active?.TextSizes.Cast<object>().ToList() ?? [];
 
-    private bool TextPickerEnabled() => ViewModel is { IsTextStyleContext: true, CanAddText: true };
+    private bool TextPickerEnabled() => Active is { IsTextStyleContext: true, CanAddText: true };
 
     /// <summary>Brings every item's enabled and checked state up to date. Cheap; called on any view model change.</summary>
     private void RefreshMenuBar()

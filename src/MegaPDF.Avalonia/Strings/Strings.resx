@@ -948,6 +948,30 @@
     <value>Close</value>
     <comment>macOS File menu: closes the window (⌘W), and the button that dismisses the About window (#176)</comment>
   </data>
+  <data name="CloseTab" xml:space="preserve">
+    <value>Close Tab</value>
+    <comment>macOS/Linux File menu: closes the active tab (⌘W/Ctrl+W) — closes the window instead when it is the last tab (#348)</comment>
+  </data>
+  <data name="CloseWindow" xml:space="preserve">
+    <value>Close Window</value>
+    <comment>macOS File menu: closes the whole window regardless of how many tabs it has (⇧⌘W) (#348)</comment>
+  </data>
+  <data name="NewWindow" xml:space="preserve">
+    <value>New Window</value>
+    <comment>macOS/Linux File menu: opens another window (⌘N on macOS, Ctrl+Shift+N on Linux) (#348)</comment>
+  </data>
+  <data name="ShowNextTab" xml:space="preserve">
+    <value>Show Next Tab</value>
+    <comment>macOS Window menu: selects the tab to the right, wrapping (⌃Tab) (#348)</comment>
+  </data>
+  <data name="ShowPreviousTab" xml:space="preserve">
+    <value>Show Previous Tab</value>
+    <comment>macOS Window menu: selects the tab to the left, wrapping (⌃⇧Tab) (#348)</comment>
+  </data>
+  <data name="TabAccessibleName" xml:space="preserve">
+    <value>{0}, tab</value>
+    <comment>Narrator/VoiceOver name for a tab-strip item: the document's name, then what it is (#348)</comment>
+  </data>
   <data name="Minimize" xml:space="preserve">
     <value>Minimize</value>
     <comment>macOS Window menu: sends the window to the Dock (⌘M) (#176)</comment>

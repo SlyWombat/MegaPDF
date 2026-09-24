@@ -4,31 +4,40 @@
         xmlns:vm="using:MegaPDF.Avalonia.ViewModels"
         xmlns:views="using:MegaPDF.Avalonia.Views"
         x:Class="MegaPDF.Avalonia.Views.MainWindow"
-        x:DataType="vm:MainViewModel"
+        x:DataType="vm:ShellViewModel"
         Title="{Binding WindowTitle}"
         Width="1000" Height="800"
         MinWidth="480" MinHeight="360"
         WindowStartupLocation="CenterScreen">
 
   <!-- Width and Height above are only the fallback: the window is sized to the
-       screen's working area in code-behind (#143). -->
+       screen's working area in code-behind (#143).
+
+       #348: the window's DataContext is now a ShellViewModel (one per window, holding
+       every open tab), not a single document. Everything that used to bind straight to
+       "the" document now binds through {Binding Active.…} — Active is the tab the
+       TabStrip below has selected. A handful of things are genuinely window/shell-level
+       (WindowTitle above, the tab strip itself, the empty state, the recents list) and
+       bind directly, with no Active. prefix. -->
 
   <Window.Resources>
     <!-- Preferences that change what an edit does, kept out of the main flow
          because most people never touch them (SDD §4.4). Opened from More and from
-         the menu bar (#144). -->
+         the menu bar (#144). Per-document (each tab keeps its own FlattenOnSave and
+         mark style via the shared AppSettings instance), so every binding here reads
+         through Active. -->
       <Flyout x:Key="OptionsFlyout" Placement="BottomEdgeAlignedRight">
-        <StackPanel x:DataType="vm:MainViewModel" Width="260" Spacing="{DynamicResource SpaceM}">
+        <StackPanel x:DataType="vm:ShellViewModel" Width="260" Spacing="{DynamicResource SpaceM}">
           <TextBlock Text="{x:Static loc:Strings.TickMarksLookLike}" FontWeight="SemiBold" />
           <ComboBox HorizontalAlignment="Stretch"
-                    ItemsSource="{Binding MarkStyleChoices}" SelectedItem="{Binding SelectedMarkStyle}">
+                    ItemsSource="{Binding Active.MarkStyleChoices}" SelectedItem="{Binding Active.SelectedMarkStyle}">
             <ComboBox.ItemTemplate>
               <DataTemplate DataType="vm:MarkStyleChoice">
                 <TextBlock Text="{Binding Label}" />
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
-          <CheckBox IsChecked="{Binding FlattenOnSave}"
+          <CheckBox IsChecked="{Binding Active.FlattenOnSave}"
                     Content="{x:Static loc:Strings.FlattenWhenSaving}" />
           <TextBlock Text="{x:Static loc:Strings.FlattenExplanation}"
                      TextWrapping="Wrap" FontSize="{DynamicResource TypeCaption}" Opacity="0.75" />
@@ -70,7 +79,7 @@
           </Style>
         </StackPanel.Styles>
 
-        <Button Name="OpenButton" IsEnabled="{Binding IsIdle}">
+        <Button Name="OpenButton" IsEnabled="{Binding Active.IsIdle}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -78,7 +87,7 @@
             <TextBlock Classes="label" Text="{x:Static loc:Strings.Open}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button Name="SaveButton" Command="{Binding SaveCommand}">
+        <Button Name="SaveButton" Command="{Binding Active.SaveCommand}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconSave}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -90,7 +99,7 @@
 
         <!-- Sign: pick a stored signature, or draw a new one. Choosing one arms
              placement, and the next click on the page puts it there. -->
-        <Button Name="SignButton" IsEnabled="{Binding CanSign}">
+        <Button Name="SignButton" IsEnabled="{Binding Active.CanSign}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconSign}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -109,16 +118,16 @@
                 <TextBlock Text="{x:Static loc:Strings.SignaturesTitle}" FontWeight="SemiBold"
                            FontSize="{DynamicResource TypeBody}" />
 
-                <Border IsVisible="{Binding !HasSignatures}"
+                <Border IsVisible="{Binding !Active.HasSignatures}"
                         Background="{DynamicResource BrandAccentSubtle}" CornerRadius="8"
                         Padding="12">
                   <TextBlock Text="{x:Static loc:Strings.NoSignaturesYet}" TextWrapping="Wrap"
                              FontSize="{DynamicResource TypeBody}" />
                 </Border>
 
-                <ScrollViewer MaxHeight="300" IsVisible="{Binding HasSignatures}"
+                <ScrollViewer MaxHeight="300" IsVisible="{Binding Active.HasSignatures}"
                               HorizontalScrollBarVisibility="Disabled">
-                  <ItemsControl Name="SignatureList" ItemsSource="{Binding Signatures}">
+                  <ItemsControl Name="SignatureList" ItemsSource="{Binding Active.Signatures}">
                     <ItemsControl.ItemsPanel>
                       <ItemsPanelTemplate>
                         <StackPanel Spacing="{DynamicResource SpaceS}" />
@@ -232,8 +241,8 @@
           </Button.Flyout>
         </Button>
         <ToggleButton Name="AddTextButton"
-                      IsChecked="{Binding IsAddingText, Mode=OneWay}"
-                      Command="{Binding ToggleAddTextCommand}">
+                      IsChecked="{Binding Active.IsAddingText, Mode=OneWay}"
+                      Command="{Binding Active.ToggleAddTextCommand}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconText}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -242,8 +251,8 @@
           </StackPanel>
         </ToggleButton>
         <ToggleButton Name="WhiteoutButton"
-                      IsChecked="{Binding IsWhiteoutMode, Mode=OneWay}"
-                      Command="{Binding ToggleWhiteoutCommand}"
+                      IsChecked="{Binding Active.IsWhiteoutMode, Mode=OneWay}"
+                      Command="{Binding Active.ToggleWhiteoutCommand}"
                       ToolTip.Tip="{x:Static loc:Strings.WhiteoutCoversOnlyBody}"
                       AutomationProperties.HelpText="{x:Static loc:Strings.WhiteoutCoversOnlyBody}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
@@ -256,8 +265,8 @@
         <!-- Redact sits beside Cover, because the pair is the point (#173): one covers,
              the other removes, and each tooltip says which. -->
         <ToggleButton Name="RedactButton"
-                      IsChecked="{Binding IsRedactMode, Mode=OneWay}"
-                      Command="{Binding ToggleRedactCommand}"
+                      IsChecked="{Binding Active.IsRedactMode, Mode=OneWay}"
+                      Command="{Binding Active.ToggleRedactCommand}"
                       ToolTip.Tip="{x:Static loc:Strings.ToolbarRedactTip}"
                       AutomationProperties.Name="{x:Static loc:Strings.ToolbarRedact}"
                       AutomationProperties.HelpText="{x:Static loc:Strings.ToolbarRedactTip}">
@@ -274,18 +283,18 @@
              engine speaks: "Times", not "Times-Roman"; "Croix", not "Cross". -->
         <!-- ToolbarPicker is a ComboBox that leaves an unnamed template part out of the
              accessibility tree (Views/ToolbarPicker.cs). -->
-        <views:ToolbarPicker Name="FontBox" Width="120" ItemsSource="{Binding TextFontChoices}"
-                  SelectedItem="{Binding SelectedTextFont}" IsEnabled="{Binding CanAddText}">
+        <views:ToolbarPicker Name="FontBox" Width="120" ItemsSource="{Binding Active.TextFontChoices}"
+                  SelectedItem="{Binding Active.SelectedTextFont}" IsEnabled="{Binding Active.CanAddText}">
           <ComboBox.ItemTemplate>
             <DataTemplate DataType="vm:FontChoice">
               <TextBlock Text="{Binding Label}" />
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </views:ToolbarPicker>
-        <views:ToolbarPicker Name="SizeBox" Width="70" ItemsSource="{Binding TextSizes}"
-                  SelectedItem="{Binding TextSize}" IsEnabled="{Binding CanAddText}" />
+        <views:ToolbarPicker Name="SizeBox" Width="70" ItemsSource="{Binding Active.TextSizes}"
+                  SelectedItem="{Binding Active.TextSize}" IsEnabled="{Binding Active.CanAddText}" />
         <Rectangle Width="1" Margin="4,8" Fill="{DynamicResource SystemControlForegroundBaseLowBrush}" />
-        <Button Name="UndoButton" Command="{Binding UndoCommand}">
+        <Button Name="UndoButton" Command="{Binding Active.UndoCommand}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconUndo}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -293,7 +302,7 @@
             <TextBlock Classes="label" Text="{x:Static loc:Strings.Undo}" FontSize="{DynamicResource TypeCaption}" HorizontalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button Name="RedoButton" Command="{Binding RedoCommand}">
+        <Button Name="RedoButton" Command="{Binding Active.RedoCommand}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconRedo}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -305,15 +314,15 @@
 
         <!-- One zoom control (#144): −, the level with a menu of Actual size, the fits
              and preset levels, and +. Fixed width, so its measured width holds at any level. -->
-        <Button Name="ZoomOutButton" Command="{Binding ZoomOutCommand}">
+        <Button Name="ZoomOutButton" Command="{Binding Active.ZoomOutCommand}">
           <Path Data="{StaticResource IconZoomOut}" Width="18" Height="18"
                 Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                 StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
         </Button>
         <Button Name="ZoomMenuButton" Width="84" HorizontalContentAlignment="Center"
-                IsEnabled="{Binding IsDocumentOpen}">
+                IsEnabled="{Binding Active.IsDocumentOpen}">
           <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceXs}">
-            <TextBlock Text="{Binding ZoomPercentLabel}" VerticalAlignment="Center"
+            <TextBlock Text="{Binding Active.ZoomPercentLabel}" VerticalAlignment="Center"
                        FontSize="{DynamicResource TypeBody}" />
             <Path Data="{StaticResource IconChevronDown}" Width="10" Height="10" VerticalAlignment="Center"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
@@ -321,7 +330,7 @@
           </StackPanel>
           <!-- Its menu is built and opened on click: MainWindow.Toolbar.cs, OpenToolbarMenu. -->
         </Button>
-        <Button Name="ZoomInButton" Command="{Binding ZoomInCommand}">
+        <Button Name="ZoomInButton" Command="{Binding Active.ZoomInCommand}">
           <Path Data="{StaticResource IconZoomIn}" Width="18" Height="18"
                 Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
                 StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
@@ -337,33 +346,63 @@
       </StackPanel>
     </Border>
 
+    <!-- Tab strip (#348): one row of tabs, one per open document in this window. A
+         persistent host per tab — see the Panel of DocumentView-equivalent state
+         below — not a TabControl+DataTemplate, so switching tabs does not
+         re-instantiate anything; only which tab is Active changes, and everything
+         above and below re-reads Active's state. Hidden with zero or one tab open
+         would be the polished version; shown whenever there is at least one tab,
+         which is simplest and always correct. -->
+    <TabStrip Name="DocumentTabStrip" DockPanel.Dock="Top"
+              ItemsSource="{Binding Documents}"
+              SelectedItem="{Binding Active, Mode=TwoWay}"
+              IsVisible="{Binding HasDocuments}"
+              Background="{DynamicResource SystemControlBackgroundBaseLowBrush}"
+              BorderThickness="0,0,0,1"
+              BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
+      <TabStrip.ItemTemplate>
+        <DataTemplate DataType="vm:DocumentViewModel">
+          <Grid ColumnDefinitions="Auto,Auto" Margin="4,2"
+                AutomationProperties.Name="{Binding TabAccessibleNameText}">
+            <TextBlock Grid.Column="0" Text="{Binding TabTitle}" VerticalAlignment="Center"
+                       MaxWidth="200" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+            <Button Grid.Column="1" Classes="tab-close" Width="20" Height="20" Padding="0"
+                    CornerRadius="10" Background="Transparent" BorderThickness="0"
+                    Content="✕" Click="OnCloseTabClick"
+                    ToolTip.Tip="{x:Static loc:Strings.CloseTab}"
+                    AutomationProperties.Name="{x:Static loc:Strings.CloseTab}" />
+          </Grid>
+        </DataTemplate>
+      </TabStrip.ItemTemplate>
+    </TabStrip>
+
     <!-- Document-level work (#145): opening, saving, a password change, shrinking, print
          preparation, restoring and searching. Shown only 0.5 s into the work and kept at least
          0.3 s (BusyState), so quick work never flickers it. -->
-    <Border Name="BusyStrip" DockPanel.Dock="Top" Padding="8,6,8,0" IsVisible="{Binding Busy.ShowsStrip}"
+    <Border Name="BusyStrip" DockPanel.Dock="Top" Padding="8,6,8,0" IsVisible="{Binding Active.Busy.ShowsStrip}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
             Background="{DynamicResource BrandAccentSubtle}">
       <StackPanel Spacing="{DynamicResource SpaceXs}">
-        <TextBlock Name="BusyLabel" Text="{Binding Busy.Label}" FontSize="{DynamicResource TypeBody}"
+        <TextBlock Name="BusyLabel" Text="{Binding Active.Busy.Label}" FontSize="{DynamicResource TypeBody}"
                    AutomationProperties.LiveSetting="Polite" />
         <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" Margin="0,0,0,4"
-                     AutomationProperties.Name="{Binding Busy.Label}" />
+                     AutomationProperties.Name="{Binding Active.Busy.Label}" />
       </StackPanel>
     </Border>
 
     <!-- What the next click will do, and how to get out of it. -->
-    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsModeActive}"
+    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsModeActive}"
             Background="{DynamicResource BrandAccent}">
-      <TextBlock Text="{Binding ModeHint}" Foreground="{DynamicResource BrandAccentOn}" />
+      <TextBlock Text="{Binding Active.ModeHint}" Foreground="{DynamicResource BrandAccentOn}" />
     </Border>
 
     <!-- A restricted open says so and offers the owner password (#131, ADR-004 §3).
          Not dismissable: it describes the document for as long as it is open. -->
-    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsRestricted}"
+    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsRestricted}"
             Background="{DynamicResource BrandAccentSubtle}">
       <DockPanel>
-        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0" IsEnabled="{Binding IsIdle}"
+        <Button Name="UnlockButton" DockPanel.Dock="Right" Margin="12,0,0,0" IsEnabled="{Binding Active.IsIdle}"
                 Content="{x:Static loc:Strings.UnlockEllipsis}" />
         <TextBlock Text="{x:Static loc:Strings.RestrictedBanner}" VerticalAlignment="Center"
                    TextWrapping="Wrap" />
@@ -385,12 +424,12 @@
          Each of the two buttons carries both its word and its glyph and shows one of
          them; the accessible name and the tooltip are the word either way
          (WireFindBar), so nothing is lost to a screen reader at the narrow step. -->
-    <Border Name="FindBarHost" DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding IsFindOpen}"
+    <Border Name="FindBarHost" DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsFindOpen}"
             BorderThickness="0,0,0,1"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <StackPanel Name="FindBarItems" Orientation="Horizontal" Spacing="{DynamicResource SpaceS}">
         <TextBox Name="FindBox" Width="260" Watermark="{x:Static loc:Strings.FindInDocument}" />
-        <Button Name="FindPreviousButton" Command="{Binding FindPreviousCommand}">
+        <Button Name="FindPreviousButton" Command="{Binding Active.FindPreviousCommand}">
           <Panel>
             <TextBlock Name="FindPreviousLabel" Text="{x:Static loc:Strings.Previous}" />
             <Path Name="FindPreviousGlyph" IsVisible="False"
@@ -399,7 +438,7 @@
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
           </Panel>
         </Button>
-        <Button Name="FindNextButton" Command="{Binding FindNextCommand}">
+        <Button Name="FindNextButton" Command="{Binding Active.FindNextCommand}">
           <Panel>
             <TextBlock Name="FindNextLabel" Text="{x:Static loc:Strings.Next}" />
             <Path Name="FindNextGlyph" IsVisible="False"
@@ -408,7 +447,7 @@
                   StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" />
           </Panel>
         </Button>
-        <TextBlock Name="FindMatchSummary" Text="{Binding MatchSummary}" VerticalAlignment="Center"
+        <TextBlock Name="FindMatchSummary" Text="{Binding Active.MatchSummary}" VerticalAlignment="Center"
                    Opacity="0.8" TextTrimming="CharacterEllipsis" />
         <Button Name="CloseFindButton" Content="{x:Static loc:Strings.Done}" />
       </StackPanel>
@@ -419,15 +458,16 @@
     <Border Name="StatusBarHost" DockPanel.Dock="Bottom" Padding="8,8" BorderThickness="0,1,0,0"
             BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Right" Text="{Binding PageIndicator}"
+        <TextBlock DockPanel.Dock="Right" Text="{Binding Active.PageIndicator}"
                    VerticalAlignment="Center" Opacity="0.75" Margin="12,0,0,0" />
-        <TextBlock Text="{Binding Status}" VerticalAlignment="Center"
+        <TextBlock Text="{Binding Active.Status}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
       </DockPanel>
     </Border>
 
-    <!-- Empty state (SDD §2.2): an app with nothing open should offer the two
-         things you might want, not an empty grey rectangle. -->
+    <!-- Empty state (SDD §2.2): a window with no tabs open should offer the two
+         things you might want, not an empty grey rectangle. #348: this is now
+         Shell.ShowEmptyState ("no tabs"), not any one document's. -->
     <Panel>
       <!-- AllowAutoHide off (#143): the auto-hiding bars stayed invisible until you
            scrolled, so a page taller than the window gave no sign there was more
@@ -437,7 +477,7 @@
                   VerticalScrollBarVisibility="Auto"
                   AllowAutoHide="False"
                   Background="{DynamicResource SystemControlBackgroundBaseLowBrush}">
-      <ItemsControl Name="PageList" ItemsSource="{Binding Pages}" Margin="0,16">
+      <ItemsControl Name="PageList" ItemsSource="{Binding Active.Pages}" Margin="0,16">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
             <!-- Virtualizing: only realised pages hold a raster, which is what keeps a
