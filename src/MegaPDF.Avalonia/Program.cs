@@ -34,7 +34,34 @@ internal static class Program
              : args.Contains("--print-check") ? PrintCheck(args)
              : args.Contains("--language-check") ? LanguageCheck()
              : args.Contains("--install-kind") ? InstallKind()
-             : BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+             : RunDesktopApp(args);
+    }
+
+    /// <summary>
+    /// What every other launch (a person double-clicking a file, an ordinary
+    /// `megapdf`, the capture rigs, `--brand-check`) reaches: the Linux
+    /// single-instance handshake (#348 phase 2 Part B), then the real app.
+    ///
+    /// Linux only, and skipped outright for any diagnostic/automation argument —
+    /// <see cref="App.IsAutomationArgument"/>'s list, the same one App.axaml.cs
+    /// itself uses to decide whether a launch is a rig rather than a person. This is
+    /// load-bearing: a capture run, a CI job or `--self-test` must never be
+    /// redirected into a running instance's window — each needs its own process,
+    /// every time, or the thing it is meant to check would not even be the process
+    /// it just started.
+    /// </summary>
+    private static int RunDesktopApp(string[] args)
+    {
+        if (OperatingSystem.IsLinux() && !args.Any(App.IsAutomationArgument))
+        {
+            var pdfPaths = args
+                .Where(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a))
+                .Select(a => { try { return Path.GetFullPath(a); } catch (Exception) { return a; } })
+                .ToList();
+            if (Platform.SingleInstance.TryRedirectOrBecomePrimary(pdfPaths))
+                return 0;
+        }
+        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
     /// <summary>
@@ -1524,6 +1551,43 @@ internal static class Program
             failures++;
         }
 
+        // --- Several files handed over at once (#348 phase 2) ---
+        //
+        // What a multi-select Finder "Open" or "Open With" delivers through a single
+        // Activated call, and what the Linux single-instance socket delivers from one
+        // connection: more than one path, routed through window.OpenFromSystem for
+        // each, with nothing awaited in between. CheckTabs above only ever opens one
+        // document at a time, so it could not see the race this catches.
+        Console.WriteLine("several files handed over at once (#348 phase 2):");
+        try
+        {
+            CheckMultiFileOpen(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::multi-file open: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        // --- Linux single-instance socket (#348 phase 2) ---
+        //
+        // The routing half only — Platform.SingleInstance.RoutePaths, exercised the
+        // way App.axaml.cs wires it, without a second real OS process: this machine
+        // may not even be Linux (the self-test runs on every platform), and the
+        // socket mechanics themselves (bind, listen, connect, the newline protocol)
+        // are exercised for real by tools/linux/check-single-instance.sh, which does
+        // launch a second process.
+        Console.WriteLine("Linux single-instance routing (#348 phase 2):");
+        try
+        {
+            CheckSingleInstanceRouting(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::single-instance routing: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Switching tabs mid-gesture (#348 §2b/§4) ---
         //
         // The pages area, find bar and in-place editor are one shared control set
@@ -2710,6 +2774,157 @@ internal static class Program
         check("closing the last tab closes the window", !window.IsVisible);
 
         static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Several files, handed over at once with nothing awaited in between (#348 phase
+    /// 2 Part A) — what a multi-select Finder "Open"/"Open With" delivers through one
+    /// <c>Activated</c> call once the launch sequence has already settled, and what a
+    /// burst from the Linux single-instance socket looks like from the window's side.
+    ///
+    /// Before this phase, each file's open ran through a single shared "pending file"
+    /// slot before the storage handle was adopted onto its tab: a second file's
+    /// assignment silently overwrote the first's before the first tab's open had even
+    /// finished, so the first tab ended up with no file at all for Save to write
+    /// through — not the wrong file, no file. <see cref="Views.MainWindow.HasFileHandleForTest"/>
+    /// is what <see cref="CheckTabs"/> could not see: it drives the toolbar's Save
+    /// state, not the file underneath it, so this is the only check that would have
+    /// caught the regression.
+    /// </summary>
+    private static void CheckMultiFileOpen(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        PumpUntil(() => window.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(5));
+
+        // Fired back to back, nothing awaited or pumped in between — the same shape a
+        // foreach over Activated's Files produces once _launchSettled is already true,
+        // where each file's open runs as its own un-awaited task (OpenWhenReady).
+        window.OpenFromSystem(fixtureA);
+        window.OpenFromSystem(fixtureB);
+        PumpUntil(() => shell.Documents.Count == 2 && shell.Documents.All(d => d.IsDocumentOpen),
+                  TimeSpan.FromSeconds(5));
+
+        check("both files opened, as two tabs",
+              shell.Documents.Count == 2 && shell.Documents.All(d => d.IsDocumentOpen));
+
+        var tabA = shell.Documents.FirstOrDefault(d => SamePath(d.DocumentPath, fixtureA));
+        var tabB = shell.Documents.FirstOrDefault(d => SamePath(d.DocumentPath, fixtureB));
+        check("  each tab has the document it was opened with", tabA is not null && tabB is not null);
+
+        if (tabA is not null && tabB is not null)
+        {
+            check("the first file handed over still has its own file handle for Save (#348 phase 2)",
+                  window.HasFileHandleForTest(tabA));
+            check("  and so does the second", window.HasFileHandleForTest(tabB));
+        }
+
+        window.SkipCloseConfirmation();
+        window.Close();
+    }
+
+    /// <summary>
+    /// The routing half of the Linux single-instance socket (#348 phase 2 Part B),
+    /// exercised the way App.axaml.cs wires it up, without a real second process or a
+    /// real socket: this self-test runs on every platform the app ships on, most of
+    /// which are not Linux. The socket's own mechanics — bind, listen, accept, the
+    /// newline protocol, unlinking a stale file — are exercised for real, on Linux, by
+    /// <c>tools/linux/check-single-instance.sh</c>, which does launch a second process.
+    /// </summary>
+    private static void CheckSingleInstanceRouting(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        PumpUntil(() => window.LaunchSequence.IsCompleted, TimeSpan.FromSeconds(5));
+
+        Platform.SingleInstance.ResetForTest();
+        try
+        {
+            // A connection that arrives before App.axaml.cs has wired RoutePaths up —
+            // the narrow window right at process startup — is buffered rather than
+            // dropped: delivered here with nothing listening yet, and with the
+            // dispatcher not yet marked running either.
+            Platform.SingleInstance.DeliverForTest([fixtureA]);
+            PumpFor(TimeSpan.FromMilliseconds(100));
+            check("a path delivered before RoutePaths is wired up does not open (still buffered)",
+                  shell.Documents.Count == 0);
+
+            // Wiring RoutePaths up — what App.axaml.cs does once the window exists —
+            // is the exact callback it registers: the empty-message case activates
+            // the window, everything else goes through App.RouteExternalPaths. Still
+            // buffered even now: MarkDispatcherRunning has not been called yet, the
+            // same real gap between "RoutePaths is set" and "the posted
+            // MarkDispatcherRunning job has actually run" App.axaml.cs has (#348
+            // phase 2 — a background thread's Dispatcher.UIThread.Post before the
+            // dispatcher's main loop was confirmed running crashed the process for
+            // real; see SingleInstance.MarkDispatcherRunning's own doc).
+            Platform.SingleInstance.RoutePaths = paths =>
+            {
+                if (paths.Count == 0)
+                    window.Activate();
+                else
+                    App.RouteExternalPaths(window, paths);
+            };
+            PumpFor(TimeSpan.FromMilliseconds(100));
+            check("still buffered with RoutePaths set but the dispatcher not yet confirmed running",
+                  shell.Documents.Count == 0);
+
+            // What the UI-thread-posted job in App.axaml.cs running for the first
+            // time proves: the dispatcher loop is genuinely pumping. Only past this
+            // point does Deliver ever call Dispatcher.UIThread.Post for real.
+            Platform.SingleInstance.MarkDispatcherRunning();
+            PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+            check("the buffered path is delivered the moment the dispatcher is confirmed running",
+                  shell.Documents.Count == 1 && SamePath(shell.Documents[0].DocumentPath, fixtureA));
+
+            // A second "connection" with a different file, now that routing is live:
+            // its own tab, not a replacement of the first — the same rule the Linux
+            // socket, Finder and the command line all share.
+            Platform.SingleInstance.DeliverForTest([fixtureB]);
+            PumpUntil(() => shell.Documents.Count == 2, TimeSpan.FromSeconds(5));
+            check("a path delivered once routing is live opens as its own tab, not replacing the first",
+                  shell.Documents.Count == 2
+                  && shell.Documents.Any(d => SamePath(d.DocumentPath, fixtureA))
+                  && shell.Documents.Any(d => SamePath(d.DocumentPath, fixtureB)));
+
+            // A path already open activates its tab instead of duplicating it — the
+            // same find-or-activate rule OpenFromSystem enforces, now reached through
+            // the socket's own delivery path.
+            shell.ActivateTab(shell.Documents.First(d => SamePath(d.DocumentPath, fixtureA)));
+            var countBeforeReopen = shell.Documents.Count;
+            Platform.SingleInstance.DeliverForTest([fixtureB]);
+            PumpUntil(() => SamePath(shell.Active?.DocumentPath, fixtureB), TimeSpan.FromSeconds(5));
+            check("a path already open activates its tab instead of duplicating it",
+                  shell.Documents.Count == countBeforeReopen && SamePath(shell.Active?.DocumentPath, fixtureB));
+
+            // A bare relaunch with no file (`megapdf` a second time, nothing selected):
+            // bring the window to front, open nothing new.
+            var countBeforeEmpty = shell.Documents.Count;
+            Platform.SingleInstance.DeliverForTest([]);
+            PumpFor(TimeSpan.FromMilliseconds(100));
+            check("an empty message (a bare relaunch with no file) opens nothing new",
+                  shell.Documents.Count == countBeforeEmpty);
+        }
+        finally
+        {
+            Platform.SingleInstance.ResetForTest();
+            window.SkipCloseConfirmation();
+            window.Close();
+        }
     }
 
     /// <summary>
