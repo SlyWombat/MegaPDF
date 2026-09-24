@@ -5471,8 +5471,29 @@ size_t test_structure_golden(const std::string& name, const std::string& path, i
             check(in.good(), "structure " + name + ": golden file exists", expected_path);
             if (in.good()) {
                 const std::string expected((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-                check(expected == dump, "structure " + name + ": matches its golden block dump exactly",
-                      expected_path);
+                const bool matches = expected == dump;
+                check(matches, "structure " + name + ": matches its golden block dump exactly", expected_path);
+                // #353/#359: on a mismatch, show what actually differs — the pass/fail line alone
+                // does not say whether this is a real structural difference or a formatting/precision
+                // one, and that distinction is the whole point of the check.
+                if (!matches) {
+                    std::vector<std::string> exp_lines, got_lines;
+                    std::istringstream es(expected), gs(dump);
+                    for (std::string l; std::getline(es, l);) exp_lines.push_back(l);
+                    for (std::string l; std::getline(gs, l);) got_lines.push_back(l);
+                    const size_t total = std::max(exp_lines.size(), got_lines.size());
+                    size_t shown = 0;
+                    for (size_t li = 0; li < total && shown < 8; li++) {
+                        const std::string e = li < exp_lines.size() ? exp_lines[li] : "<no such line>";
+                        const std::string g = li < got_lines.size() ? got_lines[li] : "<no such line>";
+                        if (e == g) continue;
+                        std::fprintf(stderr, "  structure %s line %zu:\n    golden: %s\n    actual: %s\n",
+                                     name.c_str(), li, e.c_str(), g.c_str());
+                        shown++;
+                    }
+                    std::fprintf(stderr, "  structure %s: %zu golden lines, %zu actual lines (%zu differing line(s) shown)\n",
+                                 name.c_str(), exp_lines.size(), got_lines.size(), shown);
+                }
             }
         }
         megapdf_structure_free(s);
