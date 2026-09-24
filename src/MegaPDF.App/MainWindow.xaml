@@ -204,8 +204,8 @@
                 </AppBarButton>
                 <AppBarSeparator />
                 <!-- Tab/window commands (#348 phase 1). -->
-                <AppBarButton x:Name="CloseTabButton" x:Uid="CloseTabMenuItem" Click="OnCloseTabClicked" IsEnabled="{x:Bind Shell.HasDocuments, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+W" AutomationProperties.AutomationId="CloseTabButton" />
-                <AppBarButton x:Name="NewWindowButton" x:Uid="NewWindowMenuItem" Click="OnNewWindowClicked" KeyboardAcceleratorTextOverride="Ctrl+Shift+N" AutomationProperties.AutomationId="NewWindowButton" />
+                <AppBarButton x:Name="CloseTabButton" Click="OnCloseTabClicked" IsEnabled="{x:Bind Shell.HasDocuments, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+W" AutomationProperties.AutomationId="CloseTabButton" />
+                <AppBarButton x:Name="NewWindowButton" Click="OnNewWindowClicked" KeyboardAcceleratorTextOverride="Ctrl+Shift+N" AutomationProperties.AutomationId="NewWindowButton" />
                 <AppBarSeparator />
                 <AppBarButton x:Name="SettingsButton" Click="OnSettingsClicked" AutomationProperties.AutomationId="SettingsButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE713;" /></AppBarButton.Icon>

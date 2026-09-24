@@ -85,8 +85,8 @@ public sealed partial class MainWindow
         SetLabels(FindButton, Strings.ToolbarFind, Strings.ToolbarFindTip);
         SetLabels(ClearMarksButton, Strings.ToolbarClearMarks, Strings.ToolbarClearMarksTip);
         SetLabels(SettingsButton, Strings.ToolbarSettings, Strings.ToolbarSettings);
-        CloseTabButton.Label = Strings.CloseTab;
-        NewWindowButton.Label = Strings.NewWindow;
+        SetLabels(CloseTabButton, Strings.CloseTab, Strings.CloseTab);
+        SetLabels(NewWindowButton, Strings.NewWindow, Strings.NewWindow);
 
         InitializeTextPickers();
         InitializeAccelerators();
