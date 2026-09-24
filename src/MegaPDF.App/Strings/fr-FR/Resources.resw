@@ -969,4 +969,26 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   <data name="CloseMoreOptions" xml:space="preserve">
     <value>Fermer les options supplémentaires</value>
   </data>
+
+  <!-- ===== Tabs (#348) ===== -->
+  <data name="CloseTab" xml:space="preserve">
+    <value>Fermer l'onglet</value>
+    <comment>#348 — new French, for francophone review</comment>
+  </data>
+  <data name="CloseWindow" xml:space="preserve">
+    <value>Fermer la fenêtre</value>
+    <comment>#348 — new French, for francophone review</comment>
+  </data>
+  <data name="NewWindow" xml:space="preserve">
+    <value>Nouvelle fenêtre</value>
+    <comment>#348 — new French, for francophone review</comment>
+  </data>
+  <data name="TabAccessibleName" xml:space="preserve">
+    <value>{0}, onglet</value>
+    <comment>#348 — new French, for francophone review</comment>
+  </data>
+  <data name="TabAccessibleNameUnsaved" xml:space="preserve">
+    <value>{0}, modifications non enregistrées, onglet</value>
+    <comment>#348 — new French, for francophone review</comment>
+  </data>
 </root>
