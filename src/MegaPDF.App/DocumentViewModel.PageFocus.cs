@@ -21,7 +21,7 @@ namespace MegaPDF.App;
 /// reachable with Tab alone. Focus arriving on the page does wrap, so it always
 /// finds something when there is anything to find.
 /// </summary>
-public partial class MainViewModel
+public partial class DocumentViewModel
 {
     /// <summary>
     /// Where keyboard focus is on the page: which page, and which of its regions in
@@ -212,7 +212,7 @@ public partial class MainViewModel
 
     /// <summary>The walk's view of every page's regions, in reading order. Safe off the UI thread.</summary>
     private sealed class KeyboardMaps(
-        MainViewModel owner, IPdfDocument doc, IReadOnlyList<InteractiveRegion>?[] rendered,
+        DocumentViewModel owner, IPdfDocument doc, IReadOnlyList<InteractiveRegion>?[] rendered,
         DocumentCapabilities capabilities, int generation)
     {
         private readonly Dictionary<int, IReadOnlyList<(PdfRect Bounds, PageHitKind Kind)>> _ordered = [];

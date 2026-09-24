@@ -260,7 +260,7 @@ internal static class Screenshot
 
         // Awaited, not fire-and-forget: ZoomIn is async, so Execute in a loop
         // races its own CanExecute and stops short of maximum by a step or two.
-        while (vm.ZoomPercent < MainViewModel.MaxZoom)
+        while (vm.ZoomPercent < DocumentViewModel.MaxZoom)
         {
             await vm.ZoomInCommand.ExecuteAsync(null);
         }

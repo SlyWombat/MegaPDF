@@ -103,7 +103,20 @@ public sealed record RecentDocument(string Name, string Path, string Location, b
     public string LocationLine => IsMissing ? $"{Strings.RecentNotFound} · {Location}" : Location;
 }
 
-public partial class MainViewModel(Window window) : ObservableObject
+/// <param name="window">
+/// The window hosting this document — dialogs need its <c>XamlRoot</c>, pickers its hwnd.
+/// One per document for phase 1 (#348); tear-out (a later phase) will need this to become
+/// a <c>Func&lt;Window&gt;</c> so a torn-out tab can follow its document to a new window.
+/// </param>
+/// <param name="settings">
+/// Shared with every other document in the process (#348 §6.3): each used to construct its
+/// own <see cref="AppSettings"/>, and whichever saved last silently overwrote every setting
+/// the others had changed. Now there is exactly one instance per process, owned by
+/// <see cref="App"/> and handed down through <see cref="ShellViewModel"/>.
+/// </param>
+/// <param name="recentFiles">Shared for the same reason as <paramref name="settings"/> — one <see cref="RecentFiles"/> list, not one per document.</param>
+/// <param name="signatureLibrary">Shared for the same reason — a signature added in one tab must appear in every other tab's flyout.</param>
+public partial class DocumentViewModel(Window window, AppSettings settings, RecentFiles recentFiles, SignatureLibrary signatureLibrary) : ObservableObject
 {
     private static readonly IPdfEngine Engine = new PdfiumEngine();
 
@@ -112,10 +125,6 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <summary>Pages already asked about in this document (#139): the warning comes once per page.</summary>
     private readonly PageRegenerationWarnings _pageWarnings = new();
     private readonly RecoveryJournal _journal = new();
-    // Missing files stay on the list and are shown as unavailable (#165), rather than
-    // disappearing as though the app had lost them.
-    private readonly RecentFiles _recentFiles = new(path: null, pruneMissing: false);
-    private readonly AppSettings _settings = new();
 
     // --- Busy state (#145) ---
 
@@ -217,37 +226,37 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public CheckMarkStyle MarkStyle
     {
-        get => _settings.MarkStyle;
-        set => _settings.MarkStyle = value;
+        get => settings.MarkStyle;
+        set => settings.MarkStyle = value;
     }
 
     public string ThemeSetting
     {
-        get => _settings.Theme;
-        set => _settings.Theme = value;
+        get => settings.Theme;
+        set => settings.Theme = value;
     }
 
     /// <summary>"" follows Windows; otherwise a BCP-47 tag such as "fr-CA". Applied at startup by App.</summary>
     public string LanguageSetting
     {
-        get => _settings.Language;
-        set => _settings.Language = value;
+        get => settings.Language;
+        set => settings.Language = value;
     }
 
     public bool ReopenLastFile
     {
-        get => _settings.ReopenLastFile;
-        set => _settings.ReopenLastFile = value;
+        get => settings.ReopenLastFile;
+        set => settings.ReopenLastFile = value;
     }
 
     public bool FlattenOnSave
     {
-        get => _settings.FlattenOnSave;
-        set => _settings.FlattenOnSave = value;
+        get => settings.FlattenOnSave;
+        set => settings.FlattenOnSave = value;
     }
 
     /// <summary>For "Reopen last file": the newest one still on disk (#165 keeps missing ones listed).</summary>
-    public string? MostRecentDocument => _recentFiles.All.FirstOrDefault(File.Exists);
+    public string? MostRecentDocument => recentFiles.All.FirstOrDefault(File.Exists);
 
     // --- Per-document view state (SDD §3.4: restore last scroll position) ---
 
@@ -260,7 +269,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     public void SaveViewState()
     {
         if (DocumentPath is { } path)
-            _recentFiles.UpdateViewState(path, CurrentScrollOffset, ZoomPercent);
+            recentFiles.UpdateViewState(path, CurrentScrollOffset, ZoomPercent);
     }
 
     /// <summary>First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — shows once, ever.</summary>
@@ -269,14 +278,14 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public void MaybeShowDefaultAppCard()
     {
-        if (_settings.DefaultAppCardShown)
+        if (settings.DefaultAppCardShown)
             return;
         IsDefaultAppCardOpen = true;
     }
 
     public void DismissDefaultAppCard()
     {
-        _settings.DefaultAppCardShown = true;
+        settings.DefaultAppCardShown = true;
         IsDefaultAppCardOpen = false;
     }
     private IPdfDocument? _document;
@@ -297,7 +306,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     {
         RecentDocuments.Clear();
         var named = ShellFolderNames.Get();
-        var paths = _recentFiles.All;
+        var paths = recentFiles.All;
         var segments = paths.Select(p => RecentLocation.Segments(p, named)).ToList();
 
         foreach (var (path, index) in paths.Select((p, i) => (p, i)))
@@ -319,7 +328,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     /// <summary>"Remove from Recent", and what a row whose file has gone offers.</summary>
     public void RemoveFromRecent(string path)
     {
-        _recentFiles.Remove(path);
+        recentFiles.Remove(path);
         LoadRecentDocuments();
         OnPropertyChanged(nameof(RecentDocumentsVisibility));
     }
@@ -520,7 +529,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
         }
 
-        var rememberedView = _recentFiles.FindEntry(path);
+        var rememberedView = recentFiles.FindEntry(path);
         _document?.Dispose();
         _cappedRenders.Clear();
         _document = doc;
@@ -554,7 +563,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         // Not journaled when opened with a password: its text must not reach disk
         // unencrypted (#135). The notice above says so (ADR-004 §7).
         _journal.BeginSession(path, contentIsProtected: openedWithPassword);
-        _recentFiles.Add(path);
+        recentFiles.Add(path);
         _ = JumpListRecents.RecordAsync(path); // the taskbar's Recent list (#165)
         if (rememberedView is not null)
             ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
@@ -1119,8 +1128,6 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     // --- Signature library & placement (SDD §3.3) ---
 
-    private readonly SignatureLibrary _signatureLibrary = new();
-
     public ObservableCollection<SignatureItem> Signatures { get; } = [];
 
     [ObservableProperty]
@@ -1374,7 +1381,7 @@ public partial class MainViewModel(Window window) : ObservableObject
     public void LoadSignatures()
     {
         Signatures.Clear();
-        foreach (var entry in _signatureLibrary.All)
+        foreach (var entry in signatureLibrary.All)
             Signatures.Add(ToItem(entry));
         Signatures.CollectionChanged -= OnSignaturesChanged;
         Signatures.CollectionChanged += OnSignaturesChanged;
@@ -1399,7 +1406,7 @@ public partial class MainViewModel(Window window) : ObservableObject
             return;
         try
         {
-            _signatureLibrary.Rename(item.Id, newName);
+            signatureLibrary.Rename(item.Id, newName);
             var index = Signatures.IndexOf(item);
             if (index >= 0)
                 Signatures[index] = item with { Name = newName };
@@ -1420,7 +1427,7 @@ public partial class MainViewModel(Window window) : ObservableObject
         try
         {
             var png = await SignatureImageProcessor.EncodePngAsync(image);
-            var entry = _signatureLibrary.Add(name, png);
+            var entry = signatureLibrary.Add(name, png);
             Signatures.Add(ToItem(entry));
         }
         catch (Exception ex)
@@ -1431,7 +1438,7 @@ public partial class MainViewModel(Window window) : ObservableObject
 
     public void RemoveSignatureFromLibrary(SignatureItem item)
     {
-        _signatureLibrary.Remove(item.Id);
+        signatureLibrary.Remove(item.Id);
         Signatures.Remove(item);
     }
 
