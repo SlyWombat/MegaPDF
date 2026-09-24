@@ -311,7 +311,7 @@ public sealed partial class MainWindow
 
         var open = ViewModel.IsDocumentOpen;
         ActualSizeItem.IsEnabled = FitWidthItem.IsEnabled = FitPageItem.IsEnabled = open;
-        foreach (var preset in MainViewModel.ZoomPresets)
+        foreach (var preset in DocumentViewModel.ZoomPresets)
         {
             var item = new RadioMenuFlyoutItem
             {

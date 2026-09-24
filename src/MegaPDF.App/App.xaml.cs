@@ -1,3 +1,4 @@
+using MegaPDF.Core.Services;
 using Microsoft.UI.Xaml;
 
 namespace MegaPDF.App;
@@ -5,6 +6,18 @@ namespace MegaPDF.App;
 public partial class App : Application
 {
     private Window? _window;
+
+    // One instance of each for the whole process (#348 §6.3): every ShellViewModel this
+    // process creates — one per MainWindow, including a future "New Window" — is handed
+    // these same three, never a copy of its own. Two independent AppSettings/RecentFiles
+    // instances used to overwrite each other's writes silently; sharing them is what makes
+    // more than one window (and, later, more than one tab) safe.
+    internal AppSettings Settings { get; } = new();
+
+    // Missing files stay on the list and are shown as unavailable (#165), rather than
+    // disappearing as though the app had lost them.
+    internal RecentFiles RecentFiles { get; } = new(path: null, pruneMissing: false);
+    internal SignatureLibrary SignatureLibrary { get; } = new();
 
     public App()
     {
@@ -27,7 +40,7 @@ public partial class App : Application
         // --language fr-CA, or the Language setting, before any XAML is loaded:
         // x:Uid resolution happens as each element is created, so an override set
         // any later leaves the first window in the previous language (#91).
-        AppLanguage.ApplyOverride(Screenshot.ArgumentAfter("--language") ?? new MegaPDF.Core.Services.AppSettings().Language);
+        AppLanguage.ApplyOverride(Screenshot.ArgumentAfter("--language") ?? Settings.Language);
 
         InitializeComponent();
     }

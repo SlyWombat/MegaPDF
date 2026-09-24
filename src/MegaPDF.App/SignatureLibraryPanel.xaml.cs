@@ -11,7 +11,7 @@ namespace MegaPDF.App;
 public sealed partial class SignatureLibraryPanel : UserControl
 {
     public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
-        nameof(ViewModel), typeof(MainViewModel), typeof(SignatureLibraryPanel), new PropertyMetadata(null));
+        nameof(ViewModel), typeof(DocumentViewModel), typeof(SignatureLibraryPanel), new PropertyMetadata(null));
 
     public SignatureLibraryPanel()
     {
@@ -28,9 +28,9 @@ public sealed partial class SignatureLibraryPanel : UserControl
         };
     }
 
-    public MainViewModel? ViewModel
+    public DocumentViewModel? ViewModel
     {
-        get => (MainViewModel?)GetValue(ViewModelProperty);
+        get => (DocumentViewModel?)GetValue(ViewModelProperty);
         set => SetValue(ViewModelProperty, value);
     }
 

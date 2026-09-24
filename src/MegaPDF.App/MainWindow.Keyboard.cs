@@ -35,7 +35,7 @@ public sealed partial class MainWindow
     {
         ViewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(MainViewModel.PageFocus))
+            if (e.PropertyName is nameof(DocumentViewModel.PageFocus))
                 UpdateFocusRing();
         };
         ViewModel.Pages.CollectionChanged += OnPagesChangedForFocus;
@@ -229,14 +229,14 @@ public sealed partial class MainWindow
             return;
         }
         var forward = _pagesFocusDirection != FocusNavigationDirection.Previous;
-        if (await MovePageFocusAsync(forward) == MainViewModel.FocusMove.NothingToFocus)
+        if (await MovePageFocusAsync(forward) == DocumentViewModel.FocusMove.NothingToFocus)
             Announce(Strings.NothingKeyboardEditable);
     }
 
     /// <summary>Tab or Shift+Tab on the page; past either end, focus moves on to the next control.</summary>
     private async Task StepPageFocusAsync(bool forward)
     {
-        if (await MovePageFocusAsync(forward) == MainViewModel.FocusMove.Moved)
+        if (await MovePageFocusAsync(forward) == DocumentViewModel.FocusMove.Moved)
             return;
 
         ViewModel.ClearPageFocus();
@@ -245,7 +245,7 @@ public sealed partial class MainWindow
             OpenButton.Focus(FocusState.Keyboard);
     }
 
-    private async Task<MainViewModel.FocusMove> MovePageFocusAsync(bool forward)
+    private async Task<DocumentViewModel.FocusMove> MovePageFocusAsync(bool forward)
     {
         // Moving on lets go of a selected signature, keeping a nudge that has not
         // been committed yet — it would otherwise be dropped with the selection.
@@ -257,7 +257,7 @@ public sealed partial class MainWindow
         }
 
         var result = await ViewModel.MovePageFocusAsync(forward);
-        if (result == MainViewModel.FocusMove.Moved && ViewModel.PageFocus is { } focus)
+        if (result == DocumentViewModel.FocusMove.Moved && ViewModel.PageFocus is { } focus)
         {
             ScrollMatchIntoView(ViewModel.ContentTargetFor(focus.PageIndex, [focus.Bounds]));
             Announce(focus.AccessibleName);

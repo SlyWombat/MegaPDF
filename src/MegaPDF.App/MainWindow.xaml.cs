@@ -17,14 +17,27 @@ public sealed partial class MainWindow : Window
     private TextBox? _activeEditor;
     private Func<Task>? _activeEditorCommit;
 
-    public MainViewModel ViewModel { get; }
+    /// <summary>This window's tabs and the process-wide services they share (#348 phase 1).</summary>
+    public ShellViewModel Shell { get; }
+
+    /// <summary>
+    /// The active tab. Phase 1 never changes which document this is after construction —
+    /// there is exactly one, and no TabView yet to switch it — so every existing binding
+    /// and event handler that says <c>ViewModel</c> keeps working unchanged. The TabView
+    /// commit replaces this alias with real per-binding <c>Shell.Active</c> access (see the
+    /// plan's §6.4: x:Bind defaults to OneTime, so that rewrite has to touch every binding
+    /// individually rather than go through one property like this).
+    /// </summary>
+    public DocumentViewModel ViewModel => Shell.Active!;
 
     private bool _allowClose;
     private readonly PdfPrinter _printer;
 
     public MainWindow()
     {
-        ViewModel = new MainViewModel(this);
+        var app = (App)Application.Current;
+        Shell = new ShellViewModel(this, app.Settings, app.RecentFiles, app.SignatureLibrary);
+        Shell.AddDocument();
         ViewModel.WatchBusyState();
         InitializeComponent();
         _printer = new PdfPrinter(this, () => ViewModel.CurrentDocument, () => ViewModel.OpenDocumentName,
@@ -109,22 +122,22 @@ public sealed partial class MainWindow : Window
         }
         ViewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(MainViewModel.WindowTitle))
+            if (e.PropertyName is nameof(DocumentViewModel.WindowTitle))
                 Title = ViewModel.WindowTitle;
             // A different document means the matches are gone — close the stale bar.
-            if (e.PropertyName is nameof(MainViewModel.DocumentPath) && FindBar.Visibility == Visibility.Visible)
+            if (e.PropertyName is nameof(DocumentViewModel.DocumentPath) && FindBar.Visibility == Visibility.Visible)
                 CloseFindBar();
             // Arming Add text brings the font and size pickers onto the toolbar (#144).
-            if (e.PropertyName is nameof(MainViewModel.IsTextBoxMode))
+            if (e.PropertyName is nameof(DocumentViewModel.IsTextBoxMode))
                 OnTextBoxModeChanged();
             // A tool turning off says so (#268). Turning on is already spoken — the hint
             // banner is a live region — but Esc, a finished whiteout or redaction, and a
             // second press end a tool in silence, and focus is usually on the page by then.
-            if (e.PropertyName is nameof(MainViewModel.IsTextBoxMode) && !ViewModel.IsTextBoxMode)
+            if (e.PropertyName is nameof(DocumentViewModel.IsTextBoxMode) && !ViewModel.IsTextBoxMode)
                 Announce(Strings.ToolOffNotice(AddTextButton.Label));
-            if (e.PropertyName is nameof(MainViewModel.IsWhiteoutMode) && !ViewModel.IsWhiteoutMode)
+            if (e.PropertyName is nameof(DocumentViewModel.IsWhiteoutMode) && !ViewModel.IsWhiteoutMode)
                 Announce(Strings.ToolOffNotice(WhiteoutButton.Label));
-            if (e.PropertyName is nameof(MainViewModel.IsRedactMode) && !ViewModel.IsRedactMode)
+            if (e.PropertyName is nameof(DocumentViewModel.IsRedactMode) && !ViewModel.IsRedactMode)
                 Announce(Strings.ToolOffNotice(RedactButton.Label));
         };
         Title = ViewModel.WindowTitle;
@@ -1181,7 +1194,7 @@ public sealed partial class MainWindow : Window
     /// </summary>
     internal ScrollViewer PageScroller => PagesScroll;
 
-    private void ScrollMatchIntoView(MainViewModel.SearchScrollTarget target)
+    private void ScrollMatchIntoView(DocumentViewModel.SearchScrollTarget target)
     {
         // The decision lives in Core so it can be tested and so macOS uses the same
         // rules (#32) — watching this work needs a window, which is why it went
@@ -1224,7 +1237,7 @@ public sealed partial class MainWindow : Window
         var dialog = new ContentDialog
         {
             Title = Strings.RestoreTitle,
-            Content = Strings.RestoreBody(MainViewModel.AppName, Path.GetFileName(session.DocumentPath)),
+            Content = Strings.RestoreBody(DocumentViewModel.AppName, Path.GetFileName(session.DocumentPath)),
             PrimaryButtonText = Strings.Restore,
             CloseButtonText = Strings.Discard,
             DefaultButton = ContentDialogButton.Primary,
