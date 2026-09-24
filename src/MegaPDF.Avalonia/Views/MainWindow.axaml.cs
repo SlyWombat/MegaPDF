@@ -21,15 +21,23 @@ namespace MegaPDF.Avalonia.Views;
 
 public partial class MainWindow : Window
 {
-    /// <summary>The file the document was opened from, kept so Save can write back to it.</summary>
-    private IStorageFile? _openedFile;
+    /// <summary>
+    /// The file each open tab was opened from, kept so Save can write back to it
+    /// under the App Sandbox (#348 — the plan's single most dangerous item). Keyed
+    /// by <see cref="DocumentViewModel"/> rather than held on it: the view model
+    /// stays UI-free (ADR-002), and a `Dictionary` keyed by the tab is exactly as
+    /// "per tab" as a field on the tab itself, without pulling
+    /// <c>Avalonia.Platform.Storage</c> into the ViewModels project.
+    /// Entries are removed when their tab closes (<see cref="ForgetTab"/>).
+    /// </summary>
+    private readonly Dictionary<DocumentViewModel, IStorageFile?> _openedFiles = [];
 
     public MainWindow()
     {
         InitializeComponent();
         SizeToWorkingArea();
 
-        // ADR-002 called this one of the two MainViewModel touch points that is a
+        // ADR-002 called this one of the two DocumentViewModel touch points that is a
         // reshape rather than a rename: WinUI's FileOpenPicker is a type you
         // construct, Avalonia's IStorageProvider is reached through the TopLevel and
         // is async. Keeping it in the view is what lets the view model stay UI-free.
@@ -41,7 +49,7 @@ public partial class MainWindow : Window
 
         RecentList.SelectionChanged += async (_, _) =>
         {
-            if (RecentList.SelectedItem is not MainViewModel.RecentRow row)
+            if (RecentList.SelectedItem is not ShellViewModel.RecentRow row)
                 return;
             RecentList.SelectedItem = null;
             await GuardedAsync(() => OpenRecentAsync(row.Entry));
@@ -82,7 +90,14 @@ public partial class MainWindow : Window
         };
     }
 
-    private MainViewModel? ViewModel => DataContext as MainViewModel;
+    /// <summary>The window's tabs and app-scoped services (#348). Set once, at construction.
+    /// Internal (not private): App.axaml.cs's capture/diagnostic rigs and Program.cs's
+    /// self-test read it the way they used to read <c>window.DataContext as MainViewModel</c>.</summary>
+    internal ShellViewModel? Shell => DataContext as ShellViewModel;
+
+    /// <summary>The active tab's document — what every toolbar/menu binding and every
+    /// event handler below acts on. Standing in for the pre-#348 single <c>ViewModel</c>.</summary>
+    internal DocumentViewModel? Active => Shell?.Active;
 
     /// <summary>
     /// Runs an async handler and puts any failure in the status line (#145): an exception
@@ -96,7 +111,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            if (ViewModel is { } vm)
+            if (Active is { } vm)
                 vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
         }
     }
@@ -104,22 +119,39 @@ public partial class MainWindow : Window
     /// <summary>A file the person chose, waiting for its document to finish opening before Save writes through it.</summary>
     private IStorageFile? _pendingFile;
 
+    /// <summary>The tab <see cref="_pendingFile"/> belongs to, so a slower-opening tab cannot adopt a faster one's file.</summary>
+    private DocumentViewModel? _pendingFileOwner;
+
     /// <summary>
     /// The storage file follows the open document (#145). Opening is async now, and a document
     /// that fails to open leaves the previous one on screen, so the file handle is adopted only
     /// once its document is the one open — or Save would write the old document into the new file.
     /// </summary>
-    private void FollowDocumentPath(string documentPath)
+    private void FollowDocumentPath(DocumentViewModel document, string documentPath)
     {
-        if (_pendingFile is { } pending && SamePath(pending.TryGetLocalPath(), documentPath))
+        if (_pendingFile is { } pending && ReferenceEquals(_pendingFileOwner, document)
+            && SamePath(pending.TryGetLocalPath(), documentPath))
         {
-            _openedFile = pending;
+            _openedFiles[document] = pending;
             _pendingFile = null;
+            _pendingFileOwner = null;
         }
-        else if (_openedFile is { } current && !SamePath(current.TryGetLocalPath(), documentPath))
+        else if (_openedFiles.TryGetValue(document, out var current) && current is { } file
+                 && !SamePath(file.TryGetLocalPath(), documentPath))
         {
             // A document opened by path alone has no handle to write through: Save says so.
-            _openedFile = null;
+            _openedFiles[document] = null;
+        }
+    }
+
+    /// <summary>Drops a closed tab's file handle and Save-related bookkeeping (#348).</summary>
+    private void ForgetTab(DocumentViewModel document)
+    {
+        _openedFiles.Remove(document);
+        if (ReferenceEquals(_pendingFileOwner, document))
+        {
+            _pendingFile = null;
+            _pendingFileOwner = null;
         }
     }
 
@@ -130,14 +162,68 @@ public partial class MainWindow : Window
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (ViewModel is { } vm)
+        if (Shell is { } shell)
+        {
+            shell.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(ShellViewModel.Active))
+                    OnActiveDocumentChanged();
+            };
+            // The menu bar (#144) lists the view model's font and size choices; the
+            // structure is the same for every tab, so it is built once per window.
+            BuildMenuBar();
+            OnActiveDocumentChanged();
+        }
+    }
+
+    /// <summary>The document whose events this window is currently wired to — see <see cref="OnActiveDocumentChanged"/>.</summary>
+    private DocumentViewModel? _wiredDocument;
+
+    /// <summary>
+    /// Rewires every per-document event to the newly active tab, and unwires the one
+    /// before it (#348 plan §6.6 — the RefreshMenuBar subscription leak, generalised
+    /// to every subscription this window makes onto "the" view model). Without this,
+    /// switching tabs would leave the window listening to whichever document was
+    /// active when the window was created — or, before any tab exists, to nothing at
+    /// all — and a closed tab's Busy/PropertyChanged would go on refreshing the menu
+    /// bar and the toolbar forever.
+    /// </summary>
+    private void OnActiveDocumentChanged()
+    {
+        if (ReferenceEquals(_wiredDocument, Active))
+            return;
+
+        if (_wiredDocument is { } old)
+        {
+            old.Busy.PropertyChanged -= OnActiveBusyChanged;
+            old.SaveRequested -= OnActiveSaveRequested;
+            old.ScrollToRequested -= ScrollToMatch;
+            old.FocusScrollRequested -= ScrollToMatch;
+            old.EditLineRequested -= ShowLineEditor;
+            old.PasswordRequested -= AskForPasswordAsync;
+            old.EditFieldRequested -= ShowFieldEditor;
+            old.RenameSignatureRequested -= OnRenameSignatureRequested;
+            old.DeleteSignatureRequested -= OnDeleteSignatureRequested;
+            old.PageRewriteConfirmationRequested -= ConfirmPageRewriteAsync;
+            old.PrintDestinationRequested -= ChoosePrinterAsync;
+            old.PropertyChanged -= OnActiveDocumentPropertyChanged;
+        }
+
+        _wiredDocument = Active;
+        // Chrome tied to the previously active tab's page list does not belong to the
+        // one now on screen (#348 §4 — the transient view state a full per-tab
+        // DocumentView would otherwise keep separate; see the PR description for why
+        // this pass shares one page host across tabs instead).
+        DismissInlineEditor();
+        RemoveChrome();
+        RemoveFocusRing();
+
+        if (Active is { } vm)
         {
             // A window: engine work runs off the UI thread from here on (#145).
             vm.RunsInBackground = true;
-            vm.Busy.PropertyChanged += (_, _) => RefreshMenuBar();
-            // The menu bar (#144) lists the view model's font and size choices.
-            BuildMenuBar();
-            vm.SaveRequested += () => _ = SaveAsync();
+            vm.Busy.PropertyChanged += OnActiveBusyChanged;
+            vm.SaveRequested += OnActiveSaveRequested;
             vm.ScrollToRequested += ScrollToMatch;
             // The focused region is brought into view by the same rules a search hit
             // is — tabbing to something off screen has to show it (#2, #32).
@@ -149,30 +235,41 @@ public partial class MainWindow : Window
             vm.DeleteSignatureRequested += OnDeleteSignatureRequested;
             vm.PageRewriteConfirmationRequested += ConfirmPageRewriteAsync;
             vm.PrintDestinationRequested += ChoosePrinterAsync;
-            vm.PropertyChanged += (_, args) =>
-            {
-                // A card was clicked: placement is armed, so the library closes and
-                // the next click goes to the page.
-                if (args.PropertyName is nameof(MainViewModel.IsPlacingSignature) && vm.IsPlacingSignature)
-                    SignButton.Flyout?.Hide();
-                // The chrome is positioned in device-independent pixels, so it has to
-                // be rebuilt when the selection changes and when zoom moves it.
-                if (args.PropertyName is nameof(MainViewModel.Selection) or nameof(MainViewModel.Zoom))
-                    OnSelectionChanged();
-                if (args.PropertyName is nameof(MainViewModel.PageFocus) or nameof(MainViewModel.Zoom))
-                    OnPageFocusChanged();
-                // The pickers join and leave the row with their context (#144).
-                if (args.PropertyName is nameof(MainViewModel.IsTextStyleContext))
-                    ApplyToolbarLayout();
-                // An editor writing new text shows the face and size it will be written in.
-                if (args.PropertyName is nameof(MainViewModel.TextFont) or nameof(MainViewModel.TextSize))
-                    FollowPickersInEditor();
-                if (args.PropertyName is nameof(MainViewModel.DocumentPath) && vm.DocumentPath is { } documentPath)
-                    FollowDocumentPath(documentPath);
-                RefreshMenuBar();
-            };
-            RefreshMenuBar();
+            vm.PropertyChanged += OnActiveDocumentPropertyChanged;
         }
+
+        ApplyToolbarLayout();
+        UpdateViewport();
+        RefreshMenuBar();
+    }
+
+    private void OnActiveBusyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => RefreshMenuBar();
+
+    private void OnActiveSaveRequested() => _ = SaveAsync();
+
+    private void OnActiveDocumentPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (sender is not DocumentViewModel vm)
+            return;
+        // A card was clicked: placement is armed, so the library closes and
+        // the next click goes to the page.
+        if (args.PropertyName is nameof(DocumentViewModel.IsPlacingSignature) && vm.IsPlacingSignature)
+            SignButton.Flyout?.Hide();
+        // The chrome is positioned in device-independent pixels, so it has to
+        // be rebuilt when the selection changes and when zoom moves it.
+        if (args.PropertyName is nameof(DocumentViewModel.Selection) or nameof(DocumentViewModel.Zoom))
+            OnSelectionChanged();
+        if (args.PropertyName is nameof(DocumentViewModel.PageFocus) or nameof(DocumentViewModel.Zoom))
+            OnPageFocusChanged();
+        // The pickers join and leave the row with their context (#144).
+        if (args.PropertyName is nameof(DocumentViewModel.IsTextStyleContext))
+            ApplyToolbarLayout();
+        // An editor writing new text shows the face and size it will be written in.
+        if (args.PropertyName is nameof(DocumentViewModel.TextFont) or nameof(DocumentViewModel.TextSize))
+            FollowPickersInEditor();
+        if (args.PropertyName is nameof(DocumentViewModel.DocumentPath) && vm.DocumentPath is { } documentPath)
+            FollowDocumentPath(vm, documentPath);
+        RefreshMenuBar();
     }
 
     /// <summary>
@@ -204,7 +301,7 @@ public partial class MainWindow : Window
             return;
         if (_inlineEditor is not null || FindBox.IsFocused)
             return;
-        if (ViewModel is { IsDocumentOpen: true, PageFocus: not null })
+        if (Active is { IsDocumentOpen: true, PageFocus: not null })
             e.Handled = true;
     }
 
@@ -212,14 +309,14 @@ public partial class MainWindow : Window
     {
         // Delete takes off whatever is selected, and a redaction mark is one of those things
         // now (#329): it rides the same chrome as a signature, so it comes off the same way.
-        if (e.Key is Key.Delete or Key.Back && ViewModel is { Selection: not null } selected)
+        if (e.Key is Key.Delete or Key.Back && Active is { Selection: not null } selected)
         {
             selected.DeleteSelection();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Escape && ViewModel is { Selection: not null } hasSelection)
+        if (e.Key == Key.Escape && Active is { Selection: not null } hasSelection)
         {
             hasSelection.ClearSelection();
             e.Handled = true;
@@ -228,14 +325,14 @@ public partial class MainWindow : Window
 
         // Escape is how every desktop app leaves a mode. Placement first: if both are
         // active, the one the user most recently entered is the one they mean.
-        if (e.Key == Key.Escape && ViewModel is { IsPlacingSignature: true } vm)
+        if (e.Key == Key.Escape && Active is { IsPlacingSignature: true } vm)
         {
             vm.CancelPlacing();
             e.Handled = true;
             return;
         }
 
-        if (e.Key == Key.Escape && ViewModel is { IsModeActive: true } modal)
+        if (e.Key == Key.Escape && Active is { IsModeActive: true } modal)
         {
             DismissInlineEditor();
             modal.CancelModes();
@@ -243,7 +340,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Key.Escape && ViewModel is { IsFindOpen: true })
+        if (e.Key == Key.Escape && Active is { IsFindOpen: true })
         {
             CloseFind();
             e.Handled = true;
@@ -256,12 +353,14 @@ public partial class MainWindow : Window
     {
         base.OnOpened(e);
         // RenderScaling is only meaningful once there is a window on a screen. Feeding
-        // it to the view model is what makes a page sharp on a retina Mac rather than
-        // upscaled from a 96 DPI raster.
-        if (ViewModel is { } vm)
+        // it to every tab's view model — not just the active one — is what makes a
+        // page sharp on a retina Mac rather than upscaled from a 96 DPI raster, and
+        // it has to reach a tab opened later too (#348 §2b), which PushDpiScale below
+        // and every AddTab call site both do.
+        if (Shell is { } shell)
         {
-            vm.DpiScale = RenderScaling;
-            vm.LoadRecents();
+            PushDpiScale(shell);
+            shell.LoadRecents();
             UpdateViewport();
         }
 
@@ -269,6 +368,13 @@ public partial class MainWindow : Window
         PageScroller.SizeChanged += (_, _) => UpdateViewport();
 
         LaunchSequence = RunLaunchSequenceAsync();
+    }
+
+    /// <summary>Pushes this window's current display scale into every open tab (#348 §2b).</summary>
+    private void PushDpiScale(ShellViewModel shell)
+    {
+        foreach (var document in shell.Documents)
+            document.DpiScale = RenderScaling;
     }
 
     /// <summary>The size the window opens at, screen permitting (#143).</summary>
@@ -310,14 +416,15 @@ public partial class MainWindow : Window
     /// </summary>
     private bool _launchSettled;
 
-    /// <summary>A document the OS handed over while the launch sequence was still running.</summary>
-    private Func<Task>? _pendingOpen;
-
     /// <summary>
-    /// Its path, kept beside the closure: what the launch sequence needs to tell the
-    /// crashed document from a different one (<see cref="LaunchedDocument"/>).
+    /// Documents the OS handed over while the launch sequence was still running, each
+    /// opened into its own tab once the sequence settles (#348: this used to be a
+    /// single slot with a comment reading "one window shows one document, so the last
+    /// one handed over wins" — a multi-file Finder/Dock open dropped every file but
+    /// the last. A list keeps them all; nothing here yet coalesces a *redirected*
+    /// second launch into this window — that is Phase 2's single-instance work.
     /// </summary>
-    private string? _pendingOpenPath;
+    private readonly List<(string? Path, Func<Task> Open)> _pendingOpens = [];
 
     /// <summary>Completed when one arrives, so the wait below ends on arrival rather than on the clock.</summary>
     private TaskCompletionSource? _handedOverDocumentArrived;
@@ -345,17 +452,17 @@ public partial class MainWindow : Window
         // Save would have nothing to write through.
         if (await StorageProvider.TryGetFileFromPathAsync(path) is { } file)
             await OpenStorageFileAsync(file);
-        else if (ViewModel is { } vm && await ConfirmUnsavedChangesAsync())
-            await vm.OpenAsync(path);
+        else
+            await OpenPathIntoTabAsync(path);
     });
 
     private void OpenWhenReady(string? path, Func<Task> open)
     {
         if (!_launchSettled)
         {
-            // One window shows one document, so the last one handed over wins.
-            _pendingOpen = open;
-            _pendingOpenPath = path;
+            // Every document handed over before the launch sequence settles gets its
+            // own tab (#348) — this used to keep only the last one.
+            _pendingOpens.Add((path, open));
             _handedOverDocumentArrived?.TrySetResult();
             return;
         }
@@ -375,9 +482,36 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            if (ViewModel is { } vm)
+            if (Active is { } vm)
                 vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Opens a bare path (no <see cref="IStorageFile"/> — a document handed over from
+    /// a location the storage provider would not resolve) into a tab of its own,
+    /// activating a tab already on that path instead of opening a duplicate (#348 §1).
+    /// </summary>
+    private async Task OpenPathIntoTabAsync(string path, string? password = null)
+    {
+        if (Shell is not { } shell)
+            return;
+        if (shell.FindTab(path) is { } existing)
+        {
+            shell.ActivateTab(existing);
+            return;
+        }
+        var document = shell.CreateDocument();
+        // Added — and so activated and wired up — before the open runs, not after: a
+        // password-protected document raises PasswordRequested from inside OpenAsync,
+        // and only the active tab's window wiring listens for it. A tab that never
+        // manages to open (and is not merely waiting on a password) is removed again
+        // below, so this still keeps the "no Untitled tab" rule (#348 §1).
+        shell.AddTab(document);
+        document.DpiScale = RenderScaling;
+        await document.OpenAsync(path, password);
+        if (!document.IsDocumentOpen && document.PendingPasswordPath is null)
+            shell.CloseTab(document);
     }
 
     /// <summary>
@@ -410,26 +544,26 @@ public partial class MainWindow : Window
         {
             // The launched file still gets its chance below: a recovery offer that
             // failed must not also cost the person the document they double-clicked.
-            if (ViewModel is { } vm)
+            if (Active is { } vm)
                 vm.Status = Strings.WithDetail(Strings.FileCouldNotBeRead, ex.Message);
         }
 
-        var open = _pendingOpen;
-        var path = _pendingOpenPath;
-        _pendingOpen = null;
-        _pendingOpenPath = null;
+        var pending = _pendingOpens.ToList();
+        _pendingOpens.Clear();
         // From here a handed-over document opens straight away. Nothing is awaited
-        // between reading the pending open and this line, so an activation cannot land
+        // between reading the pending opens and this line, so an activation cannot land
         // in the gap and be dropped.
         _launchSettled = true;
 
-        if (open is null)
-            return;
-        // A path the OS would not give us (a document handed over out of a virtual
-        // location) cannot be compared, so it is opened: the open asks about unsaved
-        // changes rather than losing them.
-        if (path is null || LaunchedDocument.NeedsOpening(path, ViewModel?.DocumentPath))
-            await RunOpenAsync(open);
+        foreach (var (path, open) in pending)
+        {
+            // A path the OS would not give us (a document handed over out of a virtual
+            // location) cannot be compared, so it is opened: the open asks about unsaved
+            // changes rather than losing them. Everything else opens into its own tab
+            // unless a just-restored crash session already put it in one (#348 §5.5).
+            if (path is null || (Shell is { } shell && !shell.IsOpen(path)))
+                await RunOpenAsync(open);
+        }
     }
 
     /// <summary>
@@ -463,19 +597,23 @@ public partial class MainWindow : Window
 
     private async Task OfferRecoveryOnLaunchAsync()
     {
-        if (SkipRecoveryOffer || ViewModel is not { } vm)
+        if (SkipRecoveryOffer || Shell is not { } shell)
             return;
 
         // The ordinary case — no crashed session — costs nothing: no wait, no dialog,
         // and the launched document opens as immediately as it always did.
-        var sessions = vm.FindRecoverableSessions();
+        var sessions = shell.FindRecoverableSessions();
         if (sessions.Count == 0)
             return;
 
-        if (WaitsForHandedOverDocument && _pendingOpen is null)
+        if (WaitsForHandedOverDocument && _pendingOpens.Count == 0)
             await WaitForHandedOverDocumentAsync();
 
-        await OfferRecoveryAsync(sessions[0]);
+        // Every crashed session gets its own offer, newest first, each restored into
+        // its own tab (#348 §5.3) — this used to offer only the newest and silently
+        // sit on the rest.
+        foreach (var session in sessions)
+            await OfferRecoveryAsync(session);
     }
 
     private async Task WaitForHandedOverDocumentAsync()
@@ -494,7 +632,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
-        ViewModel?.Dispose();
+        Shell?.Dispose();
     }
 
     // --- Unsaved changes: closing, quitting, opening another (#145, D1) ---
@@ -507,13 +645,17 @@ public partial class MainWindow : Window
     internal void SkipCloseConfirmation()
     {
         _closeConfirmed = true;
-        // What a capture changed is not the person's: no journal is left behind for it.
-        ViewModel?.DiscardChanges();
+        // What a capture changed is not the person's: no journal is left behind for
+        // any tab, not only the active one.
+        if (Shell is { } shell)
+            foreach (var document in shell.Documents)
+                document.DiscardChanges();
     }
 
-    /// <summary>Whether closing or quitting must ask first: unsaved changes, or work still running.</summary>
+    /// <summary>Whether closing or quitting must ask first: any tab with unsaved changes, or work still running.</summary>
     internal bool NeedsConfirmationBeforeClose =>
-        !_closeConfirmed && ViewModel is { } vm && (vm.Busy.IsWorking || (vm.IsDocumentOpen && vm.IsDirty));
+        !_closeConfirmed && Shell is { } shell
+        && shell.Documents.Any(vm => vm.Busy.IsWorking || (vm.IsDocumentOpen && vm.IsDirty));
 
     protected override void OnClosing(WindowClosingEventArgs e)
     {
@@ -564,7 +706,14 @@ public partial class MainWindow : Window
     /// </summary>
     internal Action? QuitForTest { get; set; }
 
-    /// <summary>Waits for a save in progress, then asks about unsaved changes. True when closing may go ahead.</summary>
+    /// <summary>
+    /// Waits for every tab's save in progress, then asks about each one's unsaved
+    /// changes in turn — window close and quit both ask every dirty tab before any of
+    /// them closes, and a Cancel on tab 2 leaves tab 1's journal (and every other
+    /// tab already confirmed) intact, because nothing here closes a tab itself; the
+    /// caller only proceeds to <c>Close()</c>/shutdown once every tab has said yes
+    /// (#348 §5.6). True when closing may go ahead.
+    /// </summary>
     private async Task<bool> ConfirmCloseAsync()
     {
         if (_confirmingClose)
@@ -572,16 +721,20 @@ public partial class MainWindow : Window
         _confirmingClose = true;
         try
         {
-            if (ViewModel is { } vm)
-                await vm.Busy.WhenIdleAsync();
-            if (!await ConfirmUnsavedChangesAsync())
-                return false;
+            if (Shell is { } shell)
+            {
+                foreach (var document in shell.Documents.ToList())
+                {
+                    if (!await ConfirmUnsavedChangesAsync(document))
+                        return false;
+                }
+            }
             _closeConfirmed = true;
             return true;
         }
         catch (Exception ex)
         {
-            if (ViewModel is { } vm)
+            if (Active is { } vm)
                 vm.Status = Strings.WithDetail(Strings.CouldNotSave, ex.Message);
             return false;
         }
@@ -591,18 +744,28 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Save, Don't Save or Cancel for the active tab — see <see cref="ConfirmUnsavedChangesAsync(DocumentViewModel?)"/>.</summary>
+    private Task<bool> ConfirmUnsavedChangesAsync() => ConfirmUnsavedChangesAsync(Active);
+
     /// <summary>
-    /// Save, Don't Save or Cancel, when the open document has unsaved changes — the standard
-    /// macOS question. True when the caller may go on: nothing unsaved, saved, or Don't Save.
-    /// Cancel changes nothing, the recovery journal included.
+    /// Save, Don't Save or Cancel, when <paramref name="document"/> has unsaved changes —
+    /// the standard macOS question. True when the caller may go on: nothing unsaved,
+    /// saved, or Don't Save. Cancel changes nothing, the recovery journal included.
+    ///
+    /// Activates the tab first (#348): Save writes through whichever file handle
+    /// <see cref="Active"/> resolves to, and the dialog should show the document it is
+    /// asking about in front, not behind whatever tab happened to be selected.
     /// </summary>
-    private async Task<bool> ConfirmUnsavedChangesAsync()
+    private async Task<bool> ConfirmUnsavedChangesAsync(DocumentViewModel? document)
     {
-        if (ViewModel is not { IsDocumentOpen: true } vm)
+        if (document is not { IsDocumentOpen: true } vm)
             return true;
         await vm.Busy.WhenIdleAsync();
         if (!vm.IsDirty)
             return true;
+
+        if (Shell is { } shell)
+            shell.ActivateTab(vm);
 
         var choice = await AskAboutUnsavedChangesAsync(vm);
         switch (choice)
@@ -626,7 +789,7 @@ public partial class MainWindow : Window
     /// <summary>How many times the question was put, for the self-test.</summary>
     internal int UnsavedChangesAsked { get; private set; }
 
-    private async Task<UnsavedChangesWindow.Decision> AskAboutUnsavedChangesAsync(MainViewModel vm)
+    private async Task<UnsavedChangesWindow.Decision> AskAboutUnsavedChangesAsync(DocumentViewModel vm)
     {
         UnsavedChangesAsked++;
         if (AnswerUnsavedChangesForTest is { } answer)
@@ -642,7 +805,7 @@ public partial class MainWindow : Window
     internal Window ShowUnsavedChangesForScreenshot()
     {
         var dialog = new UnsavedChangesWindow();
-        dialog.SetDocument(ViewModel?.DocumentName ?? "");
+        dialog.SetDocument(Active?.DocumentName ?? "");
         dialog.Show(this);
         return dialog;
     }
@@ -669,7 +832,7 @@ public partial class MainWindow : Window
         Control container, Point at, double fontSizePoints, string fontFamily,
         string initialText, double minWidth, Action<string> commit)
     {
-        if (ViewModel is not { } vm || container is not ContentPresenter presenter)
+        if (Active is not { } vm || container is not ContentPresenter presenter)
             return;
 
         DismissInlineEditor();
@@ -739,7 +902,7 @@ public partial class MainWindow : Window
     /// <summary>New text at the click point, in the toolbar's chosen face and size.</summary>
     private void ShowNewTextEditor(Control container, PageViewModel page, Point at, PdfPoint pagePoint)
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
@@ -762,7 +925,7 @@ public partial class MainWindow : Window
     /// <summary>A picker changed while added text is being typed: the editor shows the new face and size.</summary>
     private void FollowPickersInEditor()
     {
-        if (!_editorFollowsPickers || _inlineEditor is not { } editor || ViewModel is not { } vm)
+        if (!_editorFollowsPickers || _inlineEditor is not { } editor || Active is not { } vm)
             return;
         editor.FontFamily = new FontFamily(FamilyFor(vm.TextFont));
         editor.FontSize = vm.TextSize * PageBitmap.PointsToPixels * vm.Zoom;
@@ -775,7 +938,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void ShowLineEditor(int pageIndex, PdfTextLine line)
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         var container = ContainerFor(pageIndex);
@@ -798,7 +961,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void ShowFieldEditor(int pageIndex, PdfFormField field)
     {
-        if (ViewModel is not { } vm || ContainerFor(pageIndex) is not { } container)
+        if (Active is not { } vm || ContainerFor(pageIndex) is not { } container)
             return;
 
         var dip = PageBitmap.PointsToPixels * vm.Zoom;
@@ -833,7 +996,7 @@ public partial class MainWindow : Window
         _inlineEditor = null;
         _editorFollowsPickers = false;
         (editor.Parent as Panel)?.Children.Remove(editor);
-        if (ViewModel is { } vm)
+        if (Active is { } vm)
             vm.IsEditingTextBox = false;
     }
 
@@ -868,7 +1031,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateViewport()
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         vm.ViewportWidth = PageScroller.Viewport.Width;
@@ -908,17 +1071,20 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task OfferRecoveryAsync(RecoverableSession session)
     {
-        if (ViewModel is not { IsDocumentOpen: false } vm)
+        if (Shell is not { } shell)
             return;
 
         var choice = await AskAboutRecoveryAsync(session);
         switch (choice)
         {
             case RecoveryWindow.Decision.Restore:
-                await vm.RestoreSessionAsync(session);
+                // A crashed session restores into a brand new tab (#348 §5.3), not into
+                // whichever document happened to be active — there may be none yet.
+                var document = await shell.RestoreSessionAsync(session);
+                document.DpiScale = RenderScaling;
                 break;
             case RecoveryWindow.Decision.Discard:
-                vm.DiscardSession(session);
+                ShellViewModel.DiscardSession(session);
                 break;
         }
     }
@@ -946,7 +1112,7 @@ public partial class MainWindow : Window
     {
         if (sender is not Control container || container.DataContext is not PageViewModel page)
             return;
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
         if (!e.GetCurrentPoint(container).Properties.IsLeftButtonPressed)
             return;
@@ -976,15 +1142,15 @@ public partial class MainWindow : Window
 
         switch (vm.Mode)
         {
-            case MainViewModel.PageMode.AddText:
+            case DocumentViewModel.PageMode.AddText:
                 ShowNewTextEditor(container, page, position, pagePoint);
                 break;
 
-            case MainViewModel.PageMode.Whiteout:
+            case DocumentViewModel.PageMode.Whiteout:
                 BeginBand(container, position, e, redaction: false);
                 break;
 
-            case MainViewModel.PageMode.Redact:
+            case DocumentViewModel.PageMode.Redact:
                 BeginBand(container, position, e, redaction: true);
                 break;
 
@@ -1016,14 +1182,14 @@ public partial class MainWindow : Window
     {
         if (sender is not Control container || container.DataContext is not PageViewModel page)
             return;
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         // In a placement mode the cursor describes the mode, not what is underneath.
         var shape = vm.Mode switch
         {
-            MainViewModel.PageMode.AddText => StandardCursorType.Ibeam,
-            MainViewModel.PageMode.Whiteout or MainViewModel.PageMode.Redact => StandardCursorType.Cross,
+            DocumentViewModel.PageMode.AddText => StandardCursorType.Ibeam,
+            DocumentViewModel.PageMode.Whiteout or DocumentViewModel.PageMode.Redact => StandardCursorType.Cross,
             _ when vm.IsPlacingSignature => StandardCursorType.Cross,
             _ => CursorForContent(),
         };
@@ -1102,7 +1268,7 @@ public partial class MainWindow : Window
     {
         OnSelectionPointerReleased(e);
 
-        if (_band is null || _bandHost is null || ViewModel is not { } vm)
+        if (_band is null || _bandHost is null || Active is not { } vm)
             return;
 
         if (_bandHost.DataContext is PageViewModel page)
@@ -1158,7 +1324,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task TypeSignatureAsync()
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         var dialog = new TypeSignatureWindow();
@@ -1197,7 +1363,7 @@ public partial class MainWindow : Window
     /// <summary>Rename, from the card's menu (#100): a small prefilled prompt.</summary>
     private async void OnRenameSignatureRequested(SignatureItem item)
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
         SignButton.Flyout?.Hide();
         var dialog = new RenameSignatureWindow();
@@ -1210,7 +1376,7 @@ public partial class MainWindow : Window
     /// <summary>Delete, from the card's menu (#100): asks once, then removes.</summary>
     private async void OnDeleteSignatureRequested(SignatureItem item)
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
         SignButton.Flyout?.Hide();
         var dialog = new ConfirmDeleteWindow();
@@ -1237,7 +1403,7 @@ public partial class MainWindow : Window
         IReadOnlyList<Platform.Printing.Destination> destinations)
     {
         var dialog = new PrinterWindow();
-        dialog.Present(ViewModel?.DocumentName ?? "", destinations);
+        dialog.Present(Active?.DocumentName ?? "", destinations);
         await dialog.ShowDialog(this);
         return dialog.Chosen;
     }
@@ -1249,7 +1415,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task ImportSignatureAsync()
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -1284,7 +1450,7 @@ public partial class MainWindow : Window
 
     private async Task CaptureSignatureAsync()
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         var capture = new SignatureCaptureWindow();
@@ -1351,9 +1517,9 @@ public partial class MainWindow : Window
                 await RunSearchAsync(FindBox.Text ?? "");
             }
             if (backwards)
-                ViewModel?.FindPreviousCommand.Execute(null);
+                Active?.FindPreviousCommand.Execute(null);
             else
-                ViewModel?.FindNextCommand.Execute(null);
+                Active?.FindNextCommand.Execute(null);
         };
 
         CloseFindButton.Click += (_, _) => CloseFind();
@@ -1364,7 +1530,7 @@ public partial class MainWindow : Window
     /// <summary>Search off the UI thread (#145); a failure lands in the status line.</summary>
     private async Task RunSearchAsync(string term)
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
         try
         {
@@ -1378,7 +1544,7 @@ public partial class MainWindow : Window
 
     private void OpenFind()
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
         vm.IsFindOpen = true;
         FindBox.Focus();
@@ -1388,7 +1554,7 @@ public partial class MainWindow : Window
     private void CloseFind()
     {
         _findDebounce?.Stop();
-        ViewModel?.CloseFind();
+        Active?.CloseFind();
         FindBox.Text = "";
     }
 
@@ -1403,7 +1569,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void ScrollToMatch(int pageIndex, PdfRect rect)
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return;
 
         // Pages stack vertically and are centred horizontally, so a hit's content
@@ -1463,14 +1629,14 @@ public partial class MainWindow : Window
         // The gestures themselves are defined once, in MainWindow.MenuBar.cs, so the
         // key binding, the tooltip, the More menu and the menu bar cannot disagree.
         Bind(OpenButton, OpenGesture, Strings.OpenAPdf, () => _ = OpenDocumentAsync());
-        Bind(SaveButton, SaveGesture, Strings.Save, () => Run(ViewModel?.SaveCommand));
-        Bind(null, SaveAsGesture, Strings.SaveAs, () => { if (ViewModel?.IsDocumentOpen == true) _ = SaveAsAsync(); });
-        Bind(null, PrintGesture, Strings.Print, () => Run(ViewModel?.PrintCommand));
-        Bind(UndoButton, UndoGesture, Strings.Undo, () => Run(ViewModel?.UndoCommand));
-        Bind(RedoButton, RedoGesture, Strings.Redo, () => Run(ViewModel?.RedoCommand));
-        Bind(ZoomOutButton, ZoomOutGesture, Strings.ZoomOut, () => Run(ViewModel?.ZoomOutCommand));
-        Bind(ZoomInButton, ZoomInGesture, Strings.ZoomIn, () => Run(ViewModel?.ZoomInCommand));
-        Bind(null, ActualSizeGesture, Strings.ActualSize, () => Run(ViewModel?.ZoomResetCommand));
+        Bind(SaveButton, SaveGesture, Strings.Save, () => Run(Active?.SaveCommand));
+        Bind(null, SaveAsGesture, Strings.SaveAs, () => { if (Active?.IsDocumentOpen == true) _ = SaveAsAsync(); });
+        Bind(null, PrintGesture, Strings.Print, () => Run(Active?.PrintCommand));
+        Bind(UndoButton, UndoGesture, Strings.Undo, () => Run(Active?.UndoCommand));
+        Bind(RedoButton, RedoGesture, Strings.Redo, () => Run(Active?.RedoCommand));
+        Bind(ZoomOutButton, ZoomOutGesture, Strings.ZoomOut, () => Run(Active?.ZoomOutCommand));
+        Bind(ZoomInButton, ZoomInGesture, Strings.ZoomIn, () => Run(Active?.ZoomInCommand));
+        Bind(null, ActualSizeGesture, Strings.ActualSize, () => Run(Active?.ZoomResetCommand));
 
         // A key binding calls Execute directly, and a RelayCommand's Execute does not ask
         // CanExecute: Cmd+S with nothing changed rewrote the file while Save sat greyed
@@ -1540,9 +1706,68 @@ public partial class MainWindow : Window
         // Whichever window has the keys is the one that closes: a window's key binding
         // only fires while that window is focused, so this is `this`. About and the
         // notices answer Ctrl+W themselves, for the same reason.
-        KeyBindings.Add(new KeyBinding { Gesture = CloseGesture, Command = new RelayCommand(() => Close()) });
+        KeyBindings.Add(new KeyBinding { Gesture = CloseGesture, Command = new RelayCommand(() => _ = CloseActiveTabOrWindowAsync()) });
         KeyBindings.Add(new KeyBinding { Gesture = QuitGesture, Command = new RelayCommand(RequestQuit) });
+        // GNOME/KDE's own tab-switching convention (#348) — the Mac side reaches
+        // Show Next/Previous Tab through the real menu bar's ⌃Tab/⌃⇧Tab instead.
+        KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.PageDown, KeyModifiers.Control), Command = new RelayCommand(() => Shell?.ActivateNextTab()) });
+        KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.PageUp, KeyModifiers.Control), Command = new RelayCommand(() => Shell?.ActivatePreviousTab()) });
+        KeyBindings.Add(new KeyBinding { Gesture = NewWindowGestureLinux, Command = new RelayCommand(NewWindow) });
     }
+
+    /// <summary>⌘W (Mac) / Ctrl+W (Linux): closes the active tab, or the window itself when it is the last tab
+    /// (Safari/Preview/GNOME convention, #348 plan §1).</summary>
+    internal async Task CloseActiveTabOrWindowAsync()
+    {
+        if (Shell is not { } shell)
+        {
+            Close();
+            return;
+        }
+        if (shell.Documents.Count <= 1)
+        {
+            Close();
+            return;
+        }
+        if (Active is { } vm)
+            await CloseTabAsync(vm);
+    }
+
+    /// <summary>The ✕ on a tab-strip item (MainWindow.axaml).</summary>
+    private void OnCloseTabClick(object? sender, RoutedEventArgs e)
+    {
+        if ((sender as Control)?.DataContext is DocumentViewModel document)
+            _ = CloseTabAsync(document);
+        e.Handled = true;
+    }
+
+    /// <summary>Closes one tab, asking about its unsaved changes first. Used by ⌘W/Ctrl+W and the tab strip's close button.</summary>
+    internal async Task CloseTabAsync(DocumentViewModel document)
+    {
+        if (Shell is not { } shell || !shell.Documents.Contains(document))
+            return;
+        if (!await ConfirmUnsavedChangesAsync(document))
+            return;
+        ForgetTab(document);
+        shell.CloseTab(document);
+    }
+
+    /// <summary>⇧⌘W (Mac) / no Linux binding yet: closes the whole window regardless of how many tabs it has.</summary>
+    internal void CloseWindow() => Close();
+
+    /// <summary>File ▸ New Window (⌘N / Ctrl+Shift+N): another window sharing this process's settings, recents and signature library.</summary>
+    internal void NewWindow()
+    {
+        if (Shell is not { } shell)
+            return;
+        var window = new MainWindow
+        {
+            DataContext = new ShellViewModel(shell.Settings, shell.RecentFiles, shell.SignatureLibrary, shell.RecoveryDirectory),
+        };
+        window.Show();
+    }
+
+    private static KeyGesture NewWindowGestureLinux => new(Key.N, KeyModifiers.Control | KeyModifiers.Shift);
 
     private static string KeyLabel(Key key) => key switch
     {
@@ -1557,26 +1782,31 @@ public partial class MainWindow : Window
 
     private async Task OpenDocumentAsync()
     {
-        if (ViewModel is not { IsIdle: true })
+        if (Shell is not { } shell)
             return;
 
+        // AllowMultiple (#348): Explorer/Finder-style multi-select, each file its own
+        // tab (or activating one already open on it).
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
             Title = Strings.OpenAPdf,
-            AllowMultiple = false,
+            AllowMultiple = true,
             FileTypeFilter = [PdfFileType],
         });
 
-        if (files.Count == 0)
-            return;
-
-        await OpenStorageFileAsync(files[0]);
+        foreach (var file in files)
+            await OpenStorageFileAsync(file);
     }
 
-    /// <summary>Opens a file the picker or the OS gave us, and remembers it.</summary>
+    /// <summary>
+    /// Opens a file the picker, a drop or the OS gave us into its own tab — or
+    /// activates a tab already open on it rather than opening a duplicate — and
+    /// remembers it (#348 §1). Nothing here asks about unsaved changes any more:
+    /// opening a document no longer replaces one.
+    /// </summary>
     private async Task OpenStorageFileAsync(IStorageFile file)
     {
-        if (ViewModel is not { } vm)
+        if (Shell is not { } shell)
             return;
 
         // TryGetLocalPath returns null for a document the OS handed us out of a
@@ -1585,16 +1815,42 @@ public partial class MainWindow : Window
         var path = file.TryGetLocalPath();
         if (path is null)
         {
-            vm.Status = Strings.FileNotLocal;
+            if (Active is { } active)
+                active.Status = Strings.FileNotLocal;
             return;
         }
 
-        // Opening another document drops this one: unsaved changes are asked about first (D1).
-        if (!await ConfirmUnsavedChangesAsync())
+        if (shell.FindTab(path) is { } existing)
+        {
+            shell.ActivateTab(existing);
             return;
+        }
+
+        await OpenIntoNewTabAsync(shell, file, path);
+    }
+
+    /// <summary>
+    /// Opens <paramref name="file"/>/<paramref name="path"/> into a freshly created
+    /// tab. The tab is added (and so activated and wired up) before the open runs —
+    /// see the comment on the same pattern in <see cref="OpenPathIntoTabAsync"/> — and
+    /// removed again if the open fails outright rather than merely waiting on a
+    /// password, so a failed open never leaves an "Untitled" tab behind (#348 §1).
+    /// </summary>
+    private async Task OpenIntoNewTabAsync(ShellViewModel shell, IStorageFile file, string path)
+    {
+        var document = shell.CreateDocument();
+        shell.AddTab(document);
+        document.DpiScale = RenderScaling;
         _pendingFile = file;
-        await vm.OpenAsync(path);
-        await RememberAsync(vm, file, path);
+        _pendingFileOwner = document;
+        await document.OpenAsync(path);
+        if (!document.IsDocumentOpen && document.PendingPasswordPath is null)
+        {
+            shell.CloseTab(document);
+            return;
+        }
+        if (document.IsDocumentOpen)
+            await RememberAsync(shell, file, path);
     }
 
     /// <summary>
@@ -1604,16 +1860,16 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnShowRecentInFinder(object? sender, RoutedEventArgs e)
     {
-        if ((sender as Control)?.DataContext is not MainViewModel.RecentRow row)
-            return;
-        if (ViewModel is null)
+        if ((sender as Control)?.DataContext is not ShellViewModel.RecentRow row)
             return;
         if (!OperatingSystem.IsMacOS() || !Platform.MacFileNames.RevealInFinder(row.Path))
-            ViewModel!.Status = Strings.CouldNotShowInFinder(row.Name);
+            if (Active is { } vm)
+                vm.Status = Strings.CouldNotShowInFinder(row.Name);
     }
 
     /// <summary>
-    /// Reopens a document from the recents list.
+    /// Reopens a document from the recents list, into its own tab (or activates one
+    /// already open on it).
     ///
     /// On macOS under the App Sandbox the stored path is not a key to anything — the
     /// grant was to the file the user picked, in that session. The security-scoped
@@ -1622,8 +1878,14 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task OpenRecentAsync(RecentEntry entry)
     {
-        if (ViewModel is not { IsIdle: true } vm)
+        if (Shell is not { } shell)
             return;
+
+        if (shell.FindTab(entry.Path) is { } existing)
+        {
+            shell.ActivateTab(existing);
+            return;
+        }
 
         if (entry.Bookmark is { } bookmark)
         {
@@ -1641,44 +1903,38 @@ public partial class MainWindow : Window
             }
             if (file is not null && bookmarked is not null)
             {
-                if (!await ConfirmUnsavedChangesAsync())
-                    return;
-                _pendingFile = file;
-                await vm.OpenAsync(bookmarked);
-                await RememberAsync(vm, file, bookmarked);
+                await OpenIntoNewTabAsync(shell, file, bookmarked);
                 return;
             }
         }
 
         if (!File.Exists(entry.Path))
         {
-            vm.Status = Strings.FileMovedOrDeleted;
+            if (Active is { } vm)
+                vm.Status = Strings.FileMovedOrDeleted;
             return;
         }
 
-        // Ask the platform for a real file handle rather than nulling _openedFile.
+        // Ask the platform for a real file handle rather than leaving one unset.
         // Without one Save has nothing to write through, and because CanSave only
         // looks at "open and dirty" the button would stay enabled and do nothing —
         // silently losing the user's work, which is worse than refusing outright.
         var fromPath = await StorageProvider.TryGetFileFromPathAsync(entry.Path);
         if (fromPath is null)
         {
-            vm.Status = Strings.FileCannotBeOpenedFromHere;
+            if (Active is { } vm)
+                vm.Status = Strings.FileCannotBeOpenedFromHere;
             return;
         }
 
-        if (!await ConfirmUnsavedChangesAsync())
-            return;
-        _pendingFile = fromPath;
-        await vm.OpenAsync(entry.Path);
-        await RememberAsync(vm, fromPath, entry.Path);
+        await OpenIntoNewTabAsync(shell, fromPath, entry.Path);
     }
 
     /// <summary>
     /// Records the document in recents, with a bookmark where the platform supports
     /// one. Failing to mint a bookmark must not stop the document being remembered.
     /// </summary>
-    private static async Task RememberAsync(MainViewModel vm, IStorageFile file, string path)
+    private static async Task RememberAsync(ShellViewModel shell, IStorageFile file, string path)
     {
         string? bookmark = null;
         try
@@ -1689,7 +1945,7 @@ public partial class MainWindow : Window
         {
         }
 
-        vm.RememberRecent(path, bookmark);
+        shell.RememberRecent(path, bookmark);
     }
 
     /// <summary>
@@ -1717,7 +1973,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task<bool> ConfirmAndApplyRedactionsAsync(bool alreadySavingACopy)
     {
-        if (ViewModel is not { } vm || !vm.HasRedactionMarks)
+        if (Active is not { } vm || !vm.HasRedactionMarks)
             return true;
 
         var dialog = new ConfirmRedactionWindow();
@@ -1732,22 +1988,29 @@ public partial class MainWindow : Window
                 // be written. Then hand the whole save over to the copy path.
                 if (!await vm.ApplyRedactionsAsync())
                     return false;
-                await SaveAsAsync(MainViewModel.SuggestRedactedFileName(vm.DocumentName ?? ""));
+                await SaveAsAsync(DocumentViewModel.SuggestRedactedFileName(vm.DocumentName ?? ""));
                 return false;   // the copy path has saved; the caller must not save again
             default:
                 return await vm.ApplyRedactionsAsync();
         }
     }
 
+    /// <summary>The active tab's file handle, or null if it has none (#348 — keyed per tab, see <see cref="_openedFiles"/>).</summary>
+    private IStorageFile? OpenedFile
+    {
+        get => Active is { } vm && _openedFiles.TryGetValue(vm, out var file) ? file : null;
+        set { if (Active is { } vm) _openedFiles[vm] = value; }
+    }
+
     private async Task<bool> SaveAsync()
     {
-        if (ViewModel is not { } vm)
+        if (Active is not { } vm)
             return false;
 
         if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return false;
 
-        if (_openedFile is not { } file)
+        if (OpenedFile is not { } file)
         {
             // Should not happen — but a Save that does nothing at all is the worst
             // possible outcome, so it says something and offers the way out.
@@ -1778,7 +2041,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task SaveAsAsync(string? suggestedName = null)
     {
-        if (ViewModel is not { IsIdle: true } vm)
+        if (Active is not { IsIdle: true } vm)
             return;
 
         // Marks still on the document mean this Save As is the first time they are being
@@ -1791,7 +2054,7 @@ public partial class MainWindow : Window
         // passes this name in; arriving by Save As used to fall through to "<name> copy",
         // which says nothing about what was taken out of it (#173).
         if (applyingMarks && vm.DocumentName is { } redacted)
-            suggestedName = MainViewModel.SuggestRedactedFileName(redacted);
+            suggestedName = DocumentViewModel.SuggestRedactedFileName(redacted);
 
         var suggested = suggestedName is { Length: > 0 }
             ? Path.GetFileName(suggestedName)
@@ -1818,8 +2081,12 @@ public partial class MainWindow : Window
             // truncated — only once the verified bytes exist (#145).
             if (await vm.SaveAsThroughAsync(async () => await file.OpenWriteAsync(), file.TryGetLocalPath(), file.Name))
             {
-                _openedFile = file;
-                _pendingFile = null;
+                OpenedFile = file;
+                if (ReferenceEquals(_pendingFileOwner, vm))
+                {
+                    _pendingFile = null;
+                    _pendingFileOwner = null;
+                }
             }
         }
         catch (Exception ex)
@@ -1836,7 +2103,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task UnlockAsync()
     {
-        if (ViewModel is not { IsDocumentOpen: true, IsIdle: true } vm)
+        if (Active is not { IsDocumentOpen: true, IsIdle: true } vm)
             return;
 
         // Unlocking reopens the document from its file: unsaved changes would stay behind (D1).
@@ -1851,7 +2118,7 @@ public partial class MainWindow : Window
             await dialog.ShowDialog(this);
             if (string.IsNullOrEmpty(dialog.Password))
                 return;
-            if (await vm.UnlockAsync(dialog.Password) != MainViewModel.UnlockOutcome.WrongPassword)
+            if (await vm.UnlockAsync(dialog.Password) != DocumentViewModel.UnlockOutcome.WrongPassword)
                 return;
             retry = true;
         }
@@ -1867,7 +2134,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task ChangeSecurityAsync()
     {
-        if (ViewModel is not { IsDocumentOpen: true, IsIdle: true } vm)
+        if (Active is not { IsDocumentOpen: true, IsIdle: true } vm)
             return;
 
         if (!vm.Capabilities.CanChangeSecurity)
@@ -1877,7 +2144,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_openedFile is null)
+        if (OpenedFile is null)
         {
             vm.Status = Strings.NowhereToSave;
             return;
@@ -1905,7 +2172,7 @@ public partial class MainWindow : Window
             _ => Strings.PasswordRemovedStatus,
         };
 
-        var file = _openedFile;
+        var file = OpenedFile!;
         var local = file.TryGetLocalPath();
         try
         {
@@ -1964,7 +2231,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task ShrinkForEmailAsync()
     {
-        if (ViewModel is not { IsIdle: true } vm)
+        if (Active is not { IsIdle: true } vm)
             return;
 
         if (vm.IsDirty)

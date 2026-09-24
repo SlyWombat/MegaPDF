@@ -944,6 +944,30 @@
     <value>Fermer</value>
     <comment>FR-REVIEW #176 — lifted verbatim from the reviewed iOS catalogue (ios/MegaPDF/Localizable.xcstrings, state "translated"). macOS File menu: closes the window (⌘W), and the button that dismisses the About window (#176)</comment>
   </data>
+  <data name="CloseTab" xml:space="preserve">
+    <value>Fermer l'onglet</value>
+    <comment>FR-REVIEW #348 — new, francophone review pending: the standard macOS French wording for this File menu item. Closes the active tab (⌘W/Ctrl+W) — closes the window instead when it is the last tab (#348)</comment>
+  </data>
+  <data name="CloseWindow" xml:space="preserve">
+    <value>Fermer la fenêtre</value>
+    <comment>FR-REVIEW #348 — new, francophone review pending: the standard macOS French wording for this File menu item (⇧⌘W) (#348)</comment>
+  </data>
+  <data name="NewWindow" xml:space="preserve">
+    <value>Nouvelle fenêtre</value>
+    <comment>FR-REVIEW #348 — new, francophone review pending: the standard macOS French wording for this File menu item (⌘N on macOS, Ctrl+Shift+N on Linux) (#348)</comment>
+  </data>
+  <data name="ShowNextTab" xml:space="preserve">
+    <value>Afficher l'onglet suivant</value>
+    <comment>FR-REVIEW #348 — new, francophone review pending: the standard macOS French wording for this Window menu item (⌃Tab) (#348)</comment>
+  </data>
+  <data name="ShowPreviousTab" xml:space="preserve">
+    <value>Afficher l'onglet précédent</value>
+    <comment>FR-REVIEW #348 — new, francophone review pending: the standard macOS French wording for this Window menu item (⌃⇧Tab) (#348)</comment>
+  </data>
+  <data name="TabAccessibleName" xml:space="preserve">
+    <value>{0}, onglet</value>
+    <comment>FR-REVIEW #348 — new, francophone review pending. Narrator/VoiceOver name for a tab-strip item: the document's name, then what it is (#348)</comment>
+  </data>
   <data name="Minimize" xml:space="preserve">
     <value>Minimiser</value>
     <comment>FR-REVIEW #176 — new, not from the iOS catalogue: the wording macOS itself uses in French for this menu. macOS Window menu: sends the window to the Dock (⌘M) (#176)</comment>

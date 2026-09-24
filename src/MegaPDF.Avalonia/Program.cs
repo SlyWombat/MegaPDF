@@ -436,7 +436,7 @@ internal static class Program
     ///
     /// This exists because clicking is the one thing CI cannot do, and "the app
     /// launches" says nothing about whether ticking a box works. It drives the real
-    /// MainViewModel, so it exercises the same routing a click does, and it verifies
+    /// DocumentViewModel, so it exercises the same routing a click does, and it verifies
     /// through a fresh engine open of the saved file rather than by asking the object
     /// that just did the work.
     ///
@@ -449,7 +449,7 @@ internal static class Program
     /// Whether the document still says the canary, read back through a save. Used before a
     /// redaction is applied, to prove that marking alone removes nothing (#173).
     /// </summary>
-    private static bool DocumentSaysCanary(MainViewModel vm, string scratchPath)
+    private static bool DocumentSaysCanary(DocumentViewModel vm, string scratchPath)
     {
         using (var file = File.Create(scratchPath))
             vm.SaveTo(file);
@@ -510,7 +510,7 @@ internal static class Program
         var savedPath = Path.Combine(saveDir, $"megapdf-selftest-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
             Check("document opened", vm.IsDocumentOpen);
             Check("the square reads as a drawn checkbox",
@@ -558,7 +558,7 @@ internal static class Program
         try
         {
             File.Copy(Path.Combine(dir, "fixture.pdf"), inPlacePath);
-            using (var vm = new MainViewModel(state))
+            using (var vm = new DocumentViewModel(state))
             {
                 vm.Open(inPlacePath);
                 vm.HandlePageClick(0, drawnCentre);
@@ -590,7 +590,7 @@ internal static class Program
         Console.WriteLine("AcroForm checkbox:");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "forms.pdf"));
             var widgetCentre = new PdfPoint(107, 184);
             var hit = vm.HitTest(0, widgetCentre);
@@ -616,7 +616,7 @@ internal static class Program
         var signedPath = Path.Combine(saveDir, $"megapdf-selftest-sig-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             // A 40x20 block of opaque ink. Synthesised rather than loaded so this runs
@@ -671,7 +671,7 @@ internal static class Program
         Console.WriteLine("find in document:");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             // fixture.pdf page 1 says "The square below is a drawn checkbox candidate."
@@ -708,14 +708,14 @@ internal static class Program
         var editedPath = Path.Combine(saveDir, $"megapdf-selftest-edit-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             vm.TextFont = StandardTextBoxFonts.Serif;
             vm.TextSize = 18;
             vm.AddTextBox(0, new PdfPoint(120, 300), "Filled in on a Mac");
             Check("adding text marks the document dirty", vm.IsDirty);
-            Check("and leaves placement mode", vm.Mode == MainViewModel.PageMode.Select);
+            Check("and leaves placement mode", vm.Mode == DocumentViewModel.PageMode.Select);
 
             vm.AddWhiteout(0, new PdfRect(200, 200, 80, 20));
 
@@ -759,7 +759,7 @@ internal static class Program
         var redactedPath = Path.Combine(saveDir, $"megapdf-selftest-redact-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "text-partial-run.pdf"));
             Check("the redaction fixture opened", vm.IsDocumentOpen);
 
@@ -769,7 +769,7 @@ internal static class Program
 
             // The canary sits in the middle of the line; the KEEP words are either side.
             vm.AddRedactionMark(0, new PdfRect(120, 74, 150, 24));
-            Check("marking leaves placement mode", vm.Mode == MainViewModel.PageMode.Select);
+            Check("marking leaves placement mode", vm.Mode == DocumentViewModel.PageMode.Select);
             Check("the document now carries a mark", vm.HasRedactionMarks);
             Check("and nothing has been removed yet: the text is still there",
                   DocumentSaysCanary(vm, redactedPath));
@@ -824,7 +824,7 @@ internal static class Program
         var retypedPath = Path.Combine(saveDir, $"megapdf-selftest-text-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             var lines = vm.LinesOn(0);
@@ -869,7 +869,7 @@ internal static class Program
         var filledPath = Path.Combine(saveDir, $"megapdf-selftest-form-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "formtext.pdf"));
 
             // formtext.pdf's "fullname" widget is (100,600)-(300,620) in PDF space
@@ -915,7 +915,7 @@ internal static class Program
         var adjustedPath = Path.Combine(saveDir, $"megapdf-selftest-adj-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             // Place a signature, then select it by clicking it.
@@ -931,7 +931,7 @@ internal static class Program
 
             vm.HandlePageClick(0, at);
             Check("clicking a signature selects it rather than deleting it",
-                  vm.Selection is { Kind: MainViewModel.SelectionKind.Signature });
+                  vm.Selection is { Kind: DocumentViewModel.SelectionKind.Signature });
             Check("and it offers move and resize", vm.Selection is { CanMove: true, CanResize: true });
 
             var moved = new PdfRect(120, 500, 200, 100);
@@ -1009,7 +1009,7 @@ internal static class Program
         Console.WriteLine("toolbar wiring:");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
 
             var watched = new (string Name, System.Windows.Input.ICommand Command)[]
             {
@@ -1027,7 +1027,7 @@ internal static class Program
             var shrinkNotified = false;
             vm.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(MainViewModel.CanShrink))
+                if (e.PropertyName == nameof(DocumentViewModel.CanShrink))
                     shrinkNotified = true;
             };
 
@@ -1051,7 +1051,7 @@ internal static class Program
         Console.WriteLine("toolbar pickers and zoom menu (#144):");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
             Check("the pickers are away with nothing to style", !vm.IsTextStyleContext);
 
@@ -1070,14 +1070,14 @@ internal static class Program
                 vm.HandlePageClick(0, new PdfPoint(box.Bounds.X + (box.Bounds.Width / 2),
                                                    box.Bounds.Y + (box.Bounds.Height / 2)));
                 Check("selecting the box brings them back",
-                      vm.IsTextStyleContext && vm.Selection is { Kind: MainViewModel.SelectionKind.TextBox });
+                      vm.IsTextStyleContext && vm.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox });
 
                 vm.TextSize = 18;
                 var restyled = vm.BoxesOn(0).FirstOrDefault(b => b.Text.Contains("picker", StringComparison.Ordinal));
                 Check("choosing a size restyles the selected box",
                       restyled is not null && Math.Abs(restyled.FontSize - 18) < 0.5);
                 Check("and the box stays selected at its new size",
-                      vm.Selection is { Kind: MainViewModel.SelectionKind.TextBox, Run: { } run } && Math.Abs(run.FontSize - 18) < 0.5);
+                      vm.Selection is { Kind: DocumentViewModel.SelectionKind.TextBox, Run: { } run } && Math.Abs(run.FontSize - 18) < 0.5);
 
                 vm.TextFont = StandardTextBoxFonts.Mono;
                 Check("choosing a face restyles it too",
@@ -1110,7 +1110,7 @@ internal static class Program
         var copyPath = Path.Combine(saveDir, $"megapdf-selftest-copy-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
             vm.HandlePageClick(0, new PdfPoint(78, 186));   // tick a box so the copy differs
             Check("the document is dirty before saving a copy", vm.IsDirty);
@@ -1154,7 +1154,7 @@ internal static class Program
         var kbPath = Path.Combine(saveDir, $"megapdf-selftest-kb-{Guid.NewGuid():N}.pdf");
         try
         {
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             vm.Open(Path.Combine(dir, "fixture.pdf"));
 
             Check("focus starts off the page", vm.PageFocus is null);
@@ -1226,7 +1226,7 @@ internal static class Program
             var before = File.ReadAllBytes(original);
             var box = new PdfPoint(78, 186);
 
-            using (var vm = new MainViewModel(busyState))
+            using (var vm = new DocumentViewModel(busyState))
             {
                 vm.Open(original);
                 vm.HandlePageClick(0, box);
@@ -1285,7 +1285,7 @@ internal static class Program
                 vm.DiscardChanges();
             }
 
-            using (var vm = new MainViewModel(busyState) { RunsInBackground = true })
+            using (var vm = new DocumentViewModel(busyState) { RunsInBackground = true })
             {
                 vm.OpenAsync(original).GetAwaiter().GetResult();
                 Check("with a window, a document opens off the UI thread", vm.IsDocumentOpen && vm.Pages.Count > 0);
@@ -1296,14 +1296,14 @@ internal static class Program
                 Check("and a click applies its change off it", vm.IsDirty && vm.CanUndo);
             } // closed with that change unsaved, and nobody agreed to lose it
 
-            using (var vm = new MainViewModel(busyState))
+            using (var vm = new DocumentViewModel(busyState))
             {
                 Check("closing with unsaved changes keeps their journal (D1)", vm.FindRecoverableSessions().Count == 1);
                 vm.Open(original);
                 vm.HandlePageClick(0, box);
                 vm.DiscardChanges();
             } // Don't Save
-            using (var vm = new MainViewModel(busyState))
+            using (var vm = new DocumentViewModel(busyState))
                 Check("Don't Save lets the journal go", vm.FindRecoverableSessions().Count == 0);
         }
         catch (Exception ex)
@@ -1335,7 +1335,7 @@ internal static class Program
         var keyboardState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-redactkbd-{Guid.NewGuid():N}");
         try
         {
-            using var vm = new MainViewModel(keyboardState);
+            using var vm = new DocumentViewModel(keyboardState);
             vm.Open(Path.Combine(dir, "text-partial-run.pdf"));
             Check("the fixture opened", vm.IsDocumentOpen);
 
@@ -1387,7 +1387,7 @@ internal static class Program
         var markState = Path.Combine(Path.GetTempPath(), $"megapdf-selftest-marks-{Guid.NewGuid():N}");
         try
         {
-            using var vm = new MainViewModel(markState);
+            using var vm = new DocumentViewModel(markState);
             vm.Open(Path.Combine(dir, "text-partial-run.pdf"));
             Check("the fixture opened", vm.IsDocumentOpen);
 
@@ -1549,11 +1549,11 @@ internal static class Program
                 File.Copy(Path.Combine(dir, "fixture.pdf"), path, overwrite: true);
             }
 
-            using var vm = new MainViewModel(recentsState);
+            using var shell = new ShellViewModel(recentsState);
             foreach (var path in paths)
-                vm.RememberRecent(path, null);
+                shell.RememberRecent(path, null);
 
-            var rows = vm.Recents.ToList();
+            var rows = shell.Recents.ToList();
             Check($"every recent is listed ({rows.Count})", rows.Count == paths.Length);
             Check("and every one of them says where it lives",
                   rows.All(r => r.HasLocation));
@@ -1799,7 +1799,7 @@ internal static class Program
     /// </summary>
     private static void Launch(string launched, string? withCrashOf, Views.RecoveryWindow.Decision answer,
                                bool late,
-                               Action<Views.MainWindow, MainViewModel, bool?, Core.Recovery.RecoverableSession?> assert,
+                               Action<Views.MainWindow, DocumentViewModel, bool?, Core.Recovery.RecoverableSession?> assert,
                                bool capture = false)
     {
         // Its own state directory, wiped afterwards: these runs write recovery journals
@@ -1816,7 +1816,7 @@ internal static class Program
                 // Disposed without EndSession: the journal stays behind, as after a kill.
             }
 
-            using var vm = new MainViewModel(state);
+            using var vm = new DocumentViewModel(state);
             var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
 
             // Read at the moment of the offer, not after the run: whether a document was
@@ -1893,7 +1893,7 @@ internal static class Program
     {
         EnsureHeadlessPlatform();
 
-        using var vm = new MainViewModel(state);
+        using var vm = new DocumentViewModel(state);
         vm.Open(Path.Combine(dir, "fixture.pdf"));
         var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
         window.Show();
@@ -2062,9 +2062,9 @@ internal static class Program
 
         // A window per scenario: closing one disposes its view model (MainWindow.OnClosed),
         // so none of them can be reused afterwards.
-        (MainViewModel Vm, Views.MainWindow Window) Open()
+        (DocumentViewModel Vm, Views.MainWindow Window) Open()
         {
-            var vm = new MainViewModel(state);
+            var vm = new DocumentViewModel(state);
             vm.Open(fixture);
             var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
             window.Show();
@@ -2212,8 +2212,9 @@ internal static class Program
                 CultureInfo.CurrentUICulture = culture;
                 CultureInfo.CurrentCulture = culture;
 
-                using var vm = new MainViewModel(state);
-                var window = new Views.MainWindow { DataContext = vm };
+                using var shell = new ShellViewModel(state);
+                var vm = shell.CreateDocument();
+                var window = new Views.MainWindow { DataContext = shell };
                 window.Width = window.MinWidth;
                 window.Height = window.MinHeight;
                 window.Show();
@@ -2222,16 +2223,18 @@ internal static class Program
                 // --- The empty state, with recents to show ---
                 //
                 // The list used to run on under the status line and off the bottom
-                // edge, and its scrollbar track with it.
+                // edge, and its scrollbar track with it. `vm` is not a tab yet (#348):
+                // the empty state is Shell.HasDocuments == false, which an added-but-
+                // unopened tab would break.
                 foreach (var name in new[] { "fixture.pdf", "demo.pdf", "stamped.pdf" })
                 {
                     var path = Path.Combine(dir, name);
                     if (File.Exists(path))
-                        vm.RememberRecent(path, null);
+                        shell.RememberRecent(path, null);
                 }
                 Pump();
-                check($"[{tag}] at {window.Width:F0}×{window.Height:F0} the empty state shows its recents ({vm.Recents.Count})",
-                      vm.ShowEmptyState && vm.HasRecents && window.RecentList.IsVisible);
+                check($"[{tag}] at {window.Width:F0}×{window.Height:F0} the empty state shows its recents ({shell.Recents.Count})",
+                      shell.ShowEmptyState && shell.HasRecents && window.RecentList.IsVisible);
 
                 // Both ends of the block, in the window's own coordinates. Not the
                 // empty-state container's own bounds: those are the rectangle it was
@@ -2259,6 +2262,7 @@ internal static class Program
                 var demo = new[] { tag.StartsWith("fr", StringComparison.Ordinal) ? "demo-fr.pdf" : "demo.pdf", "fixture.pdf" }
                     .Select(name => Path.Combine(dir, name)).First(File.Exists);
                 vm.Open(demo);
+                shell.AddTab(vm);
                 Pump();
                 // Opened the way --screenshot-state find opens it: the view model's flag
                 // and the real box, because the box is what the typing path fills.
@@ -2315,7 +2319,7 @@ internal static class Program
     {
         EnsureHeadlessPlatform();
 
-        using var vm = new MainViewModel(state);
+        using var vm = new DocumentViewModel(state);
         vm.Open(Path.Combine(dir, "fixture.pdf"));
         var window = new Views.MainWindow { DataContext = vm, Width = 1280, Height = 800 };
         window.Show();

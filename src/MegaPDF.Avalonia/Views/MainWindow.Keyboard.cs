@@ -34,7 +34,7 @@ public partial class MainWindow
     private void OnPageFocusChanged()
     {
         RemoveFocusRing();
-        if (ViewModel is not { PageFocus: { } focus } vm)
+        if (Active is not { PageFocus: { } focus } vm)
             return;
         if (ContainerFor(focus.PageIndex) is not ContentPresenter presenter)
             return;
@@ -68,7 +68,7 @@ public partial class MainWindow
         _focusRingHost = presenter;
     }
 
-    private static string DescribeFocus(MainViewModel vm, MainViewModel.FocusedRegion focus)
+    private static string DescribeFocus(DocumentViewModel vm, DocumentViewModel.FocusedRegion focus)
     {
         var what = focus.Describe(false);
         return Strings.PageRegionDescription(focus.PageIndex + 1, what);
@@ -92,7 +92,7 @@ public partial class MainWindow
     /// </summary>
     private bool HandlePageKey(KeyEventArgs e)
     {
-        if (ViewModel is not { IsDocumentOpen: true } vm)
+        if (Active is not { IsDocumentOpen: true } vm)
             return false;
 
         // Zoom in answers Cmd+Shift+= as well as Cmd+= (#144). The plus sign is on the

@@ -44,7 +44,7 @@ public partial class App : Application
     /// these since their store screenshots were first captured; macOS is catching
     /// up with them.
     /// </summary>
-    private static bool ApplyScreenshotState(MainViewModel viewModel, MainWindow? window, string state, string? signaturePng)
+    private static bool ApplyScreenshotState(DocumentViewModel viewModel, MainWindow? window, string state, string? signaturePng)
     {
         switch (state)
         {
@@ -340,20 +340,20 @@ public partial class App : Application
             // whatever it last opened — on the capture Mac, a path through the sandbox
             // container — so the rows come from DemoContent, as iOS's do.
             case "home":
-                if (viewModel.IsDocumentOpen)
+                if (viewModel.IsDocumentOpen || window?.Shell is not { } shell)
                 {
                     Console.Error.WriteLine(
                         "::error::--screenshot-state home was given a document to open. The home "
                         + "shot is the empty window; pass no .pdf.");
                     return false;
                 }
-                viewModel.ShowDemoRecents(DemoContent.Recents);
-                if (!viewModel.HasRecents)
+                shell.ShowDemoRecents(DemoContent.Recents);
+                if (!shell.HasRecents)
                 {
                     Console.Error.WriteLine("::error::--screenshot-state home: the recents list is empty.");
                     return false;
                 }
-                Console.WriteLine($"screenshot-state home: {viewModel.Recents.Count} recent row(s)");
+                Console.WriteLine($"screenshot-state home: {shell.Recents.Count} recent row(s)");
                 return true;
 
             default:
@@ -399,11 +399,11 @@ public partial class App : Application
                     Console.WriteLine(main.DescribeToolbar());
                     // And the find bar's, when there is one on screen: it folds on the
                     // same principle and at 480 it is the row that used to overflow (#237).
-                    if (main.DataContext is MainViewModel { IsFindOpen: true })
+                    if (main.Active is { IsFindOpen: true })
                         Console.WriteLine(main.DescribeFindBar());
                     Console.WriteLine(main.DescribeMenuBar());
                 }
-                if (RenderScale != 1 && OverlaysOnThePage(desktop.MainWindow?.DataContext as MainViewModel))
+                if (RenderScale != 1 && OverlaysOnThePage((desktop.MainWindow as MainWindow)?.Active))
                 {
                     Console.Error.WriteLine(
                         "::error::--scale 2 draws page overlays in the wrong place, so this capture "
@@ -445,7 +445,7 @@ public partial class App : Application
     /// Asked of the state that is actually on screen rather than of the state name, so
     /// a capture posed some other way is covered too.
     /// </summary>
-    private static bool OverlaysOnThePage(MainViewModel? viewModel) =>
+    private static bool OverlaysOnThePage(DocumentViewModel? viewModel) =>
         viewModel is not null
         && viewModel.Pages.Any(page => page.Highlights.Count > 0
                                        || page.RedactionMarks.Count > 0
@@ -487,7 +487,7 @@ public partial class App : Application
     /// 612x792, here from the top-left as the view model counts).
     /// </summary>
     private static void RunStory(IClassicDesktopStyleApplicationLifetime desktop,
-                                 MainViewModel viewModel, string outDir, string? signaturePng)
+                                 DocumentViewModel viewModel, string outDir, string? signaturePng)
     {
         var signature = signaturePng is not null && File.Exists(signaturePng)
             ? Rendering.SignatureImages.LoadBgra(signaturePng)
@@ -1030,11 +1030,17 @@ public partial class App : Application
             }
 
             // The sign screenshot seeds a signature into the library; that must land in
-            // a throwaway directory, never in the person's real one (#100).
-            var viewModel = ArgumentAfter(desktop.Args, "--screenshot-state") == "sign"
-                ? new MainViewModel(Directory.CreateTempSubdirectory("megapdf-shot-sign-").FullName)
-                : new MainViewModel();
-            var window = new MainWindow { DataContext = viewModel };
+            // a throwaway directory, never in the person's real one (#100). The shell now
+            // owns settings/recents/signatures (#348), so the isolated state directory
+            // goes on it. `viewModel` is the one document these capture/diagnostic rigs
+            // drive — they still assume exactly one — added as a tab below, once (and
+            // only if) the command-line .pdf argument actually opens it: the "home"
+            // state needs Shell.HasDocuments false, which an empty tab would break.
+            var shell = ArgumentAfter(desktop.Args, "--screenshot-state") == "sign"
+                ? new ShellViewModel(Directory.CreateTempSubdirectory("megapdf-shot-sign-").FullName)
+                : new ShellViewModel();
+            var viewModel = shell.CreateDocument();
+            var window = new MainWindow { DataContext = shell };
             desktop.MainWindow = window;
 
             // A capture or diagnostic run is nobody's session, so it is never offered
@@ -1084,16 +1090,27 @@ public partial class App : Application
                     _ = window.ConfirmThenQuitAsync(desktop);
                     return;
                 }
-                viewModel.Dispose();
+                shell.Dispose();
             };
 
             // A PDF passed on the command line (the Windows file association, the
             // capture scripts, `open --args`) opens as soon as the window does. Finder
             // does not pass files this way; see the activation handler above.
+            //
+            // Opened directly into `viewModel` rather than through the window's
+            // find-or-open-a-tab router: the capture/diagnostic rigs below (RunStory,
+            // ApplyScreenshotState, DesktopCheckAsync) hold this one reference and
+            // expect it to be THE document, and opening it synchronously — the same
+            // RunSynchronously path the self-test uses — is what lets them proceed
+            // without a wait for an async open they do not otherwise coordinate with.
             var path = desktop.Args?.FirstOrDefault(a =>
                 a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
             if (path is not null)
-                window.OpenFromSystem(path);
+            {
+                viewModel.Open(path);
+                if (viewModel.IsDocumentOpen)
+                    shell.AddTab(viewModel);
+            }
 
             // --screenshot <out.png>: render the window to a file and quit.
             //

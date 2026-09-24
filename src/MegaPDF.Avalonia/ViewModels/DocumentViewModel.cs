@@ -23,7 +23,7 @@ public sealed record SignatureItem(SignatureEntry Entry, global::Avalonia.Media.
     /// window's visual tree, where an ancestor binding cannot find the main view
     /// model; the item carries it instead (#100).
     /// </summary>
-    public MainViewModel? Owner { get; init; }
+    public DocumentViewModel? Owner { get; init; }
 
     /// <summary>Narrator/VoiceOver name for the card: what it is, and what a click does.</summary>
     public string AccessibleName => Strings.SignatureCardA11y(Entry.Name);
@@ -52,7 +52,12 @@ public sealed record FontChoice(string PostScriptName, string Label)
 }
 
 /// <summary>
-/// The document shell: open, view, check, save.
+/// One open document: open, view, check, save. One instance per tab (#348 phase 1)
+/// — everything here is exactly the state a tab needs to act independently of every
+/// other tab (undo stack, journal, zoom, search, armed tool, selection, dirty flag).
+/// App-scoped state (settings, recent files, the signature library, the recovery
+/// scan/offer) lives on <see cref="ShellViewModel"/> and its owning app instead, and
+/// is handed to every <see cref="DocumentViewModel"/> that needs it.
 ///
 /// The editing behaviour is not reimplemented here — MegaPDF.Core's reversible
 /// operations (CheckboxToggleOperation, AddMarkOperation, RemoveMarkOperation) and
@@ -63,7 +68,7 @@ public sealed record FontChoice(string PostScriptName, string Label)
 /// File dialogs stay in the view. Avalonia reaches them through the TopLevel's
 /// IStorageProvider, so a path or a stream comes in and this stays UI-free.
 /// </summary>
-public sealed partial class MainViewModel : ObservableObject, IDisposable
+public sealed partial class DocumentViewModel : ObservableObject, IDisposable
 {
     private static readonly double[] ZoomStops =
         [0.5, 0.67, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
@@ -88,7 +93,6 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     internal event Func<IReadOnlyList<Platform.Printing.Destination>,
                       Task<Platform.Printing.Choice?>>? PrintDestinationRequested;
     private readonly ISignatureLibrary _signatures;
-    private readonly RecentFiles _recents;
     private readonly AppSettings _settings;
     private readonly RecoveryJournal _journal;
     private IPdfDocument? _document;
@@ -208,33 +212,58 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     partial void OnCurrentPageChanged(int value) => PreparePageCheck(value - 1);
 
-    /// <param name="stateDirectory">
-    /// Where settings, recents, signatures and the recovery journal live. Null means
-    /// the real per-user locations, which is what the app uses.
-    ///
-    /// It exists because --self-test used to run against those real locations: it
-    /// wrote to the user's signature library and recent files, and — worse — left
-    /// FlattenOnSave switched on, which then broke the *next* run's checks. A test
-    /// that mutates the state of the machine it runs on is not a test.
+    /// <param name="settings">
+    /// The process-wide settings instance (#348): one per app instance, shared by
+    /// every tab. Two independent copies would each load the whole file and each
+    /// write the whole file back on every setter, so a Theme change in one tab could
+    /// clobber a FlattenOnSave change made in another (#348 plan §4).
     /// </param>
-    public MainViewModel(string? stateDirectory = null)
+    /// <param name="signatures">
+    /// The process-wide signature library — shared for the same reason. Each tab
+    /// still keeps its own <see cref="Signatures"/> collection, reloaded from this
+    /// shared store on adopt, so a signature added in one tab shows up in another's
+    /// flyout the next time it opens.
+    /// </param>
+    /// <param name="recoveryDirectory">
+    /// Where this document's recovery journal lives. Null means the real per-user
+    /// location. Unlike settings and signatures, the journal itself stays one
+    /// instance per <see cref="DocumentViewModel"/> — it is already keyed by
+    /// document path, and #348's plan is explicit that nothing about its per-document
+    /// lifecycle needs to change; only the scan and the crash-recovery offer move up
+    /// to the app level (<see cref="ShellViewModel"/>).
+    /// </param>
+    public DocumentViewModel(AppSettings settings, ISignatureLibrary signatures, string? recoveryDirectory = null)
     {
-        if (stateDirectory is null)
-        {
-            _settings = new AppSettings();
-            _recents = new RecentFiles();
-            _signatures = new SignatureLibrary();
-            _journal = new RecoveryJournal();
-        }
-        else
-        {
-            Directory.CreateDirectory(stateDirectory);
-            _settings = new AppSettings(Path.Combine(stateDirectory, "settings.json"));
-            _recents = new RecentFiles(Path.Combine(stateDirectory, "recent.json"));
-            _signatures = new SignatureLibrary(Path.Combine(stateDirectory, "Signatures"));
-            _journal = new RecoveryJournal(Path.Combine(stateDirectory, "Recovery"));
-        }
+        _settings = settings;
+        _signatures = signatures;
+        _journal = recoveryDirectory is null ? new RecoveryJournal() : new RecoveryJournal(recoveryDirectory);
         Busy.PropertyChanged += OnBusyChanged;
+    }
+
+    /// <param name="stateDirectory">
+    /// Where settings, signatures and the recovery journal live for THIS document
+    /// alone. Null means the real per-user locations.
+    ///
+    /// This overload owns a private settings instance and signature library rather
+    /// than sharing a process-wide one — wrong for a tab inside a running app (two
+    /// tabs must share one settings file, or one silently clobbers the other's
+    /// changes, #348 plan §4), but exactly right for a single, isolated document
+    /// under test: the self-test and the windowless checks (--render-check and
+    /// friends) each want one document with its own private state directory and
+    /// nothing else in the process to share it with. Production code goes through
+    /// <see cref="ShellViewModel.CreateDocument"/> instead.
+    /// </param>
+    public DocumentViewModel(string? stateDirectory = null)
+        : this(stateDirectory is null ? new AppSettings() : new AppSettings(Path.Combine(EnsureDirectory(stateDirectory), "settings.json")),
+               stateDirectory is null ? new SignatureLibrary() : new SignatureLibrary(Path.Combine(stateDirectory, "Signatures")),
+               stateDirectory is null ? null : Path.Combine(stateDirectory, "Recovery"))
+    {
+    }
+
+    private static string EnsureDirectory(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        return directory;
     }
 
     public ObservableCollection<PageViewModel> Pages { get; } = [];
@@ -244,11 +273,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
+    [NotifyPropertyChangedFor(nameof(TabTitle))]
+    [NotifyPropertyChangedFor(nameof(TabAccessibleNameText))]
     private string? _documentName;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
+    [NotifyPropertyChangedFor(nameof(TabTitle))]
+    [NotifyPropertyChangedFor(nameof(TabAccessibleNameText))]
     [NotifyPropertyChangedFor(nameof(CanShrink))]
     private bool _isDirty;
 
@@ -326,6 +359,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public string WindowTitle => DocumentName is null
         ? "MegaPDF"
         : Strings.WindowTitleFormat($"{(IsDirty ? "• " : "")}{DocumentName}");
+
+    /// <summary>
+    /// The tab strip's own label for this document (#348): the same dirty-dot
+    /// convention as <see cref="WindowTitle"/>, but without the app name — the
+    /// window title carries that once, for whichever tab is active.
+    /// </summary>
+    public string TabTitle => DocumentName is null ? "MegaPDF" : $"{(IsDirty ? "• " : "")}{DocumentName}";
+
+    /// <summary>Narrator/VoiceOver name for this document's tab-strip item (#348).</summary>
+    public string TabAccessibleNameText => Strings.TabAccessibleName(TabTitle);
 
     [ObservableProperty]
     private string _status = Strings.OpenToGetStarted;
@@ -1023,114 +1066,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Shrinking rewrites the document's images, which is modify (#131).</summary>
     public bool CanShrink => IsDocumentOpen && !IsDirty && Capabilities.CanShrink && !Busy.IsBusy;
 
-    // --- Recent documents (SDD §2.2 empty state) ---
-
-    /// <summary>
-    /// One row of the empty state's recents list: the file name, and under it where
-    /// the file lives (#165).
-    ///
-    /// Every row carries its location, not only the rows whose names clash. Files
-    /// from one template or one scanner share a name, and a list that added the
-    /// folder only sometimes would rearrange itself as entries came and went — the
-    /// shared rule for this issue, which Windows and iOS follow too.
-    /// </summary>
-    /// <param name="Name">What Finder calls the file, so ".pdf" is hidden when the
-    /// person has Finder set to hide extensions.</param>
-    /// <param name="Location">The line under the name, shortened in the middle if it
-    /// is long. Null only for a path with no folder above it at all.</param>
-    /// <param name="FullLocation">Every segment, for the help tag.</param>
-    public sealed record RecentRow(RecentEntry Entry, string Name, string? Location, string? FullLocation)
-    {
-        public string Path => Entry.Path;
-
-        public bool HasLocation => !string.IsNullOrEmpty(Location);
-
-        /// <summary>The help tag: where the file is, in full, never a POSIX path.</summary>
-        public string Tip => FullLocation is { Length: > 0 } full ? full : Name;
-
-        /// <summary>
-        /// The name and the place together, so a screen reader can tell two rows with
-        /// the same file name apart (#2). The same sentence the Windows and iOS halves
-        /// of #165 read out.
-        /// </summary>
-        public string AccessibleName =>
-            FullLocation is { Length: > 0 } full ? Strings.RecentInLocation(Name, full) : Name;
-    }
-
-    public ObservableCollection<RecentRow> Recents { get; } = [];
-
-    public bool HasRecents => Recents.Count > 0;
-
-    public void LoadRecents()
-    {
-        Recents.Clear();
-        // Finder's names for the places a document can live — localised, and the
-        // account's own name rather than a POSIX home path. Empty off macOS, where the
-        // raw folder names are all there is and all that is wanted.
-        var places = OperatingSystem.IsMacOS()
-            ? Platform.MacFileNames.Places()
-            : (IReadOnlyList<NamedFolder>)[];
-        // The sandbox container is inside the home folder, so without this a file the
-        // app opened from its own container reads as the whole way down to it (#146 §3).
-        var opaque = OperatingSystem.IsMacOS()
-            ? Platform.MacFileNames.OpaqueRoots()
-            : (IReadOnlyList<string>)[];
-
-        var rows = _recents.Entries
-            .Select(entry => (
-                Entry: entry,
-                Name: (OperatingSystem.IsMacOS() ? Platform.MacFileNames.DisplayName(entry.Path) : null)
-                      ?? entry.DisplayName,
-                Segments: RecentLocation.Segments(entry.Path, places, opaque)))
-            .ToList();
-
-        // How far up a row has to go before it reads differently from the others with
-        // the same name. The parent folder usually does it; when it does not, the line
-        // keeps that much more of the path instead of shortening it away. Compared the
-        // way a person reads the list, not the way a byte comparison would.
-        var depths = rows
-            .GroupBy(r => r.Name, StringComparer.CurrentCultureIgnoreCase)
-            .ToDictionary(g => g.Key,
-                          g => RecentLocation.DistinguishingDepth(g.Select(r => r.Segments).ToList()),
-                          StringComparer.CurrentCultureIgnoreCase);
-
-        foreach (var row in rows)
-        {
-            var line = RecentLocation.Line(row.Segments, keepDeepest: depths[row.Name]);
-            var full = string.Join(RecentLocation.Separator, row.Segments);
-            Recents.Add(new RecentRow(row.Entry, row.Name,
-                                      string.IsNullOrEmpty(line) ? null : line,
-                                      string.IsNullOrEmpty(full) ? null : full));
-        }
-        OnPropertyChanged(nameof(HasRecents));
-    }
-
-    /// <summary>
-    /// Replaces the recents list with rows made for a capture (#146 §3).
-    ///
-    /// The home screenshot was whatever the machine had last opened, which is not a
-    /// screenshot anyone can re-take. These rows go in as RecentRow directly rather
-    /// than through the store: nothing about them has to exist on disk, and going
-    /// through the store would write into the person's real list.
-    /// </summary>
-    internal void ShowDemoRecents(IReadOnlyList<(string Name, string Location)> rows)
-    {
-        Recents.Clear();
-        foreach (var (name, location) in rows)
-            Recents.Add(new RecentRow(new RecentEntry(name), name, location, location));
-        OnPropertyChanged(nameof(HasRecents));
-    }
-
-    /// <summary>
-    /// Records a document as recently opened. The bookmark is what lets macOS
-    /// reopen it in a later session at all — under the sandbox a stored path is not
-    /// a key to anything.
-    /// </summary>
-    public void RememberRecent(string path, string? bookmark)
-    {
-        _recents.Add(path, bookmark);
-        LoadRecents();
-    }
+    // Recent documents (SDD §2.2 empty state) — RecentRow, Recents, LoadRecents,
+    // ShowDemoRecents and RememberRecent moved to ShellViewModel (#348): the
+    // recents list belongs to the app/window, not to any one open document, and
+    // RecentFiles itself is now a process-wide shared instance (see ShellViewModel.cs).
 
     // --- Crash recovery (SDD §3.4) ---
 

@@ -80,7 +80,7 @@ public partial class MainWindow
     private IEnumerable<Control> ToolbarChildren => ToolbarItems.Children.Where(c => c != MoreButton);
 
     /// <summary>Whether the font and size pickers belong on the row right now.</summary>
-    private bool TextStyleContextShown => ViewModel?.IsTextStyleContext == true;
+    private bool TextStyleContextShown => Active?.IsTextStyleContext == true;
 
     /// <summary>Called from the constructor, after the shortcut tooltips are set.</summary>
     private void WireToolbar()
@@ -322,7 +322,7 @@ public partial class MainWindow
         if (entries.Count > 0)
             entries.Add(new Separator());
 
-        var vm = ViewModel;
+        var vm = Active;
         entries.Add(CommandEntry(Strings.SaveAs, "IconSaveAs", SaveAsGesture,
             vm?.IsDocumentOpen == true, () => _ = SaveAsAsync()));
         entries.Add(CommandEntry(Strings.SecurityToolbar, "IconLock", null,
@@ -347,7 +347,7 @@ public partial class MainWindow
     /// </summary>
     private IEnumerable<object> ZoomMenuEntries()
     {
-        var vm = ViewModel;
+        var vm = Active;
         var open = vm?.IsDocumentOpen == true;
         yield return CommandEntry(Strings.ActualSize, "IconActualSize", ActualSizeGesture, open,
             () => vm?.ZoomResetCommand.Execute(null));
@@ -356,7 +356,7 @@ public partial class MainWindow
         yield return CommandEntry(Strings.FitPage, "IconFitPage", null, open,
             () => vm?.FitPageCommand.Execute(null));
         yield return new Separator();
-        foreach (var preset in MainViewModel.ZoomPresets)
+        foreach (var preset in DocumentViewModel.ZoomPresets)
         {
             var entry = new MenuItem
             {

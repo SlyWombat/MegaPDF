@@ -56,7 +56,7 @@ public partial class MainWindow
     private void OnSelectionChanged()
     {
         RemoveChrome();
-        if (ViewModel is not { Selection: { } sel } vm)
+        if (Active is not { Selection: { } sel } vm)
             return;
         if (ContainerFor(sel.PageIndex) is not ContentPresenter presenter)
             return;
@@ -87,7 +87,7 @@ public partial class MainWindow
             // fix a typo without deleting and retyping.
             body.DoubleTapped += (_, e) =>
             {
-                if (sel.Kind == MainViewModel.SelectionKind.TextBox && sel.Run is { } run)
+                if (sel.Kind == DocumentViewModel.SelectionKind.TextBox && sel.Run is { } run)
                 {
                     e.Handled = true;
                     ShowTextBoxEditor(sel.PageIndex, run);
@@ -126,7 +126,7 @@ public partial class MainWindow
 
         // The ✕ that takes it off, outside the body's top-right corner — standing further
         // off added text, whose tight glyph box would otherwise put the chip on the letters.
-        RemoveChip(host, vm, rect, standOff: sel.Kind == MainViewModel.SelectionKind.TextBox);
+        RemoveChip(host, vm, rect, standOff: sel.Kind == DocumentViewModel.SelectionKind.TextBox);
 
         _chrome = new Border { Child = host };
         _chromeHost = presenter;
@@ -148,7 +148,7 @@ public partial class MainWindow
     /// the mark. Windows lays its chip inside a selection-sized Grid, and this is that same
     /// position in the panel's coordinates (#338).
     /// </summary>
-    private void RemoveChip(Panel host, MainViewModel vm, Rect rect, bool standOff)
+    private void RemoveChip(Panel host, DocumentViewModel vm, Rect rect, bool standOff)
     {
         _chipOffset = standOff ? ChipStandOff : 0;
         var chip = new Button
@@ -250,7 +250,7 @@ public partial class MainWindow
 
     private void OnSelectionPointerReleased(PointerReleasedEventArgs e)
     {
-        if (!_dragging || ViewModel is not { Selection: { } sel } vm)
+        if (!_dragging || Active is not { Selection: { } sel } vm)
             return;
 
         _dragging = false;
@@ -294,7 +294,7 @@ public partial class MainWindow
     /// </summary>
     private void ShowTextBoxEditor(int pageIndex, PdfTextRun box)
     {
-        if (ViewModel is not { } vm || ContainerFor(pageIndex) is not { } container)
+        if (Active is not { } vm || ContainerFor(pageIndex) is not { } container)
             return;
 
         var dip = PageBitmap.PointsToPixels * vm.Zoom;

@@ -767,6 +767,24 @@ public static partial class Strings
     /// <summary>Close</summary>
     public static string Close => Get("Close");
 
+    /// <summary>Close Tab</summary>
+    public static string CloseTab => Get("CloseTab");
+
+    /// <summary>Close Window</summary>
+    public static string CloseWindow => Get("CloseWindow");
+
+    /// <summary>New Window</summary>
+    public static string NewWindow => Get("NewWindow");
+
+    /// <summary>Show Next Tab</summary>
+    public static string ShowNextTab => Get("ShowNextTab");
+
+    /// <summary>Show Previous Tab</summary>
+    public static string ShowPreviousTab => Get("ShowPreviousTab");
+
+    /// <summary>{0}, tab</summary>
+    public static string TabAccessibleName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabAccessibleName"), arg0);
+
     /// <summary>Minimize</summary>
     public static string Minimize => Get("Minimize");
 
