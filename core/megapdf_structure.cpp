@@ -236,8 +236,20 @@ struct Char {
     unsigned int unicode = 0;
     double l = 0, b = 0, r = 0, t = 0;                    // crop space, tight ink box (display/span bounds)
     double loose_l = 0, loose_r = 0;                       // crop space, FPDFText_GetLooseCharBox (word-gap test)
+    double loose_t = 0, loose_b = 0;                       // ...its top/bottom, needed only for #363's
+                                                            // rotation-aware BuildWords (a rotated box's
+                                                            // leading corner along the advance is not always
+                                                            // the one loose_l/loose_r alone would pick).
     double origin_x = 0, origin_y = 0;   // crop space
-    double font_size = 0;                // crop space points
+    double font_size = 0;                // crop space points (the raw Tf operand -- #363's diagnosis on
+                                          // FPDFText_GetFontSize -- times the page's own unit scale)
+    // The linear (rotation/scale, no translation) part of FPDFText_GetMatrix, unscaled -- #363's
+    // rotation-aware BuildWords inverts this to map a page-space gap/baseline test into this
+    // character's own text space, where its advance runs along local +x and font_size (above) is
+    // genuinely the em, whether or not the character is rotated. Defaults to the identity so a
+    // character PDFium fails to hand back a matrix for behaves exactly as the old page-space code
+    // did (identity's inverse is itself).
+    double mat_a = 1, mat_b = 0, mat_c = 0, mat_d = 1;
     int object_index = -1;               // the page-level text object, -1 for a form-XObject run
     bool bold = false, italic = false, mono = false;
     bool rotated = false;
@@ -363,9 +375,14 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
             c.loose_l = ToCropX(page, loose.left);
             c.loose_r = ToCropX(page, loose.right);
             if (c.loose_r < c.loose_l) std::swap(c.loose_l, c.loose_r);
+            c.loose_t = ToCropY(page, loose.top);
+            c.loose_b = ToCropY(page, loose.bottom);
+            if (c.loose_t < c.loose_b) std::swap(c.loose_t, c.loose_b);
         } else {
             c.loose_l = c.l;
             c.loose_r = c.r;
+            c.loose_t = c.t;
+            c.loose_b = c.b;
         }
         FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(tp, i);
         const auto it = obj != nullptr ? obj_index.find(obj) : obj_index.end();
@@ -379,11 +396,72 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
             const double a = std::fabs(m.a) > 1e-6 ? std::fabs(m.a) : 1.0;
             c.rotated = std::fabs(m.b) > kRotationSkewTolerance * a || std::fabs(m.c) > kRotationSkewTolerance * a;
         }
+        // Stored regardless of whether FPDFText_GetMatrix succeeded above: on failure `m` is
+        // still the identity it was initialised to, which is exactly the fallback #363's
+        // rotation-aware BuildWords wants (see the Char::mat_a comment).
+        c.mat_a = m.a; c.mat_b = m.b; c.mat_c = m.c; c.mat_d = m.d;
         out->chars.push_back(c);
     }
     FPDFText_ClosePage(tp);
     out->total_real_chars = static_cast<int>(out->chars.size());
     for (const Char& c : out->chars) if (c.rotated) out->rotated_chars++;
+}
+
+// #363 (rotation-aware BuildWords, "variant H" of the issue's investigation): the gap and
+// baseline tests below are run in a character's own TEXT space rather than page space, so a
+// 90-degree-rotated run (whose advance moves along page Y, not page X) is judged by the exact
+// same rule that already works for upright text, instead of having every consecutive pair fail
+// the page-space baseline test and every rotated character come out as its own one-glyph word
+// (measured on the real corpus: 3.4% of characters, ~97% of the token-fidelity excess this
+// closes). `Linear2` is the linear (rotation/scale, translation dropped) part of a character's
+// FPDFText_GetMatrix; every use below transforms a DIFFERENCE of two page-space points (a gap,
+// a baseline delta), and translation cancels exactly in a difference, which is why dropping it
+// is safe rather than an approximation. For upright, unscaled text this matrix is the identity,
+// its inverse is the identity too, and the arithmetic below reduces to exactly the page-space
+// gap/baseline arithmetic kWordGapEm/kBaselineEm were calibrated against — one code path, both
+// halves, matching the design's requirement that the normal case not regress.
+struct Linear2 { double a = 1, b = 0, c = 0, d = 1; };
+
+// Inverts the 2x2 linear map [a c; b d] (FS_MATRIX's own a/b/c/d convention, fpdfview.h: x' =
+// a*x + c*y, y' = b*x + d*y). A near-singular matrix should not occur for a real glyph, but
+// falls back to the identity — i.e. the old page-space arithmetic — rather than dividing by
+// (near) zero.
+Linear2 InvertLinear(const Linear2& m) {
+    const double det = m.a * m.d - m.b * m.c;
+    if (std::fabs(det) < 1e-9) return Linear2();
+    const double inv_det = 1.0 / det;
+    Linear2 r;
+    r.a = m.d * inv_det;
+    r.b = -m.b * inv_det;
+    r.c = -m.c * inv_det;
+    r.d = m.a * inv_det;
+    return r;
+}
+
+void ApplyLinear(const Linear2& inv, double x, double y, double* xp, double* yp) {
+    *xp = inv.a * x + inv.c * y;
+    *yp = inv.b * x + inv.d * y;
+}
+
+// The min/max x' (`inv`'s space) among a page-space axis-aligned box's four corners — needed
+// because a box that is axis-aligned in page space is not, in general, axis-aligned once mapped
+// through a rotated character's inverse matrix, so its "leading" and "trailing" corners along
+// the transformed advance are not always the ones loose_l/loose_r alone would pick.
+double TransformBoxMinX(const Linear2& inv, double l, double r, double b, double t) {
+    double x, y, m;
+    ApplyLinear(inv, l, b, &x, &y); m = x;
+    ApplyLinear(inv, l, t, &x, &y); m = (std::min)(m, x);
+    ApplyLinear(inv, r, b, &x, &y); m = (std::min)(m, x);
+    ApplyLinear(inv, r, t, &x, &y); m = (std::min)(m, x);
+    return m;
+}
+double TransformBoxMaxX(const Linear2& inv, double l, double r, double b, double t) {
+    double x, y, m;
+    ApplyLinear(inv, l, b, &x, &y); m = x;
+    ApplyLinear(inv, l, t, &x, &y); m = (std::max)(m, x);
+    ApplyLinear(inv, r, b, &x, &y); m = (std::max)(m, x);
+    ApplyLinear(inv, r, t, &x, &y); m = (std::max)(m, x);
+    return m;
 }
 
 // design §1.2 "Words": consecutive real characters (PDFium's own order) on one baseline join
@@ -393,7 +471,6 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
 std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<int>& indices) {
     std::vector<Word> words;
     Word cur;
-    double cur_loose_r = 0;   // the loose (advance) box, tracked separately from cur's tight display bounds
     bool have = false;
     int prev = -1;
     for (int i : indices) {
@@ -401,9 +478,17 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
         bool start_new = !have || c.preceded_by_break;   // PDFium's own generated break, respected (see Char::preceded_by_break)
         if (have && !start_new) {
             const Char& p = chars[static_cast<size_t>(prev)];
-            const double gap = c.loose_l - cur_loose_r;
+            // Both characters' loose boxes and origins, mapped into c's own text space (#363,
+            // "variant H" -- see the comment above Linear2).
+            const Linear2 inv = InvertLinear(Linear2{c.mat_a, c.mat_b, c.mat_c, c.mat_d});
+            const double p_max_x = TransformBoxMaxX(inv, p.loose_l, p.loose_r, p.loose_b, p.loose_t);
+            const double c_min_x = TransformBoxMinX(inv, c.loose_l, c.loose_r, c.loose_b, c.loose_t);
+            const double gap = c_min_x - p_max_x;
+            double p_origin_xp, p_origin_yp, c_origin_xp, c_origin_yp;
+            ApplyLinear(inv, p.origin_x, p.origin_y, &p_origin_xp, &p_origin_yp);
+            ApplyLinear(inv, c.origin_x, c.origin_y, &c_origin_xp, &c_origin_yp);
+            const double baseline_delta = std::fabs(c_origin_yp - p_origin_yp);
             const double em = Em(c.font_size > 0 ? c.font_size : cur.font_size);
-            const double baseline_delta = std::fabs(c.origin_y - p.origin_y);
             bool same_baseline = baseline_delta <= kBaselineEm * em;
             // #363 follow-up: a tight forward gap with a moderate vertical offset (see the
             // kSuperscriptGapEm/kSuperscriptOffsetEm comment above) is treated as one word even
@@ -425,7 +510,6 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
             cur.r = (std::max)(cur.r, c.r);
             cur.t = (std::max)(cur.t, c.t);
         }
-        cur_loose_r = c.loose_r;
         cur.chars.push_back(i);
         prev = i;
     }
