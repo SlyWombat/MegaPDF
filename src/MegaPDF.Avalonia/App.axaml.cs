@@ -1006,6 +1006,24 @@ public partial class App : Application
         return window;
     }
 
+    /// <summary>
+    /// Quit with more than one window open (#348 plan §5.6): every window's every
+    /// dirty tab is asked, window by window, and a Cancel anywhere stops the quit
+    /// without touching a tab that has not been asked yet — the same "ask everyone
+    /// before closing anyone" rule <see cref="Views.MainWindow.ConfirmCloseForQuitAsync"/>
+    /// already applies within one window.
+    /// </summary>
+    private static async Task ConfirmThenQuitAllAsync(
+        IClassicDesktopStyleApplicationLifetime desktop, IReadOnlyList<MainWindow> windows)
+    {
+        foreach (var window in windows)
+        {
+            if (!await window.ConfirmCloseForQuitAsync())
+                return; // Cancel: nothing further closes, and nothing already confirmed was undone.
+        }
+        desktop.Shutdown();
+    }
+
     /// <summary>Shows a window over the main one when there is one up, else on its own.</summary>
     private static void Present(Window window, Window? owner = null)
     {
@@ -1082,15 +1100,22 @@ public partial class App : Application
             // Cmd+Q with unsaved changes asks Save, Don't Save or Cancel first (D1, #145): it used
             // to quit at once and delete the recovery journal with the edits. Otherwise the
             // engine's native handles go on the way out rather than at finalisation.
+            // Quit asks every window's every dirty tab in turn (#348 plan §5.6) — not
+            // just the window the app happened to start with, now that File > New
+            // Window can open more of them. Windows.ToList() because a window closing
+            // during the loop (a consented ConfirmCloseAsync mutates nothing itself,
+            // but a future tear-down could) must not disturb the enumeration.
             desktop.ShutdownRequested += (_, e) =>
             {
-                if (window.NeedsConfirmationBeforeClose)
+                var windows = desktop.Windows.OfType<MainWindow>().ToList();
+                if (windows.Any(w => w.NeedsConfirmationBeforeClose))
                 {
                     e.Cancel = true;
-                    _ = window.ConfirmThenQuitAsync(desktop);
+                    _ = ConfirmThenQuitAllAsync(desktop, windows);
                     return;
                 }
-                shell.Dispose();
+                foreach (var w in windows)
+                    w.Shell?.Dispose();
             };
 
             // A PDF passed on the command line (the Windows file association, the
