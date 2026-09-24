@@ -211,6 +211,12 @@ struct Char {
     // one. Design §1.2 says a generated character's TEXT is ignored ("spacing is ours"); this
     // is the read that its BREAK is not — PDFium already decided these are not one run.
     bool preceded_by_break = false;
+    // FPDFText_IsHyphen(tp, i): PDFium's own judgement that this character is a hyphen at a
+    // line-wrap point. Found necessary, not optional: for such a character
+    // FPDFText_GetUnicode returns 2, not the hyphen's real code point (measured on this
+    // fixture's own "hyphen-" / "ISO-" lines — U+002D read back as U+0002 both times), so
+    // BuildPieces' hyphen-joining test cannot rely on the unicode value alone.
+    bool is_hyphen = false;
 };
 
 // A run of consecutive (PDFium's own character order) real characters joined while the
@@ -325,6 +331,7 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         ClassifyStyle(tp, i, &c.bold, &c.italic, &c.mono);
         c.preceded_by_break = pending_break;
         pending_break = false;
+        c.is_hyphen = FPDFText_IsHyphen(tp, i) == 1;
         FS_MATRIX m{1, 0, 0, 1, 0, 0};
         if (FPDFText_GetMatrix(tp, i, &m)) {
             const double a = std::fabs(m.a) > 1e-6 ? std::fabs(m.a) : 1.0;
@@ -527,13 +534,25 @@ std::vector<FurnitureLine> DetectFurniture(std::vector<PageWork>& pages) {
 // range, rounded to 0.5 pt. Ties (equally frequent sizes) resolve to the smaller size, since
 // std::map iterates its keys ascending — deterministic, and documented here rather than left
 // to iteration order accidentally deciding it.
+// Character-weighted modal size over `pages`' LINES, not their raw character lists: called
+// after furniture is pulled out of each page's `lines` (BuildStructure does this before
+// calling), so a running header/footer repeated on every page cannot out-vote the body text
+// it surrounds. A furniture.pdf fixture with a 10 pt header/footer and 12 pt body is what
+// found this — counted over every character, the two 10 pt furniture lines per page
+// out-weigh the one 12 pt body line, so the body text itself came out above the (wrong) 10 pt
+// "body" size and mis-read as a heading.
 double ComputeBodySize(const std::vector<PageWork>& pages) {
     std::map<double, long long> counts;
     for (const auto& pw : pages) {
-        for (const auto& c : pw.chars) {
-            if (c.font_size <= 0) continue;
-            const double rounded = std::round(c.font_size * 2.0) / 2.0;
-            counts[rounded]++;
+        for (const auto& line : pw.lines) {
+            for (int wi : line.words) {
+                const Word& w = pw.words[static_cast<size_t>(wi)];
+                for (int ci : w.chars) {
+                    const double size = pw.chars[static_cast<size_t>(ci)].font_size;
+                    if (size <= 0) continue;
+                    counts[std::round(size * 2.0) / 2.0]++;
+                }
+            }
         }
     }
     double best = 12.0;
@@ -806,12 +825,17 @@ std::vector<Piece> BuildPieces(const PageWork& pw, const std::vector<int>& line_
             const Word& last_word = pw.words[static_cast<size_t>(line.words.back())];
             const auto last_cps = WordCodepoints(pw.chars, last_word);
             const unsigned int last_cp = last_cps.empty() ? 0 : last_cps.back();
+            // Char::is_hyphen's comment explains why this cannot just compare last_cp: PDFium
+            // masks a line-end hyphen's own GetUnicode to 2, so it is checked directly, and
+            // the literal code points are kept as a second path for a hyphen PDFium did not
+            // flag (e.g. one it did not consider to be at a line-wrap position).
+            const bool last_is_hyphen_char = !last_word.chars.empty() && pw.chars[static_cast<size_t>(last_word.chars.back())].is_hyphen;
             const Line& next_line = pw.lines[static_cast<size_t>(line_indices[li + 1])];
             bool hyphen_join = false, strip = false;
             if (last_cp == kSoftHyphen) {
                 hyphen_join = true;
                 strip = true;
-            } else if (last_cp == kHyphenMinus || last_cp == kHyphenChar) {
+            } else if (last_cp == kHyphenMinus || last_cp == kHyphenChar || last_is_hyphen_char) {
                 hyphen_join = true;
                 if (!next_line.words.empty()) {
                     const auto next_cps = WordCodepoints(pw.chars, pw.words[static_cast<size_t>(next_line.words[0])]);
@@ -819,7 +843,14 @@ std::vector<Piece> BuildPieces(const PageWork& pw, const std::vector<int>& line_
                 }
             }
             if (hyphen_join) {
-                if (strip && !pieces.empty()) pieces.pop_back();
+                if (strip) {
+                    if (!pieces.empty()) pieces.pop_back();
+                } else if (!pieces.empty() && last_cp != kHyphenMinus && last_cp != kHyphenChar) {
+                    // Kept, but PDFium's masked code point (2, not the real character —
+                    // Char::is_hyphen's comment) cannot go out in the block's text as-is;
+                    // U+002D is design §1.2's own plain-hyphen spelling for this case.
+                    pieces.back().cp = kHyphenMinus;
+                }
                 suppress_next_separator = true;
             }
         }
