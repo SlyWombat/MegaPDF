@@ -74,7 +74,12 @@ Two packages are worth having beside it, and neither is required:
 `cups-client` for printing (`lp`), and `fonts-urw-base35` for a script face to
 type signatures in — without it they are drawn in the body font.
 
-Packaging for Flathub, AppImage and `.deb` is not done yet; #158 tracks it.
+The `.deb` and its signed APT repository are how Linux ships (see "Installing"
+below); AppImage was decided against in favor of the `.deb` (`tools/Linux-Packaging.md`
+says why). Flathub is on hold pending a Flathub account (#254 did the prep; no
+open issue tracks the submission itself yet) — the manifest, its CI checks and
+the tooling are ready and wait in `tools/linux/flatpak/`. The Snap Store is the
+other channel waiting on an account, tracked in #314.
 
 ## Installing
 
