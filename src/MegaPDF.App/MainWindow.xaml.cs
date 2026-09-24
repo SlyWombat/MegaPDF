@@ -175,20 +175,27 @@ public sealed partial class MainWindow : Window
     /// </summary>
     internal async Task CloseTabAsync(DocumentViewModel doc)
     {
-        await doc.Busy.WhenIdleAsync();
-        if (doc.HasUnsavedChanges && !await doc.ConfirmSaveChangesAsync())
-            return; // Cancel — this tab (and only this tab) stays open, its journal intact
-
-        doc.EndJournalSession();
-        if (Shell.Documents.Count == 1 && Shell.Documents[0] == doc)
+        try
         {
-            // The last tab: close the window rather than leave it showing the empty state,
-            // matching Ctrl+W's "closes the tab; with one tab it closes the window" rule.
-            _allowClose = true;
-            Close();
-            return;
+            await doc.Busy.WhenIdleAsync();
+            if (doc.HasUnsavedChanges && !await doc.ConfirmSaveChangesAsync())
+                return; // Cancel — this tab (and only this tab) stays open, its journal intact
+
+            doc.EndJournalSession();
+            if (Shell.Documents.Count == 1 && Shell.Documents[0] == doc)
+            {
+                // The last tab: close the window rather than leave it showing the empty state,
+                // matching Ctrl+W's "closes the tab; with one tab it closes the window" rule.
+                _allowClose = true;
+                Close();
+                return;
+            }
+            Shell.RemoveDocument(doc);
         }
-        Shell.RemoveDocument(doc);
+        catch (Exception ex)
+        {
+            await doc.ShowErrorAsync(Strings.CouldNotSaveTitle, UserFacing.Describe(ex));
+        }
     }
 
     private void OnCloseTabAccelerator(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
