@@ -5405,8 +5405,14 @@ std::string fmt_rect_2(const megapdf_rect& r) {
 
 // Every block (and its spans) of `s` in a stable text format, plus the two per-page facts
 // (confidence, source) that are not otherwise pinned by any one block. Coordinates round to
-// 0.01 pt: embedded fonts (tools/gen_structure_fixtures.py) make the glyph metrics behind
-// them exact across OSes, so this is generous rounding for float formatting, not a tolerance.
+// 0.01 pt for float formatting. Embedded fonts (tools/gen_structure_fixtures.py) do NOT make
+// them bit-exact across OSes, despite the original design assumption here (#359 CI evidence:
+// deltas up to 0.72 pt between Linux/Windows/macOS builds of the same PDFium patch series, on
+// fixtures whose every font is embedded) — PDFium's measured glyph/character bounding boxes
+// carry real, small, platform-dependent rasterizer noise. structure_dump_matches() below is
+// where that gets a tolerance; everything else in this dump (block/span counts, kind, level,
+// font_size, size_ratio, text, flags, confidence, source, object_index) still must match
+// exactly, since a difference there is a real behavioral divergence, not sub-pixel noise.
 std::string dump_structure(const megapdf_structure* s, int first_page, int page_count) {
     std::ostringstream out;
     out << "body_size " << megapdf_structure_body_size(s) << "\n";
@@ -5437,6 +5443,51 @@ std::string dump_structure(const megapdf_structure* s, int first_page, int page_
     return out.str();
 }
 
+// See dump_structure()'s comment: the only field that has shown real cross-platform drift
+// (#359 CI evidence, up to 0.72 pt on fixtures with every font embedded) is a block's or
+// span's `bounds=`. Comfortably above that observed maximum, with headroom for a different
+// fixture or a different pair of platforms to drift a little further without this needing to
+// be re-tuned; still tight enough to catch a genuinely different block boundary (those move
+// by whole line/column widths, not fractions of a point).
+constexpr double kStructureBoundsTolerancePt = 1.0;
+
+// True when `a` and `b` are the same dump line, or differ only in the four numbers right
+// after "bounds=" by no more than kStructureBoundsTolerancePt each — everything before
+// "bounds=" (block/span index, kind, level, page, flags, font_size, size_ratio) and
+// everything after the four numbers (object_index, continues, source, confidence, marker,
+// alt, text) must still match exactly.
+bool structure_line_matches(const std::string& a, const std::string& b) {
+    if (a == b) return true;
+    const size_t apos = a.find("bounds=");
+    const size_t bpos = b.find("bounds=");
+    if (apos == std::string::npos || bpos == std::string::npos) return false;
+    if (a.compare(0, apos + 7, b, 0, bpos + 7) != 0) return false;
+    std::istringstream as(a.substr(apos + 7)), bs(b.substr(bpos + 7));
+    for (int i = 0; i < 4; i++) {
+        double av = 0, bv = 0;
+        if (!(as >> av) || !(bs >> bv)) return false;
+        if (std::fabs(av - bv) > kStructureBoundsTolerancePt) return false;
+    }
+    std::string arest, brest;
+    std::getline(as, arest);
+    std::getline(bs, brest);
+    return arest == brest;
+}
+
+// Line-by-line version of structure_line_matches(), used in place of plain string equality
+// for the golden block dump (see its comment).
+bool structure_dump_matches(const std::string& expected, const std::string& dump) {
+    if (expected == dump) return true;
+    std::vector<std::string> exp_lines, got_lines;
+    { std::istringstream es(expected); for (std::string l; std::getline(es, l);) exp_lines.push_back(l); }
+    { std::istringstream gs(dump); for (std::string l; std::getline(gs, l);) got_lines.push_back(l); }
+    if (exp_lines.size() != got_lines.size()) return false;
+    for (size_t i = 0; i < exp_lines.size(); i++) {
+        if (!structure_line_matches(exp_lines[i], got_lines[i])) return false;
+    }
+    return true;
+}
+
 bool write_structure_goldens() {
     const char* v = std::getenv("MEGAPDF_WRITE_STRUCTURE_GOLDENS");
     return v != nullptr && *v != '\0' && std::string(v) != "0";
@@ -5444,11 +5495,14 @@ bool write_structure_goldens() {
 
 // Loads `path`, infers structure over [first_page, first_page + page_count) (page_count <= 0
 // means the whole document) and either compares the dump against
-// `expected_dir`/`name`.blocks or (MEGAPDF_WRITE_STRUCTURE_GOLDENS=1) writes it. Returns the
-// structure's block count so callers that also want content assertions are not left re-doing
-// the load; NULL through `out_doc`/`out_structure` on any failure (already checked here).
+// `expected_dir`/`name`.blocks or (MEGAPDF_WRITE_STRUCTURE_GOLDENS=1) writes it — unless
+// `check_golden` is false, in which case the structure is still built (so a real-world
+// fixture that cannot have a portable golden still gets exercised) but nothing is compared or
+// written. Returns the structure's block count so callers that also want content assertions
+// are not left re-doing the load; NULL through `out_doc`/`out_structure` on any failure
+// (already checked here).
 size_t test_structure_golden(const std::string& name, const std::string& path, int first_page, int page_count,
-                             unsigned int flags, const std::string& expected_dir) {
+                             unsigned int flags, const std::string& expected_dir, bool check_golden = true) {
     auto bytes = read_file(path);
     megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
     check(d != nullptr, "structure " + name + ": document opens", path);
@@ -5460,6 +5514,8 @@ size_t test_structure_golden(const std::string& name, const std::string& path, i
     size_t blocks = 0;
     if (s != nullptr) {
         blocks = megapdf_block_count(s);
+    }
+    if (s != nullptr && check_golden) {
         const std::string dump = dump_structure(s, first_page, count);
         const std::string expected_path = expected_dir + "/" + name + ".blocks";
         if (write_structure_goldens()) {
@@ -5471,8 +5527,11 @@ size_t test_structure_golden(const std::string& name, const std::string& path, i
             check(in.good(), "structure " + name + ": golden file exists", expected_path);
             if (in.good()) {
                 const std::string expected((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-                const bool matches = expected == dump;
-                check(matches, "structure " + name + ": matches its golden block dump exactly", expected_path);
+                const bool matches = structure_dump_matches(expected, dump);
+                check(matches,
+                      "structure " + name + ": matches its golden block dump (bounds within " +
+                          std::to_string(kStructureBoundsTolerancePt) + " pt)",
+                      expected_path);
                 // #353/#359: on a mismatch, show what actually differs — the pass/fail line alone
                 // does not say whether this is a real structural difference or a formatting/precision
                 // one, and that distinction is the whole point of the check.
@@ -5486,7 +5545,7 @@ size_t test_structure_golden(const std::string& name, const std::string& path, i
                     for (size_t li = 0; li < total && shown < 8; li++) {
                         const std::string e = li < exp_lines.size() ? exp_lines[li] : "<no such line>";
                         const std::string g = li < got_lines.size() ? got_lines[li] : "<no such line>";
-                        if (e == g) continue;
+                        if (structure_line_matches(e, g)) continue;
                         std::fprintf(stderr, "  structure %s line %zu:\n    golden: %s\n    actual: %s\n",
                                      name.c_str(), li, e.c_str(), g.c_str());
                         shown++;
@@ -5496,8 +5555,8 @@ size_t test_structure_golden(const std::string& name, const std::string& path, i
                 }
             }
         }
-        megapdf_structure_free(s);
     }
+    if (s != nullptr) megapdf_structure_free(s);
     megapdf_close(d);
     return blocks;
 }
@@ -5506,7 +5565,10 @@ size_t test_structure_golden(const std::string& name, const std::string& path, i
 
 void test_structure_goldens(const std::string& fixtures, const std::string& schematic, const std::string& repo,
                             const std::string& expected_dir) {
-    struct Case { const char* name; std::string path; int first_page, page_count; unsigned int flags; };
+    struct Case {
+        const char* name; std::string path; int first_page, page_count; unsigned int flags;
+        bool check_golden = true;
+    };
     const Case cases[] = {
         // Existing shared fixtures the issue names (#353): a real prose page, the #136
         // hidden-copy fixtures, forms with and without a text field, /UserUnit, and the #98
@@ -5519,7 +5581,17 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"forms", fixtures + "/forms.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
         {"formtext", fixtures + "/formtext.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
         {"userunit", fixtures + "/userunit.pdf", 0, 0, MEGAPDF_STRUCTURE_ALL_FIELDS},
-        {"microbit-v2-schematic", schematic, 0, 0, 0},
+        // No golden here (#359): unlike every other fixture in this list, the #98 schematic is
+        // a real-world PDF, not one of tools/gen_test_fixtures.py's/gen_structure_fixtures.py's
+        // DejaVu-embedded ones, and most of its fonts are NOT embedded (`pdffonts` on it shows
+        // Courier, Times New Roman, Segoe UI and Microsoft Sans Serif all `emb=no`). PDFium
+        // substitutes a real (platform-installed) font for those, which genuinely differs by
+        // OS — CI evidence: macOS produced a different block count (1720 vs Linux's golden
+        // 1721) and different span text/ordering for it, not just shifted bounds. That is a
+        // real, expected difference for this one fixture, not something a tolerance should
+        // paper over; test_structure_findability() and test_text_in_one_pass() below already
+        // exercise it in ways that tolerate font substitution (hit counts, PDFium-parity text).
+        {"microbit-v2-schematic", schematic, 0, 0, 0, false},
         // New fixtures (design §7, tools/gen_structure_fixtures.py). furniture.pdf's golden
         // keeps the furniture blocks (KEEP_FURNITURE) so the dump documents what the default
         // drops; test_structure_furniture() below asserts the drop itself, separately.
@@ -5531,7 +5603,9 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
         {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
     };
-    for (const Case& c : cases) test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir);
+    for (const Case& c : cases) {
+        test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir, c.check_golden);
+    }
 }
 
 // design §2 bar 2 / this issue's own acceptance criterion: every term SearchParityTests
