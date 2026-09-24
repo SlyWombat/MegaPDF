@@ -27,6 +27,15 @@ public static class LaunchedDocument
         openDocumentPath is null || !SameFile(launchedPath, openDocumentPath);
 
     /// <summary>
+    /// The tabs overload (#348 phase 1): a window's document router already treats "open a
+    /// path that is open somewhere" as "activate that tab", so the launch sequence only
+    /// needs to know whether the launched file is <em>any</em> of the tabs the recovery
+    /// offer just restored — not just the single newest one. False when it matches any.
+    /// </summary>
+    public static bool NeedsOpening(string launchedPath, IEnumerable<string> openDocumentPaths) =>
+        !openDocumentPaths.Any(open => SameFile(launchedPath, open));
+
+    /// <summary>
     /// The same file, as the file system would resolve it: full paths, and case ignored on
     /// Windows and macOS, whose default file systems are case-insensitive. Symbolic links
     /// are not followed; if two spellings of one file ever go unmatched, the launched file
