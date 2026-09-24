@@ -98,31 +98,43 @@ public partial class App : Application
         // Crash recovery is offered before anything else opens, including a file the app
         // was launched with (#145): opening that first used to return without offering it,
         // so a double-clicked PDF after a crash silently left the crash's edits behind.
+        // Still per window for phase 1 (#348) — moving this to once per app launch, looping
+        // every crashed session into its own tab, is tracked separately.
         await mainWindow.OfferCrashRecoveryAsync();
 
-        // "Open with MegaPDF" / command-line launch — after the offer, and not again if
-        // the restore has just opened this same document with its recovered edits.
-        var commandLine = Environment.GetCommandLineArgs();
-        if (commandLine.Length > 1
-            && commandLine[1].EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)
-            && File.Exists(commandLine[1]))
+        // "Open with MegaPDF" / command-line launch — after the offer, and not again for a
+        // file the restore has just opened into a tab with its recovered edits. Every .pdf
+        // argument opens (#348 phase 1: Explorer's argv[1]-only read no longer applies —
+        // single-instance redirection, which is what would actually deliver more than one
+        // path this way today, is out of phase 1's scope).
+        var launchedPaths = Environment.GetCommandLineArgs().Skip(1)
+            .Where(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a))
+            .Select(Path.GetFullPath)
+            .ToList();
+        if (launchedPaths.Count > 0)
         {
-            var launched = Path.GetFullPath(commandLine[1]);
-            if (Core.Recovery.LaunchedDocument.NeedsOpening(launched, mainWindow.ViewModel.DocumentPath))
-                await mainWindow.ViewModel.OpenDocumentAsync(launched);
+            var openPaths = mainWindow.Shell.Documents
+                .Select(d => d.DocumentPath)
+                .Where(p => p is not null)
+                .Select(p => p!);
+            foreach (var launched in launchedPaths)
+            {
+                if (Core.Recovery.LaunchedDocument.NeedsOpening(launched, openPaths))
+                    await mainWindow.Shell.OpenInTabAsync(launched);
+            }
             return;
         }
 
         // "Reopen last file" setting (off by default).
-        if (!mainWindow.ViewModel.IsDocumentOpen
-            && mainWindow.ViewModel.ReopenLastFile
-            && mainWindow.ViewModel.MostRecentDocument is { } lastDocument)
+        if (!mainWindow.Shell.HasDocuments
+            && mainWindow.Shell.Settings.ReopenLastFile
+            && mainWindow.Shell.MostRecentDocument is { } lastDocument)
         {
-            await mainWindow.ViewModel.OpenDocumentAsync(lastDocument);
+            await mainWindow.Shell.OpenInTabAsync(lastDocument);
         }
 
         // First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — once, dismissible forever.
-        mainWindow.ViewModel.MaybeShowDefaultAppCard();
+        mainWindow.Shell.MaybeShowDefaultAppCard();
     }
 
     private async Task RunScreenshotAsync(string path)
@@ -148,8 +160,10 @@ public partial class App : Application
         var ok = true;
         var pdf = Environment.GetCommandLineArgs()
             .FirstOrDefault(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
+        // A single tab, opened directly (not through the router): --screenshot always runs
+        // standalone, its own process, never redirected (#348 phase 1, plan §6.10).
         if (pdf is not null)
-            await mainWindow.ViewModel.OpenDocumentAsync(Path.GetFullPath(pdf));
+            await mainWindow.Shell.OpenInTabAsync(Path.GetFullPath(pdf));
 
         // Let layout settle and the first page raster before touching state:
         // page rendering is asynchronous with respect to layout, and a find with

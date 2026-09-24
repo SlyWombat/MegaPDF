@@ -41,7 +41,13 @@ internal static class Screenshot
     /// </summary>
     public static async Task<bool> ApplyStateAsync(MainWindow window, string state)
     {
-        var vm = window.ViewModel;
+        // --screenshot always runs its own process, standalone, against the one tab it
+        // opened (#348 phase 1, plan §6.10) — never redirected, never more than one tab.
+        if (window.Shell.Active is not { } vm)
+        {
+            Console.Error.WriteLine($"--screenshot-state {state}: no document is open.");
+            return false;
+        }
         switch (state)
         {
             case "find":
@@ -124,8 +130,8 @@ internal static class Screenshot
 
     private static async Task<bool> CheckToolbarFocusAsync(MainWindow window)
     {
-        var vm = window.ViewModel;
-        if (!vm.IsDocumentOpen)
+        var vm = window.Shell.Active;
+        if (vm is null || !vm.IsDocumentOpen)
         {
             Console.Error.WriteLine("--screenshot-state focus needs a document.");
             return false;
@@ -197,7 +203,11 @@ internal static class Screenshot
     /// </summary>
     private static async Task<bool> OpenSignatureLibraryAsync(MainWindow window)
     {
-        var vm = window.ViewModel;
+        if (window.Shell.Active is not { } vm)
+        {
+            Console.Error.WriteLine("--screenshot-state sign: no document is open.");
+            return false;
+        }
         if (vm.Signatures.Count == 0)
         {
             var seed = FindUpwards(Path.Combine("tools", "assets", "megawoman-sig.jpg"));
@@ -255,8 +265,11 @@ internal static class Screenshot
     /// </summary>
     private static async Task<bool> FindOnAZoomedPageAsync(MainWindow window)
     {
-        var vm = window.ViewModel;
-        var scroll = window.PageScroller;
+        if (window.Shell.Active is not { } vm || window.PageScroller is not { } scroll)
+        {
+            Console.Error.WriteLine("--screenshot-state find-zoomed: no document is open.");
+            return false;
+        }
 
         // Awaited, not fire-and-forget: ZoomIn is async, so Execute in a loop
         // races its own CanExecute and stops short of maximum by a step or two.

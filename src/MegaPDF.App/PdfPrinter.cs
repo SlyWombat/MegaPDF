@@ -18,9 +18,14 @@ namespace MegaPDF.App;
 /// inside the AddPages event, on the UI thread, which froze the window for the whole
 /// document, and a failure there went unhandled. The PrintDocument itself stays on the UI
 /// thread: only the engine work moves, and the pages are handed over as each is ready.
+///
+/// One printer per window (#348 phase 1): a window's print manager registration is
+/// per-hwnd, so <paramref name="getDocument"/>/<paramref name="getBusy"/> are accessors
+/// rather than a fixed document/state — they read whichever tab is active when Ctrl+P or
+/// the print task itself actually runs, not whichever was active when the window opened.
 /// </summary>
 public sealed class PdfPrinter(Window window, Func<IPdfDocument?> getDocument, Func<string> getDocumentName,
-                               BusyState busy, Func<string, string, Task> showError)
+                               Func<BusyState?> getBusy, Func<string, string, Task> showError)
 {
     private const double PrintDpi = 150;
     private const double PreviewDpi = 96;
@@ -37,7 +42,7 @@ public sealed class PdfPrinter(Window window, Func<IPdfDocument?> getDocument, F
 
     public async Task ShowPrintUiAsync()
     {
-        if (getDocument() is null || busy.IsBusy)
+        if (getDocument() is null || getBusy() is { IsBusy: true })
             return;
 
         try
@@ -103,7 +108,7 @@ public sealed class PdfPrinter(Window window, Func<IPdfDocument?> getDocument, F
             if (document is null)
                 return;
             // "Preparing to print…", with editing waiting: the pages come from the live document.
-            using (busy.Begin(Strings.BusyPrinting))
+            using (var scope = (IDisposable?)getBusy()?.Begin(Strings.BusyPrinting) ?? NullScope.Instance)
             {
                 for (var i = 0; i < document.PageCount; i++)
                 {
@@ -161,6 +166,13 @@ public sealed class PdfPrinter(Window window, Func<IPdfDocument?> getDocument, F
                 },
             },
         };
+    }
+
+    /// <summary>No document/tab to be busy for (a printer callback racing a tab closing) — nothing to dispose.</summary>
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new();
+        public void Dispose() { }
     }
 
     private void Cleanup()

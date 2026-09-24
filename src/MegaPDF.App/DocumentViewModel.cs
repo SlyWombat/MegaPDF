@@ -150,7 +150,6 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         OnPropertyChanged(nameof(IsSigningAllowed));
         OnPropertyChanged(nameof(IsTextBoxAllowed));
         OnPropertyChanged(nameof(IsPrintAllowed));
-        OpenCommand.NotifyCanExecuteChanged();
         SaveCommand.NotifyCanExecuteChanged();
         SaveAsCommand.NotifyCanExecuteChanged();
         SecurityCommand.NotifyCanExecuteChanged();
@@ -255,9 +254,6 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         set => settings.FlattenOnSave = value;
     }
 
-    /// <summary>For "Reopen last file": the newest one still on disk (#165 keeps missing ones listed).</summary>
-    public string? MostRecentDocument => recentFiles.All.FirstOrDefault(File.Exists);
-
     // --- Per-document view state (SDD §3.4: restore last scroll position) ---
 
     /// <summary>Kept current by the scroll handler; persisted on close/switch.</summary>
@@ -272,92 +268,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             recentFiles.UpdateViewState(path, CurrentScrollOffset, ZoomPercent);
     }
 
-    /// <summary>First-run "Make MegaPDF your PDF app?" card (SDD §5.4) — shows once, ever.</summary>
-    [ObservableProperty]
-    private bool _isDefaultAppCardOpen;
-
-    public void MaybeShowDefaultAppCard()
-    {
-        if (settings.DefaultAppCardShown)
-            return;
-        IsDefaultAppCardOpen = true;
-    }
-
-    public void DismissDefaultAppCard()
-    {
-        settings.DefaultAppCardShown = true;
-        IsDefaultAppCardOpen = false;
-    }
     private IPdfDocument? _document;
     private int _openGeneration;
-
-    /// <summary>Recent documents for the empty state (SDD §2.2), newest first.</summary>
-    public ObservableCollection<RecentDocument> RecentDocuments { get; } = [];
-
-    public Visibility RecentDocumentsVisibility =>
-        !IsDocumentOpen && RecentDocuments.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>
-    /// The recents list, each row with the folder it lives in (#165). Rows whose file
-    /// names clash get as much of the path as it takes to tell them apart: the folder
-    /// above, then the one above that.
-    /// </summary>
-    public void LoadRecentDocuments()
-    {
-        RecentDocuments.Clear();
-        var named = ShellFolderNames.Get();
-        var paths = recentFiles.All;
-        var segments = paths.Select(p => RecentLocation.Segments(p, named)).ToList();
-
-        foreach (var (path, index) in paths.Select((p, i) => (p, i)))
-        {
-            var name = Path.GetFileName(path);
-            // How deep this row has to go is decided among the rows that share its name.
-            var clashing = paths
-                .Select((other, i) => (Segments: segments[i], Name: Path.GetFileName(other)))
-                .Where(other => string.Equals(other.Name, name, StringComparison.CurrentCultureIgnoreCase))
-                .Select(other => other.Segments)
-                .ToList();
-            var depth = RecentLocation.DistinguishingDepth(clashing);
-            var location = RecentLocation.Line(segments[index], maxLength: 44, keepDeepest: depth);
-            RecentDocuments.Add(new RecentDocument(name, path, location, !File.Exists(path)));
-        }
-        OnPropertyChanged(nameof(RecentDocumentsVisibility));
-    }
-
-    /// <summary>"Remove from Recent", and what a row whose file has gone offers.</summary>
-    public void RemoveFromRecent(string path)
-    {
-        recentFiles.Remove(path);
-        LoadRecentDocuments();
-        OnPropertyChanged(nameof(RecentDocumentsVisibility));
-    }
-
-    /// <summary>
-    /// Opens a recent row, or — when its file has gone — says so and offers to take it off
-    /// the list (#165). Explorer and Office both ask rather than removing it silently.
-    /// </summary>
-    public async Task OpenRecentAsync(RecentDocument recent)
-    {
-        if (File.Exists(recent.Path))
-        {
-            await OpenDocumentAsync(recent.Path);
-            return;
-        }
-        if (window.Content?.XamlRoot is not { } xamlRoot)
-            return;
-        var dialog = new ContentDialog
-        {
-            Title = Strings.RecentMissingTitle,
-            Content = Strings.RecentMissingBody(recent.Name, recent.Location),
-            PrimaryButtonText = Strings.RemoveFromRecent,
-            CloseButtonText = Strings.Cancel,
-            DefaultButton = ContentDialogButton.Primary,
-            XamlRoot = xamlRoot,
-        };
-        if (await dialog.ShowOneAtATimeAsync() == ContentDialogResult.Primary)
-            RemoveFromRecent(recent.Path);
-    }
 
     /// <summary>
     /// Something worth saying out loud happened (#190). The window raises it as a UI
@@ -365,11 +277,44 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// </summary>
     public event Action<string>? Announced;
 
+    /// <summary>
+    /// Raised after this document is added to (or updated in) the shared recent-files list
+    /// (#348 phase 1) — <see cref="ShellViewModel"/> owns the recents shown on the empty
+    /// state now (one shared list, not one per tab) and reloads it from this.
+    /// </summary>
+    public event EventHandler? RecentFilesChanged;
+
+    /// <summary>
+    /// The <see cref="DocumentView"/> realized for this tab (#348 phase 1) — set once, by
+    /// that view itself when it loads. <see cref="MainWindow"/> uses this to reach the
+    /// active tab's pages area (the find bar, the page scroller, the focus/picker hooks)
+    /// without walking the TabView's visual tree.
+    /// </summary>
+    internal DocumentView? View
+    {
+        get => _view;
+        set
+        {
+            _view = value;
+            if (value is not null)
+                ViewAttached?.Invoke(this, EventArgs.Empty);
+        }
+    }
+    private DocumentView? _view;
+
+    /// <summary>
+    /// Raised once <see cref="View"/> is set — a brand-new tab's TabViewItem is not
+    /// realized (and so has no <see cref="DocumentView"/> yet) at the instant it becomes
+    /// <see cref="ShellViewModel.Active"/>, so a window re-syncs its per-active-tab wiring
+    /// (picker sync, focus fallbacks) off this too, not only off Active changing.
+    /// </summary>
+    internal event EventHandler? ViewAttached;
+
     public ObservableCollection<PageView> Pages { get; } = [];
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(ZoomInCommand), nameof(ZoomOutCommand))]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(OpenDocumentName), nameof(EmptyStateVisibility), nameof(DocumentVisibility), nameof(IsDocumentOpen))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(TabTitle), nameof(TabAccessibleName), nameof(OpenDocumentName), nameof(DocumentVisibility), nameof(IsDocumentOpen))]
     [NotifyPropertyChangedFor(nameof(IsEditingAllowed), nameof(IsSigningAllowed), nameof(IsTextBoxAllowed), nameof(IsPrintAllowed))]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand), nameof(SaveAsCommand), nameof(ShrinkForEmailCommand), nameof(SecurityCommand))]
     private string? _documentPath;
@@ -378,7 +323,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     internal IPdfDocument? CurrentDocument => _document;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(SaveButtonLabel))]
+    [NotifyPropertyChangedFor(nameof(WindowTitle), nameof(TabTitle), nameof(TabAccessibleName), nameof(SaveButtonLabel))]
     private bool _hasUnsavedChanges;
 
     [ObservableProperty]
@@ -454,25 +399,24 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         DocumentPath is null ? AppName
         : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName} — {AppName}";
 
+    /// <summary>
+    /// The tab header (#348 phase 1): the dirty dot and the file name, without the
+    /// " — MegaPDF" suffix <see cref="WindowTitle"/> carries — the app name is the window's
+    /// to say once, not every tab's to repeat.
+    /// </summary>
+    public string TabTitle =>
+        DocumentPath is null ? AppName : $"{(HasUnsavedChanges ? "● " : "")}{OpenDocumentName}";
+
+    /// <summary>Narrator name for the tab header (#348 phase 1).</summary>
+    public string TabAccessibleName => HasUnsavedChanges
+        ? Strings.TabAccessibleNameUnsaved(OpenDocumentName)
+        : Strings.TabAccessibleName(DocumentPath is null ? AppName : OpenDocumentName);
+
     public string SaveButtonLabel => HasUnsavedChanges ? Strings.SaveWithDot : Strings.Save;
 
     public string PageIndicator => PageCount > 0 ? Strings.PageOf(CurrentPage, PageCount) : "";
 
-    public Visibility EmptyStateVisibility => IsDocumentOpen ? Visibility.Collapsed : Visibility.Visible;
     public Visibility DocumentVisibility => IsDocumentOpen ? Visibility.Visible : Visibility.Collapsed;
-
-    [RelayCommand(CanExecute = nameof(IsIdle))]
-    private async Task OpenAsync()
-    {
-        var picker = new FileOpenPicker();
-        picker.FileTypeFilter.Add(".pdf");
-        // Unpackaged apps must associate pickers with their window handle.
-        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-
-        var file = await picker.PickSingleFileAsync();
-        if (file is not null)
-            await OpenDocumentAsync(file.Path);
-    }
 
     /// <param name="initialPassword">
     /// Tried first, without prompting — how the document reopens after its password was
@@ -567,8 +511,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         _ = JumpListRecents.RecordAsync(path); // the taskbar's Recent list (#165)
         if (rememberedView is not null)
             ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
-        LoadRecentDocuments();
-        OnPropertyChanged(nameof(RecentDocumentsVisibility));
+        RecentFilesChanged?.Invoke(this, EventArgs.Empty);
         ResetPageFocus(); // keyboard focus and maps belong to the previous document (#2)
         Pages.Clear();
         PageCount = doc.PageCount;
@@ -1318,7 +1261,7 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// Sizes offered for added text (#43). A short list, not a free-entry number box:
     /// the job is "match the form I am filling in", and six presets cover it.
     /// </summary>
-    public IReadOnlyList<double> TextSizes { get; } = [8, 10, 12, 14, 18, 24];
+    public static IReadOnlyList<double> TextSizes { get; } = [8, 10, 12, 14, 18, 24];
 
     /// <summary>
     /// The size and face the last added box was given. Sticky for the session, so

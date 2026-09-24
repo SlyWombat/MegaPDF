@@ -35,6 +35,11 @@ namespace MegaPDF.App;
 /// The keyboard shortcuts are accelerators on RootGrid rather than on the buttons: an
 /// accelerator only fires for an element in the live tree, and an overflowed command's
 /// button is not in it until the overflow opens.
+///
+/// Every command here acts on <c>Shell.Active</c> (#348 phase 1) — this row is the
+/// window's, shared by every tab, and is re-synced (the font/size pickers' contents
+/// and visibility) whenever the active tab changes; see MainWindow.xaml.cs's
+/// OnActiveDocumentChanged.
 /// </summary>
 public sealed partial class MainWindow
 {
@@ -48,11 +53,7 @@ public sealed partial class MainWindow
     private double? _labelledWidthWithPickers;
     private double? _labelledWidthWithoutPickers;
 
-    /// <summary>The inline editor is open over added text, whose face and size the pickers choose.</summary>
-    private bool _styleEditorOpen;
-
-    /// <summary>A picker change is being applied to the selected box; the pickers stay while it re-renders.</summary>
-    private bool _restylingSelection;
+    private static readonly TextStyleChoice DefaultTextStyle = new(12, StandardTextBoxFonts.Default);
 
     /// <summary>The pickers are being set from a box or the last style, not by the person.</summary>
     private bool _syncingPickers;
@@ -84,6 +85,8 @@ public sealed partial class MainWindow
         SetLabels(FindButton, Strings.ToolbarFind, Strings.ToolbarFindTip);
         SetLabels(ClearMarksButton, Strings.ToolbarClearMarks, Strings.ToolbarClearMarksTip);
         SetLabels(SettingsButton, Strings.ToolbarSettings, Strings.ToolbarSettings);
+        CloseTabButton.Label = Strings.CloseTab;
+        NewWindowButton.Label = Strings.NewWindow;
 
         InitializeTextPickers();
         InitializeAccelerators();
@@ -149,7 +152,7 @@ public sealed partial class MainWindow
         Toolbar.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
         var width = Toolbar.DesiredSize.Width + ToolbarSlack;
 
-        SaveButton.Label = ViewModel.SaveButtonLabel;
+        SaveButton.Label = Shell.Active?.SaveButtonLabel ?? Strings.Save;
         FontPickerItem.Visibility = SizePickerItem.Visibility = pickers;
         Toolbar.DefaultLabelPosition = position;
         Toolbar.IsDynamicOverflowEnabled = true;
@@ -182,31 +185,31 @@ public sealed partial class MainWindow
     private void InitializeAccelerators()
     {
         const VirtualKeyModifiers ctrl = VirtualKeyModifiers.Control;
-        Accelerator(VirtualKey.O, ctrl, () => Run(ViewModel.OpenCommand));
-        Accelerator(VirtualKey.S, ctrl, () => Run(ViewModel.SaveCommand));
-        Accelerator(VirtualKey.S, ctrl | VirtualKeyModifiers.Shift, () => Run(ViewModel.SaveAsCommand));
+        Accelerator(VirtualKey.O, ctrl, () => Run(Shell.OpenCommand));
+        Accelerator(VirtualKey.S, ctrl, () => Run(Shell.Active?.SaveCommand));
+        Accelerator(VirtualKey.S, ctrl | VirtualKeyModifiers.Shift, () => Run(Shell.Active?.SaveAsCommand));
         Accelerator(VirtualKey.P, ctrl, () =>
         {
             // Without the print permission there is nothing to do (#131).
-            if (!ViewModel.IsPrintAllowed)
+            if (Shell.Active?.IsPrintAllowed != true)
                 return false;
             OnPrintClicked(PrintButton, new RoutedEventArgs());
             return true;
         });
-        Accelerator(VirtualKey.Z, ctrl, () => Run(ViewModel.UndoCommand));
-        Accelerator(VirtualKey.Y, ctrl, () => Run(ViewModel.RedoCommand));
+        Accelerator(VirtualKey.Z, ctrl, () => Run(Shell.Active?.UndoCommand));
+        Accelerator(VirtualKey.Y, ctrl, () => Run(Shell.Active?.RedoCommand));
         // Both plus keys and both minus keys: the main row's (OEM 187, 189) and the keypad's.
         foreach (var key in new[] { (VirtualKey)187, VirtualKey.Add })
-            Accelerator(key, ctrl, () => Run(ViewModel.ZoomInCommand));
+            Accelerator(key, ctrl, () => Run(Shell.Active?.ZoomInCommand));
         foreach (var key in new[] { (VirtualKey)189, VirtualKey.Subtract })
-            Accelerator(key, ctrl, () => Run(ViewModel.ZoomOutCommand));
+            Accelerator(key, ctrl, () => Run(Shell.Active?.ZoomOutCommand));
         foreach (var key in new[] { VirtualKey.Number0, VirtualKey.NumberPad0 })
         {
             Accelerator(key, ctrl, () =>
             {
-                if (!ViewModel.IsDocumentOpen)
+                if (Shell.Active is not { IsDocumentOpen: true } active)
                     return false;
-                _ = ViewModel.SetZoomPercentAsync(100);
+                _ = active.SetZoomPercentAsync(100);
                 return true;
             });
         }
@@ -219,9 +222,9 @@ public sealed partial class MainWindow
             RootGrid.KeyboardAccelerators.Add(accelerator);
         }
 
-        static bool Run(ICommand command)
+        static bool Run(ICommand? command)
         {
-            if (!command.CanExecute(null))
+            if (command is null || !command.CanExecute(null))
                 return false;
             command.Execute(null);
             return true;
@@ -309,7 +312,8 @@ public sealed partial class MainWindow
         while (ZoomMenu.Items.Count > first)
             ZoomMenu.Items.RemoveAt(first);
 
-        var open = ViewModel.IsDocumentOpen;
+        var active = Shell.Active;
+        var open = active?.IsDocumentOpen ?? false;
         ActualSizeItem.IsEnabled = FitWidthItem.IsEnabled = FitPageItem.IsEnabled = open;
         foreach (var preset in DocumentViewModel.ZoomPresets)
         {
@@ -317,22 +321,29 @@ public sealed partial class MainWindow
             {
                 Text = Strings.ZoomPercent(preset),
                 GroupName = "ZoomPresets",
-                IsChecked = ViewModel.ZoomPercent == preset,
+                IsChecked = active?.ZoomPercent == preset,
                 IsEnabled = open,
             };
-            item.Click += async (_, _) => await ViewModel.SetZoomPercentAsync(preset);
+            item.Click += async (_, _) =>
+            {
+                if (Shell.Active is { } doc)
+                    await doc.SetZoomPercentAsync(preset);
+            };
             ZoomMenu.Items.Add(item);
         }
     }
 
-    private async void OnActualSizeClicked(object sender, RoutedEventArgs e) =>
-        await ViewModel.SetZoomPercentAsync(100);
+    private async void OnActualSizeClicked(object sender, RoutedEventArgs e)
+    {
+        if (Shell.Active is { } active)
+            await active.SetZoomPercentAsync(100);
+    }
 
     // --- The contextual font and size pickers ---
 
     private void InitializeTextPickers()
     {
-        foreach (var size in ViewModel.TextSizes)
+        foreach (var size in DocumentViewModel.TextSizes)
             SizePicker.Items.Add(new ComboBoxItem { Content = ((int)size).ToString(CultureInfo.CurrentCulture), Tag = size });
         foreach (var face in StandardTextBoxFonts.All)
             FontPicker.Items.Add(new ComboBoxItem { Content = FontLabel(face), Tag = face });
@@ -340,20 +351,25 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(FontPicker, Strings.TextFontName);
         AutomationProperties.SetName(SizePicker, Strings.TextSizeName);
         ToolTipService.SetToolTip(SizePicker, Strings.TextSizeName);
-        ShowStyleInPickers(ViewModel.LastTextStyle);
+        ShowStyleInPickers(DefaultTextStyle);
     }
 
-    /// <summary>
-    /// While Add text is armed, while an added box is selected or being edited — and
-    /// nowhere else: for the document's own text and for form fields the formatting is
-    /// inherited, and SDD §3.1 keeps formatting UI away from them.
-    /// </summary>
-    private bool TextPickersWanted =>
-        ViewModel.IsTextBoxMode || _styleEditorOpen || _restylingSelection || _selection is { Run: not null };
+    /// <summary>What a base-14 face is called in the UI; the PDF names are exact.</summary>
+    private static string FontLabel(string fontName) =>
+        fontName == StandardTextBoxFonts.Serif ? "Times" : fontName;
 
+    /// <summary>
+    /// While Add text is armed, while an added box is selected or being edited on the
+    /// active tab — and nowhere else: for the document's own text and for form fields the
+    /// formatting is inherited, and SDD §3.1 keeps formatting UI away from them.
+    /// </summary>
     private void UpdateTextPickers()
     {
-        var visibility = TextPickersWanted ? Visibility.Visible : Visibility.Collapsed;
+        var view = ActiveDocumentView;
+        var wanted = view?.WantsTextStylePickers ?? false;
+        var visibility = wanted ? Visibility.Visible : Visibility.Collapsed;
+        if (view is { SelectedRunStyle: { } runStyle })
+            ShowStyleInPickers(runStyle);
         if (FontPickerItem.Visibility == visibility)
             return;
         // Relaying the row out for the pickers re-templates it on a later layout pass, and
@@ -391,13 +407,6 @@ public sealed partial class MainWindow
         _addTextFocusRelease.Start();
     }
 
-    private void OnTextBoxModeChanged()
-    {
-        if (ViewModel.IsTextBoxMode)
-            ShowStyleInPickers(ViewModel.LastTextStyle);
-        UpdateTextPickers();
-    }
-
     private void ShowStyleInPickers(TextStyleChoice style)
     {
         _syncingPickers = true;
@@ -428,57 +437,23 @@ public sealed partial class MainWindow
         (FontPicker.SelectedItem as ComboBoxItem)?.Tag as string ?? fallback.FontName);
 
     /// <summary>
-    /// A picker changed. Over an open editor the choice waits for the commit (and the
-    /// editor shows the size); with an added box selected, the box takes it at once as
-    /// one undoable edit and stays selected; with Add text armed, the next box gets it.
+    /// A picker changed, on the active tab. Over an open editor the choice waits for the
+    /// commit (and the editor shows the size); with an added box selected, the box takes it
+    /// at once as one undoable edit and stays selected; with Add text armed, the next box
+    /// gets it.
     /// </summary>
     private async void OnTextPickerChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_syncingPickers)
+        if (_syncingPickers || ActiveDocumentView is not { } view || Shell.Active is not { } active)
             return;
 
-        if (_styleEditorOpen && _activeEditor is { } editor)
-        {
-            var size = PickedTextStyle(ViewModel.LastTextStyle).FontSize;
-            editor.FontSize = Math.Max(size * 96.0 / 72 * ViewModel.ZoomFactor, 10);
-            return;
-        }
-
-        if (_selection is not { Run: { } run } selection)
-            return;
-        var current = new TextStyleChoice(run.FontSize, run.TextBoxFont ?? StandardTextBoxFonts.Default);
-        var picked = PickedTextStyle(current);
-        if (picked.FontName == current.FontName && Math.Abs(picked.FontSize - current.FontSize) < 0.01)
-            return;
-
-        _restylingSelection = true;
-        try
-        {
-            Deselect();
-            await ViewModel.RestyleTextBoxAsync(selection.Page.Index, run, run.Text, picked.FontName, picked.FontSize);
-            // The page re-rendered: select the box again as it now is — or as it still is,
-            // after Cancel at the #139 warning, which also puts the pickers back.
-            if (selection.Page.Index < ViewModel.Pages.Count
-                && ViewModel.FindTextBox(selection.Page.Index, run.TextBoxId, run.ObjectIndex) is { } box
-                && FindPageCanvas(selection.Page.Index) is { } canvas)
-            {
-                SelectStamp(canvas, ViewModel.Pages[selection.Page.Index], $"textbox:{box.ObjectIndex}", box.Bounds,
-                            resizable: false, run: box);
-            }
-        }
-        finally
-        {
-            _restylingSelection = false;
-            UpdateTextPickers();
-        }
+        var picked = PickedTextStyle(active.LastTextStyle);
+        view.ApplyPickedStyleToOpenEditor(picked.FontSize, picked.FontName);
+        await view.RestyleSelectedRunAsync(picked.FontSize, picked.FontName);
     }
 
     /// <summary>Back to typing once a picker has been used over an open editor.</summary>
-    private void OnTextPickerClosed(object? sender, object e)
-    {
-        if (_styleEditorOpen)
-            _activeEditor?.Focus(FocusState.Programmatic);
-    }
+    private void OnTextPickerClosed(object? sender, object e) => ActiveDocumentView?.FocusActiveEditor();
 
     /// <summary>
     /// For the `textbox` screenshot state: adds a box and selects it, which brings the
@@ -486,15 +461,11 @@ public sealed partial class MainWindow
     /// </summary>
     internal async Task<bool> SelectNewTextBoxForScreenshotAsync(string text)
     {
-        if (!ViewModel.IsDocumentOpen)
+        if (ActiveDocumentView is not { } view)
             return false;
-        // Where the Mac --story prints the name: under the demo agreement's signature line
-        // (tools/gen_test_fixtures.py demo.pdf). On another document it may land on text.
-        await ViewModel.AddTextBoxAsync(0, new PdfPoint(72, 405), text);
-        await Task.Delay(900);
-        if (ViewModel.LastTextBoxOn(0) is not { } box || FindPageCanvas(0) is not { } canvas)
+        if (!await view.SelectNewTextBoxForScreenshotAsync(text))
             return false;
-        SelectStamp(canvas, ViewModel.Pages[0], $"textbox:{box.ObjectIndex}", box.Bounds, resizable: false, run: box);
+        UpdateTextPickers();
         return FontPickerItem.Visibility == Visibility.Visible;
     }
 }

@@ -1,0 +1,240 @@
+<UserControl
+    x:Class="MegaPDF.App.DocumentView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:MegaPDF.App">
+
+    <!--
+        One tab's pages area (#348 phase 1). Everything here is per document: the page
+        list, the inline editor, the selection chrome, the rubber band, the hover
+        overlay, the find bar, the page busy spinner and the focus ring. A DocumentView
+        is created once per tab and never rebound to a different DocumentViewModel — its
+        ViewModel property (a DependencyProperty, the same pattern SignatureLibraryPanel
+        already uses) is set once by MainWindow.xaml's TabView item template and never
+        changes for the life of the tab.
+
+        The empty-state "no document open" screen (recents, the drop hint) is not here:
+        it is shown by MainWindow over the whole TabView when the shell has no tabs at
+        all, not per tab (plan §4).
+    -->
+    <UserControl.Resources>
+        <!-- The keyboard focus ring on a page region (SDD §2.2, #2; DocumentView.Keyboard.cs).
+             The system focus-visual pair, so a high-contrast theme swaps in its own
+             colours; ThemeResource in a style setter follows theme changes live. -->
+        <Style x:Key="PageFocusRingOuterStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{ThemeResource FocusStrokeColorOuterBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+        <Style x:Key="PageFocusRingInnerStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{ThemeResource FocusStrokeColorInnerBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="CornerRadius" Value="2" />
+            <Setter Property="Margin" Value="2" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="DocumentAreaRoot">
+
+        <!-- A tab stop (SDD §2.2, #2): Tab onto the pages lands on the first field,
+             checkbox or line of the page on screen, and walks on from there. Focus
+             stays here while the ring moves; see DocumentView.Keyboard.cs. -->
+        <ScrollViewer
+            x:Name="PagesScroll"
+            x:Uid="PagesScroll"
+            AutomationProperties.AutomationId="PagesScroll"
+            IsTabStop="True"
+            GettingFocus="OnPagesGettingFocus"
+            GotFocus="OnPagesGotFocus"
+            Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}"
+            HorizontalScrollBarVisibility="Auto"
+            VerticalScrollBarVisibility="Auto"
+            ViewChanged="OnPagesScrollViewChanged"
+            PointerWheelChanged="OnPagesPointerWheel">
+            <ItemsControl x:Name="PagesItems" ItemsSource="{x:Bind ViewModel.Pages}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Spacing="{ThemeResource SpaceL}" Padding="24" HorizontalAlignment="Center" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:PageView">
+                        <local:PageCanvas
+                            Width="{x:Bind Width}"
+                            Height="{x:Bind Height}"
+                            Background="White"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            AutomationProperties.Name="{x:Bind AccessibleName}"
+                            Loaded="OnPageCanvasLoaded"
+                            Tapped="OnPageTapped"
+                            DoubleTapped="OnPageDoubleTapped"
+                            PointerPressed="OnPagePointerPressed"
+                            PointerReleased="OnPagePointerReleased"
+                            PointerMoved="OnPagePointerMoved"
+                            PointerExited="OnPagePointerExited">
+                            <Image Source="{x:Bind Source}" Stretch="Uniform" />
+                            <!-- A page the engine refused to rasterise says so (#93) rather than
+                                 staying a blank sheet the user cannot tell from "still loading". -->
+                            <TextBlock
+                                Text="{x:Bind FailedMessage}"
+                                Visibility="{x:Bind FailedVisibility}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                TextAlignment="Center"
+                                TextWrapping="Wrap"
+                                Margin="24"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <!-- Find-match highlights (issue #26); Grid panel so Margin positions each rect. -->
+                            <ItemsControl ItemsSource="{x:Bind Highlights}" IsHitTestVisible="False">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <Grid />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="local:SearchHighlight">
+                                        <Rectangle
+                                            Width="{x:Bind Width}"
+                                            Height="{x:Bind Height}"
+                                            Margin="{x:Bind Margin}"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Fill="{x:Bind Fill}"
+                                            Stroke="{x:Bind Stroke}"
+                                            StrokeThickness="{x:Bind StrokeThickness}"
+                                            RadiusX="1.5"
+                                            RadiusY="1.5" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </local:PageCanvas>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- These InfoBars float over the document page, not over app chrome,
+             and InfoBar's severity backgrounds are translucent: #80F6F6F6 in
+             light, #08FFFFFF in dark. Over a white PDF page the light one
+             survives by luck and the dark one does not — 3% white over white
+             paper, with white text on it, so the message is invisible (#87).
+             An opaque background makes them chrome, which is what the find bar
+             below already does. -->
+        <StackPanel VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="24" Spacing="{ThemeResource SpaceS}">
+            <InfoBar
+                x:Uid="FontNoticeBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsFontNoticeOpen, Mode=TwoWay}"
+                Severity="Informational"
+                IsClosable="True" />
+            <InfoBar
+                x:Uid="ScannedHintBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsScannedHintOpen, Mode=TwoWay}"
+                Severity="Informational"
+                IsClosable="True" />
+            <!-- Document security (#131, ADR-004 §3, §7): a restricted open says so
+                 and offers the owner password; a password open says crash recovery
+                 is off; the Password command reports what it did. -->
+            <InfoBar
+                x:Uid="RestrictedNoticeBar"
+                AutomationProperties.AutomationId="RestrictedNoticeBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsRestrictedNoticeOpen, Mode=TwoWay}"
+                Severity="Informational"
+                IsClosable="True">
+                <InfoBar.ActionButton>
+                    <Button x:Uid="UnlockButton" Click="OnUnlockClicked" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar
+                x:Uid="RecoveryOffNoticeBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsRecoveryOffNoticeOpen, Mode=TwoWay}"
+                Severity="Informational"
+                IsClosable="True" />
+            <InfoBar
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsSecurityNoticeOpen, Mode=TwoWay}"
+                Message="{x:Bind ViewModel.SecurityNotice, Mode=OneWay}"
+                Severity="Success"
+                IsClosable="True" />
+            <!-- What a redaction removed (#173). The view model has said this since the
+                 feature landed; on Windows nothing showed it, so a redaction finished in
+                 silence. -->
+            <InfoBar
+                AutomationProperties.AutomationId="RedactionSummaryBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsRedactionSummaryOpen, Mode=TwoWay}"
+                Message="{x:Bind ViewModel.RedactionSummaryText, Mode=OneWay}"
+                Severity="Success"
+                IsClosable="True" />
+        </StackPanel>
+
+        <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
+            <InfoBar
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
+                IsOpen="True"
+                Severity="Informational"
+                Message="{x:Bind ViewModel.PlacementHint, Mode=OneWay}"
+                CloseButtonClick="OnCancelPlacementClicked" />
+        </StackPanel>
+
+        <!-- Which page is in view (#144). Floats over the document's corner, clear
+             of the scroll bar and of the notices centred below. -->
+        <Border
+            x:Name="PageIndicatorPill"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Margin="0,0,28,14"
+            Padding="10,3"
+            CornerRadius="12"
+            IsHitTestVisible="False"
+            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            Visibility="{x:Bind ViewModel.DocumentVisibility, Mode=OneWay}">
+            <TextBlock
+                Text="{x:Bind ViewModel.PageIndicator, Mode=OneWay}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Border>
+
+        <!-- Ctrl+F find bar: compact Edge-style overlay (issue #26 simple search) -->
+        <Border
+            x:Name="FindBar"
+            Visibility="Collapsed"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Margin="0,8,24,0"
+            Padding="8,8"
+            Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8"
+            PreviewKeyDown="OnFindBarKeyDown">
+            <StackPanel Orientation="Horizontal" Spacing="{ThemeResource SpaceS}">
+                <TextBox
+                    x:Name="FindQuery"
+                    x:Uid="FindQuery"
+                    AutomationProperties.AutomationId="FindQuery"
+                    IsSpellCheckEnabled="False"
+                    MinWidth="180"
+                    TextChanged="OnFindQueryChanged" />
+                <TextBlock
+                    Text="{x:Bind ViewModel.SearchStatus, Mode=OneWay}"
+                    VerticalAlignment="Center"
+                    MinWidth="64"
+                    TextAlignment="Center"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    AutomationProperties.LiveSetting="Polite" />
+                <Button Click="OnFindPreviousClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70E;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindPreviousButton" AutomationProperties.AutomationId="FindPreviousButton" />
+                <Button Click="OnFindNextClicked" IsEnabled="{x:Bind ViewModel.HasSearchResults, Mode=OneWay}" Content="&#xE70D;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindNextButton" AutomationProperties.AutomationId="FindNextButton" />
+                <Button Click="OnFindCloseClicked" Content="&#xE711;" FontFamily="{StaticResource SymbolThemeFontFamily}" FontSize="{ThemeResource TypeCaption}" x:Uid="FindCloseButton" AutomationProperties.AutomationId="FindCloseButton" />
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</UserControl>
