@@ -39,6 +39,10 @@ public sealed partial class MainWindow : Window
         WireOverflowTooltip();
         InitializeToolbar();
         InitializeWindowKeyboard();
+        // Every window in the process registers itself, so a redirected activation (#348
+        // phase 2) has somewhere to find-or-activate a tab across, not just "the" window
+        // phase 1 could assume there was only ever one of.
+        App.RegisterWindow(this);
 
         Shell.PropertyChanged += (_, e) =>
         {
@@ -280,12 +284,11 @@ public sealed partial class MainWindow : Window
     }
 
     // --- Crash recovery offer (SDD §3.4: one-click restore after an unclean exit) ---
-    // Once per app launch (#348 phase 1, plan §5.3) — App.xaml.cs's OnLaunched calls this
-    // once, on the first window, before any launched/reopened file opens. Loops every
-    // crashed session newest-first, each into its own new tab; a redirected launch, the
-    // Linux socket path and a Finder open to a running app are all out of phase 1's scope
-    // (no single-instance redirection yet), so "once per launch" and "once per window" are
-    // the same thing today — this only had to stop being "only sessions[0]".
+    // Once per process launch (plan §5.3) — App.xaml.cs's OnLaunched calls this once, on the
+    // first window, before any launched/reopened file opens. Loops every crashed session
+    // newest-first, each into its own new tab. A redirected launch never triggers this again
+    // (#348 phase 2): OnActivatedFromAnotherInstance only ever opens tabs, and this process
+    // already ran its one recovery offer before that window existed to redirect into.
 
     public async Task OfferCrashRecoveryAsync()
     {

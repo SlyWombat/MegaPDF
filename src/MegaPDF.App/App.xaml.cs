@@ -1,5 +1,7 @@
 using MegaPDF.Core.Services;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
 
 namespace MegaPDF.App;
 
@@ -43,6 +45,10 @@ public partial class App : Application
         AppLanguage.ApplyOverride(Screenshot.ArgumentAfter("--language") ?? Settings.Language);
 
         InitializeComponent();
+
+        // The first point this process has a dispatcher queue (#348 phase 2) — replays any
+        // redirected activation that arrived before it existed. See App.Activation.cs.
+        DrainPendingActivations(DispatcherQueue.GetForCurrentThread());
     }
 
     internal static void LogCrash(Exception? ex, string context)
@@ -98,30 +104,25 @@ public partial class App : Application
         // Crash recovery is offered before anything else opens, including a file the app
         // was launched with (#145): opening that first used to return without offering it,
         // so a double-clicked PDF after a crash silently left the crash's edits behind.
-        // Still per window for phase 1 (#348) — moving this to once per app launch, looping
-        // every crashed session into its own tab, is tracked separately.
+        // Once per process launch — with single-instance redirection now in place (#348
+        // phase 2), a later "open with" while this window is already up goes through
+        // OnActivatedFromAnotherInstance instead, which never re-offers recovery.
         await mainWindow.OfferCrashRecoveryAsync();
 
         // "Open with MegaPDF" / command-line launch — after the offer, and not again for a
         // file the restore has just opened into a tab with its recovered edits. Every .pdf
-        // argument opens (#348 phase 1: Explorer's argv[1]-only read no longer applies —
-        // single-instance redirection, which is what would actually deliver more than one
-        // path this way today, is out of phase 1's scope).
-        var launchedPaths = Environment.GetCommandLineArgs().Skip(1)
-            .Where(a => a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a))
-            .Select(Path.GetFullPath)
-            .ToList();
+        // argument opens, read the same File/Launch way a redirected activation is (#348
+        // phase 2) rather than OnLaunched keeping its own separate argv[1]-only read.
+        var launchedPaths = ExtractPdfPaths(AppInstance.GetCurrent().GetActivatedEventArgs());
         if (launchedPaths.Count > 0)
         {
             var openPaths = mainWindow.Shell.Documents
                 .Select(d => d.DocumentPath)
                 .Where(p => p is not null)
                 .Select(p => p!);
-            foreach (var launched in launchedPaths)
-            {
-                if (Core.Recovery.LaunchedDocument.NeedsOpening(launched, openPaths))
-                    await mainWindow.Shell.OpenInTabAsync(launched);
-            }
+            var toOpen = launchedPaths.Where(p => Core.Recovery.LaunchedDocument.NeedsOpening(p, openPaths)).ToList();
+            if (toOpen.Count > 0)
+                await OpenExternalPathsAsync(toOpen, preferredWindow: mainWindow);
             return;
         }
 
