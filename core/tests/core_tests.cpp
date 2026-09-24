@@ -48,6 +48,7 @@
 #else
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/wait.h>   // WIFEXITED/WEXITSTATUS, for the megapdf-cli subprocess tests (#355)
 #endif
 
 #include "megapdf_core.h"
@@ -5789,12 +5790,285 @@ void test_structure_cancel(const std::string& schematic) {
     megapdf_cancel_free(c);
 }
 
+// --------------------------------------------------------------------------
+// The plain-text writer (#142, #355): megapdf_write_text(), over the same fixtures #353's
+// block goldens use. Golden .txt files follow text_runs.txt's/the .blocks goldens' own
+// discipline (regenerate only when the contract is meant to change): set
+// MEGAPDF_WRITE_TEXT_GOLDENS=1 to (re)write core/tests/expected/structure/*.txt instead of
+// comparing against them. Every golden here uses plain default options (no keep_furniture, no
+// keep_lines) deliberately: keep_lines' line-break decisions read span bounds, and the .blocks
+// goldens' own comment already documents real cross-platform bounds drift (up to 0.72 pt) that
+// could flip a decision right at that threshold. Plain text content and block classification
+// are exactly what the .blocks goldens already assert must match byte-for-byte (only their
+// bounds get a tolerance), so this stays exact-match without needing one of its own.
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct TextSink {
+    std::string text;
+};
+
+int write_to_text_sink(void* context, const void* data, size_t size) {
+    auto* sink = static_cast<TextSink*>(context);
+    sink->text.append(static_cast<const char*>(data), size);
+    return 1;
+}
+
+bool write_text_goldens() {
+    const char* v = std::getenv("MEGAPDF_WRITE_TEXT_GOLDENS");
+    return v != nullptr && *v != '\0' && std::string(v) != "0";
+}
+
+}  // namespace
+
+void test_write_text_golden(const std::string& name, const std::string& path, const std::string& expected_dir) {
+    Doc d(path);
+    check(d.doc != nullptr, "write_text " + name + ": document opens", path);
+    if (d.doc == nullptr) return;
+    const int pages = megapdf_page_count(d.doc);
+    megapdf_write_options opt{};
+    TextSink sink;
+    const int rc = megapdf_write_text(d.doc, 0, pages, MEGAPDF_WRITE_TEXT, &opt, write_to_text_sink, &sink, nullptr);
+    check(rc >= 0, "write_text " + name + ": succeeds", std::to_string(rc));
+    if (rc < 0) return;
+    const std::string expected_path = expected_dir + "/" + name + ".txt";
+    if (write_text_goldens()) {
+        std::ofstream out(expected_path, std::ios::binary);
+        out << sink.text;
+        std::printf("wrote %s (%zu bytes)\n", expected_path.c_str(), sink.text.size());
+        return;
+    }
+    std::ifstream in(expected_path, std::ios::binary);
+    check(in.good(), "write_text " + name + ": golden file exists", expected_path);
+    if (!in.good()) return;
+    const std::string expected((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    check(expected == sink.text, "write_text " + name + ": matches its golden text (exact)", expected_path);
+}
+
+void test_write_text_goldens(const std::string& repo, const std::string& expected_dir) {
+    struct Case {
+        const char* name;
+        std::string path;
+    };
+    const Case cases[] = {
+        {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
+        {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
+        {"mixed", repo + "/structure/mixed.pdf"},
+    };
+    for (const Case& c : cases) test_write_text_golden(c.name, c.path, expected_dir);
+}
+
+// design §2 bar 2 / the issue's own acceptance criterion, restated for the writer's actual
+// output rather than the raw block text test_structure_findability() already checks: every
+// term SearchParityTests asserts on the #98 schematic (4/6/2 hits for "the") is found the same
+// number of times, as a whitespace-normalised substring, in the corresponding page's extracted
+// TEXT (split on the default form-feed page separator).
+void test_write_text_findability(const std::string& schematic) {
+    Doc d(schematic);
+    if (!d.doc) { check(false, "write_text findability: schematic opens"); return; }
+    const int pages = megapdf_page_count(d.doc);
+    megapdf_write_options opt{};
+    TextSink sink;
+    const int rc = megapdf_write_text(d.doc, 0, pages, MEGAPDF_WRITE_TEXT, &opt, write_to_text_sink, &sink, nullptr);
+    check(rc >= 0, "write_text findability: succeeds", std::to_string(rc));
+    if (rc < 0) return;
+
+    std::vector<std::string> pages_text;
+    {
+        std::string cur;
+        for (char c : sink.text) {
+            if (c == '\f') { pages_text.push_back(cur); cur.clear(); }
+            else cur += c;
+        }
+        pages_text.push_back(cur);
+    }
+    const int expected[3] = {4, 6, 2};
+    for (int p = 0; p < pages && p < 3 && static_cast<size_t>(p) < pages_text.size(); p++) {
+        std::string lowered;
+        for (unsigned char c : pages_text[static_cast<size_t>(p)]) lowered += static_cast<char>(std::tolower(c));
+        std::string norm;
+        bool last_space = true;
+        for (char c : lowered) {
+            const bool is_space = std::isspace(static_cast<unsigned char>(c)) != 0;
+            if (is_space) {
+                if (!last_space) norm += ' ';
+                last_space = true;
+            } else {
+                norm += c;
+                last_space = false;
+            }
+        }
+        int count = 0;
+        for (size_t at = norm.find("the"); at != std::string::npos; at = norm.find("the", at + 1)) count++;
+        check(count == expected[p], "write_text findability: schematic 'the' count matches SearchParityTests",
+              "page " + std::to_string(p + 1) + ": " + std::to_string(count) + " vs " + std::to_string(expected[p]));
+    }
+}
+
+// --------------------------------------------------------------------------
+// megapdf-cli (#355) subprocess tests: exit codes and stderr are the shell's, not the
+// writer's, so these run the built binary rather than call megapdf_write_text() directly.
+// --------------------------------------------------------------------------
+
+namespace {
+
+struct CliResult {
+    int exit_code = -1;
+    std::string out;
+    std::string err;
+};
+
+#if defined(_WIN32)
+std::string quote_arg(const std::string& s) {
+    std::string out = "\"";
+    for (char c : s) {
+        if (c == '"') out += '\\';
+        out += c;
+    }
+    out += "\"";
+    return out;
+}
+#else
+std::string quote_arg(const std::string& s) {
+    std::string out = "'";
+    for (char c : s) {
+        if (c == '\'') out += "'\\''";
+        else out += c;
+    }
+    out += "'";
+    return out;
+}
+#endif
+
+std::string read_text_file(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+// Runs `cli_path` with `args` (each individually quoted for the platform's shell — none of the
+// fixture paths or flags used below need it, but a Windows or corpus path with a space does),
+// redirecting stdout/stderr to scratch files in the test binary's own working directory. No
+// password is ever an argument here: a caller that needs one writes it to its own temp file
+// first and passes --password-file <path>, exactly as a real user would.
+CliResult run_cli(const std::string& cli_path, const std::vector<std::string>& args) {
+    static int call_count = 0;
+    const std::string out_path = "cli_test_stdout_" + std::to_string(call_count) + ".tmp";
+    const std::string err_path = "cli_test_stderr_" + std::to_string(call_count) + ".tmp";
+    call_count++;
+
+    std::string cmd = quote_arg(cli_path);
+    for (const std::string& a : args) cmd += " " + quote_arg(a);
+    cmd += " >" + quote_arg(out_path) + " 2>" + quote_arg(err_path);
+
+    const int raw = std::system(cmd.c_str());
+    CliResult result;
+#if defined(_WIN32)
+    result.exit_code = raw;
+#else
+    result.exit_code = (raw != -1 && WIFEXITED(raw)) ? WEXITSTATUS(raw) : -1;
+#endif
+    result.out = read_text_file(out_path);
+    result.err = read_text_file(err_path);
+    std::remove(out_path.c_str());
+    std::remove(err_path.c_str());
+    return result;
+}
+
+}  // namespace
+
+// A basic end-to-end sanity check: `megapdf-cli extract fixture.pdf` from a plain shell works
+// and its stdout is exactly what megapdf_write_text() itself returns for the same document —
+// i.e. the CLI is a thin, faithful shell over the writer, as designed.
+void test_cli_smoke(const std::string& fixtures, const std::string& cli_path) {
+    const std::string pdf = fixtures + "/fixture.pdf";
+    Doc d(pdf);
+    check(d.doc != nullptr, "cli smoke: fixture.pdf opens directly (sanity)", pdf);
+    megapdf_write_options opt{};
+    TextSink sink;
+    if (d.doc != nullptr) {
+        megapdf_write_text(d.doc, 0, megapdf_page_count(d.doc), MEGAPDF_WRITE_TEXT, &opt, write_to_text_sink, &sink,
+                           nullptr);
+    }
+    CliResult r = run_cli(cli_path, {"extract", pdf, "--quiet"});
+    check(r.exit_code == 0, "cli smoke: extract exits 0 on a plain fixture", std::to_string(r.exit_code));
+    check(r.out == sink.text, "cli smoke: stdout matches megapdf_write_text()'s own output exactly");
+
+    CliResult ver = run_cli(cli_path, {"--version"});
+    check(ver.exit_code == 0, "cli smoke: --version exits 0", std::to_string(ver.exit_code));
+    check(!ver.out.empty(), "cli smoke: --version prints something");
+
+    CliResult help = run_cli(cli_path, {"--help"});
+    check(help.exit_code == 0, "cli smoke: --help exits 0", std::to_string(help.exit_code));
+
+    CliResult missing = run_cli(cli_path, {"extract", fixtures + "/does-not-exist.pdf"});
+    check(missing.exit_code == 2, "cli smoke: a missing file exits 2", std::to_string(missing.exit_code));
+
+    CliResult usage = run_cli(cli_path, {"extract"});
+    check(usage.exit_code == 1, "cli smoke: extract with no path is a usage error (exit 1)",
+          std::to_string(usage.exit_code));
+}
+
+// Password handling (#355, design §6): the encrypted fixture opens with --password-file and
+// fails with exit 3 without one; the password never appears on argv (run_cli's own comment).
+// remove-aes-256.pdf is secure-source.pdf (#241's richer fixture — two pages, a filled text
+// field, a checked checkbox, two annotations) encrypted by tools/gen_security_fixtures.sh,
+// whose own committed table names this exact password as test data, same as
+// core_tests.cpp's other security tests (test_protected_save()) already hardcode it.
+void test_cli_password(const std::string& security_dir, const std::string& cli_path) {
+    const std::string pdf = security_dir + "/remove-aes-256.pdf";
+
+    CliResult without = run_cli(cli_path, {"extract", pdf, "--quiet"});
+    check(without.exit_code == 3, "cli password: encrypted fixture without a password exits 3",
+          std::to_string(without.exit_code));
+
+    const std::string pw_path = "cli_test_password.tmp";
+    {
+        std::ofstream pw(pw_path, std::ios::binary);
+        pw << "u-remove-a256\n";
+    }
+    CliResult with = run_cli(cli_path, {"extract", pdf, "--password-file", pw_path, "--all-fields", "--quiet"});
+    std::remove(pw_path.c_str());
+    check(with.exit_code == 0, "cli password: encrypted fixture opens with --password-file",
+          std::to_string(with.exit_code));
+    check(with.out.find("fullname: Ada Lovelace") != std::string::npos,
+          "cli password: secure-source's filled text field prints \"name: value\"", with.out);
+    check(with.out.find("[x] agree") != std::string::npos,
+          "cli password: secure-source's checked box prints \"[x] name\"", with.out);
+}
+
+// scan.pdf and mixed.pdf (design §5/§6): a page with no text layer never silences the run —
+// it gets a stderr note and a placeholder line — and --strict is the only thing that turns a
+// textless page into a failing exit code.
+void test_cli_scan_mixed(const std::string& repo, const std::string& cli_path) {
+    CliResult scan = run_cli(cli_path, {"extract", repo + "/structure/scan.pdf"});
+    check(scan.exit_code == 5, "cli scan/mixed: scan.pdf exits 5 (no text on any requested page)",
+          std::to_string(scan.exit_code));
+    check(scan.err.find("no text layer on 1 of 1 pages; MegaPDF does not do OCR") != std::string::npos,
+          "cli scan/mixed: scan.pdf prints the no-OCR stderr note", scan.err);
+
+    CliResult mixed = run_cli(cli_path, {"extract", repo + "/structure/mixed.pdf"});
+    check(mixed.exit_code == 0, "cli scan/mixed: mixed.pdf exits 0 without --strict",
+          std::to_string(mixed.exit_code));
+
+    CliResult mixed_strict = run_cli(cli_path, {"extract", repo + "/structure/mixed.pdf", "--strict"});
+    check(mixed_strict.exit_code == 6, "cli scan/mixed: mixed.pdf exits 6 with --strict",
+          std::to_string(mixed_strict.exit_code));
+}
+
 int main(int argc, char** argv) {
     if (argc < 5) {
-        std::fprintf(stderr, "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt> <structure-expected-dir>\n",
+        std::fprintf(stderr,
+                     "usage: %s <fixtures-dir> <schematic.pdf> <text_runs.txt> <structure-expected-dir> "
+                     "[megapdf-cli path]\n",
                      argv[0]);
         return 2;
     }
+    // Optional (#355): the built megapdf-cli binary, for the subprocess tests that need real
+    // exit codes and stderr, not just the writer's return value. core/CMakeLists.txt's `core`
+    // ctest always passes it; a manual run without it just skips those tests, printed as such.
+    const std::string cli_path = argc > 5 ? argv[5] : std::string();
     test_null_handles();
     test_open_failures(argv[1]);
     test_document_and_geometry(argv[1]);
@@ -5847,6 +6121,15 @@ int main(int argc, char** argv) {
     test_structure_fields(argv[1]);
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
+    test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_write_text_findability(argv[2]);
+    if (cli_path.empty()) {
+        std::printf("cli tests: skipped (no megapdf-cli path given on the command line)\n");
+    } else {
+        test_cli_smoke(argv[1], cli_path);
+        test_cli_password(std::string(MEGAPDF_SECURITY_FIXTURES), cli_path);
+        test_cli_scan_mixed(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
+    }
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
     return failures == 0 ? 0 : 1;
