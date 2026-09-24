@@ -127,7 +127,16 @@ public partial class App
 
     internal static IReadOnlyList<string> ExtractPdfPaths(AppActivationArguments args)
     {
-        if (args.Kind == ExtendedActivationKind.File && args.Data is FileActivatedEventArgs fileArgs)
+        // AppActivationArguments.Data is a raw WinRT object; casting it to the concrete
+        // runtimeclass (FileActivatedEventArgs/LaunchActivatedEventArgs) fails silently at
+        // runtime — `is` never matches and no exception is thrown, so nothing about this is
+        // compiler- or exception-checked. Verified live on GPD-DAVE (#348 phase 2): a plain
+        // unpackaged argv launch produced Kind=Launch but `Data as LaunchActivatedEventArgs`
+        // came back null every time. The interface types (ILaunchActivatedEventArgs,
+        // IFileActivatedEventArgs) are what Data actually QIs to — Microsoft's own
+        // "access activation info" sample casts to these, not the runtimeclass — and casting
+        // to them is what actually works.
+        if (args.Kind == ExtendedActivationKind.File && args.Data is IFileActivatedEventArgs fileArgs)
         {
             return fileArgs.Files.OfType<IStorageFile>()
                 .Select(f => f.Path)
@@ -136,7 +145,7 @@ public partial class App
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-        if (args.Kind == ExtendedActivationKind.Launch && args.Data is Windows.ApplicationModel.Activation.LaunchActivatedEventArgs launchArgs)
+        if (args.Kind == ExtendedActivationKind.Launch && args.Data is ILaunchActivatedEventArgs launchArgs)
         {
             // The raw command line, split the way CommandLineToArgvW would (see CommandLine.cs)
             // — this is what actually delivers a path with a space in it intact.
