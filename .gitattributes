@@ -8,3 +8,10 @@ THIRD-PARTY-NOTICES.txt text eol=lf
 # CRLF, so the win-x64 build reported a different series.
 tools/pdfium/patches/*.patch text eol=lf
 tools/pdfium/*.sh text eol=lf
+
+# Contract 9 golden block dumps (#142, #353) are compared close to byte-for-byte by
+# core/tests/core_tests.cpp's test_structure_golden(), written with LF. Same trap as the
+# PDFium patches above: an unpinned Windows checkout converts them to CRLF, and every line
+# of every dump then reads as "different" (#359 — this is what actually made all 14
+# fixtures fail on windows-latest, not only the ones with a real bounds difference).
+core/tests/expected/structure/*.blocks text eol=lf
