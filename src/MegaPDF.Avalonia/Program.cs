@@ -2719,14 +2719,21 @@ internal static class Program
         window.Show();
         Pump();
 
+        // Waited out on IsDocumentOpen, not just Documents.Count: the tab is added
+        // (Count already right) before its document's own off-UI-thread load finishes
+        // — see the comment on the same fix in CheckSingleInstanceRouting. Checking
+        // only Count here gave PumpUntil nothing to actually wait for and raced the
+        // "and it is active and open" check below against that load on macOS CI.
         window.OpenFromSystem(fixtureA);
-        PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+        PumpUntil(() => shell.Documents.Count == 1 && shell.Documents.All(d => d.IsDocumentOpen),
+                  TimeSpan.FromSeconds(5));
         check("opening a document creates one tab", shell.Documents.Count == 1);
         var tabA = shell.Active;
         check("  and it is active and open", ReferenceEquals(shell.Active, tabA) && tabA is { IsDocumentOpen: true });
 
         window.OpenFromSystem(fixtureB);
-        PumpUntil(() => shell.Documents.Count == 2, TimeSpan.FromSeconds(5));
+        PumpUntil(() => shell.Documents.Count == 2 && shell.Documents.All(d => d.IsDocumentOpen),
+                  TimeSpan.FromSeconds(5));
         check("opening a second document adds a second tab, not replacing the first",
               shell.Documents.Count == 2);
         var tabB = shell.Active;
@@ -2982,12 +2989,20 @@ internal static class Program
         window.Show();
         Pump();
 
+        // Waited out on IsDocumentOpen, not just Documents.Count (see the same fix and
+        // comment in CheckTabs/CheckSingleInstanceRouting): the gestures below call
+        // AddTextBox/AddWhiteout on tabA, which silently no-op while its document is
+        // still mid-load (DocumentViewModel._document is null until Adopt runs), so a
+        // race here would not fail here — it would fail confusingly, further down,
+        // wherever the first gesture's own wait times out.
         window.OpenFromSystem(fixtureA);
-        PumpUntil(() => shell.Documents.Count == 1, TimeSpan.FromSeconds(5));
+        PumpUntil(() => shell.Documents.Count == 1 && shell.Documents.All(d => d.IsDocumentOpen),
+                  TimeSpan.FromSeconds(5));
         var tabA = shell.Active!;
 
         window.OpenFromSystem(fixtureB);
-        PumpUntil(() => shell.Documents.Count == 2, TimeSpan.FromSeconds(5));
+        PumpUntil(() => shell.Documents.Count == 2 && shell.Documents.All(d => d.IsDocumentOpen),
+                  TimeSpan.FromSeconds(5));
         var tabB = shell.Active!;
 
         shell.ActivateTab(tabA);
