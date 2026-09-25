@@ -5962,6 +5962,18 @@ CliResult run_cli(const std::string& cli_path, const std::vector<std::string>& a
     for (const std::string& a : args) cmd += " " + quote_arg(a);
     cmd += " >" + quote_arg(out_path) + " 2>" + quote_arg(err_path);
 
+#if defined(_WIN32)
+    // std::system() runs `cmd.exe /c <string>` on Windows, and cmd.exe has a well-known
+    // quirk: when a command line STARTS with a quote, it strips only the very first and very
+    // last quote character in the whole line before doing anything else, not the pair around
+    // the executable's own path -- so "a.exe" "arg" >"out" ends up as one mangled "command
+    // name" spanning everything between those two, and cmd.exe reports it as unrecognized
+    // (caught by the first real Windows CI run of PR #367). The fix is the same one
+    // CreateProcess's own documentation gives for this case: wrap the ENTIRE command line in
+    // one more pair of quotes, which cmd.exe then strips as the outermost layer and parses
+    // the rest normally.
+    cmd = "\"" + cmd + "\"";
+#endif
     const int raw = std::system(cmd.c_str());
     CliResult result;
 #if defined(_WIN32)
