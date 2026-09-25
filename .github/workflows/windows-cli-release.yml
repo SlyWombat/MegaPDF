@@ -76,7 +76,9 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "megapdf_cli build failed for $arch" }
             $exe = "$build/Release/megapdf-cli.exe"
             if (-not (Test-Path $exe)) { throw "build finished but $exe is missing" }
-            & $exe --version
+            # arm64 is cross-compiled here (this runner is x64, like the Store ARM64
+            # package's own build step): its exe cannot run on this host, only x64's can.
+            if ($arch -eq 'x64') { & $exe --version }
           }
 
       # x86-64 or ARM64, whichever this cmake configure targeted — the same check the

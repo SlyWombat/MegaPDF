@@ -98,7 +98,14 @@ rm -rf "$OUT/$NAME"
 # Checked in the archive itself, not assumed from the tree check above: tar can drop a
 # file for reasons a directory check never sees (a stale --exclude, a name that sorts
 # oddly). megapdf-cli (#142, #356) travels the same way MegaPDF itself always has.
-if ! tar -tzf "$TARBALL" | grep -qx "$NAME/bin/megapdf-cli"; then
+#
+# The listing is captured to a variable rather than piped straight into grep -q: under
+# `set -o pipefail` (this script's own top line), grep -q closing its end of the pipe
+# the moment it finds a match sends tar a SIGPIPE, and pipefail then reports that as
+# the pipeline's failure even though grep matched — this failed exactly that way in CI
+# the first time, on an archive that did carry the binary.
+TARBALL_LISTING="$(tar -tzf "$TARBALL")"
+if ! grep -qx "$NAME/bin/megapdf-cli" <<< "$TARBALL_LISTING"; then
     echo "::error::$TARBALL does not contain $NAME/bin/megapdf-cli" >&2
     exit 1
 fi
