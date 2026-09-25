@@ -156,13 +156,23 @@ shell '
     set -e
     test -n "$SNAP_NAME"
     echo "  SNAP_NAME=$SNAP_NAME, SNAP=$SNAP, HOME=$HOME"
-    for f in MegaPDF libmegapdf_core.so libpdfium.so THIRD-PARTY-NOTICES.txt; do
+    for f in MegaPDF megapdf-cli libmegapdf_core.so libpdfium.so THIRD-PARTY-NOTICES.txt; do
         test -s "$SNAP/lib/megapdf/$f"
     done
-    echo "  the apphost, both native libraries and the notices are in \$SNAP/lib/megapdf"
+    echo "  the apphost, megapdf-cli, both native libraries and the notices are in \$SNAP/lib/megapdf"
     test -f "$SNAP/meta/gui/megapdf.desktop"
 '
 check $?
+
+step "megapdf.cli extracts text under strict confinement (#142, #356)"
+out=$(snap run megapdf.cli extract "$WORK/demo.pdf")
+rc=$?
+if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+    echo "  ok, extracted $(echo "$out" | wc -l) line(s) of text from demo.pdf"
+else
+    echo "  FAIL (exit $rc)"
+fi
+check "$rc"
 
 step "--install-kind: About will say the Snap Store keeps it up to date"
 out=$(megapdf --install-kind 2>&1)
