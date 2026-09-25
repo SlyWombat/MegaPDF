@@ -567,6 +567,10 @@ Saved as {2} — ready to email.</value>
     <value>Box to tick</value>
     <comment>A drawn (non-form) box</comment>
   </data>
+  <data name="RegionBoxTicked" xml:space="preserve">
+    <value>Box, ticked</value>
+    <comment>A drawn (non-form) box that already carries a check mark (#2)</comment>
+  </data>
   <data name="RegionFormField" xml:space="preserve">
     <value>Form field</value>
   </data>

@@ -68,7 +68,7 @@ public partial class DocumentViewModel
     public static string DescribeRegion(PageHitKind kind, bool isChecked) => kind switch
     {
         PageHitKind.FormCheckbox => isChecked ? Strings.RegionCheckboxTicked : Strings.RegionCheckboxNotTicked,
-        PageHitKind.DrawnCheckbox => Strings.RegionBoxToTick,
+        PageHitKind.DrawnCheckbox => isChecked ? Strings.RegionBoxTicked : Strings.RegionBoxToTick,
         PageHitKind.FormTextField => Strings.RegionFormField,
         PageHitKind.TextRun => Strings.RegionTextEditable,
         PageHitKind.TextBox => Strings.RegionAddedText,
@@ -259,7 +259,18 @@ public partial class DocumentViewModel
             // whether a box is ticked. One hit-test at its centre answers both (#190).
             using var page = doc.GetPage(at.PageIndex);
             var hit = page.HitTest(bounds.Center);
-            var isChecked = kind == PageHitKind.FormCheckbox && hit.Field is { IsChecked: true };
+            // A real form checkbox knows its own state. A drawn box has none to ask — ticking
+            // one places a "mark:"-prefixed check-mark stamp over it (AddMarkOperation), which
+            // then wins the hit test at the same centre point (stamps sit on top of everything).
+            // Without this, re-reading after a tick kept reporting "Box to tick" — the region's
+            // kind never changes, so nothing told a screen reader it had just been ticked (#2).
+            var isChecked = kind switch
+            {
+                PageHitKind.FormCheckbox => hit.Field is { IsChecked: true },
+                PageHitKind.DrawnCheckbox => hit is { Kind: PageHitKind.StampAnnotation, AnnotationId: not null }
+                                              && hit.AnnotationId.StartsWith("mark:", StringComparison.Ordinal),
+                _ => false,
+            };
             var content = DescribeContent(hit);
             if (content is null && kind == PageHitKind.DrawnCheckbox)
             {

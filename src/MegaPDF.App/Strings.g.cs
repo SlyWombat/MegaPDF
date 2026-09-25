@@ -331,6 +331,9 @@ public static partial class Strings
     /// <summary>Box to tick</summary>
     public static string RegionBoxToTick => Get("RegionBoxToTick");
 
+    /// <summary>Box, ticked</summary>
+    public static string RegionBoxTicked => Get("RegionBoxTicked");
+
     /// <summary>Form field</summary>
     public static string RegionFormField => Get("RegionFormField");
 

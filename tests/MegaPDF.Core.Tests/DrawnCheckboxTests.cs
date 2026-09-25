@@ -74,6 +74,24 @@ public class DrawnCheckboxTests : IDisposable
         Assert.Equal(id, hit.AnnotationId);
     }
 
+    /// <summary>
+    /// The Windows keyboard-focus announcement (#2) tells a real form checkbox's ticked
+    /// state apart from a drawn box's by asking whether the region now hit-tests as a
+    /// "mark:"-prefixed stamp rather than the drawn square. That only works as long as
+    /// a mark's own id keeps this prefix.
+    /// </summary>
+    [Fact]
+    public void AddMark_GeneratedId_CarriesTheMarkPrefix()
+    {
+        using var doc = _engine.Open(WritePdf());
+        using var page = doc.GetPage(0);
+        var square = page.HitTest(SquareCenter).Bounds!.Value;
+
+        var id = page.AddCheckMarkStamp(square);
+
+        Assert.StartsWith("mark:", id, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RemoveMark_RestoresDrawnCheckboxHit()
     {

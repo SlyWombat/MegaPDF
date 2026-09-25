@@ -540,6 +540,10 @@ Enregistrée sous {2}, prête pour le courriel.</value>
     <value>Case à cocher</value>
     <comment>A drawn (non-form) box</comment>
   </data>
+  <data name="RegionBoxTicked" xml:space="preserve">
+    <value>Case cochée</value>
+    <comment>A drawn (non-form) box that already carries a check mark (#2)</comment>
+  </data>
   <data name="RegionFormField" xml:space="preserve">
     <value>Champ de formulaire</value>
   </data>
