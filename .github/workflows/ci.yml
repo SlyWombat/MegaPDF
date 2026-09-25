@@ -120,6 +120,12 @@ jobs:
         run: |
           "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --render-check "$RUNNER_TEMP/fixtures/stamped.pdf"
 
+      # megapdf-cli (#142, #356): the same beside-the-apphost engine load, through the
+      # standalone binary tools/build-linux-app.sh now ships next to MegaPDF.
+      - name: megapdf-cli extracts text from beside the app
+        run: |
+          "$RUNNER_TEMP/app/MegaPDF/bin/megapdf-cli" extract "$RUNNER_TEMP/fixtures/demo.pdf" | head -1
+
       # Editing, verified in the built tree: tick a checkbox, save, reopen, undo,
       # place a signature, walk the toolbar with the keyboard. Clicking is the one
       # thing CI cannot do, so this drives the real view model's click routing and
@@ -392,6 +398,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/app"
           tar -C "$RUNNER_TEMP/app" -xzf "$RUNNER_TEMP/artifact/MegaPDF-linux-x64.tar.gz"
           test -x "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF"
+          test -x "$RUNNER_TEMP/app/MegaPDF/bin/megapdf-cli"
 
       - name: Generate fixtures
         run: |

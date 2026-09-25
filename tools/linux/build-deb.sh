@@ -47,6 +47,12 @@ cp -a "$TREE/bin/." "$STAGE$OPTDIR/"
 # to the download page (MegaPDF.Core LinuxInstall).
 printf 'deb\n' > "$STAGE$OPTDIR/INSTALL-KIND"
 ln -sf "$OPTDIR/MegaPDF" "$STAGE/usr/bin/megapdf"
+# A symlink into the app tree, like the launcher above: megapdf-cli carries an $ORIGIN
+# runpath (core/CMakeLists.txt) that resolves relative to the binary's real directory
+# once the symlink is followed, so it still finds libmegapdf_core.so and libpdfium.so
+# beside it in $OPTDIR rather than needing them split into /usr/lib (#142, #356).
+[ -x "$TREE/bin/megapdf-cli" ] || { echo "::error::no megapdf-cli in $TREE/bin — tools/build-linux-app.sh should have built it" >&2; exit 1; }
+ln -sf "$OPTDIR/megapdf-cli" "$STAGE/usr/bin/megapdf-cli"
 
 # An absolute Exec, for the reason tools/linux/install.sh gives: a desktop entry is
 # launched by the session, whose PATH is not always the login shell's, and an entry
@@ -172,7 +178,7 @@ chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
 
 # Nothing in the tree is a config file, and dpkg must not treat the engine as one.
 find "$STAGE$OPTDIR" -type f -name '*.so' -exec chmod 644 {} +
-chmod 755 "$STAGE$OPTDIR/MegaPDF"
+chmod 755 "$STAGE$OPTDIR/MegaPDF" "$STAGE$OPTDIR/megapdf-cli"
 
 DEB="$OUT/${PKG}_${PKG_VERSION}_${ARCH}.deb"
 rm -f "$DEB"

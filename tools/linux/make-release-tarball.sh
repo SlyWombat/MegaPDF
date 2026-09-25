@@ -32,6 +32,11 @@ APP_ID="$(basename "$MANIFEST" .yml)"
 
 [ -x "$TREE/bin/MegaPDF" ] || {
     echo "::error::no app tree at $TREE — run tools/build-linux-app.sh first" >&2; exit 1; }
+# megapdf-cli (#142, #356) ships in the same tarball as the app, from the same bin/ —
+# checked here, not assumed, because this tarball is also what the Flathub manifest
+# fetches and what tools/linux/install.sh unpacks straight onto a person's PATH.
+[ -x "$TREE/bin/megapdf-cli" ] || {
+    echo "::error::no megapdf-cli at $TREE/bin — run tools/build-linux-app.sh first" >&2; exit 1; }
 [ -f "$TREE/VERSION" ] || { echo "::error::$TREE has no VERSION file" >&2; exit 1; }
 
 VERSION="$(tr -d '[:space:]' < "$TREE/VERSION")"
@@ -90,5 +95,14 @@ rm -rf "$OUT/$NAME"
 
 ( cd "$OUT" && sha256sum "$(basename "$TARBALL")" > "$(basename "$TARBALL").sha256" )
 
+# Checked in the archive itself, not assumed from the tree check above: tar can drop a
+# file for reasons a directory check never sees (a stale --exclude, a name that sorts
+# oddly). megapdf-cli (#142, #356) travels the same way MegaPDF itself always has.
+if ! tar -tzf "$TARBALL" | grep -qx "$NAME/bin/megapdf-cli"; then
+    echo "::error::$TARBALL does not contain $NAME/bin/megapdf-cli" >&2
+    exit 1
+fi
+
 echo "tarball:  $TARBALL ($(du -h "$TARBALL" | cut -f1))"
 echo "checksum: $(cut -d' ' -f1 < "$TARBALL.sha256")"
+echo "verified: $NAME/bin/megapdf-cli is in the archive"

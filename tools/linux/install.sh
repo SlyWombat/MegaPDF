@@ -31,6 +31,9 @@ cp -R "$HERE/bin/." "$LIBDIR/"
 [ -d "$HERE/share/doc" ] && cp -R "$HERE/share/doc" "$LIBDIR/doc"
 
 ln -sf "$LIBDIR/MegaPDF" "$BINDIR/megapdf"
+# megapdf-cli (#142, #356), the same way: a symlink whose $ORIGIN runpath resolves to
+# $LIBDIR once followed, exactly like tools/linux/build-deb.sh's /usr/bin/megapdf-cli.
+[ -x "$LIBDIR/megapdf-cli" ] && ln -sf "$LIBDIR/megapdf-cli" "$BINDIR/megapdf-cli"
 
 # The desktop entry is rewritten with an absolute Exec rather than shipped with
 # "Exec=megapdf": ~/.local/bin is on PATH for a login shell on every current
@@ -73,6 +76,7 @@ command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f -t 
 echo "installed:"
 echo "  $LIBDIR/MegaPDF"
 echo "  $BINDIR/megapdf"
+[ -x "$LIBDIR/megapdf-cli" ] && echo "  $BINDIR/megapdf-cli"
 echo "  $DESKTOP_DIR/megapdf.desktop"
 echo
 echo "MegaPDF now offers itself in a PDF's Open With menu. To make it the one that"
