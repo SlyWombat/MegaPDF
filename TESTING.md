@@ -215,12 +215,12 @@ dumps (`core/tests/expected/structure/*.blocks`) over the fixtures
 `tools/leakcheck` drives redaction) — see that script's own header comment for the four
 measures and their gates.
 
-### megapdf-cli (#142, #355)
+### megapdf-cli (#142, #355, #357)
 
 `megapdf-cli extract <file.pdf>` is a small, self-contained native binary — no .NET runtime,
-no Store package — that turns a PDF's text into plain text from a shell: `PowerShell`, `cmd`,
-`bash`, whatever the machine has. It is built as part of the shared engine core, not as part
-of any app:
+no Store package — that turns a PDF's text into plain text (or, with `--format md`, CommonMark
+Markdown) from a shell: `PowerShell`, `cmd`, `bash`, whatever the machine has. It is built as
+part of the shared engine core, not as part of any app:
 
 ```bash
 cmake -S core -B core/build/linux-x64 -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -233,12 +233,13 @@ build's `Release\` folder; on macOS, the same as Linux. Building the core needs 
 PDFium prebuilt — `tools/fetch-pdfium-linux.sh` / `tools/fetch-pdfium-mac.sh`, or
 `tools/pdfium/install-release.sh` on Windows — fetched first, same as `MEGAPDF_CORE_TESTS`.)
 
-`--help` lists every option (`--pages`, `--out`, `--password-file`/`--password-stdin`,
-`--keep-lines`, `--page-marker`/`--no-page-breaks`, `--keep-furniture`, `--all-fields`/
-`--no-fields`, `--heuristic`, `--strict`, `--quiet`). There is deliberately no `--password`
-flag — the password is a file's first line or stdin's first line, never a command-line
-argument, matching the rest of the repo's own practice (`tools/gen_security_fixtures.sh`,
-`MEGAPDF_STRESS_UNLOCK_LIST`). Exit codes are part of the contract, not an afterthought:
+`--help` lists every option (`--format txt|md`, `--pages`, `--out`,
+`--password-file`/`--password-stdin`, `--keep-lines`, `--page-marker`/`--no-page-breaks`,
+`--keep-furniture`, `--all-fields`/`--no-fields`, `--heuristic`, `--strict`, `--quiet`). There
+is deliberately no `--password` flag — the password is a file's first line or stdin's first
+line, never a command-line argument, matching the rest of the repo's own practice
+(`tools/gen_security_fixtures.sh`, `MEGAPDF_STRESS_UNLOCK_LIST`). Exit codes are part of the
+contract, not an afterthought:
 
 | exit | meaning |
 |------|---------|
@@ -255,12 +256,28 @@ argument, matching the rest of the repo's own practice (`tools/gen_security_fixt
 A page with no text layer never silences the run — MegaPDF does not do OCR, and says so once
 on stderr, plus one `page N: no text layer` line per such page (`--quiet` silences these two
 notes; errors always print regardless). `core-tests.yml` runs the built binary against the
-structure fixtures above on all three OSes and diffs its output against the same goldens the
-internal API test compares against, plus an informational, Linux-only token comparison
-against `pdftotext`. `tools/stress/structure-battery.sh --cli <megapdf-cli path>` re-runs the
-corpus battery's token-fidelity measure through the real binary (`--page-marker`, not the
-default form feed, because a real document's text can itself contain a stray form-feed
+structure fixtures above on all three OSes and diffs its output against the same `.txt`/`.md`
+goldens the internal API test compares against, plus an informational, Linux-only token
+comparison against `pdftotext`. `tools/stress/structure-battery.sh --cli <megapdf-cli path>`
+re-runs the corpus battery's token-fidelity measure through the real binary (`--page-marker`,
+not the default form feed, because a real document's text can itself contain a stray form-feed
 character from a bad font mapping) rather than only through the internal API call.
+
+`--format md` (#357) renders the same contract-9 blocks as CommonMark: `#`-headings (capped at
+level 6), unwrapped paragraphs with bold/italic/monospace spans, `-`/`N.`-prefixed list items
+(a lettered or roman marker becomes `1. <marker> text`, since CommonMark has no lettered
+lists), form fields as GitHub task-list items or `**name:** value`, and a page with no text
+layer as `*[Page N has no text layer]*`. It infers nothing itself — every block came from the
+same structure load the plain-text writer uses, so the two formats can never disagree about
+what a heading is. `core_tests.cpp` additionally renders each golden `.md` fixture through an
+independent CommonMark implementation (`cmark`, `apt install cmark` on Linux) and asserts its
+heading and list-item counts match contract 9's own block counts — proof that escaping never
+breaks a real block out of its own markup, skipped rather than failed when `cmark` is not on
+`PATH`. `tools/stress/markdown-battery.sh <megapdf-cli> <cmark> <corpus> <out-dir>` is the
+corpus-scale counterpart: every document's `--format md` output parses cleanly through `cmark`,
+gating on crashes, hangs and parse failures (never on heading *accuracy* — there is no
+corpus-scale ground truth for that; #357's own hand-checked sample of 30 documents is where
+that bar is judged, by a person, off `--dump` output on the corpus machine).
 
 ## Reporting
 

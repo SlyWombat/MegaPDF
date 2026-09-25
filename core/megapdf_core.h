@@ -1200,15 +1200,15 @@ MEGAPDF_API size_t megapdf_block_span_string(const megapdf_structure* s, size_t 
                                              unsigned short* out, size_t capacity);
 
 /* --------------------------------------------------------------------------
- * Text writer (#142, #355), over contract 9's blocks. `format` picks the output kind so a
- * second writer (#357, Markdown) can be added as another enum value and `megapdf_write_options`
+ * Text and Markdown writers (#142, #355, #357), over contract 9's blocks. `format` picks the
+ * output kind (MEGAPDF_WRITE_TEXT or MEGAPDF_WRITE_MARKDOWN) as another `megapdf_write_options`
  * field, without breaking this signature or any existing caller — the same "frozen struct,
  * grown by new fields/enum values, never new parameters" shape contract 9 itself uses.
  * `megapdf_cli extract` (core/cli/megapdf_cli.cpp) is a thin shell over this one call.
  * ----------------------------------------------------------------------- */
 
-/** megapdf_write_options.format. MEGAPDF_WRITE_MARKDOWN is reserved for #357. */
-enum { MEGAPDF_WRITE_TEXT = 0 };
+/** megapdf_write_options.format. */
+enum { MEGAPDF_WRITE_TEXT = 0, MEGAPDF_WRITE_MARKDOWN = 1 };
 
 /** megapdf_write_options.page_break: how pages are separated in the output. */
 typedef enum megapdf_page_break {
@@ -1236,23 +1236,40 @@ typedef struct megapdf_write_options {
 /**
  * Writes the document's text over pages [first_page, first_page + page_count) through `write`,
  * in the shape megapdf_save() already uses (one abort-able callback, no file I/O in the core).
- * `format` must be MEGAPDF_WRITE_TEXT (Markdown is #357); `options` may be NULL for the defaults
- * above.
+ * `format` is MEGAPDF_WRITE_TEXT or MEGAPDF_WRITE_MARKDOWN; `options` may be NULL for the
+ * defaults above.
  *
- * Output is UTF-8, LF line endings, no BOM, built over contract 9's blocks (design §2, the
- * 2026-09-24 comment on #142): one block per line by default (paragraphs unwrapped; a
- * `continues` paragraph is joined to the one before it with a space, not a break), a blank
- * line between blocks, headings bare, list items "marker text" indented two spaces per nesting
- * level, fields as "[x] name" / "[ ] name" (a checkbox or radio) or "name: value" (a text
- * field), a page with no text as one "[Page N has no text layer]" line, and U+000C between
- * pages by default (`page_break`). `keep_lines` restores line breaks inside a block on a
- * best-effort basis: contract 9 does not expose per-line boundaries (a span is a same-style
- * run, which commonly spans several visual lines), so a break is only recovered where two
- * consecutive spans' vertical centres do not overlap (BuildLines' own rule, reused); a plain,
- * unstyled paragraph's internal line breaks are not recoverable from the contract and stay
- * unwrapped even with this option. A FIGURE block with no alt text (every FIGURE in this
- * phase — alt text needs the tagged path, #358) is skipped; TABLE_ROW (tagged only, unused
- * before #358) would print as its cells joined by tabs.
+ * Output is UTF-8, LF line endings, no BOM, built over contract 9's blocks (design §2/§3, the
+ * 2026-09-24 comment on #142) and renders it, inferring nothing itself.
+ *
+ * MEGAPDF_WRITE_TEXT: one block per line by default (paragraphs unwrapped; a `continues`
+ * paragraph is joined to the one before it with a space, not a break), a blank line between
+ * blocks, headings bare, list items "marker text" indented two spaces per nesting level, fields
+ * as "[x] name" / "[ ] name" (a checkbox or radio) or "name: value" (a text field), a page with
+ * no text as one "[Page N has no text layer]" line, and U+000C between pages by default
+ * (`page_break`).
+ *
+ * MEGAPDF_WRITE_MARKDOWN: CommonMark. HEADING → `#`×level + text (level capped at 6); PARAGRAPH/
+ * FURNITURE → one unwrapped line, spans rendered as bold (`**`)/italic (`*`)/monospace (code
+ * span), adjacent same-style spans merged, escaped per design §3 (`\`, `` ` ``, `*`, `_`, a
+ * leading `#`/`>`, `[`/`]`, and a leading `-` or `\d+[.)]` that would otherwise start a list);
+ * LIST_ITEM → "- text" for a glyph marker, "N. text" keeping the document's own ordinal for a
+ * numeric marker, "1. <marker> text" for a lettered or roman marker (CommonMark has no lettered
+ * lists), two spaces of indent per nesting level; FIELD → GitHub task-list syntax ("- [x] name" /
+ * "- [ ] name") for a checkbox/radio, "**name:** value" for a text field; FIGURE → "*[Figure:
+ * alt]*" only when alt text exists (tagged, #358), nothing otherwise; PAGE_IMAGE → "*[Page N has
+ * no text layer]*"; TABLE_ROW (tagged only, #358) → cells joined by a tab, one row per line, `|`
+ * additionally escaped, until #358 supplies the per-cell header tag a pipe table needs; no page
+ * separator by default (a blank line, like between any two blocks) or with MEGAPDF_PAGE_BREAK_
+ * NONE, `--page-marker` → "<!-- page N -->".
+ *
+ * `keep_lines` restores line breaks inside a block on a best-effort basis, for both formats:
+ * contract 9 does not expose per-line boundaries (a span is a same-style run, which commonly
+ * spans several visual lines), so a break is only recovered where two consecutive spans'
+ * vertical centres do not overlap (BuildLines' own rule, reused); a plain, unstyled paragraph's
+ * internal line breaks are not recoverable from the contract and stay unwrapped even with this
+ * option. In Markdown, a recovered break always closes any open span styling first (a style
+ * marker is never left open across a line) and is itself eligible for the line-start escapes.
  *
  * Returns the count of pages in the range that had a text layer (i.e. did not become a lone
  * PAGE_IMAGE block) — what megapdf-cli's exit code is chosen from — or a negative MEGAPDF_ERR_*:

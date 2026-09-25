@@ -5860,6 +5860,59 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
     for (const Case& c : cases) test_write_text_golden(c.name, c.path, expected_dir);
 }
 
+// --------------------------------------------------------------------------
+// The Markdown writer (#142, #357): megapdf_write_text() with MEGAPDF_WRITE_MARKDOWN, over the
+// same fixtures the .blocks/.txt goldens use, same discipline: set
+// MEGAPDF_WRITE_MARKDOWN_GOLDENS=1 to (re)write core/tests/expected/structure/*.md instead of
+// comparing against them. Plain default options, for the same reason test_write_text_goldens
+// uses them (keep_lines' line-break decisions read span bounds close to the cross-platform
+// tolerance the .blocks goldens already document).
+// --------------------------------------------------------------------------
+
+bool write_markdown_goldens() {
+    const char* v = std::getenv("MEGAPDF_WRITE_MARKDOWN_GOLDENS");
+    return v != nullptr && *v != '\0' && std::string(v) != "0";
+}
+
+void test_write_markdown_golden(const std::string& name, const std::string& path, const std::string& expected_dir) {
+    Doc d(path);
+    check(d.doc != nullptr, "write_markdown " + name + ": document opens", path);
+    if (d.doc == nullptr) return;
+    const int pages = megapdf_page_count(d.doc);
+    megapdf_write_options opt{};
+    TextSink sink;
+    const int rc =
+        megapdf_write_text(d.doc, 0, pages, MEGAPDF_WRITE_MARKDOWN, &opt, write_to_text_sink, &sink, nullptr);
+    check(rc >= 0, "write_markdown " + name + ": succeeds", std::to_string(rc));
+    if (rc < 0) return;
+    const std::string expected_path = expected_dir + "/" + name + ".md";
+    if (write_markdown_goldens()) {
+        std::ofstream out(expected_path, std::ios::binary);
+        out << sink.text;
+        std::printf("wrote %s (%zu bytes)\n", expected_path.c_str(), sink.text.size());
+        return;
+    }
+    std::ifstream in(expected_path, std::ios::binary);
+    check(in.good(), "write_markdown " + name + ": golden file exists", expected_path);
+    if (!in.good()) return;
+    const std::string expected((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    check(expected == sink.text, "write_markdown " + name + ": matches its golden text (exact)", expected_path);
+}
+
+void test_write_markdown_goldens(const std::string& repo, const std::string& expected_dir) {
+    struct Case {
+        const char* name;
+        std::string path;
+    };
+    const Case cases[] = {
+        {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
+        {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
+        {"mixed", repo + "/structure/mixed.pdf"},
+    };
+    for (const Case& c : cases) test_write_markdown_golden(c.name, c.path, expected_dir);
+}
+
 // design §2 bar 2 / the issue's own acceptance criterion, restated for the writer's actual
 // output rather than the raw block text test_structure_findability() already checks: every
 // term SearchParityTests asserts on the #98 schematic (4/6/2 hits for "the") is found the same
@@ -5990,6 +6043,83 @@ CliResult run_cli(const std::string& cli_path, const std::vector<std::string>& a
 
 }  // namespace
 
+// design §3's own bar, restated as an automatic check (#357's issue text, "Tests"): rendering a
+// golden through an independent CommonMark implementation (`cmark`) and counting <heading>/
+// <item> tags in its XML output proves the writer's escaping never accidentally breaks a real
+// block out of its own markup (a stray unescaped '#' or '-' turning a paragraph into a heading
+// or list item) or hides a real one (a stray backslash swallowing a marker). `cmark` is a
+// tooling dependency (design §3's own named oracle, installed on the Linux leg of
+// core-tests.yml), not a core assertion, so a PATH without it skips rather than fails.
+namespace {
+
+bool cmark_available() { return run_cli("cmark", {"--version"}).exit_code == 0; }
+
+// Counts opening tags named `tag` in cmark's --to xml output, guarding against a longer tag
+// name that merely starts with the same letters (e.g. "heading" inside a hypothetical
+// "heading_level" attribute-less tag never occurs in cmark's schema, but this stays exact all
+// the same by requiring the character after the name to end the tag or start its attributes).
+int count_xml_tag(const std::string& xml, const std::string& tag) {
+    int n = 0;
+    const std::string needle = "<" + tag;
+    for (size_t at = xml.find(needle); at != std::string::npos; at = xml.find(needle, at + needle.size())) {
+        const size_t after = at + needle.size();
+        if (after < xml.size() && (xml[after] == ' ' || xml[after] == '>' || xml[after] == '\n')) n++;
+    }
+    return n;
+}
+
+}  // namespace
+
+void test_markdown_round_trip(const std::string& name, const std::string& pdf_path, const std::string& expected_dir) {
+    if (!cmark_available()) {
+        std::printf("markdown round trip: skipped (%s -- cmark not found on PATH)\n", name.c_str());
+        return;
+    }
+    Doc d(pdf_path);
+    check(d.doc != nullptr, "markdown round trip " + name + ": document opens", pdf_path);
+    if (d.doc == nullptr) return;
+    const int pages = megapdf_page_count(d.doc);
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, pages, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+    check(s != nullptr, "markdown round trip " + name + ": structure loads");
+    if (s == nullptr) return;
+    int expected_headings = 0, expected_items = 0;
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (b.kind == MEGAPDF_BLOCK_HEADING) expected_headings++;
+        if (b.kind == MEGAPDF_BLOCK_LIST_ITEM) expected_items++;
+    }
+    megapdf_structure_free(s);
+
+    const std::string golden_path = expected_dir + "/" + name + ".md";
+    CliResult r = run_cli("cmark", {golden_path, "--to", "xml"});
+    check(r.exit_code == 0, "markdown round trip " + name + ": cmark parses the golden", golden_path);
+    if (r.exit_code != 0) return;
+    const int got_headings = count_xml_tag(r.out, "heading");
+    const int got_items = count_xml_tag(r.out, "item");
+    check(got_headings == expected_headings,
+          "markdown round trip " + name + ": cmark heading count matches the block count",
+          std::to_string(got_headings) + " vs " + std::to_string(expected_headings));
+    check(got_items == expected_items,
+          "markdown round trip " + name + ": cmark list-item count matches the block count",
+          std::to_string(got_items) + " vs " + std::to_string(expected_items));
+}
+
+void test_markdown_round_trips(const std::string& repo, const std::string& expected_dir) {
+    struct Case {
+        const char* name;
+        std::string path;
+    };
+    const Case cases[] = {
+        {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
+        {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
+        {"mixed", repo + "/structure/mixed.pdf"},
+    };
+    for (const Case& c : cases) test_markdown_round_trip(c.name, c.path, expected_dir);
+}
+
 // A basic end-to-end sanity check: `megapdf-cli extract fixture.pdf` from a plain shell works
 // and its stdout is exactly what megapdf_write_text() itself returns for the same document —
 // i.e. the CLI is a thin, faithful shell over the writer, as designed.
@@ -6069,6 +6199,27 @@ void test_cli_scan_mixed(const std::string& repo, const std::string& cli_path) {
           std::to_string(mixed_strict.exit_code));
 }
 
+// #357: `--format md` is the same thin shell over megapdf_write_text() the txt path already is
+// (test_cli_smoke's own check, restated for MEGAPDF_WRITE_MARKDOWN).
+void test_cli_markdown_smoke(const std::string& fixtures, const std::string& cli_path) {
+    const std::string pdf = fixtures + "/structure/headings.pdf";
+    Doc d(pdf);
+    check(d.doc != nullptr, "cli markdown smoke: headings.pdf opens directly (sanity)", pdf);
+    megapdf_write_options opt{};
+    TextSink sink;
+    if (d.doc != nullptr) {
+        megapdf_write_text(d.doc, 0, megapdf_page_count(d.doc), MEGAPDF_WRITE_MARKDOWN, &opt, write_to_text_sink,
+                           &sink, nullptr);
+    }
+    CliResult r = run_cli(cli_path, {"extract", pdf, "--format", "md", "--quiet"});
+    check(r.exit_code == 0, "cli markdown smoke: extract --format md exits 0", std::to_string(r.exit_code));
+    check(r.out == sink.text, "cli markdown smoke: stdout matches megapdf_write_text()'s own Markdown exactly");
+
+    CliResult bad = run_cli(cli_path, {"extract", pdf, "--format", "rtf"});
+    check(bad.exit_code == 1, "cli markdown smoke: an unknown --format is a usage error (exit 1)",
+          std::to_string(bad.exit_code));
+}
+
 int main(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr,
@@ -6135,12 +6286,15 @@ int main(int argc, char** argv) {
     test_structure_cancel(argv[2]);
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
+    test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     if (cli_path.empty()) {
         std::printf("cli tests: skipped (no megapdf-cli path given on the command line)\n");
     } else {
         test_cli_smoke(argv[1], cli_path);
         test_cli_password(std::string(MEGAPDF_SECURITY_FIXTURES), cli_path);
         test_cli_scan_mixed(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
+        test_cli_markdown_smoke(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
     }
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);

@@ -68,7 +68,7 @@ void PrintUsage(std::FILE* out) {
     std::fprintf(out,
         "usage: megapdf-cli extract <file.pdf> [options]\n"
         "\n"
-        "  --format txt               output format (only txt is implemented; md is #357)\n"
+        "  --format txt|md            output format (default txt)\n"
         "  --pages <ranges>           1-based, e.g. \"1-3,7,9-\" (an open end means the last page);\n"
         "                             default: every page\n"
         "  --out <path>               write to <path> instead of stdout (atomic: a sibling temp\n"
@@ -296,8 +296,18 @@ int WriteToBuffer(void* context, const void* data, size_t size) {
 
 // The separator megapdf_write_text would place between two ordinary consecutive pages within
 // one call, placed here between two DISJOINT requested ranges instead (contract 9 only takes
-// one contiguous range per load; see this file's header comment).
-void AppendSeparator(std::string* buffer, int page_break, int next_page1based) {
+// one contiguous range per load; see this file's header comment). Mirrors
+// megapdf_write_text.cpp's own AppendPageSeparatorText/AppendPageSeparatorMarkdown, which this
+// file cannot call directly (they are private to that translation unit).
+void AppendSeparator(std::string* buffer, bool is_markdown, int page_break, int next_page1based) {
+    if (is_markdown) {
+        if (page_break == MEGAPDF_PAGE_BREAK_MARKER) {
+            *buffer += "\n<!-- page " + std::to_string(next_page1based) + " -->\n\n";
+        } else {
+            *buffer += "\n";
+        }
+        return;
+    }
     switch (page_break) {
         case MEGAPDF_PAGE_BREAK_FORM_FEED: *buffer += "\f\n"; break;
         case MEGAPDF_PAGE_BREAK_MARKER: *buffer += "\n--- page " + std::to_string(next_page1based) + " ---\n\n"; break;
@@ -346,9 +356,11 @@ int RunExtract(int argc, char** argv) {
     }
 
     if (pdf_path.empty()) { std::fprintf(stderr, "extract needs a PDF path\n\n"); PrintUsage(stderr); return 1; }
-    if (format != "txt") {
-        if (format == "md") std::fprintf(stderr, "--format md is not implemented yet (#357)\n");
-        else std::fprintf(stderr, "unknown --format: %s\n", format.c_str());
+    int format_value = MEGAPDF_WRITE_TEXT;
+    if (format == "md") {
+        format_value = MEGAPDF_WRITE_MARKDOWN;
+    } else if (format != "txt") {
+        std::fprintf(stderr, "unknown --format: %s\n", format.c_str());
         return 1;
     }
     if (!password_file.empty() && password_stdin) {
@@ -447,10 +459,13 @@ int RunExtract(int argc, char** argv) {
         const int first0 = iv.start1 - 1;
         const int count = iv.end1 - iv.start1 + 1;
         const int rc =
-            megapdf_write_text(doc, first0, count, MEGAPDF_WRITE_TEXT, &wopt, WriteToBuffer, &buffered, cancel);
+            megapdf_write_text(doc, first0, count, format_value, &wopt, WriteToBuffer, &buffered, cancel);
         if (rc == MEGAPDF_ERR_CANCELLED) { cancelled = true; break; }
         if (rc < 0) { write_failed = true; break; }
-        if (idx + 1 < intervals.size()) AppendSeparator(&buffered, opt.page_break, intervals[idx + 1].start1);
+        if (idx + 1 < intervals.size()) {
+            AppendSeparator(&buffered, format_value == MEGAPDF_WRITE_MARKDOWN, opt.page_break,
+                            intervals[idx + 1].start1);
+        }
     }
     megapdf_close(doc);
     cleanup();
