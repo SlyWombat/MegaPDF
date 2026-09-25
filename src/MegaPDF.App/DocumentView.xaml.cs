@@ -195,9 +195,16 @@ public sealed partial class DocumentView : UserControl
             return;
         }
 
-        // A tap outside a selected signature deselects it.
+        // A tap outside a selected signature deselects it. A click within 600ms of an
+        // arrow-key nudge races the nudge's debounce timer (#2): without this, Deselect
+        // ripped the chrome (and its already-moved position) out from under the timer,
+        // which then found _selection/_selectionChrome null and committed nothing — the
+        // nudge was silently lost. Flushing first, the same guard MovePageFocusAsync
+        // already uses for Tab, commits the pending move before the click lets go of it.
         if (_selection is not null)
         {
+            if (_nudgeTimer is { IsRunning: true })
+                await CommitChromeAsync();
             Deselect();
             return;
         }
