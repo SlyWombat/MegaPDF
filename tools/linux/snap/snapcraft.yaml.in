@@ -82,6 +82,18 @@ apps:
     #            Flatpak (LinuxPrinter.InSandbox): the desktop prints a file descriptor
     #            the app hands it, with its own dialog. The portal is reachable through
     #            the desktop plug the extension already brings.
+  # megapdf-cli (#142, #356): the app key is `cli`, not `megapdf.cli` — snapcraft
+  # exposes an app under a key that is not the snap's own name as
+  # `<snap-name>.<key>`, so this becomes `snap run megapdf.cli extract file.pdf`.
+  # No gnome extension — a native console binary over the shared core, it touches no
+  # toolkit, no X server and nothing the extension's content snap provides. Same two
+  # plugs as the GUI app so it can read a document wherever the GUI app can: the home
+  # folder by default, removable media once connected.
+  cli:
+    command: lib/megapdf/megapdf-cli
+    plugs:
+      - home
+      - removable-media
 
 parts:
   megapdf:
