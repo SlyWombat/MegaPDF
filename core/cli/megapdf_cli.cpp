@@ -21,11 +21,20 @@
 // (matching --page-marker/--no-page-breaks/the default) between intervals itself -- exactly the
 // separator megapdf_write_text would put between two ordinary consecutive pages within one call.
 //
-// The per-page "page N: no text layer" stderr notes need per-page detail megapdf_write_text's
-// aggregate return value does not carry, so this file makes its own lightweight
-// megapdf_structure_load() pass first (same flags the write derives) purely to find which
-// requested pages have no non-PAGE_IMAGE block -- the same test megapdf_write_text itself makes
-// internally to decide what a "page with text" is (see megapdf_write_text.cpp's own comment).
+// The per-page "page N: no text layer" stderr notes and the exit code both need to know which
+// requested pages had no text layer, which megapdf_write_text()'s own return value (an
+// aggregate count) does not carry by page. An earlier version of this file answered that with
+// a second, independent megapdf_structure_load() pass before the real write -- and a real
+// Windows CI run of PR #367 found a document (a single all-image page) where that second call's
+// answer silently disagreed with the first: the exit code came out right (both calls agreed the
+// page had no text) but the actual written output was empty, because the SEPARATE call inside
+// megapdf_write_text() that produces the real bytes did not see what the first call saw. Rather
+// than chase why two calls over the same range can disagree, this file now makes exactly ONE
+// contract-9 pass per interval: the whole output is captured in memory first, textless pages are
+// found by scanning that SAME text for the writer's own "[Page N has no text layer]" placeholder
+// (megapdf_write_text.cpp's PAGE_IMAGE case), and only then is it written to the real
+// destination. The exit code and the stderr notes are now guaranteed to describe exactly what
+// was written, because they are read from it.
 #include "megapdf_core.h"
 #include "fpdfview.h"   // FPDF_ERR_* constants only: header macros, no pdfium link needed.
 
@@ -182,49 +191,27 @@ struct CliOptions {
     bool quiet = false;
 };
 
-unsigned int StructureFlagsFor(const CliOptions& o) {
-    unsigned int f = MEGAPDF_STRUCTURE_DEFAULT;
-    if (o.heuristic_only) f |= MEGAPDF_STRUCTURE_HEURISTIC_ONLY;
-    if (o.keep_furniture) f |= MEGAPDF_STRUCTURE_KEEP_FURNITURE;
-    if (o.fields == MEGAPDF_WRITE_FIELDS_ALL) f |= MEGAPDF_STRUCTURE_ALL_FIELDS;
-    return f;
-}
-
-// One pass over the requested intervals, purely to learn which pages have no text layer: the
-// same PAGE_IMAGE test megapdf_write_text makes internally, exposed here because its own return
-// value is only the aggregate count. Returns false only on cancellation.
-bool FindTextlessPages(megapdf_document* doc, const std::vector<Interval>& intervals, unsigned int structure_flags,
-                       const megapdf_cancel* cancel, std::vector<int>* textless_out, int* total_out) {
-    textless_out->clear();
-    *total_out = 0;
-    for (const Interval& iv : intervals) {
-        const int first0 = iv.start1 - 1;
-        const int count = iv.end1 - iv.start1 + 1;
-        *total_out += count;
-        megapdf_structure* s = megapdf_structure_load(doc, first0, count, structure_flags, cancel);
-        if (s == nullptr) {
-            if (megapdf_last_error() == static_cast<unsigned int>(MEGAPDF_ERR_CANCELLED)) return false;
-            // Should not happen once the document opened and the range was validated; err on
-            // the side of reporting every page in the range as textless rather than silently
-            // skip it.
-            for (int p = iv.start1; p <= iv.end1; p++) textless_out->push_back(p);
-            continue;
-        }
-        std::vector<char> has_text(static_cast<size_t>(count), 0);
-        const size_t n = megapdf_block_count(s);
-        for (size_t i = 0; i < n; i++) {
-            megapdf_block b{};
-            if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
-            const int rel = b.page - first0;
-            if (rel < 0 || rel >= count) continue;
-            if (b.kind != MEGAPDF_BLOCK_PAGE_IMAGE) has_text[static_cast<size_t>(rel)] = 1;
-        }
-        megapdf_structure_free(s);
-        for (int rel = 0; rel < count; rel++) {
-            if (!has_text[static_cast<size_t>(rel)]) textless_out->push_back(iv.start1 + rel);
+// Finds every "[Page N has no text layer]" placeholder megapdf_write_text() wrote (its own
+// PAGE_IMAGE formatting, megapdf_write_text.cpp) and returns the page numbers, in the order
+// they appear (which is reading order, so already ascending). This is how this file learns
+// which requested pages had no text layer -- see the header comment for why it reads the
+// actual written text rather than asking contract 9 again.
+std::vector<int> FindTextlessPagesInOutput(const std::string& text) {
+    std::vector<int> out;
+    const std::string prefix = "[Page ";
+    const std::string suffix = " has no text layer]";
+    for (size_t at = text.find(prefix); at != std::string::npos;) {
+        const size_t digits_start = at + prefix.size();
+        size_t digits_end = digits_start;
+        while (digits_end < text.size() && text[digits_end] >= '0' && text[digits_end] <= '9') digits_end++;
+        if (digits_end > digits_start && text.compare(digits_end, suffix.size(), suffix) == 0) {
+            out.push_back(std::atoi(text.substr(digits_start, digits_end - digits_start).c_str()));
+            at = text.find(prefix, digits_end + suffix.size());
+        } else {
+            at = text.find(prefix, digits_start);
         }
     }
-    return true;
+    return out;
 }
 
 // --------------------------------------------------------------------------
@@ -297,34 +284,26 @@ std::string TempPathFor(const std::string& out_path) {
     return tmp.str();
 }
 
-struct Sink {
-    std::FILE* f = nullptr;
-    bool ok = true;
-};
-
-int WriteToSink(void* context, const void* data, size_t size) {
-    auto* s = static_cast<Sink*>(context);
-    if (!s->ok) return 0;
-    if (size == 0) return 1;
-    if (std::fwrite(data, 1, size, s->f) != size) {
-        s->ok = false;
-        return 0;
-    }
+// megapdf_write_text()'s own callback, appending into the in-memory buffer this file builds the
+// whole answer in before writing it anywhere real (see the header comment). Appending to a
+// std::string cannot fail short of std::bad_alloc, which is not modelled as a return-0 abort
+// here -- it propagates as an ordinary exception, same as any other allocation failure in this
+// process.
+int WriteToBuffer(void* context, const void* data, size_t size) {
+    static_cast<std::string*>(context)->append(static_cast<const char*>(data), size);
     return 1;
 }
 
 // The separator megapdf_write_text would place between two ordinary consecutive pages within
 // one call, placed here between two DISJOINT requested ranges instead (contract 9 only takes
 // one contiguous range per load; see this file's header comment).
-bool WriteSeparator(Sink* sink, int page_break, int next_page1based) {
-    std::string sep;
+void AppendSeparator(std::string* buffer, int page_break, int next_page1based) {
     switch (page_break) {
-        case MEGAPDF_PAGE_BREAK_FORM_FEED: sep = "\f\n"; break;
-        case MEGAPDF_PAGE_BREAK_MARKER: sep = "\n--- page " + std::to_string(next_page1based) + " ---\n\n"; break;
-        case MEGAPDF_PAGE_BREAK_NONE: sep = "\n"; break;
-        default: return true;
+        case MEGAPDF_PAGE_BREAK_FORM_FEED: *buffer += "\f\n"; break;
+        case MEGAPDF_PAGE_BREAK_MARKER: *buffer += "\n--- page " + std::to_string(next_page1based) + " ---\n\n"; break;
+        case MEGAPDF_PAGE_BREAK_NONE: *buffer += "\n"; break;
+        default: break;
     }
-    return WriteToSink(sink, sep.data(), sep.size()) != 0;
 }
 
 // --------------------------------------------------------------------------
@@ -446,41 +425,8 @@ int RunExtract(int argc, char** argv) {
         }
     }
 
-    const unsigned int structure_flags = StructureFlagsFor(opt);
-    std::vector<int> textless_pages;
     int total_requested = 0;
-    if (!FindTextlessPages(doc, intervals, structure_flags, cancel, &textless_pages, &total_requested)) {
-        megapdf_close(doc);
-        cleanup();
-        return 130;
-    }
-
-    if (!opt.quiet) {
-        for (int p : textless_pages) std::fprintf(stderr, "page %d: no text layer\n", p);
-        if (!textless_pages.empty()) {
-            std::fprintf(stderr, "no text layer on %zu of %d pages; MegaPDF does not do OCR\n",
-                        textless_pages.size(), total_requested);
-        }
-    }
-
-#if defined(_WIN32)
-    _setmode(_fileno(stdout), _O_BINARY);   // LF stays LF; the writer never emits CRLF itself.
-#endif
-    Sink sink;
-    const bool using_out_file = !out_path.empty();
-    std::string temp_path;
-    if (using_out_file) {
-        temp_path = TempPathFor(out_path);
-        sink.f = OpenForWrite(temp_path);
-        if (sink.f == nullptr) {
-            std::fprintf(stderr, "cannot write %s\n", out_path.c_str());
-            megapdf_close(doc);
-            cleanup();
-            return 7;
-        }
-    } else {
-        sink.f = stdout;
-    }
+    for (const Interval& iv : intervals) total_requested += iv.end1 - iv.start1 + 1;
 
     megapdf_write_options wopt{};
     wopt.keep_lines = opt.keep_lines ? 1 : 0;
@@ -489,38 +435,63 @@ int RunExtract(int argc, char** argv) {
     wopt.fields = opt.fields;
     wopt.heuristic_only = opt.heuristic_only ? 1 : 0;
 
+    // The whole answer, built in memory first (see the header comment for why): one
+    // megapdf_write_text() call per interval, with this file's own separator appended between
+    // disjoint intervals exactly where the writer would put one between two ordinary
+    // consecutive pages.
+    std::string buffered;
     bool cancelled = false;
     bool write_failed = false;
     for (size_t idx = 0; idx < intervals.size(); idx++) {
         const Interval& iv = intervals[idx];
         const int first0 = iv.start1 - 1;
         const int count = iv.end1 - iv.start1 + 1;
-        const int rc = megapdf_write_text(doc, first0, count, MEGAPDF_WRITE_TEXT, &wopt, WriteToSink, &sink, cancel);
+        const int rc =
+            megapdf_write_text(doc, first0, count, MEGAPDF_WRITE_TEXT, &wopt, WriteToBuffer, &buffered, cancel);
         if (rc == MEGAPDF_ERR_CANCELLED) { cancelled = true; break; }
         if (rc < 0) { write_failed = true; break; }
-        if (idx + 1 < intervals.size() && !WriteSeparator(&sink, opt.page_break, intervals[idx + 1].start1)) {
-            write_failed = true;
-            break;
-        }
+        if (idx + 1 < intervals.size()) AppendSeparator(&buffered, opt.page_break, intervals[idx + 1].start1);
     }
-    if (!sink.ok) write_failed = true;
-
-    if (using_out_file && sink.f != nullptr) std::fclose(sink.f);
     megapdf_close(doc);
     cleanup();
 
-    if (cancelled) {
-        if (using_out_file) RemoveFileQuiet(temp_path);
-        return 130;
-    }
+    if (cancelled) return 130;
     if (write_failed) {
-        if (using_out_file) RemoveFileQuiet(temp_path);
-        std::fprintf(stderr, "cannot write %s\n", using_out_file ? out_path.c_str() : "output");
+        std::fprintf(stderr, "internal error extracting %s\n", pdf_path.c_str());
         return 7;
     }
-    if (using_out_file && !RenameOver(temp_path, out_path)) {
-        RemoveFileQuiet(temp_path);
-        std::fprintf(stderr, "cannot write %s\n", out_path.c_str());
+
+    const std::vector<int> textless_pages = FindTextlessPagesInOutput(buffered);
+    if (!opt.quiet) {
+        for (int p : textless_pages) std::fprintf(stderr, "page %d: no text layer\n", p);
+        if (!textless_pages.empty()) {
+            std::fprintf(stderr, "no text layer on %zu of %d pages; MegaPDF does not do OCR\n",
+                        textless_pages.size(), total_requested);
+        }
+    }
+
+    // Only now does anything touch the real destination: a cancelled or failed run above never
+    // created an --out temp file at all, let alone one that needs cleaning up.
+#if defined(_WIN32)
+    _setmode(_fileno(stdout), _O_BINARY);   // LF stays LF; the writer never emits CRLF itself.
+#endif
+    const bool using_out_file = !out_path.empty();
+    if (using_out_file) {
+        const std::string temp_path = TempPathFor(out_path);
+        std::FILE* f = OpenForWrite(temp_path);
+        bool ok = f != nullptr;
+        if (ok && !buffered.empty() && std::fwrite(buffered.data(), 1, buffered.size(), f) != buffered.size()) {
+            ok = false;
+        }
+        if (f != nullptr) std::fclose(f);
+        if (ok) ok = RenameOver(temp_path, out_path);
+        if (!ok) {
+            RemoveFileQuiet(temp_path);
+            std::fprintf(stderr, "cannot write %s\n", out_path.c_str());
+            return 7;
+        }
+    } else if (!buffered.empty() && std::fwrite(buffered.data(), 1, buffered.size(), stdout) != buffered.size()) {
+        std::fprintf(stderr, "cannot write output\n");
         return 7;
     }
 
