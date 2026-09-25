@@ -20,3 +20,8 @@ core/tests/expected/structure/*.blocks text eol=lf
 # test_write_text_golden()), written with LF -- same #359 trap as the .blocks goldens above,
 # caught the same way on the first real Windows CI run of PR #367.
 core/tests/expected/structure/*.txt text eol=lf
+
+# The #357 Markdown writer's golden output (megapdf_write_text() with MEGAPDF_WRITE_MARKDOWN,
+# exact match by test_write_markdown_golden()) -- same #359 trap as the .txt goldens above,
+# caught the same way on the first real Windows CI run of this PR.
+core/tests/expected/structure/*.md text eol=lf
