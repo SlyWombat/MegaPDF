@@ -1,0 +1,155 @@
+# The Windows megapdf-cli release archive (#142, #356): megapdf-cli.exe, x64 and arm64,
+# zipped with megapdf_core.dll, pdfium.dll, LICENSE and THIRD-PARTY-NOTICES, attached to a
+# draft GitHub release.
+#
+# There is no existing Windows tag-triggered release workflow to extend: the Windows
+# sideload installer and its release.yml were retired 2026-09-11 (README.md, "Installing"),
+# and the only thing that ships today is the MSIX Store package, built by
+# tools/Store-Submission.md's manual runbook, never by a git tag. So this is a new,
+# narrowly-scoped workflow — the CLI's own release, not a Windows app release. The tag
+# prefix is windows-cli-v*, not windows-v*, so it cannot be mistaken for a future release
+# of the app itself.
+#
+# UNSIGNED, on purpose, not by oversight: MegaPDF carries no Authenticode certificate of
+# its own anywhere in this repository. The only Windows signing that exists is the Store's
+# own re-signing of the MSIX package on ingestion (tools/Store-Submission.md, "Status") —
+# a mechanism that only applies to a Store submission and cannot sign a loose .exe. The
+# release description says so explicitly (the "publish" job below).
+#
+# NOTHING HERE PUBLISHES ANYTHING BUT A DRAFT. A person still has to click publish.
+name: Windows megapdf-cli release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['windows-cli-v*']
+  # The tag path cannot be rehearsed on a pull request, so everything up to it is
+  # rehearsed instead, whenever any of the pieces change.
+  pull_request:
+    paths:
+      - '.github/workflows/windows-cli-release.yml'
+      - 'core/**'
+      - 'tools/build-core.ps1'
+      - 'libs/pdfium/win-x64/**'
+      - 'libs/pdfium/win-arm64/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: megapdf-cli.exe, x64 and arm64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The version this build carries
+        id: version
+        shell: bash
+        run: |
+          v=$(grep -oE '<Version>[^<]+</Version>' src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj | head -1 | sed 's/<[^>]*>//g')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "building megapdf-cli $v"
+
+      # A tag names the version it releases. windows-cli-v2.2.0 built from a tree that
+      # says 2.1.0 would publish a release whose files contradict its name.
+      - name: The tag matches the version
+        if: startsWith(github.ref, 'refs/tags/windows-cli-v')
+        shell: bash
+        run: |
+          [ "windows-cli-v${{ steps.version.outputs.version }}" = "$GITHUB_REF_NAME" ] || {
+            echo "::error::tag $GITHUB_REF_NAME, but this tree builds ${{ steps.version.outputs.version }}"; exit 1; }
+
+      # x64 and arm64 (#288: the core has built win-arm64 since the Store ARM64 package
+      # shipped with an x64 engine it could not load). Cross-built on this x64 runner the
+      # same way tools/build-core.ps1 already cross-builds the Store's ARM64 package.
+      - name: Build megapdf-cli for both architectures
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($arch in 'x64', 'arm64') {
+            $platform = @{ x64 = 'x64'; arm64 = 'ARM64' }[$arch]
+            $build = "core/build/win-$arch"
+            cmake -S core -B $build -A $platform -DCMAKE_BUILD_TYPE=Release
+            if ($LASTEXITCODE -ne 0) { throw "cmake configure failed for $arch" }
+            cmake --build $build --target megapdf_cli --config Release
+            if ($LASTEXITCODE -ne 0) { throw "megapdf_cli build failed for $arch" }
+            $exe = "$build/Release/megapdf-cli.exe"
+            if (-not (Test-Path $exe)) { throw "build finished but $exe is missing" }
+            & $exe --version
+          }
+
+      # x86-64 or ARM64, whichever this cmake configure targeted — the same check the
+      # Store packages get (tools/check-native-arch.py), pointed at the build's own
+      # Release directory (it takes a directory or a package, not individual files).
+      - name: Each architecture carries only its own binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($arch in 'x64', 'arm64') {
+            python tools/check-native-arch.py $arch "core/build/win-$arch/Release"
+            if ($LASTEXITCODE -ne 0) { throw "$arch build carries a binary for another architecture" }
+          }
+
+      - name: The zips (binary, megapdf_core, pdfium, LICENSE, THIRD-PARTY-NOTICES)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ steps.version.outputs.version }}'
+          New-Item -ItemType Directory -Force artifacts/release | Out-Null
+          foreach ($arch in 'x64', 'arm64') {
+            $dir = "core/build/win-$arch/Release"
+            $stage = "$env:RUNNER_TEMP/stage-$arch"
+            New-Item -ItemType Directory -Force $stage | Out-Null
+            Copy-Item "$dir/megapdf-cli.exe" $stage
+            Copy-Item "$dir/megapdf_core.dll" $stage
+            Copy-Item "$dir/pdfium.dll" $stage
+            Copy-Item LICENSE "$stage/LICENSE"
+            Copy-Item src/MegaPDF.App/Assets/THIRD-PARTY-NOTICES.txt "$stage/THIRD-PARTY-NOTICES.txt"
+            $zip = "artifacts/release/megapdf-cli-windows-$arch-$version.zip"
+            Compress-Archive -Path "$stage/*" -DestinationPath $zip -Force
+            (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  " + (Split-Path -Leaf $zip) |
+              Out-File -Encoding ascii "$zip.sha256"
+          }
+          Get-ChildItem artifacts/release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-cli-windows-release
+          path: |
+            artifacts/release/megapdf-cli-windows-*.zip
+            artifacts/release/megapdf-cli-windows-*.zip.sha256
+          if-no-files-found: error
+
+  # A job of its own, so the write permission exists only on a tag run, never on the
+  # pull-request rehearsal above. Publishing the draft is still a person's click.
+  publish:
+    name: Draft the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/windows-cli-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MegaPDF-cli-windows-release
+          path: artifacts
+
+      - name: The zips and their checksums, in a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          TAG="$GITHUB_REF_NAME"
+          VERSION="${TAG#windows-cli-v}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --draft --verify-tag --title "megapdf-cli $VERSION for Windows" \
+              --notes "megapdf-cli $VERSION for Windows (x64 and ARM64). Unpack the zip and run megapdf-cli.exe from a shell — this is a command-line tool, not the MegaPDF app, which ships through the Microsoft Store. **These binaries are UNSIGNED**: MegaPDF has no Authenticode certificate of its own, only the Store's own re-signing of the MSIX package on ingestion, which does not apply to a loose .exe. Windows SmartScreen may warn on first run. Each zip's sha256 is beside it."
+          gh release upload "$TAG" \
+            artifacts/megapdf-cli-windows-*.zip \
+            artifacts/megapdf-cli-windows-*.zip.sha256 \
+            --clobber
+          gh release view "$TAG" --json isDraft,tagName,assets \
+            --jq '"draft=\(.isDraft) \(.tagName): \([.assets[].name] | join(", "))"'
