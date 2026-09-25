@@ -74,6 +74,8 @@ Conventions (OQLF, Canadian French):
 | Not found | Introuvable | |
 | {0} of {1} | {0} sur {1} | match counter and page counter |
 | Page {0} of {1} | Page {0} sur {1} | |
+| Extract text | Extraire le texte | #142, #168, #356 — `megapdf-cli extract`; not yet a UI string, added ahead so #168's reflow view reuses it |
+| Markdown | Markdown | #142, #168, #356 — `megapdf-cli --format md`; unchanged in French, as elsewhere on the platforms (product/brand-name-like technical terms) |
 | Next match | Résultat suivant | |
 | Previous match | Résultat précédent | |
 | Zoom in | Zoom avant | |

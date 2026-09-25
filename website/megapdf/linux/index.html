@@ -202,9 +202,11 @@ sudo apt update</code></pre>
 cd megapdf-linux-x64-2.1.0
 ./install.sh</code></pre>
             <p>That puts MegaPDF in <code>~/.local</code>, in your applications menu, and on
-               your <code>PATH</code> as <code>megapdf</code>. If a terminal then says
-               <code>megapdf</code> isn't found, log out and back in: on most distributions
-               <code>~/.local/bin</code> joins your <code>PATH</code> at the next login.</p>
+               your <code>PATH</code> as <code>megapdf</code> — and, for the command line,
+               as <code>megapdf-cli</code>: <code>megapdf-cli extract file.pdf</code> writes
+               the text. If a terminal then says <code>megapdf</code> isn't found, log out
+               and back in: on most distributions <code>~/.local/bin</code> joins your
+               <code>PATH</code> at the next login.</p>
             <p>It needs glibc 2.35 or later and the ICU, OpenSSL, fontconfig and X11
                libraries, which almost every desktop already has. On a minimal system, the
                <a href="#apt">repository</a> or the <a href="#deb">.deb</a> is simpler: apt

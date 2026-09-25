@@ -56,6 +56,30 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
 
+## megapdf-cli (#142, #356)
+
+The standalone text-extraction binary (#355) ships everywhere the GUI app does, built
+by `tools/build-linux-app.sh` as the `megapdf_cli` CMake target and copied into the app
+tree's `bin/` beside `libmegapdf_core.so` and `libpdfium.so` — nothing packaging-side
+builds it separately. Each package puts it on `PATH` its own way:
+
+| channel | invocation | how |
+|---|---|---|
+| tarball / `install.sh` | `megapdf-cli extract file.pdf` | `~/.local/bin/megapdf-cli`, a symlink into `~/.local/lib/megapdf`, the same way `megapdf` itself is |
+| `.deb` | `megapdf-cli extract file.pdf` | `/usr/bin/megapdf-cli`, a symlink into `/opt/MegaPDF` |
+| Flatpak | `flatpak run --command=megapdf-cli ca.electricrv.MegaPDF file.pdf` | `/app/bin/megapdf-cli`, a symlink into `/app/lib/megapdf` — exported to `/app/bin` because `--command` looks a bare name up on `PATH` inside the sandbox, and `/app/lib/megapdf` is not on it |
+| snap | `snap run megapdf.cli extract file.pdf` | a second `apps:` entry, `cli`, in `snapcraft.yaml.in` — snapcraft exposes an app whose key is not the snap's own name as `<snap-name>.<key>` |
+
+Every symlink form exists for the same reason `/usr/bin/megapdf` already did: `megapdf-cli`
+carries an `$ORIGIN` (Flatpak: `@loader_path`, not applicable here) runpath, set directly
+on the CMake target (`core/CMakeLists.txt`), which resolves relative to the binary's real
+directory once the symlink is followed — so it still finds `libmegapdf_core.so` and
+`libpdfium.so` beside it without needing them split across the filesystem.
+
+`tools/linux/check-deb.sh`, `check-flatpak.sh` and `check-snap.sh` each run
+`extract` against a fixture through their own invocation above, so a change that breaks
+any one of them fails in CI (`linux-package` in `ci.yml`, `snap.yml`).
+
 ## Building them by hand
 
 ```sh

@@ -279,6 +279,24 @@ gating on crashes, hangs and parse failures (never on heading *accuracy* — the
 corpus-scale ground truth for that; #357's own hand-checked sample of 30 documents is where
 that bar is judged, by a person, off `--dump` output on the corpus machine).
 
+**Where the binary comes from, per platform (#142, #356).** Not a separate build: on every
+platform `megapdf-cli` is the `megapdf_cli` CMake target, built alongside `libmegapdf_core`
+by the same core build every app already needed.
+
+| platform | where it ships |
+|---|---|
+| Linux | `tools/build-linux-app.sh` builds it and copies it into the app tree's `bin/`, beside `libmegapdf_core.so` and `libpdfium.so`. From there: the tarball and `install.sh` (`~/.local/bin/megapdf-cli`, a symlink into `~/.local/lib/megapdf`), the `.deb` (`/usr/bin/megapdf-cli`, a symlink into `/opt/MegaPDF`), the Flatpak (`flatpak run --command=megapdf-cli ca.electricrv.MegaPDF file.pdf`), and the snap (`snap run megapdf.cli extract file.pdf`). `tools/Linux-Packaging.md` has the exact invocations and the packaging changes behind each. |
+| Windows | `megapdf-cli.exe`, x64 and arm64, in `megapdf-cli-windows-<arch>-<version>.zip`, attached to a draft GitHub release by `.github/workflows/windows-cli-release.yml` on a `windows-cli-v*` tag, alongside `megapdf_core.dll`, `pdfium.dll`, `LICENSE` and `THIRD-PARTY-NOTICES.txt`. **Unsigned** — MegaPDF carries no Authenticode certificate; the only Windows signing that exists is the Store's own re-signing of the MSIX on ingestion, which cannot sign a loose `.exe`. The release notes say so. Not in the MSIX Store package — a Store app cannot put a binary on `PATH`. |
+| macOS | `megapdf-cli`, a universal (arm64 + x86_64) binary, in `megapdf-cli-macos-universal-<version>.zip`, attached to a draft GitHub release by the `cli-release`/`cli-release-publish` jobs in `.github/workflows/macos-app.yml` on a `macos-cli-v*` tag. Signed with the app's Developer ID and notarized the way `notarize-macos-app.sh` notarizes the bundle, but not stapled — Apple's stapler only attaches to a bundle, `.pkg` or `.dmg`, not a loose-file zip, so Gatekeeper checks the ticket online on first run instead. Not in the Mac App Store package, for the same reason as Windows. |
+
+The zips are a separate release artifact from the app itself, on their own tag series
+(`windows-cli-v*`, `macos-cli-v*`, alongside `linux-v*`, `android-v*`, `ios-v*`) — nothing
+about the MSIX or the Mac App Store submission changes.
+
+**Verifying the archives needs Windows/macOS hardware this repository's CI does not have
+outside the tag build itself** — download, unzip and run on a clean Windows 11 machine and a
+clean Mac (Gatekeeper's verdict on the unstapled zip in particular) is a manual check.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
