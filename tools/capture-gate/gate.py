@@ -190,7 +190,12 @@ def language_pairs(shots: list) -> list[dict]:
     """
     by_lang = collections.defaultdict(dict)
     for shot in shots:
-        by_lang[shot.lang][(shot.device, shot.pose)] = shot.digest
+        # Appearance is part of the key for the same reason it is part of
+        # `pose_id`: a set that files light and dark side by side (the Linux
+        # QA rig) has one light and one dark file at the same (device, pose),
+        # and without appearance the second one walked would silently
+        # overwrite the first here too.
+        by_lang[shot.lang][(shot.device, shot.pose, shot.appearance)] = shot.digest
     out = []
     langs = sorted(by_lang)
     for i, a in enumerate(langs):
@@ -242,11 +247,20 @@ def run(root: str, store: str, out: str, thumb_width: int,
             shot.findings.extend(check(shot, profile))
 
     if against:
-        reference = {(s.lang, s.device, s.pose): s.path
+        # Appearance joins the key for the same reason `pose_id` carries it: a
+        # set that files light and dark side by side (the Linux QA rig) has
+        # one light and one dark file at the same (lang, device, pose), and
+        # `discover` parses both to that identical triple (`stores.py`'s
+        # `linux` pattern reads the theme only to skip past it). Without
+        # appearance here, whichever file `os.walk` reached last won that key,
+        # and about half of every comparison was a light shot certified
+        # against a dark reference or the reverse (#251).
+        reference = {(s.lang, s.device, s.pose, s.appearance): s.path
                      for s in discover(against, profile, only)}
         for shot in shots:
             shot.findings.extend(checks.against_reference(
-                shot, reference.get((shot.lang, shot.device, shot.pose))))
+                shot, reference.get(
+                    (shot.lang, shot.device, shot.pose, shot.appearance))))
 
     # Set-wide: the same pose across languages, and each language's own frame.
     by_pose = collections.defaultdict(list)

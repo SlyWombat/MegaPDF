@@ -159,7 +159,11 @@ The note says what was measured. Open the image, and:
 - **`certified`** — with `--against`, *everything* that changed since the set
   was signed off, which is the only way to notice something plausible that is
   simply not what was agreed: a different signature in the library, a
-  regenerated fixture, a theme that moved a shade.
+  regenerated fixture, a theme that moved a shade. Pairing is by measured
+  appearance as well as language, device and pose (`Shot.appearance`), so a
+  reference folder holding light and dark side by side — the Linux QA rig's
+  own shape — needs no splitting first: each shot is matched against its own
+  theme's counterpart, never the other one (#251).
 
 ## What it cannot tell you
 
