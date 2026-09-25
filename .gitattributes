@@ -15,3 +15,8 @@ tools/pdfium/*.sh text eol=lf
 # of every dump then reads as "different" (#359 — this is what actually made all 14
 # fixtures fail on windows-latest, not only the ones with a real bounds difference).
 core/tests/expected/structure/*.blocks text eol=lf
+
+# The #355 plain-text writer's golden output (megapdf_write_text(), exact match by
+# test_write_text_golden()), written with LF -- same #359 trap as the .blocks goldens above,
+# caught the same way on the first real Windows CI run of PR #367.
+core/tests/expected/structure/*.txt text eol=lf
