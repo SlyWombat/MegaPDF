@@ -46,12 +46,14 @@
 # a literal U+000C from a bad ToUnicode mapping, which silently corrupts a form-feed-based page
 # split; structure_check.cpp's split_on_page_markers() comment has the corpus evidence) — into
 # a scratch file handed to `megapdf_structure_check check --cli-reference`, which computes the
-# identical token-multiset F1 against megapdf-cli's own output. Its exit code is also checked: only 0
-# (text on at least one requested page) or 5 (none) are legitimate outcomes for a plain
-# `extract` with no --strict; anything else (a crash, an unexpected usage/open failure on a
-# document the internal call just opened fine) is counted as a CLI-side failure and fails the
-# run, exactly as a crashed or hung megapdf_structure_check does. Only meaningful together with
-# `check` mode; ignored under --census.
+# identical token-multiset F1 against megapdf-cli's own output. Its exit code is also checked:
+# a corpus has encrypted and malformed documents too, so 0 (text on at least one requested
+# page), 2 (cannot open), 3 (needs a password) and 4 (unsupported security handler) are all
+# legitimate outcomes for a plain `extract` with no --strict over an arbitrary document, along
+# with 5 (no requested page had text); anything else (a crash-mapped code, a usage error, a
+# --strict-only code this invocation never asks for) is counted as a CLI-side failure and fails
+# the run, exactly as a crashed or hung megapdf_structure_check does. Only meaningful together
+# with `check` mode; ignored under --census.
 #
 # --seed is accepted for parity with redaction-battery.sh's option shape; this battery visits
 # every document deterministically (sorted find order) and does not sample within a document,
@@ -153,11 +155,15 @@ while IFS= read -r pdf; do
     [ -n "$DUMP" ] && [ "$CENSUS" -eq 0 ] && dumparg=(--dump "$DUMP" --dump-id "$id")
 
     # #355: the real megapdf-cli binary's own output for this document, handed to
-    # `check --cli-reference` below. A bad exit code (anything but 0 or 5 for a plain
-    # `extract` with no --strict) is this document's own failure signal and is recorded before
-    # the internal check() call even runs, exactly like a crash.
+    # `check --cli-reference` below. A corpus has encrypted and malformed documents too, and a
+    # plain `extract` with no --strict correctly answers 2 (cannot open) or 3 (needs a
+    # password) for those -- a full-corpus run found exactly this: every "bad" exit at first
+    # matched, one-for-one, a document the internal check() call already counted as `format`
+    # (rc=2) or `encrypted` (rc=3), which is megapdf-cli behaving exactly as documented, not a
+    # failure. Genuinely bad is anything OUTSIDE {0, 2, 3, 4, 5} -- a crash-mapped code, a usage
+    # error (1) or a --strict-only code (6/7) that this invocation never asks for, or an
+    # interrupt (130) nothing here sends.
     cliarg=()
-    cli_this_doc_bad=0
     if [ -n "$CLI" ] && [ "$CENSUS" -eq 0 ]; then
         clifile="$OUT/scratch/cli-$id.txt"
         cli_out=$(run_with_timeout "$TIMEOUT" "$CLI" extract "$pdf" --keep-furniture --no-fields --page-marker \
@@ -169,11 +175,13 @@ while IFS= read -r pdf; do
             rm -f "$clifile"
             continue
         fi
-        if [ "$cli_rc" -ne 0 ] && [ "$cli_rc" -ne 5 ]; then
-            cli_bad_exit=$((cli_bad_exit + 1))
-            cli_this_doc_bad=1
-            echo "$id cli-bad-exit rc=$cli_rc" >>"$LOG"
-        fi
+        case "$cli_rc" in
+            0|2|3|4|5) ;;
+            *)
+                cli_bad_exit=$((cli_bad_exit + 1))
+                echo "$id cli-bad-exit rc=$cli_rc" >>"$LOG"
+                ;;
+        esac
         [ -s "$clifile" ] && cliarg=(--cli-reference "$clifile")
     fi
 
@@ -307,7 +315,7 @@ order_gates=0
         if [ -n "$CLI" ]; then
             echo "--- #355: measure 1 through the real megapdf-cli binary ---"
             echo "cli aggregate F1:      $cli_agg_f1 (gate: >= 0.998, same as the internal-API measure above)"
-            echo "cli bad exit codes:    $cli_bad_exit (gate: must be 0 -- extract with no --strict is only ever 0 or 5)"
+            echo "cli bad exit codes:    $cli_bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5, never 1/6/7/130)"
         fi
     fi
 } | tee "$SUMMARY"
