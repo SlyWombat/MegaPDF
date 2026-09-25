@@ -74,6 +74,11 @@ modules:
       - install -d /app/lib/megapdf
       - cp -a tree/bin/. /app/lib/megapdf/
       - install -Dm755 megapdf.sh /app/bin/megapdf
+      # megapdf-cli (#142, #356): `flatpak run --command=megapdf-cli ca.electricrv.MegaPDF
+      # file.pdf` looks the command up on PATH inside the sandbox, which /app/lib/megapdf
+      # is not — a symlink into the tree, like the .deb's /usr/bin/megapdf-cli, so the
+      # $ORIGIN runpath still resolves to the real directory once it is followed.
+      - ln -sf /app/lib/megapdf/megapdf-cli /app/bin/megapdf-cli
 
       # Named for the app ID, which is what Flatpak exports and AppStream matches on.
       - install -Dm644 ca.electricrv.MegaPDF.desktop /app/share/applications/ca.electricrv.MegaPDF.desktop

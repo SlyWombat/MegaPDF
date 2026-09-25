@@ -49,9 +49,10 @@ flatpak run --user --command=sh "$APP_ID" -c '
     test -f /.flatpak-info
     echo "  /.flatpak-info is there, so the app can tell"
     test -x /app/bin/megapdf
+    test -x /app/bin/megapdf-cli
     test -s /app/lib/megapdf/libmegapdf_core.so
     test -s /app/lib/megapdf/libpdfium.so
-    echo "  the launcher and both native libraries are in place"
+    echo "  the launcher, megapdf-cli and both native libraries are in place"
     echo "  notices:       $(wc -l < /app/lib/megapdf/THIRD-PARTY-NOTICES.txt) lines, beside the binary"
     echo "  metainfo:      $(ls /app/share/metainfo/)"
     echo "  desktop entry: $(ls /app/share/applications/)"
@@ -73,6 +74,20 @@ flatpak run --user --command=sh "$APP_ID" -c '
 '
 check $?
 rm -f "$MARKER"
+
+step "megapdf-cli extracts text inside the sandbox (#142, #356)"
+# The exact invocation the design and the docs promise: --command looks the binary up
+# on PATH inside the sandbox, which is why it is exported to /app/bin rather than left
+# only in /app/lib/megapdf.
+out=$(flatpak run --user --filesystem="$FIXTURES:ro" --command=megapdf-cli "$APP_ID" \
+    extract "$FIXTURES/demo.pdf")
+rc=$?
+if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+    echo "  ok, extracted $(echo "$out" | wc -l) line(s) of text from demo.pdf"
+else
+    echo "  FAIL (exit $rc)"
+fi
+check "$rc"
 
 step "--render-check: the engine loads inside the sandbox and a page renders"
 flatpak run --user --filesystem="$FIXTURES:ro" --command=/app/lib/megapdf/MegaPDF "$APP_ID" \
