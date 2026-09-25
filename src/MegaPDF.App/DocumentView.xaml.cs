@@ -610,35 +610,72 @@ public sealed partial class DocumentView : UserControl
             CornerRadius = new CornerRadius(2),
         });
 
+        // A control smaller than the 40x40 accessibility target (WCAG 2.5.5/2.5.8) gets a
+        // bigger, transparent, corner-anchored host around it instead — see
+        // HitTargetGeometry for the maths that keeps the host centred on the same point
+        // the small control used to be centred on, so nothing on screen moves or grows (#2).
+        const double hitTargetSize = 40;
+
         // Corner handle: proportional-only resize (SDD §3.3 — no distortion possible),
         // except for a redaction mark, which keeps the free aspect it was given (#329).
-        var handle = new Border
+        // The dot stays 14x14 on screen; the host carries the drag gesture.
+        const double handleSize = 14;
+        const double handleMargin = -handleSize / 2; // the dot's own corner-centring margin
+        var handle = new Grid
         {
-            Width = 14,
-            Height = 14,
-            Background = accent,
-            CornerRadius = new CornerRadius(7),
+            Width = hitTargetSize,
+            Height = hitTargetSize,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, -7, -7),
+            Margin = new Thickness(0, 0,
+                HitTargetGeometry.CenteredHostMargin(handleMargin, handleSize, hitTargetSize),
+                HitTargetGeometry.CenteredHostMargin(handleMargin, handleSize, hitTargetSize)),
             ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY,
             Visibility = movable && resizable ? Visibility.Visible : Visibility.Collapsed,
         };
+        handle.Children.Add(new Border
+        {
+            Width = handleSize,
+            Height = handleSize,
+            Background = accent,
+            CornerRadius = new CornerRadius(handleSize / 2),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false,
+        });
         chrome.Children.Add(handle);
 
-        // ✕ chip.
+        // ✕ chip. Same idea: the button stays 22x22 on screen, centred in a larger
+        // transparent host at the same anchor, so the tap target meets 40x40 without the
+        // chip looking any bigger. On a text box the chip sits beside the box, clear of
+        // the text, hence the two different corner margins it used to carry itself.
+        const double removeSize = 22;
+        const double removeMargin = -removeSize / 2;
+        const double removeMarginTextBox = -26;
         var remove = new Button
         {
             Content = new FontIcon { Glyph = "", FontSize = 10 },
-            Width = 22,
-            Height = 22,
+            Width = removeSize,
+            Height = removeSize,
             Padding = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var removeHost = new Grid
+        {
+            Width = hitTargetSize,
+            Height = hitTargetSize,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
-            // On a text box the chip sits beside the box, clear of the text.
-            Margin = isTextBox ? new Thickness(0, -11, -26, 0) : new Thickness(0, -11, -11, 0),
+            Margin = new Thickness(0,
+                HitTargetGeometry.CenteredHostMargin(removeMargin, removeSize, hitTargetSize),
+                HitTargetGeometry.CenteredHostMargin(isTextBox ? removeMarginTextBox : removeMargin, removeSize, hitTargetSize),
+                0),
         };
-        chrome.Children.Add(remove);
+        removeHost.Children.Add(remove);
+        chrome.Children.Add(removeHost);
 
         chrome.Tapped += (_, args) => args.Handled = true;
 
@@ -673,12 +710,24 @@ public sealed partial class DocumentView : UserControl
             await CommitChromeAsync();
         };
 
-        remove.Click += async (_, _) =>
+        async Task RemoveClickedAsync()
         {
             var selection = _selection;
             Deselect();
             if (selection is not null)
                 await RemoveSelectedAsync(selection);
+        }
+        remove.Click += async (_, _) => await RemoveClickedAsync();
+        // A tap in the host's added margin — outside the 22x22 chip but inside the
+        // enlarged 40x40 target — does exactly what a tap on the chip does. A tap on the
+        // chip itself fires the button's own Click above and does not reach here: Button
+        // marks its pointer release handled, so Tapped never bubbles to the host for it.
+        removeHost.Tapped += async (_, args) =>
+        {
+            if (args.OriginalSource != removeHost)
+                return;
+            args.Handled = true;
+            await RemoveClickedAsync();
         };
 
         canvas.Children.Add(chrome);
