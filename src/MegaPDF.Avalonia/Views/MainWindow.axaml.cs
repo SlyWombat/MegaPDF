@@ -752,6 +752,19 @@ public partial class MainWindow : Window
         !_closeConfirmed && Shell is { } shell
         && shell.Documents.Any(vm => vm.Busy.IsWorking || (vm.IsDocumentOpen && vm.IsDirty));
 
+    /// <summary>
+    /// Un-confirms this window: the next Closing or quit asks again, exactly as if it had
+    /// never been asked (#145 D1's gap in the multi-window quit path).
+    ///
+    /// <see cref="App.ConfirmAllWindowsForQuitAsync"/> calls this on every window it already
+    /// confirmed once a later window answers Cancel. Without it, a window confirmed early in
+    /// that loop kept <see cref="_closeConfirmed"/> set forever — nothing ever put it back to
+    /// false — so a document edited in that window afterwards was never asked about again, on
+    /// either a later Close or a later Quit: the exact silent loss D1 was about, just reached
+    /// by way of an aborted multi-window quit instead of the missing prompt this fixed in 2026-09-15.
+    /// </summary>
+    internal void UndoCloseConfirmation() => _closeConfirmed = false;
+
     protected override void OnClosing(WindowClosingEventArgs e)
     {
         // Closing the window used to drop unsaved changes and delete their journal, silently.

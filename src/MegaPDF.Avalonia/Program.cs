@@ -1551,6 +1551,21 @@ internal static class Program
             failures++;
         }
 
+        // --- Quitting with more than one window open (#145 D1, #348 plan §5.6) ---
+        //
+        // App.axaml.cs's ShutdownRequested asks every window in turn; a Cancel on a later
+        // window must not leave an earlier, already-confirmed window stuck that way forever.
+        Console.WriteLine("quitting with more than one window open (#145 D1):");
+        try
+        {
+            CheckMultiWindowQuitConfirmation(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::multi-window quit: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Several files handed over at once (#348 phase 2) ---
         //
         // What a multi-select Finder "Open" or "Open With" delivers through a single
@@ -2781,6 +2796,92 @@ internal static class Program
         check("closing the last tab closes the window", !window.IsVisible);
 
         static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Quitting with more than one window open (#145 D1, #348 plan §5.6): App.axaml.cs's
+    /// ShutdownRequested asks every window in turn, and a Cancel on a later window must not
+    /// leave an earlier, already-confirmed window stuck that way forever — see
+    /// <see cref="App.ConfirmAllWindowsForQuitAsync"/>'s own doc for the bug this proves is
+    /// fixed. Called directly rather than through ShutdownRequested/RequestQuit: those need a
+    /// real <c>IClassicDesktopStyleApplicationLifetime</c>, which a headless self-test run
+    /// (<c>SetupWithoutStarting</c>) never has — the same reason <see cref="Views.MainWindow.QuitForTest"/>
+    /// exists — but the method under test takes only the window list, so it is exercised for
+    /// real either way.
+    /// </summary>
+    private static void CheckMultiWindowQuitConfirmation(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        // The same fixture and tick point in both windows — each window is its own
+        // ShellViewModel/DocumentViewModel, so there is no tab-dedup concern to keep them
+        // apart the way two tabs in one window would need distinct files for.
+        var fixture = Path.Combine(dir, "fixture.pdf");
+        var tick = new PdfPoint(78, 186);
+
+        var shellA = new ShellViewModel(state);
+        var vmA = shellA.CreateDocument();
+        vmA.Open(fixture);
+        shellA.AddTab(vmA);
+        var windowA = new Views.MainWindow { DataContext = shellA, Width = 1280, Height = 800 };
+        windowA.Show();
+
+        var shellB = new ShellViewModel(state);
+        var vmB = shellB.CreateDocument();
+        vmB.Open(fixture);
+        shellB.AddTab(vmB);
+        var windowB = new Views.MainWindow { DataContext = shellB, Width = 1280, Height = 800 };
+        windowB.Show();
+        MenuProbe.Pump();
+
+        try
+        {
+            vmA.HandlePageClick(0, tick);
+            vmB.HandlePageClick(0, tick);
+            MenuProbe.Pump();
+            check("both windows start with a dirty tab", vmA.IsDirty && vmB.IsDirty);
+
+            // Window A answers cleanly (Don't Save); window B answers Cancel — the quit must
+            // abort without ever touching window B, the same "ask everyone before closing
+            // anyone" rule a single window's own tabs already get.
+            windowA.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
+            windowB.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Cancel;
+
+            var confirmed = App.ConfirmAllWindowsForQuitAsync([windowA, windowB]).GetAwaiter().GetResult();
+            check("a Cancel on the second window stops the quit", !confirmed);
+            // Don't Save answers the question rather than clearing it — nothing was written,
+            // so the in-memory document is still "dirty" in the ordinary sense — so what proves
+            // window A was actually asked and answered is the count, not IsDirty.
+            check("  window A's tab was asked and answered (Don't Save)", windowA.UnsavedChangesAsked == 1);
+            check("  window B's tab was asked too, and its Cancel left it untouched: still dirty",
+                  windowB.UnsavedChangesAsked == 1 && vmB.IsDirty);
+            check("  both windows are still open", windowA.IsVisible && windowB.IsVisible);
+
+            // The regression this proves fixed (#145 D1): window A's confirmation from the
+            // aborted pass above must not outlive it. An edit made afterwards has to be asked
+            // about on its own, independent Close or Quit — not silently let through because
+            // an earlier, unrelated pass once said yes for this window.
+            vmA.HandlePageClick(0, tick);
+            MenuProbe.Pump();
+            check("window A is dirty again, from an edit made after the aborted quit", vmA.IsDirty);
+            check("  and it is asked about again rather than staying pre-confirmed from that aborted quit",
+                  windowA.NeedsConfirmationBeforeClose);
+
+            // With both windows now able to answer cleanly, the same call goes all the way
+            // through — proving the fix did not just suppress the stale "yes" but replaced it
+            // with a fresh, correct one.
+            windowB.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
+            var confirmedAgain = App.ConfirmAllWindowsForQuitAsync([windowA, windowB]).GetAwaiter().GetResult();
+            check("with both windows now answering cleanly, the quit is confirmed", confirmedAgain);
+        }
+        finally
+        {
+            windowA.SkipCloseConfirmation();
+            windowA.Close();
+            windowB.SkipCloseConfirmation();
+            windowB.Close();
+            MenuProbe.Pump();
+        }
     }
 
     /// <summary>

@@ -1026,21 +1026,43 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Quit with more than one window open (#348 plan §5.6): every window's every
-    /// dirty tab is asked, window by window, and a Cancel anywhere stops the quit
-    /// without touching a tab that has not been asked yet — the same "ask everyone
+    /// Every window's every dirty tab is asked, window by window, in the order given: true
+    /// once every window has said yes, false the moment one says Cancel.
+    ///
+    /// A Cancel does not touch a tab that has not been asked yet — the same "ask everyone
     /// before closing anyone" rule <see cref="Views.MainWindow.ConfirmCloseForQuitAsync"/>
-    /// already applies within one window.
+    /// already applies within one window — but it does undo the confirmation on every window
+    /// already asked in this pass (#145 D1). Leaving those set used to be the plan: a window's
+    /// own <c>_closeConfirmed</c> only exists so the <c>Shutdown()</c>/<c>Close()</c> that
+    /// follows a successful ask does not ask a second time, and when that shutdown never
+    /// happens — because a later window in the same pass cancelled — a stale confirmation left
+    /// standing meant that window's NEXT Close or Quit, possibly minutes later over a document
+    /// edited since, silently skipped the question it exists to put. Internal so the self-test
+    /// can drive it directly: it needs no <see cref="IClassicDesktopStyleApplicationLifetime"/>,
+    /// which a headless self-test run has none of.
     /// </summary>
-    private static async Task ConfirmThenQuitAllAsync(
-        IClassicDesktopStyleApplicationLifetime desktop, IReadOnlyList<MainWindow> windows)
+    internal static async Task<bool> ConfirmAllWindowsForQuitAsync(IReadOnlyList<MainWindow> windows)
     {
+        var confirmed = new List<MainWindow>();
         foreach (var window in windows)
         {
             if (!await window.ConfirmCloseForQuitAsync())
-                return; // Cancel: nothing further closes, and nothing already confirmed was undone.
+            {
+                foreach (var done in confirmed)
+                    done.UndoCloseConfirmation();
+                return false;
+            }
+            confirmed.Add(window);
         }
-        desktop.Shutdown();
+        return true;
+    }
+
+    /// <summary>Quit with more than one window open (#348 plan §5.6): see <see cref="ConfirmAllWindowsForQuitAsync"/>.</summary>
+    private static async Task ConfirmThenQuitAllAsync(
+        IClassicDesktopStyleApplicationLifetime desktop, IReadOnlyList<MainWindow> windows)
+    {
+        if (await ConfirmAllWindowsForQuitAsync(windows))
+            desktop.Shutdown();
     }
 
     /// <summary>
