@@ -9,11 +9,19 @@ name: macOS app
 
 on:
   workflow_dispatch:
+  # macos-cli-v* (#142, #356): the megapdf-cli release archive, built and notarized by
+  # the cli-release job below. Not macos-v*: there is no tag-triggered release of the
+  # app bundle itself (ADR-002 decided Mac App Store; macos-appstore.yml is
+  # workflow_dispatch-only, on purpose — see its own header), so a bare macos-v* tag
+  # would look like it releases the app and would not. This tag releases the CLI only.
+  push:
+    tags: ['macos-cli-v*']
   pull_request:
     paths:
       - '.github/workflows/macos-app.yml'
       - 'tools/build-macos-app.sh'
       - 'tools/fetch-pdfium-mac.sh'
+      - 'tools/notarize-macos-app.sh'
       - 'libs/pdfium/RELEASE'
       - 'src/MegaPDF.Avalonia/**'
       # Core is shared with the Windows app, so a Core change that breaks the Mac
@@ -24,6 +32,9 @@ on:
       # libmegapdf_core.dylib (#38, ADR-003); a change there is a Mac change.
       - 'core/**'
       - 'tools/build-core.sh'
+
+permissions:
+  contents: read
 
 jobs:
   # Fast feedback on the same code, on the cheaper runner. This is ADR-002
@@ -407,3 +418,192 @@ jobs:
         run: |
           dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj \
             -c Release --no-build --logger "console;verbosity=normal"
+
+  # ==========================================================================
+  # megapdf-cli release (#142, #356): a universal (arm64 + x86_64) binary, Developer
+  # ID signed and notarized the way tools/notarize-macos-app.sh already does for the
+  # app bundle, zipped with megapdf_core, pdfium, LICENSE and THIRD-PARTY-NOTICES, and
+  # attached to a draft GitHub release. macos-cli-v* only — see the tag comment above;
+  # this never touches the Mac App Store package (macos-appstore.yml).
+  #
+  # Stapling only applies to a signed app bundle, .pkg or .dmg (Apple's stapler has no
+  # loose-binary form), so this zip is NOT stapled — notarize-macos-app.sh's own job.
+  # It IS submitted for notarization and accepted before it ships, which is what lets
+  # Gatekeeper's online ticket check pass on a Mac with internet on first run, even
+  # unstapled.
+  #
+  # Build and signing run on a pull request too, the way the tarball job in
+  # linux-release.yml rehearses everything up to the tag-only publish step. Only the
+  # notarization step itself is skipped there (see its own `if`): notarizing means
+  # `notarytool submit`, which UPLOADS THE BUILD TO APPLE, and macos-tester-build.yml's
+  # own header explains why that must never fire on every pull request (#173 did
+  # exactly that, five times, before anyone noticed).
+  # ==========================================================================
+  cli-release:
+    name: megapdf-cli release archive (universal)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The version this build carries
+        id: version
+        run: |
+          v=$(grep -oE '<Version>[^<]+</Version>' src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj | head -1 | sed 's/<[^>]*>//g')
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "building megapdf-cli $v"
+
+      # A tag names the version it releases.
+      - name: The tag matches the version
+        if: startsWith(github.ref, 'refs/tags/macos-cli-v')
+        run: |
+          [ "macos-cli-v${{ steps.version.outputs.version }}" = "$GITHUB_REF_NAME" ] || {
+            echo "::error::tag $GITHUB_REF_NAME, but this tree builds ${{ steps.version.outputs.version }}"; exit 1; }
+
+      - name: Fetch pinned PDFium (universal)
+        run: tools/fetch-pdfium-mac.sh
+
+      # CMAKE_OSX_ARCHITECTURES is set to "arm64;x86_64" before project() in
+      # core/CMakeLists.txt whenever the host is Apple, so this one configure and
+      # build already produces a universal megapdf-cli, exactly like the universal
+      # libmegapdf_core.dylib the app bundle links.
+      - name: Build the universal megapdf-cli
+        run: |
+          set -e
+          cmake -S core -B core/build/osx -DCMAKE_BUILD_TYPE=Release
+          cmake --build core/build/osx --target megapdf_cli --config Release
+          BIN=core/build/osx/megapdf-cli
+          [ -x "$BIN" ] || { echo "::error::$BIN was not built"; exit 1; }
+          lipo -archs "$BIN"
+          "$BIN" --version
+
+      # Signed with Developer ID + Hardened Runtime, the way tools/build-macos-app.sh
+      # signs the app bundle (same env vars, same keychain dance) — but per file, since
+      # there is no bundle here to sign as one unit. Ad-hoc signed (no-op for
+      # notarization) when the secrets are absent, e.g. a fork's workflow_dispatch.
+      - name: Sign with Developer ID
+        env:
+          MACOS_DEVID_P12_B64: ${{ secrets.MACOS_DEVID_P12_B64 }}
+          MACOS_DEVID_P12_PASSWORD: ${{ secrets.MACOS_DEVID_P12_PASSWORD }}
+          MACOS_DEVID_IDENTITY: ${{ secrets.MACOS_DEVID_IDENTITY }}
+        run: |
+          set -e
+          BIN=core/build/osx/megapdf-cli
+          DYLIB=core/build/osx/libmegapdf_core.dylib
+          PDFIUM=core/build/osx/libpdfium.dylib
+          if [ -n "${MACOS_DEVID_P12_B64:-}" ]; then
+            : "${MACOS_DEVID_P12_PASSWORD:?}"
+            : "${MACOS_DEVID_IDENTITY:?}"
+            KEYCHAIN="$RUNNER_TEMP/megapdf-cli-signing.keychain-db"
+            KEYCHAIN_PW="$(openssl rand -base64 24)"
+            security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN"
+            security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+            echo "$MACOS_DEVID_P12_B64" | base64 -d > "$RUNNER_TEMP/devid.p12"
+            security import "$RUNNER_TEMP/devid.p12" -k "$KEYCHAIN" \
+              -P "$MACOS_DEVID_P12_PASSWORD" -T /usr/bin/codesign
+            rm -f "$RUNNER_TEMP/devid.p12"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: \
+              -s -k "$KEYCHAIN_PW" "$KEYCHAIN" >/dev/null
+            security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+            IDENTITY="$MACOS_DEVID_IDENTITY"
+            echo "signing identity: $IDENTITY (hardened runtime, secure timestamp)"
+          else
+            IDENTITY="-"
+            echo "signing identity: ad-hoc (no MACOS_DEVID_P12_B64 — a fork or a rehearsal run)"
+          fi
+          for f in "$PDFIUM" "$DYLIB" "$BIN"; do
+            if [ "$IDENTITY" = "-" ]; then
+              codesign --force --sign - "$f"
+            else
+              codesign --force --timestamp --options runtime --sign "$IDENTITY" "$f"
+            fi
+          done
+          codesign --verify --verbose=2 "$BIN" "$DYLIB" "$PDFIUM"
+          echo "signed=$([ "$IDENTITY" != "-" ] && echo 1 || echo 0)" >> "$GITHUB_OUTPUT"
+        id: sign
+
+      - name: The zip (binary, megapdf_core, pdfium, LICENSE, THIRD-PARTY-NOTICES)
+        id: zip
+        run: |
+          set -e
+          VERSION="${{ steps.version.outputs.version }}"
+          STAGE="$RUNNER_TEMP/megapdf-cli-macos-universal-$VERSION"
+          mkdir -p "$STAGE"
+          cp core/build/osx/megapdf-cli "$STAGE/"
+          cp core/build/osx/libmegapdf_core.dylib "$STAGE/"
+          cp core/build/osx/libpdfium.dylib "$STAGE/"
+          cp LICENSE "$STAGE/LICENSE"
+          cp src/MegaPDF.Avalonia/Assets/THIRD-PARTY-NOTICES.txt "$STAGE/THIRD-PARTY-NOTICES.txt"
+          mkdir -p artifacts/release
+          ZIP="artifacts/release/megapdf-cli-macos-universal-$VERSION.zip"
+          # ditto, not zip: it preserves the code signature, same as
+          # notarize-macos-app.sh's own packing step.
+          ditto -c -k --keepParent "$STAGE" "$ZIP"
+          ( cd artifacts/release && shasum -a 256 "$(basename "$ZIP")" > "$(basename "$ZIP").sha256" )
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          ls -lh artifacts/release
+
+      # NOT via tools/notarize-macos-app.sh: that script requires a directory (a .app
+      # bundle, `[ -d "$APP" ]`) and stples the ticket into it afterwards, and stapling
+      # a loose-file zip is not a thing the stapler does. The submission and acceptance
+      # wait are the same notarytool call that script makes; only the packaging and the
+      # (absent) stapling step differ.
+      - name: Notarize (no stapling — see above)
+        if: steps.sign.outputs.signed == '1' && github.event_name != 'pull_request'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -e
+          : "${ASC_KEY_P8:?}"; : "${ASC_KEY_ID:?}"; : "${ASC_ISSUER_ID:?}"
+          if printf '%s' "$ASC_KEY_P8" | grep -q "BEGIN PRIVATE KEY"; then
+            printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+          else
+            printf '%s' "$ASC_KEY_P8" | base64 -d > "$RUNNER_TEMP/key.p8"
+          fi
+          xcrun notarytool submit "${{ steps.zip.outputs.zip }}" \
+            --key "$RUNNER_TEMP/key.p8" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" \
+            --wait --timeout 30m | tee "$RUNNER_TEMP/submit.log"
+          grep -qE "status: Accepted" "$RUNNER_TEMP/submit.log" || {
+            echo "::error::notarization was not accepted"; exit 1; }
+          rm -f "$RUNNER_TEMP/key.p8"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MegaPDF-cli-macos-release
+          path: |
+            artifacts/release/megapdf-cli-macos-universal-*.zip
+            artifacts/release/megapdf-cli-macos-universal-*.zip.sha256
+          if-no-files-found: error
+
+  cli-release-publish:
+    name: Draft the release
+    needs: cli-release
+    if: startsWith(github.ref, 'refs/tags/macos-cli-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MegaPDF-cli-macos-release
+          path: artifacts
+
+      - name: The zip and its checksum, in a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          TAG="$GITHUB_REF_NAME"
+          VERSION="${TAG#macos-cli-v}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --draft --verify-tag --title "megapdf-cli $VERSION for macOS" \
+              --notes "megapdf-cli $VERSION for macOS (universal: arm64 + x86_64). Unpack the zip and run megapdf-cli from a shell — this is a command-line tool, not the MegaPDF app, which ships through the Mac App Store. Signed with the app's Developer ID and notarized (Apple accepted it); it is not stapled, because Apple's stapler only attaches to an app bundle, .pkg or .dmg — Gatekeeper checks the notarization online instead on first run, which needs internet once. Each zip's sha256 is beside it."
+          gh release upload "$TAG" \
+            artifacts/megapdf-cli-macos-universal-*.zip \
+            artifacts/megapdf-cli-macos-universal-*.zip.sha256 \
+            --clobber
+          gh release view "$TAG" --json isDraft,tagName,assets \
+            --jq '"draft=\(.isDraft) \(.tagName): \([.assets[].name] | join(", "))"'
