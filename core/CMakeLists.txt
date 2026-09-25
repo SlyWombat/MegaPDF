@@ -206,10 +206,17 @@ add_custom_target(megapdf_pdfium_runtime
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PDFIUM_RUNTIME} $<TARGET_FILE_DIR:megapdf_cli>
     COMMENT "pdfium beside megapdf-cli")
 add_dependencies(megapdf_cli megapdf_pdfium_runtime)
+# BUILD_WITH_INSTALL_RPATH, for the reason megapdf_core sets it above: without it CMake
+# appends the build tree's own library directories to the runpath alongside $ORIGIN
+# (or @loader_path), which is exactly the builder's-own-filesystem-path bug #158's
+# lintian pass caught on libmegapdf_core.so. megapdf_cli links megapdf_core as a CMake
+# target, not a plain file, so it is just as exposed to that default behaviour.
 if(APPLE)
-    set_target_properties(megapdf_cli PROPERTIES BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path")
+    set_target_properties(megapdf_cli PROPERTIES
+        BUILD_RPATH "@loader_path" INSTALL_RPATH "@loader_path" BUILD_WITH_INSTALL_RPATH TRUE)
 elseif(UNIX)
-    set_target_properties(megapdf_cli PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN")
+    set_target_properties(megapdf_cli PROPERTIES
+        BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN" BUILD_WITH_INSTALL_RPATH TRUE)
 endif()
 
 # ---------------------------------------------------------------------------
