@@ -61,7 +61,9 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build qpdf poppler-utils; else brew install ninja; fi
+          # cmark (#357): the CommonMark oracle for the Markdown writer's round-trip test,
+          # Linux-only per design §3 ("A CommonMark round trip on the Linux leg").
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y -qq ninja-build qpdf poppler-utils cmark; else brew install ninja; fi
 
       - name: Fetch the pinned PDFium prebuilt
         if: matrix.fetch != ''
@@ -136,9 +138,23 @@ jobs:
               echo "::error title=megapdf-cli output does not match its golden::$name"
               fail=1
             fi
+            # #357: --format md against the same fixture, same exit-code expectation.
+            md_golden="core/tests/expected/structure/$name.md"
+            md_got="$RUNNER_TEMP/$name.cli.md"
+            "$BIN" extract "$pdf" --format md --quiet > "$md_got"
+            md_rc=$?
+            if [ "$name" = "scan" ]; then
+              [ "$md_rc" -eq 5 ] || { echo "::error title=exit code::$name --format md expected 5, got $md_rc"; fail=1; }
+            else
+              [ "$md_rc" -eq 0 ] || { echo "::error title=exit code::$name --format md expected 0, got $md_rc"; fail=1; }
+            fi
+            if ! diff -u "$md_golden" "$md_got"; then
+              echo "::error title=megapdf-cli --format md output does not match its golden::$name"
+              fail=1
+            fi
           done
           if [ "$fail" -ne 0 ]; then exit 1; fi
-          echo "megapdf-cli: 7 fixtures match their goldens"
+          echo "megapdf-cli: 7 fixtures match their txt and md goldens"
 
       # Informational only (design #142 §7 measure 3's own precedent: poppler is another
       # heuristic, not truth): a rough token-multiset overlap between megapdf-cli's plain-text

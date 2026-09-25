@@ -1,0 +1,5 @@
+First page has text.
+
+*[Page 2 has no text layer]*
+
+Third page has text too.

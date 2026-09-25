@@ -1,0 +1,23 @@
+# Shopping List
+
+- Milk
+
+- Bread
+
+- Eggs
+
+1. First step
+
+2. Second step
+
+3. Third step
+
+1. Preparation
+
+  1. a. Wash vegetables
+
+  1. b. Chop vegetables
+
+This paragraph demonstrates a hyphenated line ending that should join without a space.
+
+Standards like ISO-8859 are common encodings.
