@@ -49,6 +49,22 @@ echo "building MegaPDF $VERSION for $RID"
 rm -rf "$APP"
 mkdir -p "$APP/bin"
 
+# megapdf-cli (#142, #355, #356): the standalone extraction binary, built with the core
+# rather than with the .NET app. Built and copied in first, beside where the publish
+# below will land libmegapdf_core.so and libpdfium.so — the RPATH the CMake target sets
+# ($ORIGIN) only resolves if the two native libraries end up in the same directory.
+command -v cmake >/dev/null 2>&1 || {
+    echo "::error::cmake not found. apt install cmake." >&2
+    exit 1
+}
+CLI_BUILD="$ROOT/core/build/linux-x64"
+CLI_GEN=()
+command -v ninja >/dev/null 2>&1 && CLI_GEN=(-G Ninja)
+cmake -S "$ROOT/core" -B "$CLI_BUILD" -DCMAKE_BUILD_TYPE=Release "${CLI_GEN[@]+"${CLI_GEN[@]}"}"
+cmake --build "$CLI_BUILD" --target megapdf_cli --config Release
+[ -x "$CLI_BUILD/megapdf-cli" ] || { echo "::error::megapdf_cli build did not produce $CLI_BUILD/megapdf-cli" >&2; exit 1; }
+cp "$CLI_BUILD/megapdf-cli" "$APP/bin/megapdf-cli"
+
 # PublishSingleFile for the same reason the Mac bundle uses it — one file to
 # install, and no loose .pdb or runtimeconfig.json to explain — but WITHOUT
 # IncludeNativeLibrariesForSelfExtract. Self-extracting the native libraries
@@ -68,6 +84,7 @@ for lib in libpdfium.so libmegapdf_core.so; do
     fi
 done
 [ -x "$APP/bin/MegaPDF" ] || { echo "::error::no executable at $APP/bin/MegaPDF" >&2; exit 1; }
+[ -x "$APP/bin/megapdf-cli" ] || { echo "::error::no executable at $APP/bin/megapdf-cli" >&2; exit 1; }
 
 # The engine must be loaded from beside the apphost, never from the system
 # library path: a distribution's own libpdfium is not the patched build this app
@@ -75,12 +92,16 @@ done
 # change behaviour in ways no test here would catch. .NET probes the app
 # directory first for a bare DllImport name, which is what CoreNative and
 # PdfiumNative both use, and libmegapdf_core.so carries RUNPATH $ORIGIN for its
-# own link to pdfium. Asserted rather than assumed:
-if ! objdump -p "$APP/bin/libmegapdf_core.so" 2>/dev/null | grep -qE 'R(UN)?PATH.*\$ORIGIN'; then
-    echo "::error::libmegapdf_core.so has no \$ORIGIN runpath — it would load the system libpdfium" >&2
-    objdump -p "$APP/bin/libmegapdf_core.so" | grep -E 'R(UN)?PATH' >&2 || true
-    exit 1
-fi
+# own link to pdfium. megapdf-cli carries the same $ORIGIN RUNPATH (CMake sets it
+# on the target directly, core/CMakeLists.txt), for the same reason: a distribution's
+# own libpdfium must never be what it loads. Asserted rather than assumed, for both:
+for bin in libmegapdf_core.so megapdf-cli; do
+    if ! objdump -p "$APP/bin/$bin" 2>/dev/null | grep -qE 'R(UN)?PATH.*\$ORIGIN'; then
+        echo "::error::$bin has no \$ORIGIN runpath — it would load the system libpdfium" >&2
+        objdump -p "$APP/bin/$bin" | grep -E 'R(UN)?PATH' >&2 || true
+        exit 1
+    fi
+done
 
 # --- The freedesktop pieces -------------------------------------------------
 
