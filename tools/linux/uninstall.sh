@@ -25,6 +25,9 @@ rm -rf "$LIBDIR"
 if [ -L "$BINDIR/megapdf" ] && [ "$(readlink "$BINDIR/megapdf")" = "$LIBDIR/MegaPDF" ]; then
     rm -f "$BINDIR/megapdf"
 fi
+if [ -L "$BINDIR/megapdf-cli" ] && [ "$(readlink "$BINDIR/megapdf-cli")" = "$LIBDIR/megapdf-cli" ]; then
+    rm -f "$BINDIR/megapdf-cli"
+fi
 rm -f "$DESKTOP_DIR/megapdf.desktop"
 rm -f "$DATA_HOME/metainfo/ca.electricrv.MegaPDF.metainfo.xml"
 

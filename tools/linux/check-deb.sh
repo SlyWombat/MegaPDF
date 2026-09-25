@@ -44,9 +44,28 @@ echo "=== the launcher is on PATH and points into the package ==="
 command -v megapdf && readlink -f "$(command -v megapdf)"
 
 echo
+echo "=== megapdf-cli extracts text out of the installed package (#142, #356) ==="
+cli_rc=0
+command -v megapdf-cli && readlink -f "$(command -v megapdf-cli)"
+megapdf-cli --version
+if [ -s "$FIXTURES/demo.pdf" ]; then
+    out=$(megapdf-cli extract "$FIXTURES/demo.pdf")
+    if [ -n "$out" ]; then
+        echo "  ok    extracted $(echo "$out" | wc -l) line(s) of text from demo.pdf"
+    else
+        echo "  FAIL  megapdf-cli extract produced no text"
+        cli_rc=$((cli_rc + 1))
+    fi
+else
+    echo "  FAIL  no $FIXTURES/demo.pdf to extract"
+    cli_rc=$((cli_rc + 1))
+fi
+
+echo
 # A .deb installed from the file itself, with no repository behind it: DebFile.
 bash "$ROOT/tools/linux/package-check.sh" "$OPTDIR" "$FIXTURES" "" "deb" DebFile
 rc=$?
+rc=$((rc + cli_rc))
 
 echo
 echo "=== the desktop entry and the icons, as a desktop would look for them ==="
