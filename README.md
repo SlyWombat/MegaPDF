@@ -16,6 +16,9 @@ Also included, because long documents need it: **Find** (the toolbar button, or
 `Ctrl+F`) searches the whole document — type and every match lights up, Enter
 walks through them.
 
+Also on the command line: `megapdf-cli extract file.pdf` writes the text;
+`--format md` writes Markdown.
+
 No account. No cloud. No subscription. All processing is local.
 
 ## Design
