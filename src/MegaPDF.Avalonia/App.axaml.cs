@@ -110,6 +110,18 @@ public partial class App : Application
             // is not on the French agreement at all — so the French store set could not
             // be taken: the capture failed and left no file behind it.
             case "find":
+                // #252: a search with no document open silently finds nothing — SearchAsync
+                // skips its whole loop when _document is null — and the MatchCount==0 branch
+                // below used to read that as the fixture having lost the word. Every other
+                // document-dependent state (redact below, busy) already guards on
+                // IsDocumentOpen; this one and focus did not.
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state find needs a document: none is open, so "
+                        + "there is nothing to search.");
+                    return false;
+                }
                 viewModel.IsFindOpen = true;
                 // Into the box as well as into the view model. The find field is a plain
                 // TextBox that the typing path fills; searching the view model directly
@@ -120,10 +132,21 @@ public partial class App : Application
                 viewModel.Search(DemoContent.SearchTerm);
                 if (viewModel.MatchCount == 0)
                 {
+                    // #252: this used to name the fixture as the cause without having
+                    // checked it. The document was open (the guard above already returned
+                    // otherwise), so print what the search actually had to work with —
+                    // page count and page 1's own text — rather than accusing demo.pdf of
+                    // having lost the word.
+                    var pageOneLines = viewModel.LinesOn(0);
                     Console.Error.WriteLine(
-                        $"::error::--screenshot-state find matched nothing. The fixture no "
-                        + $"longer contains \"{DemoContent.SearchTerm}\", so the capture would be an "
-                        + "ordinary document view under a name that claims otherwise.");
+                        $"::error::--screenshot-state find matched nothing for "
+                        + $"\"{DemoContent.SearchTerm}\". IsDocumentOpen=true, "
+                        + $"Pages.Count={viewModel.Pages.Count}, page 1 has {pageOneLines.Count} "
+                        + $"text line(s) totalling {pageOneLines.Sum(l => l.Text.Length)} character(s), "
+                        + $"Busy.IsWorking={viewModel.Busy.IsWorking}. If that page count and "
+                        + "text length look right for the fixture, this was not the fixture — "
+                        + "something about the document's state had not settled by the time "
+                        + "the search ran.");
                     return false;
                 }
                 return true;
@@ -131,12 +154,23 @@ public partial class App : Application
             // The keyboard focus ring (#2): brand accent-pressed stroke over an
             // accent-subtle fill.
             case "focus":
+                // #252: same guard as find, for the same reason — MoveFocus walks Pages,
+                // which is empty with nothing open, so "reached no region" used to look
+                // exactly like an empty fixture instead of a missing document.
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state focus needs a document: none is open, so "
+                        + "there is nothing to focus.");
+                    return false;
+                }
                 viewModel.MoveFocus(forward: true);
                 if (viewModel.PageFocus is null)
                 {
                     Console.Error.WriteLine(
-                        "::error::--screenshot-state focus reached no region. The fixture has "
-                        + "nothing focusable, so no ring would be drawn.");
+                        $"::error::--screenshot-state focus reached no region "
+                        + $"(Pages.Count={viewModel.Pages.Count}). The fixture has nothing "
+                        + "focusable, so no ring would be drawn.");
                     return false;
                 }
                 return true;
