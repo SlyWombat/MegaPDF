@@ -107,7 +107,11 @@ jobs:
       - name: megapdf-cli smoke against the structure fixtures
         shell: bash
         run: |
-          set -uo pipefail
+          # GitHub Actions runs a bash `run:` step with `-e` by default, which would abort the
+          # whole step the instant scan.pdf's expected exit 5 happens, before its own exit-code
+          # check below even runs. `set +e` turns that off; `$rc` is checked explicitly instead.
+          set +e
+          set -u
           BIN="$RUNNER_TEMP/core-build/megapdf-cli"
           [ "$RUNNER_OS" = "Windows" ] && BIN="$RUNNER_TEMP/core-build/Debug/megapdf-cli.exe"
           [ -x "$BIN" ] || { echo "::error::$BIN is missing"; exit 1; }
