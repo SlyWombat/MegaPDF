@@ -156,7 +156,10 @@ each, all identical, none missing — and the pages the two images render are id
 outside that band. The pose finds its line by phrase (`screenshot_redacted_word` =
 "client nommé"), which the French agreement breaks across a line ("… et le client /
 nommé ci-dessous …"), so both languages fall through to the same fallback — the
-longest line on page 1 — and ask for a mark at the same rectangle.
+longest line on page 1 — and ask for a mark at the same rectangle. (Since #395 the
+phrase is "sections 1 through 4" / "sections 1 à 4", the opening paragraph's last
+line in all three languages, so the #408 ✕ chip hangs over whitespace; a phrase that
+matches no line is now itself an `::error::`, not a silent fallthrough.)
 
 What is left is the pose's **silence**. `markForRedaction` returns without a word
 while an edit is in flight (`launchEdit`'s `editingBlocked` guard), and it returns
