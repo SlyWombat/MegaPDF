@@ -27,7 +27,11 @@ public sealed partial class DocumentView : UserControl
     public static readonly DependencyProperty ViewModelProperty = DependencyProperty.Register(
         nameof(ViewModel), typeof(DocumentViewModel), typeof(DocumentView), new PropertyMetadata(null));
 
-    /// <summary>The tab's document. Set once, by the TabView's item template (never rebound).</summary>
+    /// <summary>
+    /// The tab's document. Set once, by the TabView's item template (never rebound).
+    /// A DependencyProperty read is UI-thread-only: capture it into a local before any
+    /// <c>Task.Run</c> lambda that needs it (#401).
+    /// </summary>
     public DocumentViewModel ViewModel
     {
         get => (DocumentViewModel)GetValue(ViewModelProperty);
@@ -247,7 +251,12 @@ public sealed partial class DocumentView : UserControl
             return;
         }
 
-        var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
+        // Read the view model here, on the UI thread, not inside the lambda: ViewModel is a
+        // DependencyProperty since the #348 split, and GetValue from the thread pool throws
+        // RPC_E_WRONG_THREAD — which an async void Tapped handler swallowed, so every plain
+        // click and Enter on a region died silently right here (#401).
+        var viewModel = ViewModel;
+        var hit = await Task.Run(() => viewModel.HitTestPage(pageView.Index, pagePoint));
         // #131: on a restricted document a click on something the owner does not allow
         // changing opens no editor and selects nothing; the notice says why.
         if (!ViewModel.AllowsInteraction(hit.Kind))
@@ -351,7 +360,8 @@ public sealed partial class DocumentView : UserControl
     {
         if (_activeEditor is not null)
             return false;
-        var hit = await Task.Run(() => ViewModel.HitTestPage(pageView.Index, pagePoint));
+        var viewModel = ViewModel; // UI thread only — see RoutePageActivationAsync (#401)
+        var hit = await Task.Run(() => viewModel.HitTestPage(pageView.Index, pagePoint));
         if (hit.Kind != PageHitKind.TextBox || hit.TextLine is not { } line)
             return false;
         if (!ViewModel.AllowsInteraction(hit.Kind))
