@@ -76,6 +76,12 @@ public static partial class Strings
     /// <summary>PDF document</summary>
     public static string PdfDocumentFilter => Get("PdfDocumentFilter");
 
+    /// <summary>Markdown document</summary>
+    public static string MarkdownDocumentFilter => Get("MarkdownDocumentFilter");
+
+    /// <summary>Couldn't export</summary>
+    public static string CouldNotExportTitle => Get("CouldNotExportTitle");
+
     /// <summary>{0} - edited</summary>
     public static string EditedFileName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("EditedFileName"), arg0);
 
@@ -493,6 +499,9 @@ public static partial class Strings
     /// <summary>Checking the saved file…</summary>
     public static string BusyCheckingSavedFile => Get("BusyCheckingSavedFile");
 
+    /// <summary>Exporting…</summary>
+    public static string BusyExportingMarkdown => Get("BusyExportingMarkdown");
+
     /// <summary>Checking this page…</summary>
     public static string BusyCheckingPage => Get("BusyCheckingPage");
 
@@ -666,6 +675,9 @@ public static partial class Strings
 
     /// <summary>Saved {0}</summary>
     public static string SavedAnnouncement(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SavedAnnouncement"), arg0);
+
+    /// <summary>Exported {0}</summary>
+    public static string ExportedAnnouncement(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ExportedAnnouncement"), arg0);
 
     /// <summary>More options</summary>
     public static string MoreOptions => Get("MoreOptions");

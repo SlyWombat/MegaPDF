@@ -262,6 +262,12 @@
   <data name="PdfDocumentFilter" xml:space="preserve">
     <value>Document PDF</value>
   </data>
+  <data name="MarkdownDocumentFilter" xml:space="preserve">
+    <value>Document Markdown</value>
+  </data>
+  <data name="CouldNotExportTitle" xml:space="preserve">
+    <value>Impossible d'exporter</value>
+  </data>
   <data name="EditedFileName" xml:space="preserve">
     <value>{0} - modifié</value>
   </data>
@@ -743,6 +749,9 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>Vérification du fichier enregistré…</value>
     <comment>Busy strip while the saved bytes are read back (#145)</comment>
   </data>
+  <data name="BusyExportingMarkdown" xml:space="preserve">
+    <value>Exportation…</value>
+  </data>
   <data name="BusyCheckingPage" xml:space="preserve">
     <value>Vérification de cette page…</value>
     <comment>Page spinner while the page check runs before a change (#139, #145)</comment>
@@ -966,6 +975,9 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
   </data>
   <data name="SavedAnnouncement" xml:space="preserve">
     <value>{0} enregistré</value>
+  </data>
+  <data name="ExportedAnnouncement" xml:space="preserve">
+    <value>{0} exporté</value>
   </data>
   <data name="MoreOptions" xml:space="preserve">
     <value>Plus d'options</value>
