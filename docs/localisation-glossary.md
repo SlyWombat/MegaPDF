@@ -132,9 +132,7 @@ Conventions (OQLF, Canadian French):
 | Save changes to {0}? | Enregistrer les modifications de {0}? | |
 | Your changes will be lost if you don't save them. | Vos modifications seront perdues si vous ne les enregistrez pas. | |
 | Restore unsaved changes? | Restaurer les modifications non enregistrées? | |
-| Share | Partager | #378 |
-| Share without saving | Partager sans enregistrer | #378, unsaved-changes alert's non-destructive Share button |
-| This document has unsaved changes. They won't be in the shared copy unless you save first. | Ce document contient des modifications non enregistrées. Elles ne seront pas dans la copie partagée si vous ne l'enregistrez pas d'abord. | #378, unsaved-changes alert's Share-case message |
+| This document has unsaved changes. They won't be in the shared copy unless you save first. | Ce document contient des modifications non enregistrées. Elles ne feront pas partie de la copie partagée si vous ne l'enregistrez pas d'abord. | #378, unsaved-changes alert's Share-case message |
 | Couldn't open that file | Impossible d'ouvrir ce fichier | |
 | This file is too large for MegaPDF to open. | Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir. | #147; *volumineux* for a file's size, never *gros* |
 | Couldn't save | Impossible d'enregistrer | |

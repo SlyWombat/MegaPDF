@@ -2851,13 +2851,13 @@
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce document contient des modifications non enregistrées. Elles ne seront pas dans la copie partagée si vous ne l'enregistrez pas d'abord."
+            "value" : "Ce document contient des modifications non enregistrées. Elles ne feront pas partie de la copie partagée si vous ne l'enregistrez pas d'abord."
           }
         },
         "fr-CA" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ce document contient des modifications non enregistrées. Elles ne seront pas dans la copie partagée si vous ne l'enregistrez pas d'abord."
+            "value" : "Ce document contient des modifications non enregistrées. Elles ne feront pas partie de la copie partagée si vous ne l'enregistrez pas d'abord."
           }
         }
       }
