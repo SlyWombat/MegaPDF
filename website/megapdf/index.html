@@ -56,7 +56,6 @@
         .tagline { font-family: 'Space Grotesk', sans-serif; font-size: 20px; color: var(--accent);
                    letter-spacing: .5px; margin-bottom: 16px; }
         .hero p.sub { color: var(--muted); font-size: 17px; max-width: 54ch; margin-bottom: 28px; }
-        .ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin-top: 18px; }
         .cta {
             display: inline-block; background: var(--accent); color: #061325; font-weight: 700;
             font-size: 15px; padding: 13px 26px; border-radius: 10px; text-decoration: none;
@@ -106,6 +105,8 @@
         .whatsnew { padding: 16px 0 8px; }
         .whatsnew .features { padding-top: 18px; }
         .whatsnew .feature { border-color: rgba(53,182,224,.34); }
+        .whatsnew.prev .feature { border-color: rgba(53,182,224,.16); }
+        .whatsnew.prev h2 { opacity: .8; }
         .gallery { padding: 16px 0 48px; }
         .gallery h2 { font-size: 26px; margin-bottom: 6px; }
         .gallery p.lead { color: var(--muted); margin-bottom: 26px; }
@@ -179,9 +180,6 @@
                     <span class="soon"><span class="where">Coming to</span>Linux</span>
                     linux:end-->
                 </div>
-                <div class="ctas">
-                    <a class="cta ghost" href="https://github.com/SlyWombat/MegaPDF">View the source</a>
-                </div>
             </div>
             <div class="shot">
                 <img src="screenshot-viewer.png"
@@ -222,6 +220,51 @@
                        one undo step, Clear all marks drops every mark at once, and a
                        mark no longer outlives the document it was made on. Nothing is
                        removed until you save.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="whatsnew prev" aria-label="New in MegaPDF 2.0">
+            <h2 class="sec">New in 2.0</h2>
+            <div class="features">
+                <article class="feature">
+                    <h3><span class="dot">■</span> Redact, and it really is gone</h3>
+                    <p>Mark what has to come out — a name, an address, a picture — and
+                       MegaPDF takes it out of the file rather than covering it over.
+                       What was underneath is gone: no other app can copy it or search
+                       for it. On the desktop, whiteout (Cover on the Mac) still only
+                       covers, and now says so.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">✏</span> Fix the document's own text, far more often</h3>
+                    <p>MegaPDF used to refuse a correction when it could not promise the
+                       rest of the page would stay put. It now makes those changes. Over
+                       a 22,000-edit test run, every one of the 112 edits it used to
+                       refuse goes through, and none of them disturbs the page.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">⧉</span> Very large PDFs</h3>
+                    <p>A 2.5 GB file used to take a minute to open and gigabytes of
+                       memory. It now opens straight away. Banner-size pages measure at
+                       their real size, and pages full of pictures draw several times
+                       faster.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🔑</span> Protected PDFs</h3>
+                    <p>Open one with its password. If its owner restricted what may be
+                       changed, MegaPDF respects that and says so, and the owner password
+                       unlocks it. You can also set a password on a document, change it,
+                       or remove it.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">▤</span> One row of tools</h3>
+                    <p>The toolbar is a single row, with the pickers appearing beside the
+                       tool they belong to and everything else under More.</p>
+                </article>
+                <article class="feature">
+                    <h3><span class="dot">🇫🇷</span> MegaPDF speaks French</h3>
+                    <p>Canadian and European French throughout the app. It follows your
+                       device's language.</p>
                 </article>
             </div>
         </section>
@@ -338,7 +381,7 @@
         <div class="wrap">
             <span>© 2026 Electric RV</span>
             <a href="privacy/">Privacy policy</a>
-            <a href="https://github.com/SlyWombat/MegaPDF">GitHub</a>
+            <a href="https://github.com/SlyWombat/MegaPDF">View the source on GitHub</a>
             <a href="/">ElectricRV</a>
         </div>
     </footer>
