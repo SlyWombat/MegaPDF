@@ -60,9 +60,13 @@
 
 namespace {
 
-// Bumped by hand; megapdf-cli ships from #356's platform archives/packages, not from this
-// project's own .csproj version numbers (a native tool has no .NET assembly to match).
-constexpr const char* kVersion = "megapdf-cli 2.2.0-dev";
+// Bumped by hand at each release, alongside the five .csproj/manifest/build.gradle.kts/
+// project.yml version numbers this repo otherwise keeps in sync (#342) — megapdf-cli ships
+// from #356's platform archives/packages, not from this project's own .NET assembly version,
+// so nothing bumps this one automatically. It carries the app's version: the CLI is the
+// same core as the app on the same commit, and the tags that publish it
+// (windows-cli-v*, macos-cli-v*, linux-v*) are cut from the release commit.
+constexpr const char* kVersion = "megapdf-cli 2.1.1";
 
 void PrintUsage(std::FILE* out) {
     std::fprintf(out,
