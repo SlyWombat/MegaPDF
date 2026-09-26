@@ -146,6 +146,29 @@ fi
 apt-cache policy megapdf | sed -n '1,6p' | sed 's/^/     /'
 NO_PRINT_CLIENT="$NORECS" bash /src/tools/linux/package-check.sh /opt/MegaPDF /fixtures "" apt AptRepository || fails=$((fails + 1))
 
+# megapdf-cli, on THIS release's glibc and libstdc++ (#395). The app beside it is .NET's
+# apphost over a core that happened to import nothing new, so it ran everywhere while the
+# CLI, built on the runner's newer toolchain, wanted GLIBC_2.38 and GLIBCXX_3.4.32 and
+# refused to load on Debian 12 and Ubuntu 22.04 -- which nothing in CI noticed, because
+# check-deb.sh runs the CLI on the runner itself and this script never ran it at all.
+# These containers are the only place in CI that an older libc meets the binary.
+echo "-- megapdf-cli runs on this release's libc"
+if v=$(megapdf-cli --version 2>&1) && [ "$v" = "megapdf-cli $(dpkg-query -W -f='${Version}' megapdf | sed 's/-.*//')" ]; then
+    ok "megapdf-cli --version: $v"
+else
+    fail "megapdf-cli --version failed or disagrees with the package: ${v:-no output}"
+fi
+if out=$(megapdf-cli extract /fixtures/demo.pdf --quiet 2>&1) && [ -n "$out" ]; then
+    ok "megapdf-cli extract demo.pdf: $(printf '%s\n' "$out" | wc -l) line(s) of text"
+else
+    fail "megapdf-cli extract produced no text: $(printf '%s\n' "$out" | head -2 | tr '\n' ' ')"
+fi
+if out=$(megapdf-cli extract /fixtures/demo.pdf --format md --quiet 2>&1) && [ -n "$out" ]; then
+    ok "megapdf-cli extract --format md demo.pdf: $(printf '%s\n' "$out" | wc -l) line(s) of Markdown"
+else
+    fail "megapdf-cli extract --format md produced nothing: $(printf '%s\n' "$out" | head -2 | tr '\n' ' ')"
+fi
+
 echo "-- a newer version is published: apt upgrade takes it"
 point r2
 apt-get update -qq >/dev/null 2>&1
