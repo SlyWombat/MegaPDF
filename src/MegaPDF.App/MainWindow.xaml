@@ -438,8 +438,13 @@
         </Border>
 
         <!-- Offscreen host for rendering typed signatures (Segoe Script → bitmap). Window-level,
-             not per tab: no document state involved, just a scratch surface (#348 phase 1). -->
-        <Border x:Name="TypedSignatureHost" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
+             not per tab: no document state involved, just a scratch surface (#348 phase 1).
+
+             Grid.Row="2", the star row, where it lay before #348 (inside the pages grid): as a
+             direct child of RootGrid with no row it landed in row 0, and an Auto row grows to
+             its tallest child — this invisible 64 pt sample became a ~110 px band between the
+             toolbar and the tab strip (#401). -->
+        <Border x:Name="TypedSignatureHost" Grid.Row="2" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Left" VerticalAlignment="Top">
             <!-- 64 is outside the type scale on purpose: this is sample ink at signature
                  size, not UI type. Foreground is the SDD §6.2 contract value, the same
                  #202020 a drawn signature and a check mark are stroked in. -->

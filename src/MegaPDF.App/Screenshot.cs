@@ -122,6 +122,12 @@ internal static class Screenshot
             case "focus":
                 return await CheckToolbarFocusAsync(window);
 
+            // #401: a plain click on a text line opens the inline editor and a click on a
+            // drawn box ticks it — the route a tap, Enter and Space share, which 2.1.1 lost
+            // without a crash or a dialog. Needs a document; the exit code is the test.
+            case "click":
+                return await window.ClickFirstRegionsForTest();
+
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
                 return false;

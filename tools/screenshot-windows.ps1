@@ -55,7 +55,11 @@ $shots = @(
     # #32: zooms until the page overflows both axes, scrolls the hit off screen
     # in both directions, searches, and fails if either axis stays put. It prints
     # the offsets it measured, so the run is the evidence rather than the image.
-    @{ name = "06-find-zoomed";   args = @($pdf, "--screenshot-state", "find-zoomed") }
+    @{ name = "06-find-zoomed";   args = @($pdf, "--screenshot-state", "find-zoomed") },
+    # #401: a plain click on the first text line must open the inline editor and a click
+    # on the first drawn box must tick it. 2.1.1 lost both with no crash and no dialog;
+    # the pose prints PASS/FAIL per check and the exit code fails the run.
+    @{ name = "07-click";         args = @($pdf, "--screenshot-state", "click") }
 )
 
 $Out = (New-Item -ItemType Directory -Force -Path $Out).FullName
