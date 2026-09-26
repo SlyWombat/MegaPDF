@@ -101,21 +101,26 @@ checks, so it is the rehearsal.
 
 ## Where the gallery images come from
 
-All of them are from the **2.0.0 capture sets** measured in
-`docs/release-notes/2.0/capture-gate-report.md` — every set gate-clean and read
-image by image. Nothing here is a mockup or a re-shoot for the website.
+All of them are from the **2.1.1 capture sets** (#395): the store sets in
+`artifacts/store/captures-2.1.1/` (gitignored, on Dave's laptop; read image by
+image on 2026-09-26) and a Linux run of the same day. Nothing here is a mockup
+or a re-shoot for the website. The 2.0 images they replace came from the 2.0.0
+sets measured in `docs/release-notes/2.0/capture-gate-report.md`; every desktop
+one went stale with the 2.1 tab strip (#348).
 
 | File | Source | Size |
 |---|---|---|
-| `shot-viewer/text/search/sign/draw/home.png` | `gate-ios-284/en/listing/iphone-6_9-<state>.png` (1320×2868, the #284 re-shoot) | exactly a third: **440×956** |
-| `screenshot-viewer.png` | `gate-ios-284/en/listing/iphone-6_9-viewer.png` | exactly a half: **660×1434** |
-| `shot-desktop.png` | `gate-macos/en/light-05-redact.png` (1440×900) | exactly two-thirds: **960×600** |
-| `screenshots/linux/{en,fr-CA,fr-FR}/*` | the Xvfb captures of #254 A1 (PR #255), 1280×800 | as captured |
+| `shot-viewer/text/search/sign/draw/home.png` | `captures-2.1.1/ios-screenshots/en/iphone-6_9-<state>.png` (1320×2868) | exactly a third: **440×956** |
+| `screenshot-viewer.png` | `captures-2.1.1/ios-screenshots/en/iphone-6_9-viewer.png` | exactly a half: **660×1434** |
+| `shot-desktop.png` | `captures-2.1.1/macos-screenshots/en/light-05-redact.png` (1440×900) | exactly two-thirds: **960×600** |
+| `screenshots/linux/{en,fr-CA,fr-FR}/*` | `tools/linux/store-captures.sh` on 2026-09-26, from a `tools/build-linux-app.sh` build of main at `0733111`, 1280×800 (PR for #395) | as captured |
 
 The iPhone set is the App Store listing set, so its poses and the captions under
 them are the ones in `docs/app-store-listing.md` § Screenshots. The desktop shot
-is Mac slot #5 and carries that slot's caption. Windows would have done as well;
-the Mac set is the one that is not only on Dave's laptop.
+is Mac slot #5 and carries that slot's caption: since 2.1 the pose is the mark
+*selected*, with the ✕ that removes it at its corner, under the document's tab.
+Windows would have done as well; the Mac set is the one that is not only on
+Dave's laptop.
 
 All eighteen Linux captures are staged, because the AppStream metainfo points at
 every one of them per language. The gallery itself shows **one** —
@@ -125,8 +130,12 @@ than resized into a `shot-linux.png`, so there is one copy of each Linux capture
 and part A stays the only thing that writes them.
 
 Refresh them by re-running the capture sets (the **iOS Screenshots** workflow for
-iPhone, `tools/macos-store-captures.sh` for the Mac) and resizing with
-`convert <src> -filter Lanczos -resize <w>x<h>! -strip`.
+iPhone, `tools/macos-store-captures.sh` for the Mac, `tools/linux/store-captures.sh`
+per language for Linux) and resizing with
+`convert <src> -filter Lanczos -resize <w>x<h>! -strip`. The Linux captures are
+copied in as they are. Render the pages afterwards the way
+`docs/release-notes/2.1.1/website-renders/` was made (headless Chromium at 1280
+and 390, the 390 render tiled into 1300 px columns) and look at them.
 
 ## Store URLs, and the 200 check
 
