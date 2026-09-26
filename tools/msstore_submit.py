@@ -43,7 +43,7 @@ APP_ID = "9PF4TRRH4M76"          # Store ID of "Mega PDF"
 TITLE = "Mega PDF"               # must match the name reserved in Partner Center
 API = "https://manage.devcenter.microsoft.com/v1.0/my"
 RESOURCE = "https://manage.devcenter.microsoft.com"
-VERSION = "2.1.0.0"
+VERSION = "2.1.1.0"
 REPO = Path(__file__).resolve().parent.parent
 
 # Partner Center listing language -> the screenshot set and the release-notes block
@@ -58,11 +58,14 @@ LIMITS = {"description": 10000, "shortDescription": 1000, "releaseNotes": 1500,
           "keywordWords": 21, "caption": 200, "copyright": 200}
 
 CERT_NOTES = (
-    "MegaPDF 2.1 is a local PDF editor: no account, no sign-in, no network use. "
+    "MegaPDF 2.1.1 is a local PDF editor: no account, no sign-in, no network use. "
     "To try it, open any PDF with the toolbar's Open button (Ctrl+O), or double-click a "
-    ".pdf once MegaPDF is the default app. Click text to edit it, click an empty square "
+    ".pdf once MegaPDF is the default app. Open a second PDF and it appears as a tab in "
+    "the same window (Ctrl+W closes a tab). Click text to edit it, click an empty square "
     "to tick it, use Redact on the toolbar to mark a name (click the mark to select, move "
-    "or remove it), and Save. This update replaces the 2.0 x64 and ARM64 packages."
+    "or remove it), and Save. Save As offers Markdown document as well as PDF document: "
+    "the Markdown file is a text export and leaves the PDF unchanged. This update "
+    "replaces the 2.1.0 x64 and ARM64 packages."
 )
 
 

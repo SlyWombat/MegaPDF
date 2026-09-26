@@ -31,12 +31,16 @@ from gen_strings import to_france  # noqa: E402
 sys.path.insert(0, str(ROOT / "docs/release-notes/2.0"))
 from fix_french_spacing import space_before  # noqa: E402
 
-RELEASE_NOTES = ROOT / "docs/release-notes/2.0"
+# The release whose What's New the listings carry. docs/release-notes/<version>/ is
+# the record; its check_copy.py copies the four store files into the folder the
+# submission tools read (2.1.1 -> docs/release-notes/2.1/, #395).
+NOTES_VERSION = "2.1.1"
+RELEASE_NOTES = ROOT / "docs/release-notes" / NOTES_VERSION
 
 
 def release_block(name: str, language: str) -> str:
-    """The first counted block in `language`'s section of a 2.0 store-copy file, so the
-    listing's What's new is the 2.0 text itself rather than a second copy of it."""
+    """The first counted block in `language`'s section of the release's store-copy file, so
+    the listing's What's new is that text itself rather than a second copy of it."""
     text = (RELEASE_NOTES / name).read_text(encoding="utf-8")
     section = text.split(f"\n## {language}", 1)[1]
     return re.search(r"\*\*[^*]+\*\*\s*\[\d+\]\s*\(\d+\)\s*\n\n```\n(.*?)\n```", section, re.S).group(1)
@@ -59,9 +63,9 @@ CHECK BOXES — Click an empty square and it becomes a checked box. Forms that w
 
 APPLY SIGNATURES — Keep a small personal library of signature images. Pick one and click where it goes. Move it, nudge it, resize it until it sits exactly right.
 
-SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises.
+SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises. Save As can also write the document's text — headings, lists, the values you filled in — as a Markdown file, leaving the PDF untouched.
 
-Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression).
+Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a double-click in File Explorer joins the window you already have.
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
@@ -74,6 +78,8 @@ MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
         "Place a signature from your personal library with a click, then nudge and resize it",
         "Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them",
         "Save overwrites, Save As copies — no export wizards or flatten dialogs",
+        "Open several PDFs as tabs in one window — a double-click in File Explorer joins the window you already have",
+        "Save As writes the document's text as Markdown: headings, lists and filled-in values, with the PDF untouched",
         "Shrink oversized scans for email with one click",
         "Print directly from the app",
         "100% local processing: no account, no cloud, no subscription, no telemetry",
@@ -104,9 +110,9 @@ COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. 
 
 APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images de signature. Choisissez-en une et cliquez à l'endroit voulu. Déplacez-la, ajustez-la, redimensionnez-la jusqu'à ce qu'elle soit exactement à sa place.
 
-ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
+ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise. Enregistrer sous peut aussi écrire le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, sans toucher au PDF.
 
-Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG).
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
@@ -119,6 +125,8 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
         "Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la",
         "Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant",
         "Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement",
+        "Ouvrez plusieurs PDF dans les onglets d'une même fenêtre : un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà",
+        "Enregistrer sous écrit le texte du document en Markdown : titres, listes et valeurs remplies, sans toucher au PDF",
         "Réduisez les numérisations trop lourdes pour le courriel en un clic",
         "Imprimez directement depuis l'application",
         "Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie",
@@ -163,7 +171,7 @@ Sign like you mean it
 Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
 
 Save without fear
-Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy.
+Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was.
 
 Find any word
 Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a few taps away.
@@ -172,7 +180,7 @@ Private by design
 MegaPDF requests zero permissions and makes zero network connections. Your documents and your signature never leave your device — there is no server for them to go to. The app is open source, so anyone can verify that.
 
 Works with everything
-Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app.
+Open a PDF from Mail, Files, iCloud Drive or any app that shares one — MegaPDF is among the apps they offer to open it in — and send it back with Share. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app.
 
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.""",
     "keywords": "pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign",
@@ -213,7 +221,7 @@ Signez pour de vrai
 Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
@@ -222,7 +230,7 @@ Confidentiel par conception
 MegaPDF ne demande aucune permission et n'établit aucune connexion réseau. Vos documents et votre signature ne quittent jamais votre appareil : il n'y a aucun serveur où ils pourraient aller. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Compatible avec tout
-Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
+Ouvrez un PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui en partage un (MegaPDF fait partie des applications qu'elles proposent pour l'ouvrir) et renvoyez-le avec Partager. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
     "keywords": "pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter",
@@ -268,7 +276,7 @@ Sign like you mean it
 Draw your signature with the trackpad or mouse, type it, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your Mac; drop one onto any document, move and resize it until it sits right on the line.
 
 Save without fear
-Double-click a PDF in the Finder and Save writes back to that file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Closing or quitting with unsaved changes always asks first.
+Double-click a PDF in the Finder and Save writes back to that file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy — or, from the same Save As panel, a Markdown file of the document's text, with the PDF left as it was. Closing or quitting with unsaved changes always asks first.
 
 Find any word
 Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a keystroke away.
@@ -280,7 +288,7 @@ Private by design
 MegaPDF makes zero network connections — its sandbox does not even allow them — and opens only the files you choose. Your documents and your signature never leave your Mac. The app is open source, so anyone can verify that.
 
 At home on the Mac
-Every command is in the menu bar with the keyboard shortcut you expect. VoiceOver reads the toolbar and the page, and the app follows your Mac's light or dark appearance. Documents you fill and sign here are standard PDFs: they open perfectly in Preview and any other PDF app.
+Every command is in the menu bar with the keyboard shortcut you expect. Documents open as tabs in one window, and a PDF opened from the Finder joins the window you already have. VoiceOver reads the toolbar and the page, and the app follows your Mac's light or dark appearance. Documents you fill and sign here are standard PDFs: they open perfectly in Preview and any other PDF app.
 
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.""",
 }
@@ -307,7 +315,7 @@ Signez pour de vrai
 Dessinez votre signature au pavé tactile ou à la souris, tapez-la, ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre Mac; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Double-cliquez sur un PDF dans le Finder, et Enregistrer écrit dans ce fichier, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
+Double-cliquez sur un PDF dans le Finder, et Enregistrer écrit dans ce fichier, en toute sécurité. MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, ou un fichier Markdown de son texte, le PDF restant tel quel. Fermer ou quitter avec des modifications non enregistrées demande toujours d'abord.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à une touche près.
@@ -319,7 +327,7 @@ Confidentiel par conception
 MegaPDF n'établit aucune connexion réseau (son bac à sable ne le lui permet même pas) et n'ouvre que les fichiers que vous choisissez. Vos documents et votre signature ne quittent jamais votre Mac. L'application est un logiciel libre; n'importe qui peut le vérifier.
 
 Chez lui sur le Mac
-Chaque commande est dans la barre des menus, avec le raccourci clavier attendu. VoiceOver lit la barre d'outils et la page, et l'application suit l'apparence claire ou sombre de votre Mac. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans Aperçu et dans toute autre application PDF.
+Chaque commande est dans la barre des menus, avec le raccourci clavier attendu. Les documents s'ouvrent dans les onglets d'une même fenêtre, et un PDF ouvert depuis le Finder rejoint celle que vous avez déjà. VoiceOver lit la barre d'outils et la page, et l'application suit l'apparence claire ou sombre de votre Mac. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans Aperçu et dans toute autre application PDF.
 
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.""",
 }
@@ -331,22 +339,24 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 # Apple rejects a description that names another platform (2.3.10, c1b0a4a), so
 # the App Store copy above names none; Play's "Works with everything" paragraph
 # is its own, and may.
-WORKS_EN_AS = "Open PDFs from Mail, Files, iCloud Drive, or any app that shares files. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app."
-WORKS_EN_PLAY = "Open PDFs from Files, Google Drive, or any storage app through MegaPDF's file picker. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows, Mac and iOS — same engine, same result, on every platform."
-WORKS_FR_CA_AS = "Ouvrez des PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui partage des fichiers. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF."
-WORKS_FR_CA_PLAY = "Ouvrez des PDF depuis Fichiers, Google Drive ou toute application de stockage, avec le sélecteur de fichiers de MegaPDF. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes."
+WORKS_EN_AS = "Open a PDF from Mail, Files, iCloud Drive or any app that shares one — MegaPDF is among the apps they offer to open it in — and send it back with Share. Documents you fill and sign here are standard PDFs: they open perfectly in any other PDF app."
+WORKS_EN_PLAY = "Open a PDF from Files, Google Drive, Gmail or any app that hands one over — MegaPDF is in their Open with list — or through MegaPDF's own file picker, and send it back with Share. Documents you fill and sign here open perfectly in Adobe Acrobat, desktop PDF apps, and MegaPDF for Windows, Mac and iOS — same engine, same result, on every platform."
+WORKS_FR_CA_AS = "Ouvrez un PDF depuis Mail, Fichiers, iCloud Drive ou toute application qui en partage un (MegaPDF fait partie des applications qu'elles proposent pour l'ouvrir) et renvoyez-le avec Partager. Les documents remplis et signés ici sont des PDF standard : ils s'ouvrent parfaitement dans toute autre application PDF."
+WORKS_FR_CA_PLAY = "Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en remet un (MegaPDF est dans leur liste Ouvrir avec), ou avec le sélecteur de fichiers de MegaPDF, et renvoyez-le avec Partager. Les documents remplis et signés ici s'ouvrent parfaitement dans Adobe Acrobat, dans les applications PDF de bureau, et dans MegaPDF pour Windows, Mac et iOS : même moteur, même résultat, sur toutes les plateformes."
 
 # What the Android app does differently from the iPhone one, checked against the code
-# (2026-09-19 independent Play audit): no "Open with"/share-sheet entry (no VIEW or SEND
-# intent filter, so PDFs come in through the picker), signatures from the photo picker
-# rather than the camera, typed signatures, and a merged signature-level androidx
-# permission that the user is never asked for. Each pair must match exactly once.
+# (2026-09-19 independent Play audit, re-read for 2.1.1): since #376 and #378 both
+# phones open a PDF handed over by another app and share one back, so that paragraph
+# differs only in which apps it names; signatures come from the photo picker rather
+# than the camera, can be typed, and a merged signature-level androidx permission is
+# never asked for; the Markdown export is a type choice in Save a copy's own picker
+# (#386), not a separate "Export as Markdown" row. Each pair must match exactly once.
 PLAY_EN_SWAPS = [
     (WORKS_EN_AS, WORKS_EN_PLAY),
     ("Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically.",
      "Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically."),
-    ("Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy.",
-     "Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. You can also protect a document with a password, or remove one you know."),
+    ("Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was.",
+     "Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy — as a PDF, or as a Markdown file of the document's text (headings, lists, the values you filled in) that leaves the PDF as it was. You can also protect a document with a password, or remove one you know."),
     ("MegaPDF requests zero permissions and makes zero network connections.",
      "MegaPDF asks you for no permissions and makes no network connections."),
 ]
@@ -354,8 +364,8 @@ PLAY_FR_CA_SWAPS = [
     (WORKS_FR_CA_AS, WORKS_FR_CA_PLAY),
     ("Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement.",
      "Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement."),
-    ("MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie.",
-     "MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez."),
+    ("MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel.",
+     "MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, en PDF ou dans un fichier Markdown du texte du document (titres, listes, les valeurs que vous avez remplies) qui laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez."),
     ("MegaPDF ne demande aucune permission et n'établit aucune connexion réseau.",
      "MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau."),
 ]
@@ -441,7 +451,7 @@ def as_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**Promotional text** [170] ({len(c['promo'])})\n" + block(c["promo"]))
     parts.append(f"**Description** [4000] ({len(c['description'])})\n" + block(c["description"]))
     parts.append(f"**Keywords** [100] ({len(c['keywords'])})\n" + block(c["keywords"]))
-    parts.append(f"**What's new** [4000] ({len(c['whatsnew'])}) — 2.0, from `docs/release-notes/2.0/app-store.md`\n"
+    parts.append(f"**What's new** [4000] ({len(c['whatsnew'])}) — {NOTES_VERSION}, from `docs/release-notes/{NOTES_VERSION}/app-store.md`\n"
                  + block(c["whatsnew"]))
     parts.append("**Screenshot captions** (optional overlay text), iPhone 6.9\" and iPad 13\" in this order\n"
                  + block("\n".join(f"{f}: {cap}" for f, cap in c["captions"])))
@@ -464,7 +474,7 @@ def play_section(title: str, tag: str, c: dict, note: str = "") -> str:
     parts.append(f"**Title** [30] ({len(c['title'])})\n" + block(c["title"]))
     parts.append(f"**Short description** [80] ({len(c['short'])})\n" + block(c["short"]))
     parts.append(f"**Full description** [4000] ({len(c['description'])})\n" + block(c["description"]))
-    parts.append(f"**Release notes** [500] ({len(c['notes'])}) — 2.0, from `docs/release-notes/2.0/google-play.md`\n"
+    parts.append(f"**Release notes** [500] ({len(c['notes'])}) — {NOTES_VERSION}, from `docs/release-notes/{NOTES_VERSION}/google-play.md`\n"
                  + block(c["notes"]))
     return "\n".join(p for p in parts if p)
 
@@ -517,7 +527,9 @@ AS_BODY = "\n".join([
     REVIEW_NOTE,
     as_section("English (Canada)", "en-CA", AS_EN),
     as_section("Français (Canada)", "fr-CA", canada(AS_FR_CA)),
-    # The 2.0 What's new carries hand-made France wording (#242), so it is read, not derived.
+    # The France What's new is read from the release file, not derived here, so that a
+    # hand-made France wording there (#242) survives; since 2.1.1 that file's own
+    # check_copy.py derives it the same way this script derives the rest.
     as_section("Français", "fr", {**derive(AS_FR_CA), "whatsnew": release_block("app-store.md", "Français (France)")}),
     mac_section("English (Canada)", "en-CA", AS_MAC_EN),
     mac_section("Français (Canada)", "fr-CA", canada(AS_MAC_FR_CA)),

@@ -39,16 +39,16 @@ CHECK BOXES — Click an empty square and it becomes a checked box. Forms that w
 
 APPLY SIGNATURES — Keep a small personal library of signature images. Pick one and click where it goes. Move it, nudge it, resize it until it sits exactly right.
 
-SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises.
+SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises. Save As can also write the document's text — headings, lists, the values you filled in — as a Markdown file, leaving the PDF untouched.
 
-Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression).
+Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a double-click in File Explorer joins the window you already have.
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 10 boxes
+**App features** — one line per box, 12 boxes
 ```
 Edit the document's own text by clicking and typing — like a Word document
 Redact names, addresses and pictures: taken out of the file, not just covered over
@@ -57,6 +57,8 @@ Click empty squares to check boxes on any form
 Place a signature from your personal library with a click, then nudge and resize it
 Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
 Save overwrites, Save As copies — no export wizards or flatten dialogs
+Open several PDFs as tabs in one window — a double-click in File Explorer joins the window you already have
+Save As writes the document's text as Markdown: headings, lists and filled-in values, with the PDF untouched
 Shrink oversized scans for email with one click
 Print directly from the app
 100% local processing: no account, no cloud, no subscription, no telemetry
@@ -111,16 +113,16 @@ CHECK BOXES — Click an empty square and it becomes a checked box. Forms that w
 
 APPLY SIGNATURES — Keep a small personal library of signature images. Pick one and click where it goes. Move it, nudge it, resize it until it sits exactly right.
 
-SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises.
+SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises. Save As can also write the document's text — headings, lists, the values you filled in — as a Markdown file, leaving the PDF untouched.
 
-Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression).
+Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a double-click in File Explorer joins the window you already have.
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
 MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 10 boxes
+**App features** — one line per box, 12 boxes
 ```
 Edit the document's own text by clicking and typing — like a Word document
 Redact names, addresses and pictures: taken out of the file, not just covered over
@@ -129,6 +131,8 @@ Click empty squares to check boxes on any form
 Place a signature from your personal library with a click, then nudge and resize it
 Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them
 Save overwrites, Save As copies — no export wizards or flatten dialogs
+Open several PDFs as tabs in one window — a double-click in File Explorer joins the window you already have
+Save As writes the document's text as Markdown: headings, lists and filled-in values, with the PDF untouched
 Shrink oversized scans for email with one click
 Print directly from the app
 100% local processing: no account, no cloud, no subscription, no telemetry
@@ -181,16 +185,16 @@ COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. 
 
 APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images de signature. Choisissez-en une et cliquez à l'endroit voulu. Déplacez-la, ajustez-la, redimensionnez-la jusqu'à ce qu'elle soit exactement à sa place.
 
-ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
+ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise. Enregistrer sous peut aussi écrire le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, sans toucher au PDF.
 
-Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG).
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 10 boxes
+**App features** — one line per box, 12 boxes
 ```
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
@@ -199,6 +203,8 @@ Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
 Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
 Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
+Ouvrez plusieurs PDF dans les onglets d'une même fenêtre : un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà
+Enregistrer sous écrit le texte du document en Markdown : titres, listes et valeurs remplies, sans toucher au PDF
 Réduisez les numérisations trop lourdes pour le courriel en un clic
 Imprimez directement depuis l'application
 Traitement 100 % local : pas de compte, pas d'infonuagique, pas d'abonnement, pas de télémétrie
@@ -251,16 +257,16 @@ COCHER DES CASES — Cliquez sur un carré vide et il devient une case cochée. 
 
 APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images de signature. Choisissez-en une et cliquez à l'endroit voulu. Déplacez-la, ajustez-la, redimensionnez-la jusqu'à ce qu'elle soit exactement à sa place.
 
-ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise.
+ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise. Enregistrer sous peut aussi écrire le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, sans toucher au PDF.
 
-Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour l'e-mail en un clic (sous-échantillonnage des images et recompression JPEG).
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour l'e-mail en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas de cloud. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais envoyé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
 MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF
 ```
 
-**App features** — one line per box, 10 boxes
+**App features** — one line per box, 12 boxes
 ```
 Modifiez le texte du document lui-même en cliquant et en tapant, comme dans un document Word
 Caviardez noms, adresses et images : retirés du fichier, pas seulement recouverts
@@ -269,6 +275,8 @@ Cliquez sur les carrés vides pour cocher les cases de n'importe quel formulaire
 Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la
 Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant
 Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement
+Ouvrez plusieurs PDF dans les onglets d'une même fenêtre : un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà
+Enregistrer sous écrit le texte du document en Markdown : titres, listes et valeurs remplies, sans toucher au PDF
 Réduisez les numérisations trop lourdes pour l'e-mail en un clic
 Imprimez directement depuis l'application
 Traitement 100 % local : pas de compte, pas de cloud, pas d'abonnement, pas de télémétrie
