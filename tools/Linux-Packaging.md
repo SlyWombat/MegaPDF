@@ -52,9 +52,29 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 | `tools/linux/snap/make-snapcraft-yaml.py` | fills it in, replacing the one metainfo paragraph that is only true of the Flatpak. |
 | `tools/linux/build-snap.sh` | the snap, from that tree, with `snapcraft pack --destructive-mode` (Ubuntu 24.04 only). |
 | `tools/linux/check-snap.sh` | installs the snap and drives the app under strict confinement: what it can and cannot reach, a save at the top of the home folder, the portal dialogs, printing, French, and what AppArmor refused. |
+| `tools/linux/check-single-instance.sh` | the tabs' single-instance handshake (#348), against the real GUI binary under a display: a first launch listens, a second launch with another file hands its path over the socket and exits 0, and the process count stays at one. |
 
 CI builds both on every push (`linux-package` in `ci.yml`) and attaches them to the run
 as `MegaPDF-linux-packages`.
+
+## One instance, tabs (#348)
+
+Since 2.1.1 a second `megapdf file.pdf` — a file manager's Open With, a terminal, a
+double-click — does not start a second process: `Platform/SingleInstance.cs` listens on a
+Unix socket at `$XDG_RUNTIME_DIR/megapdf.sock` (falling back to the app's own data folder),
+a later launch connects, sends its absolute paths one per line, waits for a one-byte
+acknowledgement and exits 0, and the running instance opens each as a tab — or activates
+the tab that already shows that file. Diagnostic and capture launches (`--self-test`,
+`--screenshot`, `--story`, `--desktop-check`, the checks below) never register and never
+redirect, so a rig beside a live app is unaffected. Inside the Flatpak and the snap the
+runtime directory is per app id and shared by that app's instances, so the socket works
+there too; `check-flatpak.sh` and `check-snap.sh` do not exercise it (no display), and
+`check-single-instance.sh` does, against the real binary.
+
+Packaging-side that is one line: `megapdf.desktop`'s `Exec=megapdf %F` (several files, was
+`%f`), which `ci.yml`'s desktop-entry check expects. `SingleMainWindow=false` stays, because
+File → New Window is real. Nothing in the `.deb`, the tarball, the Flatpak manifest or the
+snap needed changing.
 
 ## megapdf-cli (#142, #356)
 
