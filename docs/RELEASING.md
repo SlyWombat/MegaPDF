@@ -23,11 +23,12 @@ it happens, because the consoles are reachable from nowhere else in this repo.
 
 ## 1. What a release is
 
-**A release is a milestone closed, not a tag pushed.** 2.1.0 went to every store on
-2026-09-21 with the 2.1 milestone still open; five days later nobody could say whether
-the next build was "2.1 finished" or something new, and it took a morning to re-home the
-milestone before 2.1.1 could start. The version tags are how each channel is *built*; the
-release is done when the checklist issue is closed and the milestone with it.
+**A release is the checklist issue closed, not a tag pushed.** The version tags are how
+each channel is *built*; the release is done when every channel has been read back from
+the outside and the checklist issue says so. The milestone is Dave's: it stays the
+working milestone until he opens the next one, and nothing is moved out of it or into a
+"next" milestone to make a release look finished (2026-09-26: a morning spent re-homing
+issues into a 2.2 that had not been started, then moving them all back).
 
 **One version everywhere, and it must be higher than what every store holds.** Each
 store refuses a version at or below its live one, so if one store is a version ahead
@@ -300,7 +301,7 @@ gh release view linux-v<x.y.z> --json assets -q '.assets[].name'      # and the 
 Then the close-out, all of it:
 
 - the checklist issue's last comment says what went live where, with ids and hashes;
-- the **milestone is closed** (`gh api -X PATCH repos/SlyWombat/MegaPDF/milestones/<n> -f state=closed`) and anything left in it moved to the next one first;
+- the checklist issue is closed; the milestone is left exactly as it is — opening or closing one is Dave's call;
 - a handoff memory (what shipped, what was deferred, what bit);
 - **machines left as found**: the WACK task deleted, no test package or window left on
   GPD-DAVE, the Mac mini's and kdocker2's `~/megapdf-work/<task>/` gone, every agent
