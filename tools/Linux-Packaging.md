@@ -33,6 +33,7 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 | `tools/build-linux-app.sh` | the self-contained publish: apphost, both native libraries, desktop entry, icons, licences, notices, install/uninstall scripts. Everything else wraps this. |
 | `tools/linux/build-flatpak.sh` | the Flatpak, from that tree. Validates the desktop entry and the metainfo first, exports an ostree repo, writes a single-file bundle. |
 | `tools/linux/build-deb.sh` | the `.deb`, from that tree. For GitHub Releases. |
+| `tools/linux/megapdf-cli.1` | the `megapdf-cli(1)` manual page (troff). Its OPTIONS and EXIT STATUS are `core/cli/megapdf_cli.cpp`'s `--help` text, kept in step by hand. |
 | `tools/linux/package-check.sh` | what any package must be true of. Run against whatever a package installed. |
 | `tools/linux/check-flatpak.sh` | installs the bundle and drives the app inside the sandbox. |
 | `tools/linux/check-deb.sh` | installs the `.deb` on a bare machine, runs the app out of it, removes it again. |
@@ -79,6 +80,34 @@ directory once the symlink is followed — so it still finds `libmegapdf_core.so
 `tools/linux/check-deb.sh`, `check-flatpak.sh` and `check-snap.sh` each run
 `extract` against a fixture through their own invocation above, so a change that breaks
 any one of them fails in CI (`linux-package` in `ci.yml`, `snap.yml`).
+
+### The manual page (#395)
+
+`man megapdf-cli` works from the `.deb` and from the tarball's `install.sh`. The page
+is `tools/linux/megapdf-cli.1`, hand-written troff whose OPTIONS and EXIT STATUS
+sections are the `--help` block and the exit-code list in `core/cli/megapdf_cli.cpp`,
+option for option — **when either changes there, change the page in the same commit**;
+nothing generates it, and `build-linux-app.sh` only checks the one drift that is easy to
+miss, the `.TH` line's `"MegaPDF <version>"` against the tree's version.
+
+| where | path | how |
+|---|---|---|
+| the tree / tarball | `share/man/man1/megapdf-cli.1` | uncompressed, so `man -l` reads it straight out of an unpacked tree |
+| `install.sh` | `$PREFIX/share/man/man1/megapdf-cli.1` | man-db maps `~/.local/bin` to `~/.local/share/man` (manpath(5)), so no `MANPATH` is needed |
+| `.deb` | `/usr/share/man/man1/megapdf-cli.1.gz` | `gzip -9n`, as Debian policy §12.1 asks and lintian checks; the control file's `Description:` has a paragraph on the CLI that points at it |
+| Flatpak, snap | not installed | neither bundle exports `share/man` to the host, and neither runtime carries `man`, so a page inside the bundle is reachable by nobody. `flatpak run --command=megapdf-cli … --help` and `megapdf.cli --help` are the help there |
+
+Check it with `man -l tools/linux/megapdf-cli.1` and `groff -man -z -ww
+tools/linux/megapdf-cli.1` (or `mandoc -Tlint`). The file is plain ASCII on purpose:
+lintian runs groff without `-K utf8`, and a UTF-8 dash is two warnings per byte there.
+
+**The dpkg trap, again.** The same `path-exclude` that discards `/usr/share/doc` on every
+Debian and Ubuntu container image (below) also lists `/usr/share/man/*`, so in a stock
+container the page is not unpacked and `man megapdf-cli` says there is none, while
+`dpkg -L megapdf` lists it. `check-deb.sh` reports which of the two happened rather than
+failing; to see the page render in a container, remove the `path-exclude` on
+`/usr/share/man` from `/etc/dpkg/dpkg.cfg.d/` (the `ubuntu:24.04` image ships it as
+`excludes`) and `apt install man-db` before installing the package.
 
 ## Building them by hand
 
@@ -214,6 +243,34 @@ what someone who has just downloaded a file from a Releases page will double cli
 
 ---
 
+## The oldest system the package runs on, and how that is enforced (#395)
+
+The `.deb` declares `libc6 (>= 2.35)` (Ubuntu 22.04) and no libstdc++ version, and the
+APT check installs on Debian 12 (glibc 2.36, libstdc++ 12 = `GLIBCXX_3.4.30`). The
+native binaries are built on `ubuntu-latest` — glibc 2.39, GCC 13 — and a binary built
+there can quietly import a symbol version the older systems lack: **megapdf-cli did**,
+in the 2.1.1 release tree as CI built it (`__isoc23_strtol`, `GLIBC_2.38`, from
+`std::strtol`/`std::atoi` under glibc 2.38's headers; `std::ios_base_library_init`,
+`GLIBCXX_3.4.32`, from `#include <iostream>` with GCC 13's libstdc++). The .deb installed
+on Debian 12, the app ran, and `megapdf-cli --version` said `version GLIBC_2.38 not
+found`. The app beside it was fine only because the core happens to call neither.
+
+Two things now hold the line:
+
+- **`build-linux-app.sh` reads every ELF in the tree** (`objdump -T`) and refuses one
+  that imports above `GLIBC_2.35` or `GLIBCXX_3.4.30`. Measured on the 2.1.1 tree: the
+  apphost 2.16 / 3.4.21, libpdfium.so 2.16, libSkiaSharp.so 2.17, libHarfBuzzSharp.so
+  2.14, libmegapdf_core.so 2.35 / 3.4.30, megapdf-cli (fixed) 2.34 / 3.4.29.
+- **`check-apt-repo.sh` runs `megapdf-cli --version` and two `extract`s** (txt and md, on
+  `demo.pdf`) inside each of its containers — Debian 12 and 13, Ubuntu 22.04, 24.04 and
+  26.04 — which is the only place in CI an older libc meets the binary (`check-deb.sh`
+  runs it on the runner). That is the `linux-release.yml` tarball job, on every PR that
+  touches the packaging and on every tag.
+
+If the ceiling has to move (a real need for a newer symbol), move `libc6 (>= …)` in
+`build-deb.sh`, the two constants in `build-linux-app.sh`, and drop the distributions
+that can no longer install from `check-apt-repo.sh`'s list — in that order, on purpose.
+
 ## Two things a packager must not do
 
 1. **Do not unbundle PDFium.** The app carries its own build with 25 MegaPDF patches
@@ -253,9 +310,15 @@ this being a bundled third-party package rather than one for the Debian archive.
 | `embedded-library` (freetype, libpng, libjpeg, expat, lcms2, openjpeg) | Deliberate. They are inside PDFium and SkiaSharp, which are upstream binaries; unbundling them means building both from source, and for PDFium it means losing the patches. |
 | `unstripped-binary-or-object` | Deliberate. Stripping the engine would ship a binary that is not the one the corpus batteries ran against. |
 | `no-changelog` | Not a Debian-archive package; the release notes are in `docs/release-notes/`. |
-| `copyright-file-contains-full-apache-2-license` | The `copyright` file is the project's `LICENSE` verbatim, which is the honest thing for a package that is not in the archive to ship. |
-| `no-manual-page` | Fair. There is no man page. |
+| `copyright-file-contains-full-apache-2-license`, `copyright-not-using-common-license-for-apache2`, `copyright-without-copyright-notice` | The `copyright` file is the project's `LICENSE` verbatim, which is the honest thing for a package that is not in the archive to ship; the archive's `/usr/share/common-licenses` shortcut is for packages in it. |
+| `no-manual-page` (`megapdf`) | Fair for the desktop app, which has no page. `megapdf-cli` has had one since 2.1.1 (#395), so the tag names only `usr/bin/megapdf`. |
 | `custom-library-search-path` | **This one was real** and is fixed: the shipped `libmegapdf_core.so` carried the build machine's own directory in its runpath. |
+| `executable-not-elf-or-script`, `executable-in-usr-share-doc` | **Would be real**, and are now prevented: a tree built from a checkout on a Windows-mounted filesystem (WSL) inherits 0777 on every file. `build-linux-app.sh` and `build-deb.sh` set the modes themselves (0644 everywhere, 0755 for the four things that run), so the tags cannot recur. |
+
+The 2.1.1 `.deb` built on 2026-09-26 shows exactly the first six rows and nothing else
+(`lintian --tag-display-limit 0`: 9 `dir-or-file-in-opt`, 7 `embedded-library`, 3
+`unstripped-binary-or-object`, `no-manual-page [usr/bin/megapdf]`, `no-changelog`, and
+the three copyright tags).
 
 ---
 
@@ -381,6 +444,20 @@ name. Instead:
    `website/megapdf/apt/`, and deploy the Linux parts as on "the day".
 
 The metainfo's `<releases>` lists app versions, so a revision adds no entry there.
+
+**When the app moves to a new version, reset the file to `<new version> 1`** (#395). A
+revision of 1 means no suffix, so the packages are simply `<new version>`; leaving the
+old line there is harmless to `package-version.sh` (it ignores a line for another
+version) but reads as if the old revision still applied. `tools/linux/package-version.sh
+<version>` prints what the tag must be called: `linux-v$(tools/linux/package-version.sh
+2.1.1)` is `linux-v2.1.1`, and the tag build refuses any other name (`linux-release.yml`,
+"The tag matches the version").
+
+**The metainfo's newest `<release>` must be the app version, dated within the last 30
+days and not in the future**, or `make-release-tarball.sh` — the tag build's second step
+— refuses. Add the entry with the release's date when the version is bumped; if the tag
+comes later than a month after, re-date it. `STALE_AFTER_DAYS` widens the window for a
+rehearsal.
 
 **2.0.0-2** (2026-09-19) was the first: Ubuntu 26.04's `libicu78` was missing from the
 Depends line so the .deb wouldn't install there (#315); libssl was undeclared, so a

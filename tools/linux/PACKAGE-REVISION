@@ -5,8 +5,11 @@
 # so the new package has a version of its own and never replaces the published files
 # of the same name. It applies only while the app version matches: once the csproj
 # moves to a new version, packages are that version again with no suffix, whatever
-# this file says. tools/linux/package-version.sh reads it.
+# this file says. tools/linux/package-version.sh reads it. A revision of 1 means "no
+# suffix": it is how this file is reset when the app moves on, so it never misleads
+# (#395: 2.1.1 shipped with "2.0.0 2" still here, which package-version.sh ignored
+# correctly but a person reading the file would not).
 #
-# 2.0.0-2 (2026-09-19): Ubuntu 26.04's libicu78, a declared libssl, Installed-Size,
-# and AppStream metainfo for software centres (#315-#318).
-2.0.0 2
+# History: 2.0.0-2 (2026-09-19): Ubuntu 26.04's libicu78, a declared libssl,
+# Installed-Size, and AppStream metainfo for software centres (#315-#318).
+2.1.1 1
