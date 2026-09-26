@@ -106,9 +106,10 @@ def derive_long_form(text: str) -> str:
     note = re.match(r"\s*(?:>.*\n)+\n", body)
     if not note:
         raise SystemExit(f"{LONG_FORM}: the France section must open with a `>` note")
-    canada = text[ca_start:ca_end].strip("\n")
+    canada = space_before(text[ca_start:ca_end].strip("\n"), ":")
     france = space_before(to_france(canada), ":?!;")
-    return text[:fr_start] + body[:note.end()] + france + "\n" + text[fr_end:]
+    return (text[:ca_start] + "\n" + canada + "\n\n" + text[ca_end:fr_start]
+            + body[:note.end()] + france + "\n" + text[fr_end:])
 
 
 def report(text: str, name: str) -> None:
