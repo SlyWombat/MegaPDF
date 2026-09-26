@@ -1313,21 +1313,28 @@ int RunDiagBaseline(const std::vector<std::string>& pdfs) {
 // otherwise leaves this process -- same corpus-privacy discipline as every mode above):
 //   - SHORT: at most kShortTextChars UTF-16 code units in the block's whole text (a rough,
 //     surrogate-pair-insensitive proxy for "short label", not an exact character count).
-//   - NUMERIC_LIKE: the text contains no Unicode letter at all (IsLetterCpLocal's own ASCII/
-//     Latin-1/Latin-Extended-A range, the same letter set Tokenize's IsWordCodepoint draws
-//     from, minus the digit range) -- a dollar amount, an account number, a bare code, a lone
-//     colon or dash all qualify; "Total:" does not (it has letters), which is deliberate: that
-//     case is exactly the "short label" SHORT alone is for.
+//   - NUMERIC_LIKE: a POSITIVE allowlist match, mirroring megapdf_structure.cpp's own
+//     IsNumericLikeText exactly (see that function's comment for why this is an allowlist of
+//     digits/punctuation rather than "contains no Latin letter" -- the latter would misread a
+//     genuine heading in any script outside ASCII/Latin-1/Latin-Extended-A as numeric-like) --
+//     a dollar amount, an account number, a bare code, a lone colon or dash all qualify;
+//     "Total:" does not (it has a letter), which is deliberate: that case is exactly the "short
+//     label" SHORT alone is for.
 // ---------------------------------------------------------------------------
 constexpr double kHeadingSizeRatioMirror = 1.15;   // mirrors megapdf_structure.cpp's kHeadingSizeRatio.
 constexpr int kShortTextChars = 20;
 
-bool IsLetterCpLocal(unsigned int c) {
-    if (c >= 'A' && c <= 'Z') return true;
-    if (c >= 'a' && c <= 'z') return true;
-    if (c >= 0xC0 && c <= 0xFF && c != 0xD7 && c != 0xF7) return true;  // Latin-1 Supplement letters
-    if (c >= 0x100 && c <= 0x17F) return true;                          // Latin Extended-A
-    return false;
+bool IsAsciiDigitLocal(unsigned int c) { return c >= '0' && c <= '9'; }
+
+// Mirrors megapdf_structure.cpp's IsNumericLikePunctuation exactly.
+bool IsNumericLikePunctuationLocal(unsigned int c) {
+    switch (c) {
+        case '.': case ',': case ':': case ';': case '-': case '(': case ')': case '/':
+        case '%': case '#': case '$': case 0x00A3 /* £ */: case 0x20AC /* € */: case ' ':
+            return true;
+        default:
+            return false;
+    }
 }
 
 double BlockAvgSizeRatio(const megapdf_structure* s, size_t idx) {
@@ -1341,7 +1348,13 @@ double BlockAvgSizeRatio(const megapdf_structure* s, size_t idx) {
         weighted += sp.size_ratio * static_cast<double>(len);
         total_chars += static_cast<long long>(len);
     }
-    return total_chars > 0 ? weighted / static_cast<double>(total_chars) : 1.0;
+    // A block whose span text cannot be read back through the ABI (should not happen for a
+    // real HEADING block, but this is a diagnostic reading the public surface, not the
+    // internals) defaults to a ratio comfortably ABOVE kHeadingSizeRatioMirror, not below it --
+    // misreading it as "size-based, not bold" undercounts the mechanism this tool measures;
+    // misreading it as "bold" (the old default of 1.0 would have) overcounts it, which is the
+    // direction that would make this PR's own corpus numbers look more dramatic than they are.
+    return total_chars > 0 ? weighted / static_cast<double>(total_chars) : 999.0;
 }
 
 // See the file comment above: exact given the two current heading routes, not a heuristic
@@ -1499,11 +1512,12 @@ void RunHeadingDiagOnDoc(const std::string& pdf, HeadingDiagTotals* totals) {
                 const size_t bidx = stream[m].idx;
                 const std::vector<unsigned short> text16 = BlockString(s, bidx, MEGAPDF_BLOCK_TEXT);
                 const std::vector<unsigned int> cps = Utf16ToCodepoints(text16);
-                bool has_letter = false;
+                bool saw_digit = false, numeric_like = true;
                 for (unsigned int c : cps) {
-                    if (IsLetterCpLocal(c)) { has_letter = true; break; }
+                    if (IsAsciiDigitLocal(c)) { saw_digit = true; continue; }
+                    if (!IsNumericLikePunctuationLocal(c)) { numeric_like = false; break; }
                 }
-                const bool numeric_like = !has_letter && !cps.empty();
+                numeric_like = numeric_like && saw_digit;
                 const bool is_short = cps.size() <= static_cast<size_t>(kShortTextChars);
                 if (isolated) {
                     totals->isolated_total++;
