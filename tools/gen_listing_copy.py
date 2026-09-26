@@ -65,7 +65,7 @@ APPLY SIGNATURES — Keep a small personal library of signature images. Pick one
 
 SAVE — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs, no surprises. Save As can also write the document's text — headings, lists, the values you filled in — as a Markdown file, leaving the PDF untouched.
 
-Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a double-click in File Explorer joins the window you already have.
+Also included, because real documents need them: find any word with Ctrl+F (every match highlighted, Enter to step through them), print your PDF, and shrink oversized scans for email with one click (image downsampling and JPEG recompression). Documents open as tabs in one window, and a PDF double-clicked in File Explorer joins the window you already have.
 
 PRIVATE BY DESIGN — No account. No cloud. No subscription. No telemetry. Every document is processed entirely on your device and never uploaded anywhere. Ideal for contracts, medical forms, and anything else you'd rather not hand to someone else's server.
 
@@ -78,7 +78,7 @@ MegaPDF is open source (Apache-2.0): github.com/SlyWombat/MegaPDF""",
         "Place a signature from your personal library with a click, then nudge and resize it",
         "Find any word in the document with Ctrl+F — every match highlighted, Enter steps through them",
         "Save overwrites, Save As copies — no export wizards or flatten dialogs",
-        "Open several PDFs as tabs in one window — a double-click in File Explorer joins the window you already have",
+        "Open several PDFs as tabs in one window — a PDF double-clicked in File Explorer joins the window you already have",
         "Save As writes the document's text as Markdown: headings, lists and filled-in values, with the PDF untouched",
         "Shrink oversized scans for email with one click",
         "Print directly from the app",

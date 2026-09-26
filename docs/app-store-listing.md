@@ -98,11 +98,11 @@ MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you
 pdf,sign,signature,fill,form,checkbox,esign,editor,search,document,annotate,fill and sign
 ```
 
-**What's new** [4000] (1021) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
+**What's new** [4000] (1043) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
 ```
 Open with MegaPDF
 
-MegaPDF is now a PDF viewer as far as your iPhone and iPad are concerned. A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF at home. If a document with unsaved changes is already open, it asks before switching.
+MegaPDF is now a PDF viewer as far as your iPhone and iPad are concerned. A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF on MegaPDF's own first screen. If a document with unsaved changes is already open, it asks before switching.
 
 Share
 

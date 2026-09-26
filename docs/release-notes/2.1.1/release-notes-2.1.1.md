@@ -108,7 +108,8 @@ package**: a Store app cannot put a binary on your `PATH`, on either platform.
 opening a PDF from Files, Drive, Gmail or any app that hands one over offers
 MegaPDF in the Open with list. On iPhone and iPad, a PDF in Files, an attachment
 in Mail or a document in any app's share sheet opens in MegaPDF from right
-there. Until now the only way in was Open PDF at home, through the picker. If a
+there. Until now the only way in was Open PDF on MegaPDF's own first screen,
+through the picker. If a
 document with unsaved changes is already open, the phone asks — Save, Discard
 or Cancel — before switching, because the alternative was to lose those edits
 silently.
@@ -167,8 +168,8 @@ reads like the document.
 
 ### Windows
 
-- Tabs, as above: Ctrl+W and Ctrl+Shift+N, Close tab / Close window / New
-  window in the More menu, multi-select Open, drag-and-drop, and a double-click
+- Tabs, as above: Ctrl+W and Ctrl+Shift+N, Close tab and New window in the
+  More menu, multi-select Open, drag-and-drop, and a double-click
   in File Explorer landing in the running window — several at once, each its
   own tab, none dropped. Verified on GPD-DAVE, where the single-instance code
   was found to be silently opening nothing (a WinRT cast that compiles and

@@ -16,12 +16,12 @@ one by `check_copy.py` in this folder — edit the Canadian block, then run it.*
 
 ## English — `en-US` and `en-CA`
 
-**What's new** [1500] (1054)
+**What's new** [1500] (1053)
 
 ```
 Tabs
 
-Open a second PDF and it opens in a tab beside the first, in the same window. Open picks several files at once, a file dropped on the window opens too, and a double-click in File Explorer lands in the window you already have — as a new tab, or on the tab that already shows that file. Each tab keeps its own undo history, find, zoom and unsaved-changes dot; Ctrl+W closes one, and closing the window asks about each document that needs saving. After a crash, every document that was open comes back in its own tab.
+Open a second PDF and it opens in a tab beside the first, in the same window. Open picks several files at once, a file dropped on the window opens too, and a PDF double-clicked in File Explorer lands in the window you already have — as a new tab, or on the tab that already shows it. Each tab keeps its own undo history, find, zoom and unsaved-changes dot; Ctrl+W closes one, and closing the window asks about each document that needs saving. After a crash, every document that was open comes back in its own tab.
 
 Save As Markdown
 

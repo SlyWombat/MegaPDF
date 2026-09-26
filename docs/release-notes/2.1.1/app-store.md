@@ -17,12 +17,12 @@ one by `check_copy.py` in this folder — edit the Canadian block, then run it.*
 
 ## English (Canada) — `en-CA`
 
-**What's New** [4000] (1021)
+**What's New** [4000] (1043)
 
 ```
 Open with MegaPDF
 
-MegaPDF is now a PDF viewer as far as your iPhone and iPad are concerned. A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF at home. If a document with unsaved changes is already open, it asks before switching.
+MegaPDF is now a PDF viewer as far as your iPhone and iPad are concerned. A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF on MegaPDF's own first screen. If a document with unsaved changes is already open, it asks before switching.
 
 Share
 
