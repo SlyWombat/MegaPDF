@@ -12,7 +12,8 @@ next and can spend every character on what changed.
 copy-by-language section, which `tools/gen_listing_copy.py` fills from this file
 (the [README](README.md) says how).
 
-*The French is new for 2.1.1 and awaits its francophone read (#343); it follows
+*The French is new for 2.1.1 and was reviewed on 2026-09-26 (#343; see the
+[README](README.md#french-review-2026-09-26)); it follows
 `docs/localisation-glossary.md`. The France block is derived from the Canadian
 one by `check_copy.py` in this folder — edit the Canadian block, then run it.*
 

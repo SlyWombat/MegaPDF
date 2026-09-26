@@ -11,7 +11,8 @@ and no Save As on iOS, so neither appears, and the Markdown item is worded as
 the iOS menu has it — *Export as Markdown*, beside *Save a copy*. App Store
 Connect refuses the ✕ character (#340), and this copy contains none.
 
-*The French is new for 2.1.1 and awaits its francophone read (#343); it follows
+*The French is new for 2.1.1 and was reviewed on 2026-09-26 (#343; see the
+[README](README.md#french-review-2026-09-26)); it follows
 `docs/localisation-glossary.md`. The France block is derived from the Canadian
 one by `check_copy.py` in this folder — edit the Canadian block, then run it.*
 

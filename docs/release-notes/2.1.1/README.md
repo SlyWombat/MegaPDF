@@ -13,13 +13,17 @@ extractor, `megapdf-cli`, ships in every Linux package and as Windows and macOS
 zips on GitHub, and is named only in the long form: **no store package carries
 it**, so no store block may.
 
-> **The French is not yet reviewed.** It was written against
-> `docs/localisation-glossary.md` — the new rows for this release are in it —
-> and every new phrase is listed [below](#the-new-french-for-a-francophone-to-read)
-> for the francophone read #343 still owes 2.1's copy as well. The France French
-> is derived from the Canadian by [`check_copy.py`](check_copy.py) in this
-> folder, with the rules `tools/gen_strings.py fr-fr` applies to the app's
-> catalogues; nothing in the France blocks is hand-made.
+> **The French was reviewed on 2026-09-26** by an AI reviewer at Dave's
+> instruction, standing in for the francophone read #343 asks for: every new
+> app string and every French block below, the long form and the listing
+> sentences, for correctness, register, glossary consistency and platform
+> idiom. What changed is in [the review section](#french-review-2026-09-26) at
+> the end. The copy was written against `docs/localisation-glossary.md` — the
+> new rows for this release are in it — and every new phrase is listed
+> [below](#the-new-french-for-a-francophone-to-read). The France French is
+> derived from the Canadian by [`check_copy.py`](check_copy.py) in this folder,
+> with the rules `tools/gen_strings.py fr-fr` applies to the app's catalogues;
+> nothing in the France blocks is hand-made.
 
 | File | Store | Field | Limit |
 |---|---|---|---|
@@ -134,33 +138,33 @@ glossary rows added for it (*onglet*, *Ouvrir avec*, *feuille de partage*,
 |---|---|---|---|
 | Tabs | Des onglets | Microsoft, Mac | the headline, with the article as 2.1's *Des marques…* |
 | Open a second PDF and it opens in a tab beside the first, in the same window. | Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre. | Microsoft, Mac | |
-| Open picks several files at once, a file dropped on the window opens too, and a double-click in File Explorer lands in the window you already have — as a new tab, or on the tab that already shows that file. | Ouvrir choisit plusieurs fichiers à la fois, un fichier déposé sur la fenêtre s'ouvre aussi, et un double-clic dans l'Explorateur de fichiers arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui montre déjà ce fichier. | Microsoft | *l'Explorateur de fichiers* is Windows' own French name |
+| Open picks several files at once, a file dropped on the window opens too, and a PDF double-clicked in File Explorer lands in the window you already have — as a new tab, or on the tab that already shows it. | Ouvrir choisit plusieurs fichiers à la fois, un fichier déposé sur la fenêtre s'ouvre aussi, et un PDF double-cliqué dans l'Explorateur de fichiers arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui le montre déjà. | Microsoft | *l'Explorateur de fichiers* is Windows' own French name |
 | Each tab keeps its own undo history, find, zoom and unsaved-changes dot; Ctrl+W closes one, and closing the window asks about each document that needs saving. | Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée; Ctrl+W en ferme un, et fermer la fenêtre demande quoi faire pour chaque document à enregistrer. | Microsoft | *point de modification non enregistrée* is 2.1's phrase for the dot |
 | After a crash, every document that was open comes back in its own tab. | Après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet. | Microsoft, Mac | *fermeture inattendue* is the glossary's phrase for a crash |
 | from Open, which now picks several files at once, from a file dropped on the window, or from the Finder or any other app that hands MegaPDF a document | que ce soit avec Ouvrir, qui choisit maintenant plusieurs fichiers à la fois, en déposant un fichier sur la fenêtre, ou depuis le Finder ou toute autre application qui remet un document à MegaPDF | Mac | |
 | A document opened from outside lands in the window you already have — as a new tab, or on the tab that already shows it — instead of replacing what was there. | Un document ouvert de l'extérieur arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui le montre déjà, au lieu de remplacer ce qui s'y trouvait. | Mac | |
 | ⌘W closes a tab, ⇧⌘W the window, ⌃Tab moves between tabs and ⌘N opens another window. | ⌘W ferme un onglet, ⇧⌘W la fenêtre, ⌃Tab passe d'un onglet à l'autre et ⌘N ouvre une autre fenêtre. | Mac | the key glyphs are the Mac's own, in both languages |
 | Closing or quitting asks about each document that needs saving | Fermer ou quitter demande quoi faire pour chaque document à enregistrer | Mac | |
-| Save As Markdown | Enregistrer sous en Markdown | Microsoft, Mac | the headline names the command (*Enregistrer sous*) and the format |
+| Save As Markdown | Enregistrer sous, en Markdown | Microsoft, Mac | the headline names the command (*Enregistrer sous*) and the format; the comma keeps *sous en* from running together |
 | Save As now offers Markdown document beside PDF document. | Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. | Microsoft | the two file-type names as the panel shows them |
 | The Save As panel now offers Markdown document beside PDF document. | La zone de dialogue Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. | Mac | *zone de dialogue* is what 2.0's Mac copy calls the panel |
 | It writes the document's text — headings, paragraphs, lists and the values you filled in — as a Markdown file you can paste anywhere. | Il écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. | Microsoft, Mac | parentheses where the English has dashes, as 2.0's French does |
 | It is an export, not a save: the PDF is untouched, and it still asks to be saved if you had changed it. | C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. | Microsoft, Mac, App Store | *exportation* (OQLF), matching the app's *Exportation…* |
-| A scanned page has no text to give, and the file says so in its place. | Une page numérisée n'a pas de texte à donner, et le fichier le dit à sa place. | Mac, App Store | *numérisée*, the glossary's word for a scan |
+| A scanned page has no text to give, and the file says so in its place. | Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place. | Mac, App Store | *numérisée*, the glossary's word for a scan |
 | Smaller things | Et aussi | Microsoft | 2.1's heading, kept |
 | Ticking a drawn box now tells a screen reader that it is ticked. | Cocher une case dessinée indique maintenant au lecteur d'écran qu'elle est cochée. | Microsoft | |
 | The resize handle and the ✕ on a selected signature are easier to hit. | La poignée de redimensionnement et le ✕ d'une signature sélectionnée sont plus faciles à atteindre. | Microsoft | *poignée*, as 2.1's *poignées de coin* |
 | An arrow-key nudge is kept even if you click straight afterwards. | Un déplacement aux flèches est conservé même si vous cliquez tout de suite après. | Microsoft | |
 | Open with MegaPDF | Ouvrir avec MegaPDF | App Store | the OS's phrase; Play says *Ouvrir avec :* as a label |
 | MegaPDF is now a PDF viewer as far as your iPhone and iPad are concerned. | Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. | App Store | |
-| A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF at home. | Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement de là, et non plus seulement par Ouvrir un PDF à l'accueil. | App Store | *Fichiers*, *Mail*, *feuille de partage*: Apple's French; *Ouvrir un PDF* is the home button's string |
-| If a document with unsaved changes is already open, it asks before switching. | Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer. | App Store | |
-| Share, in the More menu, hands the document to the share sheet: Mail, Messages, AirDrop, Save to Files, whatever you have. | Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, ce que vous avez. | App Store | *Enregistrer dans Fichiers* is the share sheet's own French row |
-| If the document has unsaved changes it says so first and offers Save, Share without saving — the last saved copy goes out and your edits stay open — or Cancel. | Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée part, et vos modifications restent ouvertes) ou Annuler. | App Store | the three buttons as the app names them |
+| A PDF in Files, an attachment in Mail, or a document in any app's share sheet can be opened in MegaPDF from right there, instead of only through Open PDF on MegaPDF's own first screen. | Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement à partir de là, et non plus seulement par Ouvrir un PDF à l'accueil. | App Store | *Fichiers*, *Mail*, *feuille de partage*: Apple's French; *Ouvrir un PDF* is the home button's string |
+| If a document with unsaved changes is already open, it asks before switching. | Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer de document. | App Store | |
+| Share, in the More menu, hands the document to the share sheet: Mail, Messages, AirDrop, Save to Files, whatever you have. | Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, tout ce que vous avez. | App Store | *Enregistrer dans Fichiers* is the share sheet's own French row |
+| If the document has unsaved changes it says so first and offers Save, Share without saving — the last saved copy goes out and your edits stay open — or Cancel. | Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée est envoyée, et vos modifications restent ouvertes) ou Annuler. | App Store | the three buttons as the app names them |
 | Export as Markdown, beside Save a copy in the More menu, writes the document's text … as a Markdown file, saved wherever you choose in Files. | Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document … dans un fichier Markdown, enregistré où vous voulez dans Fichiers. | App Store | |
 | Open with: MegaPDF is now offered when you open a PDF from Files, Drive, Gmail or any app that hands one over. | Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Drive, Gmail ou une autre application. | Play | cut for the 500-character field: *maintenant* and the relative clause go |
 | Share, in the More menu, sends the document through the share sheet. If it has unsaved changes it offers Save, Share without saving, or Cancel. | Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler. | Play | the second sentence is a label and a list, for room |
-| Save a copy can now write Markdown as well as PDF: the document's text, headings, lists and filled-in values, as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text. | Enregistrer une copie écrit maintenant du Markdown aussi bien qu'un PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché. | Play | the scanned-page clause is dropped for room; 490 of 500 |
+| Save a copy can now write Markdown as well as PDF: the document's text, headings, lists and filled-in values, as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text. | Enregistrer une copie écrit maintenant en Markdown aussi bien qu'en PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché. | Play | the scanned-page clause is dropped for room; 490 of 500 |
 
 The long form's French (`release-notes-2.1.1.md`, *Français (Canada)*) is the
 same vocabulary at length; its own new phrases are the section titles — *Des
@@ -176,9 +180,9 @@ Counted the way the field counts, by `check_copy.py`, `len()` of the block:
 
 | Block | en | fr-CA | fr-FR | Limit |
 |---|---:|---:|---:|---:|
-| Microsoft Store | 1054 | 1342 | 1343 | 1500 |
-| App Store | 1021 | 1255 | 1255 | 4000 |
-| Mac App Store | 1087 | 1370 | 1370 | 4000 |
+| Microsoft Store | 1053 | 1341 | 1342 | 1500 |
+| App Store | 1043 | 1289 | 1289 | 4000 |
+| Mac App Store | 1087 | 1372 | 1372 | 4000 |
 | Google Play | 486 | 490 | 490 | 500 |
 
 The Microsoft France block is one character longer than the Canadian: the
@@ -199,3 +203,82 @@ App Store's French description is at 3978 of 4000 after its two new sentences.
   — the store shows the version itself.
 - Each block's character count is beside it, and `check_copy.py --check` fails
   if a count, a France block or a `../2.1/` copy has drifted.
+
+## French review, 2026-09-26
+
+Reviewed by an AI reviewer at Dave's instruction, standing in for the
+francophone read #343 asks for (Dave, 2026-09-26): the thirteen new app strings
+above, read in the catalogues themselves (`fr-CA/Resources.resw`,
+`Strings.fr-CA.resx`, `values-fr-rCA/strings.xml`, `Localizable.xcstrings`);
+every French block in this folder; the long form's Canadian section; and the
+listing sentences in `tools/gen_listing_copy.py` — against the glossary, the
+shipped 2.0 and 2.1 French, each platform's own French strings and its idiom.
+The France blocks were regenerated by `check_copy.py` after the Canadian edits,
+and the derived diff is unchanged: the non-breaking space before `;`, and
+*courriel* → *e-mail* once in the long form.
+
+**App strings.** All thirteen are kept as written. *Fermer l'onglet* / *Fermer
+la fenêtre* / *Nouvelle fenêtre* and *Afficher l'onglet suivant / précédent* are
+AppKit's own French; *{0}, onglet* and *{0}, modifications non enregistrées,
+onglet* say what a screen reader should, in the order the English does;
+*Document Markdown* sits beside *Document PDF* on all three desktops; the
+*Exportation… / Exporté / {0} exporté / Impossible d'exporter…* family is one
+family on all four platforms and never *Enregistr-*; *Partager*, *Partager sans
+enregistrer* and *Impossible de partager. Réessayez.* follow the glossary and
+the *Impossible de…* pattern; the share-case sentence says the one consequence;
+*Case cochée* is the state after 2.0's *Case à cocher*. One note, not a change:
+the Windows overflow menu is labelled *Plus d'options* and the phones' *Plus*,
+so copy that names the menu says *Plus d'options* on Windows, as 2.0's
+Microsoft block did, and *Plus* on the phones.
+
+**Store copy** (the same edit in every file that carries the block, the `../2.1/`
+copies and the listings being regenerated):
+
+| Was | Now | Why |
+|---|---|---|
+| Enregistrer sous en Markdown | Enregistrer sous, en Markdown | *sous en* runs together; the comma reads as the English does — the command, then the format (Microsoft, Mac, the long form's heading) |
+| un double-clic dans l'Explorateur de fichiers arrive dans la fenêtre … sur l'onglet qui montre déjà ce fichier | un PDF double-cliqué dans l'Explorateur de fichiers arrive dans la fenêtre … sur l'onglet qui le montre déjà | a click does not arrive anywhere; the file does (Microsoft block; the same subject in the Microsoft description's and feature's *rejoint la fenêtre*) |
+| directement de là | directement à partir de là | *de là* alone is clipped |
+| il demande avant de changer | il demande avant de changer de document | *changer* without an object asks "change what?" |
+| Enregistrer dans Fichiers, ce que vous avez | Enregistrer dans Fichiers, tout ce que vous avez | *whatever you have* |
+| la dernière copie enregistrée part | la dernière copie enregistrée est envoyée | *partir* is colloquial for a file, as 2.1's review found for marks (App Store block; the long form's *le dernier fichier enregistré est envoyé*) |
+| Une page numérisée n'a pas de texte à donner | Une page numérisée n'a aucun texte à extraire | *donner* is the English metaphor, not a French one (Mac, App Store) |
+| écrit maintenant du Markdown aussi bien qu'un PDF | écrit maintenant en Markdown aussi bien qu'en PDF | a format is written *en*, and the two halves now match (Play; still 490 of 500) |
+
+The long form (`release-notes-2.1.1.md`) also had these fixes: *l'appuyer
+n'abandonne rien* → *appuyer dessus n'abandonne rien* (*appuyer* takes *sur*);
+*ce qui est de l'habillage* → *ce qui n'est qu'en-tête ou pied de page*
+(*habillage* is text wrapped around a picture, not page furniture); *pour que
+l'écriture puisse le dire* → *pour que l'exportation puisse le dire* (the
+writer is a component, not the act); *Un texte en gras à la taille du corps* →
+*à la taille du texte courant* (*corps* is the point size itself); *Une suite
+de plusieurs à la file (…) n'en est pas un, ni un chiffre nu* → *Plusieurs à la
+suite (…) n'en sont pas, pas plus qu'un chiffre nu* (agreement, and the idiom);
+*sur le `PATH` ou à une commande près* → *ou accessible en une commande* (*à
+une commande près* means give or take one); *Avec un document aux
+modifications non enregistrées ouvert* → *Si un document avec des
+modifications non enregistrées est ouvert*; *avant de changer* → *avant de
+changer de document*; *corrigé avant de partir* → *corrigé avant la sortie*;
+and, a matter of fact rather than French, the Windows section no longer lists
+*Fermer la fenêtre* — the Windows More menu has Close tab and New window only.
+
+Not changed, on purpose: *Des onglets* (2.1's *Des marques…* headline shape);
+*demande quoi faire pour chaque document à enregistrer* (plain, in 2.0's
+register); *fermeture inattendue* (the glossary's crash); *Un déplacement aux
+flèches* (*aux* as in *au clavier*); *ouvert de l'extérieur*; *à l'accueil*
+(French says *l'accueil* of an app, which is why the English needed *first
+screen* and the French did not); *feuille de partage*, *Ouvrir avec*,
+*Fichiers*, *Mail*, *Enregistrer dans Fichiers* (Apple's and Google's own
+French); *exportation* (OQLF, and the app's *Exportation…*); *planté* in the
+long form's iPad bullet (the everyday French for a crash, in a sentence about
+a popover, where *fermeture inattendue* would be the user's experience rather
+than the bug); the Play block's cuts for room. *Suppr* and *Supprimer* do not
+occur in this copy.
+
+**English, the same pass.** *a double-click in File Explorer lands in / joins
+the window you already have* → *a PDF double-clicked in File Explorer …*
+(Microsoft block, listing and feature, the website's file-manager sentence);
+*Open PDF at home* → *Open PDF on MegaPDF's own first screen* (App Store block,
+long form); the long form's Windows section, as above; and the website's *Save
+a copy on the phones, Export as Markdown on iPhone and iPad* → *Save a copy on
+Android, …*. Counts after the review are in the table above.

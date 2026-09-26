@@ -12,8 +12,9 @@ export in every app), #376 and #377 (the phones as PDF viewers), #378 (Share),
 went out on every store on 2026-09-21, so these notes cover the same span for
 all four.
 
-*The French awaits its francophone read (#343); the [README](README.md) lists
-every new phrase, here and in the app's own new strings.*
+*The French was reviewed on 2026-09-26 (#343); the [README](README.md) lists
+every new phrase, here and in the app's own new strings, and what the review
+changed.*
 
 ---
 

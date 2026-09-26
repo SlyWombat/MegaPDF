@@ -10,7 +10,8 @@ Store app cannot put a binary on `PATH` — so nothing here names the command
 line. Tabs and the Markdown export are the two things this build changes on
 Windows; the keyboard items under *Smaller things* are #2's.
 
-*The French is new for 2.1.1 and awaits its francophone read (#343); it follows
+*The French is new for 2.1.1 and was reviewed on 2026-09-26 (#343; see the
+[README](README.md#french-review-2026-09-26)); it follows
 `docs/localisation-glossary.md`. The France block is derived from the Canadian
 one by `check_copy.py` in this folder — edit the Canadian block, then run it.*
 
