@@ -505,9 +505,25 @@ int RunExtract(int argc, char** argv) {
             std::fprintf(stderr, "cannot write %s\n", out_path.c_str());
             return 7;
         }
-    } else if (!buffered.empty() && std::fwrite(buffered.data(), 1, buffered.size(), stdout) != buffered.size()) {
-        std::fprintf(stderr, "cannot write output\n");
-        return 7;
+    } else if (!buffered.empty()) {
+        // Explicit fflush (Windows CI investigation, 2026-09-26): the `return` from main() a
+        // few lines below relies on the C runtime's own exit-time stream flush to get these
+        // bytes from stdio's buffer to the OS file object. On windows-latest Debug builds that
+        // reliance was observed to silently lose exactly this write -- the single, short,
+        // well-under-buffer-size fwrite() below for a page with no text layer (megapdf-cli
+        // smoke's scan.pdf fixture): fwrite() itself reported success and the exit code (derived
+        // from `buffered`, scanned further down) came out right, but the real destination ended
+        // up with 0 bytes, on Windows only, and only sometimes -- interleaving extra stderr
+        // writes while diagnosing this made it stop reproducing, which points at a timing-
+        // dependent loss of the CRT's own atexit flush rather than a content bug. Flushing
+        // explicitly here removes the dependence on that timing (and on process-exit cleanup
+        // generally) instead of chasing why the implicit flush is sometimes skipped.
+        const size_t wrote = std::fwrite(buffered.data(), 1, buffered.size(), stdout);
+        const bool flushed = std::fflush(stdout) == 0;
+        if (wrote != buffered.size() || !flushed) {
+            std::fprintf(stderr, "cannot write output\n");
+            return 7;
+        }
     }
 
     if (total_requested > 0 && static_cast<int>(textless_pages.size()) == total_requested) return 5;
