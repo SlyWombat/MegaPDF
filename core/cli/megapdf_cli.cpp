@@ -45,7 +45,6 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -122,6 +121,25 @@ bool IsAllDigits(const std::string& s) {
     return true;
 }
 
+// The value of an all-digits string, saturating at INT_MAX (a page number that large is
+// past the end of any document and is reported as such by ResolveIntervals, which is
+// what strtol's LONG_MAX clamp used to produce too). Written out rather than calling
+// std::strtol or std::atoi (#395): under glibc 2.38+ headers those resolve to
+// __isoc23_strtol, a GLIBC_2.38 symbol, so a binary built on Ubuntu 24.04 -- which is
+// where CI builds the Linux package -- refused to load on Debian 12 and Ubuntu 22.04
+// with "version GLIBC_2.38 not found" although the .deb's Depends allows libc6 2.35.
+// For the same reason this file does not include <iostream>: with GCC 13's libstdc++ it
+// references std::ios_base_library_init (GLIBCXX_3.4.32), which Debian 12's libstdc++
+// 12 does not have. tools/build-linux-app.sh asserts both ceilings on the built binary.
+int ParseDigits(const std::string& digits) {
+    long long n = 0;
+    for (char c : digits) {
+        n = n * 10 + (c - '0');
+        if (n > 2147483647LL) return 2147483647;
+    }
+    return static_cast<int>(n);
+}
+
 bool ParsePageSpec(const std::string& spec, std::vector<Interval>* out, std::string* err) {
     out->clear();
     std::stringstream ss(spec);
@@ -131,24 +149,24 @@ bool ParsePageSpec(const std::string& spec, std::vector<Interval>* out, std::str
         const size_t dash = token.find('-');
         if (dash == std::string::npos) {
             if (!IsAllDigits(token)) { *err = "not a page number: \"" + token + "\""; return false; }
-            const long n = std::strtol(token.c_str(), nullptr, 10);
+            const int n = ParseDigits(token);
             if (n < 1) { *err = "page numbers start at 1: \"" + token + "\""; return false; }
-            out->push_back(Interval{static_cast<int>(n), static_cast<int>(n)});
+            out->push_back(Interval{n, n});
             continue;
         }
         const std::string a = token.substr(0, dash);
         const std::string b = token.substr(dash + 1);
         if (!IsAllDigits(a)) { *err = "bad range: \"" + token + "\""; return false; }
-        const long start = std::strtol(a.c_str(), nullptr, 10);
+        const int start = ParseDigits(a);
         if (start < 1) { *err = "page numbers start at 1: \"" + token + "\""; return false; }
         if (b.empty()) {
-            out->push_back(Interval{static_cast<int>(start), -1});
+            out->push_back(Interval{start, -1});
             continue;
         }
         if (!IsAllDigits(b)) { *err = "bad range: \"" + token + "\""; return false; }
-        const long end = std::strtol(b.c_str(), nullptr, 10);
+        const int end = ParseDigits(b);
         if (end < start) { *err = "range end before its start: \"" + token + "\""; return false; }
-        out->push_back(Interval{static_cast<int>(start), static_cast<int>(end)});
+        out->push_back(Interval{start, end});
     }
     if (out->empty()) { *err = "no ranges given"; return false; }
     return true;
@@ -209,7 +227,7 @@ std::vector<int> FindTextlessPagesInOutput(const std::string& text) {
         size_t digits_end = digits_start;
         while (digits_end < text.size() && text[digits_end] >= '0' && text[digits_end] <= '9') digits_end++;
         if (digits_end > digits_start && text.compare(digits_end, suffix.size(), suffix) == 0) {
-            out.push_back(std::atoi(text.substr(digits_start, digits_end - digits_start).c_str()));
+            out.push_back(ParseDigits(text.substr(digits_start, digits_end - digits_start)));
             at = text.find(prefix, digits_end + suffix.size());
         } else {
             at = text.find(prefix, digits_start);
@@ -395,7 +413,12 @@ int RunExtract(int argc, char** argv) {
         if (!password.empty() && password.back() == '\r') password.pop_back();
         has_password = true;
     } else if (password_stdin) {
-        std::getline(std::cin, password);
+        // stdin's first line through the C stream rather than std::cin, so this file
+        // needs no <iostream> (see ParseDigits for the GLIBCXX symbol that header costs).
+        // Same result as std::getline: up to and excluding the first '\n' or EOF.
+        for (int c = std::getc(stdin); c != EOF && c != '\n'; c = std::getc(stdin)) {
+            password.push_back(static_cast<char>(c));
+        }
         if (!password.empty() && password.back() == '\r') password.pop_back();
         has_password = true;
     }

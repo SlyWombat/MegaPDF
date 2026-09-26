@@ -218,6 +218,25 @@
        tag build is where that is enforced (#254 A3) rather than left to whoever
        remembers. -->
   <releases>
+    <!-- 2.1.1's date is the day the entry was written (#395); make-release-tarball.sh
+         refuses a top entry older than 30 days or in the future, so re-date it to the
+         tag day if the tag comes later. -->
+    <release version="2.1.1" date="2026-09-26">
+      <description>
+        <p>Tabs, Markdown, and a command-line tool:</p>
+        <ul>
+          <li>Documents open as tabs in one window. Opening a PDF from a file manager
+          or a terminal while MegaPDF is running adds a tab to that window rather than
+          starting a second one.</li>
+          <li>Save As can write Markdown: the document's headings, paragraphs, lists
+          and filled-in form fields, in reading order, as a .md file.</li>
+          <li>megapdf-cli, installed beside the app, extracts a document's text or
+          Markdown from the command line for scripts and pipelines. It needs no display
+          and no network, takes a password from a file or standard input rather than
+          the command line, and has a manual page: man megapdf-cli.</li>
+        </ul>
+      </description>
+    </release>
     <release version="2.1.0" date="2026-09-21">
       <url type="details">https://github.com/SlyWombat/MegaPDF/blob/main/docs/release-notes/2.1/release-notes-2.1.md</url>
       <description>

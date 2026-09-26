@@ -62,6 +62,32 @@ else
 fi
 
 echo
+echo "=== megapdf-cli(1), where man looks for it (#395) ==="
+# The same dpkg path-excludes that prune /usr/share/doc (below) prune /usr/share/man on
+# every Debian and Ubuntu container image, so on such a machine the page is legitimately
+# absent after a successful install. What must hold: the package CARRIES it (dpkg -L
+# lists it whether or not it was unpacked), and where it was unpacked, man renders it.
+PKG_FILES="$(dpkg -L megapdf 2>/dev/null || true)"   # captured, not piped: pipefail + grep -q
+if grep -qx /usr/share/man/man1/megapdf-cli.1.gz <<< "$PKG_FILES"; then
+    echo "  ok    the package carries /usr/share/man/man1/megapdf-cli.1.gz"
+else
+    echo "  FAIL  the package does not carry /usr/share/man/man1/megapdf-cli.1.gz"
+    cli_rc=$((cli_rc + 1))
+fi
+if [ -s /usr/share/man/man1/megapdf-cli.1.gz ]; then
+    if command -v man >/dev/null && env MANPAGER=cat man megapdf-cli 2>/dev/null | grep -q '^EXIT STATUS'; then
+        echo "  ok    man megapdf-cli renders (EXIT STATUS section found)"
+    elif zcat /usr/share/man/man1/megapdf-cli.1.gz | grep -q '^\.SH EXIT STATUS'; then
+        echo "  ok    the installed page has its EXIT STATUS section (no man-db here to render it)"
+    else
+        echo "  FAIL  the installed page has no EXIT STATUS section"
+        cli_rc=$((cli_rc + 1))
+    fi
+else
+    echo "  pruned here by a dpkg path-exclude on /usr/share/man, like the doc copy below"
+fi
+
+echo
 # A .deb installed from the file itself, with no repository behind it: DebFile.
 bash "$ROOT/tools/linux/package-check.sh" "$OPTDIR" "$FIXTURES" "" "deb" DebFile
 rc=$?

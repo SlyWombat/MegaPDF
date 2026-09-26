@@ -1,0 +1,266 @@
+.\" megapdf-cli(1): the manual page for MegaPDF's command-line extractor (#142, #395).
+.\" Plain ASCII throughout: groff -man without -K reads its input as Latin-1 and warns
+.\" on every byte of a UTF-8 dash, and lintian runs it exactly that way.
+.\"
+.\" The OPTIONS and EXIT STATUS sections are the --help text and the exit-code list in
+.\" core/cli/megapdf_cli.cpp (PrintUsage), option for option and code for code. When an
+.\" option is added or an exit code changes there, change it here in the same commit:
+.\" nothing generates this file, and a page that disagrees with --help is worse than
+.\" no page.
+.\"
+.\" Shipped by tools/build-linux-app.sh (share/man/man1/ in the tree), installed by
+.\" tools/linux/install.sh ($PREFIX/share/man/man1/) and tools/linux/build-deb.sh
+.\" (/usr/share/man/man1/megapdf-cli.1.gz). Check it with `man -l tools/linux/megapdf-cli.1`
+.\" and `groff -man -z -ww tools/linux/megapdf-cli.1` (or `mandoc -Tlint`).
+.TH MEGAPDF-CLI 1 "2026-09-26" "MegaPDF 2.1.1" "User Commands"
+.SH NAME
+megapdf-cli \- extract text or Markdown from a PDF, from the command line
+.SH SYNOPSIS
+.B megapdf-cli extract
+.I file.pdf
+.RI [ options ]
+.br
+.B megapdf-cli \-\-version
+.br
+.B megapdf-cli \-\-help
+.SH DESCRIPTION
+.B megapdf-cli
+reads a PDF and writes its text, in reading order, to standard output or to a file.
+It is the same engine MegaPDF itself uses (the shared core over MegaPDF's own patched
+PDFium), packaged as a standalone program: it opens no window, needs no display and
+no desktop session, makes no network connection of any kind, and runs the same way in
+a terminal, a script, a cron job or a container.
+.PP
+The one command is
+.BR extract .
+By default it writes every page as plain text: paragraphs are joined into blocks, the
+running headers, footers and page numbers a document repeats on every page are
+dropped, filled-in form fields are included, and a form feed separates one page from
+the next. Each of those defaults has an option below.
+.PP
+With
+.B \-\-format md
+the output is Markdown built from the document's inferred structure rather than a
+flat dump of its words: headings, paragraphs, lists, form fields and (in a tagged PDF)
+tables are written as Markdown headings, paragraphs, lists, definition lines and pipe
+tables. Where the PDF carries a structure tree (a tagged PDF), that is what is read;
+where it does not, or with
+.BR \-\-heuristic ,
+the structure is inferred from the layout of the page.
+.PP
+A page with no text layer (a scan, a photograph of a page) yields the placeholder
+.B [Page N has no text layer]
+in the output and, unless
+.B \-\-quiet
+is given, a note on standard error. MegaPDF does not do OCR.
+.PP
+A password is never taken from the command line, where every process on the machine
+could read it. It comes from the first line of a file
+.RB ( \-\-password\-file )
+or of standard input
+.RB ( \-\-password\-stdin ),
+is handed to the document once, and is overwritten in memory as soon as the document
+has been opened, whether or not that succeeded.
+.SH OPTIONS
+.TP
+.BI \-\-format " txt|md"
+output format (default txt)
+.TP
+.BI \-\-pages " <ranges>"
+1-based, e.g. "1-3,7,9-" (an open end means the last page); default: every page
+.TP
+.BI \-\-out " <path>"
+write to <path> instead of stdout (atomic: a sibling temp file, then a rename)
+.TP
+.BI \-\-password\-file " <path>"
+the file's first line is the password
+.TP
+.B \-\-password\-stdin
+the password is the first line of stdin
+.TP
+.B \-\-keep\-lines
+keep the PDF's own line breaks inside a block
+.TP
+.B \-\-page\-marker
+"--- page N ---" lines instead of a form feed between pages
+.TP
+.B \-\-no\-page\-breaks
+no separator between pages at all
+.TP
+.B \-\-keep\-furniture
+keep running headers, footers and page numbers
+.TP
+.B \-\-all\-fields
+include empty text fields and unchecked boxes too
+.TP
+.B \-\-no\-fields
+no form fields in the output, page text only
+.TP
+.B \-\-heuristic
+ignore the document's structure tree even when present
+.TP
+.B \-\-strict
+a page with no text layer is a failure (exit 6)
+.TP
+.B \-\-quiet
+no informational notes on stderr (errors always print)
+.TP
+.B \-\-version
+print the version and exit
+.TP
+.B \-\-help
+print this and exit
+.PP
+Notes on a few of them:
+.IP \(bu 3
+.B \-\-pages
+takes a comma-separated list of pages and ranges. Ranges that overlap or touch are
+merged, and the pages come out in document order whatever order they were asked for
+in. A range whose end runs past the last page is cut off at the last page; a range
+whose
+.I start
+is past the last page is an error (exit 1), because it names a page that is not there.
+.IP \(bu 3
+.B \-\-page\-marker
+in Markdown writes an HTML comment,
+.BR "<!-- page N -->" ,
+instead of the text marker, so it does not show in a rendered document. The default
+page separator in Markdown is a blank line, not a form feed.
+.IP \(bu 3
+.B \-\-password\-file
+and
+.B \-\-password\-stdin
+are mutually exclusive. A trailing carriage return on the line is removed, so a file
+written on Windows works too.
+.IP \(bu 3
+.B \-\-out
+writes the whole result to a hidden temporary file beside the destination and then
+renames it into place, so a reader never sees a half-written file and an interrupted or
+failed run leaves no file behind. The output is built in memory first: nothing is
+written anywhere until the extraction has finished.
+.SH EXIT STATUS
+.TP
+.B 0
+text written
+.TP
+.B 1
+usage
+.TP
+.B 2
+cannot open
+.TP
+.B 3
+password required or wrong
+.TP
+.B 4
+unsupported security handler
+.TP
+.B 5
+no text on any requested page
+.TP
+.B 6
+\-\-strict and some requested page had no text
+.TP
+.B 7
+\-\-out could not be written
+.TP
+.B 130
+interrupted (Ctrl+C)
+.PP
+Exit code 5 is reported after the output (all placeholders) has been written, so a
+script can tell "the file is a scan" from "the file could not be read". On an
+interruption nothing is written to
+.B \-\-out
+at all.
+.SH EXAMPLES
+Pages 3 to 5 and page 12 of a report, as plain text, into a file:
+.PP
+.RS
+.nf
+megapdf-cli extract report.pdf \-\-pages 3\-5,12 \-\-out report.txt
+.fi
+.RE
+.PP
+The whole document as Markdown, piped to another tool (here, a word count and a
+pager):
+.PP
+.RS
+.nf
+megapdf-cli extract report.pdf \-\-format md | wc \-w
+megapdf-cli extract report.pdf \-\-format md \-\-quiet | less
+.fi
+.RE
+.PP
+A protected document, with the password read from a file only its owner can read
+(never from the command line):
+.PP
+.RS
+.nf
+(umask 077 && printf '%s\\n' 'the password' > ~/.pdf\-pass)
+megapdf-cli extract protected.pdf \-\-password\-file ~/.pdf\-pass \-\-out protected.md \-\-format md
+.fi
+.RE
+.PP
+The same, from standard input, when the password is already held by another program:
+.PP
+.RS
+.nf
+some\-secret\-store show pdf\-password | megapdf-cli extract protected.pdf \-\-password\-stdin
+.fi
+.RE
+.PP
+Refuse a document that has any page without a text layer, keeping the document's own
+line breaks and its headers and footers:
+.PP
+.RS
+.nf
+megapdf-cli extract scan.pdf \-\-strict \-\-keep\-lines \-\-keep\-furniture || echo "exit $?"
+.fi
+.RE
+.SH FILES
+.TP
+.I /opt/MegaPDF/megapdf-cli
+the binary installed by the .deb;
+.I /usr/bin/megapdf-cli
+is a symbolic link to it. The tarball's
+.I install.sh
+installs it under
+.I ~/.local/lib/megapdf/
+with the link at
+.IR ~/.local/bin/megapdf-cli .
+.TP
+.IR libmegapdf_core.so ", " libpdfium.so
+the shared engine core and MegaPDF's patched PDFium, found beside the binary through
+its
+.B $ORIGIN
+run path once the symbolic link is followed. A distribution's own libpdfium is never
+loaded, on purpose: it is a different renderer, and every result MegaPDF has is
+against its own.
+.SH NOTES
+.B megapdf-cli
+ships with the MegaPDF desktop application, in the same package, and carries the same
+version number (see
+.BR \-\-version ).
+The Markdown it writes is the same Markdown MegaPDF's own
+.I Save As
+writes when Markdown is chosen as the format. Text is written as UTF-8, with LF line
+endings, and is never re-encoded.
+.PP
+Inside the Flatpak the same program runs as
+.B "flatpak run \-\-command=megapdf-cli ca.electricrv.MegaPDF extract"
+.IR file.pdf ,
+and inside the snap as
+.B "megapdf.cli extract"
+.IR file.pdf .
+.SH SEE ALSO
+.B megapdf
+.I file.pdf
+opens a document in the desktop application, which has no manual page of its own.
+.PP
+The MegaPDF page, with the Linux packages and the APT repository:
+.UR https://electricrv.ca/megapdf/linux/
+.UE
+.br
+Source and issues:
+.UR https://github.com/SlyWombat/MegaPDF
+.UE

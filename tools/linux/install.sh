@@ -35,6 +35,17 @@ ln -sf "$LIBDIR/MegaPDF" "$BINDIR/megapdf"
 # $LIBDIR once followed, exactly like tools/linux/build-deb.sh's /usr/bin/megapdf-cli.
 [ -x "$LIBDIR/megapdf-cli" ] && ln -sf "$LIBDIR/megapdf-cli" "$BINDIR/megapdf-cli"
 
+# Its manual page (#395), under the prefix's own man tree. man-db looks in
+# $PREFIX/share/man for every $PREFIX/bin on PATH (manpath(5) maps ~/.local/bin to
+# ~/.local/share/man on every current distribution), so `man megapdf-cli` works as
+# soon as the bin directory is on PATH, with no MANPATH to set.
+MAN_DIR="$PREFIX/share/man/man1"
+if [ -f "$HERE/share/man/man1/megapdf-cli.1" ]; then
+    mkdir -p "$MAN_DIR"
+    cp "$HERE/share/man/man1/megapdf-cli.1" "$MAN_DIR/megapdf-cli.1"
+    chmod 644 "$MAN_DIR/megapdf-cli.1"
+fi
+
 # The desktop entry is rewritten with an absolute Exec rather than shipped with
 # "Exec=megapdf": ~/.local/bin is on PATH for a login shell on every current
 # distribution, but a desktop entry is launched by the session, whose PATH is
@@ -77,6 +88,7 @@ echo "installed:"
 echo "  $LIBDIR/MegaPDF"
 echo "  $BINDIR/megapdf"
 [ -x "$LIBDIR/megapdf-cli" ] && echo "  $BINDIR/megapdf-cli"
+[ -f "$MAN_DIR/megapdf-cli.1" ] && echo "  $MAN_DIR/megapdf-cli.1   (man megapdf-cli)"
 echo "  $DESKTOP_DIR/megapdf.desktop"
 echo
 echo "MegaPDF now offers itself in a PDF's Open With menu. To make it the one that"

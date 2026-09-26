@@ -106,6 +106,19 @@ cp "$TREE/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt" "$STAGE$OPTDIR/THIRD-PARTY-
 cp "$TREE/share/doc/MegaPDF/THIRD-PARTY-NOTICES.txt" "$STAGE/usr/share/doc/$PKG/"
 cp "$TREE/share/doc/MegaPDF/LICENSE" "$STAGE/usr/share/doc/$PKG/copyright"
 
+# megapdf-cli(1) (#395), where `man megapdf-cli` looks, gzip'd the way Debian policy
+# (§12.1) asks: -9 for the size, -n so the archive carries no timestamp or name and two
+# builds of the same page are the same bytes. The same dpkg path-excludes that prune
+# /usr/share/doc prune /usr/share/man on every Docker image and minimal install, so a
+# container that wants `man` to work has to drop /etc/dpkg/dpkg.cfg.d/excludes first
+# (check-deb.sh says which happened). The uncompressed copy stays in the tree for the
+# tarball; only the .deb compresses it.
+[ -s "$TREE/share/man/man1/megapdf-cli.1" ] \
+    || { echo "::error::the tree has no share/man/man1/megapdf-cli.1 — build-linux-app.sh should have put it there" >&2; exit 1; }
+mkdir -p "$STAGE/usr/share/man/man1"
+gzip -9n -c "$TREE/share/man/man1/megapdf-cli.1" > "$STAGE/usr/share/man/man1/megapdf-cli.1.gz"
+chmod 644 "$STAGE/usr/share/man/man1/megapdf-cli.1.gz"
+
 # --- control --------------------------------------------------------------------
 # The dependencies are the ones the app loads at run time, which objdump cannot see:
 # .NET dlopens ICU and Avalonia.X11 dlopens the X libraries, so neither appears in any
@@ -151,6 +164,12 @@ ICU_DEPS="$(for n in $(seq 80 -1 70); do printf 'libicu%s | ' "$n"; done | sed '
     echo " touches your original, so a failed save cannot corrupt the file you were sent."
     echo " ."
     echo " No account, no subscription and no network connection of any kind."
+    echo " ."
+    echo " The package also installs megapdf-cli, a command-line tool that extracts a"
+    echo " document's text, or Markdown built from its structure, to a file or to standard"
+    echo " output: for scripts, pipelines and servers. It needs no display, no desktop"
+    echo " session and no network, and takes a password from a file or standard input,"
+    echo " never from the command line. See megapdf-cli(1)."
 } > "$STAGE/DEBIAN/control"
 
 # Refreshing the caches is what puts the app in the menu and its icon on the file; both
@@ -177,7 +196,12 @@ POSTRM
 chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
 
 # Nothing in the tree is a config file, and dpkg must not treat the engine as one.
+# Everything under /usr/share is data (the symlinks in /usr/bin are not files), and an
+# icon or a copyright file copied from a checkout on a Windows-mounted filesystem
+# arrives 0777 (build-linux-app.sh says why), which lintian reports as
+# executable-not-elf-or-script and executable-in-usr-share-doc.
 find "$STAGE$OPTDIR" -type f -name '*.so' -exec chmod 644 {} +
+find "$STAGE/usr/share" -type f -exec chmod 644 {} +
 chmod 755 "$STAGE$OPTDIR/MegaPDF" "$STAGE$OPTDIR/megapdf-cli"
 
 DEB="$OUT/${PKG}_${PKG_VERSION}_${ARCH}.deb"
