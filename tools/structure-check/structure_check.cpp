@@ -25,6 +25,15 @@
 //         3. agreement with poppler — the same tau against `pdftotext -layout` output, read
 //            from --reference (a file the battery already produced; this tool never shells
 //            out). Informational only.
+//            #384 investigation: alongside the flat tau_ref list, three more comma lists of the
+//            same length, index-aligned to it -- tau_ref_page (the page index each tau came
+//            from), tau_ref_tokens (that page's heuristic block-token count, the same count
+//            measure 1 tallies), tau_ref_area (that page's width*height in points^2, rounded).
+//            These let a corpus-scale slice by page shape (e.g. "page 0 of a multi-page
+//            document" or "low token count for the page area") be computed after the fact from
+//            the existing battery log, without a second corpus pass -- see
+//            tools/stress/structure_titlepage_slice.py. Numbers only, same as everything else
+//            this tool prints.
 //         4. robustness — timing and memory; crashes and hangs are the caller's business
 //            (a segfault or a timeout means this process does not get to print anything).
 //       --cli-reference <file> (#355): the same measure 1, but against megapdf-cli's own
@@ -631,6 +640,10 @@ int RunCheck(const Options& opt) {
     FidelityCounts cli_fidelity_total;   // #355: the same measure 1, through megapdf-cli's own output
     int fidelity_low09 = 0;
     std::vector<long long> tau_tree_x1000, tau_ref_x1000;
+    // #384 investigation: page shape metadata, index-aligned to tau_ref_x1000 (see the --reference
+    // doc comment above) -- filled at the same push_back site as tau_ref_x1000 below, never
+    // independently, so the three vectors and tau_ref_x1000 always have equal length.
+    std::vector<long long> tau_ref_page, tau_ref_tokens, tau_ref_area;
 
     for (int p = 0; p < pages; p++) {
         const auto page_t0 = std::chrono::steady_clock::now();
@@ -684,7 +697,23 @@ int RunCheck(const Options& opt) {
                 if (static_cast<size_t>(p) < reference_pages.size()) {
                     const std::vector<Token> ref_tokens = Tokenize(Utf8ToCodepoints(reference_pages[static_cast<size_t>(p)]));
                     const double tau = KendallTau(tokens_by_page[static_cast<size_t>(p)], ref_tokens);
-                    if (tau > kTauNotEnoughData) tau_ref_x1000.push_back(static_cast<long long>(tau * 1000.0));
+                    if (tau > kTauNotEnoughData) {
+                        tau_ref_x1000.push_back(static_cast<long long>(tau * 1000.0));
+                        // #384: page-shape metadata for this same tau, so a slice by "title-page-
+                        // like" proxy can be computed post-hoc from the battery log. Page area
+                        // comes from the raw page itself (points^2, rounded) -- available even
+                        // when raw_page's text page has zero characters, which cannot happen here
+                        // since ref_tokens/tau above already required a loaded textpage.
+                        tau_ref_page.push_back(p);
+                        tau_ref_tokens.push_back(
+                            static_cast<long long>(tokens_by_page[static_cast<size_t>(p)].size()));
+                        double pw = 0.0, ph = 0.0;
+                        if (raw_page != nullptr) {
+                            pw = FPDF_GetPageWidth(raw_page);
+                            ph = FPDF_GetPageHeight(raw_page);
+                        }
+                        tau_ref_area.push_back(static_cast<long long>(pw * ph));
+                    }
                 }
             } else {
                 std::vector<int> discard;
@@ -753,13 +782,15 @@ int RunCheck(const Options& opt) {
     std::printf("result=ok pages=%d tagged=%d tree=0 textless=%d multicol=%d manycut=%d ms_per_page=%.3f rss_kb=%lld "
                 "conf_deciles=%s %s fid_match=%lld fid_a=%lld fid_b=%lld fid_low09=%d "
                 "cli_fid_match=%lld cli_fid_a=%lld cli_fid_b=%lld "
-                "tau_tree_n=%zu tau_tree=%s tau_ref_n=%zu tau_ref=%s\n",
+                "tau_tree_n=%zu tau_tree=%s tau_ref_n=%zu tau_ref=%s "
+                "tau_ref_page=%s tau_ref_tokens=%s tau_ref_area=%s\n",
                 pages, tagged_pages, textless_pages, multicol_pages, manycut_pages, ms_avg, PeakRssKb(),
                 ConfidenceDeciles(confidences).c_str(), blocks_field.str().c_str(), fidelity_total.matched,
                 fidelity_total.a, fidelity_total.b, fidelity_low09,
                 cli_fidelity_total.matched, cli_fidelity_total.a, cli_fidelity_total.b,
                 tau_tree_x1000.size(), JoinInts(tau_tree_x1000).c_str(), tau_ref_x1000.size(),
-                JoinInts(tau_ref_x1000).c_str());
+                JoinInts(tau_ref_x1000).c_str(), JoinInts(tau_ref_page).c_str(),
+                JoinInts(tau_ref_tokens).c_str(), JoinInts(tau_ref_area).c_str());
     return 0;
 }
 
