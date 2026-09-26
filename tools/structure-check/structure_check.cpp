@@ -36,9 +36,8 @@
 //            actual signal, not a stand-in for it, can be checked against tau_ref directly).
 //            These let a corpus-scale slice by page shape (e.g. "page 0 of a multi-page
 //            document" or "low token count for the page area") be computed after the fact from
-//            the existing battery log, without a
-//            second corpus pass -- see tools/stress/structure_titlepage_slice.py. Numbers only,
-//            same as everything else
+//            the existing battery log, without a second corpus pass -- see
+//            tools/stress/structure_titlepage_slice.py. Numbers only, same as everything else
 //            this tool prints.
 //         4. robustness — timing and memory; crashes and hangs are the caller's business
 //            (a segfault or a timeout means this process does not get to print anything).
