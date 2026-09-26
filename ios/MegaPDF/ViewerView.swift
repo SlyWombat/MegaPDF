@@ -16,7 +16,6 @@ struct ViewerView: View {
     @State private var gestureZoom: CGFloat = 1
     @State private var visible: Set<Int> = []
     @State private var signaturesOpen = false
-    @State private var confirmDiscard = false
     @State private var searchOpen = false
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
@@ -25,6 +24,10 @@ struct ViewerView: View {
     @State private var redactBand: RedactBand?
     /// The redaction confirmation is up: marks are on the document and a save was asked for.
     @State private var redactConfirm: RedactSaveChoice?
+    /// The More button's on-screen frame (#378): iPad's `UIActivityViewController` needs a
+    /// popover source or it crashes, and it has to point at wherever the button actually is
+    /// rather than a guessed coordinate — `MoreMenuAnchorKey` below reports it here.
+    @State private var moreMenuAnchor: CGRect = .zero
     @Environment(\.displayScale) private var displayScale
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
@@ -143,7 +146,7 @@ struct ViewerView: View {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Close") {
                     guard !model.closeBlocked else { return }
-                    if model.isDirty { confirmDiscard = true } else { onClose() }
+                    if model.isDirty { model.unsavedChangesFollowUp = .close } else { onClose() }
                 }
                 .disabled(model.fileCommandsBlocked)
             }
@@ -166,6 +169,17 @@ struct ViewerView: View {
                         if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
                     }
                         .disabled(model.isSaving || model.fileCommandsBlocked)
+                    // #378: hands the document to the OS's own share sheet (Mail, Messages,
+                    // AirDrop, another PDF app, whatever is installed) rather than a
+                    // MegaPDF-drawn destination list. Unsaved changes ask first, through the
+                    // same alert Close uses, wired to share instead of close.
+                    Button {
+                        if model.isDirty { model.unsavedChangesFollowUp = .share } else { model.share() }
+                    } label: {
+                        Label("Share", systemImage: "square.and.arrow.up")
+                    }
+                        .disabled(!model.canShare)
+                        .accessibilityIdentifier("viewerShare")
                     Button("Password…", action: model.showPasswordCommand)
                         .disabled(!model.canUsePasswordCommand || model.fileCommandsBlocked)
                     if model.capabilities.isRestricted {
@@ -207,6 +221,15 @@ struct ViewerView: View {
                     Label("More", systemImage: "ellipsis.circle")
                 }
                 .accessibilityIdentifier("viewerMore")
+                // Captures where this button actually ends up on screen, for the iPad share
+                // popover (#378) — a `GeometryReader` behind a toolbar item still reports real
+                // window coordinates, so this needs no fixed guess at the nav bar's geometry.
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .preference(key: MoreMenuAnchorKey.self, value: geo.frame(in: .global))
+                    }
+                )
             }
             ToolbarItemGroup(placement: .bottomBar) {
                 // A restricted open can't use the tools its owner withheld (#131);
@@ -237,8 +260,18 @@ struct ViewerView: View {
                 .disabled(!model.canRedo || model.fileCommandsBlocked)
             }
         }
+        .onPreferenceChange(MoreMenuAnchorKey.self) { moreMenuAnchor = $0 }
         .sheet(isPresented: $aboutOpen) {
             AboutView()
+        }
+        // #378: the OS share sheet. `isPresented`, not `.sheet(item:)`, because `URL` has no
+        // stable identity of its own to key a sheet off — the guard inside re-reads
+        // `model.shareURL` for the content.
+        .sheet(isPresented: Binding(get: { model.shareURL != nil },
+                                    set: { if !$0 { model.shareURL = nil } })) {
+            if let url = model.shareURL {
+                ShareSheet(activityItems: [url], anchor: moreMenuAnchor)
+            }
         }
         // The confirmation #173 asks for, before either save path writes anything: what
         // redaction does, that it cannot be undone once saved, and Save a copy as the
@@ -354,10 +387,34 @@ struct ViewerView: View {
                 onCancel: model.cancelTextPlacement
             )
         }
-        .alert("Unsaved changes", isPresented: $confirmDiscard) {
-            // Saves, then closes once the document is saved (#145).
-            Button("Save") { model.save(thenClose: true) }
-            Button("Discard", role: .destructive, action: onClose)
+        // One alert for all three callers (#145, #377, #378): what Save/Discard/Cancel each
+        // do depends on why it was raised, kept in the model as `unsavedChangesFollowUp`
+        // rather than three separate booleans here.
+        .alert("Unsaved changes", isPresented: Binding(
+            get: { model.unsavedChangesFollowUp != nil },
+            set: { if !$0 { model.unsavedChangesFollowUp = nil } })
+        ) {
+            Button("Save") {
+                switch model.unsavedChangesFollowUp {
+                case .close: model.save(then: .close)
+                case .share: model.save(then: .share)
+                case let .open(url): model.save(then: .open(url))
+                case nil: break
+                }
+            }
+            Button("Discard", role: .destructive) {
+                switch model.unsavedChangesFollowUp {
+                case .close: onClose()
+                // Shares the document exactly as it last saved (#378): the pending edits
+                // are not lost, only what gets shared changes.
+                case .share: model.share()
+                // The pending edits to the document being replaced are lost, same as Close's
+                // Discard always meant (#377) — this is only reachable for a document handed
+                // over from outside, never the everyday Close path above.
+                case let .open(url): model.openPicked(url: url)
+                case nil: break
+                }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This document has unsaved changes.")
@@ -732,3 +789,41 @@ struct RedactBand: Equatable {
 
 /// Which save the redaction confirmation was raised from (#173).
 enum RedactSaveChoice { case overwrite, copy }
+
+/// The More button's on-screen frame, reported by the `GeometryReader` behind its label
+/// (#378) — read by `ViewerView` so the iPad share popover has a real anchor.
+private struct MoreMenuAnchorKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+
+/// The OS share sheet (#378): hands the document's file URL to Mail, Messages, AirDrop,
+/// another PDF app, or whatever else is installed, through the platform's own chooser
+/// rather than a destination list MegaPDF draws itself.
+///
+/// iPad presents `UIActivityViewController` as a popover and crashes without a
+/// `sourceView`/`sourceRect` — `anchor` is the More button's real frame (`MoreMenuAnchorKey`,
+/// above), not a guessed coordinate, so the popover points at where the row actually is.
+/// `.zero` (asked before the first layout pass ever ran) falls back to the window's
+/// top-trailing corner, roughly the nav bar's trailing end, rather than crashing.
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let anchor: CGRect
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        if let popover = controller.popoverPresentationController {
+            let window = UIApplication.shared.connectedScenes
+                .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+                .first
+            popover.sourceView = window
+            popover.sourceRect = anchor == .zero
+                ? CGRect(x: (window?.bounds.width ?? 0) - 1, y: 0, width: 1, height: 1)
+                : anchor
+            popover.permittedArrowDirections = [.up]
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}

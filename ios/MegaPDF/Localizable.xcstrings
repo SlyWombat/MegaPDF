@@ -2346,6 +2346,23 @@
         }
       }
     },
+    "Share" : {
+      "comment" : "More menu (#378): row label",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partager"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partager"
+          }
+        }
+      }
+    },
     "Show in Files" : {
       "localizations" : {
         "fr" : {
