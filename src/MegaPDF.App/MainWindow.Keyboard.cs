@@ -91,5 +91,9 @@ public sealed partial class MainWindow
     }
 
     internal void ClickPagesForTest() => ActiveDocumentView?.ClickPagesForTest();
+
+    /// <summary>The `click` self-test pose (#401): a page click opens the editor and ticks a box.</summary>
+    internal Task<bool> ClickFirstRegionsForTest() =>
+        ActiveDocumentView?.ClickFirstRegionsForTest() ?? Task.FromResult(false);
     internal bool IsToolbarEnabled => Toolbar.IsEnabled;
 }
