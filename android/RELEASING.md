@@ -168,7 +168,7 @@ Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Dr
 
 Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler.
 
-Enregistrer une copie écrit maintenant du Markdown aussi bien qu'un PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
+Enregistrer une copie écrit maintenant en Markdown aussi bien qu'en PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
 ```
 
 ### Français (France) — `fr-FR`
@@ -225,7 +225,7 @@ Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Dr
 
 Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler.
 
-Enregistrer une copie écrit maintenant du Markdown aussi bien qu'un PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
+Enregistrer une copie écrit maintenant en Markdown aussi bien qu'en PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
 ```
 
 <!-- /copy-by-language -->

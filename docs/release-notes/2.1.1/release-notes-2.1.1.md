@@ -248,9 +248,9 @@ qu'une fois que vous avez répondu pour ce document. Après une fermeture
 inattendue, la proposition de restaurer est faite une fois par lancement, pour
 chaque document qui était ouvert, et chacun revient dans son propre onglet.
 
-Fermer l'onglet et Nouvelle fenêtre sont dans le menu Plus de la barre d'outils
-sur Windows, et Fermer l'onglet, Fermer la fenêtre et Nouvelle fenêtre dans le
-menu Fichier sur le Mac et Linux, avec les touches propres à chaque
+Fermer l'onglet et Nouvelle fenêtre sont dans le menu Plus d'options de la
+barre d'outils sur Windows, et Fermer l'onglet, Fermer la fenêtre et Nouvelle
+fenêtre dans le menu Fichier sur le Mac et Linux, avec les touches propres à chaque
 plateforme : Ctrl+W ferme un onglet (⌘W sur le Mac; avec un seul onglet, cela
 ferme la fenêtre), Ctrl+Maj+N ouvre une nouvelle fenêtre (⌘N), et sur le Mac,
 ⇧⌘W ferme la fenêtre et ⌃Tab / ⌃⇧Tab passent d'un onglet à l'autre, comme le
@@ -263,7 +263,7 @@ fenêtre, et aucun ne passe d'une fenêtre à l'autre; le Mac utilise la barre
 d'onglets de MegaPDF plutôt que les onglets de fenêtre du système. Rien ne
 change sur les téléphones.
 
-### Enregistrer sous en Markdown
+### Enregistrer sous, en Markdown
 
 Enregistrer sous sur Windows, le Mac et Linux, Enregistrer une copie sur Android
 et Exporter en Markdown sur iPhone et iPad écrivent maintenant le texte du
@@ -322,8 +322,8 @@ Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage
 de n'importe quelle application s'ouvre dans MegaPDF directement de là.
 Jusqu'ici, la seule entrée était Ouvrir un PDF à l'accueil, par le sélecteur.
 Si un document avec des modifications non enregistrées est déjà ouvert, le
-téléphone demande (Enregistrer, Abandonner ou Annuler) avant de changer, parce
-que l'autre option était de perdre ces modifications en silence.
+téléphone demande (Enregistrer, Abandonner ou Annuler) avant de changer de
+document, parce que l'autre option était de perdre ces modifications en silence.
 
 **Partager**, dans le menu Plus des deux téléphones, remet le document à la
 feuille de partage du système : Mail, Messages, AirDrop, Enregistrer dans
@@ -332,7 +332,7 @@ enregistrées, il le dit d'abord — *Ce document contient des modifications non
 enregistrées. Elles ne feront pas partie de la copie partagée si vous ne
 l'enregistrez pas d'abord* — et propose **Enregistrer**, **Partager sans
 enregistrer** ou **Annuler**. Le bouton du milieu allait dire Abandonner, et ne
-le dit pas : l'appuyer n'abandonne rien, le dernier fichier enregistré part et
+le dit pas : appuyer dessus n'abandonne rien, le dernier fichier enregistré est envoyé et
 vos modifications restent ouvertes, et un bouton qui dit Abandonner sans rien
 détruire apprendrait aux gens qu'Abandonner est sans danger, ce qui n'est pas
 le cas dans la zone de dialogue Fermer à côté.
@@ -341,7 +341,7 @@ le cas dans la zone de dialogue Fermer à côté.
 
 L'exportation Markdown et `megapdf-cli` lisent la même structure que le moteur
 déduit d'une page (quel texte est un titre, ce qui est un paragraphe, où sont
-les colonnes, ce qui est de l'habillage), et cette déduction a été mesurée
+les colonnes, ce qui n'est qu'en-tête ou pied de page), et cette déduction a été mesurée
 contre tout le corpus de test (4 158 vrais documents, 22 180 pages) et corrigée
 quatre fois dans cette version. Rien de tout cela n'est une fonction visible;
 tout cela est ce qui fait que le Markdown se lit comme le document.
@@ -357,15 +357,15 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
   faisait déjà, seulement quand PDFium dit que c'est une césure, jamais pour
   *bien-aimé* au milieu d'une ligne (#360).
 - **Un tableau n'est pas une liste de titres.** Un texte en gras à la taille du
-  corps est un titre quand il est seul, comme un vrai titre. Une suite de
-  plusieurs à la file (les étiquettes de colonnes d'un tableau, les noms de
-  champs d'un formulaire, l'en-tête d'un courriel) n'en est pas un, ni un
-  chiffre nu comme un montant en dollars. Ce sont de nouveau des paragraphes
+  texte courant est un titre quand il est seul, comme un vrai titre. Plusieurs
+  à la suite (les étiquettes de colonnes d'un tableau, les noms de champs d'un
+  formulaire, l'en-tête d'un courriel) n'en sont pas, pas plus qu'un chiffre nu
+  comme un montant en dollars. Ce sont de nouveau des paragraphes
   (#375) : 62 % de faux titres en moins sur le corpus, aucun vrai titre perdu
   sur aucun fichier de test.
 - **Une page dont l'ordre de lecture saute** (une page titre, une couverture,
   une page que la mise en page n'ordonne vraiment pas) porte maintenant un
-  indice de confiance plus bas, pour que l'écriture puisse le dire plutôt que
+  indice de confiance plus bas, pour que l'exportation puisse le dire plutôt que
   de présenter le désordre comme de la prose (#384).
 
 ### Mac
@@ -387,13 +387,13 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
 
 ### Windows
 
-- Les onglets, comme ci-dessus : Ctrl+W et Ctrl+Maj+N, Fermer l'onglet / Fermer
-  la fenêtre / Nouvelle fenêtre dans le menu Plus, Ouvrir à sélection multiple,
+- Les onglets, comme ci-dessus : Ctrl+W et Ctrl+Maj+N, Fermer l'onglet et
+  Nouvelle fenêtre dans le menu Plus d'options, Ouvrir à sélection multiple,
   le glisser-déposer, et un double-clic dans l'Explorateur de fichiers qui
   arrive dans la fenêtre en cours, plusieurs à la fois, chacun dans son onglet,
   aucun perdu. Vérifié sur GPD-DAVE, où le code d'instance unique s'est révélé
   n'ouvrir rien du tout en silence (une conversion WinRT qui compile et ne
-  correspond jamais) et a été corrigé avant de partir.
+  correspond jamais) et a été corrigé avant la sortie.
 - Enregistrer sous propose Document Markdown.
 - Clavier (#2) : cocher une case dessinée annonce *Case cochée* plutôt que de
   nouveau *Case à cocher*; la poignée de redimensionnement et le ✕ d'une
@@ -412,7 +412,7 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
   dans le Flatpak et le snap aussi. L'entrée de bureau accepte maintenant
   plusieurs fichiers (`%F`).
 - Enregistrer sous propose Document Markdown.
-- `megapdf-cli` est dans chaque paquet, sur le `PATH` ou à une commande près
+- `megapdf-cli` est dans chaque paquet, sur le `PATH` ou accessible en une commande
   (ci-dessus).
 - Le snap se construit de nouveau (#352).
 
@@ -433,8 +433,8 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
 
 - Ouvrir avec : un PDF dans Fichiers, une pièce jointe dans Mail ou un document
   dans la feuille de partage de n'importe quelle application s'ouvre dans
-  MegaPDF, qui se déclare maintenant lecteur de PDF. Avec un document aux
-  modifications non enregistrées ouvert, il demande d'abord.
+  MegaPDF, qui se déclare maintenant lecteur de PDF. Si un document avec des
+  modifications non enregistrées est ouvert, il demande d'abord.
 - Partager, dans le menu Plus, par la feuille de partage, avec une fenêtre
   contextuelle ancrée au bouton Plus sur iPad, là où une fenêtre sans ancrage
   aurait planté.
@@ -485,9 +485,9 @@ qu'une fois que vous avez répondu pour ce document. Après une fermeture
 inattendue, la proposition de restaurer est faite une fois par lancement, pour
 chaque document qui était ouvert, et chacun revient dans son propre onglet.
 
-Fermer l'onglet et Nouvelle fenêtre sont dans le menu Plus de la barre d'outils
-sur Windows, et Fermer l'onglet, Fermer la fenêtre et Nouvelle fenêtre dans le
-menu Fichier sur le Mac et Linux, avec les touches propres à chaque
+Fermer l'onglet et Nouvelle fenêtre sont dans le menu Plus d'options de la
+barre d'outils sur Windows, et Fermer l'onglet, Fermer la fenêtre et Nouvelle
+fenêtre dans le menu Fichier sur le Mac et Linux, avec les touches propres à chaque
 plateforme : Ctrl+W ferme un onglet (⌘W sur le Mac ; avec un seul onglet, cela
 ferme la fenêtre), Ctrl+Maj+N ouvre une nouvelle fenêtre (⌘N), et sur le Mac,
 ⇧⌘W ferme la fenêtre et ⌃Tab / ⌃⇧Tab passent d'un onglet à l'autre, comme le
@@ -500,7 +500,7 @@ fenêtre, et aucun ne passe d'une fenêtre à l'autre ; le Mac utilise la barre
 d'onglets de MegaPDF plutôt que les onglets de fenêtre du système. Rien ne
 change sur les téléphones.
 
-### Enregistrer sous en Markdown
+### Enregistrer sous, en Markdown
 
 Enregistrer sous sur Windows, le Mac et Linux, Enregistrer une copie sur Android
 et Exporter en Markdown sur iPhone et iPad écrivent maintenant le texte du
@@ -559,8 +559,8 @@ Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage
 de n'importe quelle application s'ouvre dans MegaPDF directement de là.
 Jusqu'ici, la seule entrée était Ouvrir un PDF à l'accueil, par le sélecteur.
 Si un document avec des modifications non enregistrées est déjà ouvert, le
-téléphone demande (Enregistrer, Abandonner ou Annuler) avant de changer, parce
-que l'autre option était de perdre ces modifications en silence.
+téléphone demande (Enregistrer, Abandonner ou Annuler) avant de changer de
+document, parce que l'autre option était de perdre ces modifications en silence.
 
 **Partager**, dans le menu Plus des deux téléphones, remet le document à la
 feuille de partage du système : Mail, Messages, AirDrop, Enregistrer dans
@@ -569,7 +569,7 @@ enregistrées, il le dit d'abord — *Ce document contient des modifications non
 enregistrées. Elles ne feront pas partie de la copie partagée si vous ne
 l'enregistrez pas d'abord* — et propose **Enregistrer**, **Partager sans
 enregistrer** ou **Annuler**. Le bouton du milieu allait dire Abandonner, et ne
-le dit pas : l'appuyer n'abandonne rien, le dernier fichier enregistré part et
+le dit pas : appuyer dessus n'abandonne rien, le dernier fichier enregistré est envoyé et
 vos modifications restent ouvertes, et un bouton qui dit Abandonner sans rien
 détruire apprendrait aux gens qu'Abandonner est sans danger, ce qui n'est pas
 le cas dans la zone de dialogue Fermer à côté.
@@ -578,7 +578,7 @@ le cas dans la zone de dialogue Fermer à côté.
 
 L'exportation Markdown et `megapdf-cli` lisent la même structure que le moteur
 déduit d'une page (quel texte est un titre, ce qui est un paragraphe, où sont
-les colonnes, ce qui est de l'habillage), et cette déduction a été mesurée
+les colonnes, ce qui n'est qu'en-tête ou pied de page), et cette déduction a été mesurée
 contre tout le corpus de test (4 158 vrais documents, 22 180 pages) et corrigée
 quatre fois dans cette version. Rien de tout cela n'est une fonction visible ;
 tout cela est ce qui fait que le Markdown se lit comme le document.
@@ -594,15 +594,15 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
   faisait déjà, seulement quand PDFium dit que c'est une césure, jamais pour
   *bien-aimé* au milieu d'une ligne (#360).
 - **Un tableau n'est pas une liste de titres.** Un texte en gras à la taille du
-  corps est un titre quand il est seul, comme un vrai titre. Une suite de
-  plusieurs à la file (les étiquettes de colonnes d'un tableau, les noms de
-  champs d'un formulaire, l'en-tête d'un e-mail) n'en est pas un, ni un
-  chiffre nu comme un montant en dollars. Ce sont de nouveau des paragraphes
+  texte courant est un titre quand il est seul, comme un vrai titre. Plusieurs
+  à la suite (les étiquettes de colonnes d'un tableau, les noms de champs d'un
+  formulaire, l'en-tête d'un e-mail) n'en sont pas, pas plus qu'un chiffre nu
+  comme un montant en dollars. Ce sont de nouveau des paragraphes
   (#375) : 62 % de faux titres en moins sur le corpus, aucun vrai titre perdu
   sur aucun fichier de test.
 - **Une page dont l'ordre de lecture saute** (une page titre, une couverture,
   une page que la mise en page n'ordonne vraiment pas) porte maintenant un
-  indice de confiance plus bas, pour que l'écriture puisse le dire plutôt que
+  indice de confiance plus bas, pour que l'exportation puisse le dire plutôt que
   de présenter le désordre comme de la prose (#384).
 
 ### Mac
@@ -624,13 +624,13 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
 
 ### Windows
 
-- Les onglets, comme ci-dessus : Ctrl+W et Ctrl+Maj+N, Fermer l'onglet / Fermer
-  la fenêtre / Nouvelle fenêtre dans le menu Plus, Ouvrir à sélection multiple,
+- Les onglets, comme ci-dessus : Ctrl+W et Ctrl+Maj+N, Fermer l'onglet et
+  Nouvelle fenêtre dans le menu Plus d'options, Ouvrir à sélection multiple,
   le glisser-déposer, et un double-clic dans l'Explorateur de fichiers qui
   arrive dans la fenêtre en cours, plusieurs à la fois, chacun dans son onglet,
   aucun perdu. Vérifié sur GPD-DAVE, où le code d'instance unique s'est révélé
   n'ouvrir rien du tout en silence (une conversion WinRT qui compile et ne
-  correspond jamais) et a été corrigé avant de partir.
+  correspond jamais) et a été corrigé avant la sortie.
 - Enregistrer sous propose Document Markdown.
 - Clavier (#2) : cocher une case dessinée annonce *Case cochée* plutôt que de
   nouveau *Case à cocher* ; la poignée de redimensionnement et le ✕ d'une
@@ -649,7 +649,7 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
   dans le Flatpak et le snap aussi. L'entrée de bureau accepte maintenant
   plusieurs fichiers (`%F`).
 - Enregistrer sous propose Document Markdown.
-- `megapdf-cli` est dans chaque paquet, sur le `PATH` ou à une commande près
+- `megapdf-cli` est dans chaque paquet, sur le `PATH` ou accessible en une commande
   (ci-dessus).
 - Le snap se construit de nouveau (#352).
 
@@ -670,8 +670,8 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
 
 - Ouvrir avec : un PDF dans Fichiers, une pièce jointe dans Mail ou un document
   dans la feuille de partage de n'importe quelle application s'ouvre dans
-  MegaPDF, qui se déclare maintenant lecteur de PDF. Avec un document aux
-  modifications non enregistrées ouvert, il demande d'abord.
+  MegaPDF, qui se déclare maintenant lecteur de PDF. Si un document avec des
+  modifications non enregistrées est ouvert, il demande d'abord.
 - Partager, dans le menu Plus, par la feuille de partage, avec une fenêtre
   contextuelle ancrée au bouton Plus sur iPad, là où une fenêtre sans ancrage
   aurait planté.

@@ -183,19 +183,19 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
 ```
 
-**What's new** [4000] (1255) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
+**What's new** [4000] (1289) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
 ```
 Ouvrir avec MegaPDF
 
-Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement de là, et non plus seulement par Ouvrir un PDF à l'accueil. Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer.
+Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement à partir de là, et non plus seulement par Ouvrir un PDF à l'accueil. Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer de document.
 
 Partager
 
-Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, ce que vous avez. Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée part, et vos modifications restent ouvertes) ou Annuler.
+Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, tout ce que vous avez. Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée est envoyée, et vos modifications restent ouvertes) ou Annuler.
 
 Exporter en Markdown
 
-Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown, enregistré où vous voulez dans Fichiers. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a pas de texte à donner, et le fichier le dit à sa place.
+Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown, enregistré où vous voulez dans Fichiers. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order
@@ -268,19 +268,19 @@ MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas 
 pdf,signer,signature,remplir,formulaire,case,cocher,éditeur,recherche,document,annoter
 ```
 
-**What's new** [4000] (1255) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
+**What's new** [4000] (1289) — 2.1.1, from `docs/release-notes/2.1.1/app-store.md`
 ```
 Ouvrir avec MegaPDF
 
-Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement de là, et non plus seulement par Ouvrir un PDF à l'accueil. Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer.
+Pour votre iPhone et votre iPad, MegaPDF est maintenant un lecteur de PDF. Un PDF dans Fichiers, une pièce jointe dans Mail ou un document dans la feuille de partage de n'importe quelle application peut s'ouvrir dans MegaPDF directement à partir de là, et non plus seulement par Ouvrir un PDF à l'accueil. Si un document avec des modifications non enregistrées est déjà ouvert, il demande avant de changer de document.
 
 Partager
 
-Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, ce que vous avez. Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée part, et vos modifications restent ouvertes) ou Annuler.
+Partager, dans le menu Plus, remet le document à la feuille de partage : Mail, Messages, AirDrop, Enregistrer dans Fichiers, tout ce que vous avez. Si le document a des modifications non enregistrées, il le dit d'abord et propose Enregistrer, Partager sans enregistrer (la dernière copie enregistrée est envoyée, et vos modifications restent ouvertes) ou Annuler.
 
 Exporter en Markdown
 
-Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown, enregistré où vous voulez dans Fichiers. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a pas de texte à donner, et le fichier le dit à sa place.
+Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown, enregistré où vous voulez dans Fichiers. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place.
 ```
 
 **Screenshot captions** (optional overlay text), iPhone 6.9" and iPad 13" in this order

@@ -112,7 +112,7 @@ APPOSER DES SIGNATURES — Gardez une petite bibliothèque personnelle d'images 
 
 ENREGISTRER — Enregistrer remplace le fichier, Enregistrer sous en crée une copie. Pas d'assistant d'exportation, pas de boîte de dialogue d'« aplatissement », pas de surprise. Enregistrer sous peut aussi écrire le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, sans toucher au PDF.
 
-Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
+Aussi inclus, parce que les vrais documents en ont besoin : rechercher un mot avec Ctrl+F (chaque résultat surligné, Entrée pour passer au suivant), imprimer le PDF, et réduire les numérisations trop lourdes pour le courriel en un clic (sous-échantillonnage des images et recompression JPEG). Les documents s'ouvrent dans des onglets d'une même fenêtre, et un PDF double-cliqué dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà.
 
 CONFIDENTIEL PAR CONCEPTION — Pas de compte. Pas d'infonuagique. Pas d'abonnement. Pas de télémétrie. Chaque document est traité entièrement sur votre appareil et n'est jamais téléversé nulle part. Idéal pour les contrats, les formulaires médicaux et tout ce que vous préférez ne pas confier au serveur de quelqu'un d'autre.
 
@@ -125,7 +125,7 @@ MegaPDF est un logiciel libre (Apache-2.0) : github.com/SlyWombat/MegaPDF""",
         "Apposez une signature de votre bibliothèque personnelle d'un clic, puis ajustez-la et redimensionnez-la",
         "Trouvez n'importe quel mot avec Ctrl+F : chaque résultat surligné, Entrée pour passer au suivant",
         "Enregistrer remplace, Enregistrer sous copie : pas d'assistant d'exportation ni de dialogue d'aplatissement",
-        "Ouvrez plusieurs PDF dans les onglets d'une même fenêtre : un double-clic dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà",
+        "Ouvrez plusieurs PDF dans les onglets d'une même fenêtre : un PDF double-cliqué dans l'Explorateur de fichiers rejoint la fenêtre que vous avez déjà",
         "Enregistrer sous écrit le texte du document en Markdown : titres, listes et valeurs remplies, sans toucher au PDF",
         "Réduisez les numérisations trop lourdes pour le courriel en un clic",
         "Imprimez directement depuis l'application",

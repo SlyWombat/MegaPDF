@@ -32,30 +32,30 @@ The Save As panel now offers Markdown document beside PDF document. It writes th
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [4000] (1370)
+**Quoi de neuf** [4000] (1372)
 
 ```
 Des onglets
 
 Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre, que ce soit avec Ouvrir, qui choisit maintenant plusieurs fichiers à la fois, en déposant un fichier sur la fenêtre, ou depuis le Finder ou toute autre application qui remet un document à MegaPDF. Un document ouvert de l'extérieur arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui le montre déjà, au lieu de remplacer ce qui s'y trouvait. Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée. ⌘W ferme un onglet, ⇧⌘W la fenêtre, ⌃Tab passe d'un onglet à l'autre et ⌘N ouvre une autre fenêtre. Fermer ou quitter demande quoi faire pour chaque document à enregistrer, et après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet.
 
-Enregistrer sous en Markdown
+Enregistrer sous, en Markdown
 
-La zone de dialogue Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. Elle écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a pas de texte à donner, et le fichier le dit à sa place.
+La zone de dialogue Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. Elle écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place.
 ```
 
 ## Français (France) — `fr`
 
-**Quoi de neuf** [4000] (1370)
+**Quoi de neuf** [4000] (1372)
 
 ```
 Des onglets
 
 Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre, que ce soit avec Ouvrir, qui choisit maintenant plusieurs fichiers à la fois, en déposant un fichier sur la fenêtre, ou depuis le Finder ou toute autre application qui remet un document à MegaPDF. Un document ouvert de l'extérieur arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui le montre déjà, au lieu de remplacer ce qui s'y trouvait. Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée. ⌘W ferme un onglet, ⇧⌘W la fenêtre, ⌃Tab passe d'un onglet à l'autre et ⌘N ouvre une autre fenêtre. Fermer ou quitter demande quoi faire pour chaque document à enregistrer, et après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet.
 
-Enregistrer sous en Markdown
+Enregistrer sous, en Markdown
 
-La zone de dialogue Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. Elle écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a pas de texte à donner, et le fichier le dit à sa place.
+La zone de dialogue Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. Elle écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié. Une page numérisée n'a aucun texte à extraire, et le fichier le dit à sa place.
 ```
 
 > Apple's French locale for France is `fr`, not `fr-FR`. The France block is

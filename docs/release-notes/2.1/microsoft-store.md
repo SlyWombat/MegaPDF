@@ -36,14 +36,14 @@ Ticking a drawn box now tells a screen reader that it is ticked. The resize hand
 
 ## Français (Canada) — `fr-CA`
 
-**Quoi de neuf** [1500] (1342)
+**Quoi de neuf** [1500] (1341)
 
 ```
 Des onglets
 
-Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre. Ouvrir choisit plusieurs fichiers à la fois, un fichier déposé sur la fenêtre s'ouvre aussi, et un double-clic dans l'Explorateur de fichiers arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui montre déjà ce fichier. Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée; Ctrl+W en ferme un, et fermer la fenêtre demande quoi faire pour chaque document à enregistrer. Après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet.
+Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre. Ouvrir choisit plusieurs fichiers à la fois, un fichier déposé sur la fenêtre s'ouvre aussi, et un PDF double-cliqué dans l'Explorateur de fichiers arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui le montre déjà. Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée; Ctrl+W en ferme un, et fermer la fenêtre demande quoi faire pour chaque document à enregistrer. Après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet.
 
-Enregistrer sous en Markdown
+Enregistrer sous, en Markdown
 
 Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. Il écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié.
 
@@ -54,14 +54,14 @@ Cocher une case dessinée indique maintenant au lecteur d'écran qu'elle est coc
 
 ## Français (France) — `fr-FR`
 
-**Quoi de neuf** [1500] (1343)
+**Quoi de neuf** [1500] (1342)
 
 ```
 Des onglets
 
-Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre. Ouvrir choisit plusieurs fichiers à la fois, un fichier déposé sur la fenêtre s'ouvre aussi, et un double-clic dans l'Explorateur de fichiers arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui montre déjà ce fichier. Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée ; Ctrl+W en ferme un, et fermer la fenêtre demande quoi faire pour chaque document à enregistrer. Après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet.
+Ouvrez un deuxième PDF : il s'ouvre dans un onglet à côté du premier, dans la même fenêtre. Ouvrir choisit plusieurs fichiers à la fois, un fichier déposé sur la fenêtre s'ouvre aussi, et un PDF double-cliqué dans l'Explorateur de fichiers arrive dans la fenêtre que vous avez déjà, dans un nouvel onglet ou sur l'onglet qui le montre déjà. Chaque onglet garde son propre historique d'annulation, sa recherche, son zoom et son point de modification non enregistrée ; Ctrl+W en ferme un, et fermer la fenêtre demande quoi faire pour chaque document à enregistrer. Après une fermeture inattendue, chaque document qui était ouvert revient dans son propre onglet.
 
-Enregistrer sous en Markdown
+Enregistrer sous, en Markdown
 
 Enregistrer sous propose maintenant Document Markdown à côté de Document PDF. Il écrit le texte du document (titres, paragraphes, listes et les valeurs que vous avez remplies) dans un fichier Markdown à coller n'importe où. C'est une exportation, pas un enregistrement : le PDF n'est pas touché, et il demande toujours à être enregistré si vous l'aviez modifié.
 
