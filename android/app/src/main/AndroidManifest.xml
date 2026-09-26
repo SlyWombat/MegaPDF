@@ -20,6 +20,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Offers MegaPDF as a PDF viewer to other apps (#376): Outlook, Gmail, the
+                 Files app and browser downloads all hand a document over this way, not
+                 through our own SAF picker. Two schemes because senders differ — most
+                 attachment viewers hand a content:// uri through their own FileProvider,
+                 while a Files app or download manager may hand a file:// one. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="application/pdf" />
+                <data android:scheme="file" android:mimeType="application/pdf" />
+            </intent-filter>
         </activity>
 
         <!-- #378: the Share row's content:// grant. Scoped to cacheDir/share/ only

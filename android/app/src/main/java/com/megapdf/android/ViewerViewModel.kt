@@ -810,6 +810,41 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         shareFile = null
     }
 
+    /**
+     * A document handed in from outside the app (#376): another app's "Open with" chooser,
+     * via `ACTION_VIEW`, rather than this app's own SAF picker. Same unsaved-changes guard as
+     * closing the current document by hand — silently discarding an edit just because a mail
+     * client sent a second PDF would be worse than asking.
+     */
+    var pendingExternalOpen: Uri? by mutableStateOf(null)
+        private set
+
+    fun requestOpenExternal(uri: Uri) {
+        if (isDirty) pendingExternalOpen = uri else openUri(uri)
+    }
+
+    fun cancelExternalOpen() {
+        pendingExternalOpen = null
+    }
+
+    /** Discard the confirmation: the incoming document replaces the one on screen unsaved. */
+    fun discardAndOpenExternal() {
+        val uri = pendingExternalOpen ?: return
+        pendingExternalOpen = null
+        openUri(uri)
+    }
+
+    /** Save the confirmation: the incoming document opens once the current one is clean. */
+    fun saveAndOpenExternal() {
+        val uri = pendingExternalOpen ?: return
+        val current = currentUri ?: return openUri(uri).also { pendingExternalOpen = null }
+        val doc = document
+        pendingExternalOpen = null
+        writeTo(current, isSaveAs = false) {
+            if (document === doc && !isDirty) openUri(uri)
+        }
+    }
+
     // --- Document security (#131) ---
 
     /** What the open document's security lets the user do; everything when nothing is open. */
