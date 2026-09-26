@@ -2923,9 +2923,10 @@ internal static class Program
         Pump();
         check("  as the status line follows the tab's status", window.StatusLabel.Text == vm.Status);
 
-        // Closing the last tab puts the empty window's answers back.
-        shell.CloseTab(vm);
-        Pump();
+        // Closing the last tab puts the empty window's answers back. Through the window's
+        // own close path, as the tab strip's ✕ does, so the window forgets the tab too.
+        _ = window.CloseTabAsync(vm);
+        PumpUntil(() => shell.Documents.Count == 0, TimeSpan.FromSeconds(5));
         check("with the tab closed, Open is enabled again", window.OpenButton.IsEnabled);
         check($"  and the status line is the hint again ({window.StatusLabel.Text})",
               window.StatusLabel.Text == Strings.OpenToGetStarted
@@ -2986,8 +2987,16 @@ internal static class Program
             windowA.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
             windowB.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Cancel;
 
-            var confirmed = App.ConfirmAllWindowsForQuitAsync([windowA, windowB]).GetAwaiter().GetResult();
-            check("a Cancel on the second window stops the quit", !confirmed);
+            // Pumped, not GetResult() (#412): ConfirmUnsavedChangesAsync starts with
+            // `await vm.Busy.WhenIdleAsync()`, and the click above has just started
+            // background work on a wired (RunsInBackground) document. When that work is
+            // still running at the await, the continuation is posted to the dispatcher —
+            // which a GetResult() on the UI thread is blocking, so the self-test hung
+            // (seen on the macOS screenshots runner; every other thread idle, the main
+            // thread in a Monitor wait). Whether the work is done by then is a race that
+            // the preceding check's own render work made a loser.
+            var confirmed = AwaitPumped(App.ConfirmAllWindowsForQuitAsync([windowA, windowB]));
+            check("a Cancel on the second window stops the quit", confirmed is false);
             // Don't Save answers the question rather than clearing it — nothing was written,
             // so the in-memory document is still "dirty" in the ordinary sense — so what proves
             // window A was actually asked and answered is the count, not IsDirty.
@@ -3010,8 +3019,8 @@ internal static class Program
             // through — proving the fix did not just suppress the stale "yes" but replaced it
             // with a fresh, correct one.
             windowB.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
-            var confirmedAgain = App.ConfirmAllWindowsForQuitAsync([windowA, windowB]).GetAwaiter().GetResult();
-            check("with both windows now answering cleanly, the quit is confirmed", confirmedAgain);
+            var confirmedAgain = AwaitPumped(App.ConfirmAllWindowsForQuitAsync([windowA, windowB]));
+            check("with both windows now answering cleanly, the quit is confirmed", confirmedAgain is true);
         }
         finally
         {
@@ -3020,6 +3029,14 @@ internal static class Program
             windowB.SkipCloseConfirmation();
             windowB.Close();
             MenuProbe.Pump();
+        }
+
+        // The task's answer, with the dispatcher running while it is awaited; null if it
+        // has not answered in ten seconds, which fails the check instead of hanging the run.
+        static bool? AwaitPumped(Task<bool> task)
+        {
+            PumpUntil(() => task.IsCompleted, TimeSpan.FromSeconds(10));
+            return task.IsCompletedSuccessfully ? task.Result : null;
         }
     }
 
