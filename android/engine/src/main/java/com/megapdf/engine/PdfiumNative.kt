@@ -134,6 +134,44 @@ internal object PdfiumNative {
     external fun nativeApplyRedactions(handle: Long): IntArray
     external fun nativeRedactionPoisoned(handle: Long): Boolean
 
+    // Contract 9 (#142, #353, #386): document structure and the text/Markdown writers over
+    // it. nativeWriteText loads and frees its own structure internally (megapdf_write_text.cpp),
+    // so nativeStructureLoad/nativeStructureFree exist only for a future feature that reads
+    // contract 9's blocks directly — bound now because megapdf_core.h exposes the pair.
+    external fun nativeStructureLoad(handle: Long, firstPage: Int, pageCount: Int, flags: Int): Long
+    external fun nativeStructureFree(handle: Long)
+
+    /**
+     * megapdf_write_text(): [format] is [WRITE_FORMAT_TEXT] or [WRITE_FORMAT_MARKDOWN].
+     * [options] is packed [keepLines, pageBreak, keepFurniture, fields, heuristicOnly]
+     * (megapdf_write_options's own fields, each 0/1 except pageBreak/fields, contract 9's own
+     * small enums); null asks for the writer's own defaults. Returns the count of pages in the
+     * range that had a text layer, or a negative MEGAPDF_ERR_* status.
+     */
+    external fun nativeWriteText(
+        handle: Long, firstPage: Int, pageCount: Int, format: Int, options: IntArray?, out: OutputStream,
+    ): Int
+
+    // megapdf_write_options.format (megapdf_core.h, #386).
+    const val WRITE_FORMAT_TEXT = 0
+    const val WRITE_FORMAT_MARKDOWN = 1
+
+    // megapdf_page_break (megapdf_core.h): how pages are separated in a text/Markdown export.
+    const val PAGE_BREAK_FORM_FEED = 0
+    const val PAGE_BREAK_MARKER = 1
+    const val PAGE_BREAK_NONE = 2
+
+    // megapdf_write_fields (megapdf_core.h): which FIELD blocks a text/Markdown export includes.
+    const val WRITE_FIELDS_FILLED = 0
+    const val WRITE_FIELDS_ALL = 1
+    const val WRITE_FIELDS_NONE = 2
+
+    // Flags for nativeStructureLoad (megapdf_core.h's MEGAPDF_STRUCTURE_* enum).
+    const val STRUCTURE_DEFAULT = 0
+    const val STRUCTURE_HEURISTIC_ONLY = 1
+    const val STRUCTURE_KEEP_FURNITURE = 2
+    const val STRUCTURE_ALL_FIELDS = 4
+
     /** MEGAPDF_ERR_REDACT: the redaction removed nothing, or could not finish (#173). */
     const val STATUS_REDACT = -10
 
