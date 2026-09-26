@@ -25,14 +25,20 @@
 //         3. agreement with poppler — the same tau against `pdftotext -layout` output, read
 //            from --reference (a file the battery already produced; this tool never shells
 //            out). Informational only.
-//            #384 investigation: alongside the flat tau_ref list, three more comma lists of the
+//            #384 investigation: alongside the flat tau_ref list, five more comma lists of the
 //            same length, index-aligned to it -- tau_ref_page (the page index each tau came
 //            from), tau_ref_tokens (that page's heuristic block-token count, the same count
-//            measure 1 tallies), tau_ref_area (that page's width*height in points^2, rounded).
+//            measure 1 tallies), tau_ref_area (that page's width*height in points^2, rounded),
+//            tau_ref_jump (MaxBackwardJumpUnits for that page, x1000 -- the #384 mitigation's
+//            grounding measure: how far, in body-size units, the worst same-column backward
+//            reading-order jump on the page was, or 0 if none), and tau_ref_conf (that page's
+//            real megapdf_structure_page_confidence(), not a proxy -- so the mitigation's
+//            actual signal, not a stand-in for it, can be checked against tau_ref directly).
 //            These let a corpus-scale slice by page shape (e.g. "page 0 of a multi-page
 //            document" or "low token count for the page area") be computed after the fact from
-//            the existing battery log, without a second corpus pass -- see
-//            tools/stress/structure_titlepage_slice.py. Numbers only, same as everything else
+//            the existing battery log, without a
+//            second corpus pass -- see tools/stress/structure_titlepage_slice.py. Numbers only,
+//            same as everything else
 //            this tool prints.
 //         4. robustness — timing and memory; crashes and hangs are the caller's business
 //            (a segfault or a timeout means this process does not get to print anything).
@@ -459,6 +465,51 @@ ColumnCensus ColumnCensusForPage(const std::vector<megapdf_block>& page_blocks, 
 }
 
 // ---------------------------------------------------------------------------
+// #384 investigation: a page-shape-independent proxy for "this page's reading order took an
+// implausible jump", measured directly on the public bounds contract 9 already returns (no
+// core change here -- this is the grounding measurement the #384 mitigation's threshold is
+// picked from, per that issue's request to check what distance/gap actually correlates with
+// low tau_ref before hard-coding a number).
+//
+// Definition: walk the page's ordinary content blocks (HEADING/PARAGRAPH/LIST_ITEM/TABLE_ROW
+// -- the same kind filter ColumnCensusForPage uses, and the same set megapdf_structure.cpp's
+// own ComputeConfidence sees before FIGURE/FIELD/FURNITURE are spliced in) in their existing
+// order. For each adjacent pair (a, b), if their horizontal extents overlap by more than
+// kJumpOverlapFrac of the narrower block's width -- i.e. b sits in essentially the same
+// horizontal band as a, not a different column -- a legitimate top-to-bottom flow has b start
+// at or below where a ends (b.top <= a.bottom). When instead b.top is ABOVE a.bottom, the
+// reading order moved backward within what looks like the same column: exactly the "distant,
+// not a normal column-to-column transition" case #384 asks about. The page's value is the
+// worst (largest) such backward jump, in body-size units (body_size is already a whole-
+// document scale-free unit this file uses elsewhere, e.g. ColumnCensusForPage's own gap), or 0
+// when no pair qualifies. A different column (no horizontal overlap) never triggers this,
+// whatever the distance -- that is the "normal column-to-column transition" this deliberately
+// leaves alone.
+constexpr double kJumpOverlapFrac = 0.3;
+
+double MaxBackwardJumpUnits(const std::vector<megapdf_block>& page_blocks, double body_size) {
+    if (body_size <= 0) return 0.0;
+    std::vector<const megapdf_block*> content;
+    for (const auto& b : page_blocks) {
+        if (b.kind == MEGAPDF_BLOCK_HEADING || b.kind == MEGAPDF_BLOCK_PARAGRAPH ||
+            b.kind == MEGAPDF_BLOCK_LIST_ITEM || b.kind == MEGAPDF_BLOCK_TABLE_ROW) {
+            content.push_back(&b);
+        }
+    }
+    double worst = 0.0;
+    for (size_t i = 1; i < content.size(); i++) {
+        const megapdf_rect& a = content[i - 1]->bounds;
+        const megapdf_rect& b = content[i]->bounds;
+        const double overlap = (std::min)(a.right, b.right) - (std::max)(a.left, b.left);
+        const double min_width = (std::min)(a.right - a.left, b.right - b.left);
+        if (min_width <= 0 || overlap <= kJumpOverlapFrac * min_width) continue;   // different column: skip
+        const double backward = b.top - a.bottom;   // > 0 means b starts above where a ended
+        if (backward > 0) worst = (std::max)(worst, backward / body_size);
+    }
+    return worst;
+}
+
+// ---------------------------------------------------------------------------
 // megapdf_block_string / megapdf_block_span helpers.
 // ---------------------------------------------------------------------------
 std::vector<unsigned short> BlockString(const megapdf_structure* s, size_t i, megapdf_block_field which) {
@@ -644,7 +695,12 @@ int RunCheck(const Options& opt) {
     // #384 investigation: page shape metadata, index-aligned to tau_ref_x1000 (see the --reference
     // doc comment above) -- filled at the same push_back site as tau_ref_x1000 below, never
     // independently, so the three vectors and tau_ref_x1000 always have equal length.
-    std::vector<long long> tau_ref_page, tau_ref_tokens, tau_ref_area;
+    // #384 mitigation grounding: MaxBackwardJumpUnits' result for this same page, x1000 like
+    // tau itself, same index alignment as the three above. tau_ref_conf is this page's REAL
+    // megapdf_structure_page_confidence() (not a tool-side proxy, unlike tau_ref_jump) -- the
+    // most direct way to confirm the mitigation's actual confidence signal, not a
+    // stand-in for it, correlates with tau_ref.
+    std::vector<long long> tau_ref_page, tau_ref_tokens, tau_ref_area, tau_ref_jump, tau_ref_conf;
 
     for (int p = 0; p < pages; p++) {
         const auto page_t0 = std::chrono::steady_clock::now();
@@ -714,6 +770,9 @@ int RunCheck(const Options& opt) {
                             ph = FPDF_GetPageHeight(raw_page);
                         }
                         tau_ref_area.push_back(static_cast<long long>(pw * ph));
+                        tau_ref_jump.push_back(static_cast<long long>(
+                            MaxBackwardJumpUnits(blocks_by_page[static_cast<size_t>(p)], body_size) * 1000.0));
+                        tau_ref_conf.push_back(confidences[static_cast<size_t>(p)]);
                     }
                 }
             } else {
@@ -784,14 +843,15 @@ int RunCheck(const Options& opt) {
                 "conf_deciles=%s %s fid_match=%lld fid_a=%lld fid_b=%lld fid_low09=%d "
                 "cli_fid_match=%lld cli_fid_a=%lld cli_fid_b=%lld "
                 "tau_tree_n=%zu tau_tree=%s tau_ref_n=%zu tau_ref=%s "
-                "tau_ref_page=%s tau_ref_tokens=%s tau_ref_area=%s\n",
+                "tau_ref_page=%s tau_ref_tokens=%s tau_ref_area=%s tau_ref_jump=%s tau_ref_conf=%s\n",
                 pages, tagged_pages, textless_pages, multicol_pages, manycut_pages, ms_avg, PeakRssKb(),
                 ConfidenceDeciles(confidences).c_str(), blocks_field.str().c_str(), fidelity_total.matched,
                 fidelity_total.a, fidelity_total.b, fidelity_low09,
                 cli_fidelity_total.matched, cli_fidelity_total.a, cli_fidelity_total.b,
                 tau_tree_x1000.size(), JoinInts(tau_tree_x1000).c_str(), tau_ref_x1000.size(),
                 JoinInts(tau_ref_x1000).c_str(), JoinInts(tau_ref_page).c_str(),
-                JoinInts(tau_ref_tokens).c_str(), JoinInts(tau_ref_area).c_str());
+                JoinInts(tau_ref_tokens).c_str(), JoinInts(tau_ref_area).c_str(), JoinInts(tau_ref_jump).c_str(),
+                JoinInts(tau_ref_conf).c_str());
     return 0;
 }
 
