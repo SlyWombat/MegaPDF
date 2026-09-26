@@ -142,6 +142,7 @@ Conventions (OQLF, Canadian French):
 | This file is too large for MegaPDF to open. | Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir. | #147; *volumineux* for a file's size, never *gros* |
 | Couldn't save | Impossible d'enregistrer | |
 | Couldn't shrink | Impossible de réduire | |
+| Couldn't export | Impossible d'exporter | Windows Save As → Markdown export error title (#386); short-title twin of the fuller iOS "Couldn't export the text."/"Couldn't prepare the export." above |
 | Couldn't update | Impossible de mettre à jour | |
 | Save first | Enregistrez d'abord | |
 | Nothing to shrink | Rien à réduire | |
@@ -165,6 +166,7 @@ Conventions (OQLF, Canadian French):
 | Couldn't search this document. | Impossible de rechercher dans ce document. | Android (#145) |
 | Couldn't move this signature | Impossible de déplacer cette signature | Android (#145) |
 | PDF document | Document PDF | file-type name |
+| Markdown document | Document Markdown | Windows Save As file-type name (#386); *Markdown* itself is unchanged in French — see its own glossary row above |
 | {name} - edited | {name} - modifié | suggested file name |
 | {name} - smaller | {name} - réduit | suggested file name |
 | Scanned image | Image numérisée | |

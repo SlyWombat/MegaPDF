@@ -1869,6 +1869,11 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         var picker = new FileSavePicker();
         picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
+        // #386: Markdown is a one-way text export, not an alternate save format — see
+        // SaveAsExport for the shared semantics (never clears HasUnsavedChanges, never
+        // becomes DocumentPath) and its "Exporting…"/"Exported" wording, matched to #386's
+        // iOS implementation (PR #390: "Export as Markdown", not "Save a copy").
+        picker.FileTypeChoices.Add(Strings.MarkdownDocumentFilter, [SaveAsExport.MarkdownExtension]);
         picker.SuggestedFileName = wasRedacted || RedactionSummaryText.Length > 0
             ? Path.GetFileNameWithoutExtension(DocumentPath) + Strings.RedactedFileSuffix
             : Strings.EditedFileName(Path.GetFileNameWithoutExtension(DocumentPath));
@@ -1881,6 +1886,27 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         var document = _document;
         if (Busy.IsBusy || !ReferenceEquals(document, _document))
             return;
+
+        var kind = SaveAsExport.KindForPath(file.Path);
+        if (kind == SaveAsExportKind.Markdown)
+        {
+            try
+            {
+                using (Busy.Begin(Strings.BusyExportingMarkdown))
+                    await Task.Run(() => AtomicFileWriter.Write(file.Path, stream => document.WriteMarkdown(stream)));
+                // One-way export (#386): a .md can't hold the edits a re-open would need, so
+                // this never becomes DocumentPath and never clears HasUnsavedChanges — the
+                // "Unsaved changes" close prompt must stay accurate about the PDF, which this
+                // did not save. See SaveAsExport.ClearsUnsavedChanges.
+                Announced?.Invoke(Strings.ExportedAnnouncement(Path.GetFileName(file.Path)));
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync(Strings.CouldNotExportTitle, UserFacing.Describe(ex));
+            }
+            return;
+        }
+
         var editsBefore = _editCount;
         try
         {

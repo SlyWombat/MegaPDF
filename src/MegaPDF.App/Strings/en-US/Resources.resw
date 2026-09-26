@@ -279,6 +279,14 @@
     <value>PDF document</value>
     <comment>File type shown in the save picker</comment>
   </data>
+  <data name="MarkdownDocumentFilter" xml:space="preserve">
+    <value>Markdown document</value>
+    <comment>File type shown in the save picker (#386) — a one-way text export, not an alternate save format; see CouldNotExportTitle/ExportedAnnouncement</comment>
+  </data>
+  <data name="CouldNotExportTitle" xml:space="preserve">
+    <value>Couldn't export</value>
+    <comment>Error title for a failed Save As → Markdown export (#386); distinct from CouldNotSaveTitle on purpose — see #386's one-way-export wording</comment>
+  </data>
   <data name="EditedFileName" xml:space="preserve">
     <value>{0} - edited</value>
     <comment>Suggested name for Save As; {0} is the original name without extension</comment>
@@ -772,6 +780,10 @@ Saved as {2} — ready to email.</value>
     <value>Checking the saved file…</value>
     <comment>Busy strip while the saved bytes are read back (#145)</comment>
   </data>
+  <data name="BusyExportingMarkdown" xml:space="preserve">
+    <value>Exporting…</value>
+    <comment>Busy strip while Save As writes a Markdown export (#386) — "Exporting…", not "Saving…", matching #386's iOS wording (PR #390)</comment>
+  </data>
   <data name="BusyCheckingPage" xml:space="preserve">
     <value>Checking this page…</value>
     <comment>Page spinner while the page check runs before a change (#139, #145)</comment>
@@ -988,6 +1000,10 @@ Saved as {2} — ready to email.</value>
   <data name="SavedAnnouncement" xml:space="preserve">
     <value>Saved {0}</value>
     <comment>Announced to a screen reader when a save finishes; {0} file name (#190)</comment>
+  </data>
+  <data name="ExportedAnnouncement" xml:space="preserve">
+    <value>Exported {0}</value>
+    <comment>Announced to a screen reader when a Save As → Markdown export finishes; {0} file name (#386) — "Exported", not "Saved": the document itself is not saved by this</comment>
   </data>
   <data name="MoreOptions" xml:space="preserve">
     <value>More options</value>
