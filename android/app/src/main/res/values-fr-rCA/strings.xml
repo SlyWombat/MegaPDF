@@ -64,6 +64,8 @@
     <!-- Unsaved changes -->
     <string name="unsaved_changes">Modifications non enregistrées</string>
     <string name="unsaved_changes_body">Ce document contient des modifications non enregistrées.</string>
+    <string name="unsaved_changes_body_share">Ce document contient des modifications non enregistrées. Elles ne feront pas partie de la copie partagée si vous ne l\'enregistrez pas d\'abord.</string>
+    <string name="share_without_saving">Partager sans enregistrer</string>
 
     <!-- Saving -->
     <string name="saved">Enregistré</string>

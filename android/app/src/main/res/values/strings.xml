@@ -71,6 +71,8 @@
     <!-- Unsaved changes -->
     <string name="unsaved_changes">Unsaved changes</string>
     <string name="unsaved_changes_body">This document has unsaved changes.</string>
+    <string name="unsaved_changes_body_share">This document has unsaved changes. They won\'t be in the shared copy unless you save first.</string>
+    <string name="share_without_saving">Share without saving</string>
 
     <!-- Saving -->
     <string name="saved">Saved</string>

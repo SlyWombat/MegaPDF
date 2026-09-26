@@ -45,6 +45,7 @@ Conventions (OQLF, Canadian French):
 | Remove | Retirer | from a library or a page |
 | Discard | Abandonner | |
 | Share | Partager | #378, the OS share sheet row in the More menu |
+| Share without saving | Partager sans enregistrer | #378, the unsaved-changes dialog's Share-flow button — deliberately not "Discard"/"Abandonner", since nothing is discarded (Fable review, 2026-09-26) |
 | Don't save | Ne pas enregistrer | |
 | Restore | Restaurer | |
 | Signatures | Signatures | |

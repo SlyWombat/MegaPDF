@@ -450,7 +450,18 @@ fun ViewerScreen(
         AlertDialog(
             onDismissRequest = { pendingUnsavedAction = null },
             title = { Text(stringResource(R.string.unsaved_changes)) },
-            text = { DialogBody { Text(stringResource(R.string.unsaved_changes_body)) } },
+            text = {
+                DialogBody {
+                    Text(
+                        stringResource(
+                            when (action) {
+                                UnsavedAction.CLOSE -> R.string.unsaved_changes_body
+                                UnsavedAction.SHARE -> R.string.unsaved_changes_body_share
+                            }
+                        )
+                    )
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     pendingUnsavedAction = null
@@ -469,7 +480,18 @@ fun ViewerScreen(
                             UnsavedAction.CLOSE -> onClose()
                             UnsavedAction.SHARE -> onShareLastSaved()
                         }
-                    }) { Text(stringResource(R.string.discard)) }
+                    }) {
+                        // Share's second choice discards nothing — it only picks which file
+                        // gets shared, so it does not say "Discard" (#378, Fable review).
+                        Text(
+                            stringResource(
+                                when (action) {
+                                    UnsavedAction.CLOSE -> R.string.discard
+                                    UnsavedAction.SHARE -> R.string.share_without_saving
+                                }
+                            )
+                        )
+                    }
                 }
             },
         )
