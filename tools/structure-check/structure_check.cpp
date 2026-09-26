@@ -70,6 +70,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "megapdf_core.h"
@@ -1599,6 +1600,386 @@ int RunHeadingDiag(const std::vector<std::string>& pdfs) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// garbage mode (#385 investigation only -- not part of the #354 battery/gate).
+//
+// #385: a hand-found document extracts to unrecognizable glyph garbage on part of a page
+// (runs like `l"`, `qQ`), suspected cause a broken/symbolic embedded font with no usable
+// ToUnicode CMap. fid_low09 (measure 1's per-page F1 < 0.9 gate, #354) is the closest existing
+// signal, but it mixes this failure mode in with ordinary hyphenation/spacing noise
+// (#360/#362-#365/#375) -- all of those are token-COUNT disagreements between the heuristic
+// and FPDFText_GetText; none of them asks whether either side's CHARACTERS are actually right.
+// This mode scores two independent, numbers-only signals on fid_low09 pages to see which (if
+// either) actually tracks character-level garbage rather than ordinary structural noise:
+//
+//   1. PDFium's own per-character signal, FPDFText_GetUnicode alongside FPDFText_HasUnicodeMapError
+//      (an experimental API already present in the pinned PDFium build -- not a MegaPDF patch,
+//      see fpdf_text.h). Set per real (non-generated, non-whitespace) character; `maperr`/
+//      `chars` below is the fraction of a page's characters PDFium itself flags as having an
+//      invalid Unicode mapping -- the most direct possible confirmation of #385's "no usable
+//      ToUnicode map" theory, straight from the source rather than guessed from output text.
+//   2. A wordlikeness heuristic on the RAW (FPDFText_GetUnicode) token stream -- the side of
+//      measure 1's comparison that would actually carry character-level corruption, since it
+//      reads PDFium's own text, not the structure heuristic's reconstruction. Using this
+//      file's usual IsWordCodepoint token runs: an all-digit token is "numeric" (an invoice is
+//      full of real numbers -- not a garbage signal on its own); a single-letter token is
+//      "single" (a real initial, bullet or abbreviation -- ambiguous either way, not scored).
+//      Everything else is "alpha" and scored wordlike/not: does it contain at least one vowel
+//      (English+French, accents folded to their base letter for this test) and no run of more
+//      than kMaxConsonantRun consecutive non-vowel letters? (5, not 4: real English words have
+//      5-consonant runs -- "strengths" ends n-g-t-h-s -- so 4 flagged too many real words in a
+//      quick sanity check against ordinary prose before this mode was used on the corpus.)
+//      `known` is a stricter, lower-recall companion: an exact match (again accents folded)
+//      against a small hardcoded English+French common-word list.
+//
+// A sanity check against a synthetic PDF (a font with a /Differences encoding naming glyphs
+// that resolve to no Unicode value, no ToUnicode CMap) found FPDFText_HasUnicodeMapError firing
+// on 100% of that document's characters -- and measure 1's F1 STILL scored 1.0 (not low09):
+// the structure heuristic reads characters through the same FPDFText_GetUnicode PDFium itself
+// reads, so when a font is wrong, heuristic and raw agree on the SAME wrong text and measure 1
+// sees no disagreement at all. That means fid_low09 can miss this failure mode entirely, not
+// just mix it with noise -- so this mode scores BOTH populations: every fid_low09 page (the
+// population #385 was found through), and every page regardless of fid_low09 (the only way to
+// measure the failure mode's real corpus-wide prevalence, since a page can have it without ever
+// being fid_low09).
+//
+// One line per document actually opened:
+//   result=ok pages=<n> low09=<n> ctrl_chars=.. ctrl_maperr=.. ctrl_tokens=.. ctrl_alpha=..
+//             ctrl_wordlike=.. ctrl_known=.. ctrl_numeric=.. ctrl_single=..
+//   -- "ctrl" sums both signals over every NON-fid_low09 page on the document (the population
+//   measure 1 already treats as fine) -- the baseline / false-positive-rate context the
+//   fid_low09 population is compared against.
+// One line per fid_low09 page:
+//   low09page [id=<id> page=<n>] chars=.. maperr=.. tokens=.. alpha=.. wordlike=.. known=..
+//             numeric=.. single=..
+//   -- id/page are only printed when --dump-id is given (a hand-labeling run over a handful of
+//   documents); a full-corpus pass gives neither, since a bare page index identifies nothing
+//   on its own and this tool prints nothing that identifies a document (#151/#173/#354).
+// One line per page, low09 or not -- the corpus-wide prevalence measure, per the sanity check
+// above (a real-corpus check further down found the same false-positive shape by hand: a
+// maperr majority on a page that reads perfectly once the actual fallback-decoded characters
+// were read -- so maperr alone over-reports; wordlikeness needs the same all-pages coverage to
+// be trustworthy at corpus scale, not just the fid_low09 slice):
+//   page [id=<id> page=<n>] low09=0|1 chars=<c> maperr=<m> tokens=<t> alpha=<a> wordlike=<w>
+//        known=<k> numeric=<n> single=<s>
+//   -- id/page (like low09page's) are only printed when --dump-id is given.
+//
+// --dump-garbage <dir> --dump-id <id>: writes a page's raw PDFium text (the exact GetUnicode
+// stream the signals above are scored from) to <dir>/<id>-p<n>.txt, PRIVATE-marked exactly like
+// check mode's --dump, for every page "worth" hand-labeling: fid_low09, OR wordlikeness < 0.7
+// with >= 5 alpha tokens (a genuine-garbage candidate even without fid_low09 -- see the sanity
+// check above), OR a map-error rate > 0.2 (a candidate despite the false-positive risk, kept
+// for completeness). Meant for a small labeled sample, never run over the full corpus.
+// ---------------------------------------------------------------------------
+struct RawTextSignals {
+    long long chars = 0, maperr = 0;
+    long long tokens = 0, alpha = 0, wordlike = 0, known = 0, numeric = 0, single = 0;
+};
+
+bool IsAllDigitsToken(const Token& t) {
+    if (t.empty()) return false;
+    for (char32_t c : t) {
+        if (!(c >= '0' && c <= '9')) return false;
+    }
+    return true;
+}
+
+// Latin-1 Supplement / Latin Extended-A upper -> lower, ASCII upper -> lower. Approximate
+// (Latin Extended-A's even/odd upper/lower pairing has a handful of irregular spots this does
+// not special-case), but this file's own IsWordCodepoint already restricts tokens to exactly
+// ASCII + Latin-1 Supplement + Latin Extended-A, so it covers every codepoint a token can
+// actually contain.
+char32_t ToLowerLatin(char32_t c) {
+    if (c >= 'A' && c <= 'Z') return c + 32;
+    if (c >= 0xC0 && c <= 0xDE && c != 0xD7) return c + 0x20;  // À-Þ (not ×) -> à-þ
+    if (c >= 0x100 && c <= 0x177 && (c % 2) == 0) return c + 1;  // Ā/ā .. Ŵ/ŵ pairs
+    return c;
+}
+
+// Folds an accented vowel/consonant to its plain ASCII base letter, for the known-word test
+// only (the word list itself is plain ASCII to avoid any source-encoding ambiguity, see the
+// CommonWordSet() comment).
+char32_t StripAccent(char32_t c) {
+    switch (c) {
+        case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5: return U'a';  // à á â ã ä å
+        case 0xE8: case 0xE9: case 0xEA: case 0xEB: return U'e';                        // è é ê ë
+        case 0xEC: case 0xED: case 0xEE: case 0xEF: return U'i';                        // ì í î ï
+        case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6: return U'o';             // ò ó ô õ ö
+        case 0xF9: case 0xFA: case 0xFB: case 0xFC: return U'u';                        // ù ú û ü
+        case 0xFD: case 0xFF: return U'y';                                              // ý ÿ
+        case 0xE7: return U'c';                                                         // ç
+        case 0xF1: return U'n';                                                         // ñ
+        default: return c;
+    }
+}
+
+bool IsVowelish(char32_t lower) {
+    switch (lower) {
+        case U'a': case U'e': case U'i': case U'o': case U'u': case U'y':
+        case 0xE0: case 0xE1: case 0xE2: case 0xE3: case 0xE4: case 0xE5:  // à á â ã ä å
+        case 0xE8: case 0xE9: case 0xEA: case 0xEB:                       // è é ê ë
+        case 0xEC: case 0xED: case 0xEE: case 0xEF:                       // ì í î ï
+        case 0xF2: case 0xF3: case 0xF4: case 0xF5: case 0xF6:            // ò ó ô õ ö
+        case 0xF9: case 0xFA: case 0xFB: case 0xFC:                       // ù ú û ü
+        case 0xFD: case 0xFF:                                             // ý ÿ
+        case 0x153: case 0xE6:                                            // œ æ
+            return true;
+        default:
+            return false;
+    }
+}
+
+constexpr size_t kMaxConsonantRun = 5;
+
+bool IsWordlikeAlpha(const Token& t) {
+    bool has_vowel = false;
+    size_t run = 0, max_run = 0;
+    for (char32_t c : t) {
+        const char32_t lower = ToLowerLatin(c);
+        if (IsVowelish(lower)) {
+            has_vowel = true;
+            run = 0;
+        } else {
+            run++;
+            max_run = (std::max)(max_run, run);
+        }
+    }
+    return has_vowel && max_run <= kMaxConsonantRun;
+}
+
+// A small, hardcoded English+French common-word list -- function words plus a handful of
+// invoice/document vocabulary, since #385's own example is an invoice. Deliberately plain
+// ASCII (no accented literals in source): IsKnownWord() folds each document token's accents
+// off before comparing, so "être"/"numéro" in a real document still match "etre"/"numero"
+// here. Not meant to be exhaustive -- this is `known`, the stricter/lower-recall companion to
+// the vowel/consonant-run wordlikeness test above, not the primary signal.
+const std::unordered_set<Token>& CommonWordSet() {
+    static const std::unordered_set<Token> words = [] {
+        std::unordered_set<Token> s;
+        static const char* const kWords[] = {
+            "the", "of", "and", "a", "to", "in", "is", "you", "that", "it", "he", "was", "for", "on", "are",
+            "as", "with", "his", "they", "at", "be", "this", "have", "from", "or", "one", "had", "by", "not",
+            "what", "all", "were", "we", "when", "your", "can", "there", "use", "an", "each", "which", "she",
+            "do", "how", "their", "if", "will", "up", "other", "about", "out", "many", "then", "them", "these",
+            "so", "some", "her", "would", "make", "like", "him", "into", "time", "has", "look", "two", "more",
+            "write", "go", "see", "number", "no", "way", "could", "people", "my", "than", "first", "water",
+            "been", "call", "who", "its", "now", "find", "long", "down", "day", "did", "get", "come", "made",
+            "may", "part", "over", "new", "sound", "take", "only", "little", "work", "know", "place", "year",
+            "live", "me", "back", "give", "most", "very", "after", "thing", "name", "good", "man", "think",
+            "say", "great", "where", "help", "through", "much", "before", "line", "right", "too", "mean",
+            "old", "any", "same", "tell", "boy", "follow", "came", "want", "show", "also", "around", "form",
+            "three", "small", "set", "put", "end", "does", "another", "well", "large", "must", "big", "even",
+            "such", "because", "turn", "here", "why", "ask", "went", "men", "read", "need", "land", "home",
+            "us", "move", "try", "kind", "hand", "again", "change", "off", "play", "air", "away", "house",
+            "point", "page", "letter", "mother", "answer", "found", "study", "still", "learn", "should",
+            "world", "invoice", "total", "amount", "payment", "date", "address", "company", "account", "order",
+            "due", "tax", "subtotal", "description", "quantity", "price", "email", "phone", "thank", "please",
+            "le", "la", "les", "de", "des", "et", "un", "une", "du", "que", "qui", "dans", "pour", "sur",
+            "avec", "par", "est", "sont", "au", "aux", "ce", "cette", "ces", "ne", "pas", "plus", "ou", "mais",
+            "comme", "il", "elle", "nous", "vous", "ils", "elles", "je", "tu", "son", "sa", "ses", "leur",
+            "leurs", "etre", "avoir", "fait", "faire", "tout", "tous", "toute", "toutes", "facture", "montant",
+            "paiement", "nom", "adresse", "numero", "societe", "compte", "merci", "cordialement", "monsieur",
+            "madame", "bonjour", "veuillez", "trouver", "svp", "merci",
+        };
+        for (const char* w : kWords) {
+            Token t;
+            for (const char* p = w; *p != '\0'; p++) t.push_back(static_cast<char32_t>(*p));
+            s.insert(t);
+        }
+        return s;
+    }();
+    return words;
+}
+
+bool IsKnownWord(const Token& t) {
+    Token folded;
+    folded.reserve(t.size());
+    for (char32_t c : t) folded.push_back(StripAccent(ToLowerLatin(c)));
+    return CommonWordSet().count(folded) > 0;
+}
+
+void AppendUtf8(std::string* out, unsigned int cp) {
+    if (cp < 0x80) {
+        out->push_back(static_cast<char>(cp));
+    } else if (cp < 0x800) {
+        out->push_back(static_cast<char>(0xC0 | (cp >> 6)));
+        out->push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else if (cp < 0x10000) {
+        out->push_back(static_cast<char>(0xE0 | (cp >> 12)));
+        out->push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out->push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    } else {
+        out->push_back(static_cast<char>(0xF0 | (cp >> 18)));
+        out->push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+        out->push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+        out->push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+    }
+}
+
+RawTextSignals ScoreRawText(FPDF_TEXTPAGE tp, int char_count) {
+    RawTextSignals sig;
+    std::vector<unsigned int> cps;
+    cps.reserve(static_cast<size_t>((std::max)(char_count, 0)));
+    for (int i = 0; i < char_count; i++) {
+        if (FPDFText_IsGenerated(tp, i) == 1) continue;
+        const unsigned int cp = FPDFText_GetUnicode(tp, i);
+        if (cp == 0) continue;
+        if (!IsWhitespaceCpLocal(cp)) {
+            sig.chars++;
+            if (FPDFText_HasUnicodeMapError(tp, i) == 1) sig.maperr++;
+        }
+        cps.push_back(cp);
+    }
+    const std::vector<Token> tokens = Tokenize(cps);
+    sig.tokens = static_cast<long long>(tokens.size());
+    for (const Token& t : tokens) {
+        if (t.size() == 1) { sig.single++; continue; }
+        if (IsAllDigitsToken(t)) { sig.numeric++; continue; }
+        sig.alpha++;
+        if (IsWordlikeAlpha(t)) sig.wordlike++;
+        if (IsKnownWord(t)) sig.known++;
+    }
+    return sig;
+}
+
+void RunGarbageOnDoc(const std::string& pdf, const std::string& dump_dir, const std::string& dump_id) {
+    megapdf_document* doc = megapdf_open_file(pdf.c_str(), nullptr);
+    if (doc == nullptr) {
+        std::printf("result=%s\n", OpenOutcome(megapdf_last_error()));
+        return;
+    }
+    const int pages = megapdf_page_count(doc);
+    if (pages <= 0) {
+        std::printf("result=format pages=0\n");
+        megapdf_close(doc);
+        return;
+    }
+    megapdf_structure* s = megapdf_structure_load(doc, 0, pages, MEGAPDF_STRUCTURE_KEEP_FURNITURE |
+                                                                       MEGAPDF_STRUCTURE_ALL_FIELDS, nullptr);
+    if (s == nullptr) {
+        std::printf("result=format pages=%d\n", pages);
+        megapdf_close(doc);
+        return;
+    }
+
+    const size_t n_blocks = megapdf_block_count(s);
+    std::vector<std::vector<Token>> tokens_by_page(static_cast<size_t>(pages));
+    for (size_t i = 0; i < n_blocks; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (b.page < 0 || b.page >= pages) continue;
+        if (b.kind == MEGAPDF_BLOCK_FIELD) continue;  // measure 1 excludes FIELD blocks
+        const std::vector<unsigned short> text16 = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+        const std::vector<Token> toks = Tokenize(Utf16ToCodepoints(text16));
+        tokens_by_page[static_cast<size_t>(b.page)].insert(tokens_by_page[static_cast<size_t>(b.page)].end(),
+                                                            toks.begin(), toks.end());
+    }
+
+    FPDF_DOCUMENT raw = FPDF_LoadDocument(pdf.c_str(), nullptr);
+    int low09_count = 0;
+    RawTextSignals ctrl;
+    std::vector<std::pair<int, RawTextSignals>> low09_pages;
+
+    const bool dumping = !dump_dir.empty() && !dump_id.empty();
+    if (dumping) {
+        const std::string marker = dump_dir + "/PRIVATE";
+        std::ifstream check_marker(marker);
+        if (!check_marker.good()) {
+            std::ofstream m(marker);
+            m << "Extracted document text (#385 investigation). Not committed, uploaded or pasted "
+                 "anywhere: these are Dave's own documents. Delete this directory when you are done reading it.\n";
+        }
+    }
+
+    for (int p = 0; p < pages; p++) {
+        FPDF_PAGE raw_page = raw != nullptr ? FPDF_LoadPage(raw, p) : nullptr;
+        FPDF_TEXTPAGE tp = raw_page != nullptr ? FPDFText_LoadPage(raw_page) : nullptr;
+        if (tp != nullptr) {
+            const int chars = FPDFText_CountChars(tp);
+            const std::vector<Token> pdfium_tokens = Tokenize(JoinLineWrapHyphens(tp, chars));
+            const FidelityCounts fc = MultisetF1(tokens_by_page[static_cast<size_t>(p)], pdfium_tokens);
+            const bool low09 = F1(fc) < 0.9;
+            const RawTextSignals sig = ScoreRawText(tp, chars);
+            // Corpus-wide prevalence measure: every page, not just fid_low09 -- see this mode's
+            // header comment for why fid_low09 alone can miss this failure mode entirely. id/page
+            // are only printed when --dump-id is given (a hand-labeling run), same rule as
+            // low09page below.
+            if (dumping) {
+                std::printf("page id=%s page=%d low09=%d chars=%lld maperr=%lld tokens=%lld alpha=%lld "
+                            "wordlike=%lld known=%lld numeric=%lld single=%lld\n",
+                            dump_id.c_str(), p, low09 ? 1 : 0, sig.chars, sig.maperr, sig.tokens, sig.alpha,
+                            sig.wordlike, sig.known, sig.numeric, sig.single);
+            } else {
+                std::printf("page low09=%d chars=%lld maperr=%lld tokens=%lld alpha=%lld wordlike=%lld "
+                            "known=%lld numeric=%lld single=%lld\n",
+                            low09 ? 1 : 0, sig.chars, sig.maperr, sig.tokens, sig.alpha, sig.wordlike, sig.known,
+                            sig.numeric, sig.single);
+            }
+            // A page is worth dumping (for hand-labeling) when it's fid_low09, OR its wordlikeness
+            // is low enough to be a genuine-garbage candidate on its own (#385's own document may
+            // not even be fid_low09 -- see this mode's header comment) OR its map-error rate is
+            // high enough to be a candidate despite the false-positive risk seen in the CIBC-
+            // statement-shaped sanity check.
+            const double wrate = sig.alpha > 0 ? static_cast<double>(sig.wordlike) / static_cast<double>(sig.alpha)
+                                                : 1.0;
+            const double mrate = sig.chars > 0 ? static_cast<double>(sig.maperr) / static_cast<double>(sig.chars)
+                                                : 0.0;
+            const bool worth_dumping = low09 || (sig.alpha >= 5 && wrate < 0.7) || (sig.chars >= 20 && mrate > 0.2);
+            if (dumping && worth_dumping) {
+                std::string text;
+                for (int i = 0; i < chars; i++) {
+                    if (FPDFText_IsGenerated(tp, i) == 1) { text += '\n'; continue; }
+                    const unsigned int cp = FPDFText_GetUnicode(tp, i);
+                    if (cp == 0) continue;
+                    AppendUtf8(&text, cp);
+                }
+                std::ofstream out(dump_dir + "/" + dump_id + "-p" + std::to_string(p) + ".txt", std::ios::binary);
+                out << text;
+            }
+            if (low09) {
+                low09_count++;
+                low09_pages.push_back({p, sig});
+            } else {
+                ctrl.chars += sig.chars;
+                ctrl.maperr += sig.maperr;
+                ctrl.tokens += sig.tokens;
+                ctrl.alpha += sig.alpha;
+                ctrl.wordlike += sig.wordlike;
+                ctrl.known += sig.known;
+                ctrl.numeric += sig.numeric;
+                ctrl.single += sig.single;
+            }
+            FPDFText_ClosePage(tp);
+        }
+        if (raw_page != nullptr) FPDF_ClosePage(raw_page);
+    }
+    if (raw != nullptr) FPDF_CloseDocument(raw);
+    megapdf_structure_free(s);
+    megapdf_close(doc);
+
+    std::printf("result=ok pages=%d low09=%d ctrl_chars=%lld ctrl_maperr=%lld ctrl_tokens=%lld "
+                "ctrl_alpha=%lld ctrl_wordlike=%lld ctrl_known=%lld ctrl_numeric=%lld ctrl_single=%lld\n",
+                pages, low09_count, ctrl.chars, ctrl.maperr, ctrl.tokens, ctrl.alpha, ctrl.wordlike, ctrl.known,
+                ctrl.numeric, ctrl.single);
+
+    for (size_t k = 0; k < low09_pages.size(); k++) {
+        const int p = low09_pages[k].first;
+        const RawTextSignals& sig = low09_pages[k].second;
+        if (dumping) {
+            std::printf("low09page id=%s page=%d chars=%lld maperr=%lld tokens=%lld alpha=%lld wordlike=%lld "
+                        "known=%lld numeric=%lld single=%lld\n",
+                        dump_id.c_str(), p, sig.chars, sig.maperr, sig.tokens, sig.alpha, sig.wordlike, sig.known,
+                        sig.numeric, sig.single);
+        } else {
+            std::printf("low09page chars=%lld maperr=%lld tokens=%lld alpha=%lld wordlike=%lld known=%lld "
+                        "numeric=%lld single=%lld\n",
+                        sig.chars, sig.maperr, sig.tokens, sig.alpha, sig.wordlike, sig.known, sig.numeric,
+                        sig.single);
+        }
+    }
+}
+
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1641,12 +2022,27 @@ int main(int argc, char** argv) {
         for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
         return RunHeadingDiag(pdfs);
     }
+    if (argc >= 3 && std::strcmp(argv[1], "garbage") == 0) {
+        // #385 investigation only: structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]
+        // Scores fid_low09 pages (and every page, corpus-wide) for genuine character-level
+        // font/ToUnicode garbage vs ordinary hyphenation/spacing noise (see the RawTextSignals
+        // comment above).
+        std::string pdf = argv[2];
+        std::string dump_dir, dump_id;
+        for (int i = 3; i < argc; i++) {
+            if (std::strcmp(argv[i], "--dump-garbage") == 0 && i + 1 < argc) dump_dir = argv[++i];
+            else if (std::strcmp(argv[i], "--dump-id") == 0 && i + 1 < argc) dump_id = argv[++i];
+        }
+        RunGarbageOnDoc(pdf, dump_dir, dump_id);
+        return 0;
+    }
     std::printf("usage:\n"
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
                 "                              [--cli-reference <megapdf-cli-output-file>]\n"
                 "  structure_check census <pdf>\n"
                 "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n"
                 "  structure_check diagbaseline <pdf> [<pdf> ...]   (#363 follow-up investigation only)\n"
-                "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n");
+                "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n"
+                "  structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]   (#385 investigation only)\n");
     return 64;
 }
