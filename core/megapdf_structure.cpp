@@ -175,6 +175,35 @@ constexpr int kConfidenceRotatedTextPenalty = 30;
 constexpr double kConfidenceRotatedTextShare = 0.10;
 constexpr int kConfidenceOverlapPenalty = 20;
 
+// #384 mitigation: a fourth deduction, same scale/mechanism as the three above (one fixed,
+// named, one-strike-per-page penalty), for a page whose heuristic reading order takes an
+// implausible jump between two adjacent blocks -- see HasImplausibleReadingOrderJump()'s own
+// comment for the exact geometric test. Grounded in a corpus-scale sweep (#384/#387's
+// prevalence measurement, extended with tools/structure-check's MaxBackwardJumpUnits over the
+// full personal corpus, /mnt/pdf-test: 4,084 documents opened ok, 17,388 tau_ref-measured
+// pages): pages with NO qualifying jump scored tau_ref < 0.9 (the reading-order-quality line
+// #354 already uses) at 21.6%, in line with the corpus's own 21.8% baseline, while pages with
+// a jump at or above kConfidenceReadingOrderJumpBodySizes scored below that line 36.7% of the
+// time (578 pages, 3.3% of all measured pages) -- a real, sizeable lift (a much looser 0.5x
+// cutoff gives only 27.8%, barely above baseline; the lift keeps climbing at 3x/5x but the
+// flagged population shrinks further, so 2x sits at the point of real, not marginal,
+// separation), comparable in magnitude to #387's own sparsest-decile finding (37.2%). This is
+// a distinct population from that sparsest-decile one, not a re-discovery of it: of the pages
+// this flags, only 5.4% are also in the corpus's sparsest quartile by token count (vs. 25.2%
+// of all pages) -- i.e. this signal is not, in practice, just another way of saying "short
+// page" (the false-positive class #384's own review worried about), it independently finds a
+// real, comparably-sized population of bad-reading-order pages via geometry alone. Reusing
+// kConfidenceOverlapPenalty's point value rather than inventing a new number: both are "a
+// geometric implausibility on this page", the same class of signal design §1 item 6 already
+// covers.
+constexpr int kConfidenceReadingOrderJumpPenalty = kConfidenceOverlapPenalty;
+constexpr double kConfidenceReadingOrderJumpBodySizes = 2.0;
+// Two blocks count as "the same column" (a jump between them is eligible for the penalty
+// above) only when their horizontal extents overlap by more than this fraction of the
+// narrower block's width -- otherwise the jump is exactly the ordinary column-to-column or
+// page-to-page transition #384 asks this mitigation NOT to penalize, however large the jump.
+constexpr double kReadingOrderJumpOverlapFrac = 0.3;
+
 // Implementation choices below design §1.2's level of description:
 constexpr double kFontSizeSpanToleranceRatio = 0.02;   // +-2%: two adjacent same-style runs count as one span.
 constexpr int kBoldWeightThreshold = 600;              // FPDFText_GetFontWeight >= this is bold (400 normal, 700 bold).
@@ -1476,12 +1505,43 @@ bool RectsOverlap(const megapdf_rect& a, const megapdf_rect& b) {
     return a.left < b.right - kEps && b.left < a.right - kEps && a.bottom < b.top - kEps && b.bottom < a.top - kEps;
 }
 
+// #384: true when `content_blocks` (already in final reading order) contains a pair of
+// reading-order-adjacent blocks that are "geometrically distant" in the specific sense #384
+// describes -- a jump that does not correspond to a normal column-to-column or page-to-page
+// transition. Concretely: the two blocks sit in essentially the same horizontal band
+// (kReadingOrderJumpOverlapFrac of the narrower one's width or more overlaps the other's) --
+// so this is NOT a move to a new column, which legitimately jumps far with no horizontal
+// overlap at all, whatever the distance -- yet the later block starts above where the earlier
+// one ended by more than kConfidenceReadingOrderJumpBodySizes body-size units, i.e. the
+// reading order went backward within what looks like one column. tools/structure-check's
+// MaxBackwardJumpUnits (kept in sync by hand, the same convention structure_check.cpp's own
+// kSoftHyphen comment documents for another #354-era measure) computes the identical test
+// against contract 9's public bounds, which is how the constants above were picked and how
+// #384's PR verifies this fires on the pages the corpus measurement flagged.
+bool HasImplausibleReadingOrderJump(const std::vector<BlockImpl>& content_blocks, double body_size) {
+    if (body_size <= 0) return false;
+    for (size_t i = 1; i < content_blocks.size(); i++) {
+        const megapdf_rect& a = content_blocks[i - 1].info.bounds;
+        const megapdf_rect& b = content_blocks[i].info.bounds;
+        const double overlap = (std::min)(a.right, b.right) - (std::max)(a.left, b.left);
+        const double min_width = (std::min)(a.right - a.left, b.right - b.left);
+        if (min_width <= 0 || overlap <= kReadingOrderJumpOverlapFrac * min_width) continue;   // different column
+        const double backward = b.top - a.bottom;   // > 0: b starts above where a ended
+        if (backward > kConfidenceReadingOrderJumpBodySizes * body_size) return true;
+    }
+    return false;
+}
+
 // design §1 item 6: 0-100 per page. Starts at 100; the three fixed deductions are named
 // constants above; the fourth ("the share of characters left in no block") has none to name
 // since it is proportional — see the comment at BuildOnePage's PAGE_IMAGE-free-text branch
 // for why this implementation's share is close to zero in practice (rotated/unclassified
-// text still becomes a block, just a lower-confidence trailing one).
-int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vector<BlockImpl>& content_blocks) {
+// text still becomes a block, just a lower-confidence trailing one). A fifth, #384's own
+// reading-order-jump deduction, is folded in here too rather than kept as a separate pass, for
+// the same reason the other four already share one function: this is the one place design §1
+// item 6's whole point -- one page-level confidence number -- gets computed.
+int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vector<BlockImpl>& content_blocks,
+                      double body_size) {
     int score = 100;
     if (pw.total_real_chars > 0) {
         const double rotated_share = static_cast<double>(pw.rotated_chars) / pw.total_real_chars;
@@ -1497,6 +1557,7 @@ int ComputeConfidence(const PageWork& pw, bool too_many_columns, const std::vect
             }
         }
     }
+    if (HasImplausibleReadingOrderJump(content_blocks, body_size)) score -= kConfidenceReadingOrderJumpPenalty;
     return (std::max)(0, (std::min)(100, score));
 }
 
@@ -1547,7 +1608,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
         content.push_back(std::move(leftover));
     }
 
-    result.confidence = ComputeConfidence(*pw, too_many_columns, content);
+    result.confidence = ComputeConfidence(*pw, too_many_columns, content, body_size);
 
     if (flags & MEGAPDF_STRUCTURE_KEEP_FURNITURE) {
         std::vector<BlockImpl> furniture_copy = furniture_blocks;
