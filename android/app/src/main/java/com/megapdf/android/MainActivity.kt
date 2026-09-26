@@ -1,11 +1,9 @@
 package com.megapdf.android
 
-import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -20,7 +18,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
@@ -95,27 +92,13 @@ private fun redactedName(displayName: String): String {
 private const val REDACTED_SUFFIX = "-redacted"
 
 /**
- * "Save a copy" (#386): the same `ACTION_CREATE_DOCUMENT` picker as
- * [ActivityResultContracts.CreateDocument], with Markdown added to its mime-type list
- * (`EXTRA_MIME_TYPES`) alongside PDF, the primary type. DocumentsUI (and providers that follow
- * its convention) offers both as a "save as" type choice and appends the extension matching
- * whichever the person picks — [saveFormatFor] reads that extension back to decide which
- * binding writes the result.
+ * What the Redact confirmation (#173) was opened for: marks are on the document and one of
+ * the commands that reads it has been asked for, so the marked content is removed first.
+ * [SAVE] is either save path (Save, Save a copy); [EXPORT] is Export as Markdown (#409, as on
+ * iOS): an export reads the document's text, so an unapplied mark would leak straight into
+ * the `.md` file if the question were skipped.
  */
-private class CreateDocumentOrMarkdown : ActivityResultContracts.CreateDocument("application/pdf") {
-    override fun createIntent(context: Context, input: String): Intent =
-        super.createIntent(context, input)
-            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/pdf", "text/markdown"))
-}
-
-/** The document name the provider recorded for [uri] (#386), read back to decide [saveFormatFor]. */
-private fun queryDisplayName(context: Context, uri: Uri): String {
-    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-        val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-        if (col >= 0 && cursor.moveToFirst()) return cursor.getString(col) ?: ""
-    }
-    return uri.lastPathSegment ?: ""
-}
+private enum class RedactConfirm { SAVE, EXPORT }
 
 @Composable
 fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String? = null) {
@@ -124,34 +107,39 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     val openDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { viewModel.openUri(it) } }
-    // The redacted-copy flow below always saves a PDF (applying redaction marks makes sense
-    // only on the document itself), so it keeps this PDF-only launcher; the general
-    // "Save a copy" menu command uses [createDocumentOrMarkdown] instead.
+    // "Save a copy" is a PDF, and only a PDF (#409). What the row means on Android, and has
+    // meant since before #386: the person picks a place and a name, the document is written
+    // there as a PDF, and that copy becomes the current document — the title changes to the
+    // new name, its grant is persisted and it goes into Recents ([ViewerViewModel.saveAs]).
+    // That is the desktops' Save As, and the title changing is how it shows.
+    //
+    // The *type* of the picker decides what is written, never the *name* the provider hands
+    // back. #386 had offered Markdown as a second entry in this same picker's mime-type list
+    // and read the picked extension back to choose a binding; DocumentsUI ignores
+    // `EXTRA_MIME_TYPES` for ACTION_CREATE_DOCUMENT, so a person who typed `lease.md` got
+    // `lease.md.pdf` — a real PDF, silently made the current document — and no `.md` could be
+    // produced at all (#409). There is no name-based decision any more: this launcher is
+    // typed application/pdf and always saves a PDF copy; the Markdown export has its own row,
+    // its own launcher ([exportMarkdown]) and its own write path, and no picker carries
+    // `EXTRA_MIME_TYPES`.
     val createDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri -> uri?.let { viewModel.saveAs(it) } }
-    // "Save a copy" (#386): PDF or Markdown, decided by which the picker's mime-type list
-    // handed back. A `.md` is a one-way text export, never the app's current document — see
-    // [ViewerViewModel.exportMarkdown]'s own note — so it goes through a different call than
-    // [ViewerViewModel.saveAs] entirely, not just a different mime type on the same one.
-    val createDocumentOrMarkdown = rememberLauncherForActivityResult(
-        remember { CreateDocumentOrMarkdown() }
-    ) { uri ->
-        uri?.let {
-            when (saveFormatFor(queryDisplayName(context, it))) {
-                SaveFormat.MARKDOWN -> viewModel.exportMarkdown(it)
-                SaveFormat.PDF -> viewModel.saveAs(it)
-            }
-        }
-    }
+    // "Export as Markdown" (#386, #409): a one-way text export, never the app's current
+    // document — see [ViewerViewModel.exportMarkdown]'s own note — through a picker typed
+    // text/markdown with a `.md` suggested name ([markdownExportName]). Whatever the provider
+    // names the file, it is written as Markdown: the row was the choice.
+    val exportMarkdown = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/markdown")
+    ) { uri -> uri?.let { viewModel.exportMarkdown(it) } }
     val pickSignatureImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
 
-    // The Redact confirmation is open (#173): marks are on the document and a save has
-    // been asked for, so the question comes before anything is written.
-    var redactConfirmOpen by androidx.compose.runtime.remember {
-        androidx.compose.runtime.mutableStateOf(false)
+    // The Redact confirmation is open (#173): marks are on the document and a save — or an
+    // export (#409) — has been asked for, so the question comes before anything is written.
+    var redactConfirm by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<RedactConfirm?>(null)
     }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -251,13 +239,23 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 onEditTextBox = viewModel::editSelectedTextBox,
                 onRemoveTextBox = viewModel::removeSelectedTextBox,
                 onSave = {
-                    if (viewModel.redactionMarkCount > 0) redactConfirmOpen = true else viewModel.save()
+                    if (viewModel.redactionMarkCount > 0) redactConfirm = RedactConfirm.SAVE else viewModel.save()
                 },
                 onSaveAs = {
                     if (viewModel.redactionMarkCount > 0) {
-                        redactConfirmOpen = true
+                        redactConfirm = RedactConfirm.SAVE
                     } else {
-                        createDocumentOrMarkdown.launch(state.displayName)
+                        createDocument.launch(state.displayName)
+                    }
+                },
+                // No unsaved-changes question here, unlike Share (#378): Share sends the file
+                // on disk, so pending edits would be missing from it; the export reads the
+                // document as it stands in memory, edits included, so there is nothing to ask.
+                onExportMarkdown = {
+                    if (viewModel.redactionMarkCount > 0) {
+                        redactConfirm = RedactConfirm.EXPORT
+                    } else {
+                        exportMarkdown.launch(markdownExportName(state.displayName))
                     }
                 },
                 capabilities = viewModel.capabilities,
@@ -302,9 +300,14 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
             // what redaction does, that it cannot be undone once saved, and Save a copy as
             // the default action — the reversible choice, because the other one cannot be
             // taken back.
-            if (redactConfirmOpen) {
+            //
+            // Opened for an export (#409), the same question ends in Export as Markdown or
+            // Cancel: the marked content is removed from the document in memory and the
+            // export then reads it — and the document is left with unsaved changes, because
+            // no PDF was written (see [ViewerViewModel.applyRedactionsForExport]).
+            redactConfirm?.let { ask ->
                 androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { redactConfirmOpen = false },
+                    onDismissRequest = { redactConfirm = null },
                     title = { androidx.compose.material3.Text(stringResource(R.string.redact_confirm_title)) },
                     text = {
                         androidx.compose.material3.Text(
@@ -321,17 +324,42 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                     },
                     confirmButton = {
                         androidx.compose.material3.TextButton(onClick = {
-                            redactConfirmOpen = false
+                            redactConfirm = null
                             scope.launch {
-                                if (viewModel.applyRedactions()) createDocument.launch(redactedName(state.displayName))
+                                when (ask) {
+                                    RedactConfirm.SAVE ->
+                                        if (viewModel.applyRedactions()) createDocument.launch(redactedName(state.displayName))
+                                    RedactConfirm.EXPORT ->
+                                        if (viewModel.applyRedactionsForExport()) exportMarkdown.launch(markdownExportName(state.displayName))
+                                }
                             }
-                        }) { androidx.compose.material3.Text(stringResource(R.string.redact_save_copy)) }
+                        }) {
+                            androidx.compose.material3.Text(
+                                stringResource(
+                                    when (ask) {
+                                        RedactConfirm.SAVE -> R.string.redact_save_copy
+                                        RedactConfirm.EXPORT -> R.string.export_markdown
+                                    }
+                                )
+                            )
+                        }
                     },
                     dismissButton = {
                         androidx.compose.material3.TextButton(onClick = {
-                            redactConfirmOpen = false
-                            scope.launch { if (viewModel.applyRedactions()) viewModel.save() }
-                        }) { androidx.compose.material3.Text(stringResource(R.string.redact_overwrite)) }
+                            redactConfirm = null
+                            if (ask == RedactConfirm.SAVE) {
+                                scope.launch { if (viewModel.applyRedactions()) viewModel.save() }
+                            }
+                        }) {
+                            androidx.compose.material3.Text(
+                                stringResource(
+                                    when (ask) {
+                                        RedactConfirm.SAVE -> R.string.redact_overwrite
+                                        RedactConfirm.EXPORT -> R.string.cancel
+                                    }
+                                )
+                            )
+                        }
                     },
                 )
             }

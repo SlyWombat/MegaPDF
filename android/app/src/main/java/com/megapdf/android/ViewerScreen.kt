@@ -184,6 +184,8 @@ fun ViewerScreen(
     onRemoveTextBox: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    /** Export as Markdown (#386, #409): its own row, never a format of Save a copy. */
+    onExportMarkdown: () -> Unit = {},
     // Redaction (SDD §3.8 / F7, #173). Marks are not page content: the core keeps them and
     // never writes them, so the screen draws them and nothing here is in the raster.
     redactMode: Boolean = false,
@@ -571,6 +573,20 @@ fun ViewerScreen(
                                     text = { Text(stringResource(R.string.save_a_copy)) },
                                     enabled = !isSaving && !documentLocked,
                                     onClick = { menuOpen = false; onSaveAs() },
+                                )
+                                // #409: a row of its own beside Save a copy, as on iOS, rather
+                                // than a second type in Save a copy's picker — DocumentsUI has
+                                // no format chooser for a create-document sheet, so the one
+                                // picker was PDF whatever name was typed. The word is Export,
+                                // not Save: a `.md` cannot hold the edits a PDF does, and the
+                                // export changes nothing about the document (no title change,
+                                // the unsaved dot stays). No unsaved-changes question first,
+                                // unlike Share: the export reads the document as it is on
+                                // screen, unsaved edits included.
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.export_markdown)) },
+                                    enabled = !isSaving && !documentLocked,
+                                    onClick = { menuOpen = false; onExportMarkdown() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.share)) },

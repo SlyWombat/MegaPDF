@@ -8,7 +8,7 @@ or to let the tools push, when 2.1.1 is submitted (#395).
 2.1.1 has two headlines on the desktops — documents open as **tabs** in one
 window, and **Save As writes Markdown** — and three on the phones: the phone
 now offers MegaPDF to **open a PDF** from other apps, **Share** sends one back,
-and **Save a copy / Export as Markdown** writes the text. The command-line
+and **Export as Markdown** writes the text. The command-line
 extractor, `megapdf-cli`, ships in every Linux package and as Windows and macOS
 zips on GitHub, and is named only in the long form: **no store package carries
 it**, so no store block may.
@@ -81,7 +81,7 @@ counts below.
 | Issue | What the user sees |
 |---|---|
 | #348 | documents open as tabs in one window on Windows, the Mac and Linux; Open picks several; drag-and-drop (new on the Mac and Linux); an external open — File Explorer, the Finder, a file manager, another app — lands in the running window, on a new tab or the tab that already shows the file; per-tab undo, find, zoom, dot and recovery; close and quit ask per document; crash recovery restores every document into its own tab |
-| #386 | Save As (Windows, Mac, Linux) and Save a copy (Android) offer a Markdown document; iOS has Export as Markdown beside Save a copy. One-way: the PDF is untouched and the unsaved dot stays |
+| #386, #409 | Save As (Windows, Mac, Linux) offers a Markdown document; both phones have Export as Markdown beside Save a copy (Android's since #409 — #386 had made it a type of Save a copy's picker, which Android's picker never offered). One-way: the PDF is untouched and the unsaved dot stays |
 | #142 phases 1–3: #353 #354 #355 #356 #357 | `megapdf-cli extract`, text and `--format md`; ships in the Linux packages and as Windows/macOS zips. **Not in any store package** — long form and Linux page only |
 | #360 #363 #375 #384 | the extraction's accuracy: words no longer split, line-end hyphens joined only when they are hyphenation, a table's bold labels no longer headings, a lower confidence on pages whose reading order jumps. Users see these as "the Markdown is good"; the long form has them, the store blocks do not |
 | #376 #377 | Android and iOS register as PDF viewers: Open with / Files / Mail / the share sheet, with the unsaved-changes question first |
@@ -122,8 +122,8 @@ the same as in [2.1's README](../2.1/README.md#the-new-french-for-a-francophone-
 | {0}, tab / {0}, unsaved changes, tab | {0}, onglet / {0}, modifications non enregistrées, onglet | Windows, Mac and Linux | what a screen reader says for a tab; the dot is spelled out, as elsewhere |
 | Markdown document | Document Markdown | Windows, Mac and Linux | the file-type name beside *Document PDF*; *Markdown* is not translated |
 | Exporting… / Exported {0} / Exported {0}. / Exported / Couldn't export / Could not export. / Couldn't export the text. / Couldn't prepare the export. | Exportation… / {0} exporté / {0} exporté. / Exporté / Impossible d'exporter / Impossible d'exporter. / Impossible d'exporter le texte. / Impossible de préparer l'exportation. | all four | *Exporter*, never *Enregistrer*: the export is not a save, and the French keeps that distinction everywhere the English does |
-| Export as Markdown | Exporter en Markdown | iOS | the menu item beside *Enregistrer une copie* |
-| Exported as Markdown / Couldn't export as Markdown. | Exporté en Markdown / Impossible d'exporter en Markdown. | Android | the same family, with the format named because Android's Save a copy is also the PDF copy |
+| Export as Markdown | Exporter en Markdown | iOS, Android (#409) | the menu item beside *Enregistrer une copie* |
+| Exported as Markdown / Couldn't export as Markdown. | Exporté en Markdown / Impossible d'exporter en Markdown. | Android | the same family, with the format named — Android's toasts name what was written |
 | Share | Partager | both phones | the OS's own word for its share sheet row |
 | Share without saving | Partager sans enregistrer | both phones | deliberately not *Abandonner*: nothing is discarded (#378) |
 | This document has unsaved changes. They won't be in the shared copy unless you save first. | Ce document contient des modifications non enregistrées. Elles ne feront pas partie de la copie partagée si vous ne l'enregistrez pas d'abord. | both phones | says the one consequence, in the house register |
@@ -164,7 +164,7 @@ glossary rows added for it (*onglet*, *Ouvrir avec*, *feuille de partage*,
 | Export as Markdown, beside Save a copy in the More menu, writes the document's text … as a Markdown file, saved wherever you choose in Files. | Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, écrit le texte du document … dans un fichier Markdown, enregistré où vous voulez dans Fichiers. | App Store | |
 | Open with: MegaPDF is now offered when you open a PDF from Files, Drive, Gmail or any app that hands one over. | Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Drive, Gmail ou une autre application. | Play | cut for the 500-character field: *maintenant* and the relative clause go |
 | Share, in the More menu, sends the document through the share sheet. If it has unsaved changes it offers Save, Share without saving, or Cancel. | Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler. | Play | the second sentence is a label and a list, for room |
-| Save a copy can now write Markdown as well as PDF: the document's text, headings, lists and filled-in values, as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text. | Enregistrer une copie écrit maintenant en Markdown aussi bien qu'en PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché. | Play | the scanned-page clause is dropped for room; 490 of 500 |
+| Export as Markdown, in the More menu, writes the document's text, headings, lists and filled-in values as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text. | Exporter en Markdown, dans le menu Plus, écrit le texte du document : titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché. | Play | the scanned-page clause is dropped for room; 479 of 500. Reworded for #409: the row is *Exporter en Markdown*, Save a copy stays PDF |
 
 The long form's French (`release-notes-2.1.1.md`, *Français (Canada)*) is the
 same vocabulary at length; its own new phrases are the section titles — *Des
