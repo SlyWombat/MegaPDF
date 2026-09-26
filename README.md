@@ -11,13 +11,18 @@ MegaPDF does four things exceptionally well and deliberately nothing else:
 2. **Check boxes** — click an empty square and it becomes a checked box.
 3. **Apply signatures** — keep a small personal library of signature images; drag one onto the page.
 4. **Save** — Save overwrites, Save As creates a copy. No export wizards, no "flatten" dialogs.
+   Save As can also write the document's text as a **Markdown** file — a one-way export
+   that leaves the PDF untouched.
 
 Also included, because long documents need it: **Find** (the toolbar button, or
 `Ctrl+F`) searches the whole document — type and every match lights up, Enter
-walks through them.
+walks through them. Documents open as **tabs** in one window on Windows, the Mac
+and Linux, and a PDF opened from the file manager joins the window you already have.
 
 Also on the command line: `megapdf-cli extract file.pdf` writes the text;
-`--format md` writes Markdown.
+`--format md` writes Markdown. It ships in every Linux package (on `PATH`), and
+for Windows and macOS as a zip on the releases page (`windows-cli-v*`,
+`macos-cli-v*`) — not inside any store package.
 
 No account. No cloud. No subscription. All processing is local.
 

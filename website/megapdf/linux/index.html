@@ -100,9 +100,11 @@
     <main class="wrap">
         <section class="intro">
             <h1>MegaPDF for Linux</h1>
-            <p>MegaPDF 2.0 for Linux: fill in a form, check the boxes, sign it, redact what
-               has to go, and save it back. For 64-bit PCs (x86-64); ARM computers aren't
-               supported yet.</p>
+            <p>MegaPDF for Linux: fill in a form, check the boxes, sign it, redact what
+               has to go, and save it back — several documents at once, as tabs in one
+               window. Save As can write the document's text as Markdown, and
+               <code>megapdf-cli</code> does the same from a terminal. For 64-bit PCs
+               (x86-64); ARM computers aren't supported yet.</p>
             <div class="picker">
                 <a href="#apt"><b>Debian, Ubuntu, Mint, Pop!_OS</b>
                     <span>Add the MegaPDF repository. Updates arrive with your system's.</span></a>
@@ -129,8 +131,11 @@ curl -fsSL https://electricrv.ca/megapdf/apt/megapdf.sources \
 sudo apt update
 sudo apt install megapdf</code></pre>
             <p>MegaPDF then appears in your applications menu, PDF files offer it under
-               <strong>Open With</strong>, and <code>megapdf file.pdf</code> works from a terminal.
-               If <code>curl</code> is missing, install it first with <code>sudo apt install curl</code>.</p>
+               <strong>Open With</strong> (a second one opens as a tab in the running window),
+               and <code>megapdf file.pdf</code> works from a terminal. So does
+               <code>megapdf-cli extract file.pdf</code>, which writes the document's text;
+               <code>--format md</code> writes Markdown. If <code>curl</code> is missing,
+               install it first with <code>sudo apt install curl</code>.</p>
             <div class="note">
                 <p><strong>Debian without <code>sudo</code>?</strong> If you gave Debian a root
                    password when you installed it, your account can't use <code>sudo</code>.
@@ -204,7 +209,8 @@ cd megapdf-linux-x64-2.1.0
             <p>That puts MegaPDF in <code>~/.local</code>, in your applications menu, and on
                your <code>PATH</code> as <code>megapdf</code> — and, for the command line,
                as <code>megapdf-cli</code>: <code>megapdf-cli extract file.pdf</code> writes
-               the text. If a terminal then says <code>megapdf</code> isn't found, log out
+               the text, and <code>--format md</code> writes Markdown. If a terminal then
+               says <code>megapdf</code> isn't found, log out
                and back in: on most distributions <code>~/.local/bin</code> joins your
                <code>PATH</code> at the next login.</p>
             <p>It needs glibc 2.35 or later and the ICU, OpenSSL, fontconfig and X11

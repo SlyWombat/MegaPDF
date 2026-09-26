@@ -46,6 +46,17 @@ Conventions (OQLF, Canadian French):
 | Discard | Abandonner | |
 | Share | Partager | #378, the OS share sheet row in the More menu |
 | Share without saving | Partager sans enregistrer | #378, the unsaved-changes dialog's Share-flow button — deliberately not "Discard"/"Abandonner", since nothing is discarded (Fable review, 2026-09-26) |
+| Couldn't share. Try again. | Impossible de partager. Réessayez. | #378, Android |
+| share sheet | feuille de partage | #378, store copy only: Apple's own French for the iOS share sheet, and the phrase Google's French uses for Android's Sharesheet; neither app has the words as a string |
+| Open with | Ouvrir avec | #376, #377, store copy only: the OS's own menu (Android's chooser, iOS's Files and Mail) that now offers MegaPDF; not an app string |
+| tab | onglet | #348, the noun: Windows, Mac, Linux and every store block |
+| Close tab | Fermer l'onglet | #348; the Mac menu writes it Close Tab, in title case, and the French does not change |
+| Close window | Fermer la fenêtre | #348 |
+| New window | Nouvelle fenêtre | #348 |
+| Show Next Tab / Show Previous Tab | Afficher l'onglet suivant / Afficher l'onglet précédent | #348, macOS Window menu |
+| {0}, tab | {0}, onglet | #348, the accessible name of a tab |
+| {0}, unsaved changes, tab | {0}, modifications non enregistrées, onglet | #348, the same with the unsaved dot |
+| Box to tick / Box, ticked | Case à cocher / Case cochée | #2, Windows: what a screen reader says for a drawn box before and after it is ticked |
 | Don't save | Ne pas enregistrer | |
 | Restore | Restaurer | |
 | Signatures | Signatures | |
@@ -81,6 +92,8 @@ Conventions (OQLF, Canadian French):
 | Export as Markdown | Exporter en Markdown | #386, Save As / Save a copy's Markdown option and the redact-confirmation dialog; a one-way, lossy text export, not a Save-a-copy PDF variant — the word is *Exporter*, not *Enregistrer*, on every platform |
 | Markdown document | Document Markdown | #386, macOS/Linux Save As picker's Markdown file-type choice — "Markdown" itself unchanged, as above |
 | Exported | Exporté | #386, the Markdown export's completion message — deliberately not "Saved"/"Enregistré" |
+| Exported as Markdown | Exporté en Markdown | #386, Android's completion message |
+| Couldn't export as Markdown. | Impossible d'exporter en Markdown. | #386, Android |
 | Exported {0}. | {0} exporté. | #386, macOS/Linux's parameterized form of the same completion message, filename included |
 | Exporting… | Exportation… | #386, busy strip while a Markdown export is written |
 | Couldn't prepare the export. | Impossible de préparer l'exportation. | #386, Markdown export failure — the export-side twin of "Couldn't prepare the copy." |

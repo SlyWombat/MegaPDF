@@ -1,5 +1,15 @@
 # MegaPDF 2.1 — release notes and "What's New"
 
+> **2026-09-26 (#395): 2.1.0 shipped on every store on 2026-09-21, and the four
+> store files in this folder now hold 2.1.1's What's New.** `tools/msstore_submit.py`
+> and `tools/asc_publish.py` derive the release-notes folder from the first two
+> parts of the version (`2.1.1.0` → `2.1`) and read here, so
+> `microsoft-store.md`, `app-store.md`, `mac-app-store.md` and `google-play.md`
+> are generated copies of the files in [`../2.1.1/`](../2.1.1/README.md) — edit
+> those, then run `docs/release-notes/2.1.1/check_copy.py`. The 2.1.0 blocks
+> the rest of this README describes are kept, unchanged, in
+> [`2.1.0/`](2.1.0/); `release-notes-2.1.md` and `readiness.md` are 2.1.0's.
+
 Draft copy for every store, in `en`, `fr-CA` and `fr-FR`, for the 2.1 release of
 the work done since 2.0: **#332, #333, #334** (merged to `main` as `3c6f8f3`),
 **#337** (the phones) and **#338** (the desktops). Nothing here has been pasted
@@ -22,10 +32,10 @@ the Google Play field 388 of 500; only the Play French comes close to its limit.
 
 | File | Store | Field | Limit |
 |---|---|---|---|
-| [`microsoft-store.md`](microsoft-store.md) | Microsoft Store | What's new in this version | 1500 |
-| [`app-store.md`](app-store.md) | App Store (iPhone, iPad) | What's New in This Version | 4000 |
-| [`mac-app-store.md`](mac-app-store.md) | Mac App Store | What's New in This Version | 4000 |
-| [`google-play.md`](google-play.md) | Google Play | Release notes | 500 |
+| [`2.1.0/microsoft-store.md`](2.1.0/microsoft-store.md) | Microsoft Store | What's new in this version | 1500 |
+| [`2.1.0/app-store.md`](2.1.0/app-store.md) | App Store (iPhone, iPad) | What's New in This Version | 4000 |
+| [`2.1.0/mac-app-store.md`](2.1.0/mac-app-store.md) | Mac App Store | What's New in This Version | 4000 |
+| [`2.1.0/google-play.md`](2.1.0/google-play.md) | Google Play | Release notes | 500 |
 | [`release-notes-2.1.md`](release-notes-2.1.md) | — | the long form, for the repo and the website | — |
 
 Microsoft Store has four listing languages (`en-US`, `en-CA`, `fr-CA`, `fr-FR`)

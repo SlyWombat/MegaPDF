@@ -27,6 +27,25 @@ per Windows user, and never leave your computer.
 Open any PDF (Open button, drag-and-drop onto the window, or right-click a PDF →
 Open with → MegaPDF).
 
+**Tabs** — open a second PDF any of those ways and it opens as a tab beside the first,
+in the same window: the Open dialog takes several files at once, and a double-click in
+File Explorer while MegaPDF is running lands in the window you already have rather
+than starting another copy — as a new tab, or on the tab that already shows that file.
+Each tab keeps its own undo history, find, zoom and unsaved dot; the toolbar acts on
+the tab you are looking at. **Ctrl+W** closes a tab (**Close tab** and **New window**
+are in the More menu; **Ctrl+Shift+N** opens another window). Close the window with
+unsaved changes in two tabs and you should be asked about each; answer Cancel on the
+second and the first must still be there, edits and all. Kill the app with three tabs
+open and the next launch should offer to restore each of them, into its own tab.
+
+**Save As → Markdown** — Save As offers **Markdown document** beside PDF document.
+Pick it and you get the document's text as a `.md` file: headings, paragraphs, lists,
+and the values you filled in. It is an export, not a save: the busy strip says
+*Exporting…*, the confirmation says *Exported*, the PDF is untouched, and if the
+document had unsaved changes the dot stays and closing still asks. A scanned page has no
+text to give and is written as a one-line note. Open the `.md` in any text editor and
+check it reads like the document.
+
 **Text** — click any text and type. Enter or clicking elsewhere applies; Esc cancels.
 Clearing all the text deletes it. Ctrl+Z / Ctrl+Y undo and redo everything.
 If you see a note about fonts, that's expected on some documents — check the result
@@ -124,14 +143,15 @@ Scroll through a long document; pages should appear as you reach them.
 - A document that does not allow changes cannot be redacted — the button is disabled,
   same as Whiteout and Add text.
 
-## Linux (for contributors — there is nothing to install yet)
+## Linux
 
-The Linux app (#158) builds and runs, but is not packaged, so there is no
-download and nothing for a tester to install. Until Flathub happens, trying it
-means building it — the README has the steps, and `install.sh` puts it in the
-applications menu without root.
-
-Everything above applies once it is open, with two differences worth knowing:
+The Linux app ships as a `.deb`, a signed APT repository and a tarball —
+https://electricrv.ca/megapdf/linux/ has the three ways in — and building it
+yourself is in the README. Everything above applies once it is open, tabs
+included: a second `megapdf file.pdf`, or a file manager's Open With while the
+app is running, lands in the running window as a tab, and Ctrl+Page Up /
+Ctrl+Page Down move between tabs. `megapdf-cli extract file.pdf` is on your
+`PATH` beside it (below). Two differences worth knowing:
 
 - **Print** opens MegaPDF's own small dialog — which printer, how many copies —
   rather than the system print panel, and then hands the job to CUPS. It needs

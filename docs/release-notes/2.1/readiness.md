@@ -284,3 +284,15 @@ from the repository and the run history.
   will happen, and the renderer is the variable this machine cannot supply.
 - **Whether the captures are good enough to list.** They are measured; whether a
   set sells the app is a judgement and it is Dave's.
+
+## Addendum, 2026-09-26 — 2.1.1 (#395)
+
+2.1.0 went out on every store on 2026-09-21 (Windows 2.1.0.0, iOS 2.1.0, Mac
+2.1.0, Play 2.1.0 / versionCode 11, Linux 2.1.0). The version table in §1 is
+2.1.0's and is left as written; the tree now says **2.1.1** in all six places
+(`029c849`, "Version 2.1.1 everywhere"): Windows `2.1.1` / `2.1.1.0`, iOS
+`MARKETING_VERSION 2.1.1`, Android `versionName "2.1.1"` / `versionCode 12`, the
+Mac and Linux app `2.1.1`, and `megapdf-cli` reports the same number. The copy
+for 2.1.1 is in [`../2.1.1/`](../2.1.1/README.md); the four store files beside
+this one are its generated copies (see the note at the top of the README). The
+readiness audit for 2.1.1 itself is #395's checklist, not this file.
