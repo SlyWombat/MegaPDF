@@ -37,6 +37,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -66,11 +67,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import com.megapdf.android.ui.Brand
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -80,7 +85,14 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -1408,26 +1420,6 @@ private fun SelectionOverlay(
                     )
                 },
         ) {
-            Text(
-                "✕",
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .background(Brand.Danger)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                    .clickable(enabled = enabled) { onRemove() },
-            )
-            if (onEdit != null) {
-                Text(
-                    "✎",
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .background(Brand.Accent)
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                        .clickable(enabled = enabled) { onEdit() },
-                )
-            }
             if (resizable) {
                 androidx.compose.foundation.layout.Box(
                     Modifier
@@ -1450,6 +1442,123 @@ private fun SelectionOverlay(
                         },
                 )
             }
+            // The chips come after the grip so they sit above it: on a selection thinner
+            // than the grip (a mark one text line tall) the grip overflows its corner into
+            // the ✕ chip's, and whichever child is later takes the tap. The grip's drag
+            // detector lets a tap through to the page, which is how a tap on the ✕ opened
+            // Edit text (#347); the ✕ host consumes it. A thin mark's grip therefore yields
+            // to the ✕ where they overlap — it can still be moved, and a mark taller than the
+            // 48 dp host keeps its whole grip.
+            CornerChip(
+                glyph = "✕",
+                background = Brand.Danger,
+                enabled = enabled,
+                onClick = onRemove,
+                hangsFromEnd = true,
+                sharedEdgeWidth = if (onEdit != null) (baseW * scaleX).roundToInt() else null,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+            if (onEdit != null) {
+                CornerChip(
+                    glyph = "✎",
+                    background = Brand.Accent,
+                    enabled = enabled,
+                    onClick = onEdit,
+                    hangsFromEnd = false,
+                    sharedEdgeWidth = (baseW * scaleX).roundToInt(),
+                    modifier = Modifier.align(Alignment.TopStart),
+                )
+            }
         }
     }
 }
+
+/**
+ * The least a corner chip's touch target measures on each side (#347) — the 48 dp
+ * Android's own guidance and WCAG 2.5.8 ask for, and the box Compose was already
+ * reporting to a screen reader for the chip.
+ */
+private val CHIP_HIT_TARGET = 48.dp
+
+/**
+ * One of the corner chips on a selection: ✕ to remove, ✎ to edit. The chip draws at
+ * its natural size in its corner exactly as before; the tap lands on a transparent
+ * host at least [CHIP_HIT_TARGET] square centred on it (#347).
+ *
+ * Before this the `clickable` covered only the glyph, and a tap in the 48 dp box the
+ * chip's accessibility node reported fell through to the page — on a mark one text
+ * line tall, that opened Edit text for the line underneath. Compose expands a small
+ * target's touch bounds only when nothing else is hit directly, and the page always
+ * is, so the expansion has to be a real layout, not a courtesy.
+ *
+ * The host is one leaf node that paints the chip itself rather than a box around a
+ * `Text`: with a child node under the glyph, a tap on the glyph reached the page
+ * again while a tap beside it did not (seen on the emulator), and a single node with
+ * nothing beneath it has no such seam. Its semantics are what the old chip's were —
+ * the glyph as the node's text — so a screen reader and the QA rig read it unchanged.
+ */
+@Composable
+private fun CornerChip(
+    glyph: String,
+    background: Color,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    /** True for the chip in the end corner (✕), false for the start corner (✎). */
+    hangsFromEnd: Boolean,
+    /**
+     * The selection's width in px when another chip shares this edge, so the two hosts
+     * split it rather than overlap ([HitTargetGeometry.sharedHostWidth]); null when the
+     * chip has the edge to itself.
+     */
+    sharedEdgeWidth: Int? = null,
+    modifier: Modifier = Modifier,
+) {
+    val measurer = rememberTextMeasurer()
+    val style = LocalTextStyle.current.copy(color = Color.White)
+    val laidOut = remember(glyph, style, measurer) { measurer.measure(glyph, style) }
+    val density = LocalDensity.current
+    // 6/2 is badge padding sized to its glyph, not layout spacing (docs/design-tokens.md §3).
+    val padX = with(density) { 6.dp.roundToPx() }
+    val padY = with(density) { 2.dp.roundToPx() }
+    val chip = IntSize(laidOut.size.width + 2 * padX, laidOut.size.height + 2 * padY)
+    androidx.compose.foundation.layout.Box(
+        modifier
+            .hitTargetCentredOn(chip, CHIP_HIT_TARGET, hangsFromEnd = hangsFromEnd, sharedEdgeWidth = sharedEdgeWidth)
+            .drawBehind {
+                val left = (size.width - chip.width) / 2f
+                val top = (size.height - chip.height) / 2f
+                drawRect(background, Offset(left, top), Size(chip.width.toFloat(), chip.height.toFloat()))
+                drawText(laidOut, topLeft = Offset(left + padX, top + padY))
+            }
+            .clickable(enabled = enabled) { onClick() }
+            .semantics { text = AnnotatedString(glyph) },
+    )
+}
+
+/**
+ * Lays out what follows in the chain as a host at least [target] on each side, centred
+ * on a control of size [content] that hangs from this node's corner: the control's
+ * top edge is the node's top edge, and its end or start edge (per [hangsFromEnd]) is
+ * the node's — so a corner-aligned chip sits exactly where a corner-aligned chip of
+ * that size did, and only its touch host reaches past it. The geometry is
+ * [HitTargetGeometry.centredHost].
+ *
+ * The node reports no size of its own. A selection can be thinner than the chip
+ * (a mark one text line tall), and a child that reports more than its parent's
+ * constraints allow is coerced and re-centred by Compose in ways that moved the
+ * touch host off the drawn chip on the emulator; a point never exceeds anything.
+ */
+private fun Modifier.hitTargetCentredOn(
+    content: IntSize,
+    target: Dp,
+    hangsFromEnd: Boolean,
+    sharedEdgeWidth: Int?,
+): Modifier =
+    layout { measurable, _ ->
+        val targetPx = target.roundToPx()
+        val targetWidth = sharedEdgeWidth?.let { HitTargetGeometry.sharedHostWidth(it, content.width, targetPx) } ?: targetPx
+        val host = HitTargetGeometry.centredHost(content.width, content.height, targetWidth, targetPx)
+        val placeable = measurable.measure(Constraints.fixed(host.width, host.height))
+        val anchorX = if (hangsFromEnd) -content.width else 0
+        layout(0, 0) { placeable.placeRelative(anchorX + host.x, host.y) }
+    }
