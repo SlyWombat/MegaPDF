@@ -78,6 +78,11 @@ Conventions (OQLF, Canadian French):
 | Page {0} of {1} | Page {0} sur {1} | |
 | Extract text | Extraire le texte | #142, #168, #356 — `megapdf-cli extract`; not yet a UI string, added ahead so #168's reflow view reuses it |
 | Markdown | Markdown | #142, #168, #356 — `megapdf-cli --format md`; unchanged in French, as elsewhere on the platforms (product/brand-name-like technical terms) |
+| Export as Markdown | Exporter en Markdown | #386, Save As / Save a copy's Markdown option and the redact-confirmation dialog; a one-way, lossy text export, not a Save-a-copy PDF variant — the word is *Exporter*, not *Enregistrer*, on every platform |
+| Exported | Exporté | #386, the Markdown export's completion message — deliberately not "Saved"/"Enregistré" |
+| Exporting… | Exportation… | #386, busy strip while a Markdown export is written |
+| Couldn't prepare the export. | Impossible de préparer l'exportation. | #386, Markdown export failure — the export-side twin of "Couldn't prepare the copy." |
+| Couldn't export the text. | Impossible d'exporter le texte. | #386 |
 | Next match | Résultat suivant | |
 | Previous match | Résultat précédent | |
 | Zoom in | Zoom avant | |
