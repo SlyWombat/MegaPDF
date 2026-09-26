@@ -574,13 +574,29 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                             // than by a rectangle that has to be right, so the shot lands
                             // on a sentence in every language.
                             //
+                            // Which sentence matters (#395): since #408 the ✕ chip hangs
+                            // from the marked line's right end over the line below, so the
+                            // phrase names the LAST line of the opening paragraph and the
+                            // chip lands on whitespace. The phrase is the only green path:
+                            // "client nommé" never matched (demo-fr.pdf breaks it across
+                            // two lines) and the pose quietly marked the longest line
+                            // instead, which was the wrong picture with a green run. The
+                            // longest line is still marked when the phrase is missing, so
+                            // the image can be read — but the run goes red naming it.
+                            //
                             // Not armed, though the pose used to arm it: since #328 the
                             // tool is a row in the ⋯ menu, so an armed tool draws nothing
                             // on the page to photograph. A selected mark does.
                             val word = app.getString(R.string.screenshot_redacted_word)
                             val lines = doc.onPageForRedaction(0) { it.textLines() }
                             val line = lines.firstOrNull { it.text.contains(word) }
-                                ?: lines.maxByOrNull { it.text.length }
+                                ?: lines.maxByOrNull { it.text.length }?.also {
+                                    Log.e(
+                                        SCREENSHOT_TAG,
+                                        "::error:: redact pose: no line on page 1 contains "
+                                            + "'$word'; marked the longest line instead: '${it.text}'",
+                                    )
+                                }
                             if (line == null) {
                                 Log.e(SCREENSHOT_TAG, "::error:: redact pose: no text line on page 1")
                             } else {

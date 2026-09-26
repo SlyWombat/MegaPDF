@@ -32,8 +32,7 @@ launch with nothing to enter.
 
 **3. What the app does, and for whom**
 MegaPDF fills in, checks, signs and corrects PDF forms entirely on the device, for
-people sent a form (a rental agreement, a permission slip, a claim form) who need
-to complete and return it. The document never leaves the device.
+people sent a form who need to complete and return it. The document never leaves the device.
 
 **4. Reaching the main features**
 Any PDF works. The form in the attached recording is at
@@ -41,45 +40,40 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
 1. Home → **Open PDF** → the Files picker → choose a PDF.
 2. **Check a box:** tap a checkbox or an empty printed square; tap again to clear.
 3. **Sign:** **Sign** → **Draw** (finger or Apple Pencil) or **Photo** (a photo of
-   a signature on paper; the background is removed) → tap the saved signature →
-   tap the page to place it; drag to move, handles to resize.
-4. **Add text:** **Add text** → tap a blank line → type, choose size and font →
-   **Add**. Tap it again to move it or fix a typo.
-5. **Change the document's own text:** tap a line of printed text, retype it,
-   **Save**. It keeps its size and font; Undo restores the original exactly.
-6. **Search:** the magnifier → type a word; the arrows step through the matches.
+   a signature; the background is removed) → tap the saved signature → tap the
+   page to place it; drag to move, handles to resize.
+4. **Add text:** **Add text** → tap a blank line → type, pick size and font →
+   **Add**.
+5. **Change the document's own text:** tap a printed line, retype it, **Save**.
+   It keeps its size and font; Undo restores the original exactly.
+6. **Search:** the magnifier → type a word; arrows step through matches.
 7. **Save:** **Save** writes back to the original file ("Saved" confirms);
    **Save a copy** (under **More**) writes a new file through the Files picker.
-8. **Redact:** **More** (the ⋯ button) → **Redact** → drag across what must come
-   out. A mark can be tapped to select it, then moved, reshaped, or taken off
-   with its × (**Clear all marks** is under **More**); Undo puts it back. Then
-   **Save**: a confirmation says redaction permanently removes the content and
-   offers **Overwrite the original** or **Save as a copy**, then says what was
-   removed. The content is taken out of the file, not covered.
-9. **Protect:** **More** → **Password…** sets, changes or removes a
-   document password. A protected PDF asks for it when opened.
-10. **Open with:** the app is registered as a PDF viewer. In Files, long-press
-    any PDF → **Share** → **MegaPDF** (or tap the PDF → the share button →
-    MegaPDF); in Mail, tap a PDF attachment → the share button → MegaPDF. The
-    document opens in the viewer. If another document with unsaved changes is
-    open, an alert asks Save / Discard / Cancel first.
+8. **Redact:** **More** (⋯) → **Redact** → drag across what must come
+   out. Tap a mark to select it, then move, reshape or remove it with its ×
+   (**Clear all marks** is under **More**); Undo puts it back. **Save** then
+   confirms that redaction permanently removes the content, offers **Overwrite
+   the original** or **Save as a copy**, and says what was removed. The content
+   is taken out of the file, not covered.
+9. **Protect:** **More** → **Password…** sets, changes or removes a document
+   password. A protected PDF asks for it when opened.
+10. **Open with:** the app is a registered PDF viewer. In Files, long-press a
+    PDF → **Share** → **MegaPDF**; in Mail, tap a PDF attachment → share →
+    MegaPDF. If another document with unsaved changes is open, an alert asks
+    Save / Discard / Cancel first.
 11. **Share:** **More** → **Share** opens the system share sheet with the
-    current file (Mail, Messages, AirDrop, Save to Files…). If the document has
-    unsaved changes, an alert offers **Save**, **Share without saving** (the
-    last saved file is shared; the edits stay open) or **Cancel**.
+    current file. With unsaved changes, an alert offers **Save**, **Share
+    without saving** (the last saved file is shared) or **Cancel**.
 12. **Export as Markdown:** **More** → **Export as Markdown** writes the
-    document's text (headings, paragraphs, lists, filled-in field values) as a
-    `.md` file through the Files picker. It is a one-way text export: the PDF is
-    not changed, and the app still asks to save it if it had unsaved changes.
-    A page with no text layer (a scan) is written as a one-line note; the app
-    does no OCR.
+    document's text (headings, paragraphs, lists, filled-in values) as a `.md`
+    file through the Files picker. One-way: the PDF is not changed. A page with
+    no text layer (a scan) becomes a one-line note; there is no OCR.
 
 **1. Screen recording**
 Attached: MegaPDF 2.1.1 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
 launch, open the form from Files, tick and clear boxes, draw and place a
-signature, search, save, reopen from Recents, and the Photos picker opening and
-closing. Steps 8 to 12 are not in it; they need only an open PDF (step 10 needs
-a PDF in Files or Mail).
+signature, search, save, reopen from Recents, the Photos picker. Steps 8 to 12
+are not in it; they need only an open PDF (step 10 a PDF in Files or Mail).
 
 **2. Devices and OS versions tested**
 iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5.
@@ -99,12 +93,10 @@ files.
 
 **Permissions and privacy**
 No permissions are requested and no permission dialogs appear. Signing from a
-photo uses SwiftUI's PhotosPicker, which runs out of process and returns only the
-chosen image, so no photo-library access is requested. Share hands the file to
-the system share sheet (UIActivityViewController) and the Markdown export and
-Open with go through the Files picker and the document types declared in
-Info.plist; none of them makes a network request. No data is collected;
-privacy policy: https://electricrv.ca/megapdf/privacy/
+photo uses SwiftUI's PhotosPicker, which runs out of process and returns only
+the chosen image. Share uses the system share sheet; Export as Markdown and Open
+with go through the Files picker and the document types declared in Info.plist.
+No data is collected; privacy policy: https://electricrv.ca/megapdf/privacy/
 
 ---
 

@@ -176,6 +176,13 @@ large document fails if `/tmp` is a tmpfs, as it is on Fedora
 third-party notices file yet
 ([#194](https://github.com/SlyWombat/MegaPDF/issues/194)).
 
+## Releasing (for contributors, not testers)
+
+The manual pass above is also the release gate: before a build goes to any store it is
+installed and clicked through on a real machine per platform, because CI cannot click and
+every 2.1.1 show-stopper was found that way after CI was green. The order, the gates and
+the commands are in [`docs/RELEASING.md`](docs/RELEASING.md).
+
 ## Automated coverage (for contributors, not testers)
 
 Search is covered by engine-level tests on all three platforms, so a parity break shows

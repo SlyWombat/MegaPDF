@@ -98,6 +98,13 @@ package and handles updates). The Store package is built headlessly by the recip
 more — both were retired in September 2026 once the Store listing went live; the older
 `.msix` assets on the GitHub releases page are historical and will not update.
 
+## Releasing
+
+A release goes to every channel at once, in a fixed order with a gate at each step.
+[`docs/RELEASING.md`](docs/RELEASING.md) is the runbook — the version rule, the gates
+and the command that proves each, the submission commands per store, and the traps —
+and `.github/ISSUE_TEMPLATE/release-checklist.md` is the issue to open and work down.
+
 ## License
 
 [Apache-2.0](LICENSE)

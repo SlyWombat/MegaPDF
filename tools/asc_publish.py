@@ -339,9 +339,20 @@ def cmd_screenshots(captures):
         for label, display in SHOT_SETS.items():
             if display in sets:
                 sid = sets[display]["id"]
-                _replace_set_contents(f"/v1/appScreenshotSets/{sid}/appScreenshots?limit=50",
-                                      "appScreenshots", "/v1/appScreenshots")
-            else:
+                try:
+                    _replace_set_contents(f"/v1/appScreenshotSets/{sid}/appScreenshots?limit=50",
+                                          "appScreenshots", "/v1/appScreenshots")
+                except urllib.error.HTTPError as e:
+                    # A version freshly created from the last one inherits its
+                    # screenshots, and for a while App Store Connect answers 500
+                    # to deleting those one by one (2.1.1, 2026-09-26: every
+                    # retry over several minutes). Dropping the whole set and
+                    # making a new one is accepted, and gives the same result.
+                    if e.code != 500:
+                        raise
+                    api("DELETE", f"/v1/appScreenshotSets/{sid}")
+                    del sets[display]
+            if display not in sets:
                 sid = api("POST", "/v1/appScreenshotSets", {"data": {
                     "type": "appScreenshotSets", "attributes": {"screenshotDisplayType": display},
                     "relationships": {"appStoreVersionLocalization": {"data": {
@@ -404,10 +415,23 @@ def cmd_review(attachments):
         attrs.update({"contactFirstName": "David", "contactLastName": "Seaman",
                       "contactEmail": "info@electricrv.ca",
                       "contactPhone": "18885551212"})
-        did = api("POST", "/v1/appStoreReviewDetails", {"data": {
-            "type": "appStoreReviewDetails", "attributes": attrs,
-            "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})["data"]["id"]
-        print("  review detail created")
+        try:
+            did = api("POST", "/v1/appStoreReviewDetails", {"data": {
+                "type": "appStoreReviewDetails", "attributes": attrs,
+                "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})["data"]["id"]
+            print("  review detail created")
+        except urllib.error.HTTPError as e:
+            # 409: the version already has a detail (inherited from the last
+            # version) that the GET above did not return — seen on 2.1.1's
+            # freshly created version. Read it again and update it instead.
+            if e.code != 409:
+                raise
+            detail = api("GET", f"/v1/appStoreVersions/{v['id']}/appStoreReviewDetail")["data"]
+            api("PATCH", f"/v1/appStoreReviewDetails/{detail['id']}", {"data": {
+                "type": "appStoreReviewDetails", "id": detail["id"],
+                "attributes": {"notes": notes, "demoAccountRequired": False}}})
+            did = detail["id"]
+            print("  review detail updated (existed already)")
     print(f"  notes: {len(notes)} characters")
     if attachments:
         for a in paged(f"/v1/appStoreReviewDetails/{did}/appStoreReviewAttachments?limit=50"):
