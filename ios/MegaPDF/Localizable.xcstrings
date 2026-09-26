@@ -2363,6 +2363,23 @@
         }
       }
     },
+    "Share without saving" : {
+      "comment" : "Unsaved-changes alert (#378): the Share case's non-destructive second button, replacing \"Discard\" — nothing is thrown away, only excluded from what gets shared",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partager sans enregistrer"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partager sans enregistrer"
+          }
+        }
+      }
+    },
     "Show in Files" : {
       "localizations" : {
         "fr" : {
@@ -2824,6 +2841,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document contient des modifications non enregistrées."
+          }
+        }
+      }
+    },
+    "This document has unsaved changes. They won't be in the shared copy unless you save first." : {
+      "comment" : "Unsaved-changes alert (#378): the Share case's message, replacing the generic \"This document has unsaved changes.\"",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document contient des modifications non enregistrées. Elles ne seront pas dans la copie partagée si vous ne l'enregistrez pas d'abord."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document contient des modifications non enregistrées. Elles ne seront pas dans la copie partagée si vous ne l'enregistrez pas d'abord."
           }
         }
       }
