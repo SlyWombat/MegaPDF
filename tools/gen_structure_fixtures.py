@@ -264,6 +264,32 @@ def gen_headings(regular, bold):
     return d.finish()
 
 
+def gen_tabular_headings(regular, bold):
+    """#375: the bold-at-body-size heading rule over-firing on tabular/label-like text, and
+    the fix's two suppression signals -- design §7 doesn't name this fixture (written after
+    #353 shipped); it lives beside headings.pdf as the #375 regression case.
+
+    Two genuine, isolated bold-at-body headings (same shape as headings.pdf's own "Notice")
+    bracket two false-positive shapes: a run of two short bold "form label" lines back to back
+    with nothing between them (#375's own coordinator example -- a form's label/value pair,
+    e.g. "Status" then "No") and a single isolated bold line with no letters at all (a dollar
+    amount standing alone, nothing to cluster it into a run).
+    """
+    d = Doc(regular, bold)
+    body = text_ops(b"F2", 12, 72, 750, "Summary")
+    body += text_ops(b"F1", 12, 72, 700, "Body text under the summary heading.")
+    body += text_ops(b"F2", 12, 72, 650, "Status")
+    body += text_ops(b"F2", 12, 72, 610, "Paid")
+    body += text_ops(b"F1", 12, 72, 560, "Body text resuming after the label run.")
+    body += text_ops(b"F1", 12, 72, 510, "Body text before the amount line.")
+    body += text_ops(b"F2", 12, 72, 465, "12,345.67")
+    body += text_ops(b"F1", 12, 72, 415, "Body text after the amount line.")
+    body += text_ops(b"F2", 12, 72, 365, "Conclusion")
+    body += text_ops(b"F1", 12, 72, 315, "Body text under the conclusion heading.")
+    d.add_page(body)
+    return d.finish()
+
+
 def gen_xobject_text(regular, bold):
     d = Doc(regular, bold)
     fm_content = text_ops(b"F1", 14, 0, 0, "Text drawn by a form XObject.")
@@ -310,6 +336,7 @@ def main():
         ("furniture.pdf", gen_furniture),
         ("lists.pdf", gen_lists),
         ("headings.pdf", gen_headings),
+        ("tabular-headings.pdf", gen_tabular_headings),
         ("xobject-text.pdf", gen_xobject_text),
         ("scan.pdf", gen_scan),
         ("mixed.pdf", gen_mixed),

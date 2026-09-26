@@ -5600,6 +5600,10 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"furniture", repo + "/structure/furniture.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"lists", repo + "/structure/lists.pdf", 0, 0, 0},
         {"headings", repo + "/structure/headings.pdf", 0, 0, 0},
+        // #375: two genuine bold-at-body headings bracketing a run of two false-positive
+        // "form label" lines and one isolated numeric-like false positive -- see
+        // gen_tabular_headings()'s own comment for the shape.
+        {"tabular-headings", repo + "/structure/tabular-headings.pdf", 0, 0, 0},
         {"xobject-text", repo + "/structure/xobject-text.pdf", 0, 0, 0},
         {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
         {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
@@ -5854,6 +5858,7 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
     const Case cases[] = {
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
     };
@@ -5907,6 +5912,7 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
     const Case cases[] = {
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
     };
@@ -6114,6 +6120,7 @@ void test_markdown_round_trips(const std::string& repo, const std::string& expec
     const Case cases[] = {
         {"columns", repo + "/structure/columns.pdf"},     {"furniture", repo + "/structure/furniture.pdf"},
         {"lists", repo + "/structure/lists.pdf"},          {"headings", repo + "/structure/headings.pdf"},
+        {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
     };
