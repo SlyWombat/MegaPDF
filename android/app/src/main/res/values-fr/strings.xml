@@ -72,6 +72,10 @@
     <string name="save_failed">Impossible d\'enregistrer. Utilisez «&#160;Enregistrer une copie&#160;».</string>
     <string name="share_failed">Impossible de partager. Réessayez.</string>
 
+    <!-- Enregistrer une copie en Markdown (#386) : un export à sens unique, pas un autre format d'enregistrement. -->
+    <string name="exported_markdown">Exporté en Markdown</string>
+    <string name="markdown_export_failed">Impossible d\'exporter en Markdown.</string>
+
     <!-- Sécurité du document (#131) -->
     <string name="security_restricted_notice">Le propriétaire de ce document en a restreint les modifications. Pour le modifier, déverrouillez-le avec le mot de passe du propriétaire à partir du menu.</string>
     <string name="security_restricted_edit">Le propriétaire de ce document ne permet pas cette modification. Déverrouillez-le d\'abord avec le mot de passe du propriétaire.</string>
@@ -183,6 +187,7 @@
     <string name="busy_searching">Recherche…</string>
     <string name="busy_checking_page">Vérification de cette page…</string>
     <string name="busy_applying">Modification en cours…</string>
+    <string name="busy_exporting">Exportation…</string>
     <string name="search_failed">Impossible de rechercher dans ce document.</string>
     <string name="edit_failed">Impossible d\'effectuer cette modification.</string>
     <string name="signature_move_failed">Impossible de déplacer cette signature</string>

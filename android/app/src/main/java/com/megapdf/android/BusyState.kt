@@ -17,6 +17,9 @@ enum class BusyLabel(val stringId: Int) {
     SEARCHING(R.string.busy_searching),
     CHECKING_PAGE(R.string.busy_checking_page),
     APPLYING(R.string.busy_applying),
+    /** Exporting the document's text as Markdown (#386) — its own label, not [SAVING]: a
+     * Markdown export is not a save of the document (see [ViewerViewModel.exportMarkdown]). */
+    EXPORTING(R.string.busy_exporting),
 }
 
 /** Where page-level work shows its spinner: a page, and the line on it when there is one. */

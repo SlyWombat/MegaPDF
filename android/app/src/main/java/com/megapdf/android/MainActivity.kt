@@ -1,8 +1,11 @@
 package com.megapdf.android
 
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -17,6 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.launch
@@ -90,15 +94,56 @@ private fun redactedName(displayName: String): String {
 /** Kept here rather than read from resources: this runs outside a composable. */
 private const val REDACTED_SUFFIX = "-redacted"
 
+/**
+ * "Save a copy" (#386): the same `ACTION_CREATE_DOCUMENT` picker as
+ * [ActivityResultContracts.CreateDocument], with Markdown added to its mime-type list
+ * (`EXTRA_MIME_TYPES`) alongside PDF, the primary type. DocumentsUI (and providers that follow
+ * its convention) offers both as a "save as" type choice and appends the extension matching
+ * whichever the person picks — [saveFormatFor] reads that extension back to decide which
+ * binding writes the result.
+ */
+private class CreateDocumentOrMarkdown : ActivityResultContracts.CreateDocument("application/pdf") {
+    override fun createIntent(context: Context, input: String): Intent =
+        super.createIntent(context, input)
+            .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/pdf", "text/markdown"))
+}
+
+/** The document name the provider recorded for [uri] (#386), read back to decide [saveFormatFor]. */
+private fun queryDisplayName(context: Context, uri: Uri): String {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (col >= 0 && cursor.moveToFirst()) return cursor.getString(col) ?: ""
+    }
+    return uri.lastPathSegment ?: ""
+}
+
 @Composable
 fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String? = null) {
     LaunchedEffect(screenshotState) { viewModel.applyScreenshotMode(screenshotState) }
+    val context = LocalContext.current
     val openDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let { viewModel.openUri(it) } }
+    // The redacted-copy flow below always saves a PDF (applying redaction marks makes sense
+    // only on the document itself), so it keeps this PDF-only launcher; the general
+    // "Save a copy" menu command uses [createDocumentOrMarkdown] instead.
     val createDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri -> uri?.let { viewModel.saveAs(it) } }
+    // "Save a copy" (#386): PDF or Markdown, decided by which the picker's mime-type list
+    // handed back. A `.md` is a one-way text export, never the app's current document — see
+    // [ViewerViewModel.exportMarkdown]'s own note — so it goes through a different call than
+    // [ViewerViewModel.saveAs] entirely, not just a different mime type on the same one.
+    val createDocumentOrMarkdown = rememberLauncherForActivityResult(
+        remember { CreateDocumentOrMarkdown() }
+    ) { uri ->
+        uri?.let {
+            when (saveFormatFor(queryDisplayName(context, it))) {
+                SaveFormat.MARKDOWN -> viewModel.exportMarkdown(it)
+                SaveFormat.PDF -> viewModel.saveAs(it)
+            }
+        }
+    }
     val pickSignatureImage = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri -> uri?.let { viewModel.importSignature(it) } }
@@ -111,7 +156,6 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     // One-shot status toasts ("Saved", save errors).
-    val context = LocalContext.current
     val status = viewModel.statusMessage
     LaunchedEffect(status) {
         if (status != null) {
@@ -213,7 +257,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                     if (viewModel.redactionMarkCount > 0) {
                         redactConfirmOpen = true
                     } else {
-                        createDocument.launch(state.displayName)
+                        createDocumentOrMarkdown.launch(state.displayName)
                     }
                 },
                 capabilities = viewModel.capabilities,

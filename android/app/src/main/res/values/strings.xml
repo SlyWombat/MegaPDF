@@ -80,6 +80,10 @@
     <string name="save_failed">Couldn\'t save. Use Save a copy.</string>
     <string name="share_failed">Couldn\'t share. Try again.</string>
 
+    <!-- Save a copy as Markdown (#386): a one-way text export, not an alternate save format. -->
+    <string name="exported_markdown">Exported as Markdown</string>
+    <string name="markdown_export_failed">Couldn\'t export as Markdown.</string>
+
     <!-- Document security (#131): restricted documents, the owner password, and the Password command. -->
     <string name="security_restricted_notice">The owner of this document restricted changes to it. To edit it, unlock it with the owner password from the menu.</string>
     <string name="security_restricted_edit">This document\'s owner doesn\'t allow that change. Unlock it with the owner password first.</string>
@@ -172,6 +176,7 @@
     <string name="busy_searching">Searching…</string>
     <string name="busy_checking_page">Checking this page…</string>
     <string name="busy_applying">Applying…</string>
+    <string name="busy_exporting">Exporting…</string>
     <string name="search_failed">Couldn\'t search this document.</string>
     <string name="edit_failed">Couldn\'t make that change.</string>
     <string name="signature_move_failed">Couldn\'t move this signature</string>
