@@ -95,6 +95,25 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
         }
     }
 
+    // Share (#378): once the view model has a copy ready under cacheDir/share/, hand it to
+    // the OS chooser through the FileProvider's content:// grant, then clear the request so
+    // rotation or recomposition doesn't reopen the chooser.
+    val shareFile = viewModel.shareFile
+    LaunchedEffect(shareFile) {
+        if (shareFile != null) {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context, "${context.packageName}.fileprovider", shareFile,
+            )
+            val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(android.content.Intent.createChooser(sendIntent, null))
+            viewModel.consumeShareFile()
+        }
+    }
+
     when (val state = viewModel.uiState) {
         is ViewerUiState.Home -> HomeScreen(
             recents = state.recents,
@@ -192,6 +211,11 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                 toolsDisabled = viewModel.toolsDisabled,
                 onCurrentPageChange = viewModel::onCurrentPageChanged,
                 onSaveAndClose = viewModel::saveAndClose,
+                // Share (#378): no unsaved changes shares immediately (same export as
+                // Discard below — the on-disk file already is the current document).
+                onShare = viewModel::shareLastSaved,
+                onSaveAndShare = viewModel::saveAndShare,
+                onShareLastSaved = viewModel::shareLastSaved,
                 // Redaction (#173). Marks are drawn by the screen because the core never
                 // writes them into the document.
                 redactMode = viewModel.redactMode,

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The FileProvider's grant, scoped to cacheDir/share/ (#378) — ShareFile.kt's
+  shareDirectory() — where the Share row's copy of the document is written. Not the
+  whole cache dir: that also holds the temporary copies openFromUri/writeVerified make
+  of whatever document happens to be open or mid-save, none of which should ever be
+  reachable through a content:// grant.
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="share" path="share/" />
+</paths>

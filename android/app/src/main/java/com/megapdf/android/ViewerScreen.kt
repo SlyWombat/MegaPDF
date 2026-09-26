@@ -118,6 +118,9 @@ private const val MIN_MARK_THICKNESS = 0.01f
 // current match, which read well but is not a colour MegaPDF owns
 // (docs/design-tokens.md §1.2).
 private val REDACTION_MARK = Brand.RedactionMark
+
+/** Which of the two flows the unsaved-changes prompt (#145, #378) was asked on behalf of. */
+private enum class UnsavedAction { CLOSE, SHARE }
 private val REDACTION_MARK_OUTLINE = Brand.RedactionMarkOutline
 private val MATCH_HIGHLIGHT = Brand.FindMatch
 private val CURRENT_MATCH_HIGHLIGHT = Brand.FindMatchCurrent
@@ -208,6 +211,13 @@ fun ViewerScreen(
     onCurrentPageChange: (pageIndex: Int) -> Unit = {},
     /** Save from the unsaved-changes prompt, closing once saved. */
     onSaveAndClose: () -> Unit = onSave,
+    // Share (#378): hands the document to the OS share sheet.
+    onShare: () -> Unit = {},
+    /** Save from the unsaved-changes prompt, sharing once saved. */
+    onSaveAndShare: () -> Unit = onShare,
+    /** Discard from the unsaved-changes prompt: shares the last-saved file, not the
+     *  pending edits — the open document keeps them, exactly as Cancel would leave it. */
+    onShareLastSaved: () -> Unit = onShare,
 ) {
     var zoom by remember { mutableFloatStateOf(1f) }
     // The rubber band a redaction drag is drawing; null the rest of the time (#173).
@@ -218,14 +228,18 @@ fun ViewerScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var aboutOpen by remember { mutableStateOf(false) }
     var noticesOpen by remember { mutableStateOf(false) }
-    var confirmDiscard by remember { mutableStateOf(false) }
+    // The unsaved-changes prompt (#145, #378): one dialog, asked before either Close or
+    // Share proceeds with a dirty document. pendingUnsavedAction records which of the two
+    // asked, so Save/Discard/Cancel resolve to the right pair of callbacks.
+    var pendingUnsavedAction by remember { mutableStateOf<UnsavedAction?>(null) }
     var signDialogOpen by remember { mutableStateOf(false) }
     var searchOpen by remember { mutableStateOf(false) }
     // #145: while a save or password change runs, the document can't be closed and its file
     // commands wait.
     val documentLocked = busy?.locksDocument == true
     val closeSearch = { searchOpen = false; onCloseSearch() }
-    val requestClose = { if (isDirty) confirmDiscard = true else onClose() }
+    val requestClose = { if (isDirty) pendingUnsavedAction = UnsavedAction.CLOSE else onClose() }
+    val requestShare = { if (isDirty) pendingUnsavedAction = UnsavedAction.SHARE else onShare() }
     // Back stays handled while locked, so the system can't finish the activity under a save.
     androidx.activity.compose.BackHandler {
         if (searchOpen) closeSearch() else if (!documentLocked) requestClose()
@@ -427,20 +441,35 @@ fun ViewerScreen(
         )
     }
 
-    if (confirmDiscard) {
-        // Save, Discard or Cancel (#145): Save closes once the document is saved; Cancel
-        // keeps the document open with every change.
+    pendingUnsavedAction?.let { action ->
+        // Save, Discard or Cancel (#145, #378): Save proceeds once the document is saved;
+        // Cancel keeps the document open with every change. Discard proceeds with the
+        // document as it stood before this prompt — for Close that means closing without
+        // writing the pending edits; for Share it means sharing the last-saved file while
+        // those edits stay right where Cancel would have left them.
         AlertDialog(
-            onDismissRequest = { confirmDiscard = false },
+            onDismissRequest = { pendingUnsavedAction = null },
             title = { Text(stringResource(R.string.unsaved_changes)) },
             text = { DialogBody { Text(stringResource(R.string.unsaved_changes_body)) } },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; onSaveAndClose() }) { Text(stringResource(R.string.save)) }
+                TextButton(onClick = {
+                    pendingUnsavedAction = null
+                    when (action) {
+                        UnsavedAction.CLOSE -> onSaveAndClose()
+                        UnsavedAction.SHARE -> onSaveAndShare()
+                    }
+                }) { Text(stringResource(R.string.save)) }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { confirmDiscard = false }) { Text(stringResource(R.string.cancel)) }
-                    TextButton(onClick = { confirmDiscard = false; onClose() }) { Text(stringResource(R.string.discard)) }
+                    TextButton(onClick = { pendingUnsavedAction = null }) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = {
+                        pendingUnsavedAction = null
+                        when (action) {
+                            UnsavedAction.CLOSE -> onClose()
+                            UnsavedAction.SHARE -> onShareLastSaved()
+                        }
+                    }) { Text(stringResource(R.string.discard)) }
                 }
             },
         )
@@ -508,6 +537,11 @@ fun ViewerScreen(
                                     text = { Text(stringResource(R.string.save_a_copy)) },
                                     enabled = !isSaving && !documentLocked,
                                     onClick = { menuOpen = false; onSaveAs() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.share)) },
+                                    enabled = !isSaving && !documentLocked,
+                                    onClick = { menuOpen = false; requestShare() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.security_password_menu)) },
