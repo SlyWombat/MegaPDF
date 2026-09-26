@@ -113,6 +113,36 @@ constexpr double kHeadingBoldGapPitchFactor = 0.6;             // ...followed by
 constexpr int kHeadingMaxLines = 3;                            // a longer group is a paragraph.
 constexpr int kMaxHeadingLevel = 6;
 
+// #375: the bold-at-body-size heading rule above over-fires on tabular/invoice/statement
+// documents -- table column headers, address fragments, dollar values, form-field labels all
+// pass "bold, <= body size, narrower than 70% of the column, followed by a gap" just as
+// easily as a genuine subheading does. tools/structure-check headingdiag's corpus-scale
+// diagnosis (#375's PR description has the full numbers) found the column-width test alone
+// (this rule's only existing per-region signal) does not separate the two cases -- a real
+// two-column article's subheading and an invoice's table-cell label both sit in a narrow
+// leaf the XY-cut produced -- and neither does the issue's own suggested XY-cut-multi-column
+// proxy on its own: a coordinator hand-read of 25 corpus documents found the same over-firing
+// on a single-column forwarded-email header block and a label/value form summary, neither one
+// a multi-column layout by any column-count definition.
+//
+// What the diagnosis DID find, corpus-wide: a genuine heading is a rare, isolated structural
+// marker (this issue's own legal-contract counter-example -- 3 correct headings out of 137
+// lines, none adjacent to another); a false positive from this rule overwhelmingly comes
+// stacked with others of its own kind, back-to-back in the page's own content stream, with
+// nothing else between them -- a table's column of cells, a forwarded email's header block, a
+// form's label/value list. kHeadingRunSuppressThreshold names how many back-to-back
+// bold-at-body HEADING candidates it takes before DemoteFalsePositiveHeadingRuns (below)
+// stops trusting the rule for that whole run: 2, not 3 -- the coordinator's own form-summary
+// example ("Status" then "No", two lines) is a run of exactly two, and the corpus data shows
+// no meaningful population of genuine two-heading-with-nothing-between-them runs to protect
+// (a real document almost always puts body text, not another same-size bold line, right after
+// a heading). kHeadingNumericLikeSuppressed is independent of run length: no genuine section
+// heading is pure digits/currency/punctuation with no letter in it at all, so a single
+// numeric-like bold-at-body candidate is demoted even when it stands alone (the diagnosis
+// found isolated numeric-like false positives -- a lone dollar figure or account number
+// classified as a heading with nothing else nearby to cluster it into a run).
+constexpr size_t kHeadingRunSuppressThreshold = 2;
+
 constexpr double kParagraphPitchFactor = 1.4;                  // consecutive lines within 1.4x median pitch.
 constexpr double kParagraphLeftEdgeToleranceEm = 1.0;          // left edges within 1 em: same paragraph.
 constexpr double kParagraphIndentEm = 1.0;                     // indent >= 1 em starts a new paragraph.
@@ -1257,6 +1287,63 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
     }
 }
 
+// No genuine section heading is pure digits/currency/punctuation with no letter in it at all
+// (a dollar amount, an account number, a bare code, a lone colon or dash). The same letter set
+// design §1.2 "Lists" and IsRomanLetter/IsAsciiLetter already draw the line at (ASCII, plus
+// Latin-1 Supplement and Latin Extended-A, kept in sync with tools/structure-check's own
+// mirror -- see kHeadingRunSuppressThreshold's comment).
+bool IsLetterCp(unsigned int cp) {
+    if (cp >= 'A' && cp <= 'Z') return true;
+    if (cp >= 'a' && cp <= 'z') return true;
+    if (cp >= 0xC0 && cp <= 0xFF && cp != 0xD7 && cp != 0xF7) return true;  // Latin-1 Supplement letters
+    if (cp >= 0x100 && cp <= 0x17F) return true;                            // Latin Extended-A
+    return false;
+}
+
+bool IsNumericLikeText(const U16& text) {
+    bool any = false;
+    for (unsigned short u : text) {
+        any = true;
+        if (IsLetterCp(u)) return false;
+    }
+    return any;
+}
+
+// #375: demotes (to PARAGRAPH -- every character stays in a block, design §1 item 8) the
+// bold-at-body-size HEADING blocks kHeadingRunSuppressThreshold's comment explains are almost
+// never real headings: a run of kHeadingRunSuppressThreshold or more of them back-to-back in
+// `content` (HEADING/PARAGRAPH/LIST_ITEM blocks only, in reading order -- the same set
+// BuildPageContent's own content stream holds before figures/fields/furniture are spliced in,
+// so one of those between two heading candidates does not itself break a run), or a single one
+// whose whole text is numeric-like regardless of run length. Runs are found by kind and
+// heading_bold_at_body alone (not by proximity/style beyond that): a run's members already
+// share "bold, <= body size, wide enough of a gap to end the previous block" by construction,
+// since GatherOneBlock only emits a HEADING block that way.
+void DemoteFalsePositiveHeadingRuns(std::vector<BlockImpl>* content) {
+    size_t k = 0;
+    while (k < content->size()) {
+        BlockImpl& first = (*content)[k];
+        if (first.info.kind != MEGAPDF_BLOCK_HEADING || !first.heading_bold_at_body) {
+            k++;
+            continue;
+        }
+        size_t j = k + 1;
+        while (j < content->size() && (*content)[j].info.kind == MEGAPDF_BLOCK_HEADING &&
+               (*content)[j].heading_bold_at_body) {
+            j++;
+        }
+        const size_t run_len = j - k;
+        const bool demote_run = run_len >= kHeadingRunSuppressThreshold;
+        for (size_t m = k; m < j; m++) {
+            BlockImpl& cand = (*content)[m];
+            if (demote_run || IsNumericLikeText(cand.text)) {
+                cand.info.kind = MEGAPDF_BLOCK_PARAGRAPH;
+            }
+        }
+        k = j;
+    }
+}
+
 // design §1 item 8 / §1.2: rotated or otherwise unclassified characters are kept out of
 // normal grouping (BuildOnePage never hands them to GatherOneBlock) and become one trailing
 // paragraph at the end of the page's order, rather than vanishing.
@@ -1434,6 +1521,7 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
         content.push_back(std::move(block));
         i += (std::max<size_t>)(1, consumed);
     }
+    DemoteFalsePositiveHeadingRuns(&content);
     BlockImpl leftover;
     if (BuildLeftoverParagraph(*pw, page_index, &leftover)) {
         leftover.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
