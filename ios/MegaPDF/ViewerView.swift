@@ -387,9 +387,13 @@ struct ViewerView: View {
                 onCancel: model.cancelTextPlacement
             )
         }
-        // One alert for all three callers (#145, #377, #378): what Save/Discard/Cancel each
-        // do depends on why it was raised, kept in the model as `unsavedChangesFollowUp`
-        // rather than three separate booleans here.
+        // One alert for all three callers (#145, #377, #378): what Save/Cancel do never
+        // changes, kept in the model as `unsavedChangesFollowUp` rather than three separate
+        // booleans here. The second button and the message DO change for Share (Fable's
+        // #378 review, 2026-09-26): "Discard" read as if the edits themselves were being
+        // thrown away, when for Share it only ever meant which file gets shared — Close and
+        // an external open really do discard, so they keep the word and the destructive
+        // styling.
         .alert("Unsaved changes", isPresented: Binding(
             get: { model.unsavedChangesFollowUp != nil },
             set: { if !$0 { model.unsavedChangesFollowUp = nil } })
@@ -402,22 +406,29 @@ struct ViewerView: View {
                 case nil: break
                 }
             }
-            Button("Discard", role: .destructive) {
-                switch model.unsavedChangesFollowUp {
-                case .close: onClose()
-                // Shares the document exactly as it last saved (#378): the pending edits
-                // are not lost, only what gets shared changes.
-                case .share: model.share()
-                // The pending edits to the document being replaced are lost, same as Close's
-                // Discard always meant (#377) — this is only reachable for a document handed
-                // over from outside, never the everyday Close path above.
-                case let .open(url): model.openPicked(url: url)
-                case nil: break
+            if model.unsavedChangesFollowUp == .share {
+                // Not destructive: nothing is thrown away here, only excluded from what's
+                // about to be shared (#378).
+                Button("Share without saving") { model.share() }
+            } else {
+                Button("Discard", role: .destructive) {
+                    switch model.unsavedChangesFollowUp {
+                    case .close: onClose()
+                    // The pending edits to the document being replaced are lost (#377) — this
+                    // is only reachable for a document handed over from outside, never the
+                    // everyday Close path above.
+                    case let .open(url): model.openPicked(url: url)
+                    case .share, nil: break
+                    }
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This document has unsaved changes.")
+            if model.unsavedChangesFollowUp == .share {
+                Text("This document has unsaved changes. They won't be in the shared copy unless you save first.")
+            } else {
+                Text("This document has unsaved changes.")
+            }
         }
         // #139: once per page, before a text-box change on a page PDFium's rewrite would alter.
         // The buttons answer; the binding's setter does nothing, so SwiftUI dismissing the alert
