@@ -264,6 +264,73 @@ internal sealed class PdfiumDocument : IPdfDocument
             throw new InvalidOperationException("Flattening the document failed.");
     }
 
+    // Text and Markdown export (#142, #355, #357, #386) -----------------------
+
+    public int WriteText(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null)
+    {
+        ThrowIfDisposed();
+        return WriteThroughCore(target, firstPage, pageCount, CoreNative.WriteFormatText, options);
+    }
+
+    public int WriteMarkdown(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null)
+    {
+        ThrowIfDisposed();
+        return WriteThroughCore(target, firstPage, pageCount, CoreNative.WriteFormatMarkdown, options);
+    }
+
+    /// <summary>
+    /// Runs megapdf_write_text(), streaming its blocks to <paramref name="target"/> exactly as
+    /// <see cref="ThroughCore"/> does for the saves. Unlike a save, this call's return value
+    /// carries information (how many requested pages had a text layer), so it is not folded
+    /// into <see cref="ThroughCore"/>.
+    /// </summary>
+    private int WriteThroughCore(Stream target, int firstPage, int? pageCount, int format, DocumentWriteOptions? options)
+    {
+        var resolvedCount = pageCount ?? Math.Max(0, PageCount - firstPage);
+        var opt = options ?? DocumentWriteOptions.Default;
+        var nativeOptions = new CoreNative.WriteOptions
+        {
+            KeepLines = opt.KeepLines ? 1 : 0,
+            PageBreak = (int)opt.PageBreak,
+            KeepFurniture = opt.KeepFurniture ? 1 : 0,
+            Fields = (int)opt.Fields,
+            HeuristicOnly = opt.HeuristicOnly ? 1 : 0,
+        };
+
+        Exception? writeError = null;
+        int Write(IntPtr _, IntPtr data, nuint size)
+        {
+            try
+            {
+                var buffer = new byte[(int)size];
+                Marshal.Copy(data, buffer, 0, buffer.Length);
+                target.Write(buffer, 0, buffer.Length);
+                return 1;
+            }
+            catch (Exception ex)
+            {
+                writeError = ex;
+                return 0;
+            }
+        }
+
+        var callback = new CoreNative.WriteDelegate(Write);
+        var status = CoreNative.megapdf_write_text(_core, firstPage, resolvedCount, format, ref nativeOptions,
+            callback, IntPtr.Zero, IntPtr.Zero);
+        GC.KeepAlive(callback);
+
+        if (writeError is not null)
+            throw new IOException("Writing the document's text failed.", writeError);
+        if (status == MegapdfErrArgument)
+            throw new ArgumentOutOfRangeException(nameof(firstPage), "The page range is out of range for this document.");
+        if (status < 0)
+            throw new IOException("The core could not write the document's text.");
+        return status;
+    }
+
+    /// <summary>MEGAPDF_ERR_ARGUMENT (#386): a NULL handle, a bad page range, or an unknown options value.</summary>
+    private const int MegapdfErrArgument = -1;
+
     // Contract 8: redaction (#173) ------------------------------------------
 
     public int RedactionMarkCount

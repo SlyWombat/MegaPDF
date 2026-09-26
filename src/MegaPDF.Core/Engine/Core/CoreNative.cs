@@ -675,4 +675,148 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern nuint megapdf_map_to_standard_font([MarshalAs(UnmanagedType.LPUTF8Str)] string originalName,
         [Out] byte[]? outName, nuint capacity);
+
+    // Contract 9: document structure (#142, #353, #168) -----------------------
+    //
+    // Blocks in reading order over a page range; see megapdf_core.h's own header comment
+    // for the source (heuristic vs. tagged, #358) and the coordinate/canonical-text rules.
+
+    public const uint StructureDefault = 0;
+    public const uint StructureHeuristicOnly = 1;
+    public const uint StructureKeepFurniture = 2;
+    public const uint StructureAllFields = 4;
+
+    public const int BlockHeading = 1;
+    public const int BlockParagraph = 2;
+    public const int BlockListItem = 3;
+    public const int BlockTableRow = 4;
+    public const int BlockFigure = 5;
+    public const int BlockPageImage = 6;
+    public const int BlockFurniture = 7;
+    public const int BlockField = 8;
+
+    public const int StructureSourceHeuristic = 0;
+    public const int StructureSourceTagged = 1;
+
+    public const int SpanBold = 1;
+    public const int SpanItalic = 2;
+    public const int SpanMonospace = 4;
+    public const int SpanCellStart = 8;
+    public const int SpanLink = 16;
+
+    public const int BlockText = 0;
+    public const int BlockMarker = 1;
+    public const int BlockAlt = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Block
+    {
+        public int Kind;
+        public int Level;
+        public int Page;
+        public Rect Bounds;
+        public int ObjectIndex;
+        public int Continues;
+        public int Source;
+        public int Confidence;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Span
+    {
+        public int Flags;
+        public double FontSize;
+        public double SizeRatio;
+        public Rect Bounds;
+        public int ObjectIndex;
+    }
+
+    /// <summary>Infers document structure over [firstPage, firstPage + pageCount). Zero on failure (also on cancellation).</summary>
+    [DllImport(Dll)]
+    public static extern IntPtr megapdf_structure_load(IntPtr document, int firstPage, int pageCount, uint flags, IntPtr cancel);
+
+    [DllImport(Dll)]
+    public static extern void megapdf_structure_free(IntPtr structure);
+
+    /// <summary>The modal, character-count-weighted body font size over the loaded range.</summary>
+    [DllImport(Dll)]
+    public static extern double megapdf_structure_body_size(IntPtr structure);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_structure_page_confidence(IntPtr structure, int page);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_structure_page_source(IntPtr structure, int page);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_block_count(IntPtr structure);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_block_get(IntPtr structure, nuint index, out Block block);
+
+    /// <summary>UTF-16 code units, no terminator, count-then-fill.</summary>
+    [DllImport(Dll)]
+    public static extern nuint megapdf_block_string(IntPtr structure, nuint index, int which, [Out] ushort[]? outUnits, nuint capacity);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_block_span_count(IntPtr structure, nuint index);
+
+    [DllImport(Dll)]
+    public static extern int megapdf_block_span_get(IntPtr structure, nuint index, nuint span, out Span outSpan);
+
+    [DllImport(Dll)]
+    public static extern nuint megapdf_block_span_string(IntPtr structure, nuint index, nuint span, [Out] ushort[]? outUnits, nuint capacity);
+
+    public static string BlockString(IntPtr structure, nuint index, int which)
+    {
+        var n = (int)megapdf_block_string(structure, index, which, null, 0);
+        if (n == 0)
+            return "";
+        var units = new ushort[n];
+        megapdf_block_string(structure, index, which, units, (nuint)n);
+        return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
+    }
+
+    public static string BlockSpanString(IntPtr structure, nuint index, nuint span)
+    {
+        var n = (int)megapdf_block_span_string(structure, index, span, null, 0);
+        if (n == 0)
+            return "";
+        var units = new ushort[n];
+        megapdf_block_span_string(structure, index, span, units, (nuint)n);
+        return new string(System.Runtime.InteropServices.MemoryMarshal.Cast<ushort, char>(units));
+    }
+
+    // Text and Markdown writers (#142, #355, #357), over contract 9's blocks -----
+
+    public const int WriteFormatText = 0;
+    public const int WriteFormatMarkdown = 1;
+
+    public const int PageBreakFormFeed = 0;
+    public const int PageBreakMarker = 1;
+    public const int PageBreakNone = 2;
+
+    public const int WriteFieldsFilled = 0;
+    public const int WriteFieldsAll = 1;
+    public const int WriteFieldsNone = 2;
+
+    /// <summary>megapdf_write_options: zero-initialise for the native (CLI-scripting) defaults.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WriteOptions
+    {
+        public int KeepLines;
+        public int PageBreak;
+        public int KeepFurniture;
+        public int Fields;
+        public int HeuristicOnly;
+    }
+
+    /// <summary>
+    /// Writes the document's text/Markdown over [firstPage, firstPage + pageCount) through
+    /// <paramref name="write"/> (the same callback shape as megapdf_save). Returns the count of
+    /// pages in the range that had a text layer, or a negative MEGAPDF_ERR_*.
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern int megapdf_write_text(IntPtr document, int firstPage, int pageCount, int format,
+        ref WriteOptions options, WriteDelegate write, IntPtr context, IntPtr cancel);
 }

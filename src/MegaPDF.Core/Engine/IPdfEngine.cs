@@ -118,6 +118,83 @@ public interface IPdfDocument : IDisposable
     /// cannot be made, and the document still reads its file.
     /// </summary>
     void ReadFromCopy();
+
+    /// <summary>
+    /// Exports the document's text over <paramref name="firstPage"/>..<paramref name="pageCount"/>
+    /// (default: the whole document) as plain text, over contract 9's inferred blocks (#142, #355).
+    /// One-way: this is a text export, not an alternate save format (#386) — see
+    /// <see cref="DocumentWriteOptions"/> for what "the app UI would want" means here versus the
+    /// CLI's own scripting-flag defaults. Returns the count of pages in the range that had a text
+    /// layer (a page with none becomes a single "[Page N has no text layer]" line).
+    /// </summary>
+    int WriteText(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null);
+
+    /// <summary>
+    /// <see cref="WriteText"/>, as CommonMark (#357) — the format #386's Save As/Save a copy
+    /// actually needs. Headings, list items and form fields become Markdown syntax; spans render
+    /// as bold/italic/monospace. Same one-way-export caveat as <see cref="WriteText"/>.
+    /// </summary>
+    int WriteMarkdown(Stream target, int firstPage = 0, int? pageCount = null, DocumentWriteOptions? options = null);
+}
+
+/// <summary>How pages are separated in a <see cref="IPdfDocument.WriteText"/>/<c>WriteMarkdown</c> export.
+/// Mirrors MEGAPDF_PAGE_BREAK_* (megapdf_core.h).</summary>
+public enum DocumentPageBreak
+{
+    /// <summary>U+000C between pages — pdftotext's own convention, and megapdf-cli's default.</summary>
+    FormFeed = 0,
+    /// <summary>"--- page N ---" (text) / "&lt;!-- page N --&gt;" (Markdown) lines.</summary>
+    Marker = 1,
+    /// <summary>No separator beyond the blank line that already separates any two blocks.</summary>
+    None = 2,
+}
+
+/// <summary>Which FIELD blocks (contract 9) a text/Markdown export includes. Mirrors MEGAPDF_WRITE_FIELDS_*.</summary>
+public enum DocumentWriteFields
+{
+    /// <summary>A checked box, or a text field with a value.</summary>
+    Filled = 0,
+    /// <summary>Every field: empty text fields and unchecked boxes too.</summary>
+    All = 1,
+    /// <summary>No FIELD blocks: page text only.</summary>
+    None = 2,
+}
+
+/// <summary>
+/// Options for <see cref="IPdfDocument.WriteText"/>/<c>WriteMarkdown</c> (#386). The defaults here
+/// are the "someone tapped Save As in the app" ones, not megapdf-cli's own scripting-flag defaults
+/// (core/cli/megapdf_cli.cpp): a GUI export has no flags, so the choice is made once, here, and is
+/// still overridable per call.
+///
+/// <see cref="Fields"/> = Filled and <see cref="KeepFurniture"/> = false match the CLI's own
+/// defaults (and contract 9's), which are already right for "export what I'm looking at" (SDD
+/// §3.9). <see cref="PageBreak"/> departs from the CLI's form-feed default: a form feed is a
+/// terminal/pdftotext convention that a document opened in a text editor or a Markdown viewer
+/// mostly renders as nothing at all — the two pages' text runs together with no visible break —
+/// and MEGAPDF_PAGE_BREAK_NONE (a blank line, contract 9's "between any two blocks" rule) already
+/// separates pages visibly in both formats. In Markdown output this makes no difference either
+/// way: megapdf_write_text.cpp's own Markdown writer already renders form-feed and none
+/// identically (a blank line — neither a form feed nor "--- page N ---" belongs in CommonMark).
+/// </summary>
+public sealed record DocumentWriteOptions
+{
+    /// <summary>Keep the PDF's own line breaks inside a block, on a best-effort basis. Default false: unwrap to one line.</summary>
+    public bool KeepLines { get; init; }
+
+    /// <summary>Default <see cref="DocumentPageBreak.None"/> — see the type's own doc comment for why.</summary>
+    public DocumentPageBreak PageBreak { get; init; } = DocumentPageBreak.None;
+
+    /// <summary>Keep running headers/footers/page numbers as blocks. Default false: they are dropped.</summary>
+    public bool KeepFurniture { get; init; }
+
+    /// <summary>Default <see cref="DocumentWriteFields.Filled"/>: a checked box, or a text field with a value.</summary>
+    public DocumentWriteFields Fields { get; init; } = DocumentWriteFields.Filled;
+
+    /// <summary>Ignore the document's structure tree even when present (measurement/testing only). Default false.</summary>
+    public bool HeuristicOnly { get; init; }
+
+    /// <summary>The GUI Save As/Save a copy defaults (#386). Equivalent to <c>new()</c>; named for callers that want to be explicit.</summary>
+    public static readonly DocumentWriteOptions Default = new();
 }
 
 public interface IPdfPage : IDisposable
