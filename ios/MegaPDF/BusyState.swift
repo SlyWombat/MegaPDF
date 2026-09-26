@@ -19,6 +19,9 @@ enum BusyLabel: Equatable {
     case checkingPage
     case applying
     case searching
+    /// A Markdown export (#386) -- distinct from `.saving`, since it isn't one (see
+    /// `ViewerModel.exportMarkdownFile`).
+    case exportingText
 
     var text: String {
         switch self {
@@ -28,6 +31,7 @@ enum BusyLabel: Equatable {
         case .checkingPage: return String(localized: "Checking this page…")
         case .applying: return String(localized: "Applying…")
         case .searching: return String(localized: "Searching…")
+        case .exportingText: return String(localized: "Exporting…")
         }
     }
 }
