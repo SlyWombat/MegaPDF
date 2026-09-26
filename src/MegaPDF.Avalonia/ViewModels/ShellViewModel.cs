@@ -84,9 +84,59 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WindowTitle))]
+    [NotifyPropertyChangedFor(nameof(CanOpen))]
+    [NotifyPropertyChangedFor(nameof(Status))]
+    [NotifyPropertyChangedFor(nameof(ZoomPercentLabel))]
     private DocumentViewModel? _active;
 
-    partial void OnActiveChanged(DocumentViewModel? value) => OnPropertyChanged(nameof(WindowTitle));
+    partial void OnActiveChanged(DocumentViewModel? oldValue, DocumentViewModel? newValue)
+    {
+        if (oldValue is not null)
+            oldValue.PropertyChanged -= OnActivePropertyChanged;
+        if (newValue is not null)
+            newValue.PropertyChanged += OnActivePropertyChanged;
+    }
+
+    // --- Chrome that exists with or without a tab (#412) ---
+    //
+    // The toolbar's Open, the zoom box and the status line are window chrome: they are
+    // on screen before the first tab and after the last one closes. Bound through
+    // Active.* they had nothing to read with no tab, and a FallbackValue turned Open
+    // off, the zoom box blank and the status line empty — the opposite of the 2.0
+    // window, whose one enabled button was Open and whose status line said what to do.
+    // So each has a shell-level property that falls through to the active tab when
+    // there is one, and gives the empty window's answer when there is not.
+
+    /// <summary>
+    /// Open never waits on a tab: with none it is the one thing to do; with one it
+    /// waits only while that tab's blocking work runs (<see cref="DocumentViewModel.IsIdle"/>).
+    /// </summary>
+    public bool CanOpen => Active?.IsIdle ?? true;
+
+    /// <summary>The status line: the active tab's, or the empty window's hint.</summary>
+    public string Status => Active?.Status ?? Strings.OpenToGetStarted;
+
+    /// <summary>The zoom box: the active tab's level, or 100 % — what a tab starts at.</summary>
+    public string ZoomPercentLabel => Active?.ZoomPercentLabel ?? Strings.ZoomPercent(100);
+
+    /// <summary>The three fall-through properties change when the active tab's own do.</summary>
+    private void OnActivePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (!ReferenceEquals(sender, Active))
+            return;
+        switch (e.PropertyName)
+        {
+            case nameof(DocumentViewModel.IsIdle):
+                OnPropertyChanged(nameof(CanOpen));
+                break;
+            case nameof(DocumentViewModel.Status):
+                OnPropertyChanged(nameof(Status));
+                break;
+            case nameof(DocumentViewModel.ZoomPercentLabel):
+                OnPropertyChanged(nameof(ZoomPercentLabel));
+                break;
+        }
+    }
 
     /// <summary>Whether this window has any tabs — drives the empty state (SDD §2.2).</summary>
     public bool HasDocuments => Documents.Count > 0;

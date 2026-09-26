@@ -79,7 +79,9 @@
           </Style>
         </StackPanel.Styles>
 
-        <Button Name="OpenButton" IsEnabled="{Binding Active.IsIdle, FallbackValue=False}">
+        <!-- Shell.CanOpen, not Active.IsIdle (#412): Open is the one button that must
+             work with no tab open. -->
+        <Button Name="OpenButton" IsEnabled="{Binding CanOpen}">
           <StackPanel Orientation="Vertical" Spacing="2" HorizontalAlignment="Center">
             <Path Data="{StaticResource IconOpen}" Width="18" Height="18"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.6"
@@ -322,7 +324,9 @@
         <Button Name="ZoomMenuButton" Width="84" HorizontalContentAlignment="Center"
                 IsEnabled="{Binding Active.IsDocumentOpen, FallbackValue=False}">
           <StackPanel Orientation="Horizontal" Spacing="{DynamicResource SpaceXs}">
-            <TextBlock Text="{Binding Active.ZoomPercentLabel}" VerticalAlignment="Center"
+            <!-- Shell.ZoomPercentLabel (#412): reads 100 % with no tab, as 2.0 did,
+                 rather than going blank. -->
+            <TextBlock Name="ZoomLabel" Text="{Binding ZoomPercentLabel}" VerticalAlignment="Center"
                        FontSize="{DynamicResource TypeBody}" />
             <Path Data="{StaticResource IconChevronDown}" Width="10" Height="10" VerticalAlignment="Center"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
@@ -460,7 +464,9 @@
       <DockPanel>
         <TextBlock DockPanel.Dock="Right" Text="{Binding Active.PageIndicator}"
                    VerticalAlignment="Center" Opacity="0.75" Margin="12,0,0,0" />
-        <TextBlock Text="{Binding Active.Status}" VerticalAlignment="Center"
+        <!-- Shell.Status (#412): the active tab's status, or "Open a PDF to get
+             started." when there is no tab — the hint 2.0's empty window gave. -->
+        <TextBlock Name="StatusLabel" Text="{Binding Status}" VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
       </DockPanel>
     </Border>
