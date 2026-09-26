@@ -16,6 +16,16 @@ enum ViewerState {
     case viewing(displayName: String, pageSizes: [CGSize])
 }
 
+/// What the "Unsaved changes" alert resolves, once Save or Discard is picked (#145, #377,
+/// #378): closing, sharing, or replacing the document with one just handed over from
+/// outside. One alert, reused verbatim for all three — Dave's decision for #378 was to
+/// reuse the existing dialog rather than invent a second one.
+enum UnsavedChangesFollowUp: Equatable {
+    case close
+    case share
+    case open(URL)
+}
+
 /// Owns the engine document and the ±2-page render window — the iOS port of
 /// Android's `ViewerViewModel` (same virtualization, same eviction policy).
 /// A signature stamp currently selected for move/resize/remove.
@@ -96,6 +106,14 @@ final class ViewerModel: ObservableObject {
     /// A second line under `statusMessage`, cleared with it: what a redaction removed, when it
     /// went out with the save that wrote it.
     @Published var statusDetail: String?
+    /// Set when Share (#378) has a file ready to hand to the OS: ViewerView presents
+    /// `UIActivityViewController` for it. Always `sourceURL` — Share hands over the document
+    /// as currently on disk, so unlike Save a copy there is nothing to serialize freshly.
+    @Published var shareURL: URL?
+    /// An action waiting on the "Unsaved changes" alert (#377, #378): nil the rest of the
+    /// time. Set here rather than as view-local state because `openExternal` needs to raise
+    /// the same alert and runs before any view has a gesture to hang state off.
+    @Published var unsavedChangesFollowUp: UnsavedChangesFollowUp?
     @Published private(set) var signatures: [SignatureEntry] = []
     @Published private(set) var pendingSignature: SignatureEntry?
     @Published private(set) var selectedStamp: SelectedStamp?
@@ -595,6 +613,24 @@ final class ViewerModel: ObservableObject {
             // file of any size opens in the time PDFium takes to parse its structure.
             await open(source: .file(url), password: nil,
                        displayName: url.lastPathComponent, sourceURL: url)
+        }
+    }
+
+    /// A document handed to the app from outside (#377): Mail, Files, another app's share
+    /// sheet, or a Files "Open In Place" launch — anything reaching here through
+    /// `.onOpenURL` rather than the in-app picker. The only difference from `openPicked`
+    /// is that nothing has already chosen to close whatever is open, so a dirty document
+    /// asks first, through the same alert Close and Share already use — silently replacing
+    /// it would be #377 trading one data-loss bug for another.
+    func openExternal(url: URL) {
+        // A save, an open already in flight, or a change being applied still needs the
+        // current document; the OS redelivers "Open In…" on the next launch/foreground if
+        // this one is missed, so dropping it here (rather than queuing it) is safe.
+        guard !busy.isBlocked else { return }
+        if isDirty {
+            unsavedChangesFollowUp = .open(url)
+        } else {
+            openPicked(url: url)
         }
     }
 
@@ -1711,8 +1747,9 @@ final class ViewerModel: ObservableObject {
     ///
     /// #145: "Saving…", then "Checking the saved file…" in the strip; editing, Close and the file
     /// commands wait. The document is marked saved only if nothing changed while the save ran (D3).
-    /// `thenClose` is the unsaved-changes prompt's Save: the document closes once it is saved.
-    func save(thenClose: Bool = false) {
+    /// `then` is the unsaved-changes prompt's Save: close, share, or open a different document,
+    /// once the save that just wrote this one has landed.
+    func save(then followUp: UnsavedChangesFollowUp? = nil) {
         guard let doc = document, let url = sourceURL, !isSaving,
               let token = busy.begin(.saving, scope: .document, blocksFileCommands: true) else { return }
         isSaving = true
@@ -1736,11 +1773,20 @@ final class ViewerModel: ObservableObject {
                 guard document === doc else { return }
                 let unchanged = editCount == editsAtStart
                 if unchanged { isDirty = false }
-                if thenClose && unchanged {
+                switch (followUp, unchanged) {
+                case (.close, true):
                     busy.end(token)
                     isSaving = false
                     close()
-                } else {
+                case (.share, true):
+                    shareURL = url
+                case let (.open(newURL), true):
+                    // openPicked begins its own busy token (#377) — it would find this one
+                    // still blocking and refuse, the same reason `.close` above ends it first.
+                    busy.end(token)
+                    isSaving = false
+                    openPicked(url: newURL)
+                default:
                     statusMessage = String(localized: "Saved")
                     statusDetail = summaryForSave
                 }
@@ -1871,6 +1917,23 @@ final class ViewerModel: ObservableObject {
             try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
             exportStagedURL = nil
         }
+    }
+
+    // MARK: - share (#378)
+
+    /// Share hands over `sourceURL` itself, so it needs a real file behind the document —
+    /// the demo and UI-test documents open from bytes and have none — and nothing else
+    /// touching the file at the same time.
+    var canShare: Bool { sourceURL != nil && !fileCommandsBlocked }
+
+    /// Share (#378): the document exactly as it is on disk. Called directly when there are
+    /// no unsaved changes, and by the alert's Discard button when there are — "share the
+    /// document as currently saved on disk" is this same file either way, so there is only
+    /// one implementation of it. The alert's Save button instead calls `save(then: .share)`,
+    /// which sets `shareURL` to this same file once the save that just wrote it lands.
+    func share() {
+        guard let url = sourceURL else { return }
+        shareURL = url
     }
 
     // MARK: - password command (#131)

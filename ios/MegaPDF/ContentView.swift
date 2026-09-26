@@ -87,6 +87,15 @@ struct ContentView: View {
                 )
             }
         }
+        // #377: MegaPDF now declares CFBundleDocumentTypes, so the OS can hand it a PDF this
+        // way — Mail's attachment viewer, "Open In…"/"Copy to MegaPDF" from another app's
+        // share sheet, or a long-press "Open with" in Files. Routed through `openExternal`,
+        // not `openPicked` directly: unlike the in-app picker (reachable only from Home, with
+        // nothing open yet), this can arrive while a document with unsaved edits is already
+        // open, and that needs the same "Unsaved changes" ask Close and Share already give.
+        .onOpenURL { url in
+            model.openExternal(url: url)
+        }
         .fileExporter(
             isPresented: $exporting,
             document: exportDoc,
