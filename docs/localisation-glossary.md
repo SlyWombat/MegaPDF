@@ -89,7 +89,7 @@ Conventions (OQLF, Canadian French):
 | Page {0} of {1} | Page {0} sur {1} | |
 | Extract text | Extraire le texte | #142, #168, #356 — `megapdf-cli extract`; not yet a UI string, added ahead so #168's reflow view reuses it |
 | Markdown | Markdown | #142, #168, #356 — `megapdf-cli --format md`; unchanged in French, as elsewhere on the platforms (product/brand-name-like technical terms) |
-| Export as Markdown | Exporter en Markdown | #386, Save As / Save a copy's Markdown option and the redact-confirmation dialog; a one-way, lossy text export, not a Save-a-copy PDF variant — the word is *Exporter*, not *Enregistrer*, on every platform |
+| Export as Markdown | Exporter en Markdown | #386, #409 — the phones' menu row beside Save a copy (iOS since #386, Android since #409) and their redact-confirmation dialog; the desktops' Save As Markdown option; a one-way, lossy text export, not a Save-a-copy PDF variant — the word is *Exporter*, not *Enregistrer*, on every platform |
 | Markdown document | Document Markdown | #386, macOS/Linux Save As picker's Markdown file-type choice — "Markdown" itself unchanged, as above |
 | Exported | Exporté | #386, the Markdown export's completion message — deliberately not "Saved"/"Enregistré" |
 | Exported as Markdown | Exporté en Markdown | #386, Android's completion message |

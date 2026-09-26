@@ -69,7 +69,7 @@ MegaPDF: Fill & Sign PDFs
 Fill, check and sign a PDF. No account, no cloud.
 ```
 
-**Full description** [4000] (2934)
+**Full description** [4000] (2945)
 ```
 Open. Fix. Save. Done.
 
@@ -91,7 +91,7 @@ Sign like you mean it
 Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically. Your signatures stay in a private library on your device; drop one onto any document, move and resize it until it sits right on the line.
 
 Save without fear
-Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy — as a PDF, or as a Markdown file of the document's text (headings, lists, the values you filled in) that leaves the PDF as it was. You can also protect a document with a password, or remove one you know.
+Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was. You can also protect a document with a password, or remove one you know.
 
 Find any word
 Search the whole document as you type. Every match lights up and the counter tells you how many there are, so the one clause you need in a forty-page lease is a few taps away.
@@ -105,13 +105,13 @@ Open a PDF from Files, Google Drive, Gmail or any app that hands one over — Me
 MegaPDF is deliberately simple. It doesn't rearrange pages, run OCR, or bury you in toolbars. It opens, it fixes, it saves. Done.
 ```
 
-**Release notes** [500] (486) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
+**Release notes** [500] (479) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
 ```
 Open with: MegaPDF is now offered when you open a PDF from Files, Drive, Gmail or any app that hands one over.
 
 Share, in the More menu, sends the document through the share sheet. If it has unsaved changes it offers Save, Share without saving, or Cancel.
 
-Save a copy can now write Markdown as well as PDF: the document's text, headings, lists and filled-in values, as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text.
+Export as Markdown, in the More menu, writes the document's text, headings, lists and filled-in values as a file you can paste anywhere. An export, not a save — the PDF is untouched, and a scanned page says it has no text.
 ```
 
 ### Français (Canada) — `fr-CA`
@@ -126,7 +126,7 @@ MegaPDF : remplir et signer
 Remplir, cocher et signer un PDF. Pas de compte, pas d'infonuagique.
 ```
 
-**Full description** [4000] (3673)
+**Full description** [4000] (3690)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -148,7 +148,7 @@ Signez pour de vrai
 Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, en PDF ou dans un fichier Markdown du texte du document (titres, listes, les valeurs que vous avez remplies) qui laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
@@ -162,13 +162,13 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (490) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
+**Release notes** [500] (479) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
 ```
 Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Drive, Gmail ou une autre application.
 
 Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler.
 
-Enregistrer une copie écrit maintenant en Markdown aussi bien qu'en PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
+Exporter en Markdown, dans le menu Plus, écrit le texte du document : titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
 ```
 
 ### Français (France) — `fr-FR`
@@ -183,7 +183,7 @@ MegaPDF : remplir et signer
 Remplir, cocher et signer un PDF. Pas de compte, pas de cloud.
 ```
 
-**Full description** [4000] (3671)
+**Full description** [4000] (3688)
 ```
 Ouvrir. Corriger. Enregistrer. Terminé.
 
@@ -205,7 +205,7 @@ Signez pour de vrai
 Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement. Vos signatures restent dans une bibliothèque privée sur votre appareil ; déposez-en une sur n'importe quel document, déplacez-la et redimensionnez-la jusqu'à ce qu'elle soit bien sur la ligne.
 
 Enregistrez sans crainte
-Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, en PDF ou dans un fichier Markdown du texte du document (titres, listes, les valeurs que vous avez remplies) qui laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
+Enregistrer écrit dans le fichier original, en toute sécurité. MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez.
 
 Trouvez n'importe quel mot
 Cherchez dans tout le document à mesure que vous tapez. Chaque résultat s'allume et le compteur vous dit combien il y en a, pour que la seule clause dont vous avez besoin dans un bail de quarante pages soit à quelques touches.
@@ -219,13 +219,13 @@ Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute application qui en r
 MegaPDF est volontairement simple. Il ne réorganise pas les pages, ne fait pas de reconnaissance de caractères et ne vous noie pas sous les barres d'outils. Il ouvre, il corrige, il enregistre. Terminé.
 ```
 
-**Release notes** [500] (490) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
+**Release notes** [500] (479) — 2.1.1, from `docs/release-notes/2.1.1/google-play.md`
 ```
 Ouvrir avec : MegaPDF est proposé quand vous ouvrez un PDF depuis Fichiers, Drive, Gmail ou une autre application.
 
 Partager, dans le menu Plus, envoie le document par la feuille de partage. Avec des modifications non enregistrées : Enregistrer, Partager sans enregistrer ou Annuler.
 
-Enregistrer une copie écrit maintenant en Markdown aussi bien qu'en PDF : texte, titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
+Exporter en Markdown, dans le menu Plus, écrit le texte du document : titres, listes et valeurs remplies, à coller n'importe où. Une exportation, pas un enregistrement : le PDF n'est pas touché.
 ```
 
 <!-- /copy-by-language -->

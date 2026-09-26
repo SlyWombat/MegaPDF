@@ -73,7 +73,9 @@
     <string name="save_failed">Impossible d\'enregistrer. Utilisez «&#160;Enregistrer une copie&#160;».</string>
     <string name="share_failed">Impossible de partager. Réessayez.</string>
 
-    <!-- Enregistrer une copie en Markdown (#386) : un export à sens unique, pas un autre format d'enregistrement. -->
+    <!-- Exporter en Markdown (#386, #409) : sa propre ligne du menu, à côté d'Enregistrer une copie —
+         un export à sens unique, pas un autre format d'enregistrement. -->
+    <string name="export_markdown">Exporter en Markdown</string>
     <string name="exported_markdown">Exporté en Markdown</string>
     <string name="markdown_export_failed">Impossible d\'exporter en Markdown.</string>
 

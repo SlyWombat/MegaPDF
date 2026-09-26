@@ -62,8 +62,8 @@ system's window tabs. Nothing changes on the phones.
 
 ### Save As Markdown
 
-Save As on Windows, the Mac and Linux, Save a copy on Android and Export as
-Markdown on iPhone and iPad now write the document's text as a Markdown file:
+Save As on Windows, the Mac and Linux, and Export as Markdown on Android,
+iPhone and iPad now write the document's text as a Markdown file:
 headings at their levels, paragraphs unwrapped with bold, italic and monospace
 kept, lists with their markers, and form fields as a task list — a box that is
 ticked or not — or as `**name:** value`. A page with no text layer, a scan, is
@@ -77,10 +77,10 @@ PDF when you close it. The wording says so throughout — *Exporting…*,
 *Exported*, *Couldn't export* — never *Saved*.
 
 Where it is: on Windows and the Mac and Linux, a second file type, **Markdown
-document**, in the Save As panel beside PDF document; on Android, a second type
-in Save a copy's own file dialog; on iPhone and iPad, **Export as Markdown**
-beside Save a copy in the More menu, which writes the file wherever you choose
-in Files.
+document**, in the Save As panel beside PDF document; on Android and on iPhone
+and iPad, **Export as Markdown** beside Save a copy in the More menu, which
+writes the file wherever you choose — through the system's file picker on
+Android, in Files on the iPhone.
 
 ### megapdf-cli
 
@@ -200,8 +200,8 @@ reads like the document.
   the same Save / Discard / Cancel question as Close comes first.
 - Share, in the More menu, through the system's share sheet, with Save / Share
   without saving / Cancel when there are unsaved changes.
-- Save a copy offers Markdown as a second type in its file dialog; a `.md` name
-  is the export, a `.pdf` name is the copy it always was.
+- Export as Markdown, beside Save a copy in the More menu, through the system's
+  file picker. Save a copy is the PDF copy it always was.
 
 ### iPhone and iPad
 
@@ -267,9 +267,9 @@ change sur les téléphones.
 
 ### Enregistrer sous, en Markdown
 
-Enregistrer sous sur Windows, le Mac et Linux, Enregistrer une copie sur Android
-et Exporter en Markdown sur iPhone et iPad écrivent maintenant le texte du
-document dans un fichier Markdown : les titres à leur niveau, les paragraphes
+Enregistrer sous sur Windows, le Mac et Linux, et Exporter en Markdown sur
+Android, iPhone et iPad écrivent maintenant le texte du document dans un
+fichier Markdown : les titres à leur niveau, les paragraphes
 remis sur une ligne avec le gras, l'italique et la chasse fixe conservés, les
 listes avec leurs puces, et les champs de formulaire sous forme de liste de
 tâches (une case cochée ou non) ou de `**nom :** valeur`. Une page sans couche
@@ -286,10 +286,9 @@ d'exporter* — jamais *Enregistré*.
 
 Où le trouver : sur Windows, le Mac et Linux, un deuxième type de fichier,
 **Document Markdown**, dans la zone de dialogue Enregistrer sous, à côté de
-Document PDF; sur Android, un deuxième type dans la zone de dialogue
-d'Enregistrer une copie; sur iPhone et iPad, **Exporter en Markdown**, à côté
-d'Enregistrer une copie dans le menu Plus, qui écrit le fichier où vous voulez
-dans Fichiers.
+Document PDF; sur Android, iPhone et iPad, **Exporter en Markdown**, à côté
+d'Enregistrer une copie dans le menu Plus, qui écrit le fichier où vous voulez :
+par le sélecteur de fichiers du système sur Android, dans Fichiers sur iPhone.
 
 ### megapdf-cli
 
@@ -427,9 +426,9 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
 - Partager, dans le menu Plus, par la feuille de partage du système, avec
   Enregistrer / Partager sans enregistrer / Annuler quand il y a des
   modifications non enregistrées.
-- Enregistrer une copie propose Markdown comme deuxième type dans sa zone de
-  dialogue; un nom en `.md` est l'exportation, un nom en `.pdf` est la copie
-  qu'il a toujours été.
+- Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, par le
+  sélecteur de fichiers du système. Enregistrer une copie reste la copie PDF
+  qu'elle a toujours été.
 
 ### iPhone et iPad
 
@@ -504,9 +503,9 @@ change sur les téléphones.
 
 ### Enregistrer sous, en Markdown
 
-Enregistrer sous sur Windows, le Mac et Linux, Enregistrer une copie sur Android
-et Exporter en Markdown sur iPhone et iPad écrivent maintenant le texte du
-document dans un fichier Markdown : les titres à leur niveau, les paragraphes
+Enregistrer sous sur Windows, le Mac et Linux, et Exporter en Markdown sur
+Android, iPhone et iPad écrivent maintenant le texte du document dans un
+fichier Markdown : les titres à leur niveau, les paragraphes
 remis sur une ligne avec le gras, l'italique et la chasse fixe conservés, les
 listes avec leurs puces, et les champs de formulaire sous forme de liste de
 tâches (une case cochée ou non) ou de `**nom :** valeur`. Une page sans couche
@@ -523,10 +522,9 @@ d'exporter* — jamais *Enregistré*.
 
 Où le trouver : sur Windows, le Mac et Linux, un deuxième type de fichier,
 **Document Markdown**, dans la zone de dialogue Enregistrer sous, à côté de
-Document PDF ; sur Android, un deuxième type dans la zone de dialogue
-d'Enregistrer une copie ; sur iPhone et iPad, **Exporter en Markdown**, à côté
-d'Enregistrer une copie dans le menu Plus, qui écrit le fichier où vous voulez
-dans Fichiers.
+Document PDF ; sur Android, iPhone et iPad, **Exporter en Markdown**, à côté
+d'Enregistrer une copie dans le menu Plus, qui écrit le fichier où vous voulez :
+par le sélecteur de fichiers du système sur Android, dans Fichiers sur iPhone.
 
 ### megapdf-cli
 
@@ -664,9 +662,9 @@ tout cela est ce qui fait que le Markdown se lit comme le document.
 - Partager, dans le menu Plus, par la feuille de partage du système, avec
   Enregistrer / Partager sans enregistrer / Annuler quand il y a des
   modifications non enregistrées.
-- Enregistrer une copie propose Markdown comme deuxième type dans sa zone de
-  dialogue ; un nom en `.md` est l'exportation, un nom en `.pdf` est la copie
-  qu'il a toujours été.
+- Exporter en Markdown, à côté d'Enregistrer une copie dans le menu Plus, par le
+  sélecteur de fichiers du système. Enregistrer une copie reste la copie PDF
+  qu'elle a toujours été.
 
 ### iPhone et iPad
 

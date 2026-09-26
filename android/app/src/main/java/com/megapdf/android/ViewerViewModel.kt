@@ -388,6 +388,20 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         return true
     }
 
+    /**
+     * Export as Markdown with marks on the document (#409, as iOS does): the marked content
+     * has to be gone before any export reads the text, or it would land in the `.md` file.
+     * Unlike the two save paths nothing is written to the PDF afterwards, so the removal is
+     * in memory only — the document is marked edited, and closing it asks to save, exactly
+     * as any other unsaved change would.
+     */
+    suspend fun applyRedactionsForExport(): Boolean {
+        if (redactionMarkCount == 0) return true
+        if (!applyRedactions()) return false
+        dirty.markEdited()
+        return true
+    }
+
     private fun describeRedaction(counts: com.megapdf.engine.RedactionCounts): String {
         val context = getApplication<Application>()
         val removed = com.megapdf.engine.RedactionSummary.removed(
@@ -1913,13 +1927,18 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
 
     /**
-     * "Save a copy" picked Markdown instead (#386, `MainActivity`'s SAF mime-type list): a
-     * one-way export of the document's text (`megapdf_write_text`, `MEGAPDF_WRITE_MARKDOWN`),
-     * not an alternate save of the document — a `.md` cannot be reopened as one (no form
-     * fields, no signatures, no layout; contract 9's blocks are text only). Unlike
-     * [saveAs]/[writeTo] this never touches [currentUri], the persisted grant or Recents: the
-     * exported file is not, and never becomes, the app's current document — the SAF grant it
-     * comes with is left unpersisted, and it earns no entry in Recents.
+     * "Export as Markdown" — its own menu row since #409, with its own `text/markdown` picker
+     * in `MainActivity` (#386 had made it a second type of Save a copy's picker, which
+     * DocumentsUI never offered): a one-way export of the document's text
+     * (`megapdf_write_text`, `MEGAPDF_WRITE_MARKDOWN`), not an alternate save of the
+     * document — a `.md` cannot be reopened as one (no form fields, no signatures, no layout;
+     * contract 9's blocks are text only). Unlike [saveAs]/[writeTo] this never touches
+     * [currentUri], the display name, [isDirty], the persisted grant or Recents: the exported
+     * file is not, and never becomes, the app's current document — the SAF grant it comes
+     * with is left unpersisted, and it earns no entry in Recents. The text written is the
+     * document as it stands in memory, unsaved edits included, which is why no
+     * unsaved-changes question precedes it (Share's does, because Share sends the file on
+     * disk).
      *
      * No verify-by-reopening either (unlike [writeVerified]): there is nothing to reopen a
      * Markdown file as.

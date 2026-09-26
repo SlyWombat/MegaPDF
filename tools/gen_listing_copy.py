@@ -349,14 +349,16 @@ WORKS_FR_CA_PLAY = "Ouvrez un PDF depuis Fichiers, Google Drive, Gmail ou toute 
 # phones open a PDF handed over by another app and share one back, so that paragraph
 # differs only in which apps it names; signatures come from the photo picker rather
 # than the camera, can be typed, and a merged signature-level androidx permission is
-# never asked for; the Markdown export is a type choice in Save a copy's own picker
-# (#386), not a separate "Export as Markdown" row. Each pair must match exactly once.
+# never asked for; Export as Markdown is its own row beside Save a copy on both phones
+# (#386 iOS, #409 Android — Android's picker has no format chooser, so #386's "type
+# choice in Save a copy's picker" never existed on a device). Each pair must match
+# exactly once.
 PLAY_EN_SWAPS = [
     (WORKS_EN_AS, WORKS_EN_PLAY),
     ("Draw your signature with a finger, or photograph the one on paper — the white background disappears automatically.",
      "Draw your signature with a finger, type your name, or use a photo of the one on paper — the white background disappears automatically."),
     ("Save writes back to the original file — safely. MegaPDF verifies every document before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was.",
-     "Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy — as a PDF, or as a Markdown file of the document's text (headings, lists, the values you filled in) that leaves the PDF as it was. You can also protect a document with a password, or remove one you know."),
+     "Save writes back to the original file — safely. MegaPDF checks every save before it touches your original, so a failed save can never corrupt the file someone sent you. Or keep the original and save a copy. Export as Markdown writes the document's text — headings, lists, the values you filled in — as a Markdown file, and leaves the PDF as it was. You can also protect a document with a password, or remove one you know."),
     ("MegaPDF requests zero permissions and makes zero network connections.",
      "MegaPDF asks you for no permissions and makes no network connections."),
 ]
@@ -365,7 +367,7 @@ PLAY_FR_CA_SWAPS = [
     ("Dessinez votre signature du doigt, ou photographiez celle sur papier : le fond blanc disparaît automatiquement.",
      "Dessinez votre signature du doigt, tapez votre nom ou utilisez une photo de celle sur papier : le fond blanc disparaît automatiquement."),
     ("MegaPDF vérifie chaque document avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel.",
-     "MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie, en PDF ou dans un fichier Markdown du texte du document (titres, listes, les valeurs que vous avez remplies) qui laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez."),
+     "MegaPDF vérifie chaque enregistrement avant de toucher à votre original : un enregistrement raté ne peut jamais corrompre le fichier qu'on vous a envoyé. Ou gardez l'original et enregistrez une copie. Exporter en Markdown écrit le texte du document (titres, listes, les valeurs que vous avez remplies) dans un fichier Markdown, et laisse le PDF tel quel. Vous pouvez aussi protéger un document par un mot de passe, ou retirer un mot de passe que vous connaissez."),
     ("MegaPDF ne demande aucune permission et n'établit aucune connexion réseau.",
      "MegaPDF ne vous demande aucune permission et n'établit aucune connexion réseau."),
 ]

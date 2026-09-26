@@ -80,7 +80,9 @@
     <string name="save_failed">Couldn\'t save. Use Save a copy.</string>
     <string name="share_failed">Couldn\'t share. Try again.</string>
 
-    <!-- Save a copy as Markdown (#386): a one-way text export, not an alternate save format. -->
+    <!-- Export as Markdown (#386, #409): its own menu row beside Save a copy — a one-way text
+         export, not an alternate save format, so the word is Export, never Save. -->
+    <string name="export_markdown">Export as Markdown</string>
     <string name="exported_markdown">Exported as Markdown</string>
     <string name="markdown_export_failed">Couldn\'t export as Markdown.</string>
 

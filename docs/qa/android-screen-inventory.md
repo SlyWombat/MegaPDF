@@ -82,7 +82,7 @@ broken layout, a stray system dialog, the real clock instead of the demo one.
 - [ ] **D7 Odd page geometry** — a 200-inch poster, a 3-inch × 200-inch receipt, a
       `/UserUnit` banner, mixed sizes and `/Rotate` in one file (the `mixed-sizes`
       fixture), an off-origin MediaBox and a CropBox smaller than it.
-- [ ] **D8 Overflow menu (⋮)** — Save a copy · Password… · *(Unlock with owner
+- [ ] **D8 Overflow menu (⋮)** — Save a copy · Export as Markdown · Share · Password… · *(Unlock with owner
       password…, restricted documents only)* · divider · **Redact** · *(Clear all
       marks, only while there are marks)* · divider · About MegaPDF.
   - [ ] **D8a** every item disabled during a save.
@@ -217,7 +217,13 @@ Each appears only after 500 ms and stays at least 300 ms.
 - [ ] **I2** Back while the find bar is open closes the bar, not the document.
 - [ ] **I3** Back during a save is swallowed; the activity does not finish.
 - [ ] **I4** **Save a copy** opens the system `CreateDocument` picker, pre-filled with
-      the display name.
+      the display name; the copy is a PDF whatever name is typed, and becomes the
+      current document (title, Recents).
+- [ ] **I4a** **Export as Markdown** (#409) opens a `text/markdown` picker pre-filled
+      with the name in `.md`; the saved file is Markdown, the title and the unsaved
+      dot do not change, and the file is not in Recents. With redaction marks on the
+      document the Remove-the-marked-content question comes first, ending in
+      Export as Markdown / Cancel.
 - [ ] **I5** rotate the device mid-edit — the document, the selection and the undo
       stack survive.
 - [ ] **I6** the app killed from outside (`am force-stop` / `am kill`) — see note R1.
