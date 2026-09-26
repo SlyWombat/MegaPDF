@@ -1384,4 +1384,73 @@ public sealed partial class DocumentView : UserControl
         SelectStamp(canvas, ViewModel.Pages[0], $"textbox:{box.ObjectIndex}", box.Bounds, resizable: false, run: box);
         return true;
     }
+
+    /// <summary>
+    /// For the `click` self-test pose (#401): activates the first text line and the first
+    /// drawn box on page 1 through <see cref="RoutePageActivationAsync"/> — the one route a
+    /// tap, Enter and Space all take — and reports whether the inline editor opened and the
+    /// box ticked. The click that 2.1.1 lost died inside this route with no crash and no
+    /// dialog; this is the check that would have shown it. Exit code is the test.
+    /// </summary>
+    internal async Task<bool> ClickFirstRegionsForTest()
+    {
+        if (!ViewModel.IsDocumentOpen || ViewModel.Pages.Count == 0 || FindPageCanvas(0) is not { } canvas)
+        {
+            Console.Error.WriteLine("click: no rendered page to click on.");
+            return false;
+        }
+        var page = ViewModel.Pages[0];
+        var ok = true;
+        void Check(string what, bool passed)
+        {
+            Console.Error.WriteLine($"{(passed ? "PASS" : "FAIL")}: {what}");
+            ok &= passed;
+        }
+
+        // The route is an async void handler's body in real life, where a throw vanishes
+        // (that is how #401 hid); here it is a FAIL, not a hang of the screenshot runner.
+        async Task<bool> Activate(PdfPoint at)
+        {
+            try
+            {
+                await RoutePageActivationAsync(canvas, page, at);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"  the activation threw: {ex.GetType().Name}: {ex.Message}");
+                return false;
+            }
+        }
+
+        if (page.Regions.FirstOrDefault(r => r.Kind == PageHitKind.TextRun) is not { } line)
+        {
+            Console.Error.WriteLine("click: page 1 has no text line — the fixture changed.");
+            return false;
+        }
+        var routed = await Activate(line.Bounds.Center);
+        await Task.Delay(300);
+        Check("a click on the first text line opens the inline editor", routed && _activeEditor is not null);
+        if (_activeEditor is { } editor)
+            CloseEditor(canvas, editor);
+
+        // Not every fixture draws a box; the demo agreement does.
+        if (page.Regions.FirstOrDefault(r => r.Kind == PageHitKind.DrawnCheckbox) is { } box)
+        {
+            var before = ViewModel.HasUnsavedChanges;
+            routed = await Activate(box.Bounds.Center);
+            await Task.Delay(900);
+            Check("a click on the first drawn box ticks it (document now dirty)", routed && !before && ViewModel.HasUnsavedChanges);
+            while (ViewModel.UndoCommand.CanExecute(null))
+            {
+                ViewModel.UndoCommand.Execute(null);
+                await Task.Delay(300);
+            }
+        }
+        else
+        {
+            Console.Error.WriteLine("click: page 1 has no drawn box; only the text line was checked.");
+        }
+        return ok;
+    }
 }
