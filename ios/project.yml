@@ -74,6 +74,10 @@ targets:
         CFBundleDocumentTypes:
           - CFBundleTypeName: PDF document
             CFBundleTypeRole: Viewer
+            # App Store Connect warns (ITMS-90788, build 32 of 2.1.1) when this is
+            # missing. Alternate: MegaPDF can open any PDF but does not claim to be
+            # the device's default PDF handler.
+            LSHandlerRank: Alternate
             LSItemContentTypes:
               - com.adobe.pdf
         # Lets the app open a Files-app document in place rather than forcing a copy.
