@@ -18,6 +18,29 @@ struct PdfExportDocument: FileDocument {
     }
 }
 
+/// The system's own Markdown UTI: declared by the OS already (Shortcuts, Notes import, and
+/// others), so MegaPDF needs no `UTExportedTypeDeclarations` entry of its own for it. `.plainText`
+/// is the fallback only if a future OS ever drops it, so the export sheet still gets a real type.
+let megapdfMarkdownUTType: UTType = UTType("net.daringfireball.markdown") ?? .plainText
+
+/// Wraps a staged Markdown export for the same file exporter shape as `PdfExportDocument`
+/// (#386) -- a one-way, lossy text export, not another Save-a-copy format; see
+/// `ViewerModel.exportMarkdownFile`.
+struct MarkdownExportDocument: FileDocument {
+    static let readableContentTypes: [UTType] = [megapdfMarkdownUTType]
+    var file: URL?
+    var data: Data?
+
+    init(file: URL) { self.file = file }
+    init(configuration: ReadConfiguration) throws {
+        data = configuration.file.regularFileContents ?? Data()
+    }
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        if let file { return try FileWrapper(url: file, options: []) }
+        return FileWrapper(regularFileWithContents: data ?? Data())
+    }
+}
+
 struct ContentView: View {
     @StateObject private var model = ViewerModel()
     @State private var password = ""
@@ -25,6 +48,9 @@ struct ContentView: View {
     @State private var exportDoc: PdfExportDocument?
     // Default file name for Save a copy until a document is open.
     @State private var exportName = String(localized: "Document")
+    @State private var exportingMarkdown = false
+    @State private var markdownExportDoc: MarkdownExportDocument?
+    @State private var markdownExportName = String(localized: "Document")
 
     var body: some View {
         NavigationStack {
@@ -83,6 +109,18 @@ struct ContentView: View {
                             }
                         }
                     },
+                    onExportMarkdown: {
+                        guard !model.fileCommandsBlocked else { return }
+                        var base = displayName
+                        if base.lowercased().hasSuffix(".pdf") { base = String(base.dropLast(4)) }
+                        markdownExportName = base + ".md"
+                        Task {
+                            if let file = await model.exportMarkdownFile(named: displayName) {
+                                markdownExportDoc = MarkdownExportDocument(file: file)
+                                exportingMarkdown = true
+                            }
+                        }
+                    },
                     onClose: model.close
                 )
             }
@@ -106,6 +144,21 @@ struct ContentView: View {
                 model.finishExport(saved: true)
             } else {
                 model.finishExport(saved: false)
+            }
+        }
+        // #386: a second, independent file exporter for the Markdown export -- alongside the
+        // PDF one above rather than a shared picker, the same "second file-type choice" every
+        // platform's Save As gets, in this app's own existing per-format-exporter shape.
+        .fileExporter(
+            isPresented: $exportingMarkdown,
+            document: markdownExportDoc,
+            contentType: megapdfMarkdownUTType,
+            defaultFilename: markdownExportName
+        ) { result in
+            if case .success = result {
+                model.finishMarkdownExport(saved: true)
+            } else {
+                model.finishMarkdownExport(saved: false)
             }
         }
         .alert(

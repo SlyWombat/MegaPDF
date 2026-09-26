@@ -10,6 +10,9 @@ struct ViewerView: View {
     let displayName: String
     let pageSizes: [CGSize]
     let onSaveCopy: () -> Void
+    /// A Markdown export of the document's text (#386) -- a one-way, lossy export, not another
+    /// Save-a-copy format; see `ViewerModel.exportMarkdownFile`.
+    let onExportMarkdown: () -> Void
     let onClose: () -> Void
 
     @State private var zoom: CGFloat = 1
@@ -169,6 +172,17 @@ struct ViewerView: View {
                         if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
                     }
                         .disabled(model.isSaving || model.fileCommandsBlocked)
+                    // #386: a Markdown export, alongside Save a copy rather than a variant of
+                    // it -- it is a one-way, lossy text export (contract 9 drops layout, field
+                    // interactivity, everything Markdown can't model), and MegaPDF has no
+                    // Markdown-import path, so the label says "Export", not "Save", and its own
+                    // "Exported" completion message (ViewerModel.finishMarkdownExport) never
+                    // clears the "Unsaved changes" state a real Save still needs to answer.
+                    Button("Export as Markdown") {
+                        if model.redactionMarkCount > 0 { redactConfirm = .markdown } else { onExportMarkdown() }
+                    }
+                        .disabled(model.isSaving || model.fileCommandsBlocked)
+                        .accessibilityIdentifier("viewerExportMarkdown")
                     // #378: hands the document to the OS's own share sheet (Mail, Messages,
                     // AirDrop, another PDF app, whatever is installed) rather than a
                     // MegaPDF-drawn destination list. Unsaved changes ask first, through the
@@ -285,6 +299,13 @@ struct ViewerView: View {
             Button("Save as a copy") {
                 redactConfirm = nil
                 Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy() } }
+            }
+            // #386: offered here too -- marked-but-unapplied redactions must actually be
+            // removed (applyRedactions) before ANY export reads the document's text, Markdown
+            // included, or the marked content would leak into the .md file.
+            Button("Export as Markdown") {
+                redactConfirm = nil
+                Task { if await model.applyRedactions(reportWithSave: true) { onExportMarkdown() } }
             }
             Button("Overwrite the original") {
                 redactConfirm = nil
@@ -799,7 +820,7 @@ struct RedactBand: Equatable {
 }
 
 /// Which save the redaction confirmation was raised from (#173).
-enum RedactSaveChoice { case overwrite, copy }
+enum RedactSaveChoice { case overwrite, copy, markdown }
 
 /// The More button's on-screen frame, reported by the `GeometryReader` behind its label
 /// (#378) — read by `ViewerView` so the iPad share popover has a real anchor.

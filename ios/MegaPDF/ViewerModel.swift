@@ -1883,15 +1883,17 @@ final class ViewerModel: ObservableObject {
         }
     }
 
-    /// `<tmp>/export-<UUID>/<name>.pdf`: a fresh folder, so the name can be the document's own.
-    private nonisolated static func namedStagingURL(for name: String) throws -> URL {
+    /// `<tmp>/export-<UUID>/<name>.<ext>`: a fresh folder, so the name can be the document's own.
+    /// `name` is the document's own display name (its ".pdf" is stripped regardless of `ext`,
+    /// the source extension rather than the destination one).
+    private nonisolated static func namedStagingURL(for name: String, extension ext: String = "pdf") throws -> URL {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var base = name.replacingOccurrences(of: "/", with: "-")
         if base.lowercased().hasSuffix(".pdf") { base = String(base.dropLast(4)) }
         if base.isEmpty { base = String(localized: "Document") }
-        return folder.appendingPathComponent(base).appendingPathExtension("pdf")
+        return folder.appendingPathComponent(base).appendingPathExtension(ext)
     }
 
     /// The exporter finished. When it wrote the copy, the document is marked saved, but only if
@@ -1910,6 +1912,50 @@ final class ViewerModel: ObservableObject {
         exportEditCount = nil
         statusMessage = String(localized: "Saved")
         statusDetail = summary
+    }
+
+    /// A Markdown export of the document's text, in a staged file for the same exporter shape
+    /// as `exportFile` (#386). Unlike a PDF Save a copy, this is a **one-way, lossy text
+    /// export** -- contract 9's blocks drop layout, form-field interactivity and everything
+    /// else Markdown cannot model -- so it is never verified by reopening it as a document (an
+    /// `.md` file isn't one), and `finishMarkdownExport` deliberately does not stand in for a
+    /// save (see there).
+    func exportMarkdownFile(named name: String) async -> URL? {
+        guard let doc = document,
+              let token = busy.begin(.exportingText, scope: .document, blocksFileCommands: true) else { return nil }
+        defer { busy.end(token) }
+        discardExportFile()
+        let staged: URL
+        do {
+            staged = try Self.namedStagingURL(for: name, extension: "md")
+        } catch {
+            statusMessage = String(localized: "Couldn't prepare the export.")
+            return nil
+        }
+        do {
+            let data = try await PdfEngine.shared.writeText(doc, format: .markdown)
+            try data.write(to: staged, options: .atomic)
+            guard document === doc else {
+                try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+                return nil
+            }
+            exportStagedURL = staged
+            return staged
+        } catch {
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+            statusMessage = String(localized: "Couldn't prepare the export.")
+            return nil
+        }
+    }
+
+    /// The Markdown exporter finished. Deliberately parallel to, but simpler than, `finishExport`:
+    /// it never touches `isDirty`/`editCount` (#386) -- a `.md` file cannot hold the edits a
+    /// re-open would need, so exporting one must never make Close's "Unsaved changes" ask go
+    /// quiet about a PDF that was never actually saved.
+    func finishMarkdownExport(saved: Bool) {
+        discardExportFile()
+        guard saved else { return }
+        statusMessage = String(localized: "Exported")
     }
 
     private func discardExportFile() {
