@@ -758,6 +758,23 @@
         }
       }
     },
+    "Couldn't export the text." : {
+      "comment" : "PdfError.textExportFailed (#386).",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'exporter le texte."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible d'exporter le texte."
+          }
+        }
+      }
+    },
     "Couldn't load page %lld." : {
       "localizations" : {
         "fr" : {
@@ -866,6 +883,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Impossible de préparer la copie."
+          }
+        }
+      }
+    },
+    "Couldn't prepare the export." : {
+      "comment" : "Markdown export failure (#386), the export-side twin of \"Couldn't prepare the copy.\"",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de préparer l'exportation."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de préparer l'exportation."
           }
         }
       }
@@ -1205,6 +1239,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Contrat de location d'équipement (2026)"
+          }
+        }
+      }
+    },
+    "Export as Markdown" : {
+      "comment" : "More menu and the redact-confirmation dialog (#386): a one-way, lossy text export of the document, not a Save-a-copy PDF variant.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporter en Markdown"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporter en Markdown"
+          }
+        }
+      }
+    },
+    "Exported" : {
+      "comment" : "Markdown export completion alert (#386) -- deliberately not \"Saved\": see ViewerModel.finishMarkdownExport.",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporté"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exporté"
+          }
+        }
+      }
+    },
+    "Exporting…" : {
+      "comment" : "Busy strip (#145), while a Markdown export is written (#386).",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportation…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportation…"
           }
         }
       }
