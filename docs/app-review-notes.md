@@ -58,12 +58,28 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
    removed. The content is taken out of the file, not covered.
 9. **Protect:** **More** → **Password…** sets, changes or removes a
    document password. A protected PDF asks for it when opened.
+10. **Open with:** the app is registered as a PDF viewer. In Files, long-press
+    any PDF → **Share** → **MegaPDF** (or tap the PDF → the share button →
+    MegaPDF); in Mail, tap a PDF attachment → the share button → MegaPDF. The
+    document opens in the viewer. If another document with unsaved changes is
+    open, an alert asks Save / Discard / Cancel first.
+11. **Share:** **More** → **Share** opens the system share sheet with the
+    current file (Mail, Messages, AirDrop, Save to Files…). If the document has
+    unsaved changes, an alert offers **Save**, **Share without saving** (the
+    last saved file is shared; the edits stay open) or **Cancel**.
+12. **Export as Markdown:** **More** → **Export as Markdown** writes the
+    document's text (headings, paragraphs, lists, filled-in field values) as a
+    `.md` file through the Files picker. It is a one-way text export: the PDF is
+    not changed, and the app still asks to save it if it had unsaved changes.
+    A page with no text layer (a scan) is written as a one-line note; the app
+    does no OCR.
 
 **1. Screen recording**
-Attached: MegaPDF 2.1.0 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
+Attached: MegaPDF 2.1.1 on an iPhone 17 Pro Max simulator, iOS 26.5: cold
 launch, open the form from Files, tick and clear boxes, draw and place a
 signature, search, save, reopen from Recents, and the Photos picker opening and
-closing. Steps 8 and 9 are not in it; they need only an open PDF.
+closing. Steps 8 to 12 are not in it; they need only an open PDF (step 10 needs
+a PDF in Files or Mail).
 
 **2. Devices and OS versions tested**
 iPhone 17 Pro Max and iPad Pro 13-inch (M5) simulators on iOS 26.5.
@@ -84,7 +100,10 @@ files.
 **Permissions and privacy**
 No permissions are requested and no permission dialogs appear. Signing from a
 photo uses SwiftUI's PhotosPicker, which runs out of process and returns only the
-chosen image, so no photo-library access is requested. No data is collected;
+chosen image, so no photo-library access is requested. Share hands the file to
+the system share sheet (UIActivityViewController) and the Markdown export and
+Open with go through the Files picker and the document types declared in
+Info.plist; none of them makes a network request. No data is collected;
 privacy policy: https://electricrv.ca/megapdf/privacy/
 
 ---
@@ -104,7 +123,9 @@ machine. It is sandboxed and opens only the files the user chooses.
 **Reaching the main features**
 Any PDF works; the blank form used in the attached recording is at
 https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
-1. Launch → **Open** (or ⌘O) → choose a PDF.
+1. Launch → **Open** (or ⌘O) → choose a PDF. Choose several, or open a second
+   one from the Finder while the app is running, and each opens as a **tab** in
+   the same window; ⌘W closes a tab, ⇧⌘W the window, ⌃Tab switches tabs.
 2. **Check a box:** click a checkbox or an empty printed square — it is marked
    at once; click again to clear it.
 3. **Sign:** **Sign** → draw a new signature, or use a photo of one (the white
@@ -121,8 +142,12 @@ https://github.com/SlyWombat/MegaPDF/blob/main/docs/review/MegaPDF-Test-Form.pdf
    copy** and then says what was removed. The content is gone from the file.
 6. **Find:** ⌘F → type → Return steps through the matches.
 7. **Save:** ⌘S writes back to the file that was opened; **Save As** writes a
-   copy. **File → Password…** sets, changes or removes a password; **File →
-   Save a smaller copy for email** makes a smaller copy. **Print** (⌘P) uses the standard macOS print panel.
+   copy. Its file-type menu also offers **Markdown document**: that writes the
+   document's text (headings, paragraphs, lists, filled-in field values) as a
+   `.md` file and is a one-way export — the PDF is not changed, and the app
+   still asks to save it if it had unsaved changes. **File → Password…** sets,
+   changes or removes a password; **File → Save a smaller copy for email**
+   makes a smaller copy. **Print** (⌘P) uses the standard macOS print panel.
 
 **Screen recording**
 Attached: the flow above on a Mac mini (M4) running macOS 26.6.2 — ticks, the
@@ -131,7 +156,7 @@ signature placed, text added, find.
 **Devices tested**
 Mac mini (M4), macOS 26.6.2; the sandboxed Store build is exercised end to end
 inside its container on every CI run (open, tick, fill, sign, type, cover,
-find, save, reopen, undo).
+find, save, reopen, undo, tabs, the Markdown export).
 
 **External services** None. No network requests, analytics, crash reporting,
 advertising, authentication, payment or server component. One embedded
