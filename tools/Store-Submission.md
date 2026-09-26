@@ -1,5 +1,11 @@
 # MegaPDF — Microsoft Store submission runbook
 
+> **Order of operations:** this file is the Windows depth — the package, WACK and the
+> submission API. What comes before it (the version bump, CI, the corpus batteries,
+> real-machine verification, screenshots, copy) and what comes after (read-backs, the
+> milestone) is [`docs/RELEASING.md`](../docs/RELEASING.md), which links here at the
+> right step.
+
 Distribution plan of record: **Microsoft Store** (SDD §5). The Store re-signs the
 package with a Microsoft-trusted certificate on ingestion, so the self-signed dev
 cert problems (error `0x800B010A`, "Publisher: Unknown", the `.cer`/Setup.exe trust
