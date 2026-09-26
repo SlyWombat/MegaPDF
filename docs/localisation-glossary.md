@@ -44,6 +44,7 @@ Conventions (OQLF, Canadian French):
 | Delete (the key) | Suppr (Windows) / Supprimer (Mac) | the key's own name on each keyboard: a French Windows keycap reads *Suppr*, and « Supprimer la retire » would read as *deleting removes it* (#242) |
 | Remove | Retirer | from a library or a page |
 | Discard | Abandonner | |
+| Share | Partager | #378, the OS share sheet row in the More menu |
 | Don't save | Ne pas enregistrer | |
 | Restore | Restaurer | |
 | Signatures | Signatures | |

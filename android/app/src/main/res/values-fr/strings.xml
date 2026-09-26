@@ -10,6 +10,7 @@
     <string name="save">Enregistrer</string>
     <string name="saving">Enregistrement…</string>
     <string name="save_a_copy">Enregistrer une copie</string>
+    <string name="share">Partager</string>
     <string name="undo">Annuler</string>
     <string name="redo">Rétablir</string>
     <string name="cancel">Annuler</string>
@@ -67,6 +68,7 @@
     <string name="saved">Enregistré</string>
     <string name="save_no_permission">Vous n\'avez plus la permission d\'écrire ici. Utilisez «&#160;Enregistrer une copie&#160;».</string>
     <string name="save_failed">Impossible d\'enregistrer. Utilisez «&#160;Enregistrer une copie&#160;».</string>
+    <string name="share_failed">Impossible de partager. Réessayez.</string>
 
     <!-- Sécurité du document (#131) -->
     <string name="security_restricted_notice">Le propriétaire de ce document en a restreint les modifications. Pour le modifier, déverrouillez-le avec le mot de passe du propriétaire à partir du menu.</string>

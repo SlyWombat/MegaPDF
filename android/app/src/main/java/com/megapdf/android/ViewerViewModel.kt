@@ -802,6 +802,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         statusMessage = null
     }
 
+    /** One-shot: a copy is ready to hand to the OS share sheet; cleared by [consumeShareFile]. */
+    var shareFile: File? by mutableStateOf(null)
+        private set
+
+    fun consumeShareFile() {
+        shareFile = null
+    }
+
     // --- Document security (#131) ---
 
     /** What the open document's security lets the user do; everything when nothing is open. */
@@ -1868,6 +1876,47 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
 
     /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT. */
     fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
+
+    /** Share with no unsaved changes, or Discard from the unsaved-changes prompt (#378): the
+     * document on disk already is what gets shared, so this exports it as-is. */
+    fun shareLastSaved() = exportForShare()
+
+    /** Save from the unsaved-changes prompt, then share the now-saved file (#378). */
+    fun saveAndShare() {
+        val uri = currentUri ?: return
+        val doc = document ?: return
+        writeTo(uri, isSaveAs = false) {
+            if (document === doc) exportForShare()
+        }
+    }
+
+    /**
+     * Copies the last-saved bytes at [currentUri] into the app's own `cacheDir/share/` (#378),
+     * the one subtree the FileProvider grants — [currentUri] itself may belong to any content
+     * provider and cannot be handed to another app directly. Setting [shareFile] is what tells
+     * the UI a content:// grant is ready to build; [consumeShareFile] clears it once used.
+     */
+    private fun exportForShare() {
+        val uri = currentUri ?: return
+        val name = (uiState as? ViewerUiState.Viewing)?.displayName ?: "document.pdf"
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            val target = shareFileFor(app.cacheDir, name)
+            try {
+                withContext(Dispatchers.IO) {
+                    target.parentFile?.mkdirs()
+                    app.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { input.copyTo(it, COPY_BUFFER_BYTES) }
+                    } ?: throw IllegalStateException("provider returned no stream")
+                }
+                shareFile = target
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                statusMessage = str(R.string.share_failed)
+            }
+        }
+    }
 
     private fun writeTo(uri: Uri, isSaveAs: Boolean, afterSaved: (() -> Unit)? = null) {
         val doc = document ?: return

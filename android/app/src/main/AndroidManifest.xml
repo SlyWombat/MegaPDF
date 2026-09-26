@@ -2,7 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- No permissions: no network, no external storage. Documents arrive via SAF
-         (ACTION_OPEN_DOCUMENT), signatures via the Photo Picker — neither needs one. -->
+         (ACTION_OPEN_DOCUMENT), signatures via the Photo Picker — neither needs one.
+         Share (#378) hands another app a content:// grant via the FileProvider below,
+         which needs none either: it is a temporary read grant on one file, not access
+         to storage in general. -->
 
     <application
         android:label="@string/app_name"
@@ -18,6 +21,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- #378: the Share row's content:// grant. Scoped to cacheDir/share/ only
+             (@xml/file_paths) — never the whole cache dir, which also holds copies of
+             whatever document is currently open or mid-save. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>
