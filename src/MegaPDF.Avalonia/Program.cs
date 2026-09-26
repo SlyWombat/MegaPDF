@@ -1170,6 +1170,74 @@ internal static class Program
             if (File.Exists(copyPath)) File.Delete(copyPath);
         }
 
+        // --- Export as Markdown, one-way (#386) ---
+        //
+        // The real SaveFilePickerAsync has no headless substitute, so this drives
+        // DocumentViewModel.ExportMarkdownAsync directly with a stub destination — the same
+        // "openDestination" shape MainWindow.SaveAsAsync hands it once the (real) picker has
+        // returned a .md file — and separately checks the extension test that decides whether
+        // that method is the one to call at all.
+        Console.WriteLine("export as markdown (#386):");
+        Check("a .md file is the Markdown export path", Views.MainWindow.IsMarkdownExportTarget("copy.md"));
+        Check("  case-insensitively", Views.MainWindow.IsMarkdownExportTarget("COPY.MD"));
+        Check("a .pdf file keeps the exact existing save path", !Views.MainWindow.IsMarkdownExportTarget("copy.pdf"));
+        Check("  and so does a name with no extension at all", !Views.MainWindow.IsMarkdownExportTarget("copy"));
+
+        var exportPath = Path.Combine(saveDir, $"megapdf-selftest-export-{Guid.NewGuid():N}.md");
+        try
+        {
+            using var vm = new DocumentViewModel(state);
+            vm.Open(Path.Combine(dir, "fixture.pdf"));
+            var pathBefore = vm.DocumentPath;
+            var nameBefore = vm.DocumentName;
+            vm.HandlePageClick(0, new PdfPoint(78, 186));   // tick a box: dirty, same as the save-as check above
+            Check("the document is dirty before exporting", vm.IsDirty);
+
+            bool exported;
+            using (var file = File.Create(exportPath))
+                exported = vm.ExportMarkdownAsync(() => Task.FromResult<Stream>(file)).GetAwaiter().GetResult();
+
+            Check("the export reports success", exported);
+            Check("exporting does NOT clear the dirty flag — a .md can't hold the edits (#386)", vm.IsDirty);
+            Check("and does NOT retarget DocumentPath onto the export", vm.DocumentPath == pathBefore);
+            Check("or DocumentName", vm.DocumentName == nameBefore);
+            Check("the status line says Exported, not Saved", vm.Status == Strings.ExportedFile(nameBefore));
+
+            var written = File.ReadAllText(exportPath);
+            using var engine = new PdfiumEngine();
+            using var reopened = engine.Open(Path.Combine(dir, "fixture.pdf"));
+            using var expected = new MemoryStream();
+            reopened.WriteMarkdown(expected);
+            Check("and the bytes are exactly what WriteMarkdown produces for this document",
+                  written == System.Text.Encoding.UTF8.GetString(expected.ToArray()));
+
+            // A refusal must not truncate whatever the person picked (D2's own reasoning,
+            // applied to export): the destination is opened only once the bytes are built.
+            File.WriteAllText(exportPath, "unrelated content, must survive a failed export");
+            vm.FailExportForTest = () => throw new InvalidOperationException("export failed (self-test)");
+            var opened = false;
+            var failedExport = vm.ExportMarkdownAsync(() =>
+            {
+                opened = true;
+                return Task.FromResult<Stream>(File.Create(exportPath));
+            }).GetAwaiter().GetResult();
+            Check("an export that fails while building the text reports it",
+                  !failedExport && vm.Status == Strings.WithDetail(Strings.CouldNotExport, "export failed (self-test)"));
+            Check("and never opens the destination for writing", !opened);
+            Check("so a file already there is untouched",
+                  File.ReadAllText(exportPath) == "unrelated content, must survive a failed export");
+            Check("and the document is still dirty, unaffected by the failed export", vm.IsDirty);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::export as markdown: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+        finally
+        {
+            if (File.Exists(exportPath)) File.Delete(exportPath);
+        }
+
         // --- Keyboard traversal (SDD §2.2, #2) ---
         //
         // The acceptance criterion is "the persona task completes keyboard-only".

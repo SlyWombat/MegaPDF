@@ -2792,6 +2792,89 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             _ => Strings.WithDetail(Strings.CouldNotSave, ex.Message),
         };
 
+    // --- Exporting as Markdown (#386) ---
+
+    /// <summary>For the self-test: throws inside the export, where a WriteMarkdown refusal would.</summary>
+    internal Action? FailExportForTest { get; set; }
+
+    /// <summary>
+    /// Exports the open document's text as Markdown (#386, mirroring iOS's PR #390 wording and
+    /// semantics) — a one-way, lossy export, not an alternate save format. Unlike every save
+    /// method above, this must never touch <see cref="IsDirty"/>, <see cref="HasRedactionMarks"/>,
+    /// <see cref="DocumentPath"/> or <see cref="DocumentName"/>: a .md file cannot hold the edits
+    /// (or the pending marks) a future re-open would need, so completing an export must never make
+    /// the "Unsaved changes" ask go quiet about a PDF that was never actually saved. It does not
+    /// call <see cref="SaveCoreAsync"/> for exactly that reason — sharing it would also share the
+    /// "mark saved" side effects that method exists to have.
+    ///
+    /// The Markdown is built in memory first and only then written to
+    /// <paramref name="openDestination"/> — opening a person's file truncates it, so a refusal
+    /// (an out-of-range page, or the engine failing to write) must never open, and so never
+    /// touch, whatever file they picked (the same ordering <see cref="SaveCoreAsync"/> uses, for
+    /// the same reason).
+    /// </summary>
+    public async Task<bool> ExportMarkdownAsync(Func<Task<Stream>> openDestination)
+    {
+        if (_document is not { } document || Busy.IsBusy)
+            return false;
+
+        using var busy = Busy.Begin(Strings.BusyExporting);
+        MemoryStream built;
+        try
+        {
+            built = await OffUiThread(() =>
+            {
+                FailExportForTest?.Invoke();
+                var ms = new MemoryStream();
+                document.WriteMarkdown(ms);
+                ms.Position = 0;
+                return ms;
+            });
+        }
+        catch (Exception ex)
+        {
+            ReportExportFailure(ex);
+            return false;
+        }
+
+        using (built)
+        {
+            Stream destination;
+            try
+            {
+                destination = await openDestination();
+            }
+            catch (Exception ex)
+            {
+                ReportExportFailure(ex);
+                return false;
+            }
+
+            try
+            {
+                await OffUiThread(() => built.CopyTo(destination));
+            }
+            catch (Exception ex)
+            {
+                ReportExportFailure(ex);
+                return false;
+            }
+            finally
+            {
+                await destination.DisposeAsync();
+            }
+        }
+
+        if (ReferenceEquals(document, _document))
+            Status = Strings.ExportedFile(DocumentName);
+        return true;
+    }
+
+    /// <summary>A Markdown export that failed, in words. Deliberately distinct from
+    /// <see cref="ReportSaveFailure"/>'s "Could not save." — this was never a save (#386).</summary>
+    public void ReportExportFailure(Exception ex) =>
+        Status = Strings.WithDetail(Strings.CouldNotExport, ex.Message);
+
     // --- Password: unlock, set, change, remove (#131, ADR-004 §3, §5, §6) ---
 
     public enum UnlockOutcome { Unlocked, WrongPassword, Failed }

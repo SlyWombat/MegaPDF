@@ -2303,10 +2303,22 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Save a copy (SDD §3.4). The picker gives back a file the sandbox has granted
-    /// us, so this writes through its stream — the same path the sandboxed Save
-    /// takes — and then adopts it as the document's home, which is what "Save As"
-    /// means everywhere else.
+    /// Save a copy (SDD §3.4) — or, since #386, export the document's text as Markdown
+    /// instead. One dialog offers both file types (<see cref="PdfFileType"/> and
+    /// <see cref="MarkdownFileType"/>) rather than a second "Export as Markdown" menu
+    /// entry: the native Save panel's own file-type dropdown is the desktop's usual way
+    /// to choose an output format from a Save As, and it means the picker's own
+    /// suggested-name/overwrite-prompt/sandbox-grant machinery below is written once,
+    /// not duplicated for a near-identical export flow (iOS's PR #390 instead uses two
+    /// separate `fileExporter`s, because `FileDocument.fileWrapper` cannot stage bytes
+    /// for a format not yet chosen — Avalonia's picker has no such constraint).
+    ///
+    /// Which path runs is decided from the extension of whatever the person actually
+    /// picked, not from which choice was the dropdown's default: <c>.md</c> exports —
+    /// busy label "Exporting…", not "Saving…", and it must NOT adopt the file as the
+    /// document's home or clear the dirty flag, since a .md cannot hold the edits a
+    /// re-open would need (#386). Anything else keeps the exact PDF Save As path this
+    /// method has always taken.
     /// </summary>
     private async Task SaveAsAsync(string? suggestedName = null)
     {
@@ -2336,12 +2348,29 @@ public partial class MainWindow : Window
             Title = Strings.SaveACopy,
             SuggestedFileName = suggested,
             DefaultExtension = "pdf",
-            FileTypeChoices = [PdfFileType],
+            FileTypeChoices = [PdfFileType, MarkdownFileType],
             ShowOverwritePrompt = true,
         });
 
         if (file is null)
             return;
+
+        if (IsMarkdownExportTarget(file.Name))
+        {
+            try
+            {
+                // Deliberately does not set OpenedFile: exporting must not retarget where
+                // a future Save writes, and ExportMarkdownAsync itself never touches
+                // IsDirty/DocumentPath/DocumentName (#386) — a .md is not the document's
+                // home the way a saved-as .pdf becomes one just below.
+                await vm.ExportMarkdownAsync(async () => await file.OpenWriteAsync());
+            }
+            catch (Exception ex)
+            {
+                vm.ReportExportFailure(ex);
+            }
+            return;
+        }
 
         try
         {
@@ -2563,4 +2592,26 @@ public partial class MainWindow : Window
         AppleUniformTypeIdentifiers = ["com.adobe.pdf"],
         MimeTypes = ["application/pdf"],
     };
+
+    /// <summary>The Save As/Export picker's Markdown choice (#386). The system's own
+    /// net.daringfireball.markdown UTI — the same one iOS's PR #390 declares.</summary>
+    private static FilePickerFileType MarkdownFileType => new(Strings.MarkdownDocument)
+    {
+        Patterns = ["*.md"],
+        AppleUniformTypeIdentifiers = ["net.daringfireball.markdown"],
+        MimeTypes = ["text/markdown"],
+    };
+
+    /// <summary>
+    /// Whether the Save As/Export picker's returned file should take the Markdown export path in
+    /// <see cref="SaveAsAsync"/> rather than the ordinary PDF Save As one (#386). Decided from the
+    /// extension of whatever the person actually picked — not from which of
+    /// <see cref="PdfFileType"/>/<see cref="MarkdownFileType"/> was the dropdown's default — so
+    /// typing a different name in the same dialog still lands on the right path. Pulled out as its
+    /// own testable method: the self-test drives <c>DocumentViewModel.ExportMarkdownAsync</c>
+    /// directly (the real <c>SaveFilePickerAsync</c> has no headless substitute), so this is the
+    /// one piece of the branch it can still exercise directly, string in, bool out.
+    /// </summary>
+    internal static bool IsMarkdownExportTarget(string fileName) =>
+        string.Equals(Path.GetExtension(fileName), ".md", StringComparison.OrdinalIgnoreCase);
 }

@@ -407,6 +407,12 @@ public static partial class Strings
     /// <summary>Could not save.</summary>
     public static string CouldNotSave => Get("CouldNotSave");
 
+    /// <summary>Exported {0}.</summary>
+    public static string ExportedFile(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("ExportedFile"), arg0);
+
+    /// <summary>Could not export.</summary>
+    public static string CouldNotExport => Get("CouldNotExport");
+
     /// <summary>The saved document could not be read back, so the original was left untouched.</summary>
     public static string SavedDocumentUnreadable => Get("SavedDocumentUnreadable");
 
@@ -424,6 +430,9 @@ public static partial class Strings
 
     /// <summary>PDF document</summary>
     public static string PdfDocument => Get("PdfDocument");
+
+    /// <summary>Markdown document</summary>
+    public static string MarkdownDocument => Get("MarkdownDocument");
 
     /// <summary>Save your changes first, then shrink the saved file.</summary>
     public static string SaveBeforeShrinking => Get("SaveBeforeShrinking");
@@ -679,6 +688,9 @@ public static partial class Strings
 
     /// <summary>Saving…</summary>
     public static string BusySaving => Get("BusySaving");
+
+    /// <summary>Exporting…</summary>
+    public static string BusyExporting => Get("BusyExporting");
 
     /// <summary>Checking the saved file…</summary>
     public static string BusyCheckingSavedFile => Get("BusyCheckingSavedFile");
