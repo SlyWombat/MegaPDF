@@ -263,6 +263,9 @@
     <string name="redact_mark_count_one">1 area marked for redaction</string>
     <string name="redact_ok">OK</string>
     <!-- #173: what the Redact capture marks. Not UI text — nobody using the app
-         ever sees it; it only poses the screenshot. -->
-    <string name="screenshot_redacted_word">customer named</string>
+         ever sees it; it only poses the screenshot. It must sit on the LAST line
+         of the demo agreement's opening paragraph (#395): since #408 the ✕ chip
+         hangs from the marked line's right end over the line below, and a first-
+         line mark put the chip over that paragraph's own words. -->
+    <string name="screenshot_redacted_word">sections 1 through 4</string>
 </resources>
