@@ -28,6 +28,8 @@ enum PdfError: Error, Equatable {
     case unsupportedSecurity
     /// The file is past what the platform can address (#147). Not reachable on 64-bit iOS today.
     case tooLarge
+    /// `megapdf_write_text` failed (#386) -- the Markdown/text export, not a document save.
+    case textExportFailed
 }
 
 /// What `error.localizedDescription` says for an engine failure — short and
@@ -55,6 +57,8 @@ extension PdfError: LocalizedError {
             return String(localized: "This PDF uses a kind of protection MegaPDF can't open.")
         case .tooLarge:
             return String(localized: "This file is too large for MegaPDF to open.")
+        case .textExportFailed:
+            return String(localized: "Couldn't export the text.")
         }
     }
 }
