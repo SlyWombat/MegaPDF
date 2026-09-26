@@ -7,14 +7,16 @@
 # Before it: the display at 150 % (Set-Scale.ps1 150, in its own process), the
 # package to be shot installed, and fresh staging documents for the language
 # (gen_store_docs.py <shotdir> --lang ...; the run saves over blank-agreement.pdf).
-# The coordinates are the ones in README.md, read off the 2500x1550 frame.
+# The coordinates are the ones in README.md, read off the 2500x1550 frame. Since 2.1.1 the
+# tab strip (#348) sits between the toolbar and the page, so every page coordinate is 60 px
+# lower than on the 2.0/2.1.0 frame (page top at 213, not 153); the flyout row is where it was.
 #
 # The six listing images land in artifacts\store\screenshots\<Dir>\; the probe
 # and in-between frames go to its work\ folder, so the gate sees only the set.
 param(
     [ValidateSet('en-US', 'fr-CA', 'fr-FR')][string]$Lang = 'en-US',
     [string]$Dir = 'en',
-    [string]$Version = '2.1.0.0'
+    [string]$Version = '2.1.1.0'
 )
 $ErrorActionPreference = 'Continue'
 $H = $PSScriptRoot
@@ -44,17 +46,17 @@ Get-ChildItem (Join-Path $env:LOCALAPPDATA 'MegaPDF\Recovery') -Filter *.journal
 & "$H\Set-Language.ps1" -Lang $Lang -Theme Light
 & "$H\Reset-SignatureLibrary.ps1"
 & "$H\Setup-Frame.ps1" -W 2500 -T 1550 -Pdf "$shots\blank-agreement.pdf" -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame
-& "$H\Shot-TextEdit.ps1" -X 880 -Y 538 -Text $Name
-& "$H\Shot-Checkboxes.ps1" -X 787 -Y1 707 -Y2 759
+& "$H\Shot-TextEdit.ps1" -X 880 -Y 598 -Text $Name
+& "$H\Shot-Checkboxes.ps1" -X 787 -Y1 767 -Y2 819
 & "$H\Open-SignatureFlyout.ps1"
 & "$H\Arm-Signature.ps1" -Notches 0 -X 510 -Y 248
-& "$H\Place-Signature.ps1" -X 1022 -Y 1400
-& "$H\Shot-AddText.ps1" -X 1390 -Y 1360 -Text $Date
+& "$H\Place-Signature.ps1" -X 1022 -Y 1460
+& "$H\Shot-AddText.ps1" -X 1390 -Y 1420 -Text $Date
 & "$H\Shot-Shrink.ps1" -Pdf "$shots\scanned-agreement.pdf" -Lang $Lang
 # Shot 6: redaction, on the agreement the steps above finished and Shrink saved. It
 # writes a redacted copy beside it and leaves blank-agreement.pdf as it was.
 & "$H\Setup-Frame.ps1" -W 2500 -T 1550 -Pdf "$shots\blank-agreement.pdf" -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame-redact
-& "$H\Shot-Redact.ps1" -Lang $Lang -Save
+& "$H\Shot-Redact.ps1" -Lang $Lang -Save -Y1 580 -Y2 616
 
 $work = Join-Path $shots 'work'
 New-Item -ItemType Directory -Force $work | Out-Null

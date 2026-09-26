@@ -94,7 +94,11 @@ STORES: dict[str, dict] = {
         # into the canvas, so the band has no edge to find and is fixed at 150.
         # A pre-#144 second row would sit under the first with a gap of a few
         # pixels, which is why only gaps of 4 rows or less are closed.
-        "toolbar": {"depth": 150, "fixed": True, "title_bar": 45, "gap": 4,
+        # Since 2.1.1 the tab strip (#348) sits under the command bar, its ink
+        # from about 124 to 180 (measured on the 2.1.1 set), and the page's top
+        # edge is at 213. The band therefore ends at 112, above the strip, or
+        # every capture reads as a two-row toolbar.
+        "toolbar": {"depth": 112, "fixed": True, "title_bar": 45, "gap": 4,
                     "rows": 1, "height": (40, 130),
                     "rows_by_pose": {"search": 2}},
         "zoom": "100",
