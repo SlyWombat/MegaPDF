@@ -200,6 +200,59 @@ class PdfDocument internal constructor(
         out.flush()
     }
 
+    // --- Contract 9 (#142, #353, #386): document structure and the text/Markdown writers over it ---
+
+    /**
+     * Contract 9's block structure over `[firstPage, firstPage + pageCount)` (#386): the raw
+     * native handle, freed with [freeStructure]. Not used by [writeText]/[writeMarkdown], which
+     * load and free their own structure internally (megapdf_write_text.cpp) — this exists so a
+     * future Android feature can read contract 9's blocks directly, the same pair
+     * `megapdf_core.h` exposes.
+     * @throws IllegalStateException an out-of-range range, a cancelled load, or the core could
+     *   not allocate (`megapdf_structure_load` returns NULL for all three; nothing to
+     *   distinguish them on here — none is expected from a page range this class itself reports)
+     */
+    suspend fun loadStructure(
+        firstPage: Int, pageCount: Int, flags: Int = PdfiumNative.STRUCTURE_DEFAULT,
+    ): Long = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        val structure = PdfiumNative.nativeStructureLoad(handle, firstPage, pageCount, flags)
+        check(structure != 0L) { "failed to load structure for pages $firstPage..<${firstPage + pageCount}" }
+        structure
+    }
+
+    /** Frees a handle returned by [loadStructure]. */
+    suspend fun freeStructure(structure: Long): Unit = withContext(engine.dispatcher) {
+        PdfiumNative.nativeStructureFree(structure)
+    }
+
+    /**
+     * Writes the whole document's text as plain text or Markdown (#142, #355, #357; #386's
+     * binding), over contract 9's blocks — a one-way text export, not an alternate save format:
+     * the result cannot be reopened as the document (no form fields, no signatures, no layout).
+     * [format] is [PdfiumNative.WRITE_FORMAT_TEXT] or [PdfiumNative.WRITE_FORMAT_MARKDOWN].
+     * Returns the count of pages that had a text layer.
+     * @throws PdfWriteTextException the core refused (a bad range, a cancelled or failed write)
+     */
+    suspend fun writeText(
+        out: OutputStream, format: Int, options: PdfWriteTextOptions = PdfWriteTextOptions(),
+    ): Int = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        val pageCount = PdfiumNative.nativePageCount(handle)
+        val status = PdfiumNative.nativeWriteText(handle, 0, pageCount, format, options.packed(), out)
+        if (status < 0) throw PdfWriteTextException(status)
+        out.flush()
+        status
+    }
+
+    /**
+     * [writeText] with a GUI Save-As's own reasonable defaults (#386), not the CLI's scripting
+     * ones ([PdfWriteTextOptions.saveAsDefaults]): the document's filled fields, no running
+     * headers/footers/page numbers, and a blank line rather than a form feed between pages.
+     */
+    suspend fun writeMarkdown(out: OutputStream): Int =
+        writeText(out, PdfiumNative.WRITE_FORMAT_MARKDOWN, PdfWriteTextOptions.saveAsDefaults())
+
     // --- Redaction (#173, contract 8) ---
 
     /**
@@ -974,6 +1027,39 @@ class PdfLoadException(val errorCode: Int) :
 }
 
 class PdfSaveException : Exception("Failed to serialize document")
+
+/**
+ * megapdf_write_options (#386), zero-valued the same way the CLI's own struct is: filled fields,
+ * no running furniture, a form feed between pages. Use [saveAsDefaults] for a GUI Save-As
+ * context instead, which differs only in [pageBreak] — #357's own Markdown convention, restated
+ * here as an explicit choice rather than inherited from the CLI's scripting default.
+ */
+data class PdfWriteTextOptions(
+    val keepLines: Boolean = false,
+    val pageBreak: Int = PdfiumNative.PAGE_BREAK_FORM_FEED,
+    val keepFurniture: Boolean = false,
+    val fields: Int = PdfiumNative.WRITE_FIELDS_FILLED,
+    val heuristicOnly: Boolean = false,
+) {
+    /** [keepLines, pageBreak, keepFurniture, fields, heuristicOnly], nativeWriteText's own order. */
+    internal fun packed(): IntArray = intArrayOf(
+        if (keepLines) 1 else 0, pageBreak, if (keepFurniture) 1 else 0, fields, if (heuristicOnly) 1 else 0,
+    )
+
+    companion object {
+        /**
+         * A GUI Save-As's own reasonable defaults (#386), not the CLI's scripting ones: the
+         * filled fields the document is showing ([PdfiumNative.WRITE_FIELDS_FILLED], already
+         * the default), no running headers/footers/page numbers ([keepFurniture] false, already
+         * the default), and — the one difference — a blank line rather than a form feed between
+         * pages of Markdown ([PdfiumNative.PAGE_BREAK_NONE]).
+         */
+        fun saveAsDefaults(): PdfWriteTextOptions = PdfWriteTextOptions(pageBreak = PdfiumNative.PAGE_BREAK_NONE)
+    }
+}
+
+/** megapdf_write_text() refused: [status] is one of megapdf_core.h's negative MEGAPDF_ERR_* codes. */
+class PdfWriteTextException(val status: Int) : Exception("Failed to write document text (status $status)")
 
 /**
  * PDFium would change the rest of the page if it rewrote this text (#118). [verdict] says why

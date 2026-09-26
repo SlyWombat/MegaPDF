@@ -12,9 +12,15 @@ set_target_properties(pdfium PROPERTIES
 # The shared engine core (#33): one implementation of the policy that used to be
 # hand-written per platform. Compiled straight into this .so — no second binary
 # to ship, and no ABI boundary at runtime.
+#
+# megapdf_structure.cpp (contract 9, #353) and megapdf_write_text.cpp (the text/Markdown
+# writers over it, #355/#357) joined megapdf_core.cpp here for #386's binding; core/CMakeLists.txt
+# (the desktop build) has always compiled all three together, as core/megapdf_core_internal.h's
+# own comment describes.
 set(CORE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../core)
 
-add_library(megapdf_engine SHARED engine.cpp ${CORE_ROOT}/megapdf_core.cpp)
+add_library(megapdf_engine SHARED engine.cpp ${CORE_ROOT}/megapdf_core.cpp
+    ${CORE_ROOT}/megapdf_structure.cpp ${CORE_ROOT}/megapdf_write_text.cpp)
 target_include_directories(megapdf_engine PRIVATE ${PDFIUM_ROOT}/include ${CORE_ROOT})
 target_link_libraries(megapdf_engine pdfium android jnigraphics log)
 # Android 15 requirement: 16 KB-aligned load segments (Play rejects 4 KB-only).

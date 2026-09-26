@@ -1114,3 +1114,63 @@ Java_com_megapdf_engine_PdfiumNative_nativeRedactionPoisoned(JNIEnv*, jobject, j
 }
 
 }  // extern "C"
+
+// --- Contract 9 (#142, #353, #386): document structure and the text/Markdown writers over
+// --- it. megapdf_write_text() loads and frees its own megapdf_structure internally
+// --- (megapdf_write_text.cpp), so the Markdown export below never touches
+// --- nativeStructureLoad/nativeStructureFree; those two are bound only so a future Android
+// --- feature can read contract 9's blocks directly, the same pair megapdf_core.h exposes.
+
+extern "C" {
+
+JNIEXPORT jlong JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeStructureLoad(JNIEnv*, jobject, jlong handle, jint firstPage,
+                                                         jint pageCount, jint flags) {
+    auto* d = reinterpret_cast<Document*>(handle);
+    megapdf_structure* s = megapdf_structure_load(d->core, static_cast<int>(firstPage), static_cast<int>(pageCount),
+                                                  static_cast<unsigned int>(flags), nullptr);
+    return reinterpret_cast<jlong>(s);
+}
+
+JNIEXPORT void JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeStructureFree(JNIEnv*, jobject, jlong handle) {
+    megapdf_structure_free(reinterpret_cast<megapdf_structure*>(handle));
+}
+
+// megapdf_write_text() over a java.io.OutputStream, the same StreamWriter callback nativeSave
+// uses above. `options` is packed [keepLines, pageBreak, keepFurniture, fields, heuristicOnly]
+// (megapdf_write_options's own fields, in field order) so this call needs no separate JNI
+// struct marshalling; null means megapdf_write_text's own defaults (a NULL options pointer).
+// No cancel token: like nativeSave/nativeSaveWithSecurity above, a Save-As write is one call
+// with no user-visible progress to cancel — unlike the page-regeneration checks, which run
+// many times per edit and do expose nativeCancelNew/Raise/Free.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeWriteText(JNIEnv* env, jobject, jlong handle, jint firstPage,
+                                                     jint pageCount, jint format, jintArray options,
+                                                     jobject outputStream) {
+    auto* d = reinterpret_cast<Document*>(handle);
+    jclass streamClass = env->GetObjectClass(outputStream);
+    jmethodID write = env->GetMethodID(streamClass, "write", "([BII)V");
+    if (write == nullptr) return MEGAPDF_ERR_ARGUMENT;
+
+    megapdf_write_options wopt{};
+    megapdf_write_options* wopt_ptr = nullptr;
+    if (options != nullptr) {
+        jint packed[5] = {0, 0, 0, 0, 0};
+        env->GetIntArrayRegion(options, 0, 5, packed);
+        wopt.keep_lines = packed[0];
+        wopt.page_break = packed[1];
+        wopt.keep_furniture = packed[2];
+        wopt.fields = packed[3];
+        wopt.heuristic_only = packed[4];
+        wopt_ptr = &wopt;
+    }
+
+    StreamWriter writer{env, outputStream, write, false};
+    const int status = megapdf_write_text(d->core, static_cast<int>(firstPage), static_cast<int>(pageCount), format,
+                                          wopt_ptr, WriteToStream, &writer, nullptr);
+    if (status >= 0 && writer.failed) return MEGAPDF_ERR_PDFIUM;
+    return static_cast<jint>(status);
+}
+
+}  // extern "C"
