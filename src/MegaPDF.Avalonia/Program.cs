@@ -1619,6 +1619,21 @@ internal static class Program
             failures++;
         }
 
+        // --- The window with no tab (#412) ---
+        //
+        // The one state the tab checks above never look at: before the first tab and
+        // after the last. Open must be enabled there, and the status line must say so.
+        Console.WriteLine("the window with no tab (#412):");
+        try
+        {
+            CheckEmptyWindow(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::empty window: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Quitting with more than one window open (#145 D1, #348 plan §5.6) ---
         //
         // App.axaml.cs's ShutdownRequested asks every window in turn; a Cancel on a later
@@ -2867,6 +2882,63 @@ internal static class Program
     }
 
     /// <summary>
+    /// The window with no tab (#412): what a launch with nothing, and File ▸ New Window,
+    /// show. After #348 the toolbar's Open, the zoom box and the status line bound
+    /// through <c>Active.*</c> with a FallbackValue, so with no tab Open was disabled,
+    /// the zoom box blank and the status line empty — 2.0 had Open enabled, "100 %" and
+    /// "Open a PDF to get started.". Checked on the real controls in a real window, not
+    /// only on the view model, because the bug was in the bindings: the view model was
+    /// right the whole time.
+    /// </summary>
+    private static void CheckEmptyWindow(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+        window.Show();
+        Pump();
+
+        check("with no tab, the toolbar's Open is enabled", window.OpenButton.IsEnabled);
+        check($"  the status line says how to get started ({window.StatusLabel.Text})",
+              window.StatusLabel.Text == Strings.OpenToGetStarted);
+        check($"  and the zoom box reads 100 % ({window.ZoomLabel.Text})",
+              window.ZoomLabel.Text == Strings.ZoomPercent(100));
+        check("  (the zoom menu itself waits for a document)", !window.ZoomMenuButton.IsEnabled);
+
+        // With a tab, all three follow it — and keep following it as it changes.
+        var vm = shell.CreateDocument();
+        vm.Open(Path.Combine(dir, "fixture.pdf"));
+        shell.AddTab(vm);
+        Pump();
+        check("with a tab, Open is still enabled", window.OpenButton.IsEnabled);
+        check($"  the status line is the tab's ({window.StatusLabel.Text})",
+              window.StatusLabel.Text == vm.Status && vm.Status != Strings.OpenToGetStarted);
+        vm.SetZoomCommand.Execute(1.5);
+        Pump();
+        check($"  and the zoom box follows the tab's zoom ({window.ZoomLabel.Text})",
+              window.ZoomLabel.Text == Strings.ZoomPercent(150));
+        vm.Status = "a status of the tab's own";
+        Pump();
+        check("  as the status line follows the tab's status", window.StatusLabel.Text == vm.Status);
+
+        // Closing the last tab puts the empty window's answers back. Through the window's
+        // own close path, as the tab strip's ✕ does, so the window forgets the tab too.
+        _ = window.CloseTabAsync(vm);
+        PumpUntil(() => shell.Documents.Count == 0, TimeSpan.FromSeconds(5));
+        check("with the tab closed, Open is enabled again", window.OpenButton.IsEnabled);
+        check($"  and the status line is the hint again ({window.StatusLabel.Text})",
+              window.StatusLabel.Text == Strings.OpenToGetStarted
+              && window.ZoomLabel.Text == Strings.ZoomPercent(100));
+
+        window.Close();
+        Pump();
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
     /// Quitting with more than one window open (#145 D1, #348 plan §5.6): App.axaml.cs's
     /// ShutdownRequested asks every window in turn, and a Cancel on a later window must not
     /// leave an earlier, already-confirmed window stuck that way forever — see
@@ -2915,8 +2987,16 @@ internal static class Program
             windowA.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
             windowB.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.Cancel;
 
-            var confirmed = App.ConfirmAllWindowsForQuitAsync([windowA, windowB]).GetAwaiter().GetResult();
-            check("a Cancel on the second window stops the quit", !confirmed);
+            // Pumped, not GetResult() (#412): ConfirmUnsavedChangesAsync starts with
+            // `await vm.Busy.WhenIdleAsync()`, and the click above has just started
+            // background work on a wired (RunsInBackground) document. When that work is
+            // still running at the await, the continuation is posted to the dispatcher —
+            // which a GetResult() on the UI thread is blocking, so the self-test hung
+            // (seen on the macOS screenshots runner; every other thread idle, the main
+            // thread in a Monitor wait). Whether the work is done by then is a race that
+            // the preceding check's own render work made a loser.
+            var confirmed = AwaitPumped(App.ConfirmAllWindowsForQuitAsync([windowA, windowB]));
+            check("a Cancel on the second window stops the quit", confirmed is false);
             // Don't Save answers the question rather than clearing it — nothing was written,
             // so the in-memory document is still "dirty" in the ordinary sense — so what proves
             // window A was actually asked and answered is the count, not IsDirty.
@@ -2939,8 +3019,8 @@ internal static class Program
             // through — proving the fix did not just suppress the stale "yes" but replaced it
             // with a fresh, correct one.
             windowB.AnswerUnsavedChangesForTest = () => Views.UnsavedChangesWindow.Decision.DontSave;
-            var confirmedAgain = App.ConfirmAllWindowsForQuitAsync([windowA, windowB]).GetAwaiter().GetResult();
-            check("with both windows now answering cleanly, the quit is confirmed", confirmedAgain);
+            var confirmedAgain = AwaitPumped(App.ConfirmAllWindowsForQuitAsync([windowA, windowB]));
+            check("with both windows now answering cleanly, the quit is confirmed", confirmedAgain is true);
         }
         finally
         {
@@ -2949,6 +3029,14 @@ internal static class Program
             windowB.SkipCloseConfirmation();
             windowB.Close();
             MenuProbe.Pump();
+        }
+
+        // The task's answer, with the dispatcher running while it is awaited; null if it
+        // has not answered in ten seconds, which fails the check instead of hanging the run.
+        static bool? AwaitPumped(Task<bool> task)
+        {
+            PumpUntil(() => task.IsCompleted, TimeSpan.FromSeconds(10));
+            return task.IsCompletedSuccessfully ? task.Result : null;
         }
     }
 

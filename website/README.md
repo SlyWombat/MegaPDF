@@ -113,7 +113,8 @@ one went stale with the 2.1 tab strip (#348).
 | `shot-viewer/text/search/sign/draw/home.png` | `captures-2.1.1/ios-screenshots/en/iphone-6_9-<state>.png` (1320×2868) | exactly a third: **440×956** |
 | `screenshot-viewer.png` | `captures-2.1.1/ios-screenshots/en/iphone-6_9-viewer.png` | exactly a half: **660×1434** |
 | `shot-desktop.png` | `captures-2.1.1/macos-screenshots/en/light-05-redact.png` (1440×900) | exactly two-thirds: **960×600** |
-| `screenshots/linux/{en,fr-CA,fr-FR}/*` | `tools/linux/store-captures.sh` on 2026-09-26, from a `tools/build-linux-app.sh` build of main at `0733111`, 1280×800 (PR for #395) | as captured |
+| `screenshots/linux/{en,fr-CA,fr-FR}/01-05` | `tools/linux/store-captures.sh` on 2026-09-26, from a `tools/build-linux-app.sh` build of main at `0733111`, 1280×800 (PR for #395) | as captured |
+| `screenshots/linux/{en,fr-CA,fr-FR}/06-home.png` | the same script, later on 2026-09-26, from a build of the #412 fix (the empty window's Open, zoom box and status line, which the `0733111` build showed disabled, blank and empty) | as captured |
 
 The iPhone set is the App Store listing set, so its poses and the captions under
 them are the ones in `docs/app-store-listing.md` § Screenshots. The desktop shot
