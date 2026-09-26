@@ -1272,6 +1272,288 @@ int RunDiagBaseline(const std::vector<std::string>& pdfs) {
     return 0;
 }
 
+// ---------------------------------------------------------------------------
+// headingdiag mode (#375 investigation only -- not part of the #354 battery/gate).
+//
+// Characterizes the bold-at-body-size HEADING rule (core/megapdf_structure.cpp's
+// GatherOneBlock; design #142 section 1.2: "bold at >= body [size], < 70% column width,
+// followed by a gap") corpus-wide, to test #375's report that this rule over-fires on
+// tabular/invoice/statement documents (table headers, address fragments, dollar values,
+// form-field labels wrongly read as headings) and #375's own coordinator follow-up (a
+// 25-document hand read finding the same over-firing on documents an XY-cut column signal
+// alone would not flag: a single-column forwarded-email header block and a label/value form
+// summary, neither one a literal multi-column layout).
+//
+// This mode never reads megapdf_structure.cpp's own internal cutter state (this tool is built
+// standalone against the public contract-9 ABI, same discipline as every mode above). It
+// distinguishes the heading rule's two routes from megapdf_span::size_ratio alone: given a
+// HEADING block, GatherOneBlock only reaches the bold-at-body branch when the earlier
+// size->=1.15x-body branch already failed for every line in the group, so a HEADING block
+// whose spans' char-weighted average size_ratio is < kHeadingSizeRatioMirror (1.15, mirroring
+// megapdf_structure.cpp's kHeadingSizeRatio) came from the bold branch, not the size branch --
+// exact, given the two routes the current code has, not an approximation.
+//
+// Two structural signals, both measured, neither assumed correct in advance:
+//   1. RUN LENGTH -- how many bold-at-body HEADING blocks appear back-to-back in a page's own
+//      content stream (HEADING/PARAGRAPH/LIST_ITEM blocks only, in reading order -- the same
+//      set GatherOneBlock's `content` vector holds before figures/fields/furniture are spliced
+//      in, so a figure or a filled form field between two headings does not break a run any
+//      more than it would in the real pipeline). A genuine heading is a rare, isolated
+//      structural marker (design's own two/three examples, and this issue's legal-contract
+//      counter-example: 3 correct headings out of 137 lines, none adjacent to another). A
+//      table column, a forwarded email's header block or a form's label/value list produces
+//      MANY short bold-at-body "headings" one after another with nothing else between them.
+//   2. XY-CUT COLUMN CENSUS -- the SAME per-page multi_column/many_cut proxy `check`/`census`
+//      already compute (ColumnCensusForPage, above) -- the issue's OWN suggested direction
+//      (suppress inside a detected multi-cut/tabular region). Tallied per bold-at-body heading,
+//      split by isolated (run length 1) vs. clustered (run length >= 3), to measure how much of
+//      the clustered population a column-count-only signal would actually have covered.
+// Plus two independent, purely-numeric proxies for "this individual heading looks like a false
+// positive" (the text itself is inspected to compute these but never printed, stored or
+// otherwise leaves this process -- same corpus-privacy discipline as every mode above):
+//   - SHORT: at most kShortTextChars UTF-16 code units in the block's whole text (a rough,
+//     surrogate-pair-insensitive proxy for "short label", not an exact character count).
+//   - NUMERIC_LIKE: the text contains no Unicode letter at all (IsLetterCpLocal's own ASCII/
+//     Latin-1/Latin-Extended-A range, the same letter set Tokenize's IsWordCodepoint draws
+//     from, minus the digit range) -- a dollar amount, an account number, a bare code, a lone
+//     colon or dash all qualify; "Total:" does not (it has letters), which is deliberate: that
+//     case is exactly the "short label" SHORT alone is for.
+// ---------------------------------------------------------------------------
+constexpr double kHeadingSizeRatioMirror = 1.15;   // mirrors megapdf_structure.cpp's kHeadingSizeRatio.
+constexpr int kShortTextChars = 20;
+
+bool IsLetterCpLocal(unsigned int c) {
+    if (c >= 'A' && c <= 'Z') return true;
+    if (c >= 'a' && c <= 'z') return true;
+    if (c >= 0xC0 && c <= 0xFF && c != 0xD7 && c != 0xF7) return true;  // Latin-1 Supplement letters
+    if (c >= 0x100 && c <= 0x17F) return true;                          // Latin Extended-A
+    return false;
+}
+
+double BlockAvgSizeRatio(const megapdf_structure* s, size_t idx) {
+    const size_t n = megapdf_block_span_count(s, idx);
+    double weighted = 0;
+    long long total_chars = 0;
+    for (size_t si = 0; si < n; si++) {
+        megapdf_span sp{};
+        if (megapdf_block_span_get(s, idx, si, &sp) != MEGAPDF_OK) continue;
+        const size_t len = megapdf_block_span_string(s, idx, si, nullptr, 0);
+        weighted += sp.size_ratio * static_cast<double>(len);
+        total_chars += static_cast<long long>(len);
+    }
+    return total_chars > 0 ? weighted / static_cast<double>(total_chars) : 1.0;
+}
+
+// See the file comment above: exact given the two current heading routes, not a heuristic
+// guess -- a HEADING block reaches this branch only because GatherOneBlock's earlier
+// size->=1.15x-body test already failed for it.
+bool BlockIsBoldAtBodyHeading(const megapdf_structure* s, size_t idx) {
+    return BlockAvgSizeRatio(s, idx) < kHeadingSizeRatioMirror;
+}
+
+struct HeadingDiagTotals {
+    long long docs = 0, pages = 0;
+    long long heading_size_based = 0;   // the size->=1.15x-body route -- not this issue's rule
+    long long heading_bold_total = 0;   // every bold-at-body HEADING block, any run length
+
+    // Run-length histogram: RUNS (one count per maximal back-to-back run) and BLOCKS (sum of
+    // run length over every run in that bucket, i.e. how many HEADING blocks the bucket holds).
+    long long runs_run1 = 0, runs_run2 = 0, runs_run3_9 = 0, runs_run10_49 = 0, runs_run50_plus = 0;
+    long long blocks_run1 = 0, blocks_run2 = 0, blocks_run3_9 = 0, blocks_run10_49 = 0, blocks_run50_plus = 0;
+    long long max_run_len = 0;
+    long long pages_with_extreme_run = 0;   // >= 1 run of length >= 50 on the page (#375's "1,000+" document's shape)
+    // A DIFFERENT, pre-existing defect this investigation surfaced but does not fix (out of
+    // #375's scope: it degenerates the size->=1.15x-body route, not the bold-at-body one):
+    // megapdf_structure_body_size() rounds to exactly 0 for a document whose modal
+    // (character-count-weighted) font-size bucket is dominated by a near-zero reported size
+    // (ComputeBodySize's own 0.5pt rounding, core/megapdf_structure.cpp) -- ordinarily
+    // impossible to hit with real body text, but seen on a small minority of real corpus
+    // documents (a hidden OCR text layer with a degenerate font-size/matrix combination is the
+    // likely source, not confirmed here). With body_size == 0, LineQualifiesBySize's own
+    // `line_size >= 1.15 * body_size` degenerates to `line_size >= 0`, true for essentially
+    // every line on the page, AND megapdf_span::size_ratio is left at its zero default
+    // (AssignSizeRatios's own `if (body_size <= 0) return;` guard) -- which is what an extreme
+    // run's size_ratio_min/max both reading exactly 0 here means. Tracked so a persisting
+    // extreme run is not mistaken for this fix's run/numeric-like suppression failing to fire:
+    // a block on one of these documents is virtually always classified by the SIZE route, not
+    // the bold-at-body one this fix targets, so DemoteFalsePositiveHeadingRuns correctly leaves
+    // it alone.
+    long long docs_zero_body_size = 0;
+    long long extreme_runs_on_zero_body_size_docs = 0;
+
+    // Proxies, tallied for isolated (run==1), run==2 (the boundary case) and clustered (run>=3,
+    // the threshold the fix hypothesis below tests) heading blocks separately.
+    long long isolated_total = 0, isolated_short = 0, isolated_numeric = 0;
+    long long run2_total = 0, run2_short = 0, run2_numeric = 0;
+    long long clustered_total = 0, clustered_short = 0, clustered_numeric = 0;
+
+    // Column-census overlap (isolated vs. clustered only -- the contrast the issue's suggested
+    // fix direction needs measured).
+    long long isolated_on_multicol_page = 0, isolated_on_manycut_page = 0;
+    long long clustered_on_multicol_page = 0, clustered_on_manycut_page = 0;
+};
+
+void RunHeadingDiagOnDoc(const std::string& pdf, HeadingDiagTotals* totals) {
+    megapdf_document* doc = megapdf_open_file(pdf.c_str(), nullptr);
+    if (doc == nullptr) return;
+    const int pages = megapdf_page_count(doc);
+    if (pages <= 0) { megapdf_close(doc); return; }
+    // MEGAPDF_STRUCTURE_DEFAULT (0): furniture dropped, only non-empty fields kept -- the
+    // ordinary consumer's own view (e.g. #357's Markdown export), which is what #375's
+    // hand-check actually read.
+    megapdf_structure* s = megapdf_structure_load(doc, 0, pages, MEGAPDF_STRUCTURE_DEFAULT, nullptr);
+    if (s == nullptr) { megapdf_close(doc); return; }
+    const double body_size = megapdf_structure_body_size(s);
+
+    const size_t n_blocks = megapdf_block_count(s);
+    std::vector<std::vector<std::pair<size_t, megapdf_block>>> by_page(static_cast<size_t>(pages));
+    for (size_t i = 0; i < n_blocks; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (b.page < 0 || b.page >= pages) continue;
+        by_page[static_cast<size_t>(b.page)].push_back({i, b});
+    }
+
+    totals->docs++;
+    // See docs_zero_body_size's comment: with body_size <= 0, megapdf_span::size_ratio is left
+    // at its zero default for every span (AssignSizeRatios's own guard), so
+    // BlockIsBoldAtBodyHeading's re-derivation cannot tell the two heading routes apart on this
+    // document at all -- everything would misread as "bold". Such a document is excluded from
+    // the bold/run measurement entirely (kept out of heading_bold_total, the run histogram and
+    // the proxies) rather than silently polluting them; `extreme_runs_on_zero_body_size_docs`
+    // separately tallies its own (kind == HEADING, any route) run lengths so the residual is
+    // still explained, not just hidden.
+    const bool degenerate_body_size = body_size <= 0;
+    if (degenerate_body_size) totals->docs_zero_body_size++;
+    for (int p = 0; p < pages; p++) {
+        const auto& page_blocks_all = by_page[static_cast<size_t>(p)];
+        totals->pages++;
+
+        if (degenerate_body_size) {
+            size_t run = 0;
+            for (const auto& pr : page_blocks_all) {
+                if (pr.second.kind == MEGAPDF_BLOCK_HEADING) {
+                    run++;
+                } else if (pr.second.kind == MEGAPDF_BLOCK_PARAGRAPH || pr.second.kind == MEGAPDF_BLOCK_LIST_ITEM) {
+                    if (run >= 50) totals->extreme_runs_on_zero_body_size_docs++;
+                    run = 0;
+                }
+            }
+            if (run >= 50) totals->extreme_runs_on_zero_body_size_docs++;
+            continue;
+        }
+
+        // The same page-level census `check`/`census` already compute, over the same block set
+        // (ColumnCensusForPage filters to HEADING/PARAGRAPH/LIST_ITEM/TABLE_ROW itself).
+        std::vector<megapdf_block> plain;
+        plain.reserve(page_blocks_all.size());
+        for (const auto& pr : page_blocks_all) plain.push_back(pr.second);
+        const ColumnCensus cc = ColumnCensusForPage(plain, body_size);
+
+        // The content stream GatherOneBlock itself builds a page from, before figures/fields/
+        // furniture are spliced in: HEADING/PARAGRAPH/LIST_ITEM only, in reading order.
+        struct Item {
+            size_t idx;
+            bool is_heading;
+            bool is_bold;
+        };
+        std::vector<Item> stream;
+        stream.reserve(page_blocks_all.size());
+        for (const auto& pr : page_blocks_all) {
+            const megapdf_block& b = pr.second;
+            if (b.kind != MEGAPDF_BLOCK_HEADING && b.kind != MEGAPDF_BLOCK_PARAGRAPH &&
+                b.kind != MEGAPDF_BLOCK_LIST_ITEM) {
+                continue;
+            }
+            Item it;
+            it.idx = pr.first;
+            it.is_heading = b.kind == MEGAPDF_BLOCK_HEADING;
+            it.is_bold = it.is_heading && BlockIsBoldAtBodyHeading(s, pr.first);
+            if (it.is_heading && !it.is_bold) totals->heading_size_based++;
+            stream.push_back(it);
+        }
+
+        bool page_has_extreme_run = false;
+        for (size_t k = 0; k < stream.size();) {
+            if (!stream[k].is_bold) { k++; continue; }
+            size_t j = k;
+            while (j < stream.size() && stream[j].is_bold) j++;
+            const size_t run_len = j - k;
+            totals->heading_bold_total += static_cast<long long>(run_len);
+            totals->max_run_len = (std::max)(totals->max_run_len, static_cast<long long>(run_len));
+            if (run_len >= 50) page_has_extreme_run = true;
+
+            long long* runs_bucket;
+            long long* blocks_bucket;
+            if (run_len == 1) { runs_bucket = &totals->runs_run1; blocks_bucket = &totals->blocks_run1; }
+            else if (run_len == 2) { runs_bucket = &totals->runs_run2; blocks_bucket = &totals->blocks_run2; }
+            else if (run_len <= 9) { runs_bucket = &totals->runs_run3_9; blocks_bucket = &totals->blocks_run3_9; }
+            else if (run_len <= 49) { runs_bucket = &totals->runs_run10_49; blocks_bucket = &totals->blocks_run10_49; }
+            else { runs_bucket = &totals->runs_run50_plus; blocks_bucket = &totals->blocks_run50_plus; }
+            (*runs_bucket)++;
+            (*blocks_bucket) += static_cast<long long>(run_len);
+
+            const bool isolated = run_len == 1;
+            const bool clustered = run_len >= 3;
+            for (size_t m = k; m < j; m++) {
+                const size_t bidx = stream[m].idx;
+                const std::vector<unsigned short> text16 = BlockString(s, bidx, MEGAPDF_BLOCK_TEXT);
+                const std::vector<unsigned int> cps = Utf16ToCodepoints(text16);
+                bool has_letter = false;
+                for (unsigned int c : cps) {
+                    if (IsLetterCpLocal(c)) { has_letter = true; break; }
+                }
+                const bool numeric_like = !has_letter && !cps.empty();
+                const bool is_short = cps.size() <= static_cast<size_t>(kShortTextChars);
+                if (isolated) {
+                    totals->isolated_total++;
+                    if (is_short) totals->isolated_short++;
+                    if (numeric_like) totals->isolated_numeric++;
+                    if (cc.multi_column) totals->isolated_on_multicol_page++;
+                    if (cc.many_cut) totals->isolated_on_manycut_page++;
+                } else if (clustered) {
+                    totals->clustered_total++;
+                    if (is_short) totals->clustered_short++;
+                    if (numeric_like) totals->clustered_numeric++;
+                    if (cc.multi_column) totals->clustered_on_multicol_page++;
+                    if (cc.many_cut) totals->clustered_on_manycut_page++;
+                } else {
+                    totals->run2_total++;
+                    if (is_short) totals->run2_short++;
+                    if (numeric_like) totals->run2_numeric++;
+                }
+            }
+            k = j;
+        }
+        if (page_has_extreme_run) totals->pages_with_extreme_run++;
+    }
+    megapdf_structure_free(s);
+    megapdf_close(doc);
+}
+
+int RunHeadingDiag(const std::vector<std::string>& pdfs) {
+    HeadingDiagTotals t;
+    for (const auto& pdf : pdfs) RunHeadingDiagOnDoc(pdf, &t);
+    std::printf("headingdiag docs=%lld pages=%lld\n", t.docs, t.pages);
+    std::printf("heading_size_based=%lld heading_bold_total=%lld max_run_len=%lld pages_with_extreme_run(>=50)=%lld\n",
+                t.heading_size_based, t.heading_bold_total, t.max_run_len, t.pages_with_extreme_run);
+    std::printf("runs_by_length 1=%lld 2=%lld 3-9=%lld 10-49=%lld 50+=%lld\n", t.runs_run1, t.runs_run2,
+                t.runs_run3_9, t.runs_run10_49, t.runs_run50_plus);
+    std::printf("bold_heading_blocks_by_run_length 1=%lld 2=%lld 3-9=%lld 10-49=%lld 50+=%lld\n", t.blocks_run1,
+                t.blocks_run2, t.blocks_run3_9, t.blocks_run10_49, t.blocks_run50_plus);
+    std::printf("isolated(run=1) total=%lld short=%lld numeric_like=%lld on_multicol_page=%lld on_manycut_page=%lld\n",
+                t.isolated_total, t.isolated_short, t.isolated_numeric, t.isolated_on_multicol_page,
+                t.isolated_on_manycut_page);
+    std::printf("run2 total=%lld short=%lld numeric_like=%lld\n", t.run2_total, t.run2_short, t.run2_numeric);
+    std::printf("clustered(run>=3) total=%lld short=%lld numeric_like=%lld on_multicol_page=%lld on_manycut_page=%lld\n",
+                t.clustered_total, t.clustered_short, t.clustered_numeric, t.clustered_on_multicol_page,
+                t.clustered_on_manycut_page);
+    std::printf("docs_zero_body_size=%lld extreme_runs_on_zero_body_size_docs=%lld (excluded from every number "
+                "above -- see HeadingDiagTotals's own comment)\n",
+                t.docs_zero_body_size, t.extreme_runs_on_zero_body_size_docs);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1305,10 +1587,21 @@ int main(int argc, char** argv) {
         for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
         return RunDiagBaseline(pdfs);
     }
+    if (argc >= 3 && std::strcmp(argv[1], "headingdiag") == 0) {
+        // #375 investigation only: structure_check headingdiag <pdf> [<pdf> ...]
+        // Characterizes the bold-at-body-size HEADING rule's over-firing (see the
+        // HeadingDiagTotals comment above): run-length clustering, XY-cut column-census
+        // overlap, and short/numeric-text proxies.
+        std::vector<std::string> pdfs;
+        for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
+        return RunHeadingDiag(pdfs);
+    }
     std::printf("usage:\n"
                 "  structure_check check <pdf> [--dump <dir> --dump-id <id>] [--reference <pdftotext-file>]\n"
                 "                              [--cli-reference <megapdf-cli-output-file>]\n"
                 "  structure_check census <pdf>\n"
-                "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n");
+                "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n"
+                "  structure_check diagbaseline <pdf> [<pdf> ...]   (#363 follow-up investigation only)\n"
+                "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n");
     return 64;
 }
