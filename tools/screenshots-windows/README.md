@@ -46,24 +46,24 @@ shot once per listing language: `en-US`, `fr-CA`, `fr-FR`.
                       -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame
 
     # 3. shot 1 — click the misspelled name, retype it (caret must be visible)
-    .\Shot-TextEdit.ps1 -X 880 -Y 538 -Text "Nom : Helene Belanger"   # with the accents
+    .\Shot-TextEdit.ps1 -X 880 -Y 598 -Text "Nom : Helene Belanger"   # with the accents
 
     # 4. shot 2 — commit the edit, tick two of the three boxes
-    .\Shot-Checkboxes.ps1 -X 787 -Y1 707 -Y2 759
+    .\Shot-Checkboxes.ps1 -X 787 -Y1 767 -Y2 819
 
     # 5. shot 3 — arm the signature, drop it on the line, let go of it
     .\Open-SignatureFlyout.ps1        # once, to locate the library item
     .\Arm-Signature.ps1 -Notches 0 -X 510 -Y 248
-    .\Place-Signature.ps1 -X 1022 -Y 1400
+    .\Place-Signature.ps1 -X 1022 -Y 1460
 
     # 6. shot 5 — Add text with the size and face pickers showing (#43)
-    .\Shot-AddText.ps1 -X 1390 -Y 1360 -Text "18 mars 2026"
+    .\Shot-AddText.ps1 -X 1390 -Y 1420 -Text "18 mars 2026"
 
     # 7. shot 4 — save, open the scan, Shrink for email (last: it replaces the document)
     .\Shot-Shrink.ps1 -Pdf "<repo>\...\fr-CA\scanned-agreement.pdf" -Lang fr-CA
     # 8. shot 6 — reopen the finished agreement, mark the name, save a redacted copy
     .\Setup-Frame.ps1 -W 2500 -T 1550 -Pdf "<repo>\...\fr-CA\blank-agreement.pdf" -Fit "ActualSizeItem" -ZoomIn 0 -Name probe-frame-redact
-    .\Shot-Redact.ps1 -Lang fr-CA -Save
+    .\Shot-Redact.ps1 -Lang fr-CA -Save -Y1 580 -Y2 616
 
 **Shoot at 100%, not at a fit.** "Fit page then one zoom in" landed on 109% in every
 shot, and a listing image with a number like that in the toolbar reads like an
@@ -107,7 +107,10 @@ the library up (use `Reset-SignatureLibrary.ps1`). `Test-ToolbarWidths.ps1` capt
 toolbar strips across a list of widths. `Shot-Now.ps1` grabs the current state.
 
 **The coordinates above are for a 2500x1550 window on a 2560x1600 display at 150%
-scale** (GPD-DAVE, re-read 2026-09-17 against the one-row toolbar of #144 at 100%
+scale**, re-read 2026-09-26 for the 2.1.1 tab strip (#348): the strip sits between the
+toolbar and the page, so the page top is at 213 rather than 153 and every page coordinate
+is 60 px lower than the 2.0/2.1.0 set's; the signature flyout hangs off the toolbar and its
+row did not move. Before that (GPD-DAVE, re-read 2026-09-17 against the one-row toolbar of #144 at 100%
 zoom; the 2026-09-09 set was for the two-row bar and clicks the wrong things now). The set
 before that was a 3060x2000 window on a 3240x2160 display at 200%.
 
