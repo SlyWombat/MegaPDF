@@ -1,5 +1,6 @@
 package com.megapdf.android
 
+import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.widget.Toast
@@ -9,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import com.megapdf.android.ui.MegaPdfTheme
 import androidx.compose.material3.Surface
@@ -23,6 +25,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
+    // Held here, not just inside the composable's default `viewModel()`, so onCreate and
+    // onNewIntent (#376) share the same instance the UI observes rather than each resolving
+    // their own.
+    private val viewModel: ViewerViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Edge-to-edge, declared rather than inherited (#40). Targeting API 36
         // makes it mandatory — Android 16 ignores the opt-out — so saying it here
@@ -40,13 +47,31 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         val screenshotState = intent.getStringExtra("screenshot")
+        handleViewIntent(intent)
         setContent {
             MegaPdfTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    MegaPdfApp(screenshotState = screenshotState)
+                    MegaPdfApp(viewModel = viewModel, screenshotState = screenshotState)
                 }
             }
         }
+    }
+
+    /**
+     * A second `ACTION_VIEW` (#376) while this activity is already running — the same PDF
+     * viewer, launched again from another app's chooser rather than a fresh process. Single
+     * activity, so there is no second window to open it in: it replaces whatever is on
+     * screen, same as picking a different document from the in-app Open would, guarded by
+     * the same unsaved-changes prompt.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleViewIntent(intent)
+    }
+
+    private fun handleViewIntent(intent: Intent) {
+        ViewIntent.uriToOpen(intent.action, intent.data)?.let(viewModel::requestOpenExternal)
     }
 }
 
@@ -279,6 +304,33 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                     },
                 )
             }
+            // A document handed in from another app (#376) while this one has unsaved
+            // changes: same Save/Discard/Cancel shape as closing the viewer by hand, since
+            // silently dropping an edit for a PDF that just arrived by mail would surprise
+            // someone worse than asking.
+            if (viewModel.pendingExternalOpen != null) {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = viewModel::cancelExternalOpen,
+                    title = { androidx.compose.material3.Text(stringResource(R.string.unsaved_changes)) },
+                    text = { androidx.compose.material3.Text(stringResource(R.string.unsaved_changes_body)) },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = viewModel::saveAndOpenExternal) {
+                            androidx.compose.material3.Text(stringResource(R.string.save))
+                        }
+                    },
+                    dismissButton = {
+                        androidx.compose.foundation.layout.Row {
+                            androidx.compose.material3.TextButton(onClick = viewModel::cancelExternalOpen) {
+                                androidx.compose.material3.Text(stringResource(R.string.cancel))
+                            }
+                            androidx.compose.material3.TextButton(onClick = viewModel::discardAndOpenExternal) {
+                                androidx.compose.material3.Text(stringResource(R.string.discard))
+                            }
+                        }
+                    },
+                )
+            }
+
             viewModel.redactionRefusal?.let { refusal ->
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { viewModel.redactionRefusal = null },
