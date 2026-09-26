@@ -1288,25 +1288,34 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
 }
 
 // No genuine section heading is pure digits/currency/punctuation with no letter in it at all
-// (a dollar amount, an account number, a bare code, a lone colon or dash). The same letter set
-// design §1.2 "Lists" and IsRomanLetter/IsAsciiLetter already draw the line at (ASCII, plus
-// Latin-1 Supplement and Latin Extended-A, kept in sync with tools/structure-check's own
-// mirror -- see kHeadingRunSuppressThreshold's comment).
-bool IsLetterCp(unsigned int cp) {
-    if (cp >= 'A' && cp <= 'Z') return true;
-    if (cp >= 'a' && cp <= 'z') return true;
-    if (cp >= 0xC0 && cp <= 0xFF && cp != 0xD7 && cp != 0xF7) return true;  // Latin-1 Supplement letters
-    if (cp >= 0x100 && cp <= 0x17F) return true;                            // Latin Extended-A
-    return false;
+// (a dollar amount, an account number, a bare code, a lone colon or dash) -- but this is a
+// POSITIVE allowlist (digits plus the punctuation such a value is made of), not "contains no
+// Latin letter": code review on this PR caught that the obvious negative phrasing (this file
+// already has an ASCII/Latin-1/Latin-Extended-A IsLetterCp-style test elsewhere, e.g.
+// IsAsciiLetter/IsRomanLetter above) would demote a genuine, isolated heading written in any
+// script that test does not cover -- Cyrillic, Greek, Arabic, CJK -- merely because none of its
+// letters are recognised, which is exactly the over-suppression this fix must not introduce.
+// An allowlist cannot make that mistake: a real word in ANY script is not made entirely of
+// digits and this punctuation set, whether or not this file's letter-detection covers its
+// alphabet. At least one digit is required, so a heading that is pure punctuation (not a
+// realistic bold-at-body heading, and not a numeric label either) does not qualify.
+bool IsNumericLikePunctuation(unsigned int cp) {
+    switch (cp) {
+        case '.': case ',': case ':': case ';': case '-': case '(': case ')': case '/':
+        case '%': case '#': case '$': case 0x00A3 /* £ */: case 0x20AC /* € */: case ' ':
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool IsNumericLikeText(const U16& text) {
-    bool any = false;
+    bool saw_digit = false;
     for (unsigned short u : text) {
-        any = true;
-        if (IsLetterCp(u)) return false;
+        if (IsAsciiDigit(u)) { saw_digit = true; continue; }
+        if (!IsNumericLikePunctuation(u)) return false;
     }
-    return any;
+    return saw_digit;
 }
 
 // #375: demotes (to PARAGRAPH -- every character stays in a block, design §1 item 8) the
@@ -1319,6 +1328,16 @@ bool IsNumericLikeText(const U16& text) {
 // heading_bold_at_body alone (not by proximity/style beyond that): a run's members already
 // share "bold, <= body size, wide enough of a gap to end the previous block" by construction,
 // since GatherOneBlock only emits a HEADING block that way.
+//
+// Called once per page (BuildPageContent), on that page's own `content` alone: a tabular/label
+// run whose last row falls on one page and continues at the top of the next is judged as two
+// separate, shorter runs rather than one, which can leave a short remainder run (as short as a
+// single block on each side) unsuppressed by the run-length signal alone. Not joined across the
+// page boundary here -- BuildPageContent has no easy access to the next/previous page's already-
+// built content at the point this runs, and the corpus measurement in this PR's PR description
+// (run lengths, not page boundaries) does not show this materially understating the fix's
+// effect. The numeric-like check is unaffected either way, since it does not depend on run
+// length.
 void DemoteFalsePositiveHeadingRuns(std::vector<BlockImpl>* content) {
     size_t k = 0;
     while (k < content->size()) {
