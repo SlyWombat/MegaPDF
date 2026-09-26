@@ -515,6 +515,14 @@
     <value>Impossible d'enregistrer.</value>
     <comment>Technical detail follows</comment>
   </data>
+  <data name="ExportedFile" xml:space="preserve">
+    <value>{0} exporté.</value>
+    <comment>#386, Markdown export completion — deliberately not "Saved {0}."</comment>
+  </data>
+  <data name="CouldNotExport" xml:space="preserve">
+    <value>Impossible d'exporter.</value>
+    <comment>#386, Markdown export failure. Technical detail follows; deliberately not "Could not save."</comment>
+  </data>
   <data name="SavedDocumentUnreadable" xml:space="preserve">
     <value>Le document enregistré n'a pas pu être relu, l'original a donc été laissé intact.</value>
     <comment>VerifiedSave.UnreadableOutputException</comment>
@@ -537,6 +545,10 @@
   <data name="PdfDocument" xml:space="preserve">
     <value>Document PDF</value>
     <comment>File-type name in pickers</comment>
+  </data>
+  <data name="MarkdownDocument" xml:space="preserve">
+    <value>Document Markdown</value>
+    <comment>#386, file-type name in the Save As/Export picker's format choices</comment>
   </data>
   <data name="SaveBeforeShrinking" xml:space="preserve">
     <value>Enregistrez d'abord vos modifications, puis réduisez le fichier enregistré.</value>
@@ -827,6 +839,10 @@
   <data name="BusySaving" xml:space="preserve">
     <value>Enregistrement…</value>
     <comment>Busy strip while a document is saved (#145)</comment>
+  </data>
+  <data name="BusyExporting" xml:space="preserve">
+    <value>Exportation…</value>
+    <comment>#386, busy strip while a Markdown export is written — deliberately not "Saving…"</comment>
   </data>
   <data name="BusyCheckingSavedFile" xml:space="preserve">
     <value>Vérification du fichier enregistré…</value>
