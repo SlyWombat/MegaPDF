@@ -45,5 +45,6 @@ export PATH=/usr/bin:/bin
 case "${1:-}" in
     version-info) shift; exec python3 "$here/asc_version_info.py" "$@" ;;
     assets-state) shift; exec python3 "$here/asc_assets_state.py" "$@" ;;
+    api)          shift; exec "$here/asc.sh" "$@" ;;   # raw call: api [GET|POST|PATCH|DELETE] <path> [body-file]
     *)            exec python3 "$here/asc_publish.py" "$@" ;;
 esac
