@@ -37,6 +37,17 @@ sparsely-laid-out front page) and both computed from data the battery already ga
 Threshold for "scores badly": tau < 0.9 by default — the same median gate #354 already uses
 for measure 2 (order agreement on tagged pages), reused here for consistency rather than
 inventing a new number.
+
+Proxy C (added alongside the #384 mitigation's own grounding pass): the reading-order-jump
+measure structure_check.cpp's MaxBackwardJumpUnits computes per page (tau_ref_jump, x1000,
+same index alignment as tau_ref/tau_ref_page/tau_ref_tokens/tau_ref_area) -- how far, in
+body-size units, the worst same-column backward reading-order jump on the page was, or 0 when
+none was found. This section sweeps a handful of candidate thresholds and reports, for each,
+what fraction of pages at or above it score tau < --tau-bad, and what fraction of ALL measured
+pages that threshold would flag -- the two numbers #384's mitigation threshold was picked from
+(a threshold worth using needs both a real lift over the corpus baseline AND a small enough
+flagged population that it stays "a penalty for a real minority", not something that fires on
+ordinary pages).
 """
 import argparse
 import os
@@ -107,15 +118,16 @@ def percentile(values, p):
 
 
 class PageRow:
-    __slots__ = ("doc_id", "doc_pages", "page_idx", "tau", "tokens", "area")
+    __slots__ = ("doc_id", "doc_pages", "page_idx", "tau", "tokens", "area", "jump")
 
-    def __init__(self, doc_id, doc_pages, page_idx, tau, tokens, area):
+    def __init__(self, doc_id, doc_pages, page_idx, tau, tokens, area, jump):
         self.doc_id = doc_id
         self.doc_pages = doc_pages
         self.page_idx = page_idx
         self.tau = tau
         self.tokens = tokens
         self.area = area
+        self.jump = jump
 
 
 def collect_page_rows(rows):
@@ -131,15 +143,23 @@ def collect_page_rows(rows):
         pages_idx = as_int_list(r, "tau_ref_page")
         tokens = as_int_list(r, "tau_ref_tokens")
         areas = as_int_list(r, "tau_ref_area")
+        # tau_ref_jump (the #384 mitigation's own grounding field) postdates the other three:
+        # a battery log from before that change has no such field at all. Falling back to a
+        # same-length list of zeros (rather than skipping the row, as the length-mismatch
+        # check below does for a genuinely partial line) keeps Proxies A/B usable against an
+        # older log while Proxy C honestly reports "no jump data" via jump_field_present.
+        jump_field_present = "tau_ref_jump" in r
+        jumps = as_int_list(r, "tau_ref_jump") if jump_field_present else [0] * len(taus)
         if not taus:
             continue
-        if not (len(taus) == len(pages_idx) == len(tokens) == len(areas)):
+        if not (len(taus) == len(pages_idx) == len(tokens) == len(areas) == len(jumps)):
             # A battery run predating this investigation's fields, or a partial line — skip
             # rather than mismatch index-aligned lists silently.
             continue
         docs_with_tau_ref += 1
-        for tau, pidx, tok, area in zip(taus, pages_idx, tokens, areas):
-            out.append(PageRow(r["_id"], doc_pages, pidx, tau / 1000.0, tok, area))
+        for tau, pidx, tok, area, jump in zip(taus, pages_idx, tokens, areas, jumps):
+            out.append(PageRow(r["_id"], doc_pages, pidx, tau / 1000.0, tok, area,
+                                jump / 1000.0 if jump_field_present else None))
     return out, docs_ok, docs_with_tau_ref
 
 
@@ -236,6 +256,37 @@ def main():
     all_taus = [p.tau for p in page_rows]
     print()
     summarize_group("ALL measured pages (corpus-wide baseline)", all_taus, args.tau_bad)
+
+    # ---- Proxy C: the #384 mitigation's own grounding measure (reading-order jump). ----
+    print()
+    print("=== Proxy C: reading-order jump (tau_ref_jump, body-size units) vs the rest ===")
+    jump_rows = [p for p in page_rows if p.jump is not None]
+    if not jump_rows:
+        print("  no tau_ref_jump data in this run (battery log predates the #384 mitigation's "
+              "measurement fields) -- re-run structure-battery.sh with the current "
+              "structure_check to get this section.")
+    else:
+        print(f"  pages with jump data: {len(jump_rows):,} of {total_pages:,}")
+        zero = [p.tau for p in jump_rows if p.jump <= 0]
+        nonzero = [p.tau for p in jump_rows if p.jump > 0]
+        summarize_group("jump == 0 (no implausible same-column transition found)", zero, args.tau_bad)
+        summarize_group("jump  > 0 (at least one same-column backward transition)", nonzero, args.tau_bad)
+        print()
+        print("  threshold sweep (candidate cutoffs, in body-size units):")
+        print(f"  {'threshold':>10}  {'flagged pages':>14}  {'% of all pages':>15}  {'median tau (flagged)':>21}  "
+              f"{'tau<%.1f (flagged)' % args.tau_bad:>20}  {'tau<%.1f (rest)' % args.tau_bad:>17}")
+        for cutoff in (0.5, 1.0, 1.5, 2.0, 3.0, 5.0):
+            flagged = [p.tau for p in jump_rows if p.jump >= cutoff]
+            rest = [p.tau for p in jump_rows if p.jump < cutoff]
+            if not flagged:
+                print(f"  {cutoff:>10.1f}  {0:>14}  {0.0:>14.1f}%  {'n/a':>21}  {'n/a':>20}  "
+                      f"{100.0 * sum(1 for t in rest if t < args.tau_bad) / len(rest) if rest else 0:>16.1f}%")
+                continue
+            m = median(flagged)
+            bad_flagged = 100.0 * sum(1 for t in flagged if t < args.tau_bad) / len(flagged)
+            bad_rest = 100.0 * sum(1 for t in rest if t < args.tau_bad) / len(rest) if rest else 0.0
+            print(f"  {cutoff:>10.1f}  {len(flagged):>14,}  {100.0 * len(flagged) / len(jump_rows):>14.2f}%  "
+                  f"{m:>21.3f}  {bad_flagged:>19.1f}%  {bad_rest:>16.1f}%")
 
 
 if __name__ == "__main__":
