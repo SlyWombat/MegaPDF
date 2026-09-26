@@ -1909,8 +1909,52 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT. */
+    /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT, as a PDF. */
     fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
+
+    /**
+     * "Save a copy" picked Markdown instead (#386, `MainActivity`'s SAF mime-type list): a
+     * one-way export of the document's text (`megapdf_write_text`, `MEGAPDF_WRITE_MARKDOWN`),
+     * not an alternate save of the document — a `.md` cannot be reopened as one (no form
+     * fields, no signatures, no layout; contract 9's blocks are text only). Unlike
+     * [saveAs]/[writeTo] this never touches [currentUri], the persisted grant or Recents: the
+     * exported file is not, and never becomes, the app's current document — the SAF grant it
+     * comes with is left unpersisted, and it earns no entry in Recents.
+     *
+     * No verify-by-reopening either (unlike [writeVerified]): there is nothing to reopen a
+     * Markdown file as.
+     */
+    fun exportMarkdown(uri: Uri) {
+        val doc = document ?: return
+        if (isSaving || busy.locksDocument) return
+        isSaving = true
+        val token = busy.beginDocument(BusyLabel.EXPORTING, locks = true)
+        val app = getApplication<Application>()
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val pfd = app.contentResolver.openFileDescriptor(uri, "wt")
+                        ?: throw IllegalStateException("provider returned no descriptor")
+                    pfd.use {
+                        java.io.FileOutputStream(it.fileDescriptor).use { out ->
+                            doc.writeMarkdown(out)
+                            out.fd.sync()
+                        }
+                    }
+                }
+                statusMessage = str(R.string.exported_markdown)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: SecurityException) {
+                statusMessage = str(R.string.save_no_permission)
+            } catch (_: Exception) {
+                statusMessage = str(R.string.markdown_export_failed)
+            } finally {
+                isSaving = false
+                token.end()
+            }
+        }
+    }
 
     /** Share with no unsaved changes, or Discard from the unsaved-changes prompt (#378): the
      * document on disk already is what gets shared, so this exports it as-is. */
