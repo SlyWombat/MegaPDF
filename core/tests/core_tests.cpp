@@ -5604,6 +5604,14 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         // "form label" lines and one isolated numeric-like false positive -- see
         // gen_tabular_headings()'s own comment for the shape.
         {"tabular-headings", repo + "/structure/tabular-headings.pdf", 0, 0, 0},
+        // #384: the confidence-penalty mitigation's own regression case -- see
+        // gen_reading_order_jump()'s own comment for the shape (a bottom-of-page paragraph
+        // followed, in reading order, by a rotated top-of-page snippet: a large same-column
+        // backward jump with every other confidence deduction deliberately kept from firing).
+        // test_structure_reading_order_jump() below asserts the confidence value itself, not
+        // just the golden dump, so a regression here fails loudly rather than only on a golden
+        // diff nobody reads closely.
+        {"reading-order-jump", repo + "/structure/reading-order-jump.pdf", 0, 0, 0},
         {"xobject-text", repo + "/structure/xobject-text.pdf", 0, 0, 0},
         {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
         {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
@@ -5771,6 +5779,35 @@ void test_structure_furniture(const std::string& repo) {
           std::to_string(megapdf_structure_body_size(dropped)));
     megapdf_structure_free(dropped);
     megapdf_structure_free(kept);
+}
+
+// #384: HasImplausibleReadingOrderJump()'s regression case, asserted directly (not just
+// through the golden dump) so a regression here is unmistakable -- reading-order-jump.pdf
+// (gen_reading_order_jump()'s own comment has the shape) is built so exactly ONE of design §1
+// item 6's deductions fires: the bottom-of-page paragraph and the rotated top-of-page trailing
+// paragraph are far apart with no real 2D overlap (the pre-existing overlap penalty does not
+// fire) and the rotated snippet is far under kConfidenceRotatedTextShare of the page's
+// characters (the rotated-text penalty does not fire either) -- so a confidence anywhere other
+// than exactly 100 - kConfidenceOverlapPenalty (the same point value the #384 mitigation
+// reuses) means either the new penalty did not fire, or something else on this fixture did.
+void test_structure_reading_order_jump(const std::string& repo) {
+    Doc d(repo + "/structure/reading-order-jump.pdf");
+    if (!d.doc) { check(false, "structure reading-order-jump: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+    check(s != nullptr, "structure reading-order-jump: loads");
+    if (s == nullptr) return;
+    const int confidence = megapdf_structure_page_confidence(s, 0);
+    check(confidence == 80,
+          "structure reading-order-jump: confidence takes exactly the #384 jump deduction "
+          "(100 - 20), no other design §1 item 6 penalty firing alongside it",
+          std::to_string(confidence));
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        check(b.confidence == confidence, "structure reading-order-jump: every block carries the page confidence");
+    }
+    megapdf_structure_free(s);
 }
 
 // #145's cancellation pattern: a cancel raised before the call returns NULL, with
@@ -6290,6 +6327,7 @@ int main(int argc, char** argv) {
     test_structure_xobject_text(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_fields(argv[1]);
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);

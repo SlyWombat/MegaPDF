@@ -290,6 +290,38 @@ def gen_tabular_headings(regular, bold):
     return d.finish()
 
 
+def gen_reading_order_jump(regular, bold):
+    """#384: the confidence-penalty mitigation's own regression case -- a page whose reading
+    order takes an implausible geometric jump between two adjacent blocks, isolated from every
+    other confidence deduction so this fixture pins down HasImplausibleReadingOrderJump()
+    alone (design §1 item 6's other three penalties, plus the pre-existing overlap check,
+    all stay unfired here -- see the assertions this earns in test_structure_goldens()'s
+    caller, core_tests.cpp).
+
+    A normal multi-line body paragraph near the BOTTOM of the page, plus a short snippet of
+    ROTATED text (30 degrees, the same technique tools/gen_redaction_fixtures.py's
+    gen_text_rotated() uses) near the TOP, in the same horizontal band as the paragraph.
+    Rotated/unclassified text always becomes a trailing paragraph appended AFTER every normal
+    content block regardless of its own position on the page (design's rule, BuildLeftoverParagraph)
+    -- so the reading order goes from the paragraph at the bottom straight to the rotated
+    snippet at the top, a huge same-column backward jump with no real 2D box overlap (so the
+    pre-existing overlap penalty does not also fire) and too small a rotated share of the
+    page's characters to trip the existing rotated-text penalty on its own (kept well under
+    kConfidenceRotatedTextShare) -- isolating the #384 mitigation's own deduction.
+    """
+    d = Doc(regular, bold)
+    body = b""
+    y = 300
+    for i in range(6):
+        body += text_ops(b"F1", 12, 100, y, "Body text line %d of the normal reading flow." % i)
+        y -= 16
+    # 30 degrees about (100, 700), same matrix gen_redaction_fixtures.py's gen_text_rotated()
+    # uses -- short enough that its character count stays under 10% of the page's total.
+    body += (b"BT /F1 14 Tf .8660254 .5 -.5 .8660254 100 700 Tm (Rotated top note) Tj ET\n")
+    d.add_page(body)
+    return d.finish()
+
+
 def gen_xobject_text(regular, bold):
     d = Doc(regular, bold)
     fm_content = text_ops(b"F1", 14, 0, 0, "Text drawn by a form XObject.")
@@ -337,6 +369,7 @@ def main():
         ("lists.pdf", gen_lists),
         ("headings.pdf", gen_headings),
         ("tabular-headings.pdf", gen_tabular_headings),
+        ("reading-order-jump.pdf", gen_reading_order_jump),
         ("xobject-text.pdf", gen_xobject_text),
         ("scan.pdf", gen_scan),
         ("mixed.pdf", gen_mixed),
