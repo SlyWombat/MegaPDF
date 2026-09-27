@@ -29,8 +29,6 @@ fi
 
 # Empty for English — and an empty array under set -u is an error on macOS
 # bash 3.2, hence the ${arr[@]+...} form where it is expanded.
-# Empty for English — and an empty array under set -u is an error on macOS
-# bash 3.2, hence the ${arr[@]+...} form where it is expanded.
 LANG_ARGS=()
 case "$LANG_TAG" in
     fr-CA) LANG_ARGS=(-AppleLanguages "(fr-CA)" -AppleLocale fr_CA) ;;
@@ -73,6 +71,11 @@ capture() {
     sleep 5
     xcrun simctl boot "$udid" 2>/dev/null || true
     xcrun simctl bootstatus "$udid" -b >/dev/null
+    # The first keyboard on a fresh simulator comes up under iOS's QuickPath tip
+    # ("Swipe to type"), which is what text-edit shot in CI (#406). The in-house
+    # simulators had shown it once and kept this flag; a new one has not.
+    xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences \
+        DidShowContinuousPathIntroduction -bool true
     # An iPad in Windowed Apps draws a resize grabber in the corner of every app,
     # identical in every image, so no comparison sees it (capture-gate-report.md
     # §6). Put it in Full Screen Apps, through Settings, before shooting.
