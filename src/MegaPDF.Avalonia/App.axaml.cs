@@ -132,8 +132,20 @@ public partial class App : Application
                 // TextBox that the typing path fills; searching the view model directly
                 // left the capture showing a watermark — an empty-looking field beside
                 // "1 of 3", which is the sort of thing a store screenshot must not say.
+                //
+                // Written without the keystroke debounce (#252): a plain assignment is a
+                // TextChanged, which 250 ms later ran the same search again off the UI
+                // thread, so the render at four seconds was racing a background search it
+                // had no reason to start. One search, here, synchronously, is the state.
+                //
+                // The two-second clock this runs on is safe only because an automation run
+                // opens its document synchronously before the timer starts (6fe0caa, #348
+                // phase 2). The run #252 reported, at eab65f1, still opened the command-line
+                // PDF through OpenFromSystem, which parked it as a pending open until the
+                // launch sequence finished — a slow runner lost that race to this timer, and
+                // the search ran on nothing. That path no longer exists for a capture run.
                 if (window is not null)
-                    window.FindBox.Text = DemoContent.SearchTerm;
+                    window.ShowFindTerm(DemoContent.SearchTerm);
                 viewModel.Search(DemoContent.SearchTerm);
                 if (viewModel.MatchCount == 0)
                 {

@@ -49,6 +49,7 @@ cd ios && xcodegen generate && xcodebuild test -project MegaPDF.xcodeproj -schem
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath ~/dd-ios CODE_SIGNING_ALLOWED=NO
 tools/build-macos-app.sh osx-arm64 ~/app-macos
 python3 tools/gen_test_fixtures.py ~/fixtures
+python3 tools/gen_redaction_fixtures.py ~/fixtures   # the self-test's redaction half (#173); same folder, no name clashes
 ~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF --render-check ~/fixtures/stamped.pdf
 ~/app-macos/MegaPDF.app/Contents/MacOS/MegaPDF --self-test ~/fixtures
 dotnet test tests/MegaPDF.Core.Tests/MegaPDF.Core.Tests.csproj -c Release
