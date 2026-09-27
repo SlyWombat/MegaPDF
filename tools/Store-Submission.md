@@ -301,6 +301,11 @@ script is needed.
 - What's new, from `docs/release-notes/<ver>/microsoft-store.md`.
 - The six screenshots per language, with their captions, from
   `artifacts/store/screenshots/<lang>/`.
+- The Store logo, `dist/store-assets/store-logo-300.png`, sent once in the zip and
+  listed by all four languages as an `Icon` image — the API's name for the 1:1
+  300×300 logo (`StoreLogoSquare` is the 1080×1080 box art). It refuses to build
+  without the file, or with one that isn't a 300×300 PNG. `dist/` is gitignored;
+  `docs/microsoft-store-listing.md` § *Store logo* says how the file is made (#305).
 - Both packages, from `artifacts/store/rc-<ver>/`. It refuses a package whose
   sha256 isn't the one in that folder's `SHA256SUMS`.
 
@@ -315,8 +320,9 @@ It stops rather than send anything over a limit.
 
 **`submit` then:**
 - clones the last published submission;
-- marks every earlier package and screenshot for deletion, and adds the new
-  ones;
+- marks every earlier package, screenshot and `Icon` logo for deletion, and adds
+  the new ones — so a re-run replaces the logo rather than adding a second one.
+  Images of any other type in a listing are left as Partner Center has them;
 - sets **publish mode Immediate**, so the release goes live as soon as it
   passes certification (Dave, 2026-09-19);
 - uploads the zip;
