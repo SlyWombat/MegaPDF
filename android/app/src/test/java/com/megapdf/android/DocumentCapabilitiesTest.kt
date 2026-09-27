@@ -3,6 +3,7 @@ package com.megapdf.android
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfRect
 import com.megapdf.engine.PdfSecurity
+import com.megapdf.engine.RedactionMark
 import com.megapdf.engine.TextLine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,7 +31,7 @@ class DocumentCapabilitiesTest {
     private val redactMark = RedactMarkOperation(0, listOf(rect), listOf(7), adding = true)
     private val removeMark = RedactMarkOperation(0, listOf(rect), listOf(7), adding = false)
     private val moveMark = MoveRedactionMarkOperation(0, 7, rect, PdfRect(1.0, 1.0, 5.0, 5.0))
-    private val clearMarks = ClearRedactionMarksOperation(0, mapOf(0 to listOf(rect)))
+    private val clearMarks = ClearRedactionMarksOperation(0, mapOf(0 to listOf(RedactionMark(7, rect))))
 
     /** The edits that change the document's own text, which is what modify buys. */
     private val contentEdits: List<PdfEditOperation> =

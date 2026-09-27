@@ -3,6 +3,7 @@ package com.megapdf.android
 import com.megapdf.engine.DEFAULT_FONT
 import com.megapdf.engine.PdfRect
 import com.megapdf.engine.DetachedObject
+import com.megapdf.engine.RedactionMark
 import com.megapdf.engine.TextEditOutcome
 import com.megapdf.engine.TextLine
 
@@ -12,7 +13,12 @@ import com.megapdf.engine.TextLine
 //
 //   1. Operations address their target by id, never by index. Annotation and
 //      page-object indices shift; `MegaPDF_Id` and the text box mark id do not.
-//   2. Revert restores the same id, so a second undo still finds it.
+//   2. Revert restores the same id, so a second undo still finds it. The redaction marks
+//      are the one place this is not in the history's gift: the core hands out a fresh mark
+//      id every time an area is marked and never reuses one, so a mark that comes back from
+//      an undo comes back under a new id. The history rebinds the operations that named the
+//      old one ([RedactionMarkEdit], #429) — without that, the undo of a move recorded
+//      before a removal looks for a mark the removal's own undo has already replaced.
 
 /** A reversible edit. */
 interface PdfEditOperation {
@@ -45,6 +51,7 @@ class EditHistory(private val capacity: Int = 200) {
     /** Applies the operation and records it, clearing the redo history. */
     suspend fun perform(operation: PdfEditOperation, doc: EditTarget) {
         operation.apply(doc)
+        rebindRedactionMarks(operation)
         record(operation)
     }
 
@@ -71,6 +78,7 @@ class EditHistory(private val capacity: Int = 200) {
             throw e
         }
         undone.addLast(operation)
+        rebindRedactionMarks(operation)
         return operation
     }
 
@@ -84,12 +92,31 @@ class EditHistory(private val capacity: Int = 200) {
             throw e
         }
         done.addLast(operation)
+        rebindRedactionMarks(operation)
         return operation
     }
 
     fun clear() {
         done.clear()
         undone.clear()
+    }
+
+    /**
+     * Hands every other operation the mark ids the one just applied or reverted re-marked
+     * under (#429).
+     *
+     * A mark cannot come back under the id it had: the core hands out a fresh one and never
+     * reuses the old. So the operation that re-marked is the only one that knows the mark's
+     * new id, and every operation still holding the old one — the move recorded before a
+     * removal, the placement under it, the clear that swept it up — would otherwise name a
+     * mark the core no longer has, and quietly do nothing when its turn came.
+     */
+    private fun rebindRedactionMarks(source: PdfEditOperation) {
+        val renames = (source as? RedactionMarkEdit)?.lastRenames.orEmpty()
+        if (renames.isEmpty()) return
+        for (operation in done + undone) {
+            if (operation !== source && operation is RedactionMarkEdit) operation.rebind(renames)
+        }
     }
 }
 
@@ -242,7 +269,35 @@ class TextBoxOperation(
 // re-renders nothing — the overlay draw is the visible change. They are in the history
 // because Undo has to be able to take a mark back, which is the whole of #329.
 //
-// Inverse pairs, one type each, as everywhere above.
+// Inverse pairs, one type each, as everywhere above — and all three of them
+// [RedactionMarkEdit]s, because a mark is the one target whose id the history does not own.
+
+/** A mark that has come back under a new core id, from the operation that re-marked it (#429). */
+data class RedactionMarkRename(val pageIndex: Int, val oldId: Int, val newId: Int)
+
+/**
+ * An operation that names redaction marks by the id the core gave them.
+ *
+ * `markForRedaction` hands out a fresh id for every area marked and the core never reuses one
+ * for the life of the document, so a mark that an undo puts back is not the id anything
+ * recorded earlier is holding (#429). An operation that re-marks reports the swap in
+ * [lastRenames]; the history hands that to every other operation, which follows it in
+ * [rebind]. Without it the undo of a move recorded before a removal names a mark the
+ * removal's own undo has already replaced, the core answers false, and the Undo the person
+ * pressed does nothing at all.
+ */
+interface RedactionMarkEdit : PdfEditOperation {
+    /** What the last apply or revert re-marked. Empty unless this operation handed out ids. */
+    val lastRenames: List<RedactionMarkRename>
+
+    /** Follows [renames]: the same marks, under the ids the core has for them now. */
+    fun rebind(renames: List<RedactionMarkRename>)
+}
+
+/** Points every id this list holds that [rename] renames at the mark's new id. */
+private fun MutableList<Int?>.rebind(rename: RedactionMarkRename) {
+    indices.forEach { if (this[it] == rename.oldId) this[it] = rename.newId }
+}
 
 /**
  * Marking areas for redaction, and removing them — each other's inverse.
@@ -255,20 +310,30 @@ class TextBoxOperation(
  * would re-derive glyph runs from the page as it is *now*, and the person is owed the
  * rectangle they saw. Re-marking a rectangle goes through the plain rect path — a mark is
  * an area, and the glyph snapping only decided what the area was. The core never reuses an
- * id for the life of a document, so a redo takes fresh ids; [ids] is what the page carries
- * at this moment and is re-read after every apply.
+ * id for the life of a document, so every re-mark takes fresh ids; [ids] is what the page
+ * carries at this moment, and what the re-mark replaces is reported as a rename (#429).
  */
 class RedactMarkOperation(
     override val pageIndex: Int,
     private val rects: List<PdfRect>,
     ids: List<Int>,
     private val adding: Boolean,
-) : PdfEditOperation {
+) : RedactionMarkEdit {
 
-    private var ids: List<Int> = ids
+    /** Per rect, the id the core has for its mark now — null while the mark is off the page. */
+    private val live: MutableList<Int?> = rects.indices.map { ids.getOrNull(it) }.toMutableList()
+
+    /**
+     * Per rect, the last id its mark carried. Kept across a removal, because that is the id
+     * the rest of the history is still holding when this operation marks the area again.
+     */
+    private val named: MutableList<Int?> = live.toMutableList()
 
     override val name: String get() = if (adding) "redact" else "remove mark"
     override val changesDocument: Boolean get() = false
+
+    override var lastRenames: List<RedactionMarkRename> = emptyList()
+        private set
 
     override suspend fun apply(doc: EditTarget) {
         if (adding) mark(doc) else remove(doc)
@@ -279,36 +344,66 @@ class RedactMarkOperation(
     }
 
     private suspend fun mark(doc: EditTarget) {
-        ids = doc.markForRedaction(pageIndex, rects).filter { it >= 0 }
+        val renames = mutableListOf<RedactionMarkRename>()
+        doc.markForRedaction(pageIndex, rects).forEachIndexed { i, id ->
+            live[i] = id.takeIf { it >= 0 }
+            if (id < 0) return@forEachIndexed   // nothing in that area: no mark, no rename
+            named[i]?.let { was -> if (was != id) renames += RedactionMarkRename(pageIndex, was, id) }
+            named[i] = id
+        }
+        lastRenames = renames
     }
 
     private suspend fun remove(doc: EditTarget) {
         // Already gone counts as success on the core side, so an undo cannot fail.
-        doc.removeRedactionMarks(pageIndex, ids)
-        ids = emptyList()
+        doc.removeRedactionMarks(pageIndex, live.filterNotNull())
+        live.indices.forEach { live[it] = null }
+        lastRenames = emptyList()
+    }
+
+    override fun rebind(renames: List<RedactionMarkRename>) {
+        renames.forEach { rename ->
+            if (rename.pageIndex != pageIndex) return@forEach
+            live.rebind(rename)
+            named.rebind(rename)
+        }
     }
 }
 
 /**
  * Moving or resizing a mark. The core moves an id in place, so undo and redo keep the same
- * id — which is why this is not the remove-and-re-place that [MoveStampOperation] needs.
+ * mark — which is why this is not the remove-and-re-place that [MoveStampOperation] needs.
+ * The *id* is not as durable as the mark: a removal undone between this operation and its
+ * turn puts the mark back under a new one, and [rebind] is how this follows it (#429).
  */
 class MoveRedactionMarkOperation(
     override val pageIndex: Int,
-    private val markId: Int,
+    markId: Int,
     private val from: PdfRect,
     private val to: PdfRect,
-) : PdfEditOperation {
+) : RedactionMarkEdit {
+
+    private var markId: Int = markId
 
     override val name: String get() = "move mark"
     override val changesDocument: Boolean get() = false
+    override val lastRenames: List<RedactionMarkRename> get() = emptyList()
 
-    override suspend fun apply(doc: EditTarget) {
-        doc.moveRedactionMark(pageIndex, markId, to)
+    override suspend fun apply(doc: EditTarget) = move(doc, to)
+    override suspend fun revert(doc: EditTarget) = move(doc, from)
+
+    private suspend fun move(doc: EditTarget, rect: PdfRect) {
+        // False means the id is not on the page. That used to be dropped on the floor, which
+        // is how #429 stayed invisible: the Undo was pressed, the mark did not move, and
+        // nothing said so. It is a broken history, so it fails the way one does — the history
+        // puts the operation back and the screen says the edit failed.
+        check(doc.moveRedactionMark(pageIndex, markId, rect)) {
+            "redaction mark $markId is not on page $pageIndex"
+        }
     }
 
-    override suspend fun revert(doc: EditTarget) {
-        doc.moveRedactionMark(pageIndex, markId, from)
+    override fun rebind(renames: List<RedactionMarkRename>) {
+        renames.forEach { if (it.pageIndex == pageIndex && it.oldId == markId) markId = it.newId }
     }
 }
 
@@ -317,25 +412,49 @@ class MoveRedactionMarkOperation(
  * marks" means one action, not one per mark or one per page, and Undo puts every one of
  * them back where it was.
  *
- * [marksByPage] is the whole document's marks as they were. [pageIndex] is the page the UI
- * treats as this operation's own — a clear can span pages, and the history wants one page.
+ * [marksByPage] is the whole document's marks as they were, ids and all: the rects are what
+ * the undo re-marks, and the ids are what it replaces, so a move recorded before the clear
+ * still finds its mark afterwards (#429). [pageIndex] is the page the UI treats as this
+ * operation's own — a clear can span pages, and the history wants one page.
  */
 class ClearRedactionMarksOperation(
     override val pageIndex: Int,
-    private val marksByPage: Map<Int, List<PdfRect>>,
-) : PdfEditOperation {
+    marksByPage: Map<Int, List<RedactionMark>>,
+) : RedactionMarkEdit {
+
+    private val rectsByPage: Map<Int, List<PdfRect>> =
+        marksByPage.mapValues { (_, marks) -> marks.map { it.rect } }
+
+    /** Per page, per rect, the last id that mark carried — as [RedactMarkOperation.named]. */
+    private val named: Map<Int, MutableList<Int?>> =
+        marksByPage.mapValues { (_, marks) -> marks.map<RedactionMark, Int?> { it.markId }.toMutableList() }
 
     override val name: String get() = "clear marks"
     override val changesDocument: Boolean get() = false
 
+    override var lastRenames: List<RedactionMarkRename> = emptyList()
+        private set
+
     override suspend fun apply(doc: EditTarget) {
         doc.clearRedactionMarks()
+        lastRenames = emptyList()
     }
 
     override suspend fun revert(doc: EditTarget) {
-        for ((page, rects) in marksByPage) {
-            doc.markForRedaction(page, rects)
+        val renames = mutableListOf<RedactionMarkRename>()
+        for ((page, rects) in rectsByPage) {
+            val ids = named.getValue(page)
+            doc.markForRedaction(page, rects).forEachIndexed { i, id ->
+                if (id < 0) return@forEachIndexed
+                ids[i]?.let { was -> if (was != id) renames += RedactionMarkRename(page, was, id) }
+                ids[i] = id
+            }
         }
+        lastRenames = renames
+    }
+
+    override fun rebind(renames: List<RedactionMarkRename>) {
+        renames.forEach { rename -> named[rename.pageIndex]?.rebind(rename) }
     }
 }
 
