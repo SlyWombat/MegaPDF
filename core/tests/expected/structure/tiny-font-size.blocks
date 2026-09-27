@@ -1,0 +1,72 @@
+body_size 12
+page 0 confidence 100 source 0
+blocks 35
+block 0 kind=1 level=1 page=0 bounds=73.44 735.70 224.82 755.20 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=005300630061006e002000480065006100640069006e0067
+  span 0 flags=1 font_size=20 size_ratio=1.66667 bounds=73.44 735.70 224.82 755.20 object_index=5 text=005300630061006e002000480065006100640069006e0067
+block 1 kind=5 level=0 page=0 bounds=72.00 400.00 540.00 700.00 object_index=0 continues=0 source=0 confidence=100 marker=- alt=- text=-
+block 2 kind=2 level=0 page=0 bounds=73.18 677.52 142.14 680.01 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=005200650063006f0067006e0069007300650064
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=73.18 677.52 142.14 680.01 object_index=1 text=005200650063006f0067006e0069007300650064
+block 3 kind=2 level=0 page=0 bounds=145.62 679.84 169.51 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0074006500780074
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=145.62 679.84 169.51 680.01 object_index=1 text=0074006500780074
+block 4 kind=2 level=0 page=0 bounds=174.13 679.84 195.32 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0069006e0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=174.13 679.84 195.32 680.01 object_index=1 text=006c0069006e0065
+block 5 kind=2 level=0 page=0 bounds=199.14 679.84 221.47 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006f006e0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=199.14 679.84 221.47 680.01 object_index=1 text=006f006e0065
+block 6 kind=2 level=0 page=0 bounds=225.29 679.84 236.47 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006f0066
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=225.29 679.84 236.47 680.01 object_index=1 text=006f0066
+block 7 kind=2 level=0 page=0 bounds=240.34 679.84 260.36 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=007400680065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=240.34 679.84 260.36 680.01 object_index=1 text=007400680065
+block 8 kind=2 level=0 page=0 bounds=264.65 679.84 313.49 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0069006e00760069007300690062006c0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=264.65 679.84 313.49 680.01 object_index=1 text=0069006e00760069007300690062006c0065
+block 9 kind=2 level=0 page=0 bounds=317.77 677.52 351.85 680.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0061007900650072002e
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=317.77 677.52 351.85 680.01 object_index=1 text=006c0061007900650072002e
+block 10 kind=2 level=0 page=0 bounds=73.18 662.52 142.14 665.01 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=005200650063006f0067006e0069007300650064
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=73.18 662.52 142.14 665.01 object_index=2 text=005200650063006f0067006e0069007300650064
+block 11 kind=2 level=0 page=0 bounds=145.62 664.84 169.51 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0074006500780074
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=145.62 664.84 169.51 665.01 object_index=2 text=0074006500780074
+block 12 kind=2 level=0 page=0 bounds=174.13 664.84 195.32 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0069006e0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=174.13 664.84 195.32 665.01 object_index=2 text=006c0069006e0065
+block 13 kind=2 level=0 page=0 bounds=198.80 664.84 221.00 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=00740077006f
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=198.80 664.84 221.00 665.01 object_index=2 text=00740077006f
+block 14 kind=2 level=0 page=0 bounds=224.82 664.84 236.00 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006f0066
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=224.82 664.84 236.00 665.01 object_index=2 text=006f0066
+block 15 kind=2 level=0 page=0 bounds=239.87 664.84 259.90 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=007400680065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=239.87 664.84 259.90 665.01 object_index=2 text=007400680065
+block 16 kind=2 level=0 page=0 bounds=264.18 664.84 313.02 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0069006e00760069007300690062006c0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=264.18 664.84 313.02 665.01 object_index=2 text=0069006e00760069007300690062006c0065
+block 17 kind=2 level=0 page=0 bounds=317.30 662.52 351.38 665.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0061007900650072002e
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=317.30 662.52 351.38 665.01 object_index=2 text=006c0061007900650072002e
+block 18 kind=2 level=0 page=0 bounds=73.18 647.52 142.14 650.01 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=005200650063006f0067006e0069007300650064
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=73.18 647.52 142.14 650.01 object_index=3 text=005200650063006f0067006e0069007300650064
+block 19 kind=2 level=0 page=0 bounds=145.62 649.84 169.51 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0074006500780074
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=145.62 649.84 169.51 650.01 object_index=3 text=0074006500780074
+block 20 kind=2 level=0 page=0 bounds=174.13 649.84 195.32 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0069006e0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=174.13 649.84 195.32 650.01 object_index=3 text=006c0069006e0065
+block 21 kind=2 level=0 page=0 bounds=198.80 649.84 231.14 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=00740068007200650065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=198.80 649.84 231.14 650.01 object_index=3 text=00740068007200650065
+block 22 kind=2 level=0 page=0 bounds=234.96 649.84 246.14 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006f0066
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=234.96 649.84 246.14 650.01 object_index=3 text=006f0066
+block 23 kind=2 level=0 page=0 bounds=250.01 649.84 270.04 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=007400680065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=250.01 649.84 270.04 650.01 object_index=3 text=007400680065
+block 24 kind=2 level=0 page=0 bounds=274.32 649.84 323.16 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0069006e00760069007300690062006c0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=274.32 649.84 323.16 650.01 object_index=3 text=0069006e00760069007300690062006c0065
+block 25 kind=2 level=0 page=0 bounds=327.44 647.52 361.52 650.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0061007900650072002e
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=327.44 647.52 361.52 650.01 object_index=3 text=006c0061007900650072002e
+block 26 kind=2 level=0 page=0 bounds=73.18 632.52 142.14 635.01 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=005200650063006f0067006e0069007300650064
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=73.18 632.52 142.14 635.01 object_index=4 text=005200650063006f0067006e0069007300650064
+block 27 kind=2 level=0 page=0 bounds=145.62 634.84 169.51 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0074006500780074
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=145.62 634.84 169.51 635.01 object_index=4 text=0074006500780074
+block 28 kind=2 level=0 page=0 bounds=174.13 634.84 195.32 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0069006e0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=174.13 634.84 195.32 635.01 object_index=4 text=006c0069006e0065
+block 29 kind=2 level=0 page=0 bounds=198.76 634.84 223.68 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0066006f00750072
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=198.76 634.84 223.68 635.01 object_index=4 text=0066006f00750072
+block 30 kind=2 level=0 page=0 bounds=227.06 634.84 238.25 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006f0066
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=227.06 634.84 238.25 635.01 object_index=4 text=006f0066
+block 31 kind=2 level=0 page=0 bounds=242.11 634.84 262.14 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=007400680065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=242.11 634.84 262.14 635.01 object_index=4 text=007400680065
+block 32 kind=2 level=0 page=0 bounds=266.42 634.84 315.26 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0069006e00760069007300690062006c0065
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=266.42 634.84 315.26 635.01 object_index=4 text=0069006e00760069007300690062006c0065
+block 33 kind=2 level=0 page=0 bounds=319.55 632.52 353.63 635.01 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=006c0061007900650072002e
+  span 0 flags=0 font_size=0.01 size_ratio=0.000833333 bounds=319.55 632.52 353.63 635.01 object_index=4 text=006c0061007900650072002e
+block 34 kind=2 level=0 page=0 bounds=72.79 367.52 322.92 379.12 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=005300630061006e006e00650064002000700061006700650020007700690074006800200061006e00200069006e00760069007300690062006c0065002000740065007800740020006c0061007900650072002e
+  span 0 flags=0 font_size=12 size_ratio=1 bounds=72.79 367.52 322.92 379.12 object_index=6 text=005300630061006e006e00650064002000700061006700650020007700690074006800200061006e00200069006e00760069007300690062006c0065002000740065007800740020006c0061007900650072002e

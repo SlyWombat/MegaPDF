@@ -164,6 +164,27 @@ constexpr double kListDepthClusterEm = 1.0;                    // marker x-clust
 
 constexpr double kFurnitureBandFraction = 0.08;                // top/bottom 8% of the page.
 
+// #382: a reported font size below this never votes for the body size. Char::font_size is the
+// raw Tf operand (times the page unit), NOT the size the glyph is drawn at -- a producer that
+// writes `/F 0.01 Tf` and scales through Tm reports a size that ComputeBodySize's 0.5 pt
+// rounding turns into exactly 0, and a modal bucket of 0 made `line_size >= 1.15 * 0` true
+// for every line on the page: hundreds of HEADING blocks per document (#375's "1,000+
+// spurious headings" shape, found by `structure_check headingdiag` on 17 of 4,263 corpus
+// documents). `structure_check bodysizediag` over the full corpus (4,084 documents opened,
+// 26.9M characters; #382's PR has the whole table) measured what those sizes are: 193K
+// characters report under 0.25 pt, none of them in an invisible render mode (so not the
+// hidden-OCR-layer guess the issue made), 84% of them drawing under 4 pt even with their text
+// matrix applied and the rest at 6-14 pt -- microtext and matrix-scaled runs, never a page's
+// body; only 1,557 characters in the whole corpus report between 0.25 pt and 1 pt, and no
+// document's modal bucket is 0.5 pt, so a floor at 1 pt changes exactly those 17 documents'
+// body size and no other's. Such characters still become blocks (design §1 item 8); they
+// simply cannot be the size everything else is measured against. When NOTHING on the range
+// clears the floor (6 of the 17), the body size falls back to ComputeBodySize's existing 12 pt
+// default, and the sub-floor lines measure as ordinary body text against it (size_ratio near
+// 0, never a size-based heading). After the change those 17 documents produce 1,084 HEADING
+// blocks among 15,204 and no page with a run of 50 or more (110 such pages before).
+constexpr double kBodySizeFloorPt = 1.0;
+
 constexpr double kFigureMinAreaCm2 = 1.0;                      // image objects smaller than this are not figures.
 constexpr double kPointsPerCm = 72.0 / 2.54;
 
@@ -742,7 +763,7 @@ double ComputeBodySize(const std::vector<PageWork>& pages) {
                 const Word& w = pw.words[static_cast<size_t>(wi)];
                 for (int ci : w.chars) {
                     const double size = pw.chars[static_cast<size_t>(ci)].font_size;
-                    if (size <= 0) continue;
+                    if (size < kBodySizeFloorPt) continue;   // #382: a sub-floor size never votes (see the constant)
                     counts[std::round(size * 2.0) / 2.0]++;
                 }
             }

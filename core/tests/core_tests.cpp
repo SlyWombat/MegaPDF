@@ -5615,6 +5615,9 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"xobject-text", repo + "/structure/xobject-text.pdf", 0, 0, 0},
         {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
         {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
+        // #382: tiny-font-size.pdf (gen_tiny_font_size()'s comment), whose golden pins body_size
+        // at the caption's 12 pt rather than 0.
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf", 0, 0, 0},
     };
     for (const Case& c : cases) {
         test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir, c.check_golden);
@@ -5831,6 +5834,33 @@ void test_structure_cancel(const std::string& schematic) {
     megapdf_cancel_free(c);
 }
 
+// #382: tiny-font-size.pdf (gen_tiny_font_size()'s comment) -- the body size must come from
+// the visible 12 pt caption, not round to 0 from the invisible 0.01 Tf layer, and only the
+// 20 pt heading is a HEADING.
+void test_structure_tiny_font_size(const std::string& repo) {
+    Doc d(repo + "/structure/tiny-font-size.pdf");
+    if (!d.doc) { check(false, "structure tiny-font-size: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+    check(s != nullptr, "structure tiny-font-size: loads");
+    if (s == nullptr) return;
+    check(std::fabs(megapdf_structure_body_size(s) - 12.0) < 0.01,
+          "structure tiny-font-size: body size is the caption's 12 pt, not 0 (#382)",
+          std::to_string(megapdf_structure_body_size(s)));
+    int headings = 0, paragraphs = 0;
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind == MEGAPDF_BLOCK_HEADING) headings++;
+        if (b.kind == MEGAPDF_BLOCK_PARAGRAPH) paragraphs++;
+    }
+    check(headings == 1, "structure tiny-font-size: exactly one HEADING (the 20 pt one), the invisible layer is not headings",
+          std::to_string(headings));
+    check(paragraphs >= 1, "structure tiny-font-size: the invisible layer's text is still extracted as paragraphs",
+          std::to_string(paragraphs));
+    megapdf_structure_free(s);
+}
+
 // --------------------------------------------------------------------------
 // The plain-text writer (#142, #355): megapdf_write_text(), over the same fixtures #353's
 // block goldens use. Golden .txt files follow text_runs.txt's/the .blocks goldens' own
@@ -5898,6 +5928,7 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},   // #382
     };
     for (const Case& c : cases) test_write_text_golden(c.name, c.path, expected_dir);
 }
@@ -5952,6 +5983,7 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},   // #382
     };
     for (const Case& c : cases) test_write_markdown_golden(c.name, c.path, expected_dir);
 }
@@ -6160,6 +6192,7 @@ void test_markdown_round_trips(const std::string& repo, const std::string& expec
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},   // #382
     };
     for (const Case& c : cases) test_markdown_round_trip(c.name, c.path, expected_dir);
 }
@@ -6329,6 +6362,7 @@ int main(int argc, char** argv) {
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
+    test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);

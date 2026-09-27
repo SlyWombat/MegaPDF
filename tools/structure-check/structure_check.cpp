@@ -1660,6 +1660,165 @@ int RunHeadingDiag(const std::vector<std::string>& pdfs) {
 }
 
 // ---------------------------------------------------------------------------
+// bodysizediag mode (#382 investigation only -- not part of the #354 battery/gate).
+//
+// #382: megapdf_structure_body_size() rounds to exactly 0 on a small minority of corpus
+// documents, degenerating the size-based heading rule (headingdiag's docs_zero_body_size
+// above found 17 of 4,263). This mode characterizes, numbers only, WHAT those sub-half-point
+// reported font sizes are, so ComputeBodySize's floor (megapdf_structure.cpp's
+// kBodySizeFloorPt) is a measured value and not a guess:
+//
+//   - the reported size is FPDFText_GetFontSize -- the raw Tf operand, which is what
+//     megapdf_structure.cpp's Char::font_size is -- and its "drawn" size is that times the
+//     text matrix's scale (sqrt|det| of FPDFText_GetMatrix's a/b/c/d): a `/F 0.01 Tf` run
+//     scaled up through Tm reports 0.01 and draws at something ordinary. If the sub-floor
+//     population's drawn sizes sit in the normal 6-14 pt band, the "tiny Tf, big Tm" shape
+//     is confirmed as the cause.
+//   - the text render mode of the sub-floor characters' objects (FPDFTextObj_GetTextRenderMode:
+//     3 / 7 are invisible) tests the hidden-OCR-layer hypothesis directly.
+//   - a fine histogram of every reported size under 2 pt, corpus-wide, shows whether any real
+//     body text lives between the degenerate population and 1 pt -- i.e. whether a 1 pt floor
+//     can ever demote a genuine body size.
+//   - modal_old / modal_new: the character-weighted modal 0.5 pt bucket over the document's
+//     raw characters (a proxy for ComputeBodySize, which votes over non-furniture lines --
+//     close enough for this question) with the pre-#382 `size <= 0` filter and with the floor.
+//
+// One aggregate report over every document given (the corpus battery's own privacy rule:
+// counts and histograms, never a name or any text).
+// ---------------------------------------------------------------------------
+struct BodySizeDiagTotals {
+    long long docs = 0, docs_opened = 0, chars = 0;
+    long long docs_modal_old_zero = 0;       // the #382 population: modal bucket rounds to 0
+    long long docs_modal_old_half = 0;       // modal bucket 0.5 (would ALSO be caught by a 1 pt floor)
+    long long docs_nothing_above_floor = 0;  // every character under the floor: falls back to the 12 pt default
+    long long docs_modal_changed = 0;        // modal_new != modal_old
+    // Reported-size histogram under 2 pt (corpus-wide characters).
+    long long sz_lt_0_05 = 0, sz_0_05_0_25 = 0, sz_0_25_0_5 = 0, sz_0_5_1 = 0, sz_1_2 = 0, sz_ge_2 = 0;
+    // Sub-0.25 characters: drawn size (reported x matrix scale) histogram and render mode.
+    long long tiny_drawn_lt_4 = 0, tiny_drawn_4_6 = 0, tiny_drawn_6_14 = 0, tiny_drawn_14_30 = 0, tiny_drawn_ge_30 = 0;
+    long long tiny_invisible = 0, tiny_visible = 0, tiny_no_object = 0;
+    // The core's own answer on the #382 population: HEADING blocks it produces on those
+    // documents (before the fix: virtually every line; after: the genuine ones).
+    long long zero_docs_heading_blocks = 0, zero_docs_blocks = 0, zero_docs_pages_extreme_run = 0;
+};
+
+void RunBodySizeDiagOnDoc(const std::string& pdf, BodySizeDiagTotals* t) {
+    constexpr double kFloorMirror = 1.0;   // mirrors megapdf_structure.cpp's kBodySizeFloorPt
+    t->docs++;
+    // Through the core first (as every other mode does): megapdf_open_file initialises PDFium,
+    // which the raw FPDF_LoadDocument below needs; the core handle also serves the
+    // structure-load check at the end.
+    megapdf_document* doc = megapdf_open_file(pdf.c_str(), nullptr);
+    if (doc == nullptr) return;
+    FPDF_DOCUMENT raw = FPDF_LoadDocument(pdf.c_str(), nullptr);
+    if (raw == nullptr) { megapdf_close(doc); return; }
+    t->docs_opened++;
+    std::map<double, long long> counts_old, counts_new;
+    const int pages = FPDF_GetPageCount(raw);
+    for (int p = 0; p < pages; p++) {
+        FPDF_PAGE page = FPDF_LoadPage(raw, p);
+        if (page == nullptr) continue;
+        FPDF_TEXTPAGE tp = FPDFText_LoadPage(page);
+        if (tp != nullptr) {
+            const int n = FPDFText_CountChars(tp);
+            for (int i = 0; i < n; i++) {
+                if (FPDFText_IsGenerated(tp, i) == 1) continue;
+                const unsigned int u = FPDFText_GetUnicode(tp, i);
+                if (u == 0 || IsWhitespaceCpLocal(u)) continue;
+                const double size = FPDFText_GetFontSize(tp, i);
+                t->chars++;
+                if (size < 0.05) t->sz_lt_0_05++;
+                else if (size < 0.25) t->sz_0_05_0_25++;
+                else if (size < 0.5) t->sz_0_25_0_5++;
+                else if (size < 1.0) t->sz_0_5_1++;
+                else if (size < 2.0) t->sz_1_2++;
+                else t->sz_ge_2++;
+                if (size > 0) counts_old[std::round(size * 2.0) / 2.0]++;
+                if (size >= kFloorMirror) counts_new[std::round(size * 2.0) / 2.0]++;
+                if (size < 0.25) {
+                    FS_MATRIX m{1, 0, 0, 1, 0, 0};
+                    double scale = 1.0;
+                    if (FPDFText_GetMatrix(tp, i, &m)) scale = std::sqrt(std::fabs(m.a * m.d - m.b * m.c));
+                    const double drawn = size * scale;
+                    if (drawn < 4) t->tiny_drawn_lt_4++;
+                    else if (drawn < 6) t->tiny_drawn_4_6++;
+                    else if (drawn < 14) t->tiny_drawn_6_14++;
+                    else if (drawn < 30) t->tiny_drawn_14_30++;
+                    else t->tiny_drawn_ge_30++;
+                    FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(tp, i);
+                    if (obj == nullptr) {
+                        t->tiny_no_object++;
+                    } else {
+                        const int mode = static_cast<int>(FPDFTextObj_GetTextRenderMode(obj));
+                        if (mode == 3 || mode == 7) t->tiny_invisible++; else t->tiny_visible++;
+                    }
+                }
+            }
+            FPDFText_ClosePage(tp);
+        }
+        FPDF_ClosePage(page);
+    }
+    auto modal = [](const std::map<double, long long>& counts, double dflt) {
+        double best = dflt;
+        long long best_count = -1;
+        for (const auto& e : counts) if (e.second > best_count) { best_count = e.second; best = e.first; }
+        return best;
+    };
+    const double modal_old = modal(counts_old, 12.0);
+    const double modal_new = modal(counts_new, 12.0);
+    if (modal_old == 0.0) t->docs_modal_old_zero++;
+    if (modal_old == 0.5) t->docs_modal_old_half++;
+    if (counts_new.empty() && !counts_old.empty()) t->docs_nothing_above_floor++;
+    if (modal_old != modal_new) t->docs_modal_changed++;
+    FPDF_CloseDocument(raw);
+
+    // The core's own answer on the #382 population, through the linked build (before or after).
+    if (modal_old == 0.0) {
+        const int n_pages = megapdf_page_count(doc);
+        megapdf_structure* s = n_pages > 0 ? megapdf_structure_load(doc, 0, n_pages, 0, nullptr) : nullptr;
+        if (s != nullptr) {
+            const size_t n = megapdf_block_count(s);
+            std::map<int, long long> run_by_page;
+            long long run = 0;
+            int run_page = -1;
+            for (size_t i = 0; i < n; i++) {
+                megapdf_block b{};
+                if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+                t->zero_docs_blocks++;
+                if (b.kind == MEGAPDF_BLOCK_HEADING) {
+                    t->zero_docs_heading_blocks++;
+                    if (b.page == run_page) run++; else { run = 1; run_page = b.page; }
+                    if (run >= 50 && run_by_page[b.page] == 0) run_by_page[b.page] = 1;
+                } else {
+                    run = 0;
+                    run_page = -1;
+                }
+            }
+            t->zero_docs_pages_extreme_run += static_cast<long long>(run_by_page.size());
+            megapdf_structure_free(s);
+        }
+    }
+    megapdf_close(doc);
+}
+
+int RunBodySizeDiag(const std::vector<std::string>& pdfs) {
+    BodySizeDiagTotals t;
+    for (const auto& pdf : pdfs) RunBodySizeDiagOnDoc(pdf, &t);
+    std::printf("bodysizediag docs=%lld opened=%lld chars=%lld\n", t.docs, t.docs_opened, t.chars);
+    std::printf("docs modal_old_zero=%lld modal_old_half=%lld nothing_above_floor=%lld modal_changed_by_floor=%lld\n",
+                t.docs_modal_old_zero, t.docs_modal_old_half, t.docs_nothing_above_floor, t.docs_modal_changed);
+    std::printf("reported_size_hist lt0.05=%lld 0.05-0.25=%lld 0.25-0.5=%lld 0.5-1=%lld 1-2=%lld ge2=%lld\n",
+                t.sz_lt_0_05, t.sz_0_05_0_25, t.sz_0_25_0_5, t.sz_0_5_1, t.sz_1_2, t.sz_ge_2);
+    std::printf("sub0.25_drawn_size_hist lt4=%lld 4-6=%lld 6-14=%lld 14-30=%lld ge30=%lld\n", t.tiny_drawn_lt_4,
+                t.tiny_drawn_4_6, t.tiny_drawn_6_14, t.tiny_drawn_14_30, t.tiny_drawn_ge_30);
+    std::printf("sub0.25_render_mode invisible=%lld visible=%lld no_object=%lld\n", t.tiny_invisible, t.tiny_visible,
+                t.tiny_no_object);
+    std::printf("zero_body_docs_via_core blocks=%lld heading_blocks=%lld pages_with_heading_run_ge50=%lld\n",
+                t.zero_docs_blocks, t.zero_docs_heading_blocks, t.zero_docs_pages_extreme_run);
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // garbage mode (#385 investigation only -- not part of the #354 battery/gate).
 //
 // #385: a hand-found document extracts to unrecognizable glyph garbage on part of a page
@@ -2081,6 +2240,14 @@ int main(int argc, char** argv) {
         for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
         return RunHeadingDiag(pdfs);
     }
+    if (argc >= 3 && std::strcmp(argv[1], "bodysizediag") == 0) {
+        // #382 investigation only: structure_check bodysizediag <pdf> [<pdf> ...]
+        // Characterizes the sub-half-point reported font sizes that round the body size to 0
+        // (see the BodySizeDiagTotals comment above).
+        std::vector<std::string> pdfs;
+        for (int i = 2; i < argc; i++) pdfs.push_back(argv[i]);
+        return RunBodySizeDiag(pdfs);
+    }
     if (argc >= 3 && std::strcmp(argv[1], "garbage") == 0) {
         // #385 investigation only: structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]
         // Scores fid_low09 pages (and every page, corpus-wide) for genuine character-level
@@ -2102,6 +2269,7 @@ int main(int argc, char** argv) {
                 "  structure_check diag <pdf> [<pdf> ...]   (#363 investigation only)\n"
                 "  structure_check diagbaseline <pdf> [<pdf> ...]   (#363 follow-up investigation only)\n"
                 "  structure_check headingdiag <pdf> [<pdf> ...]   (#375 investigation only)\n"
+                "  structure_check bodysizediag <pdf> [<pdf> ...]   (#382 investigation only)\n"
                 "  structure_check garbage <pdf> [--dump-garbage <dir> --dump-id <id>]   (#385 investigation only)\n");
     return 64;
 }

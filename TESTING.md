@@ -242,6 +242,11 @@ dumps (`core/tests/expected/structure/*.blocks`) over the fixtures
 `tools/leakcheck` drives redaction) — see that script's own header comment for the four
 measures and their gates.
 
+`tiny-font-size.pdf` (#382) pins the body size at the visible caption's 12 pt when most of a
+page's characters report a near-zero `Tf` (an invisible OCR layer scaled through `Tm`), the
+shape that used to round it to 0 and make every line a heading; `structure_check bodysizediag`
+is the corpus measurement behind the 1 pt floor.
+
 ### megapdf-cli (#142, #355, #357)
 
 `megapdf-cli extract <file.pdf>` is a small, self-contained native binary — no .NET runtime,

@@ -356,6 +356,32 @@ def gen_mixed(regular, bold):
     return d.finish()
 
 
+def gen_tiny_font_size(regular, bold):
+    """#382: the body-size-rounds-to-0 shape, as a fixture. An invisible OCR-style text layer
+    (text render mode 3) drawn with `/F1 0.01 Tf` and a text matrix scaled by 1200 -- so
+    FPDFText_GetFontSize reports 0.01 for most of the page's characters while the glyphs
+    are drawn at 12 pt -- over a placeholder image, plus a visible 12 pt caption and a
+    visible 20 pt bold heading. Before the fix the modal 0.5 pt bucket was 0 and every line
+    on the page passed the size-based heading test; after it the caption's 12 pt is the body
+    size, the heading is the only HEADING and the OCR lines are ordinary paragraphs."""
+    d = Doc(regular, bold)
+    image = d.add(stream(
+        b"/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8",
+        b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80"))
+    c = b"q 468 0 0 300 72 400 cm /Im1 Do Q\n"
+    ocr = ["Recognised text line one of the invisible layer.",
+           "Recognised text line two of the invisible layer.",
+           "Recognised text line three of the invisible layer.",
+           "Recognised text line four of the invisible layer."]
+    for i, line in enumerate(ocr):
+        y = 680 - i * 15
+        c += b"BT 3 Tr /F1 0.01 Tf 1200 0 0 1200 72 %d Tm (%s) Tj ET\n" % (y, winansi(line))
+    c += text_ops(b"F2", 20, 72, 740, "Scan Heading")
+    c += text_ops(b"F1", 12, 72, 370, "Scanned page with an invisible text layer.")
+    d.add_page(c, extra_resources=b" /XObject << /Im1 %d 0 R >>" % image)
+    return d.finish()
+
+
 def main():
     outdir = sys.argv[1] if len(sys.argv) > 1 else "tests/MegaPDF.Core.Tests/Fixtures/structure"
     os.makedirs(outdir, exist_ok=True)
@@ -373,6 +399,7 @@ def main():
         ("xobject-text.pdf", gen_xobject_text),
         ("scan.pdf", gen_scan),
         ("mixed.pdf", gen_mixed),
+        ("tiny-font-size.pdf", gen_tiny_font_size),
     )
     for name, gen in generators:
         data = gen(regular, bold)
