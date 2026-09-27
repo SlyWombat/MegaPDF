@@ -330,12 +330,12 @@ contract, not an afterthought:
 |------|---------|
 | 0 | text written |
 | 1 | usage error (a bad option, a bad `--pages` range, both password options given) |
-| 2 | the file could not be opened (missing, unreadable, not a PDF) |
+| 2 | the file could not be opened (missing, unreadable, not a PDF), or opened but a requested page in it could not be read (#443: a document PDFium's own page tree calls valid enough to open but not enough to load every page it counts) |
 | 3 | a password is required, or the one given is wrong |
 | 4 | the document uses a security handler this build cannot open |
 | 5 | none of the requested pages had a text layer |
 | 6 | `--strict` was given and at least one requested page had no text layer |
-| 7 | `--out` could not be written |
+| 7 | the output could not be written (`--out`'s file, or stdout) |
 | 130 | interrupted (Ctrl+C) |
 
 A page with no text layer never silences the run — MegaPDF does not do OCR, and says so once

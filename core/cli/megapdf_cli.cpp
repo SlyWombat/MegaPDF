@@ -92,9 +92,10 @@ void PrintUsage(std::FILE* out) {
         "  --version                  print the version and exit\n"
         "  --help                     print this and exit\n"
         "\n"
-        "exit codes: 0 text written; 1 usage; 2 cannot open; 3 password required or wrong;\n"
-        "4 unsupported security handler; 5 no text on any requested page; 6 --strict and some\n"
-        "requested page had no text; 7 --out could not be written; 130 interrupted (Ctrl+C).\n"
+        "exit codes: 0 text written; 1 usage; 2 cannot open or read; 3 password required or\n"
+        "wrong; 4 unsupported security handler; 5 no text on any requested page; 6 --strict\n"
+        "and some requested page had no text; 7 output could not be written; 130 interrupted\n"
+        "(Ctrl+C).\n"
         "\n"
         "usage: megapdf-cli pages <file.pdf> --out <path> [operations]\n"
         "\n"
@@ -528,8 +529,21 @@ int RunExtract(int argc, char** argv) {
 
     if (cancelled) return 130;
     if (write_failed) {
-        std::fprintf(stderr, "internal error extracting %s\n", pdf_path.c_str());
-        return 7;
+        // megapdf_write_text()'s only negative returns here (MEGAPDF_ERR_CANCELLED is handled
+        // above) are MEGAPDF_ERR_ARGUMENT and MEGAPDF_ERR_PDFIUM (megapdf_core.h's own doc
+        // comment on it); ERR_PDFIUM only happens when the `write` callback returns 0, and
+        // WriteToBuffer above never does. Every option and page range reaching this call was
+        // already validated against this same document a few lines up, so in practice the
+        // only way to land here is megapdf_structure_load() failing to load one of the
+        // requested pages (megapdf_structure.cpp's BuildStructure) -- the document opened, but
+        // a page in it did not, which megapdf_structure_check's own "result=format" calls the
+        // same thing a document that fails to open at all is called. No --out was necessarily
+        // even named, so claiming "--out could not be written" (exit 7, #443) was never honest
+        // here; 2 ("cannot open") is what megapdf_open_file's own failure uses for the same
+        // "this document cannot be read" fact, and megapdf_last_error_message() carries
+        // whatever megapdf_load_page() found wrong with the page.
+        std::fprintf(stderr, "cannot read %s: %s\n", pdf_path.c_str(), megapdf_last_error_message());
+        return 2;
     }
 
     const std::vector<int> textless_pages = FindTextlessPagesInOutput(buffered);
@@ -749,6 +763,11 @@ int RunPages(int argc, char** argv) {
         cleanup();
         return code;
     };
+    // FILE->7 is only honest for an operation whose own MEGAPDF_ERR_FILE means "--out could
+    // not be written": true today only of megapdf_pages_extract() (below) -- Rotate, Delete,
+    // Move and Blank never touch a file at all, so FILE cannot reach them, and Import's own
+    // MEGAPDF_ERR_FILE means something else entirely (the --import file, not --out) and is
+    // caught before it ever reaches this lambda (#443).
     auto status_code = [](int rc) { return rc == MEGAPDF_ERR_RESTRICTED ? 8 : rc == MEGAPDF_ERR_FILE ? 7 : 9; };
 
     bool extracted = false;
@@ -800,12 +819,21 @@ int RunPages(int argc, char** argv) {
                     megapdf_document* other = megapdf_open_file(op.path.c_str(), nullptr);
                     const int other_count = other != nullptr ? megapdf_page_count(other) : 0;
                     megapdf_close(other);
-                    if (other_count <= 0) return fail(7, "cannot open " + op.path);
+                    // #443: this probe open is of --import's file, never --out, so a failure
+                    // here is "cannot open" (exit 2), not "--out could not be written" (exit 7).
+                    if (other_count <= 0) return fail(2, "cannot open " + op.path);
                     if (!ResolvePages(op.ranges, other_count, &pages, &err)) return fail(1, "--import: " + err);
                 }
                 int imported = 0;
                 const int rc = megapdf_pages_import(doc, op.path.c_str(), nullptr, pages.empty() ? nullptr : pages.data(), pages.size(),
                                                     op.a - 1, &imported);
+                // MEGAPDF_ERR_FILE from megapdf_pages_import() means the file named after
+                // --import could not be opened (megapdf_core.h's doc comment on it) -- a
+                // completely different fact from what status_code's own FILE->7 branch means
+                // for --extract just below (the *output* file, --out, could not be written).
+                // #443 is exactly this: the same MEGAPDF_ERR_FILE value means two different
+                // things depending on which call produced it, and only one of them is --out.
+                if (rc == MEGAPDF_ERR_FILE) return fail(2, "cannot import from " + op.path);
                 if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot import from " + op.path);
                 if (!quiet) std::fprintf(stderr, "imported %d page%s from %s\n", imported, imported == 1 ? "" : "s", op.path.c_str());
                 break;

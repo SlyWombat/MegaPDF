@@ -6563,6 +6563,81 @@ void test_cli_pages(const std::string& fixtures, const std::string& cli_path) {
     std::remove(out.c_str());
 }
 
+// #443: a document whose page tree opens and whose page count PDFium never validates against
+// Kids actually resolving (megapdf_page_count() just reads /Count) can still fail to load one
+// of its pages -- exactly what tools/structure-check calls "result=format" for a document that
+// opened fine. fixture.pdf's own Kids array ("/Kids [<page1> 0 R <page2> 0 R]",
+// tools/gen_test_fixtures.py) is mutated with a same-length substitution -- test_structure_
+// tagged_mutations' own technique, so every other byte, and so the whole xref table, stays
+// exactly where it was: the second Kid is repointed at an object number nothing in the file
+// defines. megapdf_open_file() still succeeds and megapdf_page_count() still says 2 (both read
+// straight off bytes this edit never touches), but there is nothing for megapdf_load_page(1)
+// to load. Before #443, megapdf-cli extract mapped that into exit 7 ("--out could not be
+// written") and printed "internal error extracting <path>" even though no --out was ever named
+// on the command line -- a code that invocation cannot have produced, and the exact gate
+// failure #443 fixes (structure-battery.sh --cli's "cli bad exit codes" measure).
+void test_cli_unreadable_document(const std::string& fixtures, const std::string& cli_path) {
+    std::vector<unsigned char> pdf = read_file(fixtures + "/fixture.pdf");
+    check(!pdf.empty(), "cli unreadable document: fixture.pdf reads");
+    if (pdf.empty()) return;
+    std::string text(pdf.begin(), pdf.end());
+
+    const std::string needle = "/Kids [";
+    const size_t kids_at = text.find(needle);
+    check(kids_at != std::string::npos, "cli unreadable document: fixture.pdf has a /Kids array");
+    if (kids_at == std::string::npos) return;
+    size_t at = kids_at + needle.size();
+    while (at < text.size() && text[at] != ' ') at++;   // past the first Kid's digits (left alone)
+    at++;                                                // the space before its "0 R"
+    check(text.compare(at, 3, "0 R") == 0, "cli unreadable document: fixture.pdf's Kids shape is as expected",
+          text.substr(kids_at, 40));
+    if (text.compare(at, 3, "0 R") != 0) return;
+    at += 4;   // "0 R "; `at` now sits on the second Kid's first digit
+    const size_t second_start = at;
+    size_t second_end = second_start;
+    while (second_end < text.size() && text[second_end] >= '0' && text[second_end] <= '9') second_end++;
+    const size_t digits = second_end - second_start;
+    check(digits > 0, "cli unreadable document: fixture.pdf's second Kid is a number");
+    if (digits == 0) return;
+    // Same digit width, so the file's length -- and every byte after this point, including the
+    // whole xref table -- is unchanged; a run of '9's is past any object number this tiny a
+    // fixture ever reaches, so it can only be a dangling reference.
+    text.replace(second_start, digits, std::string(digits, '9'));
+
+    const std::string broken_path = "cli_test_unreadable.tmp.pdf";
+    {
+        std::ofstream out(broken_path, std::ios::binary);
+        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    }
+
+    // Confirm the corruption is what this test thinks it is, through the API directly, before
+    // trusting the CLI subprocess's exit code to it.
+    {
+        Doc d(broken_path);
+        check(d.doc != nullptr, "cli unreadable document: the mutated file still opens");
+        check(d.doc != nullptr && megapdf_page_count(d.doc) == 2, "cli unreadable document: it still reports 2 pages",
+              d.doc != nullptr ? std::to_string(megapdf_page_count(d.doc)) : "");
+        if (d.doc != nullptr) {
+            megapdf_page* p0 = megapdf_load_page(d.doc, 0);
+            check(p0 != nullptr, "cli unreadable document: page 1 (untouched) still loads");
+            megapdf_close_page(p0);
+            megapdf_page* p1 = megapdf_load_page(d.doc, 1);
+            check(p1 == nullptr, "cli unreadable document: page 2 (the mutated Kid) does not load");
+            megapdf_close_page(p1);
+        }
+    }
+
+    CliResult r = run_cli(cli_path, {"extract", broken_path, "--quiet"});
+    std::remove(broken_path.c_str());
+    check(r.exit_code == 2, "cli unreadable document: extract exits 2, not 7 (#443)",
+          "exit " + std::to_string(r.exit_code) + ", stderr: " + r.err);
+    check(r.err.find("--out") == std::string::npos,
+          "cli unreadable document: stderr never blames --out, which was never given", r.err);
+    check(r.err.find("internal error") == std::string::npos,
+          "cli unreadable document: stderr says what really happened, not \"internal error\"", r.err);
+    check(r.out.empty(), "cli unreadable document: nothing is written to stdout on this failure", r.out);
+}
+
 // Password handling (#355, design §6): the encrypted fixture opens with --password-file and
 // fails with exit 3 without one; the password never appears on argv (run_cli's own comment).
 // remove-aes-256.pdf is secure-source.pdf (#241's richer fixture — two pages, a filled text
@@ -7310,6 +7385,7 @@ int main(int argc, char** argv) {
         test_cli_scan_mixed(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
         test_cli_markdown_smoke(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
         test_cli_pages(argv[1], cli_path);
+        test_cli_unreadable_document(argv[1], cli_path);
     }
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);
