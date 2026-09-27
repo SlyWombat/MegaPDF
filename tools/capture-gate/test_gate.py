@@ -109,5 +109,53 @@ class LinuxThemeSlot(unittest.TestCase):
         self.assertEqual(pair["same"], 2)
 
 
+@unittest.skipUnless(shutil.which("convert"), "ImageMagick is not installed")
+class MacTabUnderline(unittest.TestCase):
+    """#400: the Mac profile knows the tab strip (#348). Its active-tab
+    underline is a thin accent rule under the toolbar, and it is in every
+    document pose of the 2.1.1 set; the gate used to read it as a selection
+    left on. A rule on those rows passes by name, and accent anywhere else on
+    the same image is still a flag."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.shots = os.path.join(self.tmp.name, "en")
+        os.makedirs(self.shots)
+        rows = stores.STORES["mac"]["tab_underline"]["rows"]
+        # As measured on the 2.1.1 set: two rows, from x=13, as wide as the
+        # tab's title.
+        underline = f"rectangle 13,{rows[0]} 240,{rows[1] - 1}"
+        subprocess.run(["convert", "-size", "1440x900", "xc:white",
+                        "-fill", stores.ACCENT, "-draw", underline,
+                        os.path.join(self.shots, "light-01-viewer.png")],
+                       check=True, capture_output=True)
+        # The same, plus a selection border around a word on the page.
+        subprocess.run(["convert", "-size", "1440x900", "xc:white",
+                        "-fill", stores.ACCENT, "-draw", underline,
+                        "-fill", "none", "-stroke", stores.ACCENT,
+                        "-draw", "rectangle 400,500 520,530",
+                        os.path.join(self.shots, "light-02-text.png")],
+                       check=True, capture_output=True)
+
+    def _accent(self, name):
+        with tempfile.TemporaryDirectory() as out:
+            result = gate.run(self.tmp.name, "mac", out, thumb_width=32)
+        image = next(i for i in result["images"]
+                     if os.path.basename(i["path"]) == name)
+        return next(f for f in image["findings"] if f["check"] == "accent")
+
+    def test_the_underline_alone_passes_by_name(self):
+        finding = self._accent("light-01-viewer.png")
+        self.assertEqual(finding["status"], "pass", finding["note"])
+        self.assertIn("active tab's underline", finding["note"])
+        self.assertNotIn("elsewhere", finding["note"])
+
+    def test_a_selection_beside_it_is_still_flagged(self):
+        finding = self._accent("light-02-text.png")
+        self.assertEqual(finding["status"], "flag", finding["note"])
+        self.assertIn("elsewhere", finding["note"])
+
+
 if __name__ == "__main__":
     unittest.main()
