@@ -50,6 +50,23 @@ else TIMEOUT_CMD=""; echo "warning: no 'timeout' on PATH — hangs will not be b
 
 export CLI OUT TIMEOUT_CMD
 export TIMEOUT=${TIMEOUT:-300}
+
+# #442: the same run_with_timeout shape structure-battery.sh and markdown-battery.sh use for
+# every external call. Before this, only the megapdf-cli invocation below was bounded; the
+# qpdf calls (on both the corpus input and our own freshly-written output) were not, which is
+# exactly the unbounded-oracle-call shape #442 found in structure-battery.sh's pdftotext --
+# a qpdf hang on a malformed input, or on a malformed output the engine produced, would stall
+# a worker (and with the default --jobs 1, the whole battery) forever, with no counted outcome.
+run_with_timeout() {
+    if [ -n "$TIMEOUT_CMD" ]; then
+        "$TIMEOUT_CMD" "$@"
+        return $?
+    fi
+    shift
+    "$@"
+}
+export -f run_with_timeout
+
 mkdir -p "$OUT/scratch" "$OUT/lines"
 LOG="$OUT/battery-pages.log"
 SUMMARY="$OUT/summary-pages.txt"
@@ -62,11 +79,7 @@ one_op() {   # <pdf> <id> <op> <expected-pages> <cli args...>
     shift 4
     local out="$OUT/scratch/$id-$op.pdf"
     local err rc
-    if [ -n "$TIMEOUT_CMD" ]; then
-        err=$("$TIMEOUT_CMD" "$TIMEOUT" "$CLI" pages "$pdf" --out "$out" --quiet "$@" 2>&1)
-    else
-        err=$("$CLI" pages "$pdf" --out "$out" --quiet "$@" 2>&1)
-    fi
+    err=$(run_with_timeout "$TIMEOUT" "$CLI" pages "$pdf" --out "$out" --quiet "$@" 2>&1)
     rc=$?
     rm -f "$OUT/scratch/.$id-$op.pdf."*.megapdf-tmp
     case $rc in
@@ -84,20 +97,25 @@ one_op() {   # <pdf> <id> <op> <expected-pages> <cli args...>
            return ;;
         *) echo "crashed:$rc"; rm -f "$out"; return ;;
     esac
-    if qpdf --requires-password "$out" >/dev/null 2>&1; then
+    run_with_timeout "$TIMEOUT" qpdf --requires-password "$out" >/dev/null 2>&1
+    local rp_rc=$?
+    if [ "$rp_rc" -eq 124 ]; then echo qpdf-timeout; rm -f "$out"; return; fi
+    if [ "$rp_rc" -eq 0 ]; then
         # The document opened without a password and was saved with its security kept; qpdf
         # cannot look inside without one. Counted as checked by the read-back only.
         echo ok-unchecked; rm -f "$out"; return
     fi
     local pages
-    pages=$(qpdf --show-npages "$out" 2>/dev/null)
+    pages=$(run_with_timeout "$TIMEOUT" qpdf --show-npages "$out" 2>/dev/null)
+    if [ $? -eq 124 ]; then echo qpdf-timeout; rm -f "$out"; return; fi
     if [ "$pages" != "$expected" ]; then echo "count-mismatch:${pages:-?}/$expected"; rm -f "$out"; return; fi
-    qpdf --check "$out" >/dev/null 2>&1
+    run_with_timeout "$TIMEOUT" qpdf --check "$out" >/dev/null 2>&1
     local q=$?
     rm -f "$out"
     case $q in
         0) echo ok ;;
         3) echo ok-warn ;;
+        124) echo qpdf-timeout ;;
         *) echo "qpdf-failed:$q" ;;
     esac
 }
@@ -107,7 +125,13 @@ run_one() {   # <pdf>
     local id
     id=$(printf '%s' "$pdf" | sha256sum | cut -c1-12)
     local n
-    n=$(qpdf --show-npages "$pdf" 2>/dev/null)
+    # #442: bounded like every other external call in this script now -- a qpdf hang counting
+    # the corpus input's own pages used to be unbounded, and (unlike the calls in one_op,
+    # which run on our own freshly-written output) this runs on an arbitrary, possibly
+    # malformed, corpus document. A timeout here leaves $n empty, which the existing
+    # "could not count the pages" branch below already handles the same as a password or an
+    # unreadable file.
+    n=$(run_with_timeout "$TIMEOUT" qpdf --show-npages "$pdf" 2>/dev/null)
     if ! [ "${n:-0}" -ge 1 ] 2>/dev/null; then
         # qpdf could not count the pages (a password, or a file it cannot read): let the
         # engine say what it is, through the rotate run alone.
@@ -162,6 +186,7 @@ seen=$(grep -c "" "$LOG")
         echo "  WRITE FAILED:        $(count "$op=write-failed")"
         echo "  COUNT MISMATCH:      $(count "$op=count-mismatch")"
         echo "  QPDF FAILED:         $(count "$op=qpdf-failed")"
+        echo "  QPDF TIMEOUT:        $(count "$op=qpdf-timeout") (#442 -- qpdf itself did not finish within ${TIMEOUT}s)"
         echo "  CRASHED:             $(count "$op=crashed")"
         echo "  HUNG:                $(count "$op=hung")"
     done
@@ -169,5 +194,5 @@ seen=$(grep -c "" "$LOG")
 } | tee "$SUMMARY"
 
 bad=$(( $(count '=crashed') + $(count ' crashed:') + $(count '=hung') + $(count ' hung$') + $(count '=qpdf-failed') \
-      + $(count '=count-mismatch') + $(count '=write-failed') + $(count '=refused( |$)') ))
+      + $(count '=qpdf-timeout') + $(count '=count-mismatch') + $(count '=write-failed') + $(count '=refused( |$)') ))
 [ "$bad" -eq 0 ]

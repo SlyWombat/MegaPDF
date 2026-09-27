@@ -127,7 +127,7 @@ MS_FILE="$OUT/scratch/ms_per_page.txt"
 : >"$TAU_REF_FILE"
 : >"$MS_FILE"
 
-opened=0; ok=0; encrypted=0; format=0; crashed=0; hung=0
+opened=0; ok=0; encrypted=0; format=0; crashed=0; hung=0; ref_timeout=0
 sum_pages=0; sum_tagged=0; sum_tree=0; sum_textless=0; sum_multicol=0; sum_manycut=0
 sum_fid_matched=0; sum_fid_a=0; sum_fid_b=0; sum_fid_low09=0
 sum_cli_fid_matched=0; sum_cli_fid_a=0; sum_cli_fid_b=0; cli_bad_exit=0
@@ -148,7 +148,22 @@ while IFS= read -r pdf; do
     refarg=()
     if [ "$REFERENCE" -eq 1 ] && [ "$CENSUS" -eq 0 ]; then
         reffile="$OUT/scratch/ref-$id.txt"
-        pdftotext -layout "$pdf" "$reffile" >/dev/null 2>&1
+        # #442: pdftotext is the one external call in this loop that was not bounded like
+        # the others below (run_with_timeout on the $CHECK and --cli invocations). A poppler
+        # hang here used to stall the entire battery forever, with no TIMEOUT line, no log
+        # entry and no exit. Bounded the same way now; a timeout is counted separately
+        # (ref_timeout) rather than folded into the ordinary "pdftotext produced nothing"
+        # case, so it is visible in the summary instead of silently looking like a document
+        # with no extractable text. This only affects measure 3 (poppler agreement,
+        # informational): measure 1's fidelity gate is computed against PDFium's own tokens
+        # inside $CHECK and never reads this file, so a poppler timeout cannot flatter or
+        # hide anything on the gate that actually fails a run.
+        run_with_timeout "$TIMEOUT" pdftotext -layout "$pdf" "$reffile" >/dev/null 2>&1
+        ref_rc=$?
+        if [ "$ref_rc" -eq 124 ]; then
+            ref_timeout=$((ref_timeout + 1))
+            echo "$id ref-timeout" >>"$LOG"
+        fi
         [ -s "$reffile" ] && refarg=(--reference "$reffile")
     fi
     dumparg=()
@@ -314,6 +329,7 @@ order_gates=0
         echo "--- measure 3: agreement with pdftotext -layout (poppler, informational only) ---"
         echo "pages measured:        $tau_ref_n"
         echo "tau median:            $tau_ref_median_h"
+        echo "poppler timeouts:      $ref_timeout (pdftotext bounded at ${TIMEOUT}s; #442 -- these documents were checked with no --reference, so they are simply absent from the two counts above, not counted as agreement or disagreement; measure 1's fidelity gate does not read this file at all and is unaffected)"
         if [ -n "$CLI" ]; then
             echo "--- #355: measure 1 through the real megapdf-cli binary ---"
             echo "cli aggregate F1:      $cli_agg_f1 (gate: >= 0.998, same as the internal-API measure above)"

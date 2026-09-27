@@ -62,7 +62,7 @@ SUMMARY="$OUT/markdown-summary.txt"
 : >"$LOG"
 
 visited=0; extracted=0; textless_only=0; encrypted=0; format_err=0
-crashed=0; hung=0; cmark_fail=0; bad_exit=0
+crashed=0; hung=0; cmark_fail=0; bad_exit=0; cmark_hung=0
 started=$(date +%s)
 
 while IFS= read -r pdf; do
@@ -98,7 +98,17 @@ while IFS= read -r pdf; do
     esac
 
     if [ -s "$mdfile" ]; then
-        if ! "$CMARK" "$mdfile" >/dev/null 2>>"$LOG"; then
+        # #442: cmark is an external tool call like pdftotext in structure-battery.sh was --
+        # bounded here for the same reason, so a document that makes cmark hang cannot stall
+        # the whole battery. A cmark timeout is not a parse failure (cmark never got to say
+        # whether the Markdown was valid), so it is counted and gated separately rather than
+        # folded into cmark_fail.
+        run_with_timeout "$TIMEOUT" "$CMARK" "$mdfile" >/dev/null 2>>"$LOG"
+        cmark_rc=$?
+        if [ "$cmark_rc" -eq 124 ]; then
+            cmark_hung=$((cmark_hung + 1))
+            echo "$id cmark-hung" >>"$LOG"
+        elif [ "$cmark_rc" -ne 0 ]; then
             cmark_fail=$((cmark_fail + 1))
             echo "$id cmark-parse-failed" >>"$LOG"
         fi
@@ -117,6 +127,7 @@ elapsed=$(( $(date +%s) - started ))
     echo "hung (> ${TIMEOUT}s):    $hung (gate: must be 0)"
     echo "other bad exit code:     $bad_exit (gate: must be 0 -- valid codes here are 0/2/3/4/5, never 1/6/7/130)"
     echo "cmark parse failures:    $cmark_fail (gate: must be 0)"
+    echo "cmark timed out (> ${TIMEOUT}s): $cmark_hung (gate: must be 0; #442 -- bounded so a hang cannot stall the whole battery)"
 } | tee "$SUMMARY"
 
-[ "$crashed" -eq 0 ] && [ "$hung" -eq 0 ] && [ "$bad_exit" -eq 0 ] && [ "$cmark_fail" -eq 0 ]
+[ "$crashed" -eq 0 ] && [ "$hung" -eq 0 ] && [ "$bad_exit" -eq 0 ] && [ "$cmark_fail" -eq 0 ] && [ "$cmark_hung" -eq 0 ]
