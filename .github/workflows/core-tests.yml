@@ -120,7 +120,7 @@ jobs:
           [ "$RUNNER_OS" = "Windows" ] && BIN="$RUNNER_TEMP/core-build/Debug/megapdf-cli.exe"
           [ -x "$BIN" ] || { echo "::error::$BIN is missing"; exit 1; }
           fail=0
-          for name in columns furniture lists headings xobject-text scan mixed; do
+          for name in columns furniture lists headings xobject-text scan mixed tagged tagged-wrong tiny-font-size; do
             pdf="tests/MegaPDF.Core.Tests/Fixtures/structure/$name.pdf"
             golden="core/tests/expected/structure/$name.txt"
             got="$RUNNER_TEMP/$name.cli.txt"
@@ -154,7 +154,7 @@ jobs:
             fi
           done
           if [ "$fail" -ne 0 ]; then exit 1; fi
-          echo "megapdf-cli: 7 fixtures match their txt and md goldens"
+          echo "megapdf-cli: 10 fixtures match their txt and md goldens"
 
       # Informational only (design #142 §7 measure 3's own precedent: poppler is another
       # heuristic, not truth): a rough token-multiset overlap between megapdf-cli's plain-text

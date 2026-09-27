@@ -107,6 +107,29 @@ U16 SpanString(const megapdf_structure* s, size_t block, size_t span) {
     return buf;
 }
 
+// A figure's alt text (#358) as one line: runs of whitespace -- including the line breaks a
+// producer may put inside /Alt (the corpus has multi-line alt texts tens of kilobytes long,
+// a chart's own data pasted in after its title) -- collapse to a single space, and the ends
+// are trimmed. Both writers render a figure as one line, and in Markdown the `*[Figure: ...]*`
+// emphasis cannot span a line break.
+std::string AltTextLine(const U16& alt) {
+    std::string out;
+    bool pending_space = false;
+    for (unsigned int cp : DecodeUtf16(alt)) {
+        const bool ws = cp == ' ' || cp == '\t' || cp == '\r' || cp == '\n' || cp == 0x0B || cp == 0x0C ||
+                        cp == 0x00A0 || cp == 0x2028 || cp == 0x2029 || (cp >= 0x2000 && cp <= 0x200B) ||
+                        cp == 0x202F || cp == 0x205F || cp == 0x3000;
+        if (ws) {
+            pending_space = !out.empty();
+            continue;
+        }
+        if (pending_space) out.push_back(' ');
+        pending_space = false;
+        AppendUtf8(&out, cp);
+    }
+    return out;
+}
+
 // See this file's header comment: recovers a line break only at a span boundary whose vertical
 // centres do not overlap (BuildLines'/megapdf_core.h's own half-the-taller-height rule).
 std::string RenderBlockText(const megapdf_structure* s, size_t index, bool keep_lines) {
@@ -185,12 +208,6 @@ void AppendEscaped(std::string* out, const std::string& text, bool* at_line_star
 std::string EscapePlainMd(const std::string& text) {
     std::string out;
     AppendEscaped(&out, text, nullptr);
-    return out;
-}
-
-std::string EscapeTableCellMd(const std::string& text) {
-    std::string out;
-    AppendEscaped(&out, text, nullptr, /*escape_pipe=*/true);
     return out;
 }
 
@@ -318,6 +335,143 @@ std::string RenderBlockMarkdown(const megapdf_structure* s, size_t index, bool k
         have_prev = true;
     }
     close_current();
+    return out;
+}
+
+// --------------------------------------------------------------------------
+// Tables (#358): a tagged table is a run of TABLE_ROW blocks; contract 9 marks each cell's
+// first span with MEGAPDF_SPAN_CELL_START (and MEGAPDF_SPAN_CELL_HEADER for a /TH). The block's
+// canonical text joins cells with a single space, which is why a cell's last span is trimmed of
+// trailing whitespace before it is rendered.
+// --------------------------------------------------------------------------
+
+struct Cell {
+    size_t first_span = 0, end_span = 0;   // [first, end) within the block
+    bool header = false;
+};
+
+std::vector<Cell> CellsOf(const megapdf_structure* s, size_t block) {
+    std::vector<Cell> cells;
+    const size_t n = megapdf_block_span_count(s, block);
+    for (size_t si = 0; si < n; si++) {
+        megapdf_span sp{};
+        if (megapdf_block_span_get(s, block, si, &sp) != MEGAPDF_OK) continue;
+        if ((sp.flags & MEGAPDF_SPAN_CELL_START) != 0 || cells.empty()) {
+            Cell c;
+            c.first_span = si;
+            c.end_span = si + 1;
+            c.header = (sp.flags & MEGAPDF_SPAN_CELL_HEADER) != 0;
+            cells.push_back(c);
+        } else {
+            cells.back().end_span = si + 1;
+        }
+    }
+    return cells;
+}
+
+std::string TrimRight(std::string s) {
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
+    return s;
+}
+
+// A cell's spans as plain text (cells are one line: no keep_lines inside a table).
+std::string RenderCellText(const megapdf_structure* s, size_t block, const Cell& cell) {
+    std::string out;
+    for (size_t si = cell.first_span; si < cell.end_span; si++) out += Utf16ToUtf8(SpanString(s, block, si));
+    return TrimRight(out);
+}
+
+// A cell's spans as Markdown: the same bold/italic/monospace merging RenderBlockMarkdown does,
+// `|` escaped, no line-start escapes (a cell never starts a line) and no line breaks.
+std::string RenderCellMarkdown(const megapdf_structure* s, size_t block, const Cell& cell) {
+    std::string out;
+    MdStyle current = MdStyle::Plain;
+    std::string mono_buf;
+    auto close_current = [&]() {
+        if (current == MdStyle::Mono) {
+            if (!mono_buf.empty()) out += RenderCodeSpan(mono_buf);
+            mono_buf.clear();
+        } else {
+            out += StyleMarker(current);
+        }
+        current = MdStyle::Plain;
+    };
+    for (size_t si = cell.first_span; si < cell.end_span; si++) {
+        megapdf_span cur{};
+        if (megapdf_block_span_get(s, block, si, &cur) != MEGAPDF_OK) continue;
+        std::string text = Utf16ToUtf8(SpanString(s, block, si));
+        if (si + 1 == cell.end_span) text = TrimRight(text);
+        if (text.empty()) continue;
+        const MdStyle style = EffectiveStyle(cur.flags);
+        if (style != current) {
+            close_current();
+            current = style;
+            if (style != MdStyle::Mono) out += StyleMarker(style);
+        }
+        if (current == MdStyle::Mono) mono_buf += text;
+        else AppendEscaped(&out, text, nullptr, /*escape_pipe=*/true);
+    }
+    close_current();
+    return out;
+}
+
+// The rows of one table: block indices `rows` (all TABLE_ROW, consecutive in reading order,
+// every row after the first marked `continues`). Markdown: a GFM pipe table when every row has
+// the same cell count (header = the first row when all its cells were /TH, else an empty header
+// row so no data row is promoted), otherwise one tab-joined line per row. Plain text: always
+// tab-joined rows on consecutive lines.
+std::string RenderTable(const megapdf_structure* s, const std::vector<size_t>& rows, bool is_markdown) {
+    std::vector<std::vector<Cell>> cells;
+    cells.reserve(rows.size());
+    for (size_t bi : rows) cells.push_back(CellsOf(s, bi));
+    std::string out;
+    if (!is_markdown) {
+        for (size_t r = 0; r < rows.size(); r++) {
+            if (r > 0) out += "\n";
+            for (size_t c = 0; c < cells[r].size(); c++) {
+                if (c > 0) out += "\t";
+                out += RenderCellText(s, rows[r], cells[r][c]);
+            }
+        }
+        return out;
+    }
+    bool uniform = !cells.empty();
+    for (const auto& row : cells) {
+        if (row.size() != cells[0].size() || row.empty()) { uniform = false; break; }
+    }
+    if (!uniform) {
+        for (size_t r = 0; r < rows.size(); r++) {
+            if (r > 0) out += "\n";
+            for (size_t c = 0; c < cells[r].size(); c++) {
+                if (c > 0) out += "\t";
+                out += RenderCellMarkdown(s, rows[r], cells[r][c]);
+            }
+        }
+        return out;
+    }
+    const size_t columns = cells[0].size();
+    bool first_is_header = true;
+    for (const Cell& c : cells[0]) if (!c.header) { first_is_header = false; break; }
+    auto row_line = [&](size_t r) {
+        std::string line = "|";
+        for (size_t c = 0; c < columns; c++) {
+            line += " " + RenderCellMarkdown(s, rows[r], cells[r][c]) + " |";
+        }
+        return line;
+    };
+    std::string divider = "|";
+    for (size_t c = 0; c < columns; c++) divider += " --- |";
+    size_t first_body = 0;
+    if (first_is_header) {
+        out += row_line(0) + "\n";
+        first_body = 1;
+    } else {
+        std::string empty = "|";
+        for (size_t c = 0; c < columns; c++) empty += "  |";
+        out += empty + "\n";
+    }
+    out += divider;
+    for (size_t r = first_body; r < rows.size(); r++) out += "\n" + row_line(r);
     return out;
 }
 
@@ -532,7 +686,9 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
         std::vector<FieldInfo> field_infos;
         bool field_infos_loaded = false;
 
-        for (size_t bi : by_page[static_cast<size_t>(rel)]) {
+        const std::vector<size_t>& page_blocks = by_page[static_cast<size_t>(rel)];
+        for (size_t pi = 0; pi < page_blocks.size(); pi++) {
+            const size_t bi = page_blocks[pi];
             megapdf_block b{};
             if (megapdf_block_get(s, bi, &b) != MEGAPDF_OK) continue;
             if (b.kind != MEGAPDF_BLOCK_PAGE_IMAGE) page_has_text = true;
@@ -540,7 +696,20 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
 
             std::string line;
             bool skip = false;
-            if (is_markdown) {
+            if (b.kind == MEGAPDF_BLOCK_TABLE_ROW) {
+                // #358: the whole table at once -- this row and every following TABLE_ROW
+                // block that continues it (contract 9 marks a table's second and later rows
+                // `continues`), rendered by RenderTable in either format.
+                std::vector<size_t> rows{bi};
+                while (pi + 1 < page_blocks.size()) {
+                    megapdf_block next{};
+                    if (megapdf_block_get(s, page_blocks[pi + 1], &next) != MEGAPDF_OK) break;
+                    if (next.kind != MEGAPDF_BLOCK_TABLE_ROW || next.continues == 0) break;
+                    rows.push_back(page_blocks[pi + 1]);
+                    pi++;
+                }
+                line = RenderTable(s, rows, is_markdown);
+            } else if (is_markdown) {
                 switch (b.kind) {
                     case MEGAPDF_BLOCK_HEADING: {
                         const int level = (std::min)(6, (std::max)(1, b.level));
@@ -587,25 +756,11 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                         break;
                     }
                     case MEGAPDF_BLOCK_FIGURE: {
-                        // Alt text needs the tagged path (#358): every FIGURE this phase has
-                        // none, so this is currently always a skip -- kept, ahead of that phase,
-                        // so a figure never silently prints as empty text once alt text exists.
-                        const U16 alt = BlockString(s, bi, MEGAPDF_BLOCK_ALT);
+                        // Alt text comes from a tagged page's /Figure (#358); a heuristic
+                        // page's figure has none and is skipped rather than printed empty.
+                        const std::string alt = AltTextLine(BlockString(s, bi, MEGAPDF_BLOCK_ALT));
                         if (alt.empty()) { skip = true; break; }
-                        line = "*[Figure: " + EscapePlainMd(Utf16ToUtf8(alt)) + "]*";
-                        break;
-                    }
-                    case MEGAPDF_BLOCK_TABLE_ROW: {
-                        // Tagged-only, unused before #358 (no TABLE_ROW block is produced by the
-                        // heuristic path). Design §3: a pipe table needs a known header row
-                        // (cells tagged TH), which contract 9 does not yet expose (no per-cell
-                        // TH/TD flag exists); until #358 adds one, every row renders through the
-                        // "otherwise" branch -- its cells joined by a tab, one row per line.
-                        const size_t spans = megapdf_block_span_count(s, bi);
-                        for (size_t si = 0; si < spans; si++) {
-                            if (si > 0) line += "\t";
-                            line += EscapeTableCellMd(Utf16ToUtf8(SpanString(s, bi, si)));
-                        }
+                        line = "*[Figure: " + EscapePlainMd(alt) + "]*";
                         break;
                     }
                     case MEGAPDF_BLOCK_PAGE_IMAGE:
@@ -643,22 +798,14 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
                         break;
                     }
                     case MEGAPDF_BLOCK_FIGURE: {
-                        // Alt text needs the tagged path (#358): every FIGURE this phase has
-                        // none, so this is currently always a skip -- kept, ahead of that phase,
-                        // so a figure never silently prints as empty text once alt text exists.
-                        const U16 alt = BlockString(s, bi, MEGAPDF_BLOCK_ALT);
+                        // Alt text comes from a tagged page's /Figure (#358); a heuristic
+                        // page's figure has none and is skipped rather than printed empty.
+                        // "[Figure: alt]", the same bracketed shape as the PAGE_IMAGE note, so a
+                        // reader (or tools/structure-check's fidelity measure) can tell the
+                        // tree's description of a picture from text that was on the page.
+                        const std::string alt = AltTextLine(BlockString(s, bi, MEGAPDF_BLOCK_ALT));
                         if (alt.empty()) { skip = true; break; }
-                        line = Utf16ToUtf8(alt);
-                        break;
-                    }
-                    case MEGAPDF_BLOCK_TABLE_ROW: {
-                        // Tagged-only, unused before #358 (no TABLE_ROW block is produced by the
-                        // heuristic path); design §2's shape (cells joined by a tab) all the same.
-                        const size_t spans = megapdf_block_span_count(s, bi);
-                        for (size_t si = 0; si < spans; si++) {
-                            if (si > 0) line += "\t";
-                            line += Utf16ToUtf8(SpanString(s, bi, si));
-                        }
+                        line = "[Figure: " + alt + "]";
                         break;
                     }
                     case MEGAPDF_BLOCK_PAGE_IMAGE:

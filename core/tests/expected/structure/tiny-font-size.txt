@@ -1,0 +1,11 @@
+Scan Heading
+
+Recognised text line one of the invisible layer.
+
+Recognised text line two of the invisible layer.
+
+Recognised text line three of the invisible layer.
+
+Recognised text line four of the invisible layer.
+
+Scanned page with an invisible text layer.

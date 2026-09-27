@@ -5615,10 +5615,318 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         {"xobject-text", repo + "/structure/xobject-text.pdf", 0, 0, 0},
         {"scan", repo + "/structure/scan.pdf", 0, 0, 0},
         {"mixed", repo + "/structure/mixed.pdf", 0, 0, 0},
+        // #358: the tagged path's two fixtures (gen_tagged()/gen_tagged_wrong()'s comments have
+        // the shapes), each dumped both ways -- the default load (tree trusted on tagged.pdf,
+        // rejected on tagged-wrong.pdf) and HEURISTIC_ONLY (what --heuristic gives) -- so the
+        // golden documents both the tree's answer and exactly what the flag changes; and #382's
+        // tiny-font-size.pdf (gen_tiny_font_size()'s comment), whose golden pins body_size at
+        // the caption's 12 pt rather than 0. KEEP_FURNITURE on the tagged ones so the /Artifact
+        // running header shows up in the dump as FURNITURE, the tagged path's furniture.
+        {"tagged", repo + "/structure/tagged.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
+        {"tagged-heuristic", repo + "/structure/tagged.pdf", 0, 0,
+         MEGAPDF_STRUCTURE_KEEP_FURNITURE | MEGAPDF_STRUCTURE_HEURISTIC_ONLY},
+        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf", 0, 0, 0},
     };
     for (const Case& c : cases) {
         test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir, c.check_golden);
     }
+}
+
+// --------------------------------------------------------------------------
+// #358: the tagged path, asserted directly (not only through the golden dumps, whose diffs
+// nobody reads closely): which page took which source, the trust rule's verdict on the
+// deliberately wrong tree, and each block kind the tree supplies.
+// --------------------------------------------------------------------------
+
+namespace {
+
+std::string block_text_ascii(const megapdf_structure* s, size_t i, megapdf_block_field which) {
+    const size_t n = megapdf_block_string(s, i, which, nullptr, 0);
+    std::vector<unsigned short> buf(n);
+    if (n > 0) megapdf_block_string(s, i, which, buf.data(), n);
+    std::string out;
+    for (unsigned short u : buf) out.push_back(u < 0x80 ? static_cast<char>(u) : '?');
+    return out;
+}
+
+std::string span_text_ascii(const megapdf_structure* s, size_t bi, size_t si) {
+    const size_t n = megapdf_block_span_string(s, bi, si, nullptr, 0);
+    std::vector<unsigned short> buf(n);
+    if (n > 0) megapdf_block_span_string(s, bi, si, buf.data(), n);
+    std::string out;
+    for (unsigned short u : buf) out.push_back(u < 0x80 ? static_cast<char>(u) : '?');
+    return out;
+}
+
+// The first block on `page` of `kind` whose text starts with `prefix`, or -1.
+long find_block(const megapdf_structure* s, int page, int kind, const std::string& prefix) {
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK || b.page != page || b.kind != kind) continue;
+        if (block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT).compare(0, prefix.size(), prefix) == 0) return static_cast<long>(i);
+    }
+    return -1;
+}
+
+}  // namespace
+
+void test_structure_tagged(const std::string& repo) {
+    Doc d(repo + "/structure/tagged.pdf");
+    if (!d.doc) { check(false, "structure tagged: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 2, 0, nullptr);
+    check(s != nullptr, "structure tagged: loads");
+    if (s == nullptr) return;
+    check(megapdf_structure_page_source(s, 0) == MEGAPDF_STRUCTURE_SOURCE_TAGGED &&
+              megapdf_structure_page_source(s, 1) == MEGAPDF_STRUCTURE_SOURCE_TAGGED,
+          "structure tagged: both pages come from the tree (source TAGGED)");
+    check(megapdf_structure_page_confidence(s, 0) == 100 && megapdf_structure_page_confidence(s, 1) == 100,
+          "structure tagged: a fully covered tree reads back as confidence 100",
+          std::to_string(megapdf_structure_page_confidence(s, 0)) + "/" + std::to_string(megapdf_structure_page_confidence(s, 1)));
+
+    // Headings at the tree's levels, including the /RoleMap-mapped /MyHeading -> /H2.
+    const long h1 = find_block(s, 0, MEGAPDF_BLOCK_HEADING, "Tagged Document Title");
+    const long h2 = find_block(s, 0, MEGAPDF_BLOCK_HEADING, "Items");
+    const long h2_mapped = find_block(s, 1, MEGAPDF_BLOCK_HEADING, "Table of Values");
+    check(h1 >= 0 && h2 >= 0 && h2_mapped >= 0, "structure tagged: the three tagged headings are HEADING blocks");
+    if (h1 >= 0 && h2 >= 0 && h2_mapped >= 0) {
+        megapdf_block b1{}, b2{}, b3{};
+        megapdf_block_get(s, static_cast<size_t>(h1), &b1);
+        megapdf_block_get(s, static_cast<size_t>(h2), &b2);
+        megapdf_block_get(s, static_cast<size_t>(h2_mapped), &b3);
+        check(b1.level == 1 && b2.level == 2, "structure tagged: /H1 and /H2 keep their tagged levels",
+              std::to_string(b1.level) + "/" + std::to_string(b2.level));
+        check(b3.level == 2, "structure tagged: a /RoleMap-mapped custom type (/MyHeading -> /H2) is an H2",
+              std::to_string(b3.level));
+    }
+
+    // The two-MCID paragraph is one block; the list is five items at two depths with the
+    // /Lbl as the marker.
+    const long para = find_block(s, 0, MEGAPDF_BLOCK_PARAGRAPH, "First paragraph");
+    check(para >= 0 && block_text_ascii(s, static_cast<size_t>(para), MEGAPDF_BLOCK_TEXT) ==
+                           "First paragraph of tagged text with a second line inside the same paragraph.",
+          "structure tagged: a /P with two marked-content IDs is one paragraph, lines joined by a space");
+    int items = 0;
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind == MEGAPDF_BLOCK_LIST_ITEM) items++;
+    }
+    check(items == 5, "structure tagged: five /LI blocks", std::to_string(items));
+    const long milk = find_block(s, 0, MEGAPDF_BLOCK_LIST_ITEM, "Milk");
+    const long wheat = find_block(s, 0, MEGAPDF_BLOCK_LIST_ITEM, "Whole wheat");
+    if (milk >= 0 && wheat >= 0) {
+        megapdf_block bm{}, bw{};
+        megapdf_block_get(s, static_cast<size_t>(milk), &bm);
+        megapdf_block_get(s, static_cast<size_t>(wheat), &bw);
+        check(bm.level == 1 && bw.level == 2, "structure tagged: list depth follows /L nesting",
+              std::to_string(bm.level) + "/" + std::to_string(bw.level));
+        check(block_text_ascii(s, static_cast<size_t>(milk), MEGAPDF_BLOCK_MARKER) == "?" /* U+2022 */ &&
+                  block_text_ascii(s, static_cast<size_t>(wheat), MEGAPDF_BLOCK_MARKER) == "-",
+              "structure tagged: the /Lbl is the marker, the /LBody the text");
+    } else {
+        check(false, "structure tagged: the Milk and Whole wheat items are LIST_ITEM blocks");
+    }
+
+    // The table: three rows, cells flagged, the /THead row's cells flagged as headers.
+    int rows = 0;
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind != MEGAPDF_BLOCK_TABLE_ROW) continue;
+        rows++;
+        int starts = 0, headers = 0;
+        const size_t sn = megapdf_block_span_count(s, i);
+        for (size_t si = 0; si < sn; si++) {
+            megapdf_span sp{};
+            megapdf_block_span_get(s, i, si, &sp);
+            if (sp.flags & MEGAPDF_SPAN_CELL_START) starts++;
+            if (sp.flags & MEGAPDF_SPAN_CELL_HEADER) headers++;
+        }
+        check(starts == 3, "structure tagged: every row has three CELL_START spans", std::to_string(starts));
+        check(b.level == rows, "structure tagged: level is the 1-based row number", std::to_string(b.level));
+        check((b.continues != 0) == (rows > 1), "structure tagged: rows after the first continue the table");
+        if (rows == 1) {
+            check(headers == 3, "structure tagged: the /THead row's cells carry CELL_HEADER", std::to_string(headers));
+            check(block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT) == "Name Count Price",
+                  "structure tagged: a row's canonical text is its cells joined by single spaces",
+                  block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT));
+        } else {
+            check(headers == 0, "structure tagged: a /TBody row has no CELL_HEADER", std::to_string(headers));
+        }
+    }
+    check(rows == 3, "structure tagged: three TABLE_ROW blocks", std::to_string(rows));
+
+    // The figure: alt text from the tree, the image object found through its marked-content ID.
+    bool figure_ok = false;
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind != MEGAPDF_BLOCK_FIGURE) continue;
+        figure_ok = b.page == 1 && b.object_index >= 0 &&
+                    block_text_ascii(s, i, MEGAPDF_BLOCK_ALT) == "A grey square standing in for a chart";
+    }
+    check(figure_ok, "structure tagged: the /Figure is a FIGURE block with its /Alt text and its image object");
+
+    // The link: a span under /Link carries SPAN_LINK, and the paragraph around it is whole.
+    const long link_para = find_block(s, 1, MEGAPDF_BLOCK_PARAGRAPH, "See the");
+    check(link_para >= 0 && block_text_ascii(s, static_cast<size_t>(link_para), MEGAPDF_BLOCK_TEXT) ==
+                                "See the project site for details.",
+          "structure tagged: inline /Link content stays inside its paragraph");
+    if (link_para >= 0) {
+        bool link_span = false;
+        const size_t sn = megapdf_block_span_count(s, static_cast<size_t>(link_para));
+        for (size_t si = 0; si < sn; si++) {
+            megapdf_span sp{};
+            megapdf_block_span_get(s, static_cast<size_t>(link_para), si, &sp);
+            // The span carries the word separator that follows it (as a bold span would), so
+            // the comparison is on the trimmed text.
+            std::string text = span_text_ascii(s, static_cast<size_t>(link_para), si);
+            while (!text.empty() && text.back() == ' ') text.pop_back();
+            if ((sp.flags & MEGAPDF_SPAN_LINK) && text == "project site") link_span = true;
+        }
+        check(link_span, "structure tagged: the /Link's characters are one SPAN_LINK span");
+    }
+
+    // Order comes from the tree: the link paragraph is drawn above the heading on page two
+    // but tagged last, and that is where it reads.
+    if (link_para >= 0 && h2_mapped >= 0) {
+        check(link_para > h2_mapped, "structure tagged: reading order is the tree's, not the page geometry's");
+    }
+    megapdf_structure_free(s);
+
+    // --heuristic: the same document without its tree.
+    megapdf_structure* h = megapdf_structure_load(d.doc, 0, 2, MEGAPDF_STRUCTURE_HEURISTIC_ONLY, nullptr);
+    check(h != nullptr, "structure tagged: HEURISTIC_ONLY loads");
+    if (h != nullptr) {
+        check(megapdf_structure_page_source(h, 0) == MEGAPDF_STRUCTURE_SOURCE_HEURISTIC &&
+                  megapdf_structure_page_source(h, 1) == MEGAPDF_STRUCTURE_SOURCE_HEURISTIC,
+              "structure tagged: HEURISTIC_ONLY forces the heuristic path on a tagged document");
+        bool any_row = false;
+        const size_t hn = megapdf_block_count(h);
+        for (size_t i = 0; i < hn; i++) {
+            megapdf_block b{};
+            megapdf_block_get(h, i, &b);
+            if (b.kind == MEGAPDF_BLOCK_TABLE_ROW) any_row = true;
+        }
+        check(!any_row, "structure tagged: the heuristic path never produces TABLE_ROW blocks");
+        const long link_h = find_block(h, 1, MEGAPDF_BLOCK_PARAGRAPH, "See the");
+        const long head_h = find_block(h, 1, MEGAPDF_BLOCK_HEADING, "Table of Values");
+        check(link_h >= 0 && head_h >= 0 && link_h < head_h,
+              "structure tagged: the heuristic path reads page two top-down (the link paragraph first)");
+        megapdf_structure_free(h);
+    }
+
+    // The trust rule: tagged-wrong.pdf's tree covers 58% of the page in a scrambled order.
+    Doc w(repo + "/structure/tagged-wrong.pdf");
+    if (!w.doc) { check(false, "structure tagged-wrong: opens"); return; }
+    megapdf_structure* ws = megapdf_structure_load(w.doc, 0, 1, 0, nullptr);
+    check(ws != nullptr, "structure tagged-wrong: loads");
+    if (ws != nullptr) {
+        check(megapdf_structure_page_source(ws, 0) == MEGAPDF_STRUCTURE_SOURCE_HEURISTIC,
+              "structure tagged-wrong: a tree covering 58% of the text is not trusted (source HEURISTIC)");
+        check(megapdf_structure_page_confidence(ws, 0) <= 80,
+              "structure tagged-wrong: the fallback page's confidence is capped at 80",
+              std::to_string(megapdf_structure_page_confidence(ws, 0)));
+        check(find_block(ws, 0, MEGAPDF_BLOCK_PARAGRAPH, "First paragraph") >= 0 ||
+                  find_block(ws, 0, MEGAPDF_BLOCK_PARAGRAPH, "First") >= 0,
+              "structure tagged-wrong: the text the tree left out is still extracted");
+        megapdf_structure_free(ws);
+    }
+}
+
+// #382: tiny-font-size.pdf (gen_tiny_font_size()'s comment) -- the body size must come from
+// the visible 12 pt caption, not round to 0 from the invisible 0.01 Tf layer, and only the
+// 20 pt heading is a HEADING.
+void test_structure_tiny_font_size(const std::string& repo) {
+    Doc d(repo + "/structure/tiny-font-size.pdf");
+    if (!d.doc) { check(false, "structure tiny-font-size: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+    check(s != nullptr, "structure tiny-font-size: loads");
+    if (s == nullptr) return;
+    check(std::fabs(megapdf_structure_body_size(s) - 12.0) < 0.01,
+          "structure tiny-font-size: body size is the caption's 12 pt, not 0 (#382)",
+          std::to_string(megapdf_structure_body_size(s)));
+    int headings = 0, paragraphs = 0;
+    const size_t n = megapdf_block_count(s);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        megapdf_block_get(s, i, &b);
+        if (b.kind == MEGAPDF_BLOCK_HEADING) headings++;
+        if (b.kind == MEGAPDF_BLOCK_PARAGRAPH) paragraphs++;
+    }
+    check(headings == 1, "structure tiny-font-size: exactly one HEADING (the 20 pt one), the invisible layer is not headings",
+          std::to_string(headings));
+    check(paragraphs >= 1, "structure tiny-font-size: the invisible layer's text is still extracted as paragraphs",
+          std::to_string(paragraphs));
+    megapdf_structure_free(s);
+}
+
+// #358's robustness bar: "0 crashes on malformed trees (a core test mutates the fixture's
+// tree a few hundred ways, ASan on)". Same-length byte substitutions (so the xref stays
+// valid and the document still opens) aimed at the structure tree's own syntax -- /K arrays,
+// /MCID values, /S types, /Pg and /P references, the /ParentTree's /Nums -- plus a few
+// anywhere in the file, 300 mutants, each loaded through the default path (tree first) and
+// written as Markdown. There is nothing to assert about the output; the assertion is that
+// this function returns, and under core-tests.yml's Linux leg, that ASan stays quiet.
+void test_structure_tagged_mutations(const std::string& repo) {
+    const std::vector<unsigned char> original = read_file(repo + "/structure/tagged.pdf");
+    if (original.empty()) { check(false, "structure tagged mutations: fixture read"); return; }
+    const std::string text(original.begin(), original.end());
+    std::vector<size_t> hot;
+    for (const char* needle : {"/K [", "/MCID ", "/S /", "/Pg ", "/P ", "/Nums [", "/StructParents ", "/RoleMap"}) {
+        const std::string pat(needle);
+        for (size_t at = text.find(pat); at != std::string::npos; at = text.find(pat, at + 1)) {
+            for (size_t k = 0; k < pat.size() + 14 && at + k < text.size(); k++) hot.push_back(at + k);
+        }
+    }
+    check(hot.size() > 200, "structure tagged mutations: the fixture has a tree to mutate", std::to_string(hot.size()));
+    static const char kReplacements[] = "0123456789 []/Rnul-<>";
+    uint32_t rng = 0x00358358u;
+    auto next = [&rng]() { rng = rng * 1664525u + 1013904223u; return rng >> 8; };
+    int opened = 0, structured = 0;
+    std::string sink;
+    auto sink_fn = [](void* ctx, const void* data, size_t size) -> int {
+        static_cast<std::string*>(ctx)->append(static_cast<const char*>(data), size);
+        return 1;
+    };
+    for (int iter = 0; iter < 300; iter++) {
+        std::vector<unsigned char> m = original;
+        const int edits = 1 + static_cast<int>(next() % 5);
+        for (int e = 0; e < edits; e++) {
+            const size_t at = (next() % 7 == 0) ? next() % m.size() : hot[next() % hot.size()];
+            m[at] = static_cast<unsigned char>(kReplacements[next() % (sizeof(kReplacements) - 1)]);
+        }
+        megapdf_document* d = megapdf_open(m.data(), m.size(), nullptr);
+        if (d == nullptr) continue;
+        opened++;
+        const int pages = megapdf_page_count(d);
+        if (pages > 0) {
+            megapdf_structure* s = megapdf_structure_load(d, 0, pages, MEGAPDF_STRUCTURE_KEEP_FURNITURE, nullptr);
+            if (s != nullptr) {
+                structured++;
+                const size_t n = megapdf_block_count(s);
+                for (size_t i = 0; i < n; i++) {
+                    (void)block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT);
+                    (void)block_text_ascii(s, i, MEGAPDF_BLOCK_MARKER);
+                    (void)block_text_ascii(s, i, MEGAPDF_BLOCK_ALT);
+                    const size_t sn = megapdf_block_span_count(s, i);
+                    for (size_t si = 0; si < sn; si++) (void)span_text_ascii(s, i, si);
+                }
+                megapdf_structure_free(s);
+            }
+            sink.clear();
+            (void)megapdf_write_text(d, 0, pages, MEGAPDF_WRITE_MARKDOWN, nullptr, sink_fn, &sink, nullptr);
+        }
+        megapdf_close(d);
+    }
+    check(opened > 150, "structure tagged mutations: most mutants still open (the mutations hit the tree, not the xref)",
+          std::to_string(opened));
+    check(structured > 100, "structure tagged mutations: most mutants still produce a structure",
+          std::to_string(structured));
+    check(true, "structure tagged mutations: 300 malformed trees, no crash");
 }
 
 // design §2 bar 2 / this issue's own acceptance criterion: every term SearchParityTests
@@ -5898,6 +6206,9 @@ void test_write_text_goldens(const std::string& repo, const std::string& expecte
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
+        // #358 / #382 (test_structure_goldens' comment on these three).
+        {"tagged", repo + "/structure/tagged.pdf"},        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf"},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},
     };
     for (const Case& c : cases) test_write_text_golden(c.name, c.path, expected_dir);
 }
@@ -5952,6 +6263,9 @@ void test_write_markdown_goldens(const std::string& repo, const std::string& exp
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
+        // #358 / #382 (test_structure_goldens' comment on these three).
+        {"tagged", repo + "/structure/tagged.pdf"},        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf"},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},
     };
     for (const Case& c : cases) test_write_markdown_golden(c.name, c.path, expected_dir);
 }
@@ -6160,6 +6474,9 @@ void test_markdown_round_trips(const std::string& repo, const std::string& expec
         {"tabular-headings", repo + "/structure/tabular-headings.pdf"},
         {"xobject-text", repo + "/structure/xobject-text.pdf"}, {"scan", repo + "/structure/scan.pdf"},
         {"mixed", repo + "/structure/mixed.pdf"},
+        // #358 / #382 (test_structure_goldens' comment on these three).
+        {"tagged", repo + "/structure/tagged.pdf"},        {"tagged-wrong", repo + "/structure/tagged-wrong.pdf"},
+        {"tiny-font-size", repo + "/structure/tiny-font-size.pdf"},
     };
     for (const Case& c : cases) test_markdown_round_trip(c.name, c.path, expected_dir);
 }
@@ -6977,6 +7294,9 @@ int main(int argc, char** argv) {
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
+    test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_tagged_mutations(std::string(MEGAPDF_REPO_FIXTURES));
     test_write_text_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
