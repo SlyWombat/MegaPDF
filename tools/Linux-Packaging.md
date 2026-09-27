@@ -321,8 +321,13 @@ app was installed.
 
 ## What lintian says about the .deb, and why each answer is "yes, on purpose"
 
-CI reports lintian and does not enforce it, because most of what it says follows from
-this being a bundled third-party package rather than one for the Debian archive.
+CI enforces lintian against this table (#403): the `linux-package` job suppresses
+exactly the tags answered below and goes red on anything else, at error or warning
+severity. Most of what lintian says follows from this being a bundled third-party
+package rather than one for the Debian archive, which is why these are accepted; a new
+tag means fixing the package, or adding a row here and the tag to the `accepted` list in
+`.github/workflows/ci.yml` in the same change. The job prints the full report first, for
+the record, then the verdict.
 
 | Tag | Answer |
 |---|---|
