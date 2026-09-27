@@ -17,8 +17,10 @@
 //     how much is needed, a call with a buffer fills up to its capacity and
 //     returns the total. That keeps JNI and P/Invoke marshalling boring.
 //   * Coordinates are crop space — bottom-left origin, the CropBox origin already
-//     subtracted, in points: user space units times the page's /UserUnit (#150).
-//     Getting that wrong is #30, so it happens once.
+//     subtracted, in points: user space units times the page's /UserUnit (#150), turned
+//     by the page's /Rotate (#439). One space, for everything: what a render draws, what
+//     megapdf_page_width/height measure and every rectangle any contract reports are all
+//     in it. Getting that wrong is #30, so it happens once.
 //   * Thread safety: every call takes the core's own mutex, because PDFium is not
 //     thread-safe and that is a property of the library, not of any platform.
 //     Bindings may keep their own discipline on top; correctness does not need it.
@@ -217,11 +219,19 @@ MEGAPDF_API int megapdf_page_count(const megapdf_document* document);
 MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* document, int index);
 MEGAPDF_API void megapdf_close_page(megapdf_page* page);
 
-/** Page size in points — the CropBox size, which is what a viewer shows, times the page's /UserUnit. */
+/**
+ * Page size in points — the CropBox size, which is what a viewer shows, times the page's
+ * /UserUnit, and rotated: a quarter-turned page answers with its width and height swapped,
+ * which is the size crop space and the render both use (#439).
+ */
 MEGAPDF_API double megapdf_page_width(const megapdf_page* page);
 MEGAPDF_API double megapdf_page_height(const megapdf_page* page);
 
-/** The CropBox origin in PDF user space that every returned coordinate has had subtracted. */
+/**
+ * The CropBox origin in PDF user space that every returned coordinate has had subtracted.
+ * The *unrotated* term of the transform: crop space also turns with the page's /Rotate
+ * (#439), and a rect the core reports has both applied already.
+ */
 MEGAPDF_API void megapdf_page_crop_origin(const megapdf_page* page, double* out_x, double* out_y);
 /**
  * The page's /UserUnit (#150): how many points one user space unit is, 1.0 for almost every
@@ -1351,13 +1361,32 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
  *                                only if they precede the delete.
  * megapdf_pages_extract changes nothing in the document and records nothing.
  *
- * Coordinates: rotating a page sets its /Rotate and rewrites no content. Renders follow
- * the rotation (contract 7 renders through PDFium's display matrix, which honours
- * /Rotate) and megapdf_page_width/height answer the rotated size; the crop-space
- * rectangles every other contract reports (fields, stamps, text runs, search hits) are
- * unrotated user space, as they were before this contract for a document that arrived
- * with /Rotate set. Adding the rotation term to that transform is its own change (#174's
- * item 2, every rect-consuming call site in four apps) and is not made here.
+ * Coordinates (#439): rotating a page sets its /Rotate and rewrites no content. Renders
+ * follow the rotation (contract 7 renders through PDFium's display matrix, which honours
+ * /Rotate), megapdf_page_width/height answer the rotated size, and so does crop space
+ * itself: the rectangles every contract reports — form fields, stamps, check marks, text
+ * runs and lines, search hits, redaction marks, page-object bounds, structure block
+ * bounds — are in the rotated space the render draws, and every coordinate passed *in* is
+ * read in that same space. There is **one** space and no flag to choose another: a caller
+ * that draws a reported rect over a render needs no rotation term of its own, which is the
+ * whole point, and a second space would only move this decision into four apps.
+ *
+ * So a page that arrives with /Rotate set, or that the user turns, reports rects a tap can
+ * be tested against and a highlight can be drawn from, with no work on the binding's part.
+ * Before #439 these rects were unrotated user space while the render was rotated, so a tap
+ * landed in the wrong place on exactly those pages.
+ *
+ * What rotation does *not* do is turn content the core writes: a stamp, a check mark or a
+ * text box placed on a rotated page lands in the rectangle the caller asked for, in the
+ * space above, but its own artwork is drawn in the page's unrotated orientation, so it
+ * appears turned against the page it sits on (an image stamp) or reads sideways (a text
+ * box). Filed separately as #446; it is a question about what belongs in the file, not
+ * about which space a rectangle is in.
+ *
+ * megapdf_page_crop_origin() and megapdf_page_user_unit() report the two *unrotated* terms
+ * of the transform, in user space, for a caller that needs the page's own geometry (a
+ * saved-copy comparison, a diagnostic). They are not what a caller needs to map a reported
+ * rect: those are already mapped.
  * ----------------------------------------------------------------------- */
 
 /** The page's index in its document as it is numbered now; -1 for a NULL handle or a deleted page. */
