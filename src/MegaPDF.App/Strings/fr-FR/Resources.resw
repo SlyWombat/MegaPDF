@@ -504,6 +504,14 @@ Enregistrée sous {2}, prête pour l'e-mail.</value>
     <value>{0}, signature</value>
     <comment>Narrator name of a library card; {0} is the signature's name</comment>
   </data>
+  <data name="SignatureCardMissingName" xml:space="preserve">
+    <value>{0}, signature, image introuvable</value>
+    <comment>Narrator name of a library card whose image file has gone (#402); {0} is the signature's name</comment>
+  </data>
+  <data name="SignatureImageMissing.Text" xml:space="preserve">
+    <value>Image introuvable</value>
+    <comment>Shown in place of a signature's thumbnail when its image file has gone (#402)</comment>
+  </data>
   <data name="Rename" xml:space="preserve">
     <value>Renommer</value>
   </data>

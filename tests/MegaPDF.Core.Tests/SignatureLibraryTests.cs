@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MegaPDF.Core.Services;
 using Xunit;
 
@@ -84,5 +85,112 @@ public class SignatureLibraryTests : IDisposable
         var reloaded = new SignatureLibrary(_dir);
 
         Assert.Empty(reloaded.All);
+        Assert.Equal([entry], reloaded.Missing);
+    }
+
+    // --- Reload: the library changed on disk under a running app (#402) ---
+
+    [Fact]
+    public void Reload_MovesAnEntryWhoseImageWasDeletedToMissing()
+    {
+        var library = new SignatureLibrary(_dir);
+        var kept = library.Add("Kept", FakePng);
+        var gone = library.Add("Gone", FakePng);
+        File.Delete(gone.PngPath);
+
+        library.Reload();
+
+        Assert.Equal([kept], library.All);
+        Assert.Equal([gone], library.Missing);
+    }
+
+    [Fact]
+    public void Reload_PicksUpAnIndexReplacedOnDisk()
+    {
+        var library = new SignatureLibrary(_dir);
+        library.Add("Before", FakePng);
+        // Another writer (a sync tool, a restore) puts a different library in place.
+        var pngPath = Path.Combine(_dir, "after.png");
+        File.WriteAllBytes(pngPath, FakePng);
+        var replacement = new SignatureEntry(Guid.NewGuid(), "After", pngPath, DateTime.UtcNow);
+        File.WriteAllText(Path.Combine(_dir, "index.json"), JsonSerializer.Serialize(new[] { replacement }));
+
+        library.Reload();
+
+        Assert.Equal([replacement], library.All);
+        Assert.Empty(library.Missing);
+    }
+
+    [Fact]
+    public void Reload_KeepsWhatItHadWhenTheIndexCannotBeRead()
+    {
+        var library = new SignatureLibrary(_dir);
+        var entry = library.Add("Dave", FakePng);
+        File.WriteAllText(Path.Combine(_dir, "index.json"), "[{\"Id\": \"half-writ");
+
+        library.Reload();
+
+        Assert.Equal([entry], library.All);
+    }
+
+    [Fact]
+    public void Reload_WithNoIndexIsAnEmptyLibrary()
+    {
+        var library = new SignatureLibrary(_dir);
+        library.Add("Dave", FakePng);
+        File.Delete(Path.Combine(_dir, "index.json"));
+
+        library.Reload();
+
+        Assert.Empty(library.All);
+        Assert.Empty(library.Missing);
+    }
+
+    [Fact]
+    public void Load_ToleratesAnIndexThatIsNotJson()
+    {
+        File.WriteAllText(Path.Combine(_dir, "index.json"), "not json at all");
+
+        var library = new SignatureLibrary(_dir);
+
+        Assert.Empty(library.All);
+        Assert.Empty(library.Missing);
+    }
+
+    [Fact]
+    public void Load_IgnoresAnEntryWithoutAPath()
+    {
+        File.WriteAllText(Path.Combine(_dir, "index.json"), "[{\"Id\": \"a11f0000-0000-4000-8000-000000000001\", \"Name\": \"No path\"}, null]");
+
+        var library = new SignatureLibrary(_dir);
+
+        Assert.Empty(library.All);
+        Assert.Empty(library.Missing);
+    }
+
+    [Fact]
+    public void Remove_ForgetsAMissingEntry()
+    {
+        var library = new SignatureLibrary(_dir);
+        var gone = library.Add("Gone", FakePng);
+        File.Delete(gone.PngPath);
+        library.Reload();
+
+        library.Remove(gone.Id);
+
+        Assert.Empty(library.Missing);
+        Assert.Empty(new SignatureLibrary(_dir).Missing); // written out of the index, not just forgotten in memory
+    }
+
+    [Fact]
+    public void Add_RecreatesTheFolderWhenItWasRemovedUnderneath()
+    {
+        var library = new SignatureLibrary(_dir);
+        Directory.Delete(_dir, recursive: true);
+
+        var entry = library.Add("Dave", FakePng);
+
+        Assert.True(File.Exists(entry.PngPath));
+        Assert.Single(new SignatureLibrary(_dir).All);
     }
 }

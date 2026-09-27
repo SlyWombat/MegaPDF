@@ -307,6 +307,9 @@ public static partial class Strings
     /// <summary>{0}, signature</summary>
     public static string SignatureCardName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignatureCardName"), arg0);
 
+    /// <summary>{0}, signature, image not found</summary>
+    public static string SignatureCardMissingName(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("SignatureCardMissingName"), arg0);
+
     /// <summary>Rename</summary>
     public static string Rename => Get("Rename");
 

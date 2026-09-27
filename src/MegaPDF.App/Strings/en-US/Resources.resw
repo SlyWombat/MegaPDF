@@ -535,6 +535,14 @@ Saved as {2} — ready to email.</value>
     <value>{0}, signature</value>
     <comment>Narrator name of a library card; {0} is the signature's name</comment>
   </data>
+  <data name="SignatureCardMissingName" xml:space="preserve">
+    <value>{0}, signature, image not found</value>
+    <comment>Narrator name of a library card whose image file has gone (#402); {0} is the signature's name</comment>
+  </data>
+  <data name="SignatureImageMissing.Text" xml:space="preserve">
+    <value>Image not found</value>
+    <comment>Shown in place of a signature's thumbnail when its image file has gone (#402)</comment>
+  </data>
   <data name="Rename" xml:space="preserve">
     <value>Rename</value>
   </data>
