@@ -9,6 +9,7 @@ by-hand production step that android/RELEASING.md describes.
 
     play_listing.py status                          read-only: listings, images, tracks
     play_listing.py push <captures> [--production <vc>] [--commit]
+    play_listing.py contact [--phone <number>|--phone ''] [--commit]   the public contact details (#417)
                                                     one edit: text, screenshots, and
                                                     optionally a production release;
                                                     validated always, committed only
@@ -113,6 +114,35 @@ def cmd_status():
         e.discard()
 
 
+def cmd_contact(phone=None, commit=False):
+    """The store listing's public contact details (Play Console -> Store settings).
+
+    Prints the email and website as they are and only whether a phone is set and
+    whether it is the agreed placeholder -- the number itself is never printed
+    (#417). With --phone, sets it; committed only with --commit.
+    """
+    e = Edit()
+    try:
+        d = e.call("GET", "/details")
+        cur = d.get("contactPhone") or ""
+        digits = re.sub(r"\D", "", cur)
+        print(f"contact email: {d.get('contactEmail')}  website: {d.get('contactWebsite')}")
+        print("contact phone: " + ("not set" if not cur else
+              ("the 888 555 placeholder" if digits.endswith("5551222") or digits.endswith("5551212")
+               else f"SET, {len(digits)} digits, NOT the placeholder")))
+        if phone is not None:
+            d["contactPhone"] = phone
+            e.call("PATCH", "/details", body={"contactPhone": phone})
+            print("contact phone <- " + ("(cleared)" if phone == "" else "the given number"))
+            if commit:
+                e.call("POST", ":commit")
+                print("edit committed")
+            else:
+                print("dry run: edit discarded")
+    finally:
+        e.discard()
+
+
 def production_release(copy, vc):
     return {"track": "production", "releases": [{
         "versionCodes": [str(vc)], "status": "completed",
@@ -204,6 +234,11 @@ def main(argv):
         cmd_status()
     elif argv[0] == "push":
         cmd_push(captures, vc, "--commit" in argv, "--phone-only" in argv)
+    elif argv[0] == "contact":
+        phone = None
+        if "--phone" in argv:
+            phone = argv[argv.index("--phone") + 1]
+        cmd_contact(phone, "--commit" in argv)
     elif argv[0] == "readback":
         sys.exit(1 if cmd_readback(captures, vc, "--phone-only" in argv) else 0)
     else:
