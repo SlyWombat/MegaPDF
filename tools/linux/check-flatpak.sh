@@ -108,11 +108,26 @@ echo "  $kind"
 [ "$kind" = "install-kind: Flatpak" ]
 check $?
 
-step "--print-check: what printing does in a sandbox with no lp in it"
-# Reported, not asserted. Printing has no portal route yet; what this proves is that
-# the app says so rather than failing obscurely.
-flatpak run --user --filesystem="$FIXTURES:ro" --command=/app/lib/megapdf/MegaPDF "$APP_ID" \
-    --print-check "$FIXTURES/fixture.pdf" 2>&1 | tail -4
+step "--print-check: inside the sandbox, printing goes through the print portal"
+# In a sandbox the CUPS route is not the route, so the check passes only where the
+# session offers org.freedesktop.portal.Print. A CI runner starts xdg-desktop-portal
+# with no desktop backend behind it, so there the check cannot pass, and the step is
+# skipped — explicitly, and only when the app says exactly why. This used to be piped
+# into tail and never looked at, which put "print-check FAILED" in a green log (#403).
+out=$(flatpak run --user --filesystem="$FIXTURES:ro" --command=/app/lib/megapdf/MegaPDF "$APP_ID" \
+    --print-check "$FIXTURES/fixture.pdf" 2>&1); rc=$?
+printf '%s\n' "$out" | grep '^print-check:' | sed 's/^/  /'
+if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'in a Flatpak sandbox, printing through org.freedesktop.portal.Print'; then
+    echo "  ok"
+elif printf '%s\n' "$out" | grep -q 'in a Flatpak sandbox, and this session offers no org.freedesktop.portal.Print'; then
+    echo "  skipped: this session has no org.freedesktop.portal.Print (a runner has no desktop"
+    echo "  portal backend), so the portal route cannot be checked here. What is checked is"
+    echo "  that the app said so, in those words, rather than failing some other way."
+else
+    echo "  FAIL (exit $rc): --print-check failed for a reason other than a missing portal"
+    printf '%s\n' "$out" | tail -5 | sed 's/^/        /'
+    failures=$((failures + 1))
+fi
 
 step "--self-test: fill, check, sign, save, reopen, inside the sandbox"
 WORK=$(mktemp -d)

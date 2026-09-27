@@ -416,14 +416,25 @@ jobs:
       - name: Install the .deb and run the app out of it
         run: sudo tools/linux/check-deb.sh "$(ls "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb)" "$RUNNER_TEMP/fixtures"
 
-      # Reported, not enforced. Most of what it says follows from this being a bundled
-      # third-party package rather than one for the Debian archive — see
-      # tools/Linux-Packaging.md, which answers each tag. It is here because the one
+      # Enforced against the table in tools/Linux-Packaging.md ("What lintian says about
+      # the .deb"): every tag that table answers is deliberate and is suppressed here;
+      # anything else goes red. Most of what lintian says follows from this being a
+      # bundled third-party package rather than one for the Debian archive, but the one
       # time it had something real to say (a build path in the shipped runpath), nothing
-      # else in CI would have noticed.
-      - name: What lintian makes of it
-        continue-on-error: true
-        run: lintian --tag-display-limit 0 "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb
+      # else in CI would have noticed — and while it was "reported, not enforced" it put
+      # an "exit code 2" annotation on a green job, which is not a check (#403). A new
+      # tag means fixing the package, or adding a row to that table and to this list in
+      # the same change. The first run is the full report for the record; the second is
+      # the verdict.
+      - name: lintian finds nothing the packaging notes have not answered
+        run: |
+          deb=$(ls "$RUNNER_TEMP"/deb/megapdf_*_amd64.deb)
+          echo "--- the full report, for the record (each tag is answered in tools/Linux-Packaging.md):"
+          lintian --tag-display-limit 0 --fail-on none "$deb"
+          accepted=dir-or-file-in-opt,embedded-library,unstripped-binary-or-object,no-changelog,copyright-file-contains-full-apache-2-license,copyright-not-using-common-license-for-apache2,copyright-without-copyright-notice,no-manual-page
+          echo "--- the verdict, with the accepted tags suppressed: ${accepted//,/ }"
+          lintian --tag-display-limit 0 --fail-on error,warning --suppress-tags "$accepted" "$deb"
+          echo "lintian: nothing beyond the accepted tags"
 
       # --- the Flatpak ----------------------------------------------------------
 
