@@ -40,4 +40,11 @@ Requires JDK 17 and the Android SDK (NDK + CMake 3.22.1 are pulled automatically
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :engine:testDebugUnitTest
 ```
 
+With an emulator or a device attached, the instrumented tests — the engine's, and the
+app's own UI tests (#346, see `TESTING.md`):
+
+```
+./gradlew :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest
+```
+
 CI builds run in `.github/workflows/android-ci.yml`, path-filtered to `android/**`.
