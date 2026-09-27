@@ -1616,14 +1616,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun undo() {
         val doc = document ?: return
         launchEdit(R.string.undo_failed) {
-            busy.pageWork(BusyLabel.APPLYING, null) { history.undo(doc) }?.let { afterHistoryChange(it) }
+            busy.pageWork(BusyLabel.APPLYING, null) { history.undo(doc.asEditTarget()) }?.let { afterHistoryChange(it) }
         }
     }
 
     fun redo() {
         val doc = document ?: return
         launchEdit(R.string.redo_failed) {
-            busy.pageWork(BusyLabel.APPLYING, null) { history.redo(doc) }?.let { afterHistoryChange(it) }
+            busy.pageWork(BusyLabel.APPLYING, null) { history.redo(doc.asEditTarget()) }?.let { afterHistoryChange(it) }
         }
     }
 
@@ -1639,7 +1639,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         busy.pageWork(BusyLabel.APPLYING, spot ?: BusySpot(operation.pageIndex)) {
-            history.perform(operation, doc)
+            history.perform(operation, doc.asEditTarget())
         }
         if (operation is BodyTextEditOperation || operation is BodyTextDeleteOperation) {
             // A change that regenerated the page already went in without a warning (#139, #145).

@@ -1,6 +1,5 @@
 package com.megapdf.android
 
-import com.megapdf.engine.PdfDocument
 import com.megapdf.engine.DEFAULT_FONT
 import com.megapdf.engine.PdfRect
 import com.megapdf.engine.DetachedObject
@@ -29,8 +28,8 @@ interface PdfEditOperation {
      */
     val changesDocument: Boolean get() = true
 
-    suspend fun apply(doc: PdfDocument)
-    suspend fun revert(doc: PdfDocument)
+    suspend fun apply(doc: EditTarget)
+    suspend fun revert(doc: EditTarget)
 }
 
 /** Bounded undo/redo stack. Single-session, so there is no recovery journal. */
@@ -44,7 +43,7 @@ class EditHistory(private val capacity: Int = 200) {
     val redoName: String? get() = undone.lastOrNull()?.name
 
     /** Applies the operation and records it, clearing the redo history. */
-    suspend fun perform(operation: PdfEditOperation, doc: PdfDocument) {
+    suspend fun perform(operation: PdfEditOperation, doc: EditTarget) {
         operation.apply(doc)
         record(operation)
     }
@@ -63,7 +62,7 @@ class EditHistory(private val capacity: Int = 200) {
     }
 
     /** Reverts the last operation; returns it — the caller needs to know if it changed the file. */
-    suspend fun undo(doc: PdfDocument): PdfEditOperation? {
+    suspend fun undo(doc: EditTarget): PdfEditOperation? {
         val operation = done.removeLastOrNull() ?: return null
         try {
             operation.revert(doc)
@@ -76,7 +75,7 @@ class EditHistory(private val capacity: Int = 200) {
     }
 
     /** Re-applies the last undone operation; returns it. */
-    suspend fun redo(doc: PdfDocument): PdfEditOperation? {
+    suspend fun redo(doc: EditTarget): PdfEditOperation? {
         val operation = undone.removeLastOrNull() ?: return null
         try {
             operation.apply(doc)
@@ -94,15 +93,6 @@ class EditHistory(private val capacity: Int = 200) {
     }
 }
 
-private suspend fun <T> PdfDocument.onPage(index: Int, body: suspend (com.megapdf.engine.PdfPage) -> T): T {
-    val page = openPage(index)
-    try {
-        return body(page)
-    } finally {
-        page.close()
-    }
-}
-
 /**
  * Marking a drawn square, or clearing a mark — one type, because they are each
  * other's inverse. [square] is the detected square; the mark drawn inside it is
@@ -117,11 +107,11 @@ class MarkOperation(
 
     override val name: String get() = if (adding) "mark" else "clear mark"
 
-    override suspend fun apply(doc: PdfDocument) = if (adding) add(doc) else remove(doc)
-    override suspend fun revert(doc: PdfDocument) = if (adding) remove(doc) else add(doc)
+    override suspend fun apply(doc: EditTarget) = if (adding) add(doc) else remove(doc)
+    override suspend fun revert(doc: EditTarget) = if (adding) remove(doc) else add(doc)
 
-    private suspend fun add(doc: PdfDocument) = doc.onPage(pageIndex) { it.addCheckMark(square, id) }
-    private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { it.removeAnnot(id) }
+    private suspend fun add(doc: EditTarget) = doc.onPage(pageIndex) { it.addCheckMark(square, id) }
+    private suspend fun remove(doc: EditTarget) = doc.onPage(pageIndex) { it.removeAnnot(id) }
 
     companion object {
         /**
@@ -147,8 +137,8 @@ class FieldToggleOperation(
 
     override val name: String get() = "checkbox"
 
-    override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { it.clickAt(x, y) }
-    override suspend fun revert(doc: PdfDocument) = apply(doc)
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) { it.clickAt(x, y) }
+    override suspend fun revert(doc: EditTarget) = apply(doc)
 }
 
 /** Placing or removing a signature stamp; the pixels let an undone removal return. */
@@ -164,13 +154,13 @@ class StampOperation(
 
     override val name: String get() = if (adding) "signature" else "remove signature"
 
-    override suspend fun apply(doc: PdfDocument) = if (adding) add(doc) else remove(doc)
-    override suspend fun revert(doc: PdfDocument) = if (adding) remove(doc) else add(doc)
+    override suspend fun apply(doc: EditTarget) = if (adding) add(doc) else remove(doc)
+    override suspend fun revert(doc: EditTarget) = if (adding) remove(doc) else add(doc)
 
-    private suspend fun add(doc: PdfDocument) = doc.onPage(pageIndex) {
+    private suspend fun add(doc: EditTarget) = doc.onPage(pageIndex) {
         it.addImageStamp(pixels, pixelWidth, pixelHeight, rect, id)
     }
-    private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { it.removeAnnot(id) }
+    private suspend fun remove(doc: EditTarget) = doc.onPage(pageIndex) { it.removeAnnot(id) }
 }
 
 /** Moving or resizing a placed stamp: remove and re-place under the same id. */
@@ -186,10 +176,10 @@ class MoveStampOperation(
 
     override val name: String get() = "move signature"
 
-    override suspend fun apply(doc: PdfDocument) = place(doc, to)
-    override suspend fun revert(doc: PdfDocument) = place(doc, from)
+    override suspend fun apply(doc: EditTarget) = place(doc, to)
+    override suspend fun revert(doc: EditTarget) = place(doc, from)
 
-    private suspend fun place(doc: PdfDocument, rect: PdfRect) = doc.onPage(pageIndex) {
+    private suspend fun place(doc: EditTarget, rect: PdfRect) = doc.onPage(pageIndex) {
         it.removeAnnot(id)
         it.addImageStamp(pixels, pixelWidth, pixelHeight, rect, id)
     }
@@ -205,7 +195,7 @@ class MoveStampOperation(
  * must normalize through a move: adding at the reported rect alone leaves the
  * box a descender's depth too high, and undo would not restore the position.
  */
-private suspend fun PdfDocument.placeTextBoxAt(
+private suspend fun EditTarget.placeTextBoxAt(
     pageIndex: Int, id: String, text: String, fontSize: Double, fontName: String,
     x: Double, y: Double,
 ) = onPage(pageIndex) {
@@ -235,14 +225,14 @@ class TextBoxOperation(
 
     override val name: String get() = if (adding) "text" else "remove text"
 
-    override suspend fun apply(doc: PdfDocument) = if (adding) add(doc) else remove(doc)
-    override suspend fun revert(doc: PdfDocument) = if (adding) remove(doc) else add(doc)
+    override suspend fun apply(doc: EditTarget) = if (adding) add(doc) else remove(doc)
+    override suspend fun revert(doc: EditTarget) = if (adding) remove(doc) else add(doc)
 
-    private suspend fun add(doc: PdfDocument) =
+    private suspend fun add(doc: EditTarget) =
         if (boundsAnchored) doc.placeTextBoxAt(pageIndex, id, text, fontSize, fontName, x, y)
         else doc.onPage(pageIndex) { it.addTextBox(text, fontSize, x, y, id, fontName) }
 
-    private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { it.removeTextBox(id) }
+    private suspend fun remove(doc: EditTarget) = doc.onPage(pageIndex) { it.removeTextBox(id) }
 }
 
 // ---- Redaction marks (#329) -------------------------------------------------
@@ -280,21 +270,21 @@ class RedactMarkOperation(
     override val name: String get() = if (adding) "redact" else "remove mark"
     override val changesDocument: Boolean get() = false
 
-    override suspend fun apply(doc: PdfDocument) {
+    override suspend fun apply(doc: EditTarget) {
         if (adding) mark(doc) else remove(doc)
     }
 
-    override suspend fun revert(doc: PdfDocument) {
+    override suspend fun revert(doc: EditTarget) {
         if (adding) remove(doc) else mark(doc)
     }
 
-    private suspend fun mark(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
-        ids = rects.mapNotNull { rect -> page.markForRedaction(rect).takeIf { it >= 0 } }
+    private suspend fun mark(doc: EditTarget) {
+        ids = doc.markForRedaction(pageIndex, rects).filter { it >= 0 }
     }
 
-    private suspend fun remove(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+    private suspend fun remove(doc: EditTarget) {
         // Already gone counts as success on the core side, so an undo cannot fail.
-        ids.forEach { page.removeRedactionMark(it) }
+        doc.removeRedactionMarks(pageIndex, ids)
         ids = emptyList()
     }
 }
@@ -313,12 +303,12 @@ class MoveRedactionMarkOperation(
     override val name: String get() = "move mark"
     override val changesDocument: Boolean get() = false
 
-    override suspend fun apply(doc: PdfDocument) {
-        doc.onPage(pageIndex) { it.moveRedactionMark(markId, to) }
+    override suspend fun apply(doc: EditTarget) {
+        doc.moveRedactionMark(pageIndex, markId, to)
     }
 
-    override suspend fun revert(doc: PdfDocument) {
-        doc.onPage(pageIndex) { it.moveRedactionMark(markId, from) }
+    override suspend fun revert(doc: EditTarget) {
+        doc.moveRedactionMark(pageIndex, markId, from)
     }
 }
 
@@ -338,13 +328,13 @@ class ClearRedactionMarksOperation(
     override val name: String get() = "clear marks"
     override val changesDocument: Boolean get() = false
 
-    override suspend fun apply(doc: PdfDocument) {
+    override suspend fun apply(doc: EditTarget) {
         doc.clearRedactionMarks()
     }
 
-    override suspend fun revert(doc: PdfDocument) {
+    override suspend fun revert(doc: EditTarget) {
         for ((page, rects) in marksByPage) {
-            doc.onPage(page) { p -> rects.forEach { p.markForRedaction(it) } }
+            doc.markForRedaction(page, rects)
         }
     }
 }
@@ -379,12 +369,12 @@ class EditTextBoxOperation(
     override val name: String
         get() = if (from.text == to.text) "restyle text" else "edit text"
 
-    override suspend fun apply(doc: PdfDocument) = replace(doc, to)
-    override suspend fun revert(doc: PdfDocument) = replace(doc, from)
+    override suspend fun apply(doc: EditTarget) = replace(doc, to)
+    override suspend fun revert(doc: EditTarget) = replace(doc, from)
 
     // One page load for the whole swap, as MoveStampOperation does — pdfium has
     // no in-place text edit, so restyling means rebuilding the object.
-    private suspend fun replace(doc: PdfDocument, style: TextBoxStyle) = doc.onPage(pageIndex) {
+    private suspend fun replace(doc: EditTarget, style: TextBoxStyle) = doc.onPage(pageIndex) {
         it.removeTextBox(id)
         it.addTextBox(style.text, style.fontSize, x, y, id, style.fontName)
         it.moveTextBox(id, x, y)
@@ -403,10 +393,10 @@ class MoveTextBoxOperation(
 
     override val name: String get() = "move text"
 
-    override suspend fun apply(doc: PdfDocument) =
+    override suspend fun apply(doc: EditTarget) =
         doc.onPage(pageIndex) { it.moveTextBox(id, toX, toY) }
 
-    override suspend fun revert(doc: PdfDocument) =
+    override suspend fun revert(doc: EditTarget) =
         doc.onPage(pageIndex) { it.moveTextBox(id, fromX, fromY) }
 }
 
@@ -432,7 +422,7 @@ class BodyTextEditOperation(
 
     override val name: String get() = "edit text"
 
-    override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) { page ->
         // One core call for the whole line, hidden copies included (#136): taking runs one
         // at a time moves the indices of those still to be taken.
         val edit = page.setLineText(line.runs.map { it.objectIndex }, newText)
@@ -440,7 +430,7 @@ class BodyTextEditOperation(
         lastOutcome = edit.outcome
     }
 
-    override suspend fun revert(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+    override suspend fun revert(doc: EditTarget) = doc.onPage(pageIndex) { page ->
         // Every object goes back at its own index, the edited run off first.
         page.restoreDetached(checkNotNull(originals) { "nothing to undo" })
         originals = null
@@ -456,11 +446,11 @@ class BodyTextDeleteOperation(
 
     override val name: String get() = "delete text"
 
-    override suspend fun apply(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+    override suspend fun apply(doc: EditTarget) = doc.onPage(pageIndex) { page ->
         held = page.detachTextRuns(line.runs.map { it.objectIndex })
     }
 
-    override suspend fun revert(doc: PdfDocument) = doc.onPage(pageIndex) { page ->
+    override suspend fun revert(doc: EditTarget) = doc.onPage(pageIndex) { page ->
         page.restoreDetached(checkNotNull(held) { "nothing to undo" })
         held = null
     }
