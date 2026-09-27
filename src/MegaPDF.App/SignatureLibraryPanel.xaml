@@ -52,17 +52,28 @@
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <!-- White on purpose in both themes: the ink was captured on paper
-                                         and reads as a signature only against it. -->
+                                         and reads as a signature only against it. The thumbnail is
+                                         decoded from bytes the app reads and set once ready (#402);
+                                         a signature whose image is gone says so in its place. -->
                                     <Border Width="136" Height="56" Background="White" CornerRadius="6" Padding="6"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                                        <Image Source="{x:Bind Thumbnail}" Stretch="Uniform" />
+                                        <Grid>
+                                            <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="Uniform" />
+                                            <!-- A fixed grey, not a theme brush: the box behind it is white in both themes. -->
+                                            <TextBlock x:Uid="SignatureImageMissing"
+                                                       Visibility="{x:Bind MissingVisibility, Mode=OneWay}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       FontSize="{ThemeResource TypeCaption}" Foreground="#6E6E6E"
+                                                       TextWrapping="Wrap" TextAlignment="Center" />
+                                        </Grid>
                                     </Border>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center"
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Name, Mode=OneWay}" VerticalAlignment="Center"
+                                               Opacity="{x:Bind NameOpacity, Mode=OneWay}"
                                                TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                                 </Grid>
                                 <Button.ContextFlyout>
                                     <MenuFlyout>
-                                        <MenuFlyoutItem x:Uid="RenameSignatureItem" Click="OnRenameClicked">
+                                        <MenuFlyoutItem x:Uid="RenameSignatureItem" Click="OnRenameClicked" IsEnabled="{x:Bind IsPresent, Mode=OneWay}">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE8AC;" />
                                             </MenuFlyoutItem.Icon>
@@ -82,7 +93,7 @@
                                 <FontIcon Glyph="&#xE712;" FontSize="{ThemeResource TypeBody}" />
                                 <Button.Flyout>
                                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                                        <MenuFlyoutItem x:Uid="RenameSignatureItem" AutomationProperties.AutomationId="RenameSignatureItem" Click="OnRenameClicked">
+                                        <MenuFlyoutItem x:Uid="RenameSignatureItem" AutomationProperties.AutomationId="RenameSignatureItem" Click="OnRenameClicked" IsEnabled="{x:Bind IsPresent, Mode=OneWay}">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE8AC;" />
                                             </MenuFlyoutItem.Icon>

@@ -76,11 +76,42 @@ public sealed record SearchHighlight(double X, double Y, double Width, double He
     public double StrokeThickness => IsCurrent ? 1.5 : 0;
 }
 
-/// <summary>A library signature shown in the flyout.</summary>
-public sealed record SignatureItem(Guid Id, string Name, string PngPath, ImageSource Thumbnail)
+/// <summary>
+/// A library signature shown in the flyout. The thumbnail arrives after the card does
+/// (#402): it is decoded from bytes the app has read, on the UI thread, never from a file
+/// URI XAML would go and open on its own — a PNG deleted under that decode failed inside
+/// XAML, which is where the one RPC_E_WRONG_THREAD crash came from.
+/// </summary>
+/// <param name="isMissing">
+/// The index names this signature but its image is gone (#402): the card says so, offers
+/// Delete, and cannot be picked or renamed.
+/// </param>
+public sealed partial class SignatureItem(Guid id, string name, string pngPath, bool isMissing) : ObservableObject
 {
-    /// <summary>Narrator name for the card: the signature's name, then what it is.</summary>
-    public string AccessibleName => Strings.SignatureCardName(Name);
+    public Guid Id { get; } = id;
+    public string PngPath { get; } = pngPath;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName))]
+    private string _name = name;
+
+    [ObservableProperty]
+    private ImageSource? _thumbnail;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(AccessibleName), nameof(IsPresent), nameof(MissingVisibility), nameof(NameOpacity))]
+    private bool _isMissing = isMissing;
+
+    /// <summary>The image is there: the card can be picked and the name changed.</summary>
+    public bool IsPresent => !IsMissing;
+
+    public Visibility MissingVisibility => IsMissing ? Visibility.Visible : Visibility.Collapsed;
+
+    /// <summary>A missing signature's name is dimmed, the way a missing recent document's is (#165).</summary>
+    public double NameOpacity => IsMissing ? 0.6 : 1;
+
+    /// <summary>Narrator name for the card: the signature's name, then what it is, then that the image is gone.</summary>
+    public string AccessibleName => IsMissing ? Strings.SignatureCardMissingName(Name) : Strings.SignatureCardName(Name);
 }
 
 /// <summary>
@@ -1344,14 +1375,58 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         await DoEditAsync(new RemoveTextBoxOperation(_document, pageIndex, objectIndex, run));
     }
 
+    /// <summary>
+    /// Rebuilds the flyout's list from the library as it is on disk now (#402): a tab
+    /// activation calls this, so a library changed underneath the app — a sync tool, a
+    /// restore, an image deleted by hand — is what the next flyout shows. Entries whose
+    /// image has gone are listed last and say so; the thumbnails of the others fill in
+    /// as their bytes are read and decoded.
+    /// </summary>
     public void LoadSignatures()
     {
+        signatureLibrary.Reload();
         Signatures.Clear();
         foreach (var entry in signatureLibrary.All)
-            Signatures.Add(ToItem(entry));
+        {
+            var item = ToItem(entry, isMissing: false);
+            Signatures.Add(item);
+            _ = LoadThumbnailAsync(item);
+        }
+        foreach (var entry in signatureLibrary.Missing)
+            Signatures.Add(ToItem(entry, isMissing: true));
         Signatures.CollectionChanged -= OnSignaturesChanged;
         Signatures.CollectionChanged += OnSignaturesChanged;
         OnSignaturesChanged(this, null);
+    }
+
+    /// <summary>
+    /// Reads the PNG and decodes it into the card's thumbnail (#402). Everything that
+    /// touches XAML runs on the UI thread: the file read is awaited from it and resumes on
+    /// it (the dispatcher's synchronization context, as every other await in this class),
+    /// the <see cref="BitmapImage"/> is created there, and <see cref="BitmapImage.SetSourceAsync"/>
+    /// is handed a stream of bytes the app already holds, so there is no file for XAML to
+    /// open and nothing on disk can vanish halfway through its decode. A read or decode
+    /// that fails marks the card missing rather than leaving a blank box.
+    /// </summary>
+    /// <param name="png">The bytes when the caller already has them (a signature just added).</param>
+    private static async Task LoadThumbnailAsync(SignatureItem item, byte[]? png = null)
+    {
+        try
+        {
+            png ??= await File.ReadAllBytesAsync(item.PngPath);
+            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            await stream.WriteAsync(png.AsBuffer());
+            stream.Seek(0);
+            var image = new BitmapImage();
+            await image.SetSourceAsync(stream);
+            item.Thumbnail = image;
+        }
+        catch (Exception)
+        {
+            // Gone between the reload and the read, unreadable, or not a PNG any more: the
+            // card stays and says so; nothing here may bring the process down.
+            item.IsMissing = true;
+        }
     }
 
     /// <summary>The flyout shows either the library or the empty-state copy, never both (#100).</summary>
@@ -1368,16 +1443,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     public async Task RenameSignatureAsync(SignatureItem item, string newName)
     {
         newName = newName.Trim();
-        if (newName.Length == 0 || newName == item.Name)
+        if (newName.Length == 0 || newName == item.Name || item.IsMissing)
             return;
         try
         {
             signatureLibrary.Rename(item.Id, newName);
-            var index = Signatures.IndexOf(item);
-            if (index >= 0)
-                Signatures[index] = item with { Name = newName };
+            item.Name = newName;
             if (PendingSignature == item)
-                PendingSignature = Signatures.FirstOrDefault(s => s.Id == item.Id);
+                OnPropertyChanged(nameof(PlacementHint)); // the hint carries the name
         }
         catch (Exception ex)
         {
@@ -1385,8 +1458,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         }
     }
 
-    private static SignatureItem ToItem(SignatureEntry entry) =>
-        new(entry.Id, entry.Name, entry.PngPath, new BitmapImage(new Uri(entry.PngPath)));
+    private static SignatureItem ToItem(SignatureEntry entry, bool isMissing) =>
+        new(entry.Id, entry.Name, entry.PngPath, isMissing);
 
     public async Task AddSignatureFromImageAsync(SignatureImage image, string name)
     {
@@ -1394,7 +1467,9 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         {
             var png = await SignatureImageProcessor.EncodePngAsync(image);
             var entry = signatureLibrary.Add(name, png);
-            Signatures.Add(ToItem(entry));
+            var item = ToItem(entry, isMissing: false);
+            Signatures.Add(item);
+            await LoadThumbnailAsync(item, png); // the bytes are in hand: no trip back to disk
         }
         catch (Exception ex)
         {
@@ -1406,10 +1481,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     {
         signatureLibrary.Remove(item.Id);
         Signatures.Remove(item);
+        if (PendingSignature == item)
+            PendingSignature = null;
     }
 
     public void SelectSignatureForPlacement(SignatureItem item)
     {
+        if (item.IsMissing)
+            return; // nothing to place (#402): the card already says the image is gone
         if (!Capabilities.CanSign)
         {
             IsRestrictedNoticeOpen = true; // #131: the owner does not allow annotations

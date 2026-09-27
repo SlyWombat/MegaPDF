@@ -101,6 +101,11 @@ internal static class Screenshot
             case "sign":
                 return await OpenSignatureLibraryAsync(window);
 
+            // #402: a library entry whose image has gone is listed and says so, and the
+            // others still show their thumbnails. Needs a document; the exit code is the test.
+            case "sign-missing":
+                return await ShowMissingSignatureAsync(window);
+
             // #145: the busy strip under the toolbar, and the page-level spinner, each held
             // open for the capture as they show 0.5 s into slow work.
             case "busy":
@@ -240,8 +245,91 @@ internal static class Screenshot
         // process started from a terminal cannot arrange. The window keeps an in-tree
         // copy of the same panel for exactly this shot.
         window.ShowSignatureLibraryForScreenshot();
-        await Task.Delay(900);
+        // Thumbnails are decoded from bytes after the cards appear (#402): every card must
+        // end up with one, or a shot of white boxes would pass for the library.
+        if (!await WaitForThumbnailsAsync(vm))
+        {
+            Console.Error.WriteLine("--screenshot-state sign: a card is still without its thumbnail, or its image is reported missing.");
+            return false;
+        }
         Console.WriteLine($"signature library shown with {vm.Signatures.Count} signature(s)");
+        return true;
+    }
+
+    /// <summary>
+    /// True once every card has either its thumbnail or its "image not found" state; false
+    /// when one is still blank after two seconds, or when <paramref name="expectMissing"/>
+    /// is not how many cards say the image is gone.
+    /// </summary>
+    private static async Task<bool> WaitForThumbnailsAsync(DocumentViewModel vm, int expectMissing = 0)
+    {
+        for (var i = 0; i < 20; i++)
+        {
+            await Task.Delay(100);
+            if (vm.Signatures.All(s => s.Thumbnail is not null || s.IsMissing))
+                break;
+        }
+        await Task.Delay(700); // layout, for the capture
+        var missing = vm.Signatures.Count(s => s.IsMissing);
+        var blank = vm.Signatures.Count(s => s.Thumbnail is null && !s.IsMissing);
+        Console.WriteLine($"signature cards: {vm.Signatures.Count}, thumbnails: {vm.Signatures.Count - missing - blank}, missing: {missing}, blank: {blank}");
+        return blank == 0 && missing == expectMissing;
+    }
+
+    /// <summary>
+    /// The #402 pose: adds a signature of its own, deletes its image behind the library's
+    /// back, and reloads — the card must come back saying the image is gone, beside the
+    /// others with their thumbnails intact. The entry it added is removed again at the
+    /// end, so the per-user library is left as it was found.
+    /// </summary>
+    private static async Task<bool> ShowMissingSignatureAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { } vm)
+        {
+            Console.Error.WriteLine("--screenshot-state sign-missing: no document is open.");
+            return false;
+        }
+        var seed = FindUpwards(Path.Combine("tools", "assets", "megawoman-sig.jpg"));
+        if (seed is null)
+        {
+            Console.Error.WriteLine("--screenshot-state sign-missing: tools/assets/megawoman-sig.jpg was not found above the executable.");
+            return false;
+        }
+        var before = vm.Signatures.Count;
+        var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(seed);
+        var image = await SignatureImageProcessor.LoadAndCleanAsync(file);
+        await vm.AddSignatureFromImageAsync(image, "Gone W.");
+        var added = vm.Signatures.LastOrDefault();
+        if (added is null || vm.Signatures.Count != before + 1)
+        {
+            Console.Error.WriteLine("--screenshot-state sign-missing: adding the test signature failed.");
+            return false;
+        }
+        // The card has to stay for the capture, which happens after this returns, so the
+        // entry is written out of the index as the process exits instead (Environment.Exit
+        // runs ProcessExit). Plain file I/O on the library, nothing of XAML's.
+        var library = window.Shell.SignatureLibrary;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { library.Remove(added.Id); }
+            catch (Exception) { /* already gone: nothing to leave behind */ }
+        };
+
+        File.Delete(added.PngPath);
+        vm.LoadSignatures(); // what a tab activation does: the library re-read from disk
+        window.ShowSignatureLibraryForScreenshot();
+        if (!await WaitForThumbnailsAsync(vm, expectMissing: 1))
+        {
+            Console.Error.WriteLine("--screenshot-state sign-missing: expected exactly one card to say its image is gone, with every other thumbnail present.");
+            return false;
+        }
+        var gone = vm.Signatures.Single(s => s.IsMissing);
+        if (gone.Id != added.Id || gone.Thumbnail is not null)
+        {
+            Console.Error.WriteLine("--screenshot-state sign-missing: the wrong card is the missing one, or it still has a thumbnail.");
+            return false;
+        }
+        Console.WriteLine($"signature library shown with {vm.Signatures.Count} card(s), '{gone.Name}' reported missing");
         return true;
     }
 
