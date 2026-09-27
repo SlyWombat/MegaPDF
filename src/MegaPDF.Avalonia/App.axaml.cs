@@ -47,11 +47,16 @@ public partial class App : Application
     /// at all, so this app never sees them either way — listed anyway so one place
     /// answers "is this a rig?" for every caller, including <see cref="Platform.SingleInstance"/>,
     /// rather than each keeping its own partial copy.
+    ///
+    /// <c>--open-check</c> (#398) is a rig too — no recovery offer, never redirected —
+    /// but unlike every other entry it takes its .pdf arguments through the ordinary
+    /// person's route (<see cref="RouteExternalPaths"/>), because the thing it exists
+    /// to check is what that route does in a real process: see <see cref="OpenCheckAsync"/>.
     /// </summary>
     internal static bool IsAutomationArgument(string argument) =>
         argument is "--screenshot" or "--screenshot-state" or "--story" or "--desktop-check"
                   or "--brand-check" or "--render-check" or "--print-check" or "--portal-print-check"
-                  or "--language-check" or "--install-kind" or "--self-test";
+                  or "--language-check" or "--install-kind" or "--self-test" or "--open-check";
 
     /// <summary>
     /// Drives the app into a state worth photographing, for --screenshot.
@@ -826,6 +831,76 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// --open-check: what a launch with .pdf paths on the command line actually ends
+    /// up with, in this real process — how many tabs, on which files, under which
+    /// window title (#398, #399).
+    ///
+    /// The self-test cannot see this from inside its headless harness, and the reason
+    /// is the bug this exists to catch: on macOS, AppKit hands the argv files of a
+    /// directly-launched binary over a second time, as open-file events, on top of
+    /// the app's own command-line routing. That second delivery only happens in a real
+    /// <c>NSApplication</c>, so the self-test launches this binary as a child process
+    /// with the same files and reads the lines below. Every other rig opens its one
+    /// file straight into its view model; this one takes the person's route.
+    ///
+    /// Waits until every tab's open has finished and the tab count has held still
+    /// for a moment, rather than for a fixed time: the duplicate, when it comes, lands
+    /// after the first open of the same file has already started, so a report taken
+    /// too early would miss exactly what it is looking for.
+    /// </summary>
+    private static async Task<int> OpenCheckAsync(MainWindow window, ShellViewModel shell, IReadOnlyList<string> files)
+    {
+        var failures = 0;
+        void Check(string what, bool ok)
+        {
+            Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {what}");
+            if (!ok) failures++;
+        }
+
+        Console.WriteLine($"open-check: launched with {files.Count} file(s): "
+                          + string.Join(", ", files.Select(Path.GetFileName)));
+
+        var settled = TimeSpan.FromSeconds(1.5);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var lastCount = -1;
+        var stableSince = DateTime.UtcNow;
+        while (DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(100);
+            var count = shell.Documents.Count;
+            if (count != lastCount)
+            {
+                lastCount = count;
+                stableSince = DateTime.UtcNow;
+            }
+            var allOpen = count > 0 && shell.Documents.All(d => d.IsDocumentOpen);
+            if (allOpen && DateTime.UtcNow - stableSince >= settled)
+                break;
+        }
+
+        var tabs = shell.Documents.Select(d => d.DocumentPath).ToList();
+        Console.WriteLine($"open-check: {tabs.Count} tab(s): "
+                          + string.Join(", ", tabs.Select(p => p is null ? "(no document)" : Path.GetFileName(p))));
+        Console.WriteLine($"open-check: window title: {window.Title}");
+
+        var distinct = files.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        Check("every file opened", shell.Documents.All(d => d.IsDocumentOpen));
+        Check("one tab per file, no duplicates (#398)",
+              tabs.Count == distinct.Count
+              && distinct.All(f => tabs.Count(t => t is not null && Core.Recovery.LaunchedDocument.SameFile(t, f)) == 1));
+
+        var active = shell.Active;
+        Check("the active tab is the last file given", files.Count == 0
+              ? active is null
+              : active?.DocumentPath is { } activePath && Core.Recovery.LaunchedDocument.SameFile(activePath, files[^1]));
+        Check("the window title names the active tab (#399)",
+              active is { DocumentName: { } name } && window.Title == Strings.WindowTitleFormat(name));
+
+        Console.WriteLine(failures == 0 ? "open-check: PASS" : $"::error::open-check: {failures} check(s) failed");
+        return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
     /// The filesystem type a path sits on, from /proc/self/mounts — the longest
     /// mount point that is a prefix of it wins, which is how the kernel resolves it.
     /// "(unknown)" rather than an exception on anything that cannot be read.
@@ -1290,7 +1365,12 @@ public partial class App : Application
             // (Program.cs) use, so a cold start with N files ends with N tabs the same
             // way those two do, and still waits for the app-level recovery offer
             // (RunLaunchSequenceAsync, started from OnOpened) rather than racing it.
-            if (isAutomationRun)
+            //
+            // --open-check is the one rig that takes the person's route on purpose:
+            // its whole job is to report what that route does in a real process (#398).
+            var isOpenCheck = desktop.Args?.Contains("--open-check") == true;
+            var cliPathsForOpenCheck = new List<string>();
+            if (isAutomationRun && !isOpenCheck)
             {
                 var path = desktop.Args?.FirstOrDefault(a =>
                     a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a));
@@ -1306,6 +1386,7 @@ public partial class App : Application
                 var cliPaths = desktop.Args?.Where(a =>
                     a.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) && File.Exists(a)).ToList() ?? [];
                 RouteExternalPaths(window, cliPaths);
+                cliPathsForOpenCheck = cliPaths;
             }
 
             // --screenshot <out.png>: render the window to a file and quit.
@@ -1321,6 +1402,31 @@ public partial class App : Application
                 if (ArgumentAfter(desktop.Args, "--theme") is "dark")
                     RequestedThemeVariant = ThemeVariant.Dark;
                 RunStory(desktop, viewModel, storyDir, ArgumentAfter(desktop.Args, "--signature"));
+            }
+
+            // --open-check: the tabs and title a launch with files on the command line
+            // actually ends up with, in this real process (#398, #399). Polled from the
+            // moment the window opens, because what it is waiting for — every file's
+            // open finishing, and any second delivery of the same file the OS may still
+            // be about to make — has no single event to wait on.
+            if (isOpenCheck)
+            {
+                window.Opened += (_, _) => DispatcherTimer.RunOnce(async () =>
+                {
+                    int code;
+                    try
+                    {
+                        code = await OpenCheckAsync(window, shell, cliPathsForOpenCheck);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"::error::open-check: {ex.GetType().Name}: {ex.Message}");
+                        code = 1;
+                    }
+                    desktop.Shutdown(code);
+                }, TimeSpan.FromMilliseconds(200));
+                base.OnFrameworkInitializationCompleted();
+                return;
             }
 
             // --desktop-check needs a real window — the file-dialog provider is a

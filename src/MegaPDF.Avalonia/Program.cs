@@ -1686,6 +1686,24 @@ internal static class Program
             failures++;
         }
 
+        // --- Launching the binary with files on the command line (#398, #399) ---
+        //
+        // The one check in this file that starts a second, real process: on macOS,
+        // AppKit hands a directly-launched binary's argv files over a second time, as
+        // open-file events, on top of the app's own command-line routing — and only a
+        // real NSApplication does that, so no headless harness can see it. The child
+        // runs --open-check with two fixtures and reports its tabs and title.
+        Console.WriteLine("launching the binary with files on the command line (#398, #399):");
+        try
+        {
+            CheckLaunchWithArguments(dir, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::launch with arguments: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Switching tabs mid-gesture (#348 §2b/§4) ---
         //
         // The pages area, find bar and in-place editor are one shared control set
@@ -3218,6 +3236,98 @@ internal static class Program
             window.SkipCloseConfirmation();
             window.Close();
         }
+    }
+
+    /// <summary>
+    /// The real thing, in a real process (#398, #399): this same binary launched with
+    /// two fixture paths on its command line and <c>--open-check</c>, which makes it
+    /// take the person's route for those paths (<c>App.RouteExternalPaths</c>), wait
+    /// for the opens to settle, print its tabs and window title, and exit. Read back
+    /// here from its stdout.
+    ///
+    /// Only a separate process can show the macOS bug: AppKit delivers a
+    /// directly-launched binary's argv files a second time, as open-file events, and
+    /// the find-or-activate dedupe used to lose the race against its own still-loading
+    /// first open of the same file — "Alpha, Alpha, Bravo". Nothing about that is
+    /// reachable from the headless platform the rest of this file runs on.
+    ///
+    /// Needs a display: Linux without one (a bare CI shell) says so and moves on
+    /// rather than failing; CI wraps the self-test in xvfb-run so it does run there.
+    /// </summary>
+    private static void CheckLaunchWithArguments(string dir, Action<string, bool> check)
+    {
+        if (OperatingSystem.IsLinux()
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"))
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+        {
+            Console.WriteLine("  skipped: no display for a real window (set DISPLAY, or run under xvfb-run)");
+            return;
+        }
+
+        var fixtureA = Path.GetFullPath(Path.Combine(dir, "fixture.pdf"));
+        var fixtureB = Path.GetFullPath(Path.Combine(dir, "forms.pdf"));
+
+        // The apphost this self-test is running in — the bundle's binary on macOS,
+        // the published apphost on Linux, MegaPDF.exe on Windows. `dotnet run` runs
+        // the apphost too, but a plain `dotnet MegaPDF.dll` does not, and then the
+        // child has to be started the same way.
+        var host = Environment.ProcessPath ?? throw new InvalidOperationException("no process path to relaunch");
+        var start = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = host,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        if (Path.GetFileNameWithoutExtension(host).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            var assembly = typeof(Program).Assembly.Location;
+            if (string.IsNullOrEmpty(assembly))
+                throw new InvalidOperationException("running under dotnet with no assembly path to relaunch");
+            start.ArgumentList.Add(assembly);
+        }
+        start.ArgumentList.Add("--open-check");
+        // English whatever the machine speaks, for the same reason this self-test
+        // forces it on itself: the title below is compared against Strings.* here.
+        start.ArgumentList.Add("--language");
+        start.ArgumentList.Add("en-US");
+        start.ArgumentList.Add(fixtureA);
+        start.ArgumentList.Add(fixtureB);
+
+        using var child = System.Diagnostics.Process.Start(start)
+                          ?? throw new InvalidOperationException("the child process did not start");
+        var stdout = child.StandardOutput.ReadToEndAsync();
+        var stderr = child.StandardError.ReadToEndAsync();
+        if (!child.WaitForExit((int)TimeSpan.FromSeconds(60).TotalMilliseconds))
+        {
+            try { child.Kill(entireProcessTree: true); } catch (Exception) { }
+            check("the launched process reported back within a minute", false);
+            return;
+        }
+        var report = stdout.GetAwaiter().GetResult();
+        var errors = stderr.GetAwaiter().GetResult();
+
+        // The child's own lines, indented under this block so a failure reads in place.
+        foreach (var line in report.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            Console.WriteLine($"    {line.TrimEnd()}");
+        foreach (var line in errors.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            Console.WriteLine($"    stderr: {line.TrimEnd()}");
+
+        var tabsLine = report.Split('\n').Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith("open-check: ", StringComparison.Ordinal) && l.Contains(" tab(s): ", StringComparison.Ordinal));
+        var titleLine = report.Split('\n').Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith("open-check: window title: ", StringComparison.Ordinal));
+        var tabs = tabsLine?["open-check: ".Length..].Split(" tab(s): ", 2) is [var count, var names] && int.TryParse(count, out var n)
+            ? (Count: n, Names: names.Split(", ").ToList())
+            : (Count: -1, Names: []);
+        var title = titleLine?["open-check: window title: ".Length..];
+
+        check("the launched process reported back", tabsLine is not null && titleLine is not null);
+        check("launching the binary with two files opens two tabs, one each (#398)",
+              tabs.Count == 2 && tabs.Names.Count(x => x == "fixture.pdf") == 1 && tabs.Names.Count(x => x == "forms.pdf") == 1);
+        check("and its window title names the last file (#399)",
+              title == Strings.WindowTitleFormat("forms.pdf"));
+        check($"and it passed its own checks (exit {child.ExitCode})", child.ExitCode == 0);
     }
 
     /// <summary>

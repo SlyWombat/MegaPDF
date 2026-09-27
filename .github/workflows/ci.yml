@@ -131,9 +131,11 @@ jobs:
       # thing CI cannot do, so this drives the real view model's click routing and
       # checks through a fresh engine open of the saved file. The same check the
       # macOS bundle runs, which is what makes "parity" a claim with evidence.
+      # Under xvfb-run since #398: one of its checks launches the binary again, for
+      # real, with two files on the command line, and that child needs a display.
       - name: Fill-check-sign self-test
         run: |
-          "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
+          xvfb-run -a "$RUNNER_TEMP/app/MegaPDF/bin/MegaPDF" --self-test "$RUNNER_TEMP/fixtures"
 
       # Printing is CUPS through lp. What can be wrong is the lpstat parsing that
       # decides which queues exist and which is the default — checked against a
