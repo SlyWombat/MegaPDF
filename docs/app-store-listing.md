@@ -499,7 +499,13 @@ review shot ends up on a store listing.
 The iPad simulator is put in **Full Screen Apps** first (Settings → Multitasking
 & Gestures, driven by `CaptureSimulatorSetupUITests`): in Windowed Apps iPadOS 26
 draws a resize grabber in the corner of every image, and the first 2.0 set
-carried it in all of them.
+carried it in all of them — and the 2.1.1 CI set too, because the workflow did
+not run that step until #406. Every simulator also gets
+`com.apple.keyboard.preferences DidShowContinuousPathIntroduction` set before
+the app is installed: the first keyboard on a fresh simulator comes up under
+iOS's QuickPath tip ("Speed up your typing by sliding your finger…", in the
+system language), which is what `text-edit` shot on the runner in all three
+languages. The in-house simulators had shown it once and never again.
 
 ## Screenshots — Mac App Store
 
