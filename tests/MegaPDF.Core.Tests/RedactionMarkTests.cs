@@ -182,6 +182,117 @@ public class RedactionMarkTests : IDisposable
         Assert.True(Same(BoundsOf(doc, id)!.Value, to));
     }
 
+    // #429: a mark that an undo puts back comes back under a *new* core id, because the core
+    // hands out a fresh one for every marking and never reuses the old. Everything the history
+    // recorded before that undo is holding the id the mark used to have, so unless the history
+    // hands the swap on, the next Undo names a mark that no longer exists, the engine answers
+    // false, and the step the person pressed does nothing — and every step after it is one out.
+    // Found on Android by #346's harness; these are the same sequences against the real engine,
+    // which is what makes them cover the desktop apps and the mobile ones alike.
+
+    [Fact]
+    public void Undo_AfterARemoval_TakesBackTheMoveBeforeIt()
+    {
+        using var doc = Open();
+        var stack = new UndoStack();
+
+        // One mark over blank paper, so the sequence is about one mark and nothing else.
+        var place = MarkForRedactionOperation.Place(doc, 0, EmptyArea)!;
+        stack.Record(place);
+        var placed = place.MarkIds[0];
+        var drawn = BoundsOf(doc, placed)!.Value;
+        var moved = new PdfRect(drawn.X, drawn.Y - 48, drawn.Width, drawn.Height);
+
+        stack.Do(new MoveRedactionMarkOperation(doc, 0, placed, drawn, moved));
+        Assert.True(Same(BoundsOf(doc, placed)!.Value, moved));
+
+        stack.Do(new RemoveRedactionMarkOperation(doc, 0, placed, moved));
+        Assert.Equal(0, doc.RedactionMarkCount);
+
+        // Undo the removal: back where it was dropped, under an id nothing recorded earlier has.
+        stack.Undo();
+        Assert.Equal(1, doc.RedactionMarkCount);
+        Assert.True(Same(Rectangles(doc)[0], moved));
+        Assert.Null(BoundsOf(doc, placed));
+
+        // Undo the move: back where the drag drew it. This is the step the stale id lost.
+        stack.Undo();
+        Assert.True(Same(Rectangles(doc)[0], drawn));
+
+        // Undo the marking: nothing marked, nothing left to undo — the history came out even.
+        stack.Undo();
+        Assert.Equal(0, doc.RedactionMarkCount);
+        Assert.False(stack.CanUndo);
+    }
+
+    [Fact]
+    public void Redo_ForwardThroughTheRemoval_FollowsTheSameMark()
+    {
+        using var doc = Open();
+        var stack = new UndoStack();
+
+        var place = MarkForRedactionOperation.Place(doc, 0, EmptyArea)!;
+        stack.Record(place);
+        var placed = place.MarkIds[0];
+        var drawn = BoundsOf(doc, placed)!.Value;
+        var moved = new PdfRect(drawn.X, drawn.Y - 48, drawn.Width, drawn.Height);
+        stack.Do(new MoveRedactionMarkOperation(doc, 0, placed, drawn, moved));
+        stack.Do(new RemoveRedactionMarkOperation(doc, 0, placed, moved));
+        stack.Undo();
+        stack.Undo();
+        stack.Undo();
+
+        // Every redo re-marks and takes fresh ids of its own, so the way forward needs the
+        // same following the way back did.
+        stack.Redo();
+        Assert.True(Same(Rectangles(doc)[0], drawn));
+        stack.Redo();
+        Assert.True(Same(Rectangles(doc)[0], moved));
+        stack.Redo();
+        Assert.Equal(0, doc.RedactionMarkCount);
+        Assert.False(stack.CanRedo);
+    }
+
+    [Fact]
+    public void Undo_AfterClearingEveryMark_TakesBackTheMoveBeforeIt()
+    {
+        using var doc = Open();
+        var stack = new UndoStack();
+
+        var place = MarkForRedactionOperation.Place(doc, 0, EmptyArea)!;
+        stack.Record(place);
+        var placed = place.MarkIds[0];
+        var drawn = BoundsOf(doc, placed)!.Value;
+        var moved = new PdfRect(drawn.X + 30, drawn.Y, drawn.Width, drawn.Height);
+        stack.Do(new MoveRedactionMarkOperation(doc, 0, placed, drawn, moved));
+
+        // A clear's undo re-marks every rectangle it swept up, exactly as a removal's does,
+        // so it carried the same bug for the same reason.
+        stack.Do(ClearRedactionMarksOperation.Capture(doc, 0)!);
+        Assert.Equal(0, doc.RedactionMarkCount);
+
+        stack.Undo();
+        Assert.True(Same(Rectangles(doc)[0], moved));
+        stack.Undo();
+        Assert.True(Same(Rectangles(doc)[0], drawn));
+    }
+
+    [Fact]
+    public void Move_WhoseMarkTheCoreNoLongerHas_FailsInsteadOfDoingNothing()
+    {
+        using var doc = Open();
+        var stack = new UndoStack();
+        var elsewhere = new PdfRect(EmptyArea.X, EmptyArea.Y - 40, EmptyArea.Width, EmptyArea.Height);
+
+        // An id the core never handed out — which is the state #429 left every move in once a
+        // removal had been undone under it.
+        stack.Record(new MoveRedactionMarkOperation(doc, 0, 4040, EmptyArea, elsewhere));
+
+        Assert.Throws<InvalidOperationException>(stack.Undo);
+        // And the step is still on the stack, because it did not happen.
+        Assert.True(stack.CanUndo);
+    }
+
     [Fact]
     public void Resize_KeepsTheRectangleItIsGiven_RatherThanAShapeItHad()
     {
