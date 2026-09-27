@@ -7229,6 +7229,199 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
     fs::remove_all(dir, ec);
 }
 
+// #439: one coordinate space. Every rect the core reports — a field's, a text run's, a search
+// hit's — is in the space the render draws in and megapdf_page_width/height measure, on a
+// rotated page as much as an upright one. Before this, a rotated page rendered and measured
+// rotated while every rect came back in unrotated user space, so a tap landed in the wrong
+// place and a search hit highlighted the wrong region.
+void test_rotation_coordinates(const std::string& fixtures) {
+    struct Shot {
+        double w = 0, h = 0;
+        megapdf_rect field{}, run{}, hit{};
+        bool has_field = false, has_run = false, has_hit = false;
+        size_t field_ink = 0, run_ink = 0, hit_ink = 0;
+    };
+
+    // The ink inside a crop-space rect. The render is one pixel per point with its origin at
+    // the top left, so a rect's pixel box is the rect with y flipped through the page height;
+    // a pixel of slack each way absorbs the rasteriser's edges.
+    auto ink_in = [](const std::vector<unsigned char>& px, int w, int h, const megapdf_rect& r, double page_h) {
+        const int x0 = (std::max)(0, static_cast<int>(std::floor(r.left)) - 1);
+        const int x1 = (std::min)(w - 1, static_cast<int>(std::ceil(r.right)) + 1);
+        const int y0 = (std::max)(0, static_cast<int>(std::floor(page_h - r.top)) - 1);
+        const int y1 = (std::min)(h - 1, static_cast<int>(std::ceil(page_h - r.bottom)) + 1);
+        size_t n = 0;
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) {
+                const unsigned char* q = &px[(static_cast<size_t>(y) * w + x) * 4];
+                if (q[0] > 240 && q[1] > 240 && q[2] > 240) continue;
+                n++;
+            }
+        }
+        return n;
+    };
+
+    // What a quarter turn clockwise does to a rect, from the unrotated page's size: the same
+    // arithmetic the core's transform does, written out independently so a sign error in one
+    // does not hide in the other.
+    auto turned = [](const megapdf_rect& r, int quarter, double w0, double h0) {
+        switch (quarter & 3) {
+            case 1: return megapdf_rect{r.bottom, w0 - r.right, r.top, w0 - r.left};
+            case 2: return megapdf_rect{w0 - r.right, h0 - r.top, w0 - r.left, h0 - r.bottom};
+            case 3: return megapdf_rect{h0 - r.top, r.left, h0 - r.bottom, r.right};
+            default: return r;
+        }
+    };
+    auto same_rect = [](const megapdf_rect& a, const megapdf_rect& b, double tol = 0.75) {
+        return close_to(a.left, b.left, tol) && close_to(a.bottom, b.bottom, tol)
+            && close_to(a.right, b.right, tol) && close_to(a.top, b.top, tol);
+    };
+    auto rect_str = [](const megapdf_rect& r) {
+        return "(" + std::to_string(r.left) + "," + std::to_string(r.bottom) + ")-("
+             + std::to_string(r.right) + "," + std::to_string(r.top) + ")";
+    };
+    auto on_page = [](const megapdf_rect& r, double w, double h) {
+        return r.left >= -0.75 && r.bottom >= -0.75 && r.right <= w + 0.75 && r.top <= h + 0.75
+            && r.right > r.left && r.top > r.bottom;
+    };
+
+    // Everything the page reports at a rotation, with the ink each rect frames in the render.
+    auto shot = [&](const std::string& path, const char* term, int quarter, bool rotate_after_open) -> Shot {
+        Shot s;
+        Doc d(path);
+        if (d.doc == nullptr) return s;
+        if (!rotate_after_open && quarter != 0 && megapdf_page_rotate(d.doc, 0, quarter) != MEGAPDF_OK) return s;
+        Page p(d.doc, 0);
+        if (p.page == nullptr) return s;
+        // With rotate_after_open the handle is older than the rotation: the transform reads
+        // /Rotate live, so the rects must follow it without the page being reopened.
+        if (rotate_after_open && quarter != 0 && megapdf_page_rotate(d.doc, 0, quarter) != MEGAPDF_OK) return s;
+        s.w = megapdf_page_width(p.page);
+        s.h = megapdf_page_height(p.page);
+        if (megapdf_form_fields* fields = megapdf_form_fields_load(p.page)) {
+            megapdf_form_field f{};
+            if (megapdf_form_field_count(fields) > 0 && megapdf_form_field_get(fields, 0, &f) == MEGAPDF_OK) {
+                s.field = f.bounds;
+                s.has_field = true;
+            }
+            megapdf_form_fields_free(fields);
+        }
+        if (megapdf_text* text = megapdf_text_load(p.page, 0)) {
+            megapdf_text_run r{};
+            if (megapdf_text_run_count(text) > 0 && megapdf_text_run_get(text, 0, &r) == MEGAPDF_OK) {
+                s.run = r.bounds;
+                s.has_run = true;
+            }
+            megapdf_text_free(text);
+        }
+        auto t = utf16(term);
+        std::vector<double> packed(megapdf_search_page(p.page, t.data(), nullptr, 0));
+        if (packed.size() >= 5) {
+            megapdf_search_page(p.page, t.data(), packed.data(), packed.size());
+            if (packed[0] >= 1) {
+                s.hit = megapdf_rect{packed[1], packed[2], packed[3], packed[4]};
+                s.has_hit = true;
+            }
+        }
+        const int pw = static_cast<int>(std::lround(s.w));
+        const int ph = static_cast<int>(std::lround(s.h));
+        const auto px = pages::render_at(p.page, pw, ph);   // the render helper the page-tool tests use
+        if (px.size() == static_cast<size_t>(pw) * static_cast<size_t>(ph) * 4) {
+            if (s.has_field) s.field_ink = ink_in(px, pw, ph, s.field, s.h);
+            if (s.has_run) s.run_ink = ink_in(px, pw, ph, s.run, s.h);
+            if (s.has_hit) s.hit_ink = ink_in(px, pw, ph, s.hit, s.h);
+        }
+        return s;
+    };
+
+    struct Case { const char* name; std::string path; const char* term; };
+    const Case cases[] = {
+        {"forms.pdf", (std::filesystem::path(fixtures) / "forms.pdf").string(), "Name"},
+        {"fixture.pdf", (std::filesystem::path(fixtures) / "fixture.pdf").string(), "fixture"},
+    };
+
+    for (const Case& c : cases) {
+        const std::string who = std::string("rotation: ") + c.name + ": ";
+        const Shot up = shot(c.path, c.term, 0, false);
+        if (!(up.w > 0 && up.h > 0)) { check(false, who + "opens upright"); continue; }
+        check(up.has_run || up.has_hit || up.has_field, who + "reports something with a rect");
+
+        // Ink framed by a rect is the same ink whichever way the page is turned, so a count
+        // that moves by more than a fifth means the rect is no longer round the same thing.
+        auto ink_holds = [&](size_t now, size_t was) {
+            if (was == 0) return now == 0;
+            const double ratio = static_cast<double>(now) / static_cast<double>(was);
+            return ratio > 0.8 && ratio < 1.25;
+        };
+
+        for (int q = 1; q <= 3; q++) {
+            const std::string at = who + "at " + std::to_string(q * 90) + "deg: ";
+            for (bool after_open : {false, true}) {
+                const Shot s = shot(c.path, c.term, q, after_open);
+                const std::string when = at + (after_open ? "(handle open across the turn) " : "");
+                const bool swapped = (q & 1) != 0;
+                if (!(s.w > 0 && s.h > 0)) { check(false, when + "opens"); continue; }
+                check(close_to(s.w, swapped ? up.h : up.w) && close_to(s.h, swapped ? up.w : up.h),
+                      when + "the page measures rotated",
+                      std::to_string(s.w) + "x" + std::to_string(s.h));
+
+                if (up.has_run) {
+                    check(s.has_run, when + "still reports its first text run");
+                    const megapdf_rect want = turned(up.run, q, up.w, up.h);
+                    check(same_rect(s.run, want), when + "the text run's rect turns with the page",
+                          rect_str(s.run) + " wanted " + rect_str(want));
+                    check(on_page(s.run, s.w, s.h), when + "the text run's rect is on the rotated page",
+                          rect_str(s.run) + " in " + std::to_string(s.w) + "x" + std::to_string(s.h));
+                    check(s.run_ink > 20 && ink_holds(s.run_ink, up.run_ink),
+                          when + "the text run's rect is where the render drew it",
+                          std::to_string(s.run_ink) + " ink px, upright " + std::to_string(up.run_ink));
+                }
+                if (up.has_hit) {
+                    check(s.has_hit, when + "still finds the search term");
+                    const megapdf_rect want = turned(up.hit, q, up.w, up.h);
+                    check(same_rect(s.hit, want), when + "the search hit's rect turns with the page",
+                          rect_str(s.hit) + " wanted " + rect_str(want));
+                    check(on_page(s.hit, s.w, s.h), when + "the search hit's rect is on the rotated page", rect_str(s.hit));
+                    check(s.hit_ink > 10 && ink_holds(s.hit_ink, up.hit_ink),
+                          when + "the search hit's rect is where the render drew it",
+                          std::to_string(s.hit_ink) + " ink px, upright " + std::to_string(up.hit_ink));
+                }
+                if (up.has_field) {
+                    check(s.has_field, when + "still reports its first field");
+                    const megapdf_rect want = turned(up.field, q, up.w, up.h);
+                    check(same_rect(s.field, want), when + "the field's rect turns with the page",
+                          rect_str(s.field) + " wanted " + rect_str(want));
+                    check(on_page(s.field, s.w, s.h), when + "the field's rect is on the rotated page", rect_str(s.field));
+                    check(ink_holds(s.field_ink, up.field_ink),
+                          when + "the field's rect is where the render drew it",
+                          std::to_string(s.field_ink) + " ink px, upright " + std::to_string(up.field_ink));
+                }
+            }
+        }
+
+        // Four quarter turns are no turn at all: the cheap check that catches a sign error.
+        {
+            Doc d(c.path);
+            if (d.doc != nullptr) {
+                bool ok = true;
+                for (int i = 0; i < 4; i++) ok = ok && megapdf_page_rotate(d.doc, 0, 1) == MEGAPDF_OK;
+                check(ok && megapdf_page_rotation(d.doc, 0) == 0, who + "four quarter turns come back to 0");
+                Page p(d.doc, 0);
+                if (p.page != nullptr && up.has_run) {
+                    megapdf_text* text = megapdf_text_load(p.page, 0);
+                    megapdf_text_run r{};
+                    const bool got = text != nullptr && megapdf_text_run_count(text) > 0
+                                  && megapdf_text_run_get(text, 0, &r) == MEGAPDF_OK;
+                    check(got && same_rect(r.bounds, up.run, 0.01),
+                          who + "four quarter turns leave the rects exactly as they were",
+                          got ? rect_str(r.bounds) + " wanted " + rect_str(up.run) : "no run");
+                    megapdf_text_free(text);
+                }
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr,
@@ -7302,6 +7495,7 @@ int main(int argc, char** argv) {
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
+    test_rotation_coordinates(argv[1]);
     if (cli_path.empty()) {
         std::printf("cli tests: skipped (no megapdf-cli path given on the command line)\n");
     } else {
