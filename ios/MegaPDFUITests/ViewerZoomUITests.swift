@@ -12,8 +12,8 @@ import XCTest
 /// clipped to the display or in a coordinate space that no longer matches what is on
 /// screen, so the pixels are the honest witness.
 ///
-/// In the MegaPDFDemo scheme with the other UI tests, so `xcodebuild test -scheme
-/// MegaPDF` in CI does not wait on a simulator launch.
+/// In the MegaPDFDemo scheme with the other UI tests; ios-ci.yml runs it on the
+/// simulator after the unit tests (#405).
 final class ViewerZoomUITests: XCTestCase {
 
     private var app: XCUIApplication!

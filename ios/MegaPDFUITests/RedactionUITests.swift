@@ -67,8 +67,10 @@ final class RedactionUITests: XCTestCase {
     /// promise is that a screen-reader user is told, not which API carries it. A row
     /// that said nothing at all fails, in both directions: off is a state too.
     ///
-    /// Not measured on a device yet: this file is in the MegaPDFDemo scheme, which CI
-    /// does not build. The first Mac run of it is what proves the menu bridge.
+    /// First run on a device 2026-09-27 (Mac mini, iPhone 17 Pro simulator): fails at
+    /// "the ⋯ menu has no Redact row", twice in a row, while the save test above
+    /// passes. ios-ci.yml runs the save test and leaves this one out until the menu
+    /// bridge is looked at (#405).
     func testTheRedactToolIsInTheMenuAndSaysWhetherItIsArmed() {
         app.launch()
 

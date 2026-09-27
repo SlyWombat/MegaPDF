@@ -7,8 +7,8 @@ import XCTest
 ///
 /// Skipped unless `SHARE_CHECK=1` (xcodebuild passes it as `TEST_RUNNER_SHARE_CHECK`), because
 /// it needs a PDF already staged at "On My iPhone"/"On My iPad" named `share-check.pdf` — the
-/// same `local_storage()` recipe `tools/ios-files-e2e.sh` uses. Not run by CI's default
-/// `-scheme MegaPDF` scheme, the same as `FilesEndToEndUITests`.
+/// same `local_storage()` recipe `tools/ios-files-e2e.sh` uses — and which ios-ci.yml
+/// stages before running this on the simulator (#405).
 final class ShareVerificationUITests: XCTestCase {
 
     private var app: XCUIApplication!
