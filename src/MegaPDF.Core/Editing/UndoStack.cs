@@ -25,6 +25,7 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
     public void Do(IEditOperation operation)
     {
         operation.Apply();
+        RebindRedactionMarks(operation);
         _done.Add(operation);
         if (_done.Count > capacity)
             _done.RemoveAt(0);
@@ -55,8 +56,17 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
             return;
         var op = _done[^1];
         _done.RemoveAt(_done.Count - 1);
-        op.Revert();
+        try
+        {
+            op.Revert();
+        }
+        catch
+        {
+            _done.Add(op);   // keep the history honest: a revert that threw did not happen
+            throw;
+        }
         _undone.Push(op);
+        RebindRedactionMarks(op);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -65,8 +75,17 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
         if (!CanRedo)
             return;
         var op = _undone.Pop();
-        op.Apply();
+        try
+        {
+            op.Apply();
+        }
+        catch
+        {
+            _undone.Push(op);
+            throw;
+        }
         _done.Add(op);
+        RebindRedactionMarks(op);
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -75,5 +94,27 @@ public sealed class UndoStack(int capacity = UndoStack.DefaultCapacity)
         _done.Clear();
         _undone.Clear();
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Hands every other operation the mark ids the one just applied or reverted re-marked
+    /// under (#429).
+    ///
+    /// A redaction mark cannot come back under the id it had: the core hands out a fresh one and
+    /// never reuses the old. So the operation that re-marked is the only one that knows the
+    /// mark's new id, and every operation still holding the old one — the move recorded before a
+    /// removal, the marking under it, the clear that swept it up — would otherwise name a mark
+    /// the core no longer has, and quietly do nothing when its turn came.
+    /// </summary>
+    private void RebindRedactionMarks(IEditOperation source)
+    {
+        if (source is not IRedactionMarkEdit edit || edit.LastRenames.Count == 0)
+            return;
+        var renames = edit.LastRenames;
+        foreach (var op in _done.Concat(_undone))
+        {
+            if (!ReferenceEquals(op, source) && op is IRedactionMarkEdit other)
+                other.Rebind(renames);
+        }
     }
 }
