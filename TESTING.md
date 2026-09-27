@@ -263,6 +263,63 @@ page's characters report a near-zero `Tf` (an invisible OCR layer scaled through
 shape that used to round it to 0 and make every line a heading; `structure_check bodysizediag`
 is the corpus measurement behind the 1 pt floor.
 
+### Which corpus gates what (#434)
+
+There are two corpora, and they answer different questions.
+
+| | private | public |
+|---|---|---|
+| where | `GPD-DAVE`, `k2`, `k3` only | anywhere — CI, a cloud sandbox, a laptop |
+| what | 4,337 of the owner's real documents | 1,037 fetched from a committed manifest |
+| how | already on disk | `tools/stress/public-corpus/fetch.sh` |
+| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files |
+| depth | the deeper battery: real-world shapes nothing synthetic reproduces | the reproducible one: anyone can run it and get the same documents |
+
+Neither replaces the other. The private corpus stays the deeper gate and stays local; the
+public corpus is what makes the gates runnable by someone who is not the owner.
+
+**They are different populations and they give different numbers. That is the point, not a
+problem.** A public-corpus figure is never a substitute for the private one in a release
+decision, and a gate must never be retuned to make the public corpus go green — doing that
+would quietly weaken the gate for the corpus it was actually calibrated on (#354, #363).
+Record the two separately.
+
+    tools/stress/public-corpus/fetch.sh                  # → ~/megapdf-public-corpus, ~2 min
+    bash tools/stress/pages-battery.sh    <cli> ~/megapdf-public-corpus <out> --jobs 3
+    tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
+    tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
+
+First full run, 2026-09-27 (1,036 documents visited, 1,533 pages — see the #434 PR for the
+per-category breakdown):
+
+| measure | public corpus | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 | 0.998590 | >= 0.998 | pass |
+| structure: F1 through `megapdf-cli` | 0.998915 | >= 0.998 | pass |
+| structure: order agreement tau (median) | 1.000 | >= 0.9 | pass |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | 2 | 0 | **fail** — #443 |
+| markdown: cmark parse failures | 0 | 0 | pass |
+| markdown: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| markdown: bad exit codes | 2 | 0 | **fail** — #443 |
+| pages: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| pages: qpdf failures, count mismatches, other refusals | 6 / 3 / 5 | 0 / 0 / 0 | **fail** — #445, all harness or population |
+
+The failures were filed, not fixed and not tuned away: #442 (the structure battery can stall
+forever on `pdftotext`), #443 (`megapdf-cli extract` returns an undocumented 7 for unreadable
+documents), #444 (token fidelity collapses on composite fonts with CMaps), #445 (the pages
+battery's gates assume a valid input, which a corpus with a `malformed` category never
+guarantees). Read #445 before treating a red pages battery on the public corpus as an engine
+defect: on this run every one of its failures was the harness or the population.
+
+What the public corpus does **not** cover: real US federal fillable forms. #434 calls those
+the highest-value category, and `irs.gov`, `uscis.gov` and `govinfo.gov` are all unreachable
+from the sandbox the corpus was built in. Its 237 `form` documents are synthetic
+single-feature fixtures, which exercise field syntax but not the deep `/Parent` hierarchies a
+real IRS form carries. A green run here is not evidence that real government forms work.
+`tools/stress/public-corpus/README.md` has the measured reachability results and how to extend
+the manifest from a machine that can reach those hosts.
+
 ### Android app UI tests (#346)
 
 `android/app/src/androidTest/` drives the Android app's own screen on an emulator — the

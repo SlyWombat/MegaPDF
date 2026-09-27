@@ -93,3 +93,9 @@ __pycache__/
 # and FINGERPRINT beside them are committed.
 website/megapdf/apt/dists/
 website/megapdf/apt/pool/
+
+# The #434 public corpus: the manifest under tools/stress/public-corpus/ is committed,
+# the PDFs it names never are. fetch.sh defaults to ~/megapdf-public-corpus, outside the
+# tree entirely; this rule covers the in-tree path for anyone who points --dest at one.
+tools/stress/public-corpus/corpus/
+megapdf-public-corpus/
