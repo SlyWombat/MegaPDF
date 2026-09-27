@@ -122,11 +122,11 @@ jobs:
       - name: Install it and run the app inside its sandbox
         run: tools/linux/check-flatpak.sh artifacts/flathub/ca.electricrv.MegaPDF.flatpak "$RUNNER_TEMP/fixtures"
 
-      # Every .deb already published stays in the repository, so the site can replace
-      # the repository wholesale without taking away a version someone has pinned, and
-      # apt upgrade sees the path from each one to this one. Downloaded from the
-      # published (not draft) linux-v* releases into the pool, which make-apt-repo.sh
-      # keeps.
+      # The repository holds this release and the two before it (#372), so the site can
+      # replace the repository wholesale and apt upgrade still sees the path from either
+      # of those to this one. The .debs of the newest few published (not draft) linux-v*
+      # releases, by release date, go into the pool; make-apt-repo.sh then keeps the
+      # newest three by version and drops the rest.
       - name: The .debs already published
         env:
           GH_TOKEN: ${{ github.token }}
@@ -136,7 +136,7 @@ jobs:
           mkdir -p "$POOL"
           for tag in $(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
                          --json tagName,isDraft --jq '.[] | select(.isDraft | not) | .tagName' \
-                       | grep '^linux-v' || true); do
+                       | grep '^linux-v' | head -5 || true); do
             [ "$tag" = "$GITHUB_REF_NAME" ] && continue
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
               --pattern 'megapdf_*_amd64.deb' --dir "$POOL" --skip-existing

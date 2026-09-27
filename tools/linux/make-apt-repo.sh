@@ -19,8 +19,12 @@
 # are generated and never committed; they are built from the release's own .deb when
 # the site is deployed.
 #
-# Every .deb already in <out-dir>/pool is kept, so a repository can be grown one
-# release at a time rather than rebuilt from nothing. APT picks the newest.
+# The pool holds the current release and the two before it (#372, Dave 2026-09-27):
+# the .debs given here join whatever <out-dir>/pool already holds, and then everything
+# but the newest three versions, in dpkg's ordering, is deleted from the pool before
+# the indices are written, so Packages never lists it. A repository can still be grown
+# one release at a time; it just never grows past three. APT picks the newest, and a
+# machine on an older version keeps what it has installed.
 #
 # The script refuses to sign with any key but the one whose fingerprint is committed
 # in website/megapdf/apt/FINGERPRINT, and checks its own InRelease against the
@@ -73,6 +77,35 @@ for deb in "$@"; do
         echo "::error::$deb is $pkg/$arch, not megapdf/$ARCH" >&2; exit 1; }
     cp "$deb" "$OUT/$POOL/${pkg}_${ver}_${arch}.deb"
     echo "  pool: ${pkg}_${ver}_${arch}.deb"
+done
+
+# --- the current release and the two before it (#372) ------------------------------
+# By dpkg's own ordering, because sort -V puts 2.0.0-2 before 2.0.0 and apt goes by
+# dpkg. An insertion sort: the pool has a handful of entries, never more.
+KEEP=3
+newest_first() {
+    local -a v=("$@"); local i j t
+    for ((i = 1; i < ${#v[@]}; i++)); do
+        for ((j = i; j > 0; j--)); do
+            dpkg --compare-versions "${v[j]}" gt "${v[j-1]}" || break
+            t=${v[j]}; v[j]=${v[j-1]}; v[j-1]=$t
+        done
+    done
+    printf '%s\n' "${v[@]}"
+}
+declare -A file_of=()
+for d in "$OUT/$POOL"/*.deb; do
+    file_of["$(dpkg-deb -f "$d" Version)"]="$d"
+done
+n=0
+for ver in $(newest_first "${!file_of[@]}"); do
+    n=$((n + 1))
+    if [ "$n" -le "$KEEP" ]; then
+        echo "  keep: $(basename "${file_of[$ver]}")"
+    else
+        rm -f "${file_of[$ver]}"
+        echo "  drop: $(basename "${file_of[$ver]}") (the pool keeps the newest $KEEP)"
+    fi
 done
 
 # --- indices ------------------------------------------------------------------------
