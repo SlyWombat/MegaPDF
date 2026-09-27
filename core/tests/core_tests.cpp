@@ -5627,6 +5627,13 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
          MEGAPDF_STRUCTURE_KEEP_FURNITURE | MEGAPDF_STRUCTURE_HEURISTIC_ONLY},
         {"tagged-wrong", repo + "/structure/tagged-wrong.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"tiny-font-size", repo + "/structure/tiny-font-size.pdf", 0, 0, 0},
+        // #444: two vertical-writing-mode (Identity-V) composite-font words, "Hello" and
+        // "World" (tools/gen_vertical_cid_fixture.py's own comment has the full diagnosis).
+        // Before the #444 fix, BuildWords always treated a character's LOCAL +x as its advance
+        // axis; a WMode-1 composite font's upright-but-vertically-advancing glyphs failed that
+        // axis's baseline test on every consecutive pair, so this fixture's golden would show
+        // ten one-glyph words/paragraphs instead of the two five-letter ones below.
+        {"vertical-cid", repo + "/structure/vertical-cid.pdf", 0, 0, 0},
     };
     for (const Case& c : cases) {
         test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir, c.check_golden);
