@@ -56,8 +56,9 @@ python3 "$ROOT/tools/gen_test_fixtures.py" "$WORK/fixtures" >/dev/null
 # recents say "Contrat de location.pdf", not "demo-fr.pdf". One set, one name.
 case "$LANG_TAG" in
     en)    FIXTURE="$WORK/fixtures/demo.pdf";    DOC="$WORK/Rental Agreement.pdf" ;;
-    fr-CA) FIXTURE="$WORK/fixtures/demo-fr.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
-    fr)    FIXTURE="$WORK/fixtures/demo-fr.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
+    fr-CA) FIXTURE="$WORK/fixtures/demo-fr.pdf";    DOC="$WORK/Contrat de location.pdf" ;;
+    # France's own page, not Quebec's under a French name (#310).
+    fr)    FIXTURE="$WORK/fixtures/demo-fr-FR.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
 esac
 [ -f "$FIXTURE" ] || { echo "no demo document at $FIXTURE" >&2; exit 1; }
 cp "$FIXTURE" "$DOC"
