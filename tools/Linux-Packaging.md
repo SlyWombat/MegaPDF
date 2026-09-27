@@ -37,7 +37,7 @@ by their environment. `MegaPDF --install-kind` prints the decision, and `package
 | `tools/linux/package-check.sh` | what any package must be true of. Run against whatever a package installed. |
 | `tools/linux/check-flatpak.sh` | installs the bundle and drives the app inside the sandbox. |
 | `tools/linux/check-deb.sh` | installs the `.deb` on a bare machine, runs the app out of it, removes it again. |
-| `tools/linux/make-apt-repo.sh` | the signed APT repository (`dists/stable`, `pool/main`) from one or more `.deb`s. Refuses any key but the one in `website/megapdf/apt/FINGERPRINT`, and checks its own signature with gpgv before it finishes. |
+| `tools/linux/make-apt-repo.sh` | the signed APT repository (`dists/stable`, `pool/main`) from one or more `.deb`s. The pool is bounded to the current release and the two before it (#372): older `.deb`s are dropped from `pool/` and `Packages`. Refuses any key but the one in `website/megapdf/apt/FINGERPRINT`, and checks its own signature with gpgv before it finishes. |
 | `tools/linux/check-apt-repo.sh` | subscribes to that repository in clean Debian 12, Ubuntu 22.04 and 24.04 containers exactly as the website says, installs, runs the app, publishes a newer version and watches `apt upgrade` take it, and checks that a forged signature is refused. |
 | `website/megapdf/apt/` | the public half of the repository: `megapdf.gpg`, `megapdf.asc`, `megapdf.sources`, `FINGERPRINT`. |
 | `tools/linux/flatpak/ca.electricrv.MegaPDF.yml` | the manifest. |
@@ -321,8 +321,13 @@ app was installed.
 
 ## What lintian says about the .deb, and why each answer is "yes, on purpose"
 
-CI reports lintian and does not enforce it, because most of what it says follows from
-this being a bundled third-party package rather than one for the Debian archive.
+CI enforces lintian against this table (#403): the `linux-package` job suppresses
+exactly the tags answered below and goes red on anything else, at error or warning
+severity. Most of what lintian says follows from this being a bundled third-party
+package rather than one for the Debian archive, which is why these are accepted; a new
+tag means fixing the package, or adding a row here and the tag to the `accepted` list in
+`.github/workflows/ci.yml` in the same change. The job prints the full report first, for
+the record, then the verdict.
 
 | Tag | Answer |
 |---|---|
@@ -421,7 +426,10 @@ to miss the date.
    files). Or build it locally from the release's own .deb, with `APT_SIGNING_KEY_FILE`
    pointing at the key file: `tools/linux/make-apt-repo.sh website/megapdf/apt
    megapdf_2.0.0_amd64.deb`. For a later release, keep the old `pool/` there and add the
-   new .deb, so a machine that is a version behind can still resolve what it has.
+   new .deb: the script keeps the newest three versions and drops the rest, so the
+   repository always offers the current release and the two before it (#372, Dave
+   2026-09-27). A machine that is a version or two behind can still resolve what it has;
+   one further behind keeps what it has installed and is offered the newest.
 4. **Rehearse.** `python3 website/deploy.py --dry-run --linux --privacy`. It refuses
    unless the repository verifies against the committed key and holds the version
    `linux/index.html` offers.
@@ -455,10 +463,14 @@ name. Instead:
    the file says.
 2. Tag `linux-v2.0.0-2`. The tag build checks the tag against the package version, not
    the app version.
-3. The tag build downloads the .debs of every *published* `linux-v*` release into the
-   repository's pool, so the repository it builds holds 2.0.0 and 2.0.0-2 together.
+3. The tag build downloads the .debs of the newest *published* `linux-v*` releases into
+   the repository's pool, and `make-apt-repo.sh` keeps the newest three by version, so
+   the repository it builds holds the revision, the release it revises and the one
+   before that (2.0.0 and 2.0.0-2 together, when it was those two; #372 bounds it).
    `check-apt-repo.sh` installs the oldest and checks that `apt upgrade` takes it to
-   the newest (on a distribution where the oldest installed at all).
+   the newest (on a distribution where the oldest installed at all), and checks the
+   bound: at most three in the pool and in `Packages`, and the next version drops the
+   oldest.
 4. Publish the draft as Latest. The old release stays, with its files untouched.
 5. Bump the Linux page's links, download the tag run's repository into
    `website/megapdf/apt/`, and deploy the Linux parts as on "the day".

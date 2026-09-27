@@ -216,8 +216,12 @@ command line, so the language comes from the Language setting: before launching,
 set `"Language": "fr-CA"` (or `"fr-FR"`) in `%LOCALAPPDATA%\MegaPDF\settings.json`,
 and set it back to `""` afterwards. Everything else is the same run — the
 scripts find buttons by `AutomationId`, and `Send-Path` knows the French picker
-titles. The recipe that produced both sets, with the coordinates read off the
-French probe frame (the layout is the English one, translated):
+titles. The two French documents are not the same page (#310, Dave 2026-09-26):
+`--lang fr-CA` is the Quebec text (*fin de semaine*, *ramassage*, pi, lb, $) and
+`--lang fr-FR` France's own (*week-end*, *enlèvement*, m, kg, €), on the same
+layout — every coordinate below holds for both. The recipe that produced both
+sets, with the coordinates read off the French probe frame (the layout is the
+English one, translated):
 
     python3 tools/screenshots-windows/gen_store_docs.py artifacts/store/screenshots/fr-CA --lang fr-CA
     $env:MEGAPDF_SHOTDIR = "<repo>\artifacts\store\screenshots\fr-CA"

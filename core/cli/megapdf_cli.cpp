@@ -94,7 +94,52 @@ void PrintUsage(std::FILE* out) {
         "\n"
         "exit codes: 0 text written; 1 usage; 2 cannot open; 3 password required or wrong;\n"
         "4 unsupported security handler; 5 no text on any requested page; 6 --strict and some\n"
-        "requested page had no text; 7 --out could not be written; 130 interrupted (Ctrl+C).\n");
+        "requested page had no text; 7 --out could not be written; 130 interrupted (Ctrl+C).\n"
+        "\n"
+        "usage: megapdf-cli pages <file.pdf> --out <path> [operations]\n"
+        "\n"
+        "  Page tools (#174), applied in the order given, each on the document as the one\n"
+        "  before left it; pages are 1-based and <ranges> is as --pages above.\n"
+        "  --rotate <ranges>:<turns>  quarter turns clockwise (negative for anticlockwise)\n"
+        "  --delete <ranges>\n"
+        "  --move <from>:<to>         the page at <from> ends up as page <to>\n"
+        "  --blank <at>[:<w>x<h>]     an empty page before page <at> (one past the end appends);\n"
+        "                             Letter unless a size in points is given\n"
+        "  --import <other.pdf>[:<ranges>]@<at>\n"
+        "                             the other file's pages (all of them, or <ranges>) before page <at>\n"
+        "  --extract <ranges>         write only those pages to --out; the document is untouched\n"
+        "  --password-file / --password-stdin, --quiet: as for extract\n"
+        "\n"
+        "  --out is written whole to a sibling temporary file, read back, and only then renamed\n"
+        "  into place. Exit codes: 0 written; 1 usage; 2 cannot open; 3 password required or\n"
+        "  wrong; 4 unsupported security handler; 7 --out could not be written; 8 the document's\n"
+        "  security does not allow the operation; 9 the engine refused it; 130 interrupted.\n");
+}
+
+// The password for <file.pdf>, from --password-file's first line or stdin's (never argv):
+// see the header comment. The caller zeroes it the moment megapdf_open_file() returns.
+bool ReadPasswordSource(const std::string& password_file, bool password_stdin, std::string* password, bool* has_password) {
+    *has_password = false;
+    if (!password_file.empty()) {
+        std::ifstream pf(password_file, std::ios::binary);
+        if (!pf.good()) {
+            std::fprintf(stderr, "cannot read --password-file %s\n", password_file.c_str());
+            return false;
+        }
+        std::getline(pf, *password);
+        if (!password->empty() && password->back() == '\r') password->pop_back();
+        *has_password = true;
+    } else if (password_stdin) {
+        // stdin's first line through the C stream rather than std::cin, so this file
+        // needs no <iostream> (see ParseDigits for the GLIBCXX symbol that header costs).
+        // Same result as std::getline: up to and excluding the first '\n' or EOF.
+        for (int c = std::getc(stdin); c != EOF && c != '\n'; c = std::getc(stdin)) {
+            password->push_back(static_cast<char>(c));
+        }
+        if (!password->empty() && password->back() == '\r') password->pop_back();
+        *has_password = true;
+    }
+    return true;
 }
 
 // #145's cancellation pattern, raised from a signal handler: megapdf_cancel_raise() is
@@ -405,25 +450,7 @@ int RunExtract(int argc, char** argv) {
     // megapdf_open_file() has consumed it, and never placed on argv.
     std::string password;
     bool has_password = false;
-    if (!password_file.empty()) {
-        std::ifstream pf(password_file, std::ios::binary);
-        if (!pf.good()) {
-            std::fprintf(stderr, "cannot read --password-file %s\n", password_file.c_str());
-            return 1;
-        }
-        std::getline(pf, password);
-        if (!password.empty() && password.back() == '\r') password.pop_back();
-        has_password = true;
-    } else if (password_stdin) {
-        // stdin's first line through the C stream rather than std::cin, so this file
-        // needs no <iostream> (see ParseDigits for the GLIBCXX symbol that header costs).
-        // Same result as std::getline: up to and excluding the first '\n' or EOF.
-        for (int c = std::getc(stdin); c != EOF && c != '\n'; c = std::getc(stdin)) {
-            password.push_back(static_cast<char>(c));
-        }
-        if (!password.empty() && password.back() == '\r') password.pop_back();
-        has_password = true;
-    }
+    if (!ReadPasswordSource(password_file, password_stdin, &password, &has_password)) return 1;
 
     megapdf_cancel* cancel = megapdf_cancel_new();
     g_cancel = cancel;
@@ -560,6 +587,272 @@ int RunExtract(int argc, char** argv) {
     return 0;
 }
 
+// --------------------------------------------------------------------------
+// pages (#174): a thin shell over contract 10. One operation per option, applied in argv
+// order; the result saved through the same write-whole, read-back, rename discipline the
+// apps' saves use, or written by megapdf_pages_extract() itself, which does the same.
+// --------------------------------------------------------------------------
+
+struct PageOp {
+    enum Kind { Rotate, Delete, Move, Blank, Import, Extract } kind;
+    std::string ranges;     // Rotate, Delete, Extract, Import (may be empty: every page)
+    int a = 0, b = 0;       // Rotate: turns; Move: from, to; Blank: at; Import: at
+    double w = 612, h = 792;
+    std::string path;       // Import
+};
+
+// "<ranges>" against a page count, as a 0-based list in ascending order without repeats.
+bool ResolvePages(const std::string& spec, int page_count, std::vector<int>* out, std::string* err) {
+    std::vector<Interval> intervals;
+    if (!ParsePageSpec(spec, &intervals, err) || !ResolveIntervals(&intervals, page_count, err)) return false;
+    out->clear();
+    for (const Interval& iv : intervals)
+        for (int p = iv.start1; p <= iv.end1; p++) out->push_back(p - 1);
+    return true;
+}
+
+bool ParseIntArg(const std::string& s, int* out) {
+    std::string digits = s;
+    bool negative = false;
+    if (!digits.empty() && digits[0] == '-') { negative = true; digits.erase(0, 1); }
+    if (!IsAllDigits(digits)) return false;
+    *out = negative ? -ParseDigits(digits) : ParseDigits(digits);
+    return true;
+}
+
+int WriteToFile(void* context, const void* data, size_t size) {
+    return std::fwrite(data, 1, size, static_cast<std::FILE*>(context)) == size ? 1 : 0;
+}
+
+int RunPages(int argc, char** argv) {
+    std::string pdf_path, out_path, password_file;
+    bool password_stdin = false, quiet = false;
+    std::vector<PageOp> ops;
+
+    for (int i = 2; i < argc; i++) {
+        const std::string a = argv[i];
+        auto value = [&](const char* name) -> const char* {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "%s needs a value\n", name);
+                return nullptr;
+            }
+            return argv[++i];
+        };
+        auto bad = [&](const char* what) { std::fprintf(stderr, "%s: %s\n", a.c_str(), what); return 1; };
+        if (a == "--out") { const char* v = value("--out"); if (v == nullptr) return 1; out_path = v; }
+        else if (a == "--password-file") { const char* v = value("--password-file"); if (v == nullptr) return 1; password_file = v; }
+        else if (a == "--password-stdin") password_stdin = true;
+        else if (a == "--quiet") quiet = true;
+        else if (a == "--rotate") {
+            const char* v = value("--rotate"); if (v == nullptr) return 1;
+            const std::string s = v;
+            const size_t colon = s.rfind(':');
+            PageOp op{PageOp::Rotate};
+            if (colon == std::string::npos || !ParseIntArg(s.substr(colon + 1), &op.a)) return bad("expected <ranges>:<turns>");
+            op.ranges = s.substr(0, colon);
+            ops.push_back(op);
+        }
+        else if (a == "--delete") { const char* v = value("--delete"); if (v == nullptr) return 1; PageOp op{PageOp::Delete}; op.ranges = v; ops.push_back(op); }
+        else if (a == "--extract") { const char* v = value("--extract"); if (v == nullptr) return 1; PageOp op{PageOp::Extract}; op.ranges = v; ops.push_back(op); }
+        else if (a == "--move") {
+            const char* v = value("--move"); if (v == nullptr) return 1;
+            const std::string s = v;
+            const size_t colon = s.find(':');
+            PageOp op{PageOp::Move};
+            if (colon == std::string::npos || !ParseIntArg(s.substr(0, colon), &op.a) || !ParseIntArg(s.substr(colon + 1), &op.b) || op.a < 1 || op.b < 1)
+                return bad("expected <from>:<to>");
+            ops.push_back(op);
+        }
+        else if (a == "--blank") {
+            const char* v = value("--blank"); if (v == nullptr) return 1;
+            const std::string s = v;
+            const size_t colon = s.find(':');
+            PageOp op{PageOp::Blank};
+            if (!ParseIntArg(s.substr(0, colon), &op.a) || op.a < 1) return bad("expected <at>[:<w>x<h>]");
+            if (colon != std::string::npos) {
+                const std::string size = s.substr(colon + 1);
+                const size_t x = size.find('x');
+                int w = 0, h = 0;
+                if (x == std::string::npos || !ParseIntArg(size.substr(0, x), &w) || !ParseIntArg(size.substr(x + 1), &h) || w < 1 || h < 1)
+                    return bad("expected <at>:<w>x<h> in whole points");
+                op.w = w;
+                op.h = h;
+            }
+            ops.push_back(op);
+        }
+        else if (a == "--import") {
+            const char* v = value("--import"); if (v == nullptr) return 1;
+            const std::string s = v;
+            const size_t at = s.rfind('@');
+            PageOp op{PageOp::Import};
+            if (at == std::string::npos || !ParseIntArg(s.substr(at + 1), &op.a) || op.a < 1) return bad("expected <other.pdf>[:<ranges>]@<at>");
+            std::string spec = s.substr(0, at);
+            // A colon after the last path separator (and not a Windows drive letter's) splits off the ranges.
+            const size_t slash = spec.find_last_of("/\\");
+            const size_t colon = spec.rfind(':');
+            if (colon != std::string::npos && (slash == std::string::npos || colon > slash) && colon != 1) {
+                op.ranges = spec.substr(colon + 1);
+                spec = spec.substr(0, colon);
+            }
+            if (spec.empty()) return bad("expected <other.pdf>[:<ranges>]@<at>");
+            op.path = spec;
+            ops.push_back(op);
+        }
+        else if (a == "--version") { std::printf("%s\n", kVersion); return 0; }
+        else if (a == "--help") { PrintUsage(stdout); return 0; }
+        else if (a.size() > 1 && a[0] == '-') { std::fprintf(stderr, "unknown option: %s\n", a.c_str()); return 1; }
+        else if (pdf_path.empty()) pdf_path = a;
+        else { std::fprintf(stderr, "unexpected argument: %s\n", a.c_str()); return 1; }
+    }
+    if (pdf_path.empty()) { std::fprintf(stderr, "pages needs a PDF path\n\n"); PrintUsage(stderr); return 1; }
+    if (out_path.empty()) { std::fprintf(stderr, "pages needs --out\n\n"); PrintUsage(stderr); return 1; }
+    if (ops.empty()) { std::fprintf(stderr, "pages needs at least one operation\n\n"); PrintUsage(stderr); return 1; }
+    if (!password_file.empty() && password_stdin) {
+        std::fprintf(stderr, "--password-file and --password-stdin are mutually exclusive\n");
+        return 1;
+    }
+    size_t extracts = 0;
+    for (const PageOp& op : ops) if (op.kind == PageOp::Extract) extracts++;
+    if (extracts > 1 || (extracts == 1 && ops.back().kind != PageOp::Extract)) {
+        std::fprintf(stderr, "--extract writes --out itself, so it must be the last operation and the only extract\n");
+        return 1;
+    }
+
+    std::string password;
+    bool has_password = false;
+    if (!ReadPasswordSource(password_file, password_stdin, &password, &has_password)) return 1;
+
+    megapdf_cancel* cancel = megapdf_cancel_new();
+    g_cancel = cancel;
+    std::signal(SIGINT, HandleSigint);
+    auto cleanup = [&]() {
+        g_cancel = nullptr;
+        megapdf_cancel_free(cancel);
+    };
+
+    megapdf_document* doc = megapdf_open_file(pdf_path.c_str(), has_password ? password.c_str() : nullptr);
+    if (has_password) {
+        std::fill(password.begin(), password.end(), '\0');
+        password.clear();
+    }
+    if (doc == nullptr) {
+        const unsigned int err = megapdf_last_error();
+        std::fprintf(stderr, "cannot open %s: %s\n", pdf_path.c_str(), megapdf_last_error_message());
+        cleanup();
+        if (err == static_cast<unsigned int>(FPDF_ERR_PASSWORD)) return 3;
+        if (err == static_cast<unsigned int>(FPDF_ERR_SECURITY)) return 4;
+        return 2;
+    }
+    auto fail = [&](int code, const std::string& what) {
+        std::fprintf(stderr, "%s: %s\n", what.c_str(), megapdf_last_error_message());
+        megapdf_close(doc);
+        cleanup();
+        return code;
+    };
+    auto status_code = [](int rc) { return rc == MEGAPDF_ERR_RESTRICTED ? 8 : rc == MEGAPDF_ERR_FILE ? 7 : 9; };
+
+    bool extracted = false;
+    int written = 0;   // pages in --out
+    for (const PageOp& op : ops) {
+        const int page_count = megapdf_page_count(doc);
+        std::string err;
+        std::vector<int> pages;
+        switch (op.kind) {
+            case PageOp::Rotate: {
+                if (!ResolvePages(op.ranges, page_count, &pages, &err)) return fail(1, "--rotate: " + err);
+                for (int p : pages) {
+                    const int rc = megapdf_page_rotate(doc, p, op.a);
+                    if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot rotate page " + std::to_string(p + 1));
+                }
+                break;
+            }
+            case PageOp::Delete: {
+                if (!ResolvePages(op.ranges, page_count, &pages, &err)) return fail(1, "--delete: " + err);
+                for (size_t k = pages.size(); k-- > 0;) {   // descending, so each index still names its page
+                    const int rc = megapdf_page_delete(doc, pages[k], nullptr);
+                    if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot delete page " + std::to_string(pages[k] + 1));
+                }
+                break;
+            }
+            case PageOp::Move: {
+                if (op.a > page_count || op.b > page_count) return fail(1, "--move: a page past the end of the document");
+                const int rc = megapdf_page_move(doc, op.a - 1, op.b - 1);
+                if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot move page " + std::to_string(op.a));
+                break;
+            }
+            case PageOp::Blank: {
+                if (op.a > page_count + 1) return fail(1, "--blank: a place past the end of the document");
+                const int rc = megapdf_page_insert_blank(doc, op.a - 1, op.w, op.h);
+                if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot insert a blank page");
+                break;
+            }
+            case PageOp::Import: {
+                if (op.a > page_count + 1) return fail(1, "--import: a place past the end of the document");
+                if (!op.ranges.empty()) {
+                    // The other file's page count is only known to the core; a start past its end
+                    // comes back as MEGAPDF_ERR_ARGUMENT below. Open ends are resolved generously
+                    // here and clamped by the core's own range check.
+                    std::vector<Interval> intervals;
+                    if (!ParsePageSpec(op.ranges, &intervals, &err)) return fail(1, "--import: " + err);
+                    // An open-ended range needs the other document's page count: import it whole
+                    // when the spec is a single "N-" from page 1, otherwise resolve against a
+                    // probe open of the other file.
+                    megapdf_document* other = megapdf_open_file(op.path.c_str(), nullptr);
+                    const int other_count = other != nullptr ? megapdf_page_count(other) : 0;
+                    megapdf_close(other);
+                    if (other_count <= 0) return fail(7, "cannot open " + op.path);
+                    if (!ResolvePages(op.ranges, other_count, &pages, &err)) return fail(1, "--import: " + err);
+                }
+                int imported = 0;
+                const int rc = megapdf_pages_import(doc, op.path.c_str(), nullptr, pages.empty() ? nullptr : pages.data(), pages.size(),
+                                                    op.a - 1, &imported);
+                if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot import from " + op.path);
+                if (!quiet) std::fprintf(stderr, "imported %d page%s from %s\n", imported, imported == 1 ? "" : "s", op.path.c_str());
+                break;
+            }
+            case PageOp::Extract: {
+                if (!ResolvePages(op.ranges, page_count, &pages, &err)) return fail(1, "--extract: " + err);
+                const int rc = megapdf_pages_extract(doc, pages.data(), pages.size(), out_path.c_str(), cancel);
+                if (rc == MEGAPDF_ERR_CANCELLED) { megapdf_close(doc); cleanup(); return 130; }
+                if (rc != MEGAPDF_OK) return fail(status_code(rc), "cannot extract to " + out_path);
+                extracted = true;
+                written = static_cast<int>(pages.size());
+                break;
+            }
+        }
+    }
+
+    if (!extracted) {
+        // The apps' save discipline: the whole document to a sibling temporary file, read back
+        // through the same open the apps use, and only then the rename into place.
+        const std::string temp_path = TempPathFor(out_path);
+        std::FILE* f = OpenForWrite(temp_path);
+        if (f == nullptr) return fail(7, "cannot write " + out_path);
+        written = megapdf_page_count(doc);
+        const int rc = megapdf_save(doc, WriteToFile, f);
+        const bool closed = std::fclose(f) == 0;
+        if (rc != MEGAPDF_OK || !closed) {
+            RemoveFileQuiet(temp_path);
+            return fail(rc == MEGAPDF_ERR_REDACT ? 9 : 7, "cannot write " + out_path);
+        }
+        megapdf_document* check = megapdf_open_file(temp_path.c_str(), nullptr);
+        const bool reads_back = check != nullptr && megapdf_page_count(check) == megapdf_page_count(doc);
+        megapdf_close(check);
+        if (!reads_back || !RenameOver(temp_path, out_path)) {
+            RemoveFileQuiet(temp_path);
+            std::fprintf(stderr, "cannot write %s: %s\n", out_path.c_str(),
+                         reads_back ? "the file could not be renamed into place" : "the written file did not read back");
+            megapdf_close(doc);
+            cleanup();
+            return 7;
+        }
+    }
+    if (!quiet) std::fprintf(stderr, "%d page%s written to %s\n", written, written == 1 ? "" : "s", out_path.c_str());
+    megapdf_close(doc);
+    cleanup();
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -569,6 +862,7 @@ int main(int argc, char** argv) {
     }
     if (std::strcmp(argv[1], "--version") == 0) { std::printf("%s\n", kVersion); return 0; }
     if (std::strcmp(argv[1], "--help") == 0) { PrintUsage(stdout); return 0; }
+    if (std::strcmp(argv[1], "pages") == 0) return RunPages(argc, argv);
     if (std::strcmp(argv[1], "extract") != 0) {
         std::fprintf(stderr, "unknown command: %s\n\n", argv[1]);
         PrintUsage(stderr);

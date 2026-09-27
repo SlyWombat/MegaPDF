@@ -1779,6 +1779,28 @@ public partial class MainWindow : Window
         FindBox.SelectAll();
     }
 
+    /// <summary>
+    /// Puts a term in the shared find box without it counting as typing, for the
+    /// capture rig's find pose (#252). The pose writes the box so the image shows
+    /// the term, then searches synchronously; a write that also started the
+    /// keystroke debounce would run a second search off the UI thread a quarter
+    /// of a second later, and the render two seconds on was racing it. Same
+    /// guard as the tab-switch resync above.
+    /// </summary>
+    internal void ShowFindTerm(string term)
+    {
+        _findDebounce?.Stop();
+        _syncingFindBox = true;
+        try
+        {
+            FindBox.Text = term;
+        }
+        finally
+        {
+            _syncingFindBox = false;
+        }
+    }
+
     private void CloseFind()
     {
         _findDebounce?.Stop();

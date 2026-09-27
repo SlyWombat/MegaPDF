@@ -237,16 +237,28 @@ def accent(shot, profile) -> list[Finding]:
     if total == 0:
         return [_ok("accent", "no brand accent drawn")]
     allowed = profile.get("accent_poses", {}).get(shot.pose, ())
-    band_rows, stray = 0, 0
+    # The tab strip (#348): the active tab's title is underlined in the
+    # accent, a thin rule under the toolbar that is as wide as the title. It
+    # is one run on each of its rows; a second run on the same rows would be
+    # something else drawn through the strip and is counted as stray.
+    underline_rows = (profile.get("tab_underline") or {}).get("rows", (0, 0))
+    band_rows, stray, underline = 0, 0, 0
     for y in range(mask.h):
         hits = row_hits(y)
         if hits > mask.w * 0.5:
             band_rows += 1
+        elif underline_rows[0] <= y < underline_rows[1]:
+            first = im.runs(mask.row(y), {0})[:1]
+            rule = first[0][1] if first else 0
+            underline += rule
+            stray += hits - rule
         else:
             stray += hits
     shapes = []
     if band_rows:
         shapes.append(f"a {band_rows}-row band")
+    if underline:
+        shapes.append(f"{underline} px in the active tab's underline")
     if stray:
         shapes.append(f"{stray} px elsewhere")
     note = f"{total} accent px: " + " and ".join(shapes)
@@ -258,6 +270,8 @@ def accent(shot, profile) -> list[Finding]:
     if allowed:
         return [_ok("accent", f"{note} — this pose draws "
                               f"{', '.join(allowed)} in the accent")]
+    if not band_rows and not stray:
+        return [_ok("accent", note + " — the tab strip's, and nothing else")]
     return [_flag("accent", note + " — no accent is expected in this pose; "
                                    "a selection or a toggled tool left on?")]
 

@@ -62,6 +62,69 @@ jobs:
             -testLanguage fr -testRegion CA \
             CODE_SIGNING_ALLOWED=NO
 
+      # The UI tests that drive the built app on the simulator (#405): pinch zoom,
+      # body-text editing, Markdown export, the recents rows' labels, the viewer
+      # bar's contrast and the redaction save question. Measured on the runner
+      # (2026-09-27): about 20 s to build the test bundle, 3-4 minutes to boot
+      # the simulator, and 6-7 minutes of tests — three to four times what the
+      # same tests take on the Mac mini (2.5 minutes); about 10 minutes on the
+      # job in all.
+      #
+      # Kept out on purpose: DemoFlowUITests is the preview-video choreography
+      # (timed for a recording, not a verdict); CaptureSimulatorSetupUITests
+      # changes the simulator's Settings for the screenshot rig;
+      # FilesEndToEndUITests needs a 1 GB fixture and the real Files picker
+      # (tools/ios-files-e2e.sh); ShareVerificationUITests and
+      # OpenWithVerificationUITests go through the Files app, which on a runner
+      # did not open the staged file at all (two runs, two different failures)
+      # and on the Mac mini does not list MegaPDF in its share sheet;
+      # RecentsAccessibilityUITests' long-press test passed one runner run and
+      # failed the next ("the context menu has no Remove from Recents"); and
+      # RedactionUITests' menu test fails on the simulator today ("the ⋯ menu
+      # has no Redact row" — its first run on a device, 2026-09-27).
+      - name: Build the UI tests
+        run: |
+          xcodebuild build-for-testing \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDFDemo \
+            -destination "platform=iOS Simulator,name=$SIM_DEVICE" \
+            CODE_SIGNING_ALLOWED=NO
+
+      # Booted here rather than by xcodebuild, so the boot is its own timing and
+      # the keyboard flag can be written first: the first keyboard on a fresh
+      # simulator comes up under iOS's QuickPath tip, and the flag is what a
+      # first keyboard would have left (#406).
+      - name: Boot the simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for devs in d.values() for dev in devs if dev['name'] == '$SIM_DEVICE'))")
+          echo "SIM_UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences \
+            DidShowContinuousPathIntroduction -bool true
+
+      - name: Run the UI tests
+        run: |
+          xcodebuild test-without-building \
+            -project MegaPDF.xcodeproj \
+            -scheme MegaPDFDemo \
+            -destination "id=$SIM_UDID" \
+            -resultBundlePath "$RUNNER_TEMP/ui-tests.xcresult" \
+            -only-testing:MegaPDFUITests/ViewerZoomUITests \
+            -only-testing:MegaPDFUITests/BodyTextEditUITests \
+            -only-testing:MegaPDFUITests/MarkdownExportUITests \
+            -only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives \
+            -only-testing:MegaPDFUITests/ViewerBarContrastUITests \
+            -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload the UI test result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-tests-xcresult
+          path: ${{ runner.temp }}/ui-tests.xcresult
+
   # ADR-001 evidence: PDFKit vs the MegaPDF_Id interop contract (macOS PDFKit
   # is the same framework family as iOS). Read the SPIKE: lines in the log.
   pdfkit-spike:

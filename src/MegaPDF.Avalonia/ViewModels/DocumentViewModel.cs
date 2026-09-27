@@ -421,6 +421,32 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         if (Busy.IsBusy)
             return;
 
+        // Set before the first await, so the caller's own find-or-activate check and
+        // this line are one synchronous step on the UI thread: nothing can look for
+        // this path in between and miss it (#398).
+        OpeningPath = path;
+        try
+        {
+            await OpenCoreAsync(path, password);
+        }
+        finally
+        {
+            OpeningPath = null;
+        }
+    }
+
+    /// <summary>
+    /// The path <see cref="OpenAsync"/> is loading right now; null before and after
+    /// (#398). <see cref="DocumentPath"/> is only set once the load has finished, so
+    /// until then a tab already opening a file looked exactly like one that was not —
+    /// and a second hand-over of the same file, landing mid-load, opened it again.
+    /// <see cref="ShellViewModel.FindTab"/> reads this, so an open in flight already
+    /// counts as the tab for its file.
+    /// </summary>
+    public string? OpeningPath { get; private set; }
+
+    private async Task OpenCoreAsync(string path, string? password)
+    {
         // Snapshotted before the await below, not read from the field in the catch
         // filter (#348 — a tab switch while this document is still loading unwires
         // this window's PasswordRequested subscription, since OnActiveDocumentChanged

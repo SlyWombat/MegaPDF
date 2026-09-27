@@ -454,7 +454,8 @@ Run the **iOS Screenshots** workflow (Actions → iOS Screenshots → Run
 workflow). It captures once per listing language — artifacts
 `appstore-screenshots-en`, `-fr-CA` and `-fr` (#91): the French runs launch the
 app with `-AppleLanguages`, so the chrome is French and the document is the
-French agreement (`demo-fr.pdf`, searched for "location"). Upload each set under
+French agreement (`demo-fr.pdf` for fr-CA, `demo-fr-FR.pdf` for fr — France's
+own text since #310 — both searched for "location"). Upload each set under
 its own localisation, same slots:
 
 | File | Slot | Suggested caption (optional overlay text) |
@@ -499,7 +500,13 @@ review shot ends up on a store listing.
 The iPad simulator is put in **Full Screen Apps** first (Settings → Multitasking
 & Gestures, driven by `CaptureSimulatorSetupUITests`): in Windowed Apps iPadOS 26
 draws a resize grabber in the corner of every image, and the first 2.0 set
-carried it in all of them.
+carried it in all of them — and the 2.1.1 CI set too, because the workflow did
+not run that step until #406. Every simulator also gets
+`com.apple.keyboard.preferences DidShowContinuousPathIntroduction` set before
+the app is installed: the first keyboard on a fresh simulator comes up under
+iOS's QuickPath tip ("Speed up your typing by sliding your finger…", in the
+system language), which is what `text-edit` shot on the runner in all three
+languages. The in-house simulators had shown it once and never again.
 
 ## Screenshots — Mac App Store
 
@@ -532,7 +539,7 @@ in the agreement — two boxes ticked, the library signature placed, a printed
 name typed under the line, every "rental" found — on a simulator, driven by
 `ios/MegaPDFUITests/DemoFlowUITests.swift` (scheme `MegaPDFDemo`, launch mode
 `-screenshot story`, which opens the *unfilled* agreement `demo-blank.pdf` /
-`demo-fr-blank.pdf`). It writes, per language and device:
+`demo-fr-blank.pdf` / `demo-fr-FR-blank.pdf`). It writes, per language and device:
 
 | File | Use |
 |---|---|

@@ -15,9 +15,14 @@
 # release a distribution adds is a new ICU soname, and a Depends line that doesn't
 # know it refuses to install there (#315), so the newest of each belongs in this list.
 #
-# When the repository holds more than one version (it keeps every published .deb),
-# each image first installs the oldest and checks that `apt upgrade` takes it to the
-# newest: the upgrade a real user makes when a release comes out.
+# When the repository holds more than one version (it keeps the current release and
+# the two before it, #372), each image first installs the oldest and checks that
+# `apt upgrade` takes it to the newest: the upgrade a real user makes when a release
+# comes out. The bound itself is checked here too: the pool and Packages hold at most
+# three, and publishing the next version drops the oldest.
+#
+# DOCKER_OPTS adds options to each `docker run` (a --name, --cpus, --memory) for a
+# shared machine.
 #
 # The repositories are served over HTTP from this machine and the containers reach
 # them on the host network, so apt goes through its real transport, its real
@@ -60,6 +65,31 @@ echo "$NEXT" > "$WORK/repack/opt/MegaPDF/UPGRADE-TEST"
 dpkg-deb --root-owner-group -Zxz --build "$WORK/repack" "$WORK/megapdf_${NEXT}_amd64.deb" >/dev/null
 cp -a "$REPO" "$SERVE/r2"
 "$ROOT/tools/linux/make-apt-repo.sh" "$SERVE/r2" "$WORK/megapdf_${NEXT}_amd64.deb" >/dev/null
+
+# --- the pool is bounded (#372): the newest three, in the pool and in Packages -------
+KEEP=3
+pool_count() { ls "$1"/pool/main/m/megapdf/megapdf_*_amd64.deb 2>/dev/null | wc -l; }
+index_count() { grep -c '^Package: megapdf$' "$1/dists/stable/main/binary-amd64/Packages" || true; }
+bound_fails=0
+for r in r1 r2; do
+    p=$(pool_count "$SERVE/$r"); i=$(index_count "$SERVE/$r")
+    if [ "$p" -le "$KEEP" ] && [ "$i" = "$p" ]; then
+        echo "  ok    $r: pool holds $p .deb(s), Packages lists $i"
+    else
+        echo "  FAIL  $r: pool holds $p .deb(s), Packages lists $i (at most $KEEP, and equal)"
+        bound_fails=$((bound_fails + 1))
+    fi
+done
+if [ "$(pool_count "$SERVE/r1")" -eq "$KEEP" ]; then
+    if [ -e "$SERVE/r2/pool/main/m/megapdf/megapdf_${OLDEST}_amd64.deb" ] \
+        || grep -q "^Version: $OLDEST$" "$SERVE/r2/dists/stable/main/binary-amd64/Packages"; then
+        echo "  FAIL  r2: publishing $NEXT did not drop $OLDEST"
+        bound_fails=$((bound_fails + 1))
+    else
+        echo "  ok    r2: publishing $NEXT dropped $OLDEST, the oldest of the three"
+    fi
+fi
+[ "$bound_fails" -eq 0 ] || { echo "::error::the APT pool is not bounded to $KEEP releases" >&2; exit 1; }
 
 # --- forged: r1 re-signed by a key nobody trusts ----------------------------------------
 cp -a "$REPO" "$SERVE/forged"
@@ -194,7 +224,8 @@ for entry in "${IMAGES[@]}"; do
     norecs=0; [ "$image" != "$entry" ] && norecs=1
     echo
     echo "=== $entry"
-    if docker run --rm --network host -e PORT="$PORT" -e NEXT="$NEXT" \
+    # shellcheck disable=SC2086  # DOCKER_OPTS is a list of options on purpose
+    if docker run --rm --network host ${DOCKER_OPTS:-} -e PORT="$PORT" -e NEXT="$NEXT" \
             -e VERSION="$VERSION" -e OLDEST="$OLDEST" -e NORECS="$norecs" \
             -v "$ROOT:/src:ro" -v "$FIXTURES:/fixtures:ro" -v "$WORK/inside.sh:/inside.sh:ro" \
             "$image" bash /inside.sh; then

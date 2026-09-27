@@ -15,6 +15,9 @@ android {
         targetSdk = 36
         versionCode = 12
         versionName = "2.1.1"
+        // The app's own instrumented tests (#346): Compose UI tests that drive the viewer on
+        // an emulator, in android-ci.yml's instrumented-test job beside the engine's.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -48,6 +51,11 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        // System animation scales are set to 0 for a connected run, so a menu or a dialog
+        // is on screen the moment it is asked for (#346).
+        animationsDisabled = true
+    }
     androidResources {
         // Emits the LocaleConfig from the values-* folders (#91) so Android 13+
         // lists MegaPDF under Settings > Languages > App languages. The default
@@ -71,4 +79,13 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Instrumented UI tests (#346): the Compose semantics tree for finding and driving the
+    // screen, and Espresso-Intents for answering the system pickers and the share sheet
+    // without a second app.
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.espresso.intents)
 }

@@ -266,9 +266,10 @@
     <string name="redact_ok">OK</string>
     <!-- #173: what the Redact capture marks. Not UI text — nobody using the app
          ever sees it; it only poses the screenshot. It must sit on the LAST line
-         of demo-fr.pdf's opening paragraph ("… et les conditions d'assurance
-         décrites aux sections 1 à 4 du présent document."), so the ✕ chip hangs
-         over whitespace (#395). "client nommé" never matched: demo-fr.pdf breaks
-         it across lines 1 and 2. -->
+         of the French demo agreement's opening paragraph ("… et les conditions
+         d'assurance décrites aux sections 1 à 4 du présent document."), so the
+         ✕ chip hangs over whitespace (#395). The paragraph is the same line for
+         line in demo-fr.pdf (fr-CA) and demo-fr-FR.pdf (fr-FR, #310). "client
+         nommé" never matched: both break it across lines 1 and 2. -->
     <string name="screenshot_redacted_word">sections 1 à 4</string>
 </resources>

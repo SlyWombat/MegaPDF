@@ -336,10 +336,23 @@ with every targetsize variant, `Square71x71`, `Square150x150`, `Square310x310`,
 and tile imagery from those. Leaving the listing's Store logo field empty is
 valid and the listing will still show the app icon.
 
-If you want to supply one explicitly — it gives you control over the listing
-thumbnail rather than letting the Store pick — use:
+**We supply one, for every listing (#305).** It gives control over the listing
+thumbnail rather than letting the Store pick, and it keeps the four listings the
+same: until 2.1.1 only en-us had one, uploaded by hand in Partner Center once, and
+en-ca, fr-ca and fr-fr fell back to the package's `StoreLogo.png`.
+`tools/msstore_submit.py build` now sends this file with every language, as an
+image of type `Icon` — the submission API's name for the 1:1 300×300 logo
+(`StoreLogoSquare` is the 1080×1080 box art), and the type the hand-uploaded
+en-us logo has in the published submission. The file is expected at:
 
     dist/store-assets/store-logo-300.png    (300×300)
+
+`build` refuses to run without it, or with one that is not a 300×300 PNG. Each
+submission marks the listing's previous `Icon` for deletion and sends this one,
+so a re-run replaces the logo rather than adding a second; `status` and `plan`
+print every image type a listing carries, so a missing or doubled logo shows in
+the read-back. After a submission, check how each of the four listings renders in
+Partner Center.
 
 Generated 2026-09-09 by Lanczos-downscaling the canonical 512×512 brand icon
 (`website/megapdf/icon.png`, byte-identical to `dist/play-assets/icon-512.png`,

@@ -263,6 +263,43 @@ page's characters report a near-zero `Tf` (an invisible OCR layer scaled through
 shape that used to round it to 0 and make every line a heading; `structure_check bodysizediag`
 is the corpus measurement behind the 1 pt floor.
 
+### Android app UI tests (#346)
+
+`android/app/src/androidTest/` drives the Android app's own screen on an emulator — the
+menu rows, gestures, toolbar and pickers that the engine's tests and the core's parity
+tests never touch, and that until #346 only a store capture had ever exercised. They are
+Compose UI tests against the real `MainActivity` and its real view model and engine,
+finding things by the labels the accessibility work gave them (#328, #347), so a label
+that goes missing fails a test rather than a TalkBack pass. The fixture is the app's own
+demo agreement, handed over as a `content://` uri through a FileProvider — the way another
+app hands a PDF over (#376). (The app's own provider serves it, from a folder inside its
+share grant: the test APK has a uid of its own, so a provider of its own would be out of
+the app's reach.)
+
+| test | what it drives |
+|------|----------------|
+| `EditingTest` | a tap ticks a drawn checkbox (Undo lights, the title gets its dot), Save writes it to the file; Add text → tap → type → Add puts a box where the tap landed, and tapping it again brings up its ✎ / ✕ chrome |
+| `RedactionMarkLifecycleTest` | the ⋮ Redact row arms the tool and says so (#328); a drag along a line marks it; tap selects, drag moves, ✕ at its centre removes (#347); Undo takes back removal, move and placement one step each, Redo puts the placement back; Clear all marks is one step (#329) |
+| `FileCommandsTest` | Export as Markdown asks for a `text/markdown` document named `.md` and writes real Markdown without touching the document (#409); Save a copy asks for a PDF, writes one that becomes the document; Share asks Save / Share without saving / Cancel when dirty, and Share without saving hands the chooser a `content://` grant on a copy (#378). The pickers and the chooser are answered by Espresso-Intents, so the test sees exactly what the app asked the system for |
+| `OpenWithTest` | an `ACTION_VIEW` with a `content://` uri opens the document cold; a second one while the first has unsaved changes asks Save / Discard / Cancel, and Discard replaces it; a `file://` uri opens too (#376) |
+| `PinchZoomTest` | two fingers apart widen the page past the screen; a double tap fits it again (#336) |
+
+They run in `android-ci.yml`'s `instrumented-test` job after the engine's tests, on the
+same API 30 emulator, a `pixel_5` frame (`:app:connectedDebugAndroidTest`). Locally, with
+an emulator or a device attached:
+
+```bash
+cd android && ./gradlew :app:connectedDebugAndroidTest
+```
+
+A red test stays in the tree under `@Ignore` naming its issue, so the fix takes the
+annotation off rather than writing the test: `undoAfterARemovalTakesBackTheMoveBeforeIt`
+is #429, found by the harness's first run.
+
+What they cannot reach: the system picker's own sheet (DocumentsUI is stubbed, not
+driven), the OS share sheet, TalkBack itself, and how any of it *feels* — the manual pass
+in this file still stands.
+
 ### megapdf-cli (#142, #355, #357)
 
 `megapdf-cli extract <file.pdf>` is a small, self-contained native binary — no .NET runtime,

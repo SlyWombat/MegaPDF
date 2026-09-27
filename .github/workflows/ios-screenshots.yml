@@ -7,6 +7,12 @@ name: iOS Screenshots
 # and upload the PNGs to App Store Connect (docs/app-store-listing.md maps them).
 on:
   workflow_dispatch:
+    inputs:
+      language:
+        description: "Which listing language to capture (all three by default)"
+        type: choice
+        default: all
+        options: [all, en, fr-CA, fr]
 
 jobs:
   capture:
@@ -14,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [en, fr-CA, fr]
+        language: ${{ fromJSON(inputs.language == 'all' && '["en","fr-CA","fr"]' || format('["{0}"]', inputs.language)) }}
     defaults:
       run:
         working-directory: ios
@@ -36,11 +42,14 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # The MegaPDFDemo scheme, built for testing: the same MegaPDF.app as the
+      # MegaPDF scheme's build, plus the UI-test runner that puts the iPad in
+      # Full Screen Apps below (#406). Both land in the same products folder.
       - name: Build for simulator
         run: |
-          xcodebuild build \
+          xcodebuild build-for-testing \
             -project MegaPDF.xcodeproj \
-            -scheme MegaPDF \
+            -scheme MegaPDFDemo \
             -sdk iphonesimulator \
             -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/dd" \
@@ -73,6 +82,21 @@ jobs:
           sys.exit(1)" "$1"
           }
 
+          # Settings → Multitasking & Gestures → Full Screen Apps, driven by a UI
+          # test (ios/MegaPDFUITests/CaptureSimulatorSetupUITests.swift), the same
+          # way tools/ios-screenshots.sh does it. In Windowed Apps iPadOS 26 draws a
+          # window-resize grabber in the corner of every app, and every iPad image
+          # of the 2.1.1 CI set carried it because this step was missing (#406).
+          ipad_full_screen() {
+            local log
+            log=$(xcodebuild test-without-building -project MegaPDF.xcodeproj -scheme MegaPDFDemo \
+                    -destination "id=$1" -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO \
+                    -only-testing:MegaPDFUITests/CaptureSimulatorSetupUITests 2>&1) || true
+            printf '%s\n' "$log" | grep -E "Test Case .*(passed|failed)|error:" || true
+            printf '%s\n' "$log" | grep -q "testIPadRunsAppsFullScreen\]' passed" \
+              || { echo "::error::could not put $1 in Full Screen Apps"; return 1; }
+          }
+
           capture() {
             local pattern="$1" label="$2"
             local picked udid name
@@ -81,6 +105,15 @@ jobs:
             echo "capturing on: $name"
             xcrun simctl boot "$udid" || true
             xcrun simctl bootstatus "$udid" -b
+            # The first time a keyboard comes up on a fresh simulator, iOS covers
+            # it with its QuickPath tip ("Swipe to type") — in the system language,
+            # so in English on the French sets — and text-edit shot the tip instead
+            # of the keyboard in all three 2.1.1 CI sets (#406). The in-house
+            # simulators had shown it once and kept this flag; a runner's have
+            # not. Set it the way a first keyboard would.
+            xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences \
+              DidShowContinuousPathIntroduction -bool true
+            case "$name" in iPad*) ipad_full_screen "$udid" ;; esac
             # A freshly booted simulator posts first-boot system banners ("Ready
             # for Apple Intelligence") for a while after bootstatus returns; one
             # landed on an iPad search shot. Let them come and go before any

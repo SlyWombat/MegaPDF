@@ -19,7 +19,8 @@ done
 adb shell settings put global sysui_demo_allowed 1
 
 # MEGAPDF_LANG=fr-CA (or fr-FR) switches the app's language through Android 13's
-# per-app locale (#91): the app then loads demo-fr.pdf and the French names, and
+# per-app locale (#91): the app then loads demo-fr.pdf (fr-CA) or demo-fr-FR.pdf
+# (fr-FR, France's own text since #310) and the French names, and
 # every label is French. The system UI stays in the emulator's language, which
 # is fine — the listing crops to the app. Unset or "en" leaves the default.
 LANG_TAG="${MEGAPDF_LANG:-en}"

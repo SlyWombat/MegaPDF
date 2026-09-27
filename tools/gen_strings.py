@@ -177,10 +177,16 @@ FR_CA_TO_FR_FR = [
     ("Crochet", "Coche"),
     ("Merci tout spécial à", "Un grand merci à"),
     ("fin de semaine", "week-end"),
+    ("ramassage", "enlèvement"),
     # Not a word but a person: the demo signatory in the store captures, who has
     # a different name per listing language (#146 §3, Dave 2026-09-15). The iOS and
     # Android catalogues carry it; the Mac reads its copy from DemoContent.cs.
     ("Hélène Bélanger", "Céline Lefèvre"),
+    # Nor this: the demo agreement the phones' captures open (#310). fr-CA opens
+    # demo-fr.pdf, the Quebec page; fr-FR opens demo-fr-FR.pdf, France's own text
+    # (tools/gen_test_fixtures.py DEMO_TEXT). Android's screenshot_demo_asset and
+    # the iOS catalogue's "demo" key both carry the name.
+    ("demo-fr", "demo-fr-FR"),
     ("Français (Canada)", "Français (Canada)"),  # language names never change
 ]
 

@@ -38,7 +38,9 @@ jobs:
           name: megapdf-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-  # Engine tests need real PDFium + Android graphics, so they run on an emulator.
+  # Engine tests need real PDFium + Android graphics, so they run on an emulator — and
+  # the app's own UI tests (#346) run on the same one, right after: Compose tests that
+  # drive the viewer's menus, gestures and pickers the way a person would.
   instrumented-test:
     runs-on: ubuntu-latest
     steps:
@@ -59,17 +61,23 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run instrumented engine tests
+      - name: Run instrumented engine and app tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
           arch: x86_64
+          # A phone-sized screen for the app's UI tests; the runner's default AVD is a
+          # 320 x 640 mdpi frame, which is no phone anyone holds.
+          profile: pixel_5
           working-directory: android
-          script: ./gradlew --no-daemon :engine:connectedDebugAndroidTest
+          # --continue so a red engine run still runs (and reports) the app's tests.
+          script: ./gradlew --no-daemon --continue :engine:connectedDebugAndroidTest :app:connectedDebugAndroidTest
 
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: instrumented-test-reports
-          path: android/engine/build/reports/androidTests/
+          path: |
+            android/engine/build/reports/androidTests/
+            android/app/build/reports/androidTests/

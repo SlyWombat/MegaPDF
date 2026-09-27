@@ -3784,7 +3784,7 @@ void test_text_in_one_pass(const std::string& fixtures, const std::string& schem
         "BT /F1 6 Tf 72 500 Td (small) Tj /F1 30 Tf 30 0 Td (LARGE) Tj ET";
     check_texts_match_pdfium(one_page_pdf(tricky, helvetica), "tricky page");
     for (const char* name : {"fixture.pdf", "forms.pdf", "formtext.pdf", "textbox.pdf", "doubled.pdf", "doubled-far.pdf",
-                             "demo.pdf", "demo-fr.pdf", "cropped.pdf", "stamped.pdf", "softmask.pdf"})
+                             "demo.pdf", "demo-fr.pdf", "demo-fr-FR.pdf", "cropped.pdf", "stamped.pdf", "softmask.pdf"})
         check_texts_match_pdfium(read_file(fixtures + "/" + name), name);
     check_texts_match_pdfium(read_file(schematic), "microbit-v2-schematic.pdf");
     for (const char* name : {"cid-font.pdf", "subset-font.pdf"})
@@ -6513,6 +6513,56 @@ void test_cli_smoke(const std::string& fixtures, const std::string& cli_path) {
           std::to_string(usage.exit_code));
 }
 
+// megapdf-cli pages (#174): the shipped binary over contract 10 — a rotate, a delete and a
+// move saved through its write-whole, read-back, rename path, and an extract written by the
+// core; each output opened again and read back.
+void test_cli_pages(const std::string& fixtures, const std::string& cli_path) {
+    const std::string pdf = fixtures + "/fixture.pdf";
+    const std::string out = "cli_pages_out.pdf";
+    std::remove(out.c_str());
+
+    CliResult r = run_cli(cli_path, {"pages", pdf, "--out", out, "--rotate", "1:1", "--quiet"});
+    check(r.exit_code == 0, "cli pages: rotate exits 0", std::to_string(r.exit_code) + " " + r.err);
+    {
+        Doc d(out);
+        check(d.doc != nullptr && megapdf_page_count(d.doc) == 2 && megapdf_page_rotation(d.doc, 0) == 1 && megapdf_page_rotation(d.doc, 1) == 0,
+              "cli pages: the rotated document reads back with page 1 turned");
+    }
+    r = run_cli(cli_path, {"pages", pdf, "--out", out, "--delete", "1", "--quiet"});
+    check(r.exit_code == 0, "cli pages: delete exits 0", std::to_string(r.exit_code) + " " + r.err);
+    {
+        Doc d(out);
+        check(d.doc != nullptr && megapdf_page_count(d.doc) == 1, "cli pages: one page after the delete");
+    }
+    r = run_cli(cli_path, {"pages", pdf, "--out", out, "--move", "2:1", "--blank", "3:200x300", "--quiet"});
+    check(r.exit_code == 0, "cli pages: move and blank exit 0", std::to_string(r.exit_code) + " " + r.err);
+    {
+        Doc d(out);
+        Page moved(d.doc, 0);
+        Page blank(d.doc, 2);
+        check(d.doc != nullptr && megapdf_page_count(d.doc) == 3 && index_of_text(moved.page, "Page 2") >= 0,
+              "cli pages: the second page is first after the move");
+        check(close_to(megapdf_page_width(blank.page), 200) && close_to(megapdf_page_height(blank.page), 300), "cli pages: the blank page is 200 x 300");
+    }
+    r = run_cli(cli_path, {"pages", pdf, "--out", out, "--import", fixtures + "/forms.pdf@1", "--extract", "1,3", "--quiet"});
+    check(r.exit_code == 0, "cli pages: import then extract exits 0", std::to_string(r.exit_code) + " " + r.err);
+    {
+        Doc d(out);
+        Page first(d.doc, 0);
+        check(d.doc != nullptr && megapdf_page_count(d.doc) == 2 && field_shots(first.page).size() == 1,
+              "cli pages: the extract's first page is the imported form page");
+    }
+    r = run_cli(cli_path, {"pages", pdf, "--out", out, "--delete", "1-2", "--quiet"});
+    check(r.exit_code == 9, "cli pages: deleting every page is refused by the engine (exit 9)", std::to_string(r.exit_code));
+    r = run_cli(cli_path, {"pages", pdf, "--out", out, "--move", "5:1", "--quiet"});
+    check(r.exit_code == 1, "cli pages: a page past the end is a usage error", std::to_string(r.exit_code));
+    r = run_cli(cli_path, {"pages", pdf, "--rotate", "1:1"});
+    check(r.exit_code == 1, "cli pages: no --out is a usage error", std::to_string(r.exit_code));
+    r = run_cli(cli_path, {"pages", fixtures + "/does-not-exist.pdf", "--out", out, "--rotate", "1:1"});
+    check(r.exit_code == 2, "cli pages: a missing file exits 2", std::to_string(r.exit_code));
+    std::remove(out.c_str());
+}
+
 // Password handling (#355, design §6): the encrypted fixture opens with --password-file and
 // fails with exit 3 without one; the password never appears on argv (run_cli's own comment).
 // remove-aes-256.pdf is secure-source.pdf (#241's richer fixture — two pages, a filled text
@@ -6579,6 +6629,604 @@ void test_cli_markdown_smoke(const std::string& fixtures, const std::string& cli
     CliResult bad = run_cli(cli_path, {"extract", pdf, "--format", "rtf"});
     check(bad.exit_code == 1, "cli markdown smoke: an unknown --format is a usage error (exit 1)",
           std::to_string(bad.exit_code));
+}
+
+// --------------------------------------------------------------------------
+// Contract 10 (#174): page tools. Each operation on the generated fixtures, then a save,
+// a reopen and a read-back; a rotated page renders rotated; a moved page keeps its fields;
+// an import keeps the other file's fonts and renames a clashing field; an extract reads
+// back through the file open and is kept for CI's qpdf --check.
+
+namespace pages {
+
+std::vector<unsigned char> render_at(const megapdf_page* page, int w, int h) {
+    std::vector<unsigned char> px(static_cast<size_t>(w) * h * 4, 0);
+    check(megapdf_render(page, px.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK, "pages: a render returns OK");
+    return px;
+}
+
+// The bounding box of every non-white pixel: left, top, right, bottom in pixels, or all -1.
+struct InkBox { int l = -1, t = -1, r = -1, b = -1; };
+
+InkBox ink_box(const std::vector<unsigned char>& px, int w, int h) {
+    InkBox box;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const unsigned char* q = &px[(static_cast<size_t>(y) * w + x) * 4];
+            if (q[0] > 240 && q[1] > 240 && q[2] > 240) continue;
+            if (box.l < 0 || x < box.l) box.l = x;
+            if (box.r < 0 || x > box.r) box.r = x;
+            if (box.t < 0 || y < box.t) box.t = y;
+            if (box.b < 0 || y > box.b) box.b = y;
+        }
+    }
+    return box;
+}
+
+std::string box_str(const InkBox& b) {
+    return "(" + std::to_string(b.l) + "," + std::to_string(b.t) + ")-(" + std::to_string(b.r) + "," + std::to_string(b.b) + ")";
+}
+
+// Pixels of two same-sized renders that differ by more than 60 across the channels.
+size_t differing(const std::vector<unsigned char>& a, const std::vector<unsigned char>& b) {
+    size_t n = 0;
+    for (size_t i = 0; i + 3 < a.size() && i + 3 < b.size(); i += 4) {
+        const int d = std::abs(a[i] - b[i]) + std::abs(a[i + 1] - b[i + 1]) + std::abs(a[i + 2] - b[i + 2]);
+        if (d > 60) n++;
+    }
+    return n;
+}
+
+// Every run's text on the page, in object order — the page's identity for these tests.
+std::vector<U16> texts_of(const megapdf_page* page) {
+    std::vector<U16> out;
+    for (const RunShot& r : run_shots(page)) out.push_back(r.text);
+    return out;
+}
+
+std::vector<U16> fonts_of(const megapdf_page* page) {
+    std::vector<U16> out;
+    megapdf_text* t = megapdf_text_load(page, MEGAPDF_TEXT_ALL);
+    for (size_t i = 0; i < megapdf_text_run_count(t); i++) out.push_back(run_string(t, i, MEGAPDF_TEXT_RUN_FONT));
+    megapdf_text_free(t);
+    return out;
+}
+
+std::vector<U16> field_names(const megapdf_page* page) {
+    std::vector<U16> out;
+    for (const FieldShot& f : field_shots(page)) out.push_back(f.name);
+    return out;
+}
+
+std::string names_str(const std::vector<U16>& names) {
+    std::string s;
+    for (const U16& n : names) s += (s.empty() ? "" : ", ") + show(n);
+    return s.empty() ? "(none)" : s;
+}
+
+std::string shots_str(const std::vector<FieldShot>& shots) {
+    std::string s;
+    for (const FieldShot& f : shots)
+        s += (s.empty() ? "" : "; ") + show(f.name) + "=" + show(f.value) + " kind " + std::to_string(f.kind) + (f.checked ? " checked" : "");
+    return s.empty() ? "(none)" : s;
+}
+
+// A one-page form whose two text widgets are kids of a parent field "person": the
+// top-level name lives on the parent dictionary, not on the widgets, which is the
+// shape megapdf_pages_import's clash rename has to walk up to.
+std::vector<unsigned char> parent_fields_pdf() {
+    std::string pdf = "%PDF-1.4\n";
+    std::vector<size_t> offsets;
+    auto add = [&](const std::string& body) { offsets.push_back(pdf.size()); pdf += std::to_string(offsets.size()) + " 0 obj\n" + body + "\nendobj\n"; };
+    auto stream = [](const std::string& dict, const std::string& body) {
+        return "<< " + dict + " /Length " + std::to_string(body.size()) + " >>\nstream\n" + body + "\nendstream";
+    };
+    add("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R] /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 4 0 R >> >> >> >>");
+    add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+    add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R "
+        "/Annots [7 0 R 8 0 R] >>");
+    add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    add(stream("", "BT /F1 14 Tf 72 720 Td (Two fields under one parent) Tj ET"));
+    add("<< /FT /Tx /T (person) /Kids [7 0 R 8 0 R] >>");
+    add("<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (first) /V (Ada) /DA (/Helv 12 Tf 0 g) /Rect [100 600 300 620] /F 4 /P 3 0 R "
+        "/AP << /N 9 0 R >> >>");
+    add("<< /Type /Annot /Subtype /Widget /Parent 6 0 R /T (last) /V (Lovelace) /DA (/Helv 12 Tf 0 g) /Rect [100 560 300 580] /F 4 /P 3 0 R "
+        "/AP << /N 10 0 R >> >>");
+    add(stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+               "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Ada) Tj ET"));
+    add(stream("/Type /XObject /Subtype /Form /BBox [0 0 200 20] /Resources << /Font << /Helv 4 0 R >> >>",
+               "0.13 G 1 w 0.5 0.5 199 19 re S BT /Helv 12 Tf 0 g 2 5 Td (Lovelace) Tj ET"));
+    const size_t xref = pdf.size();
+    pdf += "xref\n0 " + std::to_string(offsets.size() + 1) + "\n0000000000 65535 f \n";
+    for (size_t off : offsets) { char line[32]; std::snprintf(line, sizeof line, "%010zu 00000 n \n", off); pdf += line; }
+    pdf += "trailer\n<< /Size " + std::to_string(offsets.size() + 1) + " /Root 1 0 R >>\nstartxref\n" + std::to_string(xref) + "\n%%EOF\n";
+    return std::vector<unsigned char>(pdf.begin(), pdf.end());
+}
+
+bool contains(const std::vector<unsigned char>& bytes, const char* needle) {
+    return std::search(bytes.begin(), bytes.end(), needle, needle + std::strlen(needle)) != bytes.end();
+}
+
+}  // namespace pages
+
+void test_page_tools(const std::string& fixtures, const std::string& repo_fixtures, const std::string& security_fixtures) {
+    using namespace pages;
+    namespace fs = std::filesystem;
+    std::error_code ec;
+#if defined(_WIN32)
+    const long long pid = static_cast<long long>(_getpid());
+#else
+    const long long pid = static_cast<long long>(getpid());
+#endif
+    const fs::path dir = fs::temp_directory_path(ec) / ("megapdf-core-pages-" + std::to_string(pid));
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    check(!ec, "pages: a scratch folder", ec.message());
+    auto utf8 = [](const fs::path& path) { return path.u8string(); };
+    auto write = [](const fs::path& path, const std::vector<unsigned char>& bytes) {
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    };
+    const std::string fixture_path = fixtures + "/fixture.pdf";
+    const std::string forms_path = fixtures + "/forms.pdf";
+    const std::string formtext_path = fixtures + "/formtext.pdf";
+    const std::string subset_path = repo_fixtures + "/subset-font.pdf";
+
+    // Bad handles and indices: a status, never a crash.
+    {
+        check(megapdf_page_index(nullptr) == -1, "pages: the index of a NULL page is -1");
+        check(megapdf_page_rotation(nullptr, 0) == MEGAPDF_ERR_ARGUMENT, "pages: rotation of a NULL document");
+        check(megapdf_page_rotate(nullptr, 0, 1) == MEGAPDF_ERR_ARGUMENT, "pages: rotate on a NULL document");
+        check(megapdf_page_delete(nullptr, 0, nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: delete on a NULL document");
+        check(megapdf_page_restore(nullptr, nullptr, 0) == MEGAPDF_ERR_ARGUMENT, "pages: restore of nothing");
+        check(megapdf_page_move(nullptr, 0, 1) == MEGAPDF_ERR_ARGUMENT, "pages: move on a NULL document");
+        check(megapdf_page_insert_blank(nullptr, 0, 100, 100) == MEGAPDF_ERR_ARGUMENT, "pages: blank on a NULL document");
+        check(megapdf_pages_import(nullptr, "x.pdf", nullptr, nullptr, 0, 0, nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: import into a NULL document");
+        check(megapdf_pages_extract(nullptr, nullptr, 0, "x.pdf", nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: extract from a NULL document");
+        megapdf_discard_removed_page(nullptr);
+        Doc d(fixture_path);
+        if (!d.doc) { check(false, "pages: fixture.pdf opens"); return; }
+        check(megapdf_page_rotation(d.doc, 2) == MEGAPDF_ERR_ARGUMENT && megapdf_page_rotation(d.doc, -1) == MEGAPDF_ERR_ARGUMENT,
+              "pages: rotation of a page that is not there");
+        check(megapdf_page_rotate(d.doc, 2, 1) == MEGAPDF_ERR_ARGUMENT, "pages: rotating a page that is not there");
+        check(megapdf_page_delete(d.doc, 2, nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: deleting a page that is not there");
+        check(megapdf_page_move(d.doc, 0, 2) == MEGAPDF_ERR_ARGUMENT && megapdf_page_move(d.doc, 2, 0) == MEGAPDF_ERR_ARGUMENT,
+              "pages: moving to or from a page that is not there");
+        check(megapdf_page_insert_blank(d.doc, 3, 100, 100) == MEGAPDF_ERR_ARGUMENT, "pages: a blank page past the end");
+        check(megapdf_page_insert_blank(d.doc, 0, 0, 100) == MEGAPDF_ERR_ARGUMENT, "pages: a blank page with no width");
+        const int bad = 5;
+        check(megapdf_pages_extract(d.doc, &bad, 1, utf8(dir / "bad.pdf").c_str(), nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "pages: extracting a page that is not there");
+        check(megapdf_pages_extract(d.doc, nullptr, 0, "", nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: extracting to no path");
+        check(megapdf_pages_import(d.doc, utf8(dir / "missing.pdf").c_str(), nullptr, nullptr, 0, 0, nullptr) == MEGAPDF_ERR_FILE,
+              "pages: importing from a file that is not there", megapdf_last_error_message());
+        check(megapdf_pages_import(d.doc, forms_path.c_str(), nullptr, &bad, 1, 0, nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "pages: importing a page the other file does not have");
+        check(megapdf_pages_import(d.doc, forms_path.c_str(), nullptr, nullptr, 0, 3, nullptr) == MEGAPDF_ERR_ARGUMENT,
+              "pages: importing past the end");
+        check(megapdf_page_count(d.doc) == 2, "pages: the refusals changed nothing");
+    }
+
+    // Rotate: /Rotate changes, the size and the render follow, the content does not move.
+    {
+        Doc d(fixture_path);
+        Page p0(d.doc, 0);
+        if (!p0.page) { check(false, "pages: fixture.pdf page 0 loads"); return; }
+        check(megapdf_page_rotation(d.doc, 0) == 0 && megapdf_page_rotation(d.doc, 1) == 0, "pages: fixture.pdf pages start unrotated");
+        const auto upright = render_at(p0.page, 612, 792);
+        const InkBox was = ink_box(upright, 612, 792);
+        const auto texts_before = texts_of(p0.page);
+        check(megapdf_page_rotate(d.doc, 0, 1) == MEGAPDF_OK, "pages: a quarter turn clockwise", megapdf_last_error_message());
+        check(megapdf_page_rotation(d.doc, 0) == 1, "pages: the rotation reads back as 1", std::to_string(megapdf_page_rotation(d.doc, 0)));
+        check(close_to(megapdf_page_width(p0.page), 792) && close_to(megapdf_page_height(p0.page), 612),
+              "pages: the open handle answers the rotated size",
+              std::to_string(megapdf_page_width(p0.page)) + "x" + std::to_string(megapdf_page_height(p0.page)));
+        // A 90° clockwise turn takes a pixel at (x, y) of the 612 × 792 render to (791 - y, x) of the
+        // 792 × 612 one; the ink's bounding box must land where that says, within a pixel or two.
+        const auto turned = render_at(p0.page, 792, 612);
+        const InkBox now = ink_box(turned, 792, 612);
+        const InkBox want{791 - was.b, was.l, 791 - was.t, was.r};
+        check(std::abs(now.l - want.l) <= 2 && std::abs(now.t - want.t) <= 2 && std::abs(now.r - want.r) <= 2 && std::abs(now.b - want.b) <= 2,
+              "pages: the rotated page renders rotated", "ink " + box_str(now) + " wanted " + box_str(want));
+        check(texts_of(p0.page) == texts_before, "pages: rotating rewrites no content");
+        check(megapdf_page_rotate(d.doc, 0, -1) == MEGAPDF_OK && megapdf_page_rotation(d.doc, 0) == 0, "pages: a turn back");
+        check(megapdf_page_rotate(d.doc, 0, 5) == MEGAPDF_OK && megapdf_page_rotation(d.doc, 0) == 1, "pages: five quarter turns is one");
+        check(megapdf_page_rotate(d.doc, 0, 0) == MEGAPDF_OK && megapdf_page_rotation(d.doc, 0) == 1, "pages: no turns is fine");
+        check(megapdf_page_rotate(d.doc, 1, 2) == MEGAPDF_OK && megapdf_page_rotation(d.doc, 1) == 2,
+              "pages: a page with no open handle rotates too");
+        {
+            Page p1(d.doc, 1);
+            check(close_to(megapdf_page_width(p1.page), 612) && close_to(megapdf_page_height(p1.page), 792),
+                  "pages: a half turn keeps the page's size");
+        }
+        const auto saved = save_bytes(d.doc, "pages-rotate");
+        OpenDoc again(saved);
+        check(again.doc != nullptr && megapdf_page_rotation(again.doc, 0) == 1 && megapdf_page_rotation(again.doc, 1) == 2,
+              "pages: rotations survive a save and reopen");
+        Page q0(again.doc, 0);
+        check(close_to(megapdf_page_width(q0.page), 792) && close_to(megapdf_page_height(q0.page), 612),
+              "pages: the reopened page is rotated");
+        check(texts_of(q0.page) == texts_before, "pages: the reopened page has its text");
+    }
+
+    // Delete and restore: the page comes back as it was, the handles follow their pages,
+    // and a page deleted for good is not in the saved file.
+    {
+        Doc d(fixture_path);
+        Page p0(d.doc, 0);
+        Page p1(d.doc, 1);
+        if (!p0.page || !p1.page) { check(false, "pages: fixture.pdf pages load"); return; }
+        const auto r0 = render_at(p0.page, 612, 792);
+        const auto t0 = texts_of(p0.page);
+        const auto t1 = texts_of(p1.page);
+        check(!t0.empty() && !t1.empty() && t0 != t1, "pages: fixture.pdf's two pages read differently");
+        const auto full = save_bytes(d.doc, "pages-delete");
+        megapdf_removed_page* removed = nullptr;
+        check(megapdf_page_delete(d.doc, 0, &removed) == MEGAPDF_OK && removed != nullptr, "pages: page 0 is deleted, kept for an undo",
+              megapdf_last_error_message());
+        check(megapdf_page_count(d.doc) == 1, "pages: one page left", std::to_string(megapdf_page_count(d.doc)));
+        check(megapdf_page_index(p1.page) == 0, "pages: the handle on page 1 now says 0", std::to_string(megapdf_page_index(p1.page)));
+        check(megapdf_page_index(p0.page) == -1, "pages: the handle on the deleted page says -1", std::to_string(megapdf_page_index(p0.page)));
+        check(texts_of(p1.page) == t1, "pages: the remaining page reads as page 1 did");
+        std::vector<unsigned char> px(612 * 792 * 4, 0);
+        check(megapdf_render(p0.page, px.data(), 612, 792, 612 * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK,
+              "pages: a handle on a deleted page still renders");
+        {
+            Page now0(d.doc, 0);
+            check(texts_of(now0.page) == t1, "pages: loading page 0 now gives what was page 1");
+        }
+        check(megapdf_page_restore(d.doc, removed, 2) == MEGAPDF_ERR_ARGUMENT, "pages: restoring past the end is refused");
+        check(megapdf_page_restore(d.doc, removed, 0) == MEGAPDF_OK, "pages: the page is put back at 0", megapdf_last_error_message());
+        check(megapdf_page_count(d.doc) == 2, "pages: two pages again");
+        check(megapdf_page_index(p1.page) == 1, "pages: the handle on page 1 says 1 again");
+        {
+            Page back(d.doc, 0);
+            check(texts_of(back.page) == t0, "pages: the restored page has its text");
+            const auto r = render_at(back.page, 612, 792);
+            const size_t diff = differing(r, r0);
+            check(diff == 0, "pages: the restored page renders as it did", std::to_string(diff) + " pixels differ");
+        }
+        const auto saved = save_bytes(d.doc, "pages-delete");
+        {
+            OpenDoc again(saved);
+            check(again.doc != nullptr && megapdf_page_count(again.doc) == 2, "pages: delete and undo, saved and reopened: two pages");
+            Page q0(again.doc, 0);
+            Page q1(again.doc, 1);
+            check(texts_of(q0.page) == t0 && texts_of(q1.page) == t1, "pages: delete and undo, saved and reopened: the pages read as before");
+        }
+        // Gone for good: the saved file is smaller, since the page's objects are not reached.
+        check(megapdf_page_delete(d.doc, 1, nullptr) == MEGAPDF_OK && megapdf_page_count(d.doc) == 1, "pages: page 1 is deleted for good");
+        const auto shorter = save_bytes(d.doc, "pages-delete");
+        check(shorter.size() < full.size(), "pages: the file shrinks when a page goes",
+              std::to_string(shorter.size()) + " vs " + std::to_string(full.size()) + " bytes");
+        {
+            OpenDoc again(shorter);
+            check(again.doc != nullptr && megapdf_page_count(again.doc) == 1, "pages: reopened with one page");
+            Page q0(again.doc, 0);
+            check(texts_of(q0.page) == t0, "pages: the page kept is page 0");
+        }
+        check(megapdf_page_delete(d.doc, 0, nullptr) == MEGAPDF_ERR_ARGUMENT, "pages: the last page cannot be deleted");
+        // A removed page still held at close is freed with the document (ASan would say otherwise).
+        Doc leak(fixture_path);
+        megapdf_removed_page* held = nullptr;
+        check(megapdf_page_delete(leak.doc, 1, &held) == MEGAPDF_OK && held != nullptr, "pages: a page deleted and never restored");
+        Doc other(fixture_path);
+        check(megapdf_page_restore(other.doc, held, 0) == MEGAPDF_ERR_ARGUMENT, "pages: a removed page restores only into its own document");
+        megapdf_removed_page* discarded = nullptr;
+        check(megapdf_page_delete(other.doc, 0, &discarded) == MEGAPDF_OK, "pages: another delete");
+        megapdf_discard_removed_page(discarded);
+        check(megapdf_page_count(other.doc) == 1, "pages: discarding the removed page leaves the document as it was");
+    }
+
+    // Move: the page dictionary goes as it is, so its fields go with it. forms.pdf (a
+    // checkbox) plus formtext.pdf (a text field) imported after it, values set, then swapped.
+    {
+        Doc d(forms_path);
+        if (!d.doc) { check(false, "pages: forms.pdf opens"); return; }
+        int imported = -1;
+        check(megapdf_pages_import(d.doc, formtext_path.c_str(), nullptr, nullptr, 0, 1, &imported) == MEGAPDF_OK && imported == 1,
+              "pages: formtext.pdf's page is imported after the checkbox page", megapdf_last_error_message());
+        check(megapdf_page_count(d.doc) == 2, "pages: two pages after the import");
+        Page p0(d.doc, 0);
+        Page p1(d.doc, 1);
+        auto fields0 = field_shots(p0.page);
+        auto fields1 = field_shots(p1.page);
+        check(fields0.size() == 1 && show(fields0[0].name) == "agree", "pages: the checkbox page lists its field", names_str(field_names(p0.page)));
+        check(fields1.size() == 1 && show(fields1[0].name) == "fullname" && fields1[0].kind == MEGAPDF_FIELD_TEXT,
+              "pages: the imported page lists its text field", names_str(field_names(p1.page)));
+        if (fields0.size() == 1 && fields1.size() == 1) {
+            const auto centre = [](const megapdf_rect& r) { return std::make_pair((r.left + r.right) / 2, (r.bottom + r.top) / 2); };
+            const auto c0 = centre(fields0[0].bounds);
+            const auto c1 = centre(fields1[0].bounds);
+            check(megapdf_form_click(p0.page, c0.first, c0.second) == MEGAPDF_OK, "pages: the checkbox is clicked");
+            const U16 value = u16("Ada Lovelace");
+            check(megapdf_form_set_text(p1.page, c1.first, c1.second, value.data()) == MEGAPDF_OK, "pages: the imported text field takes a value");
+            megapdf_form_commit(d.doc);
+            fields0 = field_shots(p0.page);
+            fields1 = field_shots(p1.page);
+            check(fields0.size() == 1 && fields0[0].checked == 1, "pages: the checkbox is checked");
+            check(fields1.size() == 1 && show(fields1[0].value) == "Ada Lovelace", "pages: the imported field holds its value",
+                  fields1.empty() ? "no field" : show(fields1[0].value));
+        }
+        check(megapdf_page_move(d.doc, 1, 0) == MEGAPDF_OK, "pages: the text-field page moves to the front", megapdf_last_error_message());
+        check(megapdf_page_index(p1.page) == 0 && megapdf_page_index(p0.page) == 1, "pages: the handles follow the move",
+              std::to_string(megapdf_page_index(p1.page)) + "/" + std::to_string(megapdf_page_index(p0.page)));
+        {
+            Page now0(d.doc, 0);
+            Page now1(d.doc, 1);
+            check(same_fields(field_shots(now0.page), fields1), "pages: the moved page keeps its field, value and rect", names_str(field_names(now0.page)));
+            check(same_fields(field_shots(now1.page), fields0), "pages: the page it passed keeps its field too", names_str(field_names(now1.page)));
+        }
+        check(megapdf_page_move(d.doc, 0, 0) == MEGAPDF_OK, "pages: moving a page onto itself is fine");
+        const auto saved = save_bytes(d.doc, "pages-move");
+        OpenDoc again(saved);
+        check(again.doc != nullptr && megapdf_page_count(again.doc) == 2, "pages: the moved document reopens with two pages");
+        Page q0(again.doc, 0);
+        Page q1(again.doc, 1);
+        check(same_fields(field_shots(q0.page), fields1), "pages: after reopening, the moved page keeps its field", names_str(field_names(q0.page)));
+        check(same_fields(field_shots(q1.page), fields0), "pages: after reopening, the other page keeps its field", names_str(field_names(q1.page)));
+        // Delete the page whose field was imported: the field leaves the AcroForm with it.
+        check(megapdf_page_delete(again.doc, 0, nullptr) == MEGAPDF_OK, "pages: the text-field page is deleted");
+        const auto without = save_bytes(again.doc, "pages-delete-field");
+        check(!contains(without, "fullname"), "pages: the deleted page's field is not in the saved file");
+        check(contains(without, "agree"), "pages: the other field still is");
+        OpenDoc third(without);
+        Page r0(third.doc, 0);
+        check(megapdf_page_count(third.doc) == 1 && same_fields(field_shots(r0.page), fields0), "pages: the page kept has its field",
+              names_str(field_names(r0.page)));
+    }
+
+    // A clashing field name on import is renamed before the copy: a widget carrying its own
+    // name, and a widget whose name is its parent's.
+    {
+        Doc d(forms_path);
+        int imported = 0;
+        check(megapdf_pages_import(d.doc, forms_path.c_str(), nullptr, nullptr, 0, 1, &imported) == MEGAPDF_OK && imported == 1,
+              "pages: forms.pdf imported into itself", megapdf_last_error_message());
+        Page p0(d.doc, 0);
+        Page p1(d.doc, 1);
+        check(names_str(field_names(p0.page)) == "agree", "pages: the existing field keeps its name", names_str(field_names(p0.page)));
+        check(names_str(field_names(p1.page)) == "agree_2", "pages: the imported clash is renamed", names_str(field_names(p1.page)));
+        const auto saved = save_bytes(d.doc, "pages-import-clash");
+        OpenDoc again(saved);
+        Page q1(again.doc, 1);
+        check(names_str(field_names(q1.page)) == "agree_2", "pages: the renamed field reads back after a reopen", names_str(field_names(q1.page)));
+
+        // A second import of the same file: the next free suffix, and the first rename holds.
+        check(megapdf_pages_import(d.doc, forms_path.c_str(), nullptr, nullptr, 0, 2, &imported) == MEGAPDF_OK, "pages: a third copy of forms.pdf");
+        Page p2(d.doc, 2);
+        check(names_str(field_names(p2.page)) == "agree_3", "pages: the next free suffix", names_str(field_names(p2.page)));
+        check(names_str(field_names(p1.page)) == "agree_2", "pages: the earlier rename holds", names_str(field_names(p1.page)));
+
+        // Fields in a hierarchy (a /Parent field dictionary): PDFium's page copy cannot carry
+        // them across documents, so an import or an extract of such a page is refused whole,
+        // while a delete and its undo — a copy within the same document — keeps them.
+        const fs::path parents = dir / "parents.pdf";
+        write(parents, parent_fields_pdf());
+        Doc h(utf8(parents));
+        check(h.doc != nullptr, "pages: the parent-field fixture opens");
+        if (h.doc) {
+            Page h0(h.doc, 0);
+            const auto hierarchy = field_shots(h0.page);
+            check(names_str(field_names(h0.page)) == "person.first, person.last", "pages: the parent fixture's names",
+                  names_str(field_names(h0.page)));
+            check(megapdf_pages_import(h.doc, utf8(parents).c_str(), nullptr, nullptr, 0, 1, &imported) == MEGAPDF_ERR_FIELDS && imported == 0,
+                  "pages: importing a page with fields in a hierarchy is refused", megapdf_last_error_message());
+            check(megapdf_page_count(h.doc) == 1, "pages: and nothing was imported");
+            check(megapdf_pages_import(d.doc, utf8(parents).c_str(), nullptr, nullptr, 0, 0, &imported) == MEGAPDF_ERR_FIELDS,
+                  "pages: into another document too");
+            check(megapdf_page_count(d.doc) == 3, "pages: which is unchanged");
+            check(megapdf_pages_extract(h.doc, nullptr, 0, utf8(dir / "parents-out.pdf").c_str(), nullptr) == MEGAPDF_ERR_FIELDS,
+                  "pages: extracting such a page is refused");
+            check(!fs::exists(dir / "parents-out.pdf", ec), "pages: and nothing was written");
+            check(megapdf_page_insert_blank(h.doc, 1, 612, 792) == MEGAPDF_OK, "pages: a blank page after the form page");
+            megapdf_removed_page* removed = nullptr;
+            check(megapdf_page_delete(h.doc, 0, &removed) == MEGAPDF_OK && removed != nullptr, "pages: the form page is deleted with an undo");
+            check(megapdf_page_restore(h.doc, removed, 0) == MEGAPDF_OK, "pages: and put back");
+            Page back(h.doc, 0);
+            check(same_fields(field_shots(back.page), hierarchy), "pages: the restored page keeps its hierarchy of fields, values included",
+                  shots_str(field_shots(back.page)) + " wanted " + shots_str(hierarchy));
+            const auto saved = save_bytes(h.doc, "pages-restore-parents");
+            OpenDoc again2(saved);
+            Page g0(again2.doc, 0);
+            check(megapdf_page_count(again2.doc) == 2 && same_fields(field_shots(g0.page), hierarchy),
+                  "pages: after a reopen the restored hierarchy is still there", shots_str(field_shots(g0.page)));
+        }
+
+        // A field edited after the undo of its page's delete: the value goes to the widget
+        // that is on the page, and is saved.
+        {
+            Doc f(forms_path);
+            check(megapdf_page_insert_blank(f.doc, 1, 612, 792) == MEGAPDF_OK, "pages: forms.pdf plus a blank page");
+            megapdf_removed_page* removed = nullptr;
+            check(megapdf_page_delete(f.doc, 0, &removed) == MEGAPDF_OK && megapdf_page_restore(f.doc, removed, 0) == MEGAPDF_OK,
+                  "pages: the checkbox page is deleted and put back");
+            Page p0(f.doc, 0);
+            auto fields = field_shots(p0.page);
+            check(fields.size() == 1 && show(fields[0].name) == "agree" && fields[0].checked == 0, "pages: the restored checkbox is listed, unchecked",
+                  shots_str(fields));
+            if (fields.size() == 1) {
+                check(megapdf_form_click(p0.page, (fields[0].bounds.left + fields[0].bounds.right) / 2,
+                                         (fields[0].bounds.bottom + fields[0].bounds.top) / 2) == MEGAPDF_OK,
+                      "pages: the restored checkbox is clicked");
+                fields = field_shots(p0.page);
+                check(fields.size() == 1 && fields[0].checked == 1, "pages: it reads back checked", shots_str(fields));
+                const auto saved = save_bytes(f.doc, "pages-restore-edit");
+                OpenDoc again2(saved);
+                Page g0(again2.doc, 0);
+                const auto after = field_shots(g0.page);
+                check(after.size() == 1 && after[0].checked == 1 && show(after[0].name) == "agree",
+                      "pages: the edit made after the undo is in the saved file", shots_str(after));
+            }
+        }
+    }
+
+    // Import keeps the other file's fonts: subset-font.pdf's page, brought into fixture.pdf,
+    // reads the same runs in the same (subset) font and renders the same.
+    std::vector<U16> subset_texts, subset_fonts;
+    std::vector<unsigned char> subset_render;
+    int subset_w = 0, subset_h = 0;
+    {
+        Doc s(subset_path);
+        check(s.doc != nullptr, "pages: subset-font.pdf opens");
+        if (!s.doc) return;
+        Page sp(s.doc, 0);
+        subset_texts = texts_of(sp.page);
+        subset_fonts = fonts_of(sp.page);
+        subset_w = static_cast<int>(std::lround(megapdf_page_width(sp.page)));
+        subset_h = static_cast<int>(std::lround(megapdf_page_height(sp.page)));
+        subset_render = render_at(sp.page, subset_w, subset_h);
+        check(!subset_texts.empty(), "pages: subset-font.pdf reads its runs", std::to_string(subset_texts.size()));
+    }
+    std::vector<unsigned char> combined;
+    std::vector<U16> fixture_t0;
+    {
+        Doc d(fixture_path);
+        {
+            Page p0(d.doc, 0);
+            fixture_t0 = texts_of(p0.page);
+        }
+        int imported = 0;
+        check(megapdf_pages_import(d.doc, subset_path.c_str(), nullptr, nullptr, 0, 2, &imported) == MEGAPDF_OK && imported == 1,
+              "pages: subset-font.pdf is appended to fixture.pdf", megapdf_last_error_message());
+        check(megapdf_page_count(d.doc) == 3, "pages: three pages");
+        Page p2(d.doc, 2);
+        check(texts_of(p2.page) == subset_texts, "pages: the imported page reads the same runs");
+        check(fonts_of(p2.page) == subset_fonts, "pages: the imported page keeps its fonts",
+              fonts_of(p2.page).empty() ? "none" : show(fonts_of(p2.page)[0]));
+        check(static_cast<int>(std::lround(megapdf_page_width(p2.page))) == subset_w && static_cast<int>(std::lround(megapdf_page_height(p2.page))) == subset_h,
+              "pages: the imported page keeps its size");
+        const size_t diff = differing(render_at(p2.page, subset_w, subset_h), subset_render);
+        check(diff == 0, "pages: the imported page renders as it did in its own file", std::to_string(diff) + " pixels differ");
+        combined = save_bytes(d.doc, "pages-import-font");
+        check(contains(combined, "ABCDEF+DejaVuSans") && contains(combined, "/FontFile2"),
+              "pages: the saved document carries the imported page's embedded subset font");
+        OpenDoc again(combined);
+        Page q2(again.doc, 2);
+        check(texts_of(q2.page) == subset_texts && fonts_of(q2.page) == subset_fonts, "pages: after a reopen the imported page keeps its runs and fonts");
+        check(differing(render_at(q2.page, subset_w, subset_h), subset_render) == 0, "pages: after a reopen it renders the same");
+    }
+
+    // Extract: pages [2, 0] of the combined document to a new file, read back through the
+    // file open, kept for qpdf; a raised cancel flag leaves nothing behind.
+    {
+        OpenDoc d(combined);
+        const int pick[2] = {2, 0};
+        const fs::path out = dir / fs::u8path("extract \xC3\xA9.pdf");
+        check(megapdf_pages_extract(d.doc, pick, 2, utf8(out).c_str(), nullptr) == MEGAPDF_OK, "pages: two pages are extracted",
+              megapdf_last_error_message());
+        megapdf_document* e = megapdf_open_file(utf8(out).c_str(), nullptr);
+        check(e != nullptr && megapdf_page_count(e) == 2, "pages: the extract opens with two pages", megapdf_last_error_message());
+        if (e) {
+            {
+                Page e0(e, 0);
+                Page e1(e, 1);
+                check(texts_of(e0.page) == subset_texts && fonts_of(e0.page) == subset_fonts, "pages: the extract's first page is the subset page, fonts and all");
+                check(texts_of(e1.page) == fixture_t0, "pages: the extract's second page is fixture.pdf's first");
+                check(differing(render_at(e0.page, subset_w, subset_h), subset_render) == 0, "pages: the extracted page renders as its source did");
+            }
+            megapdf_close(e);
+        }
+        keep_saved("pages-extract", read_file(utf8(out)));
+        check(megapdf_page_count(d.doc) == 3, "pages: extracting changed nothing");
+        const fs::path all = dir / "all.pdf";
+        check(megapdf_pages_extract(d.doc, nullptr, 0, utf8(all).c_str(), nullptr) == MEGAPDF_OK, "pages: every page extracted");
+        megapdf_document* a = megapdf_open_file(utf8(all).c_str(), nullptr);
+        check(a != nullptr && megapdf_page_count(a) == 3, "pages: the whole-document extract has three pages");
+        megapdf_close(a);
+        keep_saved("pages-extract", read_file(utf8(all)));
+        // Over an existing file: replaced, not appended to.
+        check(megapdf_pages_extract(d.doc, pick, 1, utf8(all).c_str(), nullptr) == MEGAPDF_OK, "pages: extracting over an existing file");
+        a = megapdf_open_file(utf8(all).c_str(), nullptr);
+        check(a != nullptr && megapdf_page_count(a) == 1, "pages: the file was replaced");
+        megapdf_close(a);
+        megapdf_cancel* cancel = megapdf_cancel_new();
+        megapdf_cancel_raise(cancel);
+        const fs::path never = dir / "never.pdf";
+        check(megapdf_pages_extract(d.doc, pick, 2, utf8(never).c_str(), cancel) == MEGAPDF_ERR_CANCELLED, "pages: a raised flag cancels the extract");
+        check(!fs::exists(never, ec), "pages: a cancelled extract leaves no file");
+        megapdf_cancel_free(cancel);
+        check(megapdf_pages_extract(d.doc, pick, 2, utf8(dir / "no-such-dir" / "x.pdf").c_str(), nullptr) == MEGAPDF_ERR_FILE,
+              "pages: a path that cannot be written is MEGAPDF_ERR_FILE");
+        size_t leftovers = 0;
+        for (const auto& entry : fs::directory_iterator(dir, ec)) {
+            if (entry.path().filename().u8string().find(".megapdf-tmp") != std::string::npos) leftovers++;
+        }
+        check(leftovers == 0, "pages: no temporary file is left behind", std::to_string(leftovers));
+    }
+
+    // A blank page.
+    {
+        Doc d(fixture_path);
+        check(megapdf_page_insert_blank(d.doc, 1, 300, 400) == MEGAPDF_OK && megapdf_page_count(d.doc) == 3, "pages: a blank page at 1",
+              megapdf_last_error_message());
+        Page p1(d.doc, 1);
+        check(close_to(megapdf_page_width(p1.page), 300) && close_to(megapdf_page_height(p1.page), 400), "pages: the blank page has its size");
+        const auto px = render_at(p1.page, 300, 400);
+        check(ink_box(px, 300, 400).l == -1, "pages: the blank page renders white");
+        check(texts_of(p1.page).empty(), "pages: the blank page has no text");
+        const auto saved = save_bytes(d.doc, "pages-blank");
+        OpenDoc again(saved);
+        Page q1(again.doc, 1);
+        check(megapdf_page_count(again.doc) == 3 && close_to(megapdf_page_width(q1.page), 300), "pages: the blank page survives a save");
+        Page q2(again.doc, 2);
+        check(!texts_of(q2.page).empty(), "pages: the page after it is fixture.pdf's second");
+    }
+
+    // Redaction marks and layout verdicts follow their page; a deleted page's are dropped.
+    {
+        Doc d(fixture_path);
+        Page p1(d.doc, 1);
+        const megapdf_rect area{100, 100, 200, 120};
+        int mark = 0;
+        check(megapdf_redaction_mark(p1.page, &area, &mark) == MEGAPDF_OK, "pages: a mark on page 1");
+        megapdf_removed_page* removed = nullptr;
+        check(megapdf_page_delete(d.doc, 0, &removed) == MEGAPDF_OK, "pages: page 0 deleted under the mark");
+        check(megapdf_redaction_marks(p1.page, nullptr, 0) == 1 && megapdf_redaction_mark_count(d.doc) == 1,
+              "pages: the mark is still on its page, now page 0");
+        check(megapdf_page_restore(d.doc, removed, 0) == MEGAPDF_OK, "pages: page 0 restored");
+        check(megapdf_redaction_marks(p1.page, nullptr, 0) == 1, "pages: the mark is still on its page, page 1 again");
+        check(megapdf_page_delete(d.doc, 1, nullptr) == MEGAPDF_OK, "pages: the marked page deleted");
+        check(megapdf_redaction_mark_count(d.doc) == 0, "pages: the deleted page's mark is gone");
+        check(megapdf_page_index(p1.page) == -1, "pages: its handle says -1");
+    }
+
+    // Security (ADR-004): a restricted open may not assemble, and may not extract.
+    {
+        const auto bytes = read_file(security_fixtures + "/owner-only.pdf");
+        megapdf_document* d = megapdf_open(bytes.data(), bytes.size(), nullptr);
+        check(d != nullptr, "pages: owner-only.pdf opens without a password");
+        if (d) {
+            megapdf_security s{};
+            megapdf_security_info(d, &s);
+            const bool may_assemble = (s.permissions & (MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY)) != 0;
+            const int rotated = megapdf_page_rotate(d, 0, 1);
+            check(rotated == (may_assemble ? MEGAPDF_OK : MEGAPDF_ERR_RESTRICTED), "pages: rotating a restricted document follows its permissions",
+                  std::to_string(rotated));
+            check((s.permissions & MEGAPDF_PERMIT_COPY) == 0, "pages: owner-only.pdf forbids copying");
+            check(megapdf_pages_extract(d, nullptr, 0, utf8(dir / "restricted.pdf").c_str(), nullptr) == MEGAPDF_ERR_RESTRICTED,
+                  "pages: extracting from it is refused");
+            check(!fs::exists(dir / "restricted.pdf", ec), "pages: and nothing was written");
+            Doc plain(fixture_path);
+            check(megapdf_pages_import(plain.doc, (security_fixtures + "/owner-only.pdf").c_str(), nullptr, nullptr, 0, 0, nullptr) ==
+                      MEGAPDF_ERR_RESTRICTED,
+                  "pages: importing from it is refused too", megapdf_last_error_message());
+            check(megapdf_page_count(plain.doc) == 2, "pages: the refused import changed nothing");
+            megapdf_close(d);
+        }
+        megapdf_document* owner = megapdf_open(bytes.data(), bytes.size(), "o-restricted");
+        check(owner != nullptr, "pages: the owner opens owner-only.pdf");
+        if (owner) {
+            check(megapdf_page_rotate(owner, 0, 1) == MEGAPDF_OK, "pages: the owner may rotate");
+            check(megapdf_pages_extract(owner, nullptr, 0, utf8(dir / "owner.pdf").c_str(), nullptr) == MEGAPDF_OK, "pages: the owner may extract",
+                  megapdf_last_error_message());
+            megapdf_document* e = megapdf_open_file(utf8(dir / "owner.pdf").c_str(), nullptr);
+            check(e != nullptr && megapdf_page_count(e) == megapdf_page_count(owner), "pages: the owner's extract opens with no password");
+            megapdf_close(e);
+            megapdf_close(owner);
+        }
+    }
+    fs::remove_all(dir, ec);
 }
 
 int main(int argc, char** argv) {
@@ -6653,6 +7301,7 @@ int main(int argc, char** argv) {
     test_write_text_findability(argv[2]);
     test_write_markdown_goldens(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
+    test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
     if (cli_path.empty()) {
         std::printf("cli tests: skipped (no megapdf-cli path given on the command line)\n");
     } else {
@@ -6660,6 +7309,7 @@ int main(int argc, char** argv) {
         test_cli_password(std::string(MEGAPDF_SECURITY_FIXTURES), cli_path);
         test_cli_scan_mixed(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
         test_cli_markdown_smoke(std::string(MEGAPDF_REPO_FIXTURES), cli_path);
+        test_cli_pages(argv[1], cli_path);
     }
     if (failures == 0) std::printf("core tests: all passed\n");
     else std::fprintf(stderr, "core tests: %d failure(s)\n", failures);

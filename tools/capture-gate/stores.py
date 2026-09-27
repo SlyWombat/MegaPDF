@@ -4,7 +4,8 @@ A profile says what the gate cannot work out by looking: the pixel sizes that
 store accepts, which languages the listing is in and who the demo person is in
 each, the order the images appear in on the listing, and the few facts about
 the app's own chrome that turn "looks right" into a number — how tall the 2.0
-toolbar is, what the zoom is pinned to, where the status bar lives.
+toolbar is, what the zoom is pinned to, where the status bar lives, which rows
+the tab strip underlines its active tab on.
 
 Everything else — clipping, stray chrome, poses matching across languages — is
 measured from the images themselves and needs no profile.
@@ -135,6 +136,14 @@ STORES: dict[str, dict] = {
         "zoom": "100",
         "accent_poses": {"redact": ("banner", "mark")},
         "accent_strict": True,
+        # Since 2.1.1 the tab strip (#348) sits under the toolbar, and the
+        # active tab's title is underlined in the accent: a 2 px rule, rows
+        # 93–94 of a 1440x900 window, from x=13 and as wide as the title.
+        # Measured on the 2.1.1 set: 446–464 px in every language (the title
+        # translates), 208–270 in the sign pose where the flyout covers most
+        # of it. It is the only accent in slots 1–4, and without this the
+        # gate read it as a selection left on (#400).
+        "tab_underline": {"rows": (93, 95)},
         "status_band": None,
         "notes": "tools/macos-store-captures.sh. Each image has a .log beside "
                  "it recording the toolbar mode and the menu-bar check.",

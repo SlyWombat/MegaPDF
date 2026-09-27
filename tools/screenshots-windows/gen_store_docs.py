@@ -8,7 +8,9 @@ so the French screenshots show French chrome over a French form, #91). "fr" alon
 means fr-CA. The customer is a French name with accents per listing language (#146):
 fr-CA Hélène Bélanger, fr-FR Céline Lefèvre, and the on-camera fix is the missing
 accent ("Belanger" -> "Bélanger", "Lefevre" -> "Lefèvre") instead of English's
-"Whitfeld" -> "Whitfield". The
+"Whitfeld" -> "Whitfield". fr-FR is its own text, not the Quebec page under a
+French name (#310, Dave 2026-09-26): week-end for fin de semaine, enlèvement for
+ramassage, metres and kilograms for feet and pounds, € for $. The
 layout — every y coordinate, the box rows, the signature line — is identical,
 so the harness coordinates read off the English frame still land.
 
@@ -35,7 +37,6 @@ ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 LANG_ARG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "en"
 if LANG_ARG not in ("en", "fr", "fr-CA", "fr-FR"):
     sys.exit(f"unknown --lang {LANG_ARG}: use en, fr-CA or fr-FR")
-LANG = "en" if LANG_ARG == "en" else "fr"
 FR_NAME = {"fr-FR": ("Céline Lefevre", "Céline Lefèvre")}.get(LANG_ARG, ("Hélène Belanger", "Hélène Bélanger"))
 OUT = ARGS[0] if ARGS else os.path.join(REPO, "artifacts", "store", "screenshots")
 os.makedirs(OUT, exist_ok=True)
@@ -90,7 +91,23 @@ BOXES_FR = [(508, "Livraison et ramassage inclus"), (482, "Assurance dommages ac
             (456, "Tarif fin de semaine prolongée")]
 LABELS_FR = {"sign": "Signez au-dessus de la ligne", "date": "Date", "typo": FR_NAME[0], "fixed": FR_NAME[1]}
 
-BODY, BOXES, LABELS = (BODY_FR, BOXES_FR, LABELS_FR) if LANG == "fr" else (BODY_EN, BOXES_EN, LABELS_EN)
+# France (#310): the Quebec page with the lines that read as Quebec rewritten, keyed
+# by their y coordinate so nothing moves. Metric sizes near the imperial ones (6000 lb
+# ~ 2.7 t, 6 ft ~ 1.8 m, 12 ft ~ 3.7 m), rounded the way a French hire catalogue would.
+FR_FR_LINES = {
+    396: "1 x chariot télescopique 3 000 kg, propane, avec déport latéral",
+    380: "2 x sections d'échafaudage, 2 m, avec garde-corps",
+    364: "1 x remorque 3,5 m, essieu tandem, rampes incluses",
+    258: "acceptée ci-dessus, limite la responsabilité du client à 500 € par incident.",
+}
+BODY_FR_FR = [(kind, size, y, FR_FR_LINES.get(y, text)) for kind, size, y, text in BODY_FR]
+BOXES_FR_FR = [(508, "Livraison et enlèvement inclus"), (482, "Assurance dommages acceptée"),
+               (456, "Tarif week-end prolongé")]
+
+BODY, BOXES, LABELS = {
+    "en": (BODY_EN, BOXES_EN, LABELS_EN),
+    "fr-FR": (BODY_FR_FR, BOXES_FR_FR, LABELS_FR),
+}.get(LANG_ARG, (BODY_FR, BOXES_FR, LABELS_FR))
 SIG_LINE_Y = 150
 
 

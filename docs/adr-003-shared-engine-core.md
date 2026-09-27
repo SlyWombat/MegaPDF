@@ -204,3 +204,21 @@ third time.
 - **SDD §6.1's "native per platform" now means native UI.** The layer below the UI
   and above PDFium is shared by design; MAUI and Uno stay rejected; the product
   principles are untouched.
+- **Contract 10, page tools (#174, SDD §3.10), 2026-09-27.** Rotate, delete (with the
+  page kept for an undo, the way a detached object is), move, blank page, import from
+  another file and extract to a new one, all in the core, so the page grids the four
+  platforms will grow are UI over one implementation. Two things decision 1 had to
+  absorb. Page indices are the identity key of everything the core caches per page and
+  of every journal entry the apps write, so every operation renumbers the core's own
+  state (open handles, verdicts, marks, detached objects) and the contract states the
+  inverse of each operation, which is what lets an index-keyed journal stay a plain
+  effective stream. And PDFium's page copy (`FPDF_ImportPagesByIndex`) does not carry a
+  widget's `/Parent` across documents: the core keeps a source document open under the
+  document that imported from it, refuses to import or extract a page whose fields sit
+  in a hierarchy (`MEGAPDF_ERR_FIELDS`), rebuilds the form-fill environment after the
+  widget population changes (PDFium's interactive form would otherwise read a restored
+  widget's value from the dictionary of the widget that was deleted), and leaves the
+  proper fix — a patch that copies the chain and registers imported fields in
+  `/AcroForm` — to the patch series. The extract writes its file with the apps' own save
+  discipline (whole file to a sibling, read back, rename), the one place the core writes
+  a file itself, because the caller has no handle on the new document to verify it with.

@@ -68,7 +68,8 @@ enum {
     MEGAPDF_ERR_CANCELLED = -7,   /* a page check stopped early: its cancel flag was raised or its document is closing (#145) */
     MEGAPDF_ERR_NOT_JUDGED = -8,  /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
     MEGAPDF_ERR_FILE = -9,        /* a file could not be created, read or written (#147) */
-    MEGAPDF_ERR_REDACT = -10      /* a redaction could not remove everything it had to, so it removed nothing (#173) */
+    MEGAPDF_ERR_REDACT = -10,     /* a redaction could not remove everything it had to, so it removed nothing (#173) */
+    MEGAPDF_ERR_FIELDS = -11      /* the pages carry form fields in a hierarchy PDFium cannot copy; nothing was changed (#174) */
 };
 
 /**
@@ -1304,6 +1305,186 @@ typedef struct megapdf_write_options {
 MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, int page_count, int format,
                                    const megapdf_write_options* options, megapdf_write_fn write, void* context,
                                    const megapdf_cancel* cancel);
+
+/* --------------------------------------------------------------------------
+ * Contract 10: page tools (#174). Rotate, delete, move, insert a blank page, import
+ * pages from another file (combine) and extract pages to a new file (split). Every
+ * page index here is 0-based, as megapdf_load_page's is.
+ *
+ * Permission: every call that changes the document needs MEGAPDF_PERMIT_ASSEMBLE or
+ * MEGAPDF_PERMIT_MODIFY (ISO 32000-2 Table 22: "assemble the document — insert, rotate
+ * or delete pages"); megapdf_pages_extract needs MEGAPDF_PERMIT_COPY. MEGAPDF_ERR_RESTRICTED
+ * otherwise (ADR-004). A document poisoned by a failed redaction refuses them all with
+ * MEGAPDF_ERR_REDACT, as megapdf_save() does.
+ *
+ * Page indices are the identity key of everything the core caches per page and of every
+ * entry the apps' recovery journals record (#145), and delete, move, restore, insert and
+ * import all renumber pages. The core keeps its own per-page state right: every open
+ * megapdf_page handle's index follows its page (megapdf_page_index()), and a handle whose
+ * page was deleted answers -1 from then on and still renders (its widgets as drawn, no
+ * longer live: the form calls on it answer MEGAPDF_ERR_ARGUMENT and it lists no fields),
+ * so a view holding it does not crash; the redaction marks, layout verdicts and detached
+ * objects of a page follow
+ * it too, and those of a deleted page are dropped (a detached handle of a deleted page
+ * can no longer be restored: MEGAPDF_ERR_ARGUMENT). What the core cannot see is the apps'
+ * own index-keyed caches — render caches, thumbnail grids, the undo stack — which the app
+ * renumbers itself after each call, exactly as it would after a page op made elsewhere.
+ *
+ * Undo and the journal. Every operation has an inverse in this contract, so the apps'
+ * undo stacks and journals record page operations the way they record every other edit
+ * — the effective stream, front to back, with each entry's page index as the document
+ * was numbered when it was made — and a replay in order lands on the right pages
+ * without any index rewriting: an entry recorded after a delete already carries the
+ * post-delete index. The inverses:
+ *   rotate(page, q)            ↔ rotate(page, -q)
+ *   move(from, to)             ↔ move(to, from)
+ *   insert_blank(at, w, h)     ↔ delete(at)
+ *   import(n pages at at)      ↔ delete(at) n times
+ *   delete(page)               ↔ restore(removed, page) in the session — the page kept
+ *                                alive by its megapdf_removed_page handle, the way a
+ *                                detached object is (contract 5), so an undo puts back
+ *                                exactly what was deleted; a journal cannot carry a
+ *                                page, so its entry for that undo is "import page N of
+ *                                the file on disk at index page", best effort in the
+ *                                sense TextRestoreEntry is: edits made to the page
+ *                                before it was deleted are replayed by their own entries
+ *                                only if they precede the delete.
+ * megapdf_pages_extract changes nothing in the document and records nothing.
+ *
+ * Coordinates: rotating a page sets its /Rotate and rewrites no content. Renders follow
+ * the rotation (contract 7 renders through PDFium's display matrix, which honours
+ * /Rotate) and megapdf_page_width/height answer the rotated size; the crop-space
+ * rectangles every other contract reports (fields, stamps, text runs, search hits) are
+ * unrotated user space, as they were before this contract for a document that arrived
+ * with /Rotate set. Adding the rotation term to that transform is its own change (#174's
+ * item 2, every rect-consuming call site in four apps) and is not made here.
+ * ----------------------------------------------------------------------- */
+
+/** The page's index in its document as it is numbered now; -1 for a NULL handle or a deleted page. */
+MEGAPDF_API int megapdf_page_index(const megapdf_page* page);
+
+/** The page's /Rotate in quarter turns clockwise, 0–3; MEGAPDF_ERR_ARGUMENT for a bad document or index. */
+MEGAPDF_API int megapdf_page_rotation(const megapdf_document* document, int page);
+
+/**
+ * Rotates the page by `quarter_turns` quarter turns clockwise (negative for anticlockwise;
+ * any magnitude, taken modulo 4): its /Rotate changes and nothing else does. Every open
+ * handle on the page sees the new size and renders rotated. MEGAPDF_OK for 0 turns.
+ */
+MEGAPDF_API int megapdf_page_rotate(megapdf_document* document, int page, int quarter_turns);
+
+/**
+ * A deleted page kept alive for an undo. The core owns it: megapdf_page_restore() consumes
+ * the handle, megapdf_discard_removed_page() frees it, and closing the document frees any
+ * still held. A handle restores only into the document it came from.
+ */
+typedef struct megapdf_removed_page megapdf_removed_page;
+
+/**
+ * Deletes the page. With `out_removed` non-NULL the page is kept for megapdf_page_restore();
+ * with it NULL the page is gone. Either way the page's form fields leave the document's
+ * AcroForm with it (PDFium patch 0028), so a saved file does not carry a field whose only
+ * widget was on a deleted page — nor the page, which such a field would have kept
+ * reachable: a full save writes what the trailer reaches (SDD §3.4, patch 0029), so a
+ * deleted page's objects are not written unless something else still points at them
+ * (an outline entry or a link to the page, which the core leaves alone).
+ *
+ * MEGAPDF_ERR_ARGUMENT for a bad index or a document with one page (a PDF must have a
+ * page); MEGAPDF_ERR_PDFIUM when the page could not be copied for the undo — the document
+ * is then untouched.
+ */
+MEGAPDF_API int megapdf_page_delete(megapdf_document* document, int page, megapdf_removed_page** out_removed);
+
+/**
+ * Puts a deleted page back at index `at` (0 … page count, the count appends) and consumes
+ * the handle. The page comes back as it was — content, resources, annotations and their
+ * appearance streams, and its fields with their names and values, hierarchies included
+ * (the copy is of the same document, so a widget's /Parent still names its field) — but
+ * the fields are not re-registered in the AcroForm (PDFium's page import does not touch
+ * it): PDFium, and so every MegaPDF platform, still lists, fills and draws them from the
+ * widgets, and a save writes them; a reader that builds its form panel from /AcroForm
+ * /Fields alone will not list them. MEGAPDF_ERR_ARGUMENT for a NULL handle, a handle from
+ * another document or a bad index; MEGAPDF_ERR_PDFIUM when PDFium refuses (the handle
+ * stays valid).
+ */
+MEGAPDF_API int megapdf_page_restore(megapdf_document* document, megapdf_removed_page* removed, int at);
+
+/** Frees a removed page without restoring it. NULL is fine. */
+MEGAPDF_API void megapdf_discard_removed_page(megapdf_removed_page* removed);
+
+/**
+ * Moves the page at `from` so that it stands at index `to` afterwards (the indices of the
+ * pages between them shift by one). The page dictionary is untouched, so its fields,
+ * annotations and everything else move with it. MEGAPDF_OK when from == to.
+ */
+MEGAPDF_API int megapdf_page_move(megapdf_document* document, int from, int to);
+
+/** Inserts an empty page of `width` × `height` points at `at` (0 … page count, the count appends). */
+MEGAPDF_API int megapdf_page_insert_blank(megapdf_document* document, int at, double width, double height);
+
+/**
+ * Combine: inserts pages of the file at `other_path_utf8` before index `insert_at` (0 … page
+ * count, the count appends), in the order `pages` lists them (0-based indices into the other
+ * document; NULL with `count` 0 means all of its pages). `password_utf8` opens the other
+ * file when it needs one (NULL otherwise). `out_imported` (may be NULL) receives how many
+ * pages were inserted.
+ *
+ * The other file is read on demand (megapdf_open_file, #147): only the pages imported are
+ * copied, with their resources — the fonts, images and forms they draw come with them, and
+ * a resource two imported pages share is copied once. Form fields on the imported pages
+ * keep their names unless a top-level name already exists in this document, in which case
+ * the imported field is renamed with a numeric suffix ("name" → "name_2") before it is
+ * copied, so the two never merge into one field. As for megapdf_page_restore(), the
+ * imported fields are not registered in this document's AcroForm.
+ *
+ * A form field in a hierarchy — a widget whose name, type or value lives on a /Parent
+ * field dictionary, as LiveCycle and most authoring tools write them — cannot be imported:
+ * PDFium's page copy leaves the widget's /Parent pointing into the other document, so the
+ * field would arrive without its name or type and the saved file would name an object that
+ * is not its parent. Such pages are refused whole with MEGAPDF_ERR_FIELDS and nothing is
+ * changed (a PDFium patch that copies the chain is the fix; see docs/adr-003). A widget that
+ * is its own field (no /Parent), which is what simple forms and MegaPDF's fixtures have,
+ * imports as described above. A popup annotation's /Parent has the same flaw and is not
+ * refused: PDFium reads the markup annotation's /Popup, never the popup's /Parent, and a
+ * reader that does sees a link to the wrong object rather than a lost note.
+ *
+ * The other document stays open inside this one until it is closed, so nothing an imported
+ * page still refers to in it can be freed under the document. One PDFium call copies every
+ * page, so there is no cancel flag: importing page by page would copy a shared resource
+ * once per page.
+ *
+ * MEGAPDF_ERR_FILE when the other file cannot be opened or is not a PDF, MEGAPDF_ERR_RESTRICTED
+ * when it needs a password or its own security does not allow copying from it (COPY, as
+ * megapdf_pages_extract), MEGAPDF_ERR_ARGUMENT for a bad index in `pages` or `insert_at`,
+ * MEGAPDF_ERR_FIELDS as above, MEGAPDF_ERR_PDFIUM when PDFium refuses the copy.
+ * megapdf_last_error() carries PDFium's open code (FPDF_ERR_PASSWORD, FPDF_ERR_FORMAT, ...)
+ * after a failed open, as megapdf_open() does.
+ */
+MEGAPDF_API int megapdf_pages_import(megapdf_document* document, const char* other_path_utf8,
+                                     const char* password_utf8, const int* pages, size_t count, int insert_at,
+                                     int* out_imported);
+
+/**
+ * Split: writes the listed pages (0-based, in the order given, repeats allowed; NULL with
+ * `count` 0 means every page) as a new PDF at `out_path_utf8`, with the save discipline
+ * every platform's save uses (SDD §3.4): the whole file goes to a sibling temporary name
+ * in the destination's directory, is opened again and its page count checked, and only
+ * then takes the destination's name, so a crash or a full disk leaves either the old file
+ * or the new one, never a torn one. Form edits are committed first, as for megapdf_save().
+ *
+ * The new file carries no security (a copy the user may make of a document whose security
+ * permits copying), no outline and no document-level form dictionary: the pages' widgets
+ * come across with their appearance streams and are not fillable in a reader that needs
+ * /AcroForm. Pages with fields in a hierarchy are refused with MEGAPDF_ERR_FIELDS, for
+ * the reason megapdf_pages_import() gives. The document itself is unchanged.
+ *
+ * `cancel` may be NULL; raised, it stops the write and returns MEGAPDF_ERR_CANCELLED with
+ * nothing left at `out_path_utf8`. MEGAPDF_ERR_ARGUMENT for a bad index or an empty path,
+ * MEGAPDF_ERR_FILE when the file cannot be written, read back or renamed into place,
+ * MEGAPDF_ERR_PDFIUM when PDFium refuses.
+ */
+MEGAPDF_API int megapdf_pages_extract(const megapdf_document* document, const int* pages, size_t count,
+                                      const char* out_path_utf8, const megapdf_cancel* cancel);
 
 #ifdef __cplusplus
 }  /* extern "C" */

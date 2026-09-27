@@ -247,3 +247,14 @@ Canadian term needs a France counterpart; never edit a derived file.
 | crochet | coche |
 | Merci tout spécial à | Un grand merci à |
 | fin de semaine | week-end |
+| ramassage | enlèvement |
+
+The demo documents the store captures show are the exception: their text is
+written per listing language, not derived (#310, Dave 2026-09-26).
+`tools/gen_test_fixtures.py` (`DEMO_TEXT["fr"]` for fr-CA, `DEMO_TEXT["fr-FR"]`)
+and `tools/screenshots-windows/gen_store_docs.py` (`--lang fr-CA` / `fr-FR`)
+each carry both pages: Quebec's says *fin de semaine*, *ramassage*, pi, lb and $;
+France's says *week-end*, *enlèvement*, m, kg and €. Same layout, same demo
+person per language (Hélène Bélanger, Céline Lefèvre), and the lines the
+screenshot poses key on — *location* three times, *sections 1 à 4* on one
+line — are the same in both.
