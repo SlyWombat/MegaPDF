@@ -29,9 +29,10 @@ FPDF_FORMHANDLE FormHandle(const megapdf_document* document);
 double PageUnit(const megapdf_page* page);
 
 // The crop-space transform every coordinate leaving the core goes through (#28/#30/#150):
-// user space, less the CropBox origin, times the page's /UserUnit.
-double ToCropX(const megapdf_page* page, double x);
-double ToCropY(const megapdf_page* page, double y);
+// user space, less the CropBox origin, times the page's /UserUnit, turned by the page's
+// /Rotate (#439). A point takes both coordinates at once, because a quarter turn builds the
+// crop-space x from the user-space y.
+void ToCropPoint(const megapdf_page* page, double x, double y, double* out_x, double* out_y);
 megapdf_rect ToCropRect(const megapdf_page* page, double l, double b, double r, double t);
 
 // megapdf_last_error()/megapdf_last_error_message()'s thread-local slot (SetError() in

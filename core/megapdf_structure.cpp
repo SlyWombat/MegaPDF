@@ -57,9 +57,8 @@ using megapdf_internal::Lock;
 using megapdf_internal::PageHandle;
 using megapdf_internal::PageUnit;
 using megapdf_internal::SetLastError;
+using megapdf_internal::ToCropPoint;
 using megapdf_internal::ToCropRect;
-using megapdf_internal::ToCropX;
-using megapdf_internal::ToCropY;
 
 using U16 = std::vector<unsigned short>;
 
@@ -503,14 +502,14 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         FPDFText_GetCharOrigin(tp, i, &ox, &oy);
         Char c;
         c.unicode = u;
-        c.l = ToCropX(page, l);
-        c.r = ToCropX(page, r);
-        c.b = ToCropY(page, b);
-        c.t = ToCropY(page, t);
-        if (c.r < c.l) std::swap(c.l, c.r);
-        if (c.t < c.b) std::swap(c.b, c.t);
-        c.origin_x = ToCropX(page, ox);
-        c.origin_y = ToCropY(page, oy);
+        // One rect through the transform, which turns the page's /Rotate in and normalises
+        // (#439): on a rotated page the glyph's left edge is not the crop-space left one.
+        const megapdf_rect box = ToCropRect(page, l, b, r, t);
+        c.l = box.left;
+        c.r = box.right;
+        c.b = box.bottom;
+        c.t = box.top;
+        ToCropPoint(page, ox, oy, &c.origin_x, &c.origin_y);
         c.font_size = FPDFText_GetFontSize(tp, i) * unit;
         // The tight ink box (above) understates many glyphs' true advance — "l", "i", a
         // narrow numeral — so gapping words on it alone over-splits exactly those words
@@ -519,12 +518,11 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         // ink, and is what BuildWords compares against kWordGapEm.
         FS_RECTF loose{};
         if (FPDFText_GetLooseCharBox(tp, i, &loose)) {
-            c.loose_l = ToCropX(page, loose.left);
-            c.loose_r = ToCropX(page, loose.right);
-            if (c.loose_r < c.loose_l) std::swap(c.loose_l, c.loose_r);
-            c.loose_t = ToCropY(page, loose.top);
-            c.loose_b = ToCropY(page, loose.bottom);
-            if (c.loose_t < c.loose_b) std::swap(c.loose_t, c.loose_b);
+            const megapdf_rect wide = ToCropRect(page, loose.left, loose.bottom, loose.right, loose.top);
+            c.loose_l = wide.left;
+            c.loose_r = wide.right;
+            c.loose_b = wide.bottom;
+            c.loose_t = wide.top;
         } else {
             c.loose_l = c.l;
             c.loose_r = c.r;

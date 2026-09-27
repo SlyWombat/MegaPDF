@@ -164,6 +164,11 @@ struct megapdf_page {
     int index = -1;
     double crop_x = 0.0;
     double crop_y = 0.0;
+    // The page's own size in user space, before /Rotate: the box PDFium renders, turned back
+    // to the page's unrotated orientation. The crop-space transform needs it for the rotation
+    // term (#439), and it does not change when the page is rotated, so it is read once.
+    double crop_w = 0.0;
+    double crop_h = 0.0;
     double unit = 1.0;   // the page's /UserUnit: points per user space unit (#150)
 };
 
@@ -254,27 +259,104 @@ void InitFormFillInfo(FPDF_FORMFILLINFO* ffi) {
 }
 
 // pdfium reports content in user space (MediaBox origin) but renders the CropBox.
-// Every coordinate that leaves the core has this subtracted (#28/#30).
-void ReadCropOrigin(FPDF_PAGE page, double* x, double* y) {
+// Every coordinate that leaves the core has this subtracted (#28/#30), and the page's own
+// size comes back with it for the rotation term (#439).
+void ReadPageSpace(FPDF_PAGE page, double* x, double* y, double* w, double* h) {
+    *x = 0.0;
+    *y = 0.0;
+    *w = 0.0;
+    *h = 0.0;
+    if (page == nullptr) return;
     float l = 0, b = 0, r = 0, t = 0;
-    if (page != nullptr && FPDFPage_GetCropBox(page, &l, &b, &r, &t) && r > l && t > b) {
+    if (FPDFPage_GetCropBox(page, &l, &b, &r, &t) && r > l && t > b) {
         *x = static_cast<double>(l);
         *y = static_cast<double>(b);
-    } else {
-        *x = 0.0;
-        *y = 0.0;
     }
+    // The box PDFium renders, in the page's *unrotated* orientation: the width and height
+    // calls answer the rotated size (that is contract 10's promise), so an odd quarter turn
+    // swaps them back. Taken from the same source as megapdf_page_width/height so the two
+    // can never disagree about how big the page is.
+    const double pw = static_cast<double>(FPDF_GetPageWidthF(page));
+    const double ph = static_cast<double>(FPDF_GetPageHeightF(page));
+    const bool turned = (FPDFPage_GetRotation(page) & 1) != 0;
+    *w = turned ? ph : pw;
+    *h = turned ? pw : ph;
+}
+
+// A point in one space or the other. Crop space needs both coordinates at once now: under a
+// quarter turn the crop-space x is built from the user-space y (#439).
+struct SpacePoint {
+    double x = 0.0;
+    double y = 0.0;
+};
+
+/** The page's /Rotate in quarter turns clockwise, 0-3, read live so a rotate is honoured. */
+int PageQuarterTurns(const megapdf_page* p) {
+    if (p == nullptr || p->page == nullptr) return 0;
+    return FPDFPage_GetRotation(p->page) & 3;
 }
 
 // Crop space is points: user space, less the CropBox origin, times the page's /UserUnit
-// (#150). Most pages have none, and the factor is 1. Every coordinate and length that
-// leaves the core goes through Out*, and every one that comes in through In*.
-double OutX(const megapdf_page* p, double x) { return (x - p->crop_x) * p->unit; }
-double OutY(const megapdf_page* p, double y) { return (y - p->crop_y) * p->unit; }
-double InX(const megapdf_page* p, double x) { return x / p->unit + p->crop_x; }
-double InY(const megapdf_page* p, double y) { return y / p->unit + p->crop_y; }
+// (#150, most pages have none and the factor is 1), turned by the page's /Rotate (#439) so
+// that one space serves the render, megapdf_page_width/height and every rectangle the core
+// reports. Every coordinate that leaves the core goes through Out*, and every one that comes
+// in through In*.
+//
+// The turn is clockwise, about the page: with W and H the unrotated size, a user-space point
+// (x, y) lands at (y, W - x) for one quarter turn, (W - x, H - y) for two and (H - y, x) for
+// three — which is what PDFium's display matrix does to the pixels.
+SpacePoint OutPoint(const megapdf_page* p, double x, double y) {
+    const double cx = (x - p->crop_x) * p->unit;
+    const double cy = (y - p->crop_y) * p->unit;
+    const double w = p->crop_w * p->unit;
+    const double h = p->crop_h * p->unit;
+    switch (PageQuarterTurns(p)) {
+        case 1: return SpacePoint{cy, w - cx};
+        case 2: return SpacePoint{w - cx, h - cy};
+        case 3: return SpacePoint{h - cy, cx};
+        default: return SpacePoint{cx, cy};
+    }
+}
+
+SpacePoint InPoint(const megapdf_page* p, double x, double y) {
+    const double w = p->crop_w * p->unit;
+    const double h = p->crop_h * p->unit;
+    double cx = x;
+    double cy = y;
+    switch (PageQuarterTurns(p)) {
+        case 1: cx = w - y; cy = x; break;
+        case 2: cx = w - x; cy = h - y; break;
+        case 3: cx = y;     cy = h - x; break;
+        default: break;
+    }
+    return SpacePoint{cx / p->unit + p->crop_x, cy / p->unit + p->crop_y};
+}
+
+// A crop-space displacement back to user space. A shift has no position, so the origin does
+// not enter it — only the turn and the unit.
+SpacePoint InVector(const megapdf_page* p, double dx, double dy) {
+    double cx = dx;
+    double cy = dy;
+    switch (PageQuarterTurns(p)) {
+        case 1: cx = -dy; cy = dx;  break;
+        case 2: cx = -dx; cy = -dy; break;
+        case 3: cx = dy;  cy = -dx; break;
+        default: break;
+    }
+    return SpacePoint{cx / p->unit, cy / p->unit};
+}
+
+// A rect through either transform: both corners turn, and the result is normalised, because
+// a turn swaps which corner is which and a rect the core reports always reads left < right,
+// bottom < top.
+megapdf_rect SpaceRect(SpacePoint a, SpacePoint c) {
+    return megapdf_rect{(std::min)(a.x, c.x), (std::min)(a.y, c.y), (std::max)(a.x, c.x), (std::max)(a.y, c.y)};
+}
 megapdf_rect OutRect(const megapdf_page* p, double l, double b, double r, double t) {
-    return megapdf_rect{OutX(p, l), OutY(p, b), OutX(p, r), OutY(p, t)};
+    return SpaceRect(OutPoint(p, l, b), OutPoint(p, r, t));
+}
+megapdf_rect InRect(const megapdf_page* p, double l, double b, double r, double t) {
+    return SpaceRect(InPoint(p, l, b), InPoint(p, r, t));
 }
 
 // --------------------------------------------------------------------------
@@ -648,8 +730,11 @@ FPDF_PAGE PageHandle(const megapdf_page* p) { return p ? p->page : nullptr; }
 FPDF_DOCUMENT DocumentHandle(const megapdf_document* d) { return d ? d->doc : nullptr; }
 FPDF_FORMHANDLE FormHandle(const megapdf_document* d) { return d ? d->form : nullptr; }
 double PageUnit(const megapdf_page* p) { return p ? p->unit : 1.0; }
-double ToCropX(const megapdf_page* p, double x) { return OutX(p, x); }
-double ToCropY(const megapdf_page* p, double y) { return OutY(p, y); }
+void ToCropPoint(const megapdf_page* p, double x, double y, double* out_x, double* out_y) {
+    const SpacePoint c = OutPoint(p, x, y);
+    if (out_x != nullptr) *out_x = c.x;
+    if (out_y != nullptr) *out_y = c.y;
+}
 megapdf_rect ToCropRect(const megapdf_page* p, double l, double b, double r, double t) { return OutRect(p, l, b, r, t); }
 void SetLastError(unsigned long code, const char* message) { SetError(code, message); }
 bool IsCancelled(const megapdf_cancel* c) { return c != nullptr && c->raised.load(std::memory_order_relaxed) != 0; }
@@ -873,7 +958,7 @@ MEGAPDF_API megapdf_page* megapdf_load_page(megapdf_document* d, int index) {
     p->owner = d;
     p->page = page;
     p->index = index;
-    ReadCropOrigin(page, &p->crop_x, &p->crop_y);
+    ReadPageSpace(page, &p->crop_x, &p->crop_y, &p->crop_w, &p->crop_h);
     p->unit = static_cast<double>(FPDFPage_GetUserUnit(page));
     d->open_pages.push_back(p);
     return p;
@@ -982,10 +1067,11 @@ MEGAPDF_API size_t megapdf_search_page(const megapdf_page* p, const unsigned sho
             for (int i = 0; i < rects; i++) {
                 double l = 0, t = 0, r = 0, b = 0;
                 if (!FPDFText_GetRect(text, i, &l, &t, &r, &b)) continue;
-                match.push_back(OutX(p, l));
-                match.push_back(OutY(p, b));
-                match.push_back(OutX(p, r));
-                match.push_back(OutY(p, t));
+                const megapdf_rect hit = OutRect(p, l, b, r, t);
+                match.push_back(hit.left);
+                match.push_back(hit.bottom);
+                match.push_back(hit.right);
+                match.push_back(hit.top);
             }
             if (match.empty()) continue;
             emit(static_cast<double>(match.size() / 4));
@@ -1493,8 +1579,9 @@ MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
     Guard guard(CoreLock());
     if (p->index < 0) return MEGAPDF_ERR_ARGUMENT;   // a deleted page (#174): its widgets are off the form
     FPDF_FORMHANDLE form = p->owner->form;
-    FORM_OnLButtonDown(form, p->page, 0, InX(p, x), InY(p, y));
-    FORM_OnLButtonUp(form, p->page, 0, InX(p, x), InY(p, y));
+    const SpacePoint at = InPoint(p, x, y);
+    FORM_OnLButtonDown(form, p->page, 0, at.x, at.y);
+    FORM_OnLButtonUp(form, p->page, 0, at.x, at.y);
     FORM_ForceToKillFocus(form);
     return MEGAPDF_OK;
 }
@@ -1504,8 +1591,9 @@ MEGAPDF_API int megapdf_form_set_text(const megapdf_page* p, double x, double y,
     Guard guard(CoreLock());
     if (p->index < 0) return MEGAPDF_ERR_ARGUMENT;   // a deleted page (#174): its widgets are off the form
     FPDF_FORMHANDLE form = p->owner->form;
-    FORM_OnLButtonDown(form, p->page, 0, InX(p, x), InY(p, y));
-    FORM_OnLButtonUp(form, p->page, 0, InX(p, x), InY(p, y));
+    const SpacePoint at = InPoint(p, x, y);
+    FORM_OnLButtonDown(form, p->page, 0, at.x, at.y);
+    FORM_OnLButtonUp(form, p->page, 0, at.x, at.y);
     FORM_SelectAllText(form, p->page);
     FORM_ReplaceSelection(form, p->page, reinterpret_cast<FPDF_WIDESTRING>(value_utf16));
     FORM_ForceToKillFocus(form);
@@ -1632,10 +1720,11 @@ megapdf_image* LoadStampImageUnlocked(const megapdf_page* p, int annot_index) {
 
 int AddImageStampUnlocked(const megapdf_page* p, const unsigned char* bgra, int width, int height,
                           const megapdf_rect* bounds, const unsigned short* id) {
-    const float left = static_cast<float>(InX(p, bounds->left));
-    const float right = static_cast<float>(InX(p, bounds->right));
-    const float bottom = static_cast<float>(InY(p, bounds->bottom));
-    const float top = static_cast<float>(InY(p, bounds->top));
+    const megapdf_rect box = InRect(p, bounds->left, bounds->bottom, bounds->right, bounds->top);
+    const float left = static_cast<float>(box.left);
+    const float right = static_cast<float>(box.right);
+    const float bottom = static_cast<float>(box.bottom);
+    const float top = static_cast<float>(box.top);
 
     FPDF_BITMAP bmp = FPDFBitmap_Create(width, height, /*alpha=*/1);
     if (bmp == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the stamp bitmap"); return MEGAPDF_ERR_PDFIUM; }
@@ -1687,10 +1776,12 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* p, const megapdf_rect
     const double width = square->right - square->left;
     const double height = square->top - square->bottom;
     const double inset = (width > height ? width : height) * 0.10;
-    const float left = static_cast<float>(InX(p, square->left + inset));
-    const float right = static_cast<float>(InX(p, square->right - inset));
-    const float bottom = static_cast<float>(InY(p, square->bottom + inset));
-    const float top = static_cast<float>(InY(p, square->top - inset));
+    const megapdf_rect box = InRect(p, square->left + inset, square->bottom + inset,
+                                   square->right - inset, square->top - inset);
+    const float left = static_cast<float>(box.left);
+    const float right = static_cast<float>(box.right);
+    const float bottom = static_cast<float>(box.bottom);
+    const float top = static_cast<float>(box.top);
 
     FPDF_ANNOTATION annot = FPDFPage_CreateAnnot(p->page, FPDF_ANNOT_STAMP);
     if (annot == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the mark annotation"); return MEGAPDF_ERR_PDFIUM; }
@@ -2714,9 +2805,14 @@ int MoveTextBoxUnlocked(const megapdf_page* p, int object_index, double left, do
         return MEGAPDF_ERR_PDFIUM;
     }
     // Translate in place so the bounds' bottom-left lands on the target; scale and
-    // rotation stay as they are.
-    m.e += static_cast<float>(InX(p, left)) - l;
-    m.f += static_cast<float>(InY(p, bottom)) - b;
+    // rotation stay as they are. The target is crop space and the bounds are user space, so
+    // the shift is worked out where the caller said it (#439) and turned back: on a rotated
+    // page the crop-space bottom-left is not the user-space one, and moving the corner
+    // rather than the object would put the box a page's width away.
+    const megapdf_rect now = OutRect(p, l, b, r, t);
+    const SpacePoint shift = InVector(p, left - now.left, bottom - now.bottom);
+    m.e += static_cast<float>(shift.x);
+    m.f += static_cast<float>(shift.y);
     if (!FPDFPageObj_SetMatrix(obj, &m)) {
         SetError(FPDF_ERR_UNKNOWN, "could not move the text box");
         return MEGAPDF_ERR_PDFIUM;
@@ -2736,7 +2832,8 @@ int AddTextBoxUnlocked(const megapdf_page* p, int object_index, const unsigned s
     FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size / p->unit));
     bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
     if (ok) {
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(InX(p, baseline_x)), static_cast<float>(InY(p, baseline_y))};
+        const SpacePoint at = InPoint(p, baseline_x, baseline_y);
+        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(at.x), static_cast<float>(at.y)};
         ok = FPDFPageObj_SetMatrix(obj, &m);
     }
     if (ok) {
@@ -2865,8 +2962,9 @@ extern "C" {
 MEGAPDF_API int megapdf_add_whiteout(const megapdf_page* p, const megapdf_rect* bounds, int* out_object_index) {
     if (p == nullptr || bounds == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
-    const float left = static_cast<float>(InX(p, bounds->left)), right = static_cast<float>(InX(p, bounds->right));
-    const float bottom = static_cast<float>(InY(p, bounds->bottom)), top = static_cast<float>(InY(p, bounds->top));
+    const megapdf_rect box = InRect(p, bounds->left, bounds->bottom, bounds->right, bounds->top);
+    const float left = static_cast<float>(box.left), right = static_cast<float>(box.right);
+    const float bottom = static_cast<float>(box.bottom), top = static_cast<float>(box.top);
     FPDF_PAGEOBJECT path = FPDFPageObj_CreateNewPath(left, bottom);
     if (path == nullptr) { SetError(FPDF_ERR_UNKNOWN, "could not create the whiteout"); return MEGAPDF_ERR_PDFIUM; }
     FPDFPath_LineTo(path, right, bottom);
@@ -3770,7 +3868,8 @@ MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* p, int object_index,
     FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size / p->unit));
     bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
     if (ok) {
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(InX(p, left)), static_cast<float>(InY(p, baseline))};
+        const SpacePoint at = InPoint(p, left, baseline);
+        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(at.x), static_cast<float>(at.y)};
         FPDFPageObj_SetMatrix(obj, &m);
         const int count = FPDFPage_CountObjects(p->page);
         ok = FPDFPage_InsertObjectAtIndex(p->page, obj, static_cast<size_t>(object_index > count ? count : object_index));
@@ -4751,11 +4850,8 @@ std::vector<Area> AreasFor(const megapdf_document* d, const megapdf_page* p, int
     std::vector<Area> areas;
     for (const RedactionMark& mark : d->redactions) {
         if (mark.page_index != page_index) continue;
-        Area a{InX(p, (std::min)(mark.bounds.left, mark.bounds.right)),
-               InY(p, (std::min)(mark.bounds.bottom, mark.bounds.top)),
-               InX(p, (std::max)(mark.bounds.left, mark.bounds.right)),
-               InY(p, (std::max)(mark.bounds.bottom, mark.bounds.top))};
-        areas.push_back(a);
+        const megapdf_rect box = InRect(p, mark.bounds.left, mark.bounds.bottom, mark.bounds.right, mark.bounds.top);
+        areas.push_back(Area{box.left, box.bottom, box.right, box.top});
     }
     return areas;
 }
@@ -4776,7 +4872,7 @@ megapdf_page PageView(megapdf_document* d, FPDF_PAGE page, int index) {
     p.owner = d;
     p.page = page;
     p.index = index;
-    ReadCropOrigin(page, &p.crop_x, &p.crop_y);
+    ReadPageSpace(page, &p.crop_x, &p.crop_y, &p.crop_w, &p.crop_h);
     p.unit = FPDFPage_GetUserUnit(page);
     if (!(p.unit > 0)) p.unit = 1.0;
     return p;
@@ -4924,10 +5020,9 @@ MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* p, const mega
     Guard guard(CoreLock());
     FPDF_TEXTPAGE text_page = FPDFText_LoadPage(p->page);
     if (text_page == nullptr) return 0;
-    const double l = InX(p, (std::min)(selection->left, selection->right));
-    const double r = InX(p, (std::max)(selection->left, selection->right));
-    const double b = InY(p, (std::min)(selection->bottom, selection->top));
-    const double t = InY(p, (std::max)(selection->bottom, selection->top));
+    // InRect normalises, so a drag recorded right-to-left or upwards is the same selection.
+    const megapdf_rect sel = InRect(p, selection->left, selection->bottom, selection->right, selection->top);
+    const double l = sel.left, r = sel.right, b = sel.bottom, t = sel.top;
 
     // One mark per line of the selection, grown to the glyphs it touches so a mark always
     // covers whole glyphs. PDFium's rect list is exactly the selection's lines.
@@ -4950,8 +5045,9 @@ MEGAPDF_API size_t megapdf_redaction_mark_text(const megapdf_page* p, const mega
     // Grow each line to whole glyphs: any character the line touches is covered entirely.
     const int chars = FPDFText_CountChars(text_page);
     for (megapdf_rect& line : lines) {
-        const double ll = InX(p, line.left), lr = InX(p, line.right);
-        const double lb = InY(p, line.bottom), lt = InY(p, line.top);
+        const megapdf_rect in_user = InRect(p, line.left, line.bottom, line.right, line.top);
+        const double ll = in_user.left, lr = in_user.right;
+        const double lb = in_user.bottom, lt = in_user.top;
         double gl = ll, gr = lr, gb = lb, gt = lt;
         for (int i = 0; i < chars; i++) {
             if (FPDFText_IsGenerated(text_page, i) == 1) continue;
