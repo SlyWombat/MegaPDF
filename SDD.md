@@ -42,7 +42,7 @@ These principles override feature requests. Every design decision in this docume
 
 Stating what MegaPDF will *not* do is as important as what it will. Out of scope for v1:
 
-- PDF creation from scratch, page assembly/reordering, merging/splitting
+- PDF creation from scratch, ~~page assembly/reordering, merging/splitting~~ *(scope amendment, 2026-09-27 — page tools are in scope; see §3.10 and #174)*
 - OCR of scanned documents
 - Cryptographic digital signatures (PKI / certificate-based signing) — MegaPDF signatures are *graphic* signatures, which is what the target user means by "signing"
 - ~~Redaction~~, commenting/review workflows, form *authoring* *(scope amendment, 2026-09-17 — redaction is in scope for 2.0 and implemented on every platform; see §3.8 and #173. It was a non-goal because MegaPDF only ever covered content, and a cover mistaken for a removal is worse than no feature at all; §3.8 exists because the engine can now really remove it.)*
@@ -445,6 +445,71 @@ follow in the issues #142 tracks, with no change to this section.
 The plain-text content-fidelity bar (every glyph search can find comes out exactly once) and
 the Markdown acceptance line are a later phase's (#355, #357); this phase has no writer to
 hold to them yet. The README's mention of a command line waits for the CLI itself (#356).
+
+### 3.10 F9 — Page tools *(scope amendment — 2026-09-27, #174; engine half)*
+
+**User story:** *"This scan came in sideways. Take out the blank page. Put the signed pages
+from the other file after page 3. Save pages 2–4 as their own file."*
+
+Rotating, deleting, reordering, combining and splitting are the most common PDF tasks after
+fill and sign, and the ones Acrobat moved behind its subscription (#174). This amendment
+lifts §1.4's "page assembly/reordering, merging/splitting" non-goal. Decided by Dave,
+2026-09-17; the engine half ships first, the page grid and its flows on the four platforms
+follow in their own issues.
+
+#### Behavior (contract 10: `megapdf_page_*`, `megapdf_pages_*`)
+
+| Operation | Core call | What changes in the file |
+|---|---|---|
+| Rotate | `megapdf_page_rotate(doc, page, quarter_turns)` | the page's `/Rotate`; no content is rewritten, so nothing the #118 guard watches can move |
+| Delete | `megapdf_page_delete(doc, page, &removed)` | the page leaves the page tree and its fields leave the AcroForm (PDFium patch 0028); a full save reaches neither, so the file shrinks |
+| Undo a delete | `megapdf_page_restore(doc, removed, at)` | the page comes back from a copy the core kept, content, annotations and field values included |
+| Reorder | `megapdf_page_move(doc, from, to)` | the page dictionary moves as it is: fields, annotations, everything |
+| Blank page | `megapdf_page_insert_blank(doc, at, w, h)` | an empty page |
+| Combine | `megapdf_pages_import(doc, other, password, pages, n, at, &imported)` | the other file's pages with the fonts, images and forms they draw, a shared resource copied once; a field whose top-level name clashes is renamed `name_2` first, so two fields never merge |
+| Split | `megapdf_pages_extract(doc, pages, n, out_path, cancel)` | a new file, written whole to a sibling, read back, then renamed into place (§3.4's discipline); the document is untouched |
+
+Every page index in the ABI is 0-based. A change needs the assemble or modify permission bit
+(ADR-004); an extract needs copy. Open page handles follow their pages
+(`megapdf_page_index`), and a handle on a deleted page answers -1 and still renders. The
+core's own per-page state — redaction marks, layout verdicts, detached objects — follows
+too; the apps renumber their own index-keyed caches.
+
+**Undo and recovery.** Each operation has an inverse in the contract, so the apps' undo
+stacks and recovery journals (§3.4) record page operations as they record every other
+edit: the effective stream, front to back, each entry carrying the page index as the
+document was numbered when it was made. A replay in order therefore lands on the right
+pages with no index rewriting. In the session, the undo of a delete puts back exactly what
+was deleted, from the copy the core holds; a journal cannot carry a page, so its entry for
+that undo is "import page N of the file on disk at index page" — best effort, as
+`TextRestoreEntry` is.
+
+**What PDFium cannot copy.** `FPDF_ImportPagesByIndex` leaves a widget's `/Parent` pointing
+into the source document. A field in a hierarchy (a parent field dictionary carrying the
+name, type or value, which is how LiveCycle and most authoring tools write forms) would
+therefore arrive without its identity, so an import or extract of such a page is refused
+whole with `MEGAPDF_ERR_FIELDS` and nothing changes. A widget that is its own field imports
+and extracts as above. The fix is a PDFium patch that copies the chain and registers the
+fields; until then the apps say so and offer nothing that would write a broken form.
+
+**Coordinates.** A rotated page renders rotated (contract 7 goes through PDFium's display
+matrix) and reports the rotated size; the crop-space rectangles the other contracts report
+are unrotated user space, as they were before this amendment for a document that arrived
+with `/Rotate` set. The rotation term in that transform is #174's next engine step, and it
+touches every rect-consuming call site in four apps.
+
+#### Acceptance criteria (this phase)
+
+- Each operation on the generated fixtures, then a save, a reopen and a read-back: a
+  rotated page reads back rotated and renders rotated; a moved page keeps its fields, values
+  and rectangles; an import keeps the other file's embedded font and renders the imported
+  page pixel for pixel as its source did; an extract opens through the file open and passes
+  `qpdf --check` on the Linux CI leg; a deleted page's field is not in the saved file.
+- A page with fields in a hierarchy is refused by import and extract, and survives a delete
+  and its undo with its values.
+- The corpus battery (`tools/stress/pages-battery.sh`): rotate, delete, move and extract on
+  every document with 0 crashes, 0 hangs, every output passing `qpdf --check` with the page
+  count expected, and no refusal but the two the contract documents.
 
 ---
 
