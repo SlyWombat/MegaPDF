@@ -270,9 +270,9 @@ There are two corpora, and they answer different questions.
 | | private | public |
 |---|---|---|
 | where | `GPD-DAVE`, `k2`, `k3` only | anywhere — CI, a cloud sandbox, a laptop |
-| what | 4,337 of the owner's real documents | 1,037 fetched from a committed manifest |
+| what | 4,337 of the owner's real documents | 1,349 fetched from a committed manifest |
 | how | already on disk | `tools/stress/public-corpus/fetch.sh` |
-| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files |
+| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **and 186 real IRS/USCIS forms** |
 | depth | the deeper battery: real-world shapes nothing synthetic reproduces | the reproducible one: anyone can run it and get the same documents |
 
 Neither replaces the other. The private corpus stays the deeper gate and stays local; the
@@ -290,7 +290,7 @@ Record the two separately.
     tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
 
 First full run, 2026-09-27 (1,036 documents visited, 1,533 pages — see the #434 PR for the
-per-category breakdown):
+per-category breakdown). **Superseded by the run below**, kept for history:
 
 | measure | public corpus | gate | |
 |---|---|---|---|
@@ -305,20 +305,80 @@ per-category breakdown):
 | pages: crashes / hangs | 0 / 0 | 0 / 0 | pass |
 | pages: qpdf failures, count mismatches, other refusals | 6 / 3 / 5 | 0 / 0 / 0 | **fail** — #445, all harness or population |
 
-The failures were filed, not fixed and not tuned away: #442 (the structure battery can stall
-forever on `pdftotext`), #443 (`megapdf-cli extract` returns an undocumented 7 for unreadable
-documents), #444 (token fidelity collapses on composite fonts with CMaps), #445 (the pages
-battery's gates assume a valid input, which a corpus with a `malformed` category never
-guarantees). Read #445 before treating a red pages battery on the public corpus as an engine
-defect: on this run every one of its failures was the harness or the population.
+That run's own text noted what it was missing: real US federal fillable forms. #434 calls
+those the highest-value category, and `irs.gov`, `uscis.gov` and `govinfo.gov` were all
+unreachable from the cloud sandbox that first built the corpus. Its 237 `form` documents were
+synthetic single-feature fixtures, exercising field syntax but not the deep `/Parent`
+hierarchies a real IRS form carries — "a green run here is not evidence that real government
+forms work."
 
-What the public corpus does **not** cover: real US federal fillable forms. #434 calls those
-the highest-value category, and `irs.gov`, `uscis.gov` and `govinfo.gov` are all unreachable
-from the sandbox the corpus was built in. Its 237 `form` documents are synthetic
-single-feature fixtures, which exercise field syntax but not the deep `/Parent` hierarchies a
-real IRS form carries. A green run here is not evidence that real government forms work.
-`tools/stress/public-corpus/README.md` has the measured reachability results and how to extend
-the manifest from a machine that can reach those hosts.
+### Second run, 2026-09-27: 136 real IRS forms + 50 real USCIS forms added
+
+`irs.gov` and `uscis.gov` are reachable from an ordinary machine (kdocker3) even though they
+are not reachable from Anthropic's cloud sandbox — see
+`tools/stress/public-corpus/README.md`, "Network reality", for the measured statuses and the
+curl-vs-urllib TLS-fingerprint wrinkle this uncovered. The corpus is now **1,349 documents,
+140.2 MB**; `classify()` also had a real bug fixed alongside this (README.md and
+`build-manifest.py` have the detail — raw-byte scanning missed `/Widget` inside a compressed
+object stream, which every modern government PDF uses), which is why the `form` category grew
+beyond just the new federal rows.
+
+    tools/stress/public-corpus/build-manifest.py --add-source irs      # from a machine that can reach it
+    tools/stress/public-corpus/build-manifest.py --add-source uscis
+    tools/stress/public-corpus/fetch.sh                                # → ~/megapdf-public-corpus
+    bash tools/stress/pages-battery.sh    <cli> ~/megapdf-public-corpus <out> --jobs 3
+    tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
+    tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
+
+1,348 documents visited (1,349 minus one qpdf fixture with a case-mismatched `.Pdf`
+extension that `find -name '*.pdf'` still does not match, per #445's "assumed / not
+verified" note — cosmetic, unchanged by this run):
+
+| measure | public corpus | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 | 0.996178 | >= 0.998 | **fail** — #453, not the federal forms (below) |
+| structure: F1 through `megapdf-cli` | 0.996217 | >= 0.998 | **fail** — #453, same cause |
+| structure: order agreement tau (median, 1,393 tagged pages) | 0.955 | >= 0.9 | pass |
+| structure: poppler agreement tau (median, informational) | 0.998 | — | — |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | 2 | 0 | **fail** — #443, same two pdfium fixtures as before |
+| structure: pages F1 < 0.9 | 23 (was 5) | informational | → #453 (18 pages), #444 (rest) |
+| markdown: cmark parse failures | 0 | 0 | pass |
+| markdown: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| markdown: bad exit codes | 2 | 0 | **fail** — #443, same two documents |
+| pages: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| pages: qpdf failures, count mismatches, other refusals | 6 / 3 / 5 | 0 / 0 / 0 | **fail** — #445, all harness or population |
+| pages: extract refused (field `/Parent` hierarchy) | **209** (was 72) | informational | expected (#174) — see per-category table below |
+
+**Per-category breakdown for `form`** (structure-battery measure 1, pages-battery `extract`):
+
+| form source | documents | structure F1 | `extract` refused-fields |
+|---|---:|---:|---:|
+| **irs** (real IRS forms) | 136 | **0.998613** | **122 (90%)** |
+| **uscis** (real USCIS forms) | 50 | **0.999991** | 14 (28%; 35/50 already permission-`restricted` before the field check) |
+| veraPDF fixtures | 213 | 0.998879 | 4 |
+| pdfium fixtures | 74 | 0.998749 | 7 |
+| qpdf fixtures | 76 | 0.780229 | 61 |
+
+**The real federal forms individually clear the fidelity gate** (0.998613 and 0.999991, both
+>= 0.998) — they are not why the aggregate structure gate is red. That is `qpdf`'s own
+overlay/annotation-copy fixtures over-counting tokens 2-2.7x against PDFium on two documents,
+filed as #453, unrelated to this extension's federal-forms content. What the real forms *do*
+confirm, at a scale no synthetic fixture showed: **90% of real IRS forms refuse a page
+`extract`** because their fields sit in a `/Parent` hierarchy — exactly #174's documented,
+currently-correct refusal (`MEGAPDF_ERR_FIELDS`, exit 9), now measured against Form 1040
+itself and most of its schedules rather than a hand-built fixture. Filed as #452 for whoever
+scopes #174's extract/import field-hierarchy behavior next.
+
+#442 (the structure battery can stall forever on `pdftotext`) reproduced during this run too:
+one qpdf fixture (`shared-unnamed-field.pdf`) hung `pdftotext` for the run's duration and had
+to be killed by hand (an external watchdog, not a code change) to let the battery continue.
+That document's measure 3 (poppler agreement, informational) is missing as a result; every
+other measure above is unaffected.
+
+Read #445 before treating a red pages battery on the public corpus as an engine defect: on
+this run, as before, every qpdf-failure/count-mismatch/other-refusal was the harness or the
+population, not the engine.
 
 ### Android app UI tests (#346)
 

@@ -120,7 +120,13 @@ fetch_one() {
     local tmp="$out.part.$$"
     local attempt delay=2
     for attempt in 1 2 3 4; do
-        if curl -sS -L --fail --max-time 300 --connect-timeout 20 \
+        # --tls-max 1.2 (#434 federal-forms extension): www.uscis.gov's Akamai front end
+        # answers a bare 403 to at least one curl build's default TLS 1.3 handshake --
+        # verified on kdocker3, 2026-09-27, with no proxy, no IP block and a browser
+        # User-Agent all ruled out first. Forcing TLS 1.2 clears it and was re-checked
+        # against irs.gov and raw.githubusercontent.com too, so it is applied to every
+        # fetch rather than singled out for one host.
+        if curl -sS -L --fail --max-time 300 --connect-timeout 20 --tls-max 1.2 \
                 -o "$tmp" "$url"; then
             local got; got=$(sha256sum "$tmp" | cut -d' ' -f1)
             if [ "$got" != "$want" ]; then
