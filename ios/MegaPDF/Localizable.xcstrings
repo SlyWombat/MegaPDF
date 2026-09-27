@@ -1785,6 +1785,23 @@
         }
       }
     },
+    "Open PDF…" : {
+      "comment" : "#172: the iPad keyboard command (⌘O) in the menu bar and the ⌘ overlay; the ellipsis says a picker follows",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir un PDF…"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ouvrir un PDF…"
+          }
+        }
+      }
+    },
     "Open. Fix. Save. Done." : {
       "localizations" : {
         "fr" : {

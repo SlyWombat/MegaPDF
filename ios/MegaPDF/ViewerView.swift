@@ -32,6 +32,13 @@ struct ViewerView: View {
     /// rather than a guessed coordinate — `MoreMenuAnchorKey` below reports it here.
     @State private var moreMenuAnchor: CGRect = .zero
     @Environment(\.displayScale) private var displayScale
+    /// Which layout this is (#172). Regular width — an iPad full screen, or the wider
+    /// side of a Split View — gets its own toolbar, `regularToolStrip`; compact width,
+    /// which is every iPhone and an iPad in Slide Over or a narrow Split View, keeps the
+    /// bottom bar. Read live, so dragging the divider re-lays the chrome out.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var isRegular: Bool { horizontalSizeClass == .regular }
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
     private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
 
@@ -41,7 +48,10 @@ struct ViewerView: View {
     /// Typed as a key so both branches are looked up in the catalog.
     private var saveLabel: LocalizedStringKey { model.isSaving ? "Saving…" : "Save" }
 
-    var body: some View {
+    /// The page list itself: pinch and double-tap zoom, the find bar and busy strip over
+    /// it, and the scroll to the current match. Its own property so the body below is a
+    /// chain of presentations the type-checker can still get through (#172 tipped it).
+    private var document: some View {
         GeometryReader { geo in
             ScrollViewReader { proxy in
                 // The axes follow the COMMITTED zoom, not the one the fingers are
@@ -94,16 +104,7 @@ struct ViewerView: View {
                             pushWindow(containerWidth: geo.size.width)
                         }
                 )
-                .safeAreaInset(edge: .top, spacing: 0) {
-                    VStack(spacing: 0) {
-                        if searchOpen { searchBar }
-                        // Document-level work (#145): a strip under the top chrome.
-                        if let work = busy.strip {
-                            BusyStrip(label: work.label.text)
-                                .transition(.opacity)
-                        }
-                    }
-                }
+                .safeAreaInset(edge: .top, spacing: 0) { topChrome }
                 .onChange(of: searchText) { term in
                     model.search(term: term)
                 }
@@ -128,123 +129,297 @@ struct ViewerView: View {
                 }
             }
         }
-        .navigationTitle((model.isDirty ? "• " : "") + displayName)
-        .navigationBarTitleDisplayMode(.inline)
-        // The bar sits on the dark wall, so it takes the dark scheme whatever the
-        // system's: in light mode the transparent bar drew the title and the status
-        // bar in black on Brand.backdrop, 2.0 : 1. The background is made visible
-        // and the wall's own colour because the scheme only applies to a bar whose
-        // background is showing, and so a page scrolled up under the bar does not
-        // flip the bar back to light halfway through a scroll.
-        .toolbarBackground(Brand.backdrop, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        // #144: the navigation bar holds what is done to the file as a whole — Close,
-        // Save, and a More menu — and the bottom toolbar holds the everyday tools, as
-        // the HIG lays out an iPhone document viewer. Everything else stays in More,
-        // so the page keeps the screen.
-        .toolbar {
-            // #145: while a save, a password change or an open runs, Close and the file commands
-            // are disabled; the model ignores them too while a change is being applied.
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("Close") {
-                    guard !model.closeBlocked else { return }
-                    if model.isDirty { model.unsavedChangesFollowUp = .close } else { onClose() }
-                }
-                .disabled(model.fileCommandsBlocked)
+    }
+
+    var body: some View {
+        document
+            .navigationTitle((model.isDirty ? "• " : "") + displayName)
+            .navigationBarTitleDisplayMode(.inline)
+            // The bar sits on the dark wall, so it takes the dark scheme whatever the
+            // system's: in light mode the transparent bar drew the title and the status
+            // bar in black on Brand.backdrop, 2.0 : 1. The background is made visible
+            // and the wall's own colour because the scheme only applies to a bar whose
+            // background is showing, and so a page scrolled up under the bar does not
+            // flip the bar back to light halfway through a scroll.
+            .toolbarBackground(Brand.backdrop, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            // #144: the navigation bar holds what is done to the file as a whole — Close,
+            // Save, and a More menu — and the bottom toolbar holds the everyday tools, as
+            // the HIG lays out an iPhone document viewer. Everything else stays in More,
+            // so the page keeps the screen.
+            .toolbar { viewerToolbar }
+            // The keyboard's commands (#172, `MegaPDFCommands`): what the buttons above do,
+            // reachable from ⌘S, ⌘W, ⌘F and ⌘Z on an iPad keyboard.
+            .focusedSceneValue(\.viewerCommands, commandTarget)
+            .onPreferenceChange(MoreMenuAnchorKey.self) { moreMenuAnchor = $0 }
+            .sheet(isPresented: $aboutOpen) {
+                AboutView()
             }
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button(saveLabel) {
-                    // Marks on the document mean the question comes first (#173): nothing
-                    // is written until it has been answered.
-                    if model.redactionMarkCount > 0 { redactConfirm = .overwrite } else { model.save() }
+            // #378: the OS share sheet. `isPresented`, not `.sheet(item:)`, because `URL` has no
+            // stable identity of its own to key a sheet off — the guard inside re-reads
+            // `model.shareURL` for the content.
+            .sheet(isPresented: Binding(get: { model.shareURL != nil },
+                                        set: { if !$0 { model.shareURL = nil } })) {
+                if let url = model.shareURL {
+                    ShareSheet(activityItems: [url], anchor: moreMenuAnchor)
                 }
-                    // Marks count as something to save, even though they are not a change
-                    // to the document — nothing is written until the question above is
-                    // answered, so marking deliberately leaves it clean. Asking isDirty
-                    // alone left Save greyed out with areas marked, which made the branch
-                    // inside this very button unreachable and left the ⋯ menu as the only
-                    // way to finish a redaction (#173).
-                    .disabled((!model.isDirty && model.redactionMarkCount == 0)
-                              || model.isSaving || model.fileCommandsBlocked)
-                Menu {
-                    Button("Save a copy") {
-                        if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
-                    }
-                        .disabled(model.isSaving || model.fileCommandsBlocked)
-                    // #386: a Markdown export, alongside Save a copy rather than a variant of
-                    // it -- it is a one-way, lossy text export (contract 9 drops layout, field
-                    // interactivity, everything Markdown can't model), and MegaPDF has no
-                    // Markdown-import path, so the label says "Export", not "Save", and its own
-                    // "Exported" completion message (ViewerModel.finishMarkdownExport) never
-                    // clears the "Unsaved changes" state a real Save still needs to answer.
-                    Button("Export as Markdown") {
-                        if model.redactionMarkCount > 0 { redactConfirm = .markdown } else { onExportMarkdown() }
-                    }
-                        .disabled(model.isSaving || model.fileCommandsBlocked)
-                        .accessibilityIdentifier("viewerExportMarkdown")
-                    // #378: hands the document to the OS's own share sheet (Mail, Messages,
-                    // AirDrop, another PDF app, whatever is installed) rather than a
-                    // MegaPDF-drawn destination list. Unsaved changes ask first, through the
-                    // same alert Close uses, wired to share instead of close.
-                    Button {
-                        if model.isDirty { model.unsavedChangesFollowUp = .share } else { model.share() }
-                    } label: {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                        .disabled(!model.canShare)
-                        .accessibilityIdentifier("viewerShare")
-                    Button("Password…", action: model.showPasswordCommand)
-                        .disabled(!model.canUsePasswordCommand || model.fileCommandsBlocked)
-                    if model.capabilities.isRestricted {
-                        Button("Unlock with owner password…", action: model.showUnlock)
-                            .disabled(model.isUnlocking || model.fileCommandsBlocked)
-                    }
-                    Divider()
-                    // Redact lives here rather than on the bottom bar (#328): it is not an
-                    // everyday tool — it is the one command that destroys content — so it
-                    // keeps the company of the file-level commands instead of taking a
-                    // permanent place beside Sign and Add text. It is a labelled row, so
-                    // its name is in the list rather than guessed at from an icon, and the
-                    // name does not change with its state, so the row does not move under a
-                    // finger or rename itself on the way to being tapped.
-                    //
-                    // A Toggle, not a Button with a hand-swapped checkmark: in a menu the
-                    // state is the row's own (UIMenuElement's state, which is what draws the
-                    // checkmark and what a screen reader announces as selected), so the
-                    // platform owns both the drawing and the announcement.
-                    Toggle("Redact", isOn: Binding(get: { model.redactMode },
-                                                   set: { _ in model.toggleRedactMode() }))
-                        .disabled(!model.canRedact || model.fileCommandsBlocked)
-                        // And the state in words as well, which is how #173 defined it and
-                        // what Android says ("Activé" / "Désactivé"): it words both states,
-                        // where a checkmark only marks one. If the menu bridge drops a value
-                        // — the way the bottom bar dropped `.isSelected` — the toggle's own
-                        // state is what is left, and it says the same thing.
-                        .accessibilityValue(model.redactMode ? "On" : "Off")
-                        .accessibilityHint("Remove content from the file")
-                        .accessibilityIdentifier("viewerRedact")
-                    if model.redactionMarkCount > 0 {
-                        Button("Clear all marks", action: model.clearRedactionMarks)
-                            .disabled(!model.canRedact || model.fileCommandsBlocked)
-                            .accessibilityIdentifier("viewerClearRedactionMarks")
-                    }
-                    Divider()
-                    Button("About MegaPDF") { aboutOpen = true }
-                } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+            }
+            // The confirmation #173 asks for, before either save path writes anything: what
+            // redaction does, that it cannot be undone once saved, and Save a copy as the
+            // DEFAULT action — the reversible choice, because the other cannot be taken back.
+            .confirmationDialog(
+                "Remove the marked content?",
+                isPresented: redactConfirmPresented(regular: false),
+                titleVisibility: .visible
+            ) {
+                redactConfirmButtons
+            } message: {
+                redactConfirmMessage
+            }
+            .alert("", isPresented: Binding(get: { model.redactionSummary != nil },
+                                            set: { if !$0 { model.redactionSummary = nil } })) {
+                Button("OK", role: .cancel) { model.redactionSummary = nil }
+            } message: {
+                Text(model.redactionSummary ?? "")
+            }
+            .alert("Nothing was removed",
+                   isPresented: Binding(get: { model.redactionRefusal != nil },
+                                        set: { if !$0 { model.redactionRefusal = nil } })) {
+                Button("OK", role: .cancel) { model.redactionRefusal = nil }
+            } message: {
+                Text(model.redactionRefusal ?? "")
+            }
+            // Compact width only: in regular width the library is a popover on the Sign
+            // button in `regularToolStrip` (#172), off the same flag.
+            .sheet(isPresented: Binding(get: { signaturesOpen && !isRegular },
+                                        set: { if !$0 { signaturesOpen = false } })) {
+                signaturesLibrary
+            }
+            .onAppear {
+                if model.screenshotSheet != nil { signaturesOpen = true }
+                // `-screenshot search`: open the find bar with the term already
+                // typed and start the scan here. This view only exists in the
+                // `.viewing` state, so the document is loaded by construction —
+                // the seeded search can't fire too early or be lost.
+                if let term = model.screenshotSearchTerm, !searchOpen {
+                    searchOpen = true
+                    searchText = term
+                    model.search(term: term, debounce: false)
                 }
-                .accessibilityIdentifier("viewerMore")
-                // Captures where this button actually ends up on screen, for the iPad share
-                // popover (#378) — a `GeometryReader` behind a toolbar item still reports real
-                // window coordinates, so this needs no fixed guess at the nav bar's geometry.
-                .background(
-                    GeometryReader { geo in
-                        Color.clear
-                            .preference(key: MoreMenuAnchorKey.self, value: geo.frame(in: .global))
-                    }
+            }
+            // A sheet, not an alert: #43 puts size and face pickers beside the text
+            // field, and an alert's content builder ignores everything that is not a
+            // button or a text field. The `item:` form also drops the no-op-setter
+            // hack the alert needed — it does not flip its own binding when a button
+            // is tapped, so the pending tap can only be resolved deliberately.
+            //
+            // The field and the pickers bind to the model, not to @State, so a
+            // correction's prefill lands in the same update as `pendingText` rather
+            // than racing the sheet's presentation.
+            // The document's own text (#113): one field, the line keeps its size and font.
+            .sheet(item: $model.pendingBodyEdit) { _ in
+                BodyTextSheet(
+                    text: $model.bodyDraft,
+                    onSave: { model.commitBodyEdit(model.bodyDraft) },
+                    onCancel: model.cancelBodyEdit
                 )
             }
+            // Unlocking a restricted document; setting, changing or removing its password (#131).
+            .sheet(item: $model.securitySheet) { mode in
+                DocumentSecuritySheet(
+                    mode: mode,
+                    savesChanges: model.isDirty,
+                    isBusy: model.isSaving || model.isUnlocking,
+                    error: model.securityError,
+                    onUnlock: model.unlock,
+                    onSetPassword: model.setPassword,
+                    onRemovePassword: model.removePassword,
+                    onCancel: model.dismissSecuritySheet
+                )
+            }
+            .overlay(alignment: .bottom) {
+                if let notice = model.notice {
+                    NoticeBanner(text: notice)
+                        .padding(.bottom, 24)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: model.notice)
+            // Compact width only, like the signatures sheet: the iPad's is a popover on
+            // the Add text button (#172).
+            .sheet(item: Binding(get: { isRegular ? nil : model.pendingText },
+                                 set: { model.pendingText = $0 })) { pending in
+                textBoxEditor(pending)
+            }
+            // One alert for all three callers (#145, #377, #378): what Save/Cancel do never
+            // changes, kept in the model as `unsavedChangesFollowUp` rather than three separate
+            // booleans here. The second button and the message DO change for Share (Fable's
+            // #378 review, 2026-09-26): "Discard" read as if the edits themselves were being
+            // thrown away, when for Share it only ever meant which file gets shared — Close and
+            // an external open really do discard, so they keep the word and the destructive
+            // styling.
+            .alert("Unsaved changes", isPresented: Binding(
+                get: { model.unsavedChangesFollowUp != nil },
+                set: { if !$0 { model.unsavedChangesFollowUp = nil } })
+            ) {
+                Button("Save") {
+                    switch model.unsavedChangesFollowUp {
+                    case .close: model.save(then: .close)
+                    case .share: model.save(then: .share)
+                    case let .open(url): model.save(then: .open(url))
+                    case nil: break
+                    }
+                }
+                if model.unsavedChangesFollowUp == .share {
+                    // Not destructive: nothing is thrown away here, only excluded from what's
+                    // about to be shared (#378).
+                    Button("Share without saving") { model.share() }
+                } else {
+                    Button("Discard", role: .destructive) {
+                        switch model.unsavedChangesFollowUp {
+                        case .close: onClose()
+                        // The pending edits to the document being replaced are lost (#377) — this
+                        // is only reachable for a document handed over from outside, never the
+                        // everyday Close path above.
+                        case let .open(url): model.openPicked(url: url)
+                        case .share, nil: break
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if model.unsavedChangesFollowUp == .share {
+                    Text("This document has unsaved changes. They won't be in the shared copy unless you save first.")
+                } else {
+                    Text("This document has unsaved changes.")
+                }
+            }
+            // #139: once per page, before a text-box change on a page PDFium's rewrite would alter.
+            // The buttons answer; the binding's setter does nothing, so SwiftUI dismissing the alert
+            // around a button tap can never answer Cancel ahead of Continue.
+            .alert("Change this page?",
+                   isPresented: Binding(get: { model.pageRewriteWarning != nil }, set: { _ in })) {
+                Button("Continue") { model.answerPageRewriteWarning(true) }
+                Button("Cancel", role: .cancel) { model.answerPageRewriteWarning(false) }
+            } message: {
+                Text("Changing this page may slightly alter parts of it you haven't touched.")
+            }
+    }
+
+    /// The navigation bar (#144): what is done to the file as a whole — Close, Save and
+    /// the ⋯ menu — and, in compact width, the bottom bar of everyday tools.
+    @ToolbarContentBuilder
+    private var viewerToolbar: some ToolbarContent {
+        // #145: while a save, a password change or an open runs, Close and the file commands
+        // are disabled; the model ignores them too while a change is being applied.
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("Close", action: closeTapped)
+                .disabled(model.fileCommandsBlocked)
+        }
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+            Button(saveLabel, action: saveTapped)
+                // Marks count as something to save, even though they are not a change
+                // to the document — nothing is written until the question above is
+                // answered, so marking deliberately leaves it clean. Asking isDirty
+                // alone left Save greyed out with areas marked, which made the branch
+                // inside this very button unreachable and left the ⋯ menu as the only
+                // way to finish a redaction (#173).
+                .disabled(!canSave)
+                // On the iPad the redaction question is a popover, and a popover
+                // points at something: the Save it was raised from (#172). The
+                // compact layouts keep the action sheet on the view, below.
+                .confirmationDialog(
+                    "Remove the marked content?",
+                    isPresented: redactConfirmPresented(regular: true),
+                    titleVisibility: .visible
+                ) {
+                    redactConfirmButtons
+                } message: {
+                    redactConfirmMessage
+                }
+            Menu {
+                Button("Save a copy") {
+                    if model.redactionMarkCount > 0 { redactConfirm = .copy } else { onSaveCopy() }
+                }
+                    .disabled(model.isSaving || model.fileCommandsBlocked)
+                // #386: a Markdown export, alongside Save a copy rather than a variant of
+                // it -- it is a one-way, lossy text export (contract 9 drops layout, field
+                // interactivity, everything Markdown can't model), and MegaPDF has no
+                // Markdown-import path, so the label says "Export", not "Save", and its own
+                // "Exported" completion message (ViewerModel.finishMarkdownExport) never
+                // clears the "Unsaved changes" state a real Save still needs to answer.
+                Button("Export as Markdown") {
+                    if model.redactionMarkCount > 0 { redactConfirm = .markdown } else { onExportMarkdown() }
+                }
+                    .disabled(model.isSaving || model.fileCommandsBlocked)
+                    .accessibilityIdentifier("viewerExportMarkdown")
+                // #378: hands the document to the OS's own share sheet (Mail, Messages,
+                // AirDrop, another PDF app, whatever is installed) rather than a
+                // MegaPDF-drawn destination list. Unsaved changes ask first, through the
+                // same alert Close uses, wired to share instead of close.
+                Button {
+                    if model.isDirty { model.unsavedChangesFollowUp = .share } else { model.share() }
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                    .disabled(!model.canShare)
+                    .accessibilityIdentifier("viewerShare")
+                Button("Password…", action: model.showPasswordCommand)
+                    .disabled(!model.canUsePasswordCommand || model.fileCommandsBlocked)
+                if model.capabilities.isRestricted {
+                    Button("Unlock with owner password…", action: model.showUnlock)
+                        .disabled(model.isUnlocking || model.fileCommandsBlocked)
+                }
+                Divider()
+                // Redact lives here rather than on the bottom bar (#328): it is not an
+                // everyday tool — it is the one command that destroys content — so it
+                // keeps the company of the file-level commands instead of taking a
+                // permanent place beside Sign and Add text. It is a labelled row, so
+                // its name is in the list rather than guessed at from an icon, and the
+                // name does not change with its state, so the row does not move under a
+                // finger or rename itself on the way to being tapped.
+                //
+                // A Toggle, not a Button with a hand-swapped checkmark: in a menu the
+                // state is the row's own (UIMenuElement's state, which is what draws the
+                // checkmark and what a screen reader announces as selected), so the
+                // platform owns both the drawing and the announcement.
+                Toggle("Redact", isOn: Binding(get: { model.redactMode },
+                                               set: { _ in model.toggleRedactMode() }))
+                    .disabled(!model.canRedact || model.fileCommandsBlocked)
+                    // And the state in words as well, which is how #173 defined it and
+                    // what Android says ("Activé" / "Désactivé"): it words both states,
+                    // where a checkmark only marks one. If the menu bridge drops a value
+                    // — the way the bottom bar dropped `.isSelected` — the toggle's own
+                    // state is what is left, and it says the same thing.
+                    .accessibilityValue(model.redactMode ? "On" : "Off")
+                    .accessibilityHint("Remove content from the file")
+                    .accessibilityIdentifier("viewerRedact")
+                if model.redactionMarkCount > 0 {
+                    Button("Clear all marks", action: model.clearRedactionMarks)
+                        .disabled(!model.canRedact || model.fileCommandsBlocked)
+                        .accessibilityIdentifier("viewerClearRedactionMarks")
+                }
+                Divider()
+                Button("About MegaPDF") { aboutOpen = true }
+            } label: {
+                Label("More", systemImage: "ellipsis.circle")
+            }
+            .accessibilityIdentifier("viewerMore")
+            // Captures where this button actually ends up on screen, for the iPad share
+            // popover (#378) — a `GeometryReader` behind a toolbar item still reports real
+            // window coordinates, so this needs no fixed guess at the nav bar's geometry.
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: MoreMenuAnchorKey.self, value: geo.frame(in: .global))
+                }
+            )
+        }
+        // The phone's bar. In regular width the same tools are `regularToolStrip`
+        // (#172), and nothing is placed here — an empty bottom bar would still be
+        // drawn.
+        if !isRegular {
             ToolbarItemGroup(placement: .bottomBar) {
                 // A restricted open can't use the tools its owner withheld (#131);
                 // the notice shown when it opened says why.
@@ -257,9 +432,7 @@ struct ViewerView: View {
                 }
                 .disabled(!model.capabilities.canAddText || model.fileCommandsBlocked)
                 // Redact was the third button here; it is in the ⋯ menu now (#328).
-                Button {
-                    if searchOpen { closeSearch() } else { searchOpen = true }
-                } label: {
+                Button(action: toggleSearch) {
                     toolLabel("Search", systemImage: "magnifyingglass")
                 }
                 .accessibilityLabel("Find in document")
@@ -273,193 +446,6 @@ struct ViewerView: View {
                 }
                 .disabled(!model.canRedo || model.fileCommandsBlocked)
             }
-        }
-        .onPreferenceChange(MoreMenuAnchorKey.self) { moreMenuAnchor = $0 }
-        .sheet(isPresented: $aboutOpen) {
-            AboutView()
-        }
-        // #378: the OS share sheet. `isPresented`, not `.sheet(item:)`, because `URL` has no
-        // stable identity of its own to key a sheet off — the guard inside re-reads
-        // `model.shareURL` for the content.
-        .sheet(isPresented: Binding(get: { model.shareURL != nil },
-                                    set: { if !$0 { model.shareURL = nil } })) {
-            if let url = model.shareURL {
-                ShareSheet(activityItems: [url], anchor: moreMenuAnchor)
-            }
-        }
-        // The confirmation #173 asks for, before either save path writes anything: what
-        // redaction does, that it cannot be undone once saved, and Save a copy as the
-        // DEFAULT action — the reversible choice, because the other cannot be taken back.
-        .confirmationDialog(
-            "Remove the marked content?",
-            isPresented: Binding(get: { redactConfirm != nil },
-                                 set: { if !$0 { redactConfirm = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Save as a copy") {
-                redactConfirm = nil
-                Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy() } }
-            }
-            // #386: offered here too -- marked-but-unapplied redactions must actually be
-            // removed (applyRedactions) before ANY export reads the document's text, Markdown
-            // included, or the marked content would leak into the .md file.
-            Button("Export as Markdown") {
-                redactConfirm = nil
-                Task { if await model.applyRedactions(reportWithSave: true) { onExportMarkdown() } }
-            }
-            Button("Overwrite the original") {
-                redactConfirm = nil
-                Task { if await model.applyRedactions(reportWithSave: true) { model.save() } }
-            }
-            Button("Cancel", role: .cancel) { redactConfirm = nil }
-        } message: {
-            Text("Redaction permanently removes the marked content. This can't be undone after saving.")
-        }
-        .alert("", isPresented: Binding(get: { model.redactionSummary != nil },
-                                        set: { if !$0 { model.redactionSummary = nil } })) {
-            Button("OK", role: .cancel) { model.redactionSummary = nil }
-        } message: {
-            Text(model.redactionSummary ?? "")
-        }
-        .alert("Nothing was removed",
-               isPresented: Binding(get: { model.redactionRefusal != nil },
-                                    set: { if !$0 { model.redactionRefusal = nil } })) {
-            Button("OK", role: .cancel) { model.redactionRefusal = nil }
-        } message: {
-            Text(model.redactionRefusal ?? "")
-        }
-        .sheet(isPresented: $signaturesOpen) {
-            SignaturesSheet(
-                signatures: model.signatures,
-                startDrawing: model.screenshotSheet == .draw,
-                loadImage: { SignatureStore().loadImage($0) },
-                onPick: { entry in
-                    signaturesOpen = false
-                    model.startPlacement(entry)
-                },
-                onDrawn: model.addDrawnSignature,
-                onPhoto: model.importSignature,
-                onRename: model.renameSignature,
-                onDelete: model.deleteSignature,
-                onDismiss: { signaturesOpen = false }
-            )
-        }
-        .onAppear {
-            if model.screenshotSheet != nil { signaturesOpen = true }
-            // `-screenshot search`: open the find bar with the term already
-            // typed and start the scan here. This view only exists in the
-            // `.viewing` state, so the document is loaded by construction —
-            // the seeded search can't fire too early or be lost.
-            if let term = model.screenshotSearchTerm, !searchOpen {
-                searchOpen = true
-                searchText = term
-                model.search(term: term, debounce: false)
-            }
-        }
-        // A sheet, not an alert: #43 puts size and face pickers beside the text
-        // field, and an alert's content builder ignores everything that is not a
-        // button or a text field. The `item:` form also drops the no-op-setter
-        // hack the alert needed — it does not flip its own binding when a button
-        // is tapped, so the pending tap can only be resolved deliberately.
-        //
-        // The field and the pickers bind to the model, not to @State, so a
-        // correction's prefill lands in the same update as `pendingText` rather
-        // than racing the sheet's presentation.
-        // The document's own text (#113): one field, the line keeps its size and font.
-        .sheet(item: $model.pendingBodyEdit) { _ in
-            BodyTextSheet(
-                text: $model.bodyDraft,
-                onSave: { model.commitBodyEdit(model.bodyDraft) },
-                onCancel: model.cancelBodyEdit
-            )
-        }
-        // Unlocking a restricted document; setting, changing or removing its password (#131).
-        .sheet(item: $model.securitySheet) { mode in
-            DocumentSecuritySheet(
-                mode: mode,
-                savesChanges: model.isDirty,
-                isBusy: model.isSaving || model.isUnlocking,
-                error: model.securityError,
-                onUnlock: model.unlock,
-                onSetPassword: model.setPassword,
-                onRemovePassword: model.removePassword,
-                onCancel: model.dismissSecuritySheet
-            )
-        }
-        .overlay(alignment: .bottom) {
-            if let notice = model.notice {
-                NoticeBanner(text: notice)
-                    .padding(.bottom, 24)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: model.notice)
-        .sheet(item: $model.pendingText) { pending in
-            TextBoxSheet(
-                isEditing: pending.editingId != nil,
-                text: $model.draftText,
-                fontSize: $model.draftSize,
-                fontName: $model.draftFont,
-                onCommit: {
-                    model.commitText(model.draftText,
-                                     fontSize: model.draftSize,
-                                     fontName: model.draftFont)
-                },
-                onCancel: model.cancelTextPlacement
-            )
-        }
-        // One alert for all three callers (#145, #377, #378): what Save/Cancel do never
-        // changes, kept in the model as `unsavedChangesFollowUp` rather than three separate
-        // booleans here. The second button and the message DO change for Share (Fable's
-        // #378 review, 2026-09-26): "Discard" read as if the edits themselves were being
-        // thrown away, when for Share it only ever meant which file gets shared — Close and
-        // an external open really do discard, so they keep the word and the destructive
-        // styling.
-        .alert("Unsaved changes", isPresented: Binding(
-            get: { model.unsavedChangesFollowUp != nil },
-            set: { if !$0 { model.unsavedChangesFollowUp = nil } })
-        ) {
-            Button("Save") {
-                switch model.unsavedChangesFollowUp {
-                case .close: model.save(then: .close)
-                case .share: model.save(then: .share)
-                case let .open(url): model.save(then: .open(url))
-                case nil: break
-                }
-            }
-            if model.unsavedChangesFollowUp == .share {
-                // Not destructive: nothing is thrown away here, only excluded from what's
-                // about to be shared (#378).
-                Button("Share without saving") { model.share() }
-            } else {
-                Button("Discard", role: .destructive) {
-                    switch model.unsavedChangesFollowUp {
-                    case .close: onClose()
-                    // The pending edits to the document being replaced are lost (#377) — this
-                    // is only reachable for a document handed over from outside, never the
-                    // everyday Close path above.
-                    case let .open(url): model.openPicked(url: url)
-                    case .share, nil: break
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            if model.unsavedChangesFollowUp == .share {
-                Text("This document has unsaved changes. They won't be in the shared copy unless you save first.")
-            } else {
-                Text("This document has unsaved changes.")
-            }
-        }
-        // #139: once per page, before a text-box change on a page PDFium's rewrite would alter.
-        // The buttons answer; the binding's setter does nothing, so SwiftUI dismissing the alert
-        // around a button tap can never answer Cancel ahead of Continue.
-        .alert("Change this page?",
-               isPresented: Binding(get: { model.pageRewriteWarning != nil }, set: { _ in })) {
-            Button("Continue") { model.answerPageRewriteWarning(true) }
-            Button("Cancel", role: .cancel) { model.answerPageRewriteWarning(false) }
-        } message: {
-            Text("Changing this page may slightly alter parts of it you haven't touched.")
         }
     }
 
@@ -476,6 +462,212 @@ struct ViewerView: View {
     /// toolbar items; that is on #172.
     private func toolLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
         Label(title, systemImage: systemImage)
+    }
+
+    /// What sits between the navigation bar and the page: the iPad's tools (#172), the
+    /// find bar, and the document-level busy strip (#145), in that order.
+    private var topChrome: some View {
+        VStack(spacing: 0) {
+            if isRegular { regularToolStrip }
+            if searchOpen { searchBar }
+            if let work = busy.strip {
+                BusyStrip(label: work.label.text)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    // MARK: - file commands, shared by the bar and the keyboard (#172)
+
+    /// The commands as the keyboard sees them. A command that cannot be done now is
+    /// published as nil, which the menu shows disabled.
+    private var commandTarget: ViewerCommandTarget {
+        var target = ViewerCommandTarget()
+        if canSave { target.save = saveTapped }
+        if !model.fileCommandsBlocked { target.close = closeTapped }
+        target.find = toggleSearch
+        if model.canUndo && !model.fileCommandsBlocked { target.undo = model.undo }
+        if model.canRedo && !model.fileCommandsBlocked { target.redo = model.redo }
+        return target
+    }
+
+    private var canSave: Bool {
+        (model.isDirty || model.redactionMarkCount > 0) && !model.isSaving && !model.fileCommandsBlocked
+    }
+
+    private func saveTapped() {
+        // Marks on the document mean the question comes first (#173): nothing
+        // is written until it has been answered.
+        if model.redactionMarkCount > 0 { redactConfirm = .overwrite } else { model.save() }
+    }
+
+    private func closeTapped() {
+        guard !model.closeBlocked else { return }
+        if model.isDirty { model.unsavedChangesFollowUp = .close } else { onClose() }
+    }
+
+    private func toggleSearch() {
+        if searchOpen { closeSearch() } else { searchOpen = true }
+    }
+
+    /// The redaction question is raised from one place per layout — the view, as an
+    /// action sheet, in compact width; the Save button, as a popover, in regular — so
+    /// each presenter only answers for its own width and the question is never up twice.
+    private func redactConfirmPresented(regular: Bool) -> Binding<Bool> {
+        Binding(get: { redactConfirm != nil && isRegular == regular },
+                set: { if !$0 { redactConfirm = nil } })
+    }
+
+    /// The confirmation #173 asks for, before either save path writes anything: what
+    /// redaction does, that it cannot be undone once saved, and Save a copy as the
+    /// DEFAULT action — the reversible choice, because the other cannot be taken back.
+    @ViewBuilder
+    private var redactConfirmButtons: some View {
+        Button("Save as a copy") {
+            redactConfirm = nil
+            Task { if await model.applyRedactions(reportWithSave: true) { onSaveCopy() } }
+        }
+        // #386: offered here too -- marked-but-unapplied redactions must actually be
+        // removed (applyRedactions) before ANY export reads the document's text, Markdown
+        // included, or the marked content would leak into the .md file.
+        Button("Export as Markdown") {
+            redactConfirm = nil
+            Task { if await model.applyRedactions(reportWithSave: true) { onExportMarkdown() } }
+        }
+        Button("Overwrite the original") {
+            redactConfirm = nil
+            Task { if await model.applyRedactions(reportWithSave: true) { model.save() } }
+        }
+        Button("Cancel", role: .cancel) { redactConfirm = nil }
+    }
+
+    private var redactConfirmMessage: some View {
+        Text("Redaction permanently removes the marked content. This can't be undone after saving.")
+    }
+
+    // MARK: - the iPad's toolbar (#172)
+
+    /// The everyday tools in regular width, as ordinary views rather than toolbar items.
+    ///
+    /// A `Label` in a toolbar item renders icon-only on iOS 26 whatever it is asked
+    /// (`toolLabel`); a `Label` in a plain `HStack` renders its title, so this is where the
+    /// titles the issue asked for come from. The row sits under the navigation bar, on the
+    /// same dark wall and in the same scheme, so the two read as one wide iPad bar with the
+    /// file commands above and the tools below — the arrangement the desktops use, in this
+    /// platform's own controls. Titles go first; when the width will not hold them (a
+    /// French row in the narrower half of a Split View) `ViewThatFits` falls back to the
+    /// icons, which is what the phone shows all the time.
+    ///
+    /// Sign and Add text present as popovers anchored to their buttons, not full-screen
+    /// sheets: on an iPad the page stays where it was and the arrow says which tool is
+    /// open. Redact is not here — it stays in the ⋯ menu on every layout (#328).
+    private var regularToolStrip: some View {
+        ViewThatFits(in: .horizontal) {
+            toolStripRow(titled: true)
+            toolStripRow(titled: false)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity)
+        .background(Brand.backdrop)
+        .environment(\.colorScheme, .dark)
+        .accessibilityIdentifier("viewerToolStrip")
+    }
+
+    private func toolStripRow(titled: Bool) -> some View {
+        HStack(spacing: 8) {
+            // A restricted open can't use the tools its owner withheld (#131).
+            toolStripButton("Sign", systemImage: "signature", titled: titled) {
+                signaturesOpen = true
+            }
+            .disabled(!model.capabilities.canSign || model.fileCommandsBlocked)
+            .popover(isPresented: $signaturesOpen, arrowEdge: .top) {
+                signaturesLibrary
+                    .frame(width: 480, height: 520)
+            }
+            toolStripButton("Add text", systemImage: "character.textbox", titled: titled,
+                            selected: model.isPlacingText) {
+                model.startTextPlacement()
+            }
+            .disabled(!model.capabilities.canAddText || model.fileCommandsBlocked)
+            .popover(item: $model.pendingText, arrowEdge: .top) { pending in
+                textBoxEditor(pending)
+                    .frame(width: 400, height: 340)
+            }
+            toolStripButton("Search", systemImage: "magnifyingglass", titled: titled,
+                            accessibilityLabel: "Find in document", selected: searchOpen,
+                            action: toggleSearch)
+            Spacer(minLength: 24)
+            toolStripButton("Undo", systemImage: "arrow.uturn.backward", titled: titled,
+                            action: model.undo)
+                .disabled(!model.canUndo || model.fileCommandsBlocked)
+            toolStripButton("Redo", systemImage: "arrow.uturn.forward", titled: titled,
+                            action: model.redo)
+                .disabled(!model.canRedo || model.fileCommandsBlocked)
+        }
+    }
+
+    /// One tool: icon and title (or the icon alone), a pointer hover highlight, and its
+    /// state shown as a wash — the thing the phone's bar could not do (#173).
+    private func toolStripButton(_ title: LocalizedStringKey, systemImage: String, titled: Bool,
+                                 accessibilityLabel: LocalizedStringKey? = nil,
+                                 selected: Bool = false,
+                                 action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .labelStyle(ToolStripLabelStyle(titled: titled))
+                .font(Brand.Text.body)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(selected ? Brand.accentSubtle : .clear,
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        // The bar's own ink: white on the wall like Close above it, dimmed when disabled;
+        // the accent is kept for the wash that says a tool is on.
+        .tint(.white)
+        .hoverEffect(.highlight)
+        .accessibilityLabel(Text(accessibilityLabel ?? title))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// The signature library (#100), in whichever presentation the width calls for.
+    private var signaturesLibrary: some View {
+        SignaturesSheet(
+            signatures: model.signatures,
+            startDrawing: model.screenshotSheet == .draw,
+            loadImage: { SignatureStore().loadImage($0) },
+            onPick: { entry in
+                signaturesOpen = false
+                model.startPlacement(entry)
+            },
+            onDrawn: model.addDrawnSignature,
+            onPhoto: model.importSignature,
+            onRename: model.renameSignature,
+            onDelete: model.deleteSignature,
+            onDismiss: { signaturesOpen = false }
+        )
+    }
+
+    /// The one text editor (#34, #36, #43), likewise.
+    ///
+    /// The field and the pickers bind to the model, not to @State, so a correction's
+    /// prefill lands in the same update as `pendingText` rather than racing the
+    /// presentation.
+    private func textBoxEditor(_ pending: PendingText) -> some View {
+        TextBoxSheet(
+            isEditing: pending.editingId != nil,
+            text: $model.draftText,
+            fontSize: $model.draftSize,
+            fontName: $model.draftFont,
+            onCommit: {
+                model.commitText(model.draftText,
+                                 fontSize: model.draftSize,
+                                 fontName: model.draftFont)
+            },
+            onCancel: model.cancelTextPlacement
+        )
     }
 
     // MARK: - search (#26)
@@ -508,6 +700,9 @@ struct ViewerView: View {
             .disabled(model.searchMatches.isEmpty)
             .accessibilityLabel("Next match")
             Button("Done") { closeSearch() }
+                // Escape closes the find bar on an iPad keyboard (#172); nil leaves the
+                // phone's button exactly as it was.
+                .keyboardShortcut(isPad ? .cancelAction : nil)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -821,6 +1016,21 @@ struct RedactBand: Equatable {
 
 /// Which save the redaction confirmation was raised from (#173).
 enum RedactSaveChoice { case overwrite, copy, markdown }
+
+/// Icon beside title, or the icon alone, for the iPad's tool strip (#172). Its own style
+/// rather than a ternary between `.titleAndIcon` and `.iconOnly`, which are two types.
+/// The button carries the title as its accessibility label either way, so dropping the
+/// text drops nothing a screen reader hears.
+struct ToolStripLabelStyle: LabelStyle {
+    let titled: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 4) {
+            configuration.icon
+            if titled { configuration.title }
+        }
+    }
+}
 
 /// The More button's on-screen frame, reported by the `GeometryReader` behind its label
 /// (#378) — read by `ViewerView` so the iPad share popover has a real anchor.

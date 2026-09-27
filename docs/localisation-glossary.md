@@ -20,6 +20,7 @@ Conventions (OQLF, Canadian French):
 |---|---|---|
 | Open | Ouvrir | |
 | Open a PDF | Ouvrir un PDF | |
+| Open PDF… | Ouvrir un PDF… | #172, the iPad keyboard command (⌘O) in iPadOS 26's menu bar and the ⌘ overlay; the ellipsis because a picker follows |
 | Save | Enregistrer | |
 | Save As | Enregistrer sous | |
 | Save a copy | Enregistrer une copie | |

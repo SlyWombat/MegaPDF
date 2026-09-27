@@ -123,6 +123,9 @@ struct HomeView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
             if case let .success(url) = result { onOpen(url) }
         }
+        // ⌘O on an iPad keyboard (#172): the same picker the button opens. Published
+        // whatever the idiom; only the iPad declares a command that reads it.
+        .focusedSceneValue(\.openPDFCommand, OpenPDFCommandTarget { importing = true })
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
