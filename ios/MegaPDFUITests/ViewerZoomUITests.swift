@@ -96,8 +96,9 @@ final class ViewerZoomUITests: XCTestCase {
         let atOne = pixels(of: rect)
         XCTAssertFalse(atOne.isEmpty, "could not read the page's pixels")
 
-        // Fingers apart — the gesture the bug was about. The direction is the scale;
-        // both velocities are positive, which the API requires.
+        // Fingers apart — the gesture the bug was about. The velocity's sign has to
+        // agree with the scale: positive for a pinch out (scale > 1), negative for a
+        // pinch in (scale < 1), or XCTest throws NSInvalidArgumentException (#405).
         firstPage.pinch(withScale: 2.5, velocity: 2.0)
         Thread.sleep(forTimeInterval: 1.5)   // scroll indicators fade
         let zoomed = pixels(of: rect)
@@ -108,7 +109,7 @@ final class ViewerZoomUITests: XCTestCase {
         // that the page landed on the exact frame it started on: a pinch in a scroll
         // view can leave it a few points from where it was, and a test that demanded
         // the same picture would fail on that rather than on the zoom.
-        firstPage.pinch(withScale: 0.4, velocity: 2.0)
+        firstPage.pinch(withScale: 0.4, velocity: -2.0)
         Thread.sleep(forTimeInterval: 1.5)
         let closed = pixels(of: rect)
         XCTAssertLessThan(difference(zoomed, closed), 0.05,
