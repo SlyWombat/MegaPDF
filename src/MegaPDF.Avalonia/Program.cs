@@ -1386,6 +1386,20 @@ internal static class Program
                 Check("with a window, a document opens off the UI thread", vm.IsDocumentOpen && vm.Pages.Count > 0);
                 vm.SearchAsync("checkbox").GetAwaiter().GetResult();
                 Check("and is searched off it", vm.MatchCount > 0);
+
+                // #252: the find screenshot pose calls the *synchronous* Search(), not
+                // SearchAsync, while RunsInBackground is true (a real window is open) — the
+                // same combination as above, but through the sync wrapper the capture rig and
+                // the self-test both rely on to read MatchCount without a wait of its own.
+                // RunSynchronously forces the scan inline (DocumentViewModel's Inline check),
+                // so this must come back with the count already final and nothing left
+                // running; if a future change ever made Search() genuinely return before the
+                // scan settles, this is what would catch it, rather than #252 quietly
+                // reappearing only on a loaded capture runner.
+                vm.Search("checkbox");
+                Check("and Search(), the sync wrapper the find pose uses, also finishes before returning",
+                      vm.MatchCount > 0 && !vm.Busy.IsWorking);
+
                 vm.HandlePageClick(0, box);
                 vm.Busy.WhenIdleAsync().GetAwaiter().GetResult();
                 Check("and a click applies its change off it", vm.IsDirty && vm.CanUndo);

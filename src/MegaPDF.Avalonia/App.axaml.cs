@@ -68,7 +68,7 @@ public partial class App : Application
     /// these since their store screenshots were first captured; macOS is catching
     /// up with them.
     /// </summary>
-    private static bool ApplyScreenshotState(DocumentViewModel viewModel, MainWindow? window, string state, string? signaturePng)
+    private static async Task<bool> ApplyScreenshotStateAsync(DocumentViewModel viewModel, MainWindow? window, string state, string? signaturePng)
     {
         switch (state)
         {
@@ -147,6 +147,30 @@ public partial class App : Application
                 if (window is not null)
                     window.ShowFindTerm(DemoContent.SearchTerm);
                 viewModel.Search(DemoContent.SearchTerm);
+                // #252 (revisited): Search() is DocumentViewModel's synchronous wrapper —
+                // RunSynchronously forces the engine scan inline (no Task.Run) and blocks
+                // until SearchAsync has fully returned, so MatchCount is already final by
+                // the time the line above returns (confirmed by reading RunSynchronously /
+                // Inline, and by 40 runs of this exact pose — 20 idle, 20 with every core
+                // saturated and a parallel `dotnet build` running throughout — all clean).
+                // That guarantee lives in a different file than this one, though: a future
+                // change to RunSynchronously, or to how this pose calls Search, could make
+                // it genuinely asynchronous again without anyone touching this case. So this
+                // waits on Busy explicitly, the same way every other engine-driven pose here
+                // does (#145), instead of resting on an implementation detail three files
+                // away — if it ever is still running, that is itself the evidence, not a
+                // silent MatchCount==0.
+                var idle = viewModel.Busy.WhenIdleAsync();
+                if (await Task.WhenAny(idle, Task.Delay(TimeSpan.FromSeconds(5))) != idle)
+                {
+                    Console.Error.WriteLine(
+                        $"::error::--screenshot-state find: the search for \"{DemoContent.SearchTerm}\" "
+                        + "was still running 5s after Search() returned (Busy.IsWorking=true). That "
+                        + "should be impossible from the synchronous Search() wrapper — something "
+                        + "changed about how it runs. Not reading MatchCount against a search that "
+                        + "has not settled.");
+                    return false;
+                }
                 if (viewModel.MatchCount == 0)
                 {
                     // #252: this used to name the fixture as the cause without having
@@ -1364,7 +1388,7 @@ public partial class App : Application
             //
             // A capture or diagnostic run (any IsAutomationArgument present) opens its
             // one file directly into `viewModel` rather than through the window's
-            // find-or-activate router: RunStory, ApplyScreenshotState and
+            // find-or-activate router: RunStory, ApplyScreenshotStateAsync and
             // DesktopCheckAsync below hold this one reference and expect it to be THE
             // document, and opening it synchronously — the same RunSynchronously path
             // the self-test uses — is what lets them proceed without a wait for an
@@ -1492,10 +1516,10 @@ public partial class App : Application
                 // state, and a miss exits non-zero.
                 if (ArgumentAfter(desktop.Args, "--screenshot-state") is { } state)
                 {
-                    DispatcherTimer.RunOnce(() =>
+                    DispatcherTimer.RunOnce(async () =>
                     {
-                        if (!ApplyScreenshotState(viewModel, desktop.MainWindow as MainWindow, state,
-                                                  ArgumentAfter(desktop.Args, "--signature")))
+                        if (!await ApplyScreenshotStateAsync(viewModel, desktop.MainWindow as MainWindow, state,
+                                                             ArgumentAfter(desktop.Args, "--signature")))
                             desktop.Shutdown(1);
                     }, TimeSpan.FromSeconds(2));
                 }
