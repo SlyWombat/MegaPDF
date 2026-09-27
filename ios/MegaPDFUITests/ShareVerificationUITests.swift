@@ -45,11 +45,17 @@ final class ShareVerificationUITests: XCTestCase {
         }
         XCTAssertTrue(found, "\(name) is not visible in the Files picker")
         file.tap()
+        // Until the document is on screen, not for a fixed few seconds: a GitHub runner
+        // opens it several times slower than the Mac mini does (#405), and the first
+        // CI run failed here with the More menu not yet there and Add text not yet
+        // tappable.
+        let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
+        XCTAssertTrue(page.waitForExistence(timeout: 60), "\(name) did not open")
     }
 
     private func more(_ item: String) {
         let more = app.buttons["viewerMore"].firstMatch
-        XCTAssertTrue(more.waitForExistence(timeout: 10), "no More menu")
+        XCTAssertTrue(more.waitForExistence(timeout: 30), "no More menu")
         more.tap()
         let button = app.buttons[item].firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 5), "no \(item) in More")
@@ -60,7 +66,6 @@ final class ShareVerificationUITests: XCTestCase {
     /// and the resulting sheet has to actually be reachable (not off-screen or zero-size).
     func testShareShowsAWorkingActivitySheet() throws {
         open("share-check")
-        sleep(3)
         snap("01-document-open")
         more("Share")
         sleep(2)
@@ -76,9 +81,10 @@ final class ShareVerificationUITests: XCTestCase {
     /// model's routing.
     func testShareWithUnsavedChangesOffersShareWithoutSaving() throws {
         open("share-check")
-        sleep(3)
         // Dirty the document: Add text, tap a spot on the page, type something, commit.
-        app.buttons["Add text"].firstMatch.tap()
+        let addText = app.buttons["Add text"].firstMatch
+        XCTAssertTrue(addText.waitForExistence(timeout: 30), "no Add text button")
+        addText.tap()
         sleep(1)   // "Tap the page where the text should go"
         let page = app.descendants(matching: .any).matching(NSPredicate(format: "label == 'Page 1'")).firstMatch
         XCTAssertTrue(page.waitForExistence(timeout: 10), "no Page 1 to tap")
