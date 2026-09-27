@@ -219,6 +219,12 @@ DEMO_TEXT = {
     # The English is the original; the French is the same page translated
     # (#91), same geometry, so the screenshot tap points and the search term's
     # three hits ("location": title, "Location d'outils", "de location") line up.
+    #
+    # "fr" is Canadian French, the hand-written listing language; "fr-FR" is
+    # France (#310): the same page in France usage, written here rather than
+    # derived, because gen_strings.py's table is for the app's chrome. Both keep
+    # the paragraph the Redact poses key on ("sections 1 à 4", #415) on its own
+    # line, and "location" three times. Dave, 2026-09-26: week-end, metric, €.
     "en": {
         "title": "Equipment Rental Agreement",
         "p1": "This agreement is made between Sunrise Tool Rental and the customer named",
@@ -240,6 +246,18 @@ DEMO_TEXT = {
         "box1": "Livraison et ramassage inclus",
         "box2": "Assurance dommages accept\u00e9e",
         "box3": "Tarif fin de semaine prolong\u00e9e",
+        "sig": "Signature du client",
+        "line": "Signez au-dessus de la ligne",
+    },
+    "fr-FR": {
+        "title": "Contrat de location d'\u00e9quipement",
+        "p1": "Le pr\u00e9sent contrat est conclu entre Location d'outils Soleil Levant et le client",
+        "p2": "nomm\u00e9 ci-dessous et couvre l'\u00e9quipement de location, les options de livraison",
+        "p3": "et les conditions d'assurance d\u00e9crites aux sections 1 \u00e0 4 du pr\u00e9sent document.",
+        "options": "Options",
+        "box1": "Livraison et enl\u00e8vement inclus",
+        "box2": "Assurance dommages accept\u00e9e",
+        "box3": "Tarif week-end prolong\u00e9",
         "sig": "Signature du client",
         "line": "Signez au-dessus de la ligne",
     },
@@ -761,8 +779,10 @@ def main():
     for name, data in (("fixture.pdf", gen_fixture()), ("forms.pdf", gen_forms()),
                        ("stamped.pdf", gen_stamped()), ("demo.pdf", gen_demo()),
                        ("demo-fr.pdf", gen_demo("fr")),
+                       ("demo-fr-FR.pdf", gen_demo("fr-FR")),
                        ("demo-blank.pdf", gen_demo(filled=False)),
                        ("demo-fr-blank.pdf", gen_demo("fr", filled=False)),
+                       ("demo-fr-FR-blank.pdf", gen_demo("fr-FR", filled=False)),
                        ("formtext.pdf", gen_formtext()),
                        ("cropped.pdf", gen_cropped()),
                        ("userunit.pdf", gen_userunit()),

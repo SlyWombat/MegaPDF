@@ -17,7 +17,7 @@ push() {
     echo "pushed $(basename "$path")"
 }
 
-for name in MegaPDF-Test-Form.pdf corrupt.pdf demo.pdf demo-fr.pdf forms.pdf \
+for name in MegaPDF-Test-Form.pdf corrupt.pdf demo.pdf demo-fr.pdf demo-fr-FR.pdf forms.pdf \
             formtext.pdf textbox.pdf cropped.pdf userunit.pdf stamped.pdf; do
     push "$FIXTURES/$name"
 done

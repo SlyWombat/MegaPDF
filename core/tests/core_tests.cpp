@@ -3784,7 +3784,7 @@ void test_text_in_one_pass(const std::string& fixtures, const std::string& schem
         "BT /F1 6 Tf 72 500 Td (small) Tj /F1 30 Tf 30 0 Td (LARGE) Tj ET";
     check_texts_match_pdfium(one_page_pdf(tricky, helvetica), "tricky page");
     for (const char* name : {"fixture.pdf", "forms.pdf", "formtext.pdf", "textbox.pdf", "doubled.pdf", "doubled-far.pdf",
-                             "demo.pdf", "demo-fr.pdf", "cropped.pdf", "stamped.pdf", "softmask.pdf"})
+                             "demo.pdf", "demo-fr.pdf", "demo-fr-FR.pdf", "cropped.pdf", "stamped.pdf", "softmask.pdf"})
         check_texts_match_pdfium(read_file(fixtures + "/" + name), name);
     check_texts_match_pdfium(read_file(schematic), "microbit-v2-schematic.pdf");
     for (const char* name : {"cid-font.pdf", "subset-font.pdf"})

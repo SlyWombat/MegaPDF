@@ -26,7 +26,8 @@ THEME="${4:-light}"
 LANG_TAG="${5:-en}"
 case "$LANG_TAG" in
     en)         DEMO_DOC=demo-blank.pdf ;;
-    fr-CA|fr)   DEMO_DOC=demo-fr-blank.pdf ;;
+    fr-CA)      DEMO_DOC=demo-fr-blank.pdf ;;
+    fr)         DEMO_DOC=demo-fr-FR-blank.pdf ;;   # France's own page (#310)
     *) echo "unknown language '$LANG_TAG' (expected en, fr-CA or fr)" >&2; exit 2 ;;
 esac
 # One directory per language and theme, so a fresh run never mixes frames with

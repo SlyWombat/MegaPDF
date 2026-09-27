@@ -92,10 +92,12 @@ python3 "$ROOT/tools/gen_test_fixtures.py" "$WORK/fixtures" >/dev/null
 
 # Copied to the name DemoContent.DocumentFileName gives, because that name is in the
 # window title of every shot with a document open — and the home shot's recents say
-# "Contrat de location.pdf", not "demo-fr.pdf". One set, one name (#146 §3).
+# "Contrat de location.pdf", not "demo-fr.pdf". One set, one name (#146 §3). The two
+# French listings open different pages (#310): Quebec's for fr-CA, France's own for fr-FR.
 case "$LANG_TAG" in
-    en)    FIXTURE="$WORK/fixtures/demo.pdf";    DOC="$WORK/Rental Agreement.pdf" ;;
-    fr-CA|fr-FR) FIXTURE="$WORK/fixtures/demo-fr.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
+    en)    FIXTURE="$WORK/fixtures/demo.pdf";       DOC="$WORK/Rental Agreement.pdf" ;;
+    fr-CA) FIXTURE="$WORK/fixtures/demo-fr.pdf";    DOC="$WORK/Contrat de location.pdf" ;;
+    fr-FR) FIXTURE="$WORK/fixtures/demo-fr-FR.pdf"; DOC="$WORK/Contrat de location.pdf" ;;
 esac
 [ -f "$FIXTURE" ] || { echo "no demo document at $FIXTURE" >&2; exit 1; }
 cp "$FIXTURE" "$DOC"

@@ -2555,7 +2555,7 @@ internal static class Program
                 // The demo agreement in the running language, so the counter reads a
                 // count rather than "Not found" — the two are different widths and the
                 // row has to hold either.
-                var demo = new[] { tag.StartsWith("fr", StringComparison.Ordinal) ? "demo-fr.pdf" : "demo.pdf", "fixture.pdf" }
+                var demo = new[] { tag == "fr-FR" ? "demo-fr-FR.pdf" : tag == "fr-CA" ? "demo-fr.pdf" : "demo.pdf", "fixture.pdf" }
                     .Select(name => Path.Combine(dir, name)).First(File.Exists);
                 vm.Open(demo);
                 shell.AddTab(vm);

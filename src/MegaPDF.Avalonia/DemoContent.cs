@@ -43,10 +43,11 @@ internal static class DemoContent
     /// <summary>
     /// What the demo document is called in a capture.
     ///
-    /// The fixture on disk is demo.pdf / demo-fr.pdf, and that name is in the status
-    /// line of every shot that has a document open — beside a home shot whose recents
-    /// said "Contrat de location.pdf". One set, two names for the same file (#146 §3).
-    /// The capture script copies the fixture to this name before it opens it.
+    /// The fixture on disk is demo.pdf / demo-fr.pdf / demo-fr-FR.pdf (France's own
+    /// page since #310), and that name is in the status line of every shot that has a
+    /// document open — beside a home shot whose recents said "Contrat de location.pdf".
+    /// One set, two names for the same file (#146 §3). The capture script copies the
+    /// fixture to this name before it opens it.
     /// </summary>
     internal static string DocumentFileName => ForLanguage(
         english: "Rental Agreement.pdf",

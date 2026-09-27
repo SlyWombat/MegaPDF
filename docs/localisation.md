@@ -149,9 +149,13 @@ by a francophone reviewer for 2.0 (2026-09-18, #242); new copy gets the same rea
 it is pasted into a store. Screenshots exist per language on every
 platform: Windows sets live in `artifacts/store/screenshots/{fr-CA,fr-FR}/`
 (harness README § French screenshots); the Android and iOS capture workflows run
-a language matrix and open a French demo agreement (`demo-fr.pdf`, from
-`tools/gen_test_fixtures.py`) whose names and search term come from the string
-catalogues (`screenshot_*` keys on Android, the demo keys in the String Catalog
-on iOS). The iOS sets, and the App Store preview videos, also come off the
+a language matrix and open a French demo agreement (`demo-fr.pdf` for fr-CA,
+`demo-fr-FR.pdf` for fr-FR, both from `tools/gen_test_fixtures.py`) whose names
+and search term come from the string catalogues (`screenshot_*` keys on Android,
+the demo keys in the String Catalog on iOS). The document's text is written per
+listing language rather than derived (#310): France's page says *week-end*,
+*enlèvement* and uses metric units, where Quebec's says *fin de semaine*,
+*ramassage*, feet and pounds — the glossary's derivation table is for the chrome.
+The iOS sets, and the App Store preview videos, also come off the
 in-house Mac: `tools/ios-screenshots.sh` and `tools/ios-demo-video.sh` take the
 language as their first argument.

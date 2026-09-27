@@ -38,7 +38,7 @@ mkdir -p "$OUT"
 # accents are the point: Dave, 2026-09-15.
 case "$LANG_TAG" in
     fr-CA) DEMO_DOC=demo-fr-blank.pdf; DEMO_NAME="Hélène Bélanger"; DEMO_FIND="location" ;;
-    fr)    DEMO_DOC=demo-fr-blank.pdf; DEMO_NAME="Céline Lefèvre";  DEMO_FIND="location" ;;
+    fr)    DEMO_DOC=demo-fr-FR-blank.pdf; DEMO_NAME="Céline Lefèvre";  DEMO_FIND="location" ;;
     en)    DEMO_DOC=demo-blank.pdf;    DEMO_NAME="Jane Whitfield";  DEMO_FIND="rental"   ;;
     *)     echo "unknown language '$LANG_TAG' (expected en, fr-CA or fr)" >&2; exit 2 ;;
 esac
