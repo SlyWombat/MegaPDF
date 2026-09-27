@@ -15,10 +15,12 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -116,6 +118,21 @@ struct megapdf_document {
     // A redaction that failed halfway: the document may no longer be saved, so a
     // half-redacted file can never be written.
     bool redaction_poisoned = false;
+    // Contract 10 (#174): deleted pages kept alive for an undo, freed at megapdf_close()
+    // if never restored or discarded — decision 1 of ADR-003 again, as for `detached`.
+    std::vector<megapdf_removed_page*> removed_pages;
+    // The documents pages were imported from, kept open until this one closes: PDFium's
+    // page copy leaves a few references (a /Parent) pointing into the source, and a source
+    // freed under them would be read after free inside PDFium, where no sanitizer looks.
+    std::vector<megapdf_document*> import_sources;
+};
+
+// A deleted page kept for an undo (#174): a copy of the page in a scratch document of its
+// own, taken before FPDFPage_Delete, because PDFium has no way to put a page dictionary
+// back into the page tree once it is out of it. Restoring imports the copy back.
+struct megapdf_removed_page {
+    megapdf_document* owner = nullptr;
+    FPDF_DOCUMENT scratch = nullptr;
 };
 
 // Page objects taken off a page and kept for undo. One object for megapdf_detach_object();
@@ -809,8 +826,16 @@ MEGAPDF_API void megapdf_close(megapdf_document* d) {
         delete x;
     }
     d->detached.clear();
+    for (megapdf_removed_page* r : d->removed_pages) {
+        if (r->scratch != nullptr) FPDF_CloseDocument(r->scratch);
+        delete r;
+    }
+    d->removed_pages.clear();
     if (d->form != nullptr) FPDFDOC_ExitFormFillEnvironment(d->form);
     if (d->doc != nullptr) FPDF_CloseDocument(d->doc);
+    // After the document, whose imported pages may still refer into them (#174).
+    for (megapdf_document* source : d->import_sources) megapdf_close(source);
+    d->import_sources.clear();
     // After the document: PDFium reads through the file until it is closed (#147).
     FileSourceClose(&d->source);
     std::fill(d->unlock.begin(), d->unlock.end(), '\0');
@@ -1406,7 +1431,7 @@ MEGAPDF_API megapdf_form_fields* megapdf_form_fields_load(const megapdf_page* p)
         return nullptr;
     }
     FPDF_FORMHANDLE form = p->owner ? p->owner->form : nullptr;
-    if (form == nullptr) return f;
+    if (form == nullptr || p->index < 0) return f;   // a deleted page has no live fields (#174)
     try {
         const int count = FPDFPage_GetAnnotCount(p->page);
         for (int i = 0; i < count; i++) {
@@ -1466,6 +1491,7 @@ MEGAPDF_API size_t megapdf_form_field_string(const megapdf_form_fields* f, size_
 MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
     if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (p->index < 0) return MEGAPDF_ERR_ARGUMENT;   // a deleted page (#174): its widgets are off the form
     FPDF_FORMHANDLE form = p->owner->form;
     FORM_OnLButtonDown(form, p->page, 0, InX(p, x), InY(p, y));
     FORM_OnLButtonUp(form, p->page, 0, InX(p, x), InY(p, y));
@@ -1476,6 +1502,7 @@ MEGAPDF_API int megapdf_form_click(const megapdf_page* p, double x, double y) {
 MEGAPDF_API int megapdf_form_set_text(const megapdf_page* p, double x, double y, const unsigned short* value_utf16) {
     if (p == nullptr || p->owner == nullptr || p->owner->form == nullptr || value_utf16 == nullptr) return MEGAPDF_ERR_ARGUMENT;
     Guard guard(CoreLock());
+    if (p->index < 0) return MEGAPDF_ERR_ARGUMENT;   // a deleted page (#174): its widgets are off the form
     FPDF_FORMHANDLE form = p->owner->form;
     FORM_OnLButtonDown(form, p->page, 0, InX(p, x), InY(p, y));
     FORM_OnLButtonUp(form, p->page, 0, InX(p, x), InY(p, y));
@@ -3419,7 +3446,10 @@ MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, i
     if (flags & MEGAPDF_RENDER_RGBA) render_flags |= FPDF_REVERSE_BYTE_ORDER;
     FPDFBitmap_FillRect(bmp, 0, 0, width, height, 0xFFFFFFFF);
     FPDF_RenderPageBitmap(bmp, p->page, 0, 0, width, height, 0, render_flags);
-    if (p->owner != nullptr && p->owner->form != nullptr) {
+    // Not for a deleted page (#174): FPDF_FFLDraw would register its widgets with the form
+    // environment again, and a restored copy of the page would then read their values from
+    // them. FPDF_ANNOT above has drawn the widgets' appearance streams already.
+    if (p->owner != nullptr && p->owner->form != nullptr && p->index >= 0) {
         FPDF_FFLDraw(p->owner->form, bmp, p->page, 0, 0, width, height, 0, render_flags);
     }
     FPDFBitmap_Destroy(bmp);
@@ -5203,6 +5233,678 @@ MEGAPDF_API int megapdf_redact_apply(megapdf_document* d, const megapdf_redact_o
     d->redactions.clear();
     if (out_report != nullptr) *out_report = report;
     else delete report;
+    return MEGAPDF_OK;
+}
+
+}  // extern "C"
+
+// --------------------------------------------------------------------------
+// Contract 10: page tools (#174). Rotate, delete, move, insert a blank page,
+// import (combine) and extract (split). See the header for the undo and journal
+// story; the mechanics here are PDFium's page-tree calls plus the renumbering of
+// everything the core keeps per page.
+// --------------------------------------------------------------------------
+
+namespace {
+
+// The permission bits this open has, of the ones that mean something (as OpenPermissions()
+// in contract 6's section, which is not visible from here).
+unsigned int PermissionsOf(const megapdf_document* d) {
+    return static_cast<unsigned int>(FPDF_GetDocPermissions(d->doc) & MEGAPDF_PERMIT_ALL);
+}
+
+// The checks every page operation makes before touching anything: a poisoned document may
+// only be closed (#173), and the document's security must allow the operation (ADR-004).
+// MEGAPDF_OK to go on, otherwise the status to return.
+int PageToolsPreflight(const megapdf_document* d, unsigned int needs_any_of) {
+    if (d->redaction_poisoned) {
+        SetError(0, "a redaction failed halfway; the document may only be closed");
+        return MEGAPDF_ERR_REDACT;
+    }
+    if ((PermissionsOf(d) & needs_any_of) == 0) {
+        SetError(FPDF_ERR_SECURITY, "the document's security does not allow this; its owner password would");
+        return MEGAPDF_ERR_RESTRICTED;
+    }
+    return MEGAPDF_OK;
+}
+
+// Renumbers everything the core keeps per page after pages moved: `remap` gives a page's
+// new index, or -1 when it is gone. Open page handles follow their page (a deleted page's
+// handle answers -1 and still renders), as do detached objects, redaction marks and layout
+// verdicts; those of a deleted page are dropped. Every page's change counter is bumped as
+// well, so a page check that let go of the lock between its stages (#145) does not cache
+// its verdict under an index that now names another page.
+template <typename Remap>
+void RenumberPages(megapdf_document* d, int pages_before, int pages_after, Remap remap) {
+    for (megapdf_page* p : d->open_pages) {
+        if (p->index >= 0) p->index = remap(p->index);
+    }
+    for (megapdf_detached* x : d->detached) {
+        // -2, not -1: a deleted page's handle answers -1, and megapdf_restore_detached()
+        // must not take the two for the same page.
+        if (x->page_index >= 0) {
+            const int now = remap(x->page_index);
+            x->page_index = now < 0 ? -2 : now;
+        }
+    }
+    for (size_t i = d->redactions.size(); i-- > 0;) {
+        const int now = remap(d->redactions[i].page_index);
+        if (now < 0) d->redactions.erase(d->redactions.begin() + static_cast<std::ptrdiff_t>(i));
+        else d->redactions[i].page_index = now;
+    }
+    std::map<int, unsigned long long> changes;
+    for (const auto& entry : d->page_changes) {
+        const int now = remap(entry.first);
+        if (now >= 0) changes[now] = entry.second;
+    }
+    const int bump_to = pages_before > pages_after ? pages_before : pages_after;
+    for (int i = 0; i < bump_to; i++) changes[i]++;
+    d->page_changes.swap(changes);
+    std::map<std::pair<int, int>, megapdf_layout_verdict> verdicts;
+    for (const auto& entry : d->rewrite_keeps_page) {
+        const int now = remap(entry.first.first);
+        if (now >= 0) verdicts[std::make_pair(now, entry.first.second)] = entry.second;
+    }
+    d->rewrite_keeps_page.swap(verdicts);
+}
+
+// A page loaded straight from PDFium, without the form-fill hooks, for reading annotations
+// off it; nothing here draws or edits.
+struct RawPage {
+    FPDF_PAGE page;
+    RawPage(FPDF_DOCUMENT doc, int index) : page(FPDF_LoadPage(doc, index)) {}
+    ~RawPage() { if (page != nullptr) FPDF_ClosePage(page); }
+};
+
+U16 AnnotString(FPDF_ANNOTATION annot, const char* key) {
+    return ReadAnnotWide([&](FPDF_WCHAR* buf, unsigned long len) { return FPDFAnnot_GetStringValue(annot, key, buf, len); });
+}
+
+// Calls `visit(widget)` for every widget annotation on the given pages of `d` (all of them
+// when `pages` is NULL), the pages loaded through the form environment so a field that is
+// not in the AcroForm (an earlier import) is known to it too. `visit` returns false to stop
+// early (out of memory).
+template <typename Visit>
+bool VisitWidgets(const megapdf_document* d, const std::vector<int>* pages, Visit visit) {
+    const int count = FPDF_GetPageCount(d->doc);
+    const int n = pages != nullptr ? static_cast<int>(pages->size()) : count;
+    for (int k = 0; k < n; k++) {
+        const int index = pages != nullptr ? (*pages)[static_cast<size_t>(k)] : k;
+        ScopedPage sp(d, index);
+        if (sp.page == nullptr) continue;
+        const int annots = FPDFPage_GetAnnotCount(sp.page->page);
+        for (int i = 0; i < annots; i++) {
+            FPDF_ANNOTATION annot = FPDFPage_GetAnnot(sp.page->page, i);
+            if (annot == nullptr) continue;
+            bool go_on = true;
+            if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) go_on = visit(annot);
+            FPDFPage_CloseAnnot(annot);
+            if (!go_on) return false;
+        }
+    }
+    return true;
+}
+
+// Whether any widget on the given pages is a kid of a /Parent field dictionary: the shape
+// PDFium's page copy cannot carry across documents (see the header), so import and extract
+// refuse it whole.
+bool PagesCarryParentFields(const megapdf_document* d, const std::vector<int>* pages) {
+    bool found = false;
+    VisitWidgets(d, pages, [&](FPDF_ANNOTATION widget) {
+        if (FPDFAnnot_HasKey(widget, "Parent")) found = true;
+        return !found;
+    });
+    return found;
+}
+
+// The top-level name of the field a widget belongs to — the fully qualified name the form
+// environment gives it, up to its first dot — or the widget's own /T when the environment
+// does not know it.
+U16 TopFieldName(const megapdf_document* d, FPDF_ANNOTATION widget) {
+    U16 name;
+    if (d->form != nullptr) {
+        name = ReadAnnotWide([&](FPDF_WCHAR* buf, unsigned long len) {
+            return FPDFAnnot_GetFormFieldName(d->form, widget, buf, len);
+        });
+    }
+    if (name.empty()) name = AnnotString(widget, "T");
+    const auto dot = std::find(name.begin(), name.end(), static_cast<unsigned short>('.'));
+    name.erase(dot, name.end());
+    return name;
+}
+
+// The top-level field names on the given pages (all when `pages` is NULL).
+bool CollectTopFieldNames(const megapdf_document* d, const std::vector<int>* pages, std::set<U16>* out) {
+    return VisitWidgets(d, pages, [&](FPDF_ANNOTATION widget) {
+        try {
+            U16 name = TopFieldName(d, widget);
+            if (!name.empty()) out->insert(std::move(name));
+        } catch (...) {
+            return false;
+        }
+        return true;
+    });
+}
+
+// Before an import (#174): a field on the pages coming across whose name already exists as
+// a top-level name in `dest` is renamed in `src` — "name" becomes "name_2", or the first
+// "name_<k>" nobody has — so the two never merge into one field. Done on the source, which
+// is the core's own open of the other file and is never saved, so the copy PDFium makes
+// carries the new name. Every widget coming across is its own field (the ones with a
+// /Parent were refused before this), so the name to change is the widget's /T. False only
+// when out of memory.
+bool RenameClashingFields(const megapdf_document* dest, const megapdf_document* src, const std::vector<int>& src_pages) {
+    try {
+        std::set<U16> incoming;
+        if (!CollectTopFieldNames(src, &src_pages, &incoming)) return false;
+        if (incoming.empty()) return true;   // the common case: no form on the imported pages
+        std::set<U16> existing;
+        if (!CollectTopFieldNames(dest, nullptr, &existing)) return false;
+        bool clash = false;
+        for (const U16& name : incoming) if (existing.count(name) != 0) { clash = true; break; }
+        if (!clash) return true;
+        std::set<U16> taken = existing;
+        taken.insert(incoming.begin(), incoming.end());
+        std::map<U16, U16> renamed;   // one new name per field, for a field with several widgets
+        return VisitWidgets(src, &src_pages, [&](FPDF_ANNOTATION widget) {
+            try {
+                const U16 name = AnnotString(widget, "T");
+                if (name.empty() || existing.count(name) == 0) return true;
+                auto it = renamed.find(name);
+                if (it == renamed.end()) {
+                    U16 fresh;
+                    for (int k = 2; ; k++) {
+                        fresh = name;
+                        fresh.push_back('_');
+                        for (char c : std::to_string(k)) fresh.push_back(static_cast<unsigned short>(c));
+                        if (taken.count(fresh) == 0) break;
+                    }
+                    taken.insert(fresh);
+                    it = renamed.emplace(name, fresh).first;
+                }
+                U16 with_nul = it->second;
+                with_nul.push_back(0);
+                FPDFAnnot_SetStringValue(widget, "T", with_nul.data());
+            } catch (...) {
+                return false;
+            }
+            return true;
+        });
+    } catch (...) {
+        return false;
+    }
+}
+
+// A page's fields leave the AcroForm with the page (PDFium patch 0028): a field whose only
+// widget was on a deleted page would otherwise stay listed, and keep the page reachable.
+void RemovePageFields(const megapdf_document* d, int page) {
+    RawPage rp(d->doc, page);
+    if (rp.page == nullptr) return;
+    const int annots = FPDFPage_GetAnnotCount(rp.page);
+    for (int i = 0; i < annots; i++) {
+        FPDF_ANNOTATION annot = FPDFPage_GetAnnot(rp.page, i);
+        if (annot == nullptr) continue;
+        if (FPDFAnnot_GetSubtype(annot) == FPDF_ANNOT_WIDGET) FPDFDoc_RemoveFormField(d->doc, annot);
+        FPDFPage_CloseAnnot(annot);
+    }
+}
+
+// Builds the form-fill environment again, after the widgets of the document changed under
+// it (#174). PDFium's interactive form keeps a field object per name, made when the
+// environment was set up, and a widget it meets later on a page joins the field of that
+// name: after a delete and its undo, or an import, the widget on the page would then read
+// and write the field dictionary of a widget that is no longer on any page — the value
+// shown would be the old dictionary's (cleared with the field, patch 0028) and a value
+// typed would go into it and never be saved. A fresh environment builds its fields from
+// the pages as they are now. Every open page handle is moved across.
+void ResetFormEnvironment(megapdf_document* d) {
+    if (d->form != nullptr) {
+        FORM_ForceToKillFocus(d->form);
+        for (megapdf_page* p : d->open_pages) FORM_OnBeforeClosePage(p->page, d->form);
+        FPDFDOC_ExitFormFillEnvironment(d->form);
+        d->form = nullptr;
+    }
+    InitFormFillInfo(&d->ffi);
+    d->form = FPDFDOC_InitFormFillEnvironment(d->doc, &d->ffi);
+    if (d->form != nullptr) {
+        // Not the handles on deleted pages: their widgets would be the ones a restored copy
+        // of the page then read its values from (the fields of a name are made once).
+        for (megapdf_page* p : d->open_pages) if (p->index >= 0) FORM_OnAfterLoadPage(p->page, d->form);
+    }
+}
+
+void FreeRemovedPage(megapdf_removed_page* r) {
+    if (r->owner != nullptr) {
+        auto& list = r->owner->removed_pages;
+        for (size_t i = 0; i < list.size(); i++) {
+            if (list[i] == r) {
+                list[i] = list.back();
+                list.pop_back();
+                break;
+            }
+        }
+    }
+    if (r->scratch != nullptr) FPDF_CloseDocument(r->scratch);
+    delete r;
+}
+
+// The extract's file writer: PDFium's blocks straight into the temporary file, stopping
+// when the cancel flag is raised (#145).
+struct FileWriteBridge {
+    FPDF_FILEWRITE fw;   // first, so PDFium's pointer downcasts
+    std::FILE* file;
+    const megapdf_cancel* cancel;
+    bool failed;
+    bool cancelled;
+};
+
+int FileWriteBlock(FPDF_FILEWRITE* self, const void* data, unsigned long size) {
+    auto* b = reinterpret_cast<FileWriteBridge*>(self);
+    if (b->failed || b->cancelled) return 0;
+    if (b->cancel != nullptr && b->cancel->raised.load(std::memory_order_relaxed) != 0) {
+        b->cancelled = true;
+        return 0;
+    }
+    if (size == 0) return 1;
+    if (std::fwrite(data, 1, static_cast<size_t>(size), b->file) != static_cast<size_t>(size)) {
+        b->failed = true;
+        return 0;
+    }
+    return 1;
+}
+
+std::FILE* OpenForWriting(const std::string& path_utf8) {
+#if defined(_WIN32)
+    return _wfopen(Widen(path_utf8.c_str()).c_str(), L"wb");
+#else
+    return std::fopen(path_utf8.c_str(), "wb");
+#endif
+}
+
+void RemoveFileQuietly(const std::string& path_utf8) {
+#if defined(_WIN32)
+    _wremove(Widen(path_utf8.c_str()).c_str());
+#else
+    std::remove(path_utf8.c_str());
+#endif
+}
+
+bool RenameOver(const std::string& from_utf8, const std::string& to_utf8) {
+#if defined(_WIN32)
+    return MoveFileExW(Widen(from_utf8.c_str()).c_str(), Widen(to_utf8.c_str()).c_str(),
+                       MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    return std::rename(from_utf8.c_str(), to_utf8.c_str()) == 0;
+#endif
+}
+
+// A hidden sibling in the destination's own directory — a rename only works within one
+// file system — named so two processes extracting to the same path do not share it.
+std::string TemporarySiblingOf(const std::string& path_utf8) {
+    const size_t slash = path_utf8.find_last_of("/\\");
+    const std::string dir = slash == std::string::npos ? std::string(".") : path_utf8.substr(0, slash);
+    const std::string name = slash == std::string::npos ? path_utf8 : path_utf8.substr(slash + 1);
+#if defined(_WIN32)
+    const unsigned long pid = GetCurrentProcessId();
+#else
+    const unsigned long pid = static_cast<unsigned long>(::getpid());
+#endif
+    return dir + "/." + name + "." + std::to_string(pid) + ".megapdf-tmp";
+}
+
+}  // namespace
+
+extern "C" {
+
+MEGAPDF_API int megapdf_page_index(const megapdf_page* p) {
+    if (p == nullptr) return -1;
+    Guard guard(CoreLock());
+    return p->index;
+}
+
+MEGAPDF_API int megapdf_page_rotation(const megapdf_document* d, int page) {
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (page < 0 || page >= FPDF_GetPageCount(d->doc)) return MEGAPDF_ERR_ARGUMENT;
+    for (const megapdf_page* p : d->open_pages) {
+        if (p->index == page) return FPDFPage_GetRotation(p->page) & 3;
+    }
+    RawPage rp(d->doc, page);
+    if (rp.page == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    return FPDFPage_GetRotation(rp.page) & 3;
+}
+
+MEGAPDF_API int megapdf_page_rotate(megapdf_document* d, int page, int quarter_turns) {
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (page < 0 || page >= FPDF_GetPageCount(d->doc)) {
+        SetError(0, "no page at that index");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY);
+    if (rc != MEGAPDF_OK) return rc;
+    const int turns = ((quarter_turns % 4) + 4) % 4;
+    if (turns == 0) return MEGAPDF_OK;
+    // Through every open handle on the page: PDFium keeps a page's size and display matrix
+    // per loaded page object, and only FPDFPage_SetRotation on that object refreshes them.
+    // The first handle reads the rotation; each one is set to the same result.
+    int rotation = -1;
+    for (megapdf_page* p : d->open_pages) {
+        if (p->index != page) continue;
+        if (rotation < 0) rotation = ((FPDFPage_GetRotation(p->page) & 3) + turns) & 3;
+        FPDFPage_SetRotation(p->page, rotation);
+    }
+    if (rotation < 0) {
+        RawPage rp(d->doc, page);
+        if (rp.page == nullptr) {
+            SetError(FPDF_ERR_UNKNOWN, "the page could not be loaded");
+            return MEGAPDF_ERR_PDFIUM;
+        }
+        rotation = ((FPDFPage_GetRotation(rp.page) & 3) + turns) & 3;
+        FPDFPage_SetRotation(rp.page, rotation);
+    }
+    d->page_changes[page]++;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_page_delete(megapdf_document* d, int page, megapdf_removed_page** out_removed) {
+    if (out_removed != nullptr) *out_removed = nullptr;
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    const int count = FPDF_GetPageCount(d->doc);
+    if (page < 0 || page >= count) {
+        SetError(0, "no page at that index");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    if (count == 1) {
+        SetError(0, "a document must keep at least one page");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY);
+    if (rc != MEGAPDF_OK) return rc;
+    megapdf_removed_page* r = nullptr;
+    if (out_removed != nullptr) {
+        // The copy is taken first, before the page's fields are taken out of the AcroForm:
+        // a merged field-and-widget carries its value on the widget, which the copy keeps.
+        r = new (std::nothrow) megapdf_removed_page();
+        if (r == nullptr) {
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return MEGAPDF_ERR_MEMORY;
+        }
+        r->owner = d;
+        r->scratch = FPDF_CreateNewDocument();
+        if (r->scratch == nullptr || !FPDF_ImportPagesByIndex(r->scratch, d->doc, &page, 1, 0)) {
+            if (r->scratch != nullptr) FPDF_CloseDocument(r->scratch);
+            delete r;
+            SetError(FPDF_ERR_UNKNOWN, "the page could not be copied for an undo");
+            return MEGAPDF_ERR_PDFIUM;
+        }
+        try {
+            d->removed_pages.push_back(r);
+        } catch (...) {
+            FPDF_CloseDocument(r->scratch);
+            delete r;
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return MEGAPDF_ERR_MEMORY;
+        }
+    }
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    RemovePageFields(d, page);
+    FPDFPage_Delete(d->doc, page);
+    RenumberPages(d, count, count - 1, [page](int i) { return i == page ? -1 : (i > page ? i - 1 : i); });
+    ResetFormEnvironment(d);
+    if (out_removed != nullptr) *out_removed = r;
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_page_restore(megapdf_document* d, megapdf_removed_page* r, int at) {
+    if (d == nullptr || r == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    if (r->owner != d) {
+        SetError(0, "the removed page belongs to another document");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int count = FPDF_GetPageCount(d->doc);
+    if (at < 0 || at > count) {
+        SetError(0, "no place at that index");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY);
+    if (rc != MEGAPDF_OK) return rc;
+    const int first = 0;
+    if (!FPDF_ImportPagesByIndex(d->doc, r->scratch, &first, 1, at)) {
+        SetError(FPDF_ERR_UNKNOWN, "the page could not be put back");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    RenumberPages(d, count, count + 1, [at](int i) { return i >= at ? i + 1 : i; });
+    FreeRemovedPage(r);
+    ResetFormEnvironment(d);
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API void megapdf_discard_removed_page(megapdf_removed_page* r) {
+    if (r == nullptr) return;
+    Guard guard(CoreLock());
+    FreeRemovedPage(r);
+}
+
+MEGAPDF_API int megapdf_page_move(megapdf_document* d, int from, int to) {
+    if (d == nullptr) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    const int count = FPDF_GetPageCount(d->doc);
+    if (from < 0 || from >= count || to < 0 || to >= count) {
+        SetError(0, "no page at that index");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY);
+    if (rc != MEGAPDF_OK) return rc;
+    if (from == to) return MEGAPDF_OK;
+    if (!FPDF_MovePages(d->doc, &from, 1, to)) {
+        SetError(FPDF_ERR_UNKNOWN, "the page could not be moved");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    RenumberPages(d, count, count, [from, to](int i) {
+        if (i == from) return to;
+        if (from < to) return i > from && i <= to ? i - 1 : i;
+        return i >= to && i < from ? i + 1 : i;
+    });
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_page_insert_blank(megapdf_document* d, int at, double width, double height) {
+    if (d == nullptr || !(width > 0) || !(height > 0)) return MEGAPDF_ERR_ARGUMENT;
+    Guard guard(CoreLock());
+    const int count = FPDF_GetPageCount(d->doc);
+    if (at < 0 || at > count) {
+        SetError(0, "no place at that index");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY);
+    if (rc != MEGAPDF_OK) return rc;
+    FPDF_PAGE page = FPDFPage_New(d->doc, at, width, height);
+    if (page == nullptr) {
+        SetError(FPDF_ERR_UNKNOWN, "the page could not be created");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    // An empty content stream, so the page is a page to every reader and not a dictionary
+    // with no /Contents.
+    FPDFPage_GenerateContent(page);
+    FPDF_ClosePage(page);
+    RenumberPages(d, count, count + 1, [at](int i) { return i >= at ? i + 1 : i; });
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_pages_import(megapdf_document* d, const char* other_path_utf8, const char* unlock_utf8,
+                                     const int* pages, size_t count, int insert_at, int* out_imported) {
+    if (out_imported != nullptr) *out_imported = 0;
+    if (d == nullptr || other_path_utf8 == nullptr || other_path_utf8[0] == '\0' || (count > 0 && pages == nullptr)) {
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    const int before = FPDF_GetPageCount(d->doc);
+    if (insert_at < 0 || insert_at > before) {
+        SetError(0, "no place at that index");
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_ASSEMBLE | MEGAPDF_PERMIT_MODIFY);
+    if (rc != MEGAPDF_OK) return rc;
+    megapdf_document* other = megapdf_open_file(other_path_utf8, unlock_utf8);
+    if (other == nullptr) {
+        // megapdf_open_file() has set the code and the message.
+        return megapdf_last_error() == FPDF_ERR_PASSWORD ? MEGAPDF_ERR_RESTRICTED : MEGAPDF_ERR_FILE;
+    }
+    // Closed on every path but success, where the document keeps it (see import_sources).
+    struct CloseOther {
+        megapdf_document* doc;
+        bool kept = false;
+        ~CloseOther() { if (!kept) megapdf_close(doc); }
+    } closer{other};
+    if ((PermissionsOf(other) & MEGAPDF_PERMIT_COPY) == 0) {
+        SetError(FPDF_ERR_SECURITY, "the other document's security does not allow copying from it");
+        return MEGAPDF_ERR_RESTRICTED;
+    }
+    const int other_count = FPDF_GetPageCount(other->doc);
+    std::vector<int> chosen;
+    try {
+        if (count > 0) chosen.assign(pages, pages + count);
+        else for (int i = 0; i < other_count; i++) chosen.push_back(i);
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return MEGAPDF_ERR_MEMORY;
+    }
+    for (int index : chosen) {
+        if (index < 0 || index >= other_count) {
+            SetError(0, "no page at that index in the other document");
+            return MEGAPDF_ERR_ARGUMENT;
+        }
+    }
+    if (chosen.empty()) return MEGAPDF_OK;
+    if (PagesCarryParentFields(other, &chosen)) {
+        SetError(0, "the pages carry form fields in a hierarchy PDFium cannot copy between documents");
+        return MEGAPDF_ERR_FIELDS;
+    }
+    if (!RenameClashingFields(d, other, chosen)) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return MEGAPDF_ERR_MEMORY;
+    }
+    try {
+        d->import_sources.push_back(other);
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return MEGAPDF_ERR_MEMORY;
+    }
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    if (!FPDF_ImportPagesByIndex(d->doc, other->doc, chosen.data(), static_cast<unsigned long>(chosen.size()), insert_at)) {
+        d->import_sources.pop_back();
+        SetError(FPDF_ERR_UNKNOWN, "PDFium could not copy the pages");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    closer.kept = true;
+    const int imported = FPDF_GetPageCount(d->doc) - before;
+    RenumberPages(d, before, before + imported, [insert_at, imported](int i) { return i >= insert_at ? i + imported : i; });
+    ResetFormEnvironment(d);
+    if (out_imported != nullptr) *out_imported = imported;
+    SetError(0, "");
+    return MEGAPDF_OK;
+}
+
+MEGAPDF_API int megapdf_pages_extract(const megapdf_document* d, const int* pages, size_t count,
+                                      const char* out_path_utf8, const megapdf_cancel* cancel) {
+    if (d == nullptr || out_path_utf8 == nullptr || out_path_utf8[0] == '\0' || (count > 0 && pages == nullptr)) {
+        return MEGAPDF_ERR_ARGUMENT;
+    }
+    Guard guard(CoreLock());
+    const int rc = PageToolsPreflight(d, MEGAPDF_PERMIT_COPY);
+    if (rc != MEGAPDF_OK) return rc;
+    const int page_count = FPDF_GetPageCount(d->doc);
+    for (size_t i = 0; i < count; i++) {
+        if (pages[i] < 0 || pages[i] >= page_count) {
+            SetError(0, "no page at that index");
+            return MEGAPDF_ERR_ARGUMENT;
+        }
+    }
+    const int expected = count > 0 ? static_cast<int>(count) : page_count;
+    if (cancel != nullptr && cancel->raised.load(std::memory_order_relaxed) != 0) return MEGAPDF_ERR_CANCELLED;
+    {
+        std::vector<int> chosen;
+        try {
+            if (count > 0) chosen.assign(pages, pages + count);
+        } catch (...) {
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return MEGAPDF_ERR_MEMORY;
+        }
+        if (PagesCarryParentFields(d, count > 0 ? &chosen : nullptr)) {
+            SetError(0, "the pages carry form fields in a hierarchy PDFium cannot copy between documents");
+            return MEGAPDF_ERR_FIELDS;
+        }
+    }
+    if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
+    FPDF_DOCUMENT out = FPDF_CreateNewDocument();
+    if (out == nullptr) {
+        SetError(FPDF_ERR_UNKNOWN, "PDFium could not create the new document");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    struct CloseOut {
+        FPDF_DOCUMENT doc;
+        ~CloseOut() { FPDF_CloseDocument(doc); }
+    } closer{out};
+    if (!FPDF_ImportPagesByIndex(out, d->doc, count > 0 ? pages : nullptr, static_cast<unsigned long>(count), 0)) {
+        SetError(FPDF_ERR_UNKNOWN, "PDFium could not copy the pages");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    std::string temp;
+    try {
+        temp = TemporarySiblingOf(out_path_utf8);
+    } catch (...) {
+        SetError(FPDF_ERR_UNKNOWN, "out of memory");
+        return MEGAPDF_ERR_MEMORY;
+    }
+    // The whole file to the sibling, then a read-back, then the rename: the save discipline
+    // every platform's save follows (SDD §3.4), so nothing torn ever carries the name.
+    FileWriteBridge bridge{};
+    bridge.fw.version = 1;
+    bridge.fw.WriteBlock = FileWriteBlock;
+    bridge.file = OpenForWriting(temp);
+    bridge.cancel = cancel;
+    if (bridge.file == nullptr) {
+        SetError(FPDF_ERR_FILE, "the file could not be created");
+        return MEGAPDF_ERR_FILE;
+    }
+    const FPDF_BOOL saved = FPDF_SaveAsCopy(out, &bridge.fw, 0);
+    bool flushed = std::fflush(bridge.file) == 0;
+#if !defined(_WIN32)
+    if (flushed) flushed = ::fsync(::fileno(bridge.file)) == 0;
+#endif
+    if (std::fclose(bridge.file) != 0) flushed = false;
+    if (bridge.cancelled) {
+        RemoveFileQuietly(temp);
+        return MEGAPDF_ERR_CANCELLED;
+    }
+    if (bridge.failed || !flushed) {
+        RemoveFileQuietly(temp);
+        SetError(FPDF_ERR_FILE, "the file could not be written");
+        return MEGAPDF_ERR_FILE;
+    }
+    if (!saved) {
+        RemoveFileQuietly(temp);
+        SetError(FPDF_ERR_UNKNOWN, "PDFium could not serialize the new document");
+        return MEGAPDF_ERR_PDFIUM;
+    }
+    // Read back what was written, through the same open the apps use, before it takes the name.
+    megapdf_document* check = megapdf_open_file(temp.c_str(), nullptr);
+    const int check_pages = check != nullptr ? FPDF_GetPageCount(check->doc) : -1;
+    megapdf_close(check);
+    if (check_pages != expected) {
+        RemoveFileQuietly(temp);
+        SetError(FPDF_ERR_FILE, "the written file did not read back with the pages expected");
+        return MEGAPDF_ERR_FILE;
+    }
+    if (!RenameOver(temp, out_path_utf8)) {
+        RemoveFileQuietly(temp);
+        SetError(FPDF_ERR_FILE, "the file could not be renamed into place");
+        return MEGAPDF_ERR_FILE;
+    }
+    SetError(0, "");
     return MEGAPDF_OK;
 }
 

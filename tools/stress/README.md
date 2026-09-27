@@ -80,6 +80,17 @@ boxes and family names are the Windows substitutes').
 Everything written to `--out` contains file names and stays private (the corpus is
 the owner's own documents). The report prints indices and numbers only.
 
+## Page tools battery (#174)
+
+`pages-battery.sh <megapdf-cli> <corpus> <out-dir> [--limit N] [--jobs N]` drives the
+shipped `megapdf-cli pages` command over every document, one process per operation:
+rotate every page, delete page 1, move the last page to the front, extract the first and
+last pages. Each output is checked by `qpdf --check` and for the page count expected, then
+deleted. The gate is 0 crashes, 0 hangs, 0 qpdf failures, 0 page-count mismatches and no
+refusal but the two contract 10 documents (a restricted document, and an extract of pages
+whose form fields sit in a `/Parent` hierarchy). The log keys each document by a hash of
+its path; the summary is counts and timings only.
+
 ## The shared engine core
 
 Since #38 the desktop engine forwards contracts to `core/` (ADR-003), so a run
