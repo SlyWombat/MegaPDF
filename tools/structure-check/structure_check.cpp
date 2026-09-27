@@ -19,9 +19,17 @@
 //            still tokenize FPDFText_GetUnicode literally.
 //         2. order agreement — Kendall tau between the heuristic blocks' token order and the
 //            structure tree's own token order (from its marked-content IDs), on pages the
-//            census finds tagged. Contract 9 has no tagged path until #358, so this reimplements
-//            just the tree-to-text mapping from design #1.1 (marked-content IDs, not element
-//            classification) — a phase-1 proxy, not #358's real order-source comparison.
+//            census finds tagged. The tree side reimplements just the tree-to-text mapping
+//            from design #1.1 (marked-content IDs in depth-first order, which is exactly the
+//            order #358's tagged path reads); the heuristic side is forced through
+//            MEGAPDF_STRUCTURE_HEURISTIC_ONLY on pages contract 9 read through the tree
+//            (HeuristicTokensForPage), so the measure always compares the two sources.
+//            #358 also reports `tree=` (pages whose source is TAGGED — the census's `tagged=`
+//            minus this is what the trust rule rejected) and, per tagged page with a
+//            --reference, four index-aligned lists for the trust-threshold measurement:
+//            tree_cov_page, tree_cov (the tree's character coverage x1000), tau_treeref (the
+//            tree order against poppler) and tau_heurref (the heuristic order against poppler);
+//            tools/stress/trust_threshold.py bins them over a battery log.
 //         3. agreement with poppler — the same tau against `pdftotext -layout` output, read
 //            from --reference (a file the battery already produced; this tool never shells
 //            out). Informational only.
@@ -541,6 +549,30 @@ std::string JoinInts(const std::vector<long long>& v) {
     return out.str();
 }
 
+// #358: the heuristic path's tokens for page `p`. When contract 9 read the page through its
+// tree, the default load's tokens are the TREE's order, so measures 2 and 3's "heuristic"
+// column comes from a second, one-page load with MEGAPDF_STRUCTURE_HEURISTIC_ONLY (the same
+// KEEP_FURNITURE | ALL_FIELDS flags, FIELD blocks excluded as everywhere else); otherwise the
+// default load already IS the heuristic answer and is returned as given.
+std::vector<Token> HeuristicTokensForPage(megapdf_document* doc, int p, const std::vector<Token>& default_tokens,
+                                          bool page_was_tagged) {
+    if (!page_was_tagged) return default_tokens;
+    megapdf_structure* h = megapdf_structure_load(
+        doc, p, 1, MEGAPDF_STRUCTURE_KEEP_FURNITURE | MEGAPDF_STRUCTURE_ALL_FIELDS | MEGAPDF_STRUCTURE_HEURISTIC_ONLY,
+        nullptr);
+    if (h == nullptr) return default_tokens;
+    std::vector<Token> out;
+    const size_t n = megapdf_block_count(h);
+    for (size_t i = 0; i < n; i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(h, i, &b) != MEGAPDF_OK || b.kind == MEGAPDF_BLOCK_FIELD) continue;
+        const std::vector<Token> toks = Tokenize(Utf16ToCodepoints(BlockString(h, i, MEGAPDF_BLOCK_TEXT)));
+        out.insert(out.end(), toks.begin(), toks.end());
+    }
+    megapdf_structure_free(h);
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // check mode
 // ---------------------------------------------------------------------------
@@ -664,6 +696,8 @@ int RunCheck(const Options& opt) {
     // measure above never sees it (it reads megapdf_block_string() directly), so it must be
     // stripped from the CLI's actual stdout before tokenizing or a textless page would count as
     // an "invented" mismatch against the raw side's correctly-empty token set.
+    // #358: likewise a tagged page's "[Figure: alt]" line -- the tree's description of a
+    // picture, not text on the page (the writer keeps it on one line, so the whole line goes).
     auto strip_page_image_placeholder = [](std::string text) {
         const std::string prefix = "[Page ";
         const std::string suffix = " has no text layer]";
@@ -676,7 +710,21 @@ int RunCheck(const Options& opt) {
             }
             text.erase(at, digits_end + suffix.size() - at);
         }
-        return text;
+        std::string kept;
+        size_t start = 0;
+        while (start <= text.size()) {
+            size_t end = text.find('\n', start);
+            if (end == std::string::npos) end = text.size();
+            const std::string line = text.substr(start, end - start);
+            const bool figure = line.size() >= 10 && line.compare(0, 9, "[Figure: ") == 0 && line.back() == ']';
+            if (!figure) {
+                kept += line;
+                kept += '\n';
+            }
+            if (end == text.size()) break;
+            start = end + 1;
+        }
+        return kept;
     };
     std::vector<std::string> cli_reference_pages;
     if (!opt.cli_reference_file.empty()) {
@@ -687,6 +735,18 @@ int RunCheck(const Options& opt) {
     std::vector<int> confidences;
     std::vector<double> ms_per_page;
     int tagged_pages = 0, textless_pages = 0, multicol_pages = 0, manycut_pages = 0;
+    // #358: pages contract 9 actually read through the tree (source == TAGGED) -- the census's
+    // "tagged" count minus this is what the trust rule rejected.
+    int tree_pages = 0;
+    // #358's trust-threshold measurement, one entry per tagged page with a --reference (index-
+    // aligned): the page index, the tree's character coverage (x1000: real characters whose
+    // text object carries a marked-content ID the page's tree references, over all real
+    // characters -- the type-agnostic proxy for the core's own rule), tau of the TREE order
+    // (TreeTokenOrder: the DFS marked-content order, i.e. exactly the order the tagged path
+    // reads) against poppler, and tau of the heuristic order against poppler (the same number
+    // tau_ref holds for that page). Binned by coverage over the corpus, the two tau columns say
+    // at which coverage the tree stops beating the heuristics -- kTaggedMinCoverage's evidence.
+    std::vector<long long> tree_cov_page, tree_cov_x1000, tau_treeref_x1000, tau_heurref_x1000;
     FidelityCounts fidelity_total;
     FidelityCounts cli_fidelity_total;   // #355: the same measure 1, through megapdf-cli's own output
     int fidelity_low09 = 0;
@@ -739,20 +799,57 @@ int RunCheck(const Options& opt) {
                 cli_fidelity_total.b += cli_fc.b;
             }
 
+            if (megapdf_structure_page_source(s, p) == MEGAPDF_STRUCTURE_SOURCE_TAGGED) tree_pages++;
             if (!opt.census_only) {
                 std::vector<int> mcids;
+                std::vector<Token> tree_tokens;
+                bool page_tagged = false;
+                double tree_coverage = -1;
                 if (raw_page != nullptr && TaggedPageTree(raw_page, &mcids)) {
                     tagged_pages++;
-                    const std::vector<Token> tree_tokens = TreeTokenOrder(textpage, mcids);
-                    const double tau = KendallTau(tokens_by_page[static_cast<size_t>(p)], tree_tokens);
+                    page_tagged = true;
+                    tree_tokens = TreeTokenOrder(textpage, mcids);
+                    // measure 2 (#354): the HEURISTIC order against the tree's. Forced through
+                    // HEURISTIC_ONLY now that the default path may itself be the tree (#358),
+                    // so the measure keeps comparing the two sources rather than the tree with
+                    // itself.
+                    const std::vector<Token> heuristic_tokens =
+                        HeuristicTokensForPage(doc, p, tokens_by_page[static_cast<size_t>(p)],
+                                               megapdf_structure_page_source(s, p) == MEGAPDF_STRUCTURE_SOURCE_TAGGED);
+                    const double tau = KendallTau(heuristic_tokens, tree_tokens);
                     if (tau > kTauNotEnoughData) tau_tree_x1000.push_back(static_cast<long long>(tau * 1000.0));
-                } else if (raw_page != nullptr) {
-                    std::vector<int> discard;
-                    if (TaggedPageTree(raw_page, &discard)) tagged_pages++;
+                    // #358: type-agnostic coverage of the page's real characters by the tree.
+                    std::unordered_set<int> referenced(mcids.begin(), mcids.end());
+                    long long real = 0, covered = 0;
+                    for (int i = 0; i < chars; i++) {
+                        if (FPDFText_IsGenerated(textpage, i) == 1) continue;
+                        const unsigned int u = FPDFText_GetUnicode(textpage, i);
+                        if (u == 0 || IsWhitespaceCpLocal(u)) continue;
+                        real++;
+                        FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(textpage, i);
+                        if (obj != nullptr && referenced.count(FPDFPageObj_GetMarkedContentID(obj)) != 0) covered++;
+                    }
+                    if (real > 0) tree_coverage = static_cast<double>(covered) / static_cast<double>(real);
                 }
                 if (static_cast<size_t>(p) < reference_pages.size()) {
                     const std::vector<Token> ref_tokens = Tokenize(Utf8ToCodepoints(reference_pages[static_cast<size_t>(p)]));
+                    // #358: measure 3 stays "this page's blocks against poppler", whichever
+                    // path produced them (the shipped answer). The trust-threshold columns
+                    // below separate the two sources explicitly.
                     const double tau = KendallTau(tokens_by_page[static_cast<size_t>(p)], ref_tokens);
+                    if (page_tagged && tree_coverage >= 0) {
+                        const double tau_tree_ref = KendallTau(tree_tokens, ref_tokens);
+                        const std::vector<Token> heuristic_tokens =
+                            HeuristicTokensForPage(doc, p, tokens_by_page[static_cast<size_t>(p)],
+                                                   megapdf_structure_page_source(s, p) == MEGAPDF_STRUCTURE_SOURCE_TAGGED);
+                        const double tau_heur_ref = KendallTau(heuristic_tokens, ref_tokens);
+                        if (tau_tree_ref > kTauNotEnoughData && tau_heur_ref > kTauNotEnoughData) {
+                            tree_cov_page.push_back(p);
+                            tree_cov_x1000.push_back(static_cast<long long>(tree_coverage * 1000.0));
+                            tau_treeref_x1000.push_back(static_cast<long long>(tau_tree_ref * 1000.0));
+                            tau_heurref_x1000.push_back(static_cast<long long>(tau_heur_ref * 1000.0));
+                        }
+                    }
                     if (tau > kTauNotEnoughData) {
                         tau_ref_x1000.push_back(static_cast<long long>(tau * 1000.0));
                         // #384: page-shape metadata for this same tau, so a slice by "title-page-
@@ -838,19 +935,21 @@ int RunCheck(const Options& opt) {
                  << " blocks_furniture=" << block_kind_counts[MEGAPDF_BLOCK_FURNITURE]
                  << " blocks_field=" << block_kind_counts[MEGAPDF_BLOCK_FIELD];
 
-    std::printf("result=ok pages=%d tagged=%d tree=0 textless=%d multicol=%d manycut=%d ms_per_page=%.3f rss_kb=%lld "
+    std::printf("result=ok pages=%d tagged=%d tree=%d textless=%d multicol=%d manycut=%d ms_per_page=%.3f rss_kb=%lld "
                 "conf_deciles=%s %s fid_match=%lld fid_a=%lld fid_b=%lld fid_low09=%d "
                 "cli_fid_match=%lld cli_fid_a=%lld cli_fid_b=%lld "
                 "tau_tree_n=%zu tau_tree=%s tau_ref_n=%zu tau_ref=%s "
-                "tau_ref_page=%s tau_ref_tokens=%s tau_ref_area=%s tau_ref_jump=%s tau_ref_conf=%s\n",
-                pages, tagged_pages, textless_pages, multicol_pages, manycut_pages, ms_avg, PeakRssKb(),
+                "tau_ref_page=%s tau_ref_tokens=%s tau_ref_area=%s tau_ref_jump=%s tau_ref_conf=%s "
+                "tree_cov_n=%zu tree_cov_page=%s tree_cov=%s tau_treeref=%s tau_heurref=%s\n",
+                pages, tagged_pages, tree_pages, textless_pages, multicol_pages, manycut_pages, ms_avg, PeakRssKb(),
                 ConfidenceDeciles(confidences).c_str(), blocks_field.str().c_str(), fidelity_total.matched,
                 fidelity_total.a, fidelity_total.b, fidelity_low09,
                 cli_fidelity_total.matched, cli_fidelity_total.a, cli_fidelity_total.b,
                 tau_tree_x1000.size(), JoinInts(tau_tree_x1000).c_str(), tau_ref_x1000.size(),
                 JoinInts(tau_ref_x1000).c_str(), JoinInts(tau_ref_page).c_str(),
                 JoinInts(tau_ref_tokens).c_str(), JoinInts(tau_ref_area).c_str(), JoinInts(tau_ref_jump).c_str(),
-                JoinInts(tau_ref_conf).c_str());
+                JoinInts(tau_ref_conf).c_str(), tree_cov_page.size(), JoinInts(tree_cov_page).c_str(),
+                JoinInts(tree_cov_x1000).c_str(), JoinInts(tau_treeref_x1000).c_str(), JoinInts(tau_heurref_x1000).c_str());
     return 0;
 }
 

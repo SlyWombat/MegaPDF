@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Contract 9 fixtures (#142, #353): columns, furniture, lists, headings, a form-XObject
-text run, a scanned page and a mixed text/scan document — design §7's list.
+text run, a scanned page and a mixed text/scan document — design §7's list — plus #358's
+two tagged documents (a structure tree written by hand: marked content, /StructTreeRoot,
+/ParentTree, /RoleMap) and #382's tiny-font-size page.
 
     tools/gen_structure_fixtures.py tests/MegaPDF.Core.Tests/Fixtures/structure
+
+The output is not byte-deterministic (fontTools stamps each subset), so a run rewrites every
+fixture; commit only the ones a change is about, or every golden moves for nothing.
 
 Unlike tools/gen_test_fixtures.py (stdlib only, run by CI on every OS on every push), these
 fixtures embed real TrueType font programs so their glyph metrics — and so the golden block
@@ -158,40 +163,276 @@ class Doc:
         self.bold_kit = bold
         self.regular = regular.add(self.add, "MegaPDFStructureFixture-Regular")
         self.bold = bold.add(self.add, "MegaPDFStructureFixture-Bold")
+        self.catalog_extra = b""
 
     def add(self, body):
         self.objs.append(body)
         return len(self.objs)
 
+    def reserve(self):
+        """An object number to fill in later with set() -- the structure tree needs parents
+        and children to reference each other."""
+        return self.add(b"<< >>")
+
+    def set(self, num, body):
+        self.objs[num - 1] = body
+
     def font_refs(self):
         return b"/F1 %d 0 R /F2 %d 0 R" % (self.regular, self.bold)
 
-    def add_page(self, content, extra_resources=b"", annots=None):
+    def add_page(self, content, extra_resources=b"", annots=None, page_extra=b""):
         content_ref = self.add(stream(b"", content))
         placeholder = self.add(b"<< /Type /Page >>")   # patched below once Pages' object number is known
-        self.pages.append((placeholder, content_ref, extra_resources, annots))
+        self.pages.append((placeholder, content_ref, extra_resources, annots, page_extra))
+        return placeholder
 
     def finish(self):
         pages_num = len(self.objs) + 1   # patching below adds nothing; Pages is the next object
         # Patch each page object in place (same object number, real content).
         kids = []
-        for placeholder, content_ref, extra_resources, annots in self.pages:
+        for placeholder, content_ref, extra_resources, annots, page_extra in self.pages:
             self.objs[placeholder - 1] = (
                 b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
-                b"/Resources << /Font << %s >>%s >> /Contents %d 0 R%s >>"
+                b"/Resources << /Font << %s >>%s >> /Contents %d 0 R%s%s >>"
                 % (pages_num, self.font_refs(), extra_resources, content_ref,
-                   b" /Annots [%s]" % b" ".join(b"%d 0 R" % a for a in annots) if annots else b""))
+                   b" /Annots [%s]" % b" ".join(b"%d 0 R" % a for a in annots) if annots else b"",
+                   page_extra))
             kids.append(placeholder)
         pages = self.add(b"<< /Type /Pages /Kids [%s] /Count %d >>"
                          % (b" ".join(b"%d 0 R" % k for k in kids), len(kids)))
         assert pages == pages_num
-        self.add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+        self.add(b"<< /Type /Catalog /Pages %d 0 R%s >>" % (pages, self.catalog_extra))
         return build(self.objs)
 
 
 def text_ops(font_ref, size, x, y, text):
     return b"BT /%s %s Tf %s %s Td (%s) Tj ET\n" % (font_ref, str(size).encode(), str(x).encode(), str(y).encode(),
                                                      winansi(text))
+
+
+# ---------------------------------------------------------------------------
+# Tagged PDF (#358): marked content in the page stream + a structure tree in the catalog.
+# Written by hand here rather than with pikepdf (the design's first suggestion) because this
+# generator already writes every object itself, and a tree built from the same Doc keeps the
+# fixture's fonts, metrics and goldens on the same footing as the other structure fixtures.
+# ---------------------------------------------------------------------------
+
+def marked(tag, mcid, ops):
+    """`ops` wrapped in a marked-content sequence carrying MCID `mcid`."""
+    return b"/%s << /MCID %d >> BDC\n%sEMC\n" % (tag.encode(), mcid, ops)
+
+
+def artifact(ops):
+    """`ops` wrapped in a pagination artifact -- outside the tree by definition."""
+    return b"/Artifact << /Type /Pagination >> BDC\n%sEMC\n" % ops
+
+
+class Elem:
+    """A structure element: its /S type, its kids in order -- (page_index, mcid) pairs for
+    marked content, or nested Elems -- and an optional /Alt."""
+
+    def __init__(self, s, kids=(), alt=None):
+        self.s = s
+        self.kids = list(kids)
+        self.alt = alt
+        self.num = None
+
+    def first_page(self):
+        for k in self.kids:
+            if isinstance(k, Elem):
+                p = k.first_page()
+                if p is not None:
+                    return p
+            else:
+                return k[0]
+        return None
+
+
+def emit_tree(d, roots, page_nums, role_map=b""):
+    """Writes the /StructTreeRoot, every element (with /P, /Pg and /K), the /ParentTree the
+    page-level tree is built from (PDFium's FPDF_StructTree_GetForPage reads a page's tree
+    bottom-up from /StructParents -> /ParentTree, so an element missing there is invisible
+    to it, whatever /K says) and the catalog's /MarkInfo. Every page gets /StructParents = its
+    index. Integer kids need the element's own /Pg to be that page; a kid on another page is
+    written as an /MCR dictionary."""
+    root = d.reserve()
+
+    def alloc(e):
+        e.num = d.reserve()
+        for k in e.kids:
+            if isinstance(k, Elem):
+                alloc(k)
+
+    for r in roots:
+        alloc(r)
+    parent_nums = [dict() for _ in page_nums]
+
+    def emit(e, parent_num):
+        pg = e.first_page()
+        kids_out = []
+        for k in e.kids:
+            if isinstance(k, Elem):
+                emit(k, e.num)
+                kids_out.append(b"%d 0 R" % k.num)
+            else:
+                pi, mcid = k
+                if pi == pg:
+                    kids_out.append(b"%d" % mcid)
+                else:
+                    kids_out.append(b"<< /Type /MCR /Pg %d 0 R /MCID %d >>" % (page_nums[pi], mcid))
+                parent_nums[pi][mcid] = e.num
+        body = b"<< /Type /StructElem /S /%s /P %d 0 R" % (e.s.encode(), parent_num)
+        if pg is not None:
+            body += b" /Pg %d 0 R" % page_nums[pg]
+        body += b" /K [%s]" % b" ".join(kids_out)
+        if e.alt:
+            body += b" /Alt (%s)" % winansi(e.alt)
+        d.set(e.num, body + b" >>")
+
+    for r in roots:
+        emit(r, root)
+    nums = []
+    for pi, owners in enumerate(parent_nums):
+        entries = []
+        for mcid in range(max(owners.keys()) + 1 if owners else 0):
+            entries.append(b"%d 0 R" % owners[mcid] if mcid in owners else b"null")
+        nums.append(b"%d [%s]" % (pi, b" ".join(entries)))
+    parent_tree = d.add(b"<< /Nums [%s] >>" % b" ".join(nums))
+    d.set(root, b"<< /Type /StructTreeRoot /K [%s] /ParentTree %d 0 R /ParentTreeNextKey %d%s >>"
+          % (b" ".join(b"%d 0 R" % r.num for r in roots), parent_tree, len(page_nums), role_map))
+    d.catalog_extra = b" /MarkInfo << /Marked true >> /StructTreeRoot %d 0 R" % root
+
+
+GREY_IMAGE = (b"/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8",
+              b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80")
+
+
+def tagged_page_one():
+    """The first page's content stream, shared by tagged.pdf and tagged-wrong.pdf: a running
+    header as an artifact, an H1, a two-line P (two MCIDs in one element), an H2, a bulleted
+    list whose second item nests a two-item sub-list, and a closing P. MCIDs 0..14."""
+    c = artifact(text_ops(b"F1", 10, 72, 760, "Tagged Fixture"))
+    c += marked("H1", 0, text_ops(b"F2", 20, 72, 720, "Tagged Document Title"))
+    c += marked("P", 1, text_ops(b"F1", 12, 72, 690, "First paragraph of tagged text with a"))
+    c += marked("P", 2, text_ops(b"F1", 12, 72, 675, "second line inside the same paragraph."))
+    c += marked("H2", 3, text_ops(b"F2", 16, 72, 640, "Items"))
+    c += marked("Lbl", 4, text_ops(b"F1", 12, 72, 615, "•"))
+    c += marked("LBody", 5, text_ops(b"F1", 12, 90, 615, "Milk"))
+    c += marked("Lbl", 6, text_ops(b"F1", 12, 72, 595, "•"))
+    c += marked("LBody", 7, text_ops(b"F1", 12, 90, 595, "Bread"))
+    c += marked("Lbl", 8, text_ops(b"F1", 12, 100, 575, "-"))
+    c += marked("LBody", 9, text_ops(b"F1", 12, 114, 575, "Whole wheat"))
+    c += marked("Lbl", 10, text_ops(b"F1", 12, 100, 555, "-"))
+    c += marked("LBody", 11, text_ops(b"F1", 12, 114, 555, "Rye"))
+    c += marked("Lbl", 12, text_ops(b"F1", 12, 72, 535, "•"))
+    c += marked("LBody", 13, text_ops(b"F1", 12, 90, 535, "Eggs"))
+    c += marked("P", 14, text_ops(b"F1", 12, 72, 500, "Closing paragraph on the first page."))
+    return c
+
+
+def gen_tagged(regular, bold):
+    """#358: a two-page tagged document, every design §1.1 kind at once. Page one is
+    tagged_page_one(); page two has a heading whose /S is a custom /MyHeading that the
+    /RoleMap resolves to /H2 (proving PDFium's FPDF_StructElement_GetType applies the map),
+    a three-column table with a /THead row of /TH cells, a /Figure with /Alt over a small
+    image, and -- drawn ABOVE the heading on the page but LAST in the tree -- a paragraph
+    containing a /Link, so the tagged output's order visibly comes from the tree and the
+    --heuristic output's from geometry."""
+    d = Doc(regular, bold)
+    image = d.add(stream(*GREY_IMAGE))
+    p1 = d.add_page(tagged_page_one(), page_extra=b" /StructParents 0")
+    c = artifact(text_ops(b"F1", 10, 72, 760, "Tagged Fixture"))
+    # Word gaps of 15-16 pt: wider than BuildWords' 0.8 em (9.6 pt at 12 pt) so the three
+    # runs stay separate words, narrower than BuildLines' 2 x font size line split.
+    c += marked("P", 11, text_ops(b"F1", 12, 72, 740, "See the"))
+    c += marked("Link", 12, text_ops(b"F1", 12, 128, 740, "project site"))
+    c += marked("P", 13, text_ops(b"F1", 12, 212, 740, "for details."))
+    c += marked("MyHeading", 0, text_ops(b"F2", 16, 72, 705, "Table of Values"))
+    c += marked("TH", 1, text_ops(b"F2", 12, 72, 675, "Name"))
+    c += marked("TH", 2, text_ops(b"F2", 12, 200, 675, "Count"))
+    c += marked("TH", 3, text_ops(b"F2", 12, 330, 675, "Price"))
+    c += marked("TD", 4, text_ops(b"F1", 12, 72, 655, "Apples"))
+    c += marked("TD", 5, text_ops(b"F1", 12, 200, 655, "12"))
+    c += marked("TD", 6, text_ops(b"F1", 12, 330, 655, "3.50"))
+    c += marked("TD", 7, text_ops(b"F1", 12, 72, 635, "Pears"))
+    c += marked("TD", 8, text_ops(b"F1", 12, 200, 635, "7"))
+    c += marked("TD", 9, text_ops(b"F1", 12, 330, 635, "4.25"))
+    c += marked("Figure", 10, b"q 120 0 0 80 72 500 cm /Im1 Do Q\n")
+    p2 = d.add_page(c, extra_resources=b" /XObject << /Im1 %d 0 R >>" % image, page_extra=b" /StructParents 1")
+    doc = Elem("Document", [
+        Elem("H1", [(0, 0)]),
+        Elem("P", [(0, 1), (0, 2)]),
+        Elem("H2", [(0, 3)]),
+        Elem("L", [
+            Elem("LI", [Elem("Lbl", [(0, 4)]), Elem("LBody", [(0, 5)])]),
+            Elem("LI", [Elem("Lbl", [(0, 6)]), Elem("LBody", [(0, 7), Elem("L", [
+                Elem("LI", [Elem("Lbl", [(0, 8)]), Elem("LBody", [(0, 9)])]),
+                Elem("LI", [Elem("Lbl", [(0, 10)]), Elem("LBody", [(0, 11)])]),
+            ])])]),
+            Elem("LI", [Elem("Lbl", [(0, 12)]), Elem("LBody", [(0, 13)])]),
+        ]),
+        Elem("P", [(0, 14)]),
+        Elem("MyHeading", [(1, 0)]),
+        Elem("Table", [
+            Elem("THead", [Elem("TR", [Elem("TH", [(1, 1)]), Elem("TH", [(1, 2)]), Elem("TH", [(1, 3)])])]),
+            Elem("TBody", [
+                Elem("TR", [Elem("TD", [(1, 4)]), Elem("TD", [(1, 5)]), Elem("TD", [(1, 6)])]),
+                Elem("TR", [Elem("TD", [(1, 7)]), Elem("TD", [(1, 8)]), Elem("TD", [(1, 9)])]),
+            ]),
+        ]),
+        Elem("Figure", [(1, 10)], alt="A grey square standing in for a chart"),
+        Elem("P", [(1, 11), Elem("Link", [(1, 12)]), (1, 13)]),
+    ])
+    emit_tree(d, [doc], [p1, p2], role_map=b" /RoleMap << /MyHeading /H2 >>")
+    return d.finish()
+
+
+def gen_tagged_wrong(regular, bold):
+    """#358's trust-rule fixture: tagged.pdf's first page with a tree that is deliberately
+    wrong -- it references only 95 of the page's 163 real characters (58%, counting the
+    artifact header the rule credits as furniture: the two-line paragraph and one nested item
+    are left out) and lists what it does reference in a scrambled order. The rule must reject
+    it: the page extracts through the heuristic path, source HEURISTIC, confidence <= 80."""
+    d = Doc(regular, bold)
+    p1 = d.add_page(tagged_page_one(), page_extra=b" /StructParents 0")
+    doc = Elem("Document", [
+        Elem("P", [(0, 14)]),
+        Elem("L", [
+            Elem("LI", [Elem("Lbl", [(0, 12)]), Elem("LBody", [(0, 13)])]),
+            Elem("LI", [Elem("Lbl", [(0, 4)]), Elem("LBody", [(0, 5)])]),
+            Elem("LI", [Elem("Lbl", [(0, 6)]), Elem("LBody", [(0, 7), Elem("L", [
+                Elem("LI", [Elem("Lbl", [(0, 8)]), Elem("LBody", [(0, 9)])]),
+            ])])]),
+        ]),
+        Elem("H2", [(0, 3)]),
+        Elem("H1", [(0, 0)]),
+    ])
+    emit_tree(d, [doc], [p1])
+    return d.finish()
+
+
+def gen_tiny_font_size(regular, bold):
+    """#382: the body-size-rounds-to-0 shape, as a fixture. An invisible OCR-style text layer
+    (text render mode 3) drawn with `/F1 0.01 Tf` and a text matrix scaled by 1200 -- so
+    FPDFText_GetFontSize reports 0.01 for most of the page's characters while the glyphs
+    are drawn at 12 pt -- over a placeholder image, plus a visible 12 pt caption and a
+    visible 20 pt bold heading. Before the fix the modal 0.5 pt bucket was 0 and every line
+    on the page passed the size-based heading test; after it the caption's 12 pt is the body
+    size, the heading is the only HEADING and the OCR lines are ordinary paragraphs."""
+    d = Doc(regular, bold)
+    image = d.add(stream(*GREY_IMAGE))
+    c = b"q 468 0 0 300 72 400 cm /Im1 Do Q\n"
+    ocr = ["Recognised text line one of the invisible layer.",
+           "Recognised text line two of the invisible layer.",
+           "Recognised text line three of the invisible layer.",
+           "Recognised text line four of the invisible layer."]
+    for i, line in enumerate(ocr):
+        y = 680 - i * 15
+        c += b"BT 3 Tr /F1 0.01 Tf 1200 0 0 1200 72 %d Tm (%s) Tj ET\n" % (y, winansi(line))
+    c += text_ops(b"F2", 20, 72, 740, "Scan Heading")
+    c += text_ops(b"F1", 12, 72, 370, "Scanned page with an invisible text layer.")
+    d.add_page(c, extra_resources=b" /XObject << /Im1 %d 0 R >>" % image)
+    return d.finish()
 
 
 # ---------------------------------------------------------------------------
@@ -356,32 +597,6 @@ def gen_mixed(regular, bold):
     return d.finish()
 
 
-def gen_tiny_font_size(regular, bold):
-    """#382: the body-size-rounds-to-0 shape, as a fixture. An invisible OCR-style text layer
-    (text render mode 3) drawn with `/F1 0.01 Tf` and a text matrix scaled by 1200 -- so
-    FPDFText_GetFontSize reports 0.01 for most of the page's characters while the glyphs
-    are drawn at 12 pt -- over a placeholder image, plus a visible 12 pt caption and a
-    visible 20 pt bold heading. Before the fix the modal 0.5 pt bucket was 0 and every line
-    on the page passed the size-based heading test; after it the caption's 12 pt is the body
-    size, the heading is the only HEADING and the OCR lines are ordinary paragraphs."""
-    d = Doc(regular, bold)
-    image = d.add(stream(
-        b"/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8",
-        b"\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80\x80"))
-    c = b"q 468 0 0 300 72 400 cm /Im1 Do Q\n"
-    ocr = ["Recognised text line one of the invisible layer.",
-           "Recognised text line two of the invisible layer.",
-           "Recognised text line three of the invisible layer.",
-           "Recognised text line four of the invisible layer."]
-    for i, line in enumerate(ocr):
-        y = 680 - i * 15
-        c += b"BT 3 Tr /F1 0.01 Tf 1200 0 0 1200 72 %d Tm (%s) Tj ET\n" % (y, winansi(line))
-    c += text_ops(b"F2", 20, 72, 740, "Scan Heading")
-    c += text_ops(b"F1", 12, 72, 370, "Scanned page with an invisible text layer.")
-    d.add_page(c, extra_resources=b" /XObject << /Im1 %d 0 R >>" % image)
-    return d.finish()
-
-
 def main():
     outdir = sys.argv[1] if len(sys.argv) > 1 else "tests/MegaPDF.Core.Tests/Fixtures/structure"
     os.makedirs(outdir, exist_ok=True)
@@ -399,6 +614,8 @@ def main():
         ("xobject-text.pdf", gen_xobject_text),
         ("scan.pdf", gen_scan),
         ("mixed.pdf", gen_mixed),
+        ("tagged.pdf", gen_tagged),
+        ("tagged-wrong.pdf", gen_tagged_wrong),
         ("tiny-font-size.pdf", gen_tiny_font_size),
     )
     for name, gen in generators:

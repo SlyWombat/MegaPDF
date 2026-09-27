@@ -1081,10 +1081,24 @@ MEGAPDF_API size_t megapdf_redaction_refusal_message(const megapdf_redaction_rep
 MEGAPDF_API int megapdf_redaction_poisoned(const megapdf_document* document);
 
 /* --------------------------------------------------------------------------
- * Contract 9: document structure (#142, #353, #168; SDD §3.9, §6.2 contract 6).
+ * Contract 9: document structure (#142, #353, #358, #168; SDD §3.9, §6.2 contract 6).
  * Blocks in reading order over a page range, from the structure tree when the
- * document is tagged and trustworthy (a later phase, #358), otherwise inferred
- * from PDFium's text page — the heuristic path this phase ships.
+ * page is tagged and the tree is trustworthy (#358), otherwise inferred from
+ * PDFium's text page (the heuristic path, #353). Per page, never mixed:
+ * megapdf_structure_page_source() says which ran.
+ *
+ * Trust rule (#358, design §1.1): a page's tree is used only when at least 90%
+ * of its characters sit in a tree element of a known standard type (or in an
+ * /Artifact marked-content sequence, which is furniture) and the tree's
+ * depth-first order references no marked content twice. Otherwise the page
+ * takes the heuristic path with its confidence capped at 80. A tagged page's
+ * confidence is the tree's character coverage (0..100). Tagged pages give
+ * headings at their tagged level (H1..H6, or nesting depth for a bare H),
+ * LIST_ITEM depth from /L nesting with the /Lbl as the marker, TABLE_ROW blocks
+ * (level = 1-based row number, continues = 1 after the table's first row; cells
+ * marked by MEGAPDF_SPAN_CELL_START, header cells by MEGAPDF_SPAN_CELL_HEADER;
+ * the block's text is the cells joined by single spaces), FIGURE blocks with the
+ * /Figure's /Alt text, and MEGAPDF_SPAN_LINK on characters under a /Link.
  *
  * A page range, not a page: body-size estimation, running header/footer
  * detection and paragraph continuation all need more than one page. A
@@ -1117,7 +1131,7 @@ typedef enum megapdf_block_kind {
     MEGAPDF_BLOCK_HEADING = 1,     /* level 1..6 */
     MEGAPDF_BLOCK_PARAGRAPH = 2,
     MEGAPDF_BLOCK_LIST_ITEM = 3,   /* level = nesting depth from 1; marker string separate from text */
-    MEGAPDF_BLOCK_TABLE_ROW = 4,   /* reserved: tagged-only, unused until #358 */
+    MEGAPDF_BLOCK_TABLE_ROW = 4,   /* tagged pages only: one block per /TR; level = 1-based row number, cells by span flags */
     MEGAPDF_BLOCK_FIGURE = 5,      /* an image object: object_index set (megapdf_render_image works on it); alt text when tagged */
     MEGAPDF_BLOCK_PAGE_IMAGE = 6,  /* a page with no usable text: the consumer shows the page itself */
     MEGAPDF_BLOCK_FURNITURE = 7,   /* a running header/footer/page number (only present with MEGAPDF_STRUCTURE_KEEP_FURNITURE) */
@@ -1127,7 +1141,7 @@ typedef enum megapdf_block_kind {
 /** megapdf_structure_page_source(): which path produced a page's blocks. */
 enum {
     MEGAPDF_STRUCTURE_SOURCE_HEURISTIC = 0,
-    MEGAPDF_STRUCTURE_SOURCE_TAGGED = 1     /* unused until #358; every page is HEURISTIC in this phase */
+    MEGAPDF_STRUCTURE_SOURCE_TAGGED = 1     /* the page's structure tree passed the trust rule (#358) */
 };
 
 typedef struct megapdf_block {
@@ -1146,8 +1160,9 @@ enum {
     MEGAPDF_SPAN_BOLD = 1,
     MEGAPDF_SPAN_ITALIC = 2,
     MEGAPDF_SPAN_MONOSPACE = 4,
-    MEGAPDF_SPAN_CELL_START = 8,   /* reserved: tagged-only, unused until #358 */
-    MEGAPDF_SPAN_LINK = 16         /* reserved: tagged-only, unused until #358 */
+    MEGAPDF_SPAN_CELL_START = 8,   /* TABLE_ROW (tagged): this span starts a new cell */
+    MEGAPDF_SPAN_LINK = 16,        /* tagged: the characters sit under a /Link element (the target URL is not exposed) */
+    MEGAPDF_SPAN_CELL_HEADER = 32  /* TABLE_ROW (tagged): the cell this span starts was a /TH, not a /TD (#358) */
 };
 
 typedef struct megapdf_span {
@@ -1258,10 +1273,18 @@ typedef struct megapdf_write_options {
  * lists), two spaces of indent per nesting level; FIELD → GitHub task-list syntax ("- [x] name" /
  * "- [ ] name") for a checkbox/radio, "**name:** value" for a text field; FIGURE → "*[Figure:
  * alt]*" only when alt text exists (tagged, #358), nothing otherwise; PAGE_IMAGE → "*[Page N has
- * no text layer]*"; TABLE_ROW (tagged only, #358) → cells joined by a tab, one row per line, `|`
- * additionally escaped, until #358 supplies the per-cell header tag a pipe table needs; no page
- * separator by default (a blank line, like between any two blocks) or with MEGAPDF_PAGE_BREAK_
- * NONE, `--page-marker` → "<!-- page N -->".
+ * no text layer]*"; TABLE_ROW (tagged only, #358) → a GitHub-flavoured pipe table per tagged
+ * table (consecutive rows joined by `continues`): when every row has the same cell count, the
+ * first row is the header when its cells were /TH (MEGAPDF_SPAN_CELL_HEADER) and an empty
+ * header row is written otherwise, cells carry their span styling with `|` additionally
+ * escaped; a table whose rows disagree on cell count is written one row per line, cells joined
+ * by a tab. No page separator by default (a blank line, like between any two blocks) or with
+ * MEGAPDF_PAGE_BREAK_NONE, `--page-marker` → "<!-- page N -->".
+ *
+ * In MEGAPDF_WRITE_TEXT a TABLE_ROW is its cells joined by a tab, and the rows of one table
+ * follow each other on consecutive lines (no blank line between them); a FIGURE with alt text
+ * is "[Figure: alt]" on its own line. In both formats the alt text is written as one line:
+ * whitespace runs, line breaks included, collapse to a single space.
  *
  * `keep_lines` restores line breaks inside a block on a best-effort basis, for both formats:
  * contract 9 does not expose per-line boundaries (a span is a same-style run, which commonly

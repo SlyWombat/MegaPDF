@@ -1,0 +1,28 @@
+# Tagged Document Title
+
+First paragraph of tagged text with a second line inside the same paragraph.
+
+## Items
+
+- Milk
+
+- Bread
+
+  - Whole wheat
+
+  - Rye
+
+- Eggs
+
+Closing paragraph on the first page.
+
+## Table of Values
+
+| **Name** | **Count** | **Price** |
+| --- | --- | --- |
+| Apples | 12 | 3.50 |
+| Pears | 7 | 4.25 |
+
+*[Figure: A grey square standing in for a chart]*
+
+See the project site for details.

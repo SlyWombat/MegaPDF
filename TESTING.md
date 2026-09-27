@@ -242,6 +242,22 @@ dumps (`core/tests/expected/structure/*.blocks`) over the fixtures
 `tools/leakcheck` drives redaction) — see that script's own header comment for the four
 measures and their gates.
 
+The tagged path (#358) reads a page's structure tree instead of inferring, when the tree
+passes the trust rule (at least 90% of the page's characters inside a known-typed element or
+an `/Artifact`, and no marked content referenced twice; otherwise the page falls back to the
+heuristics with its confidence capped at 80). `tagged.pdf` (two pages: H1/H2, a two-MCID
+paragraph, a nested list, a `/RoleMap`-mapped heading, a `/THead` table, a `/Figure` with
+`/Alt`, a `/Link`, and a paragraph drawn above its heading but tagged after it) must come out
+with `source = TAGGED` on both pages, its table as a pipe table in Markdown and the tree's
+order; `tagged-wrong.pdf` (the same page with a tree covering 58% of it, scrambled) must fall
+back. Both are dumped with and without `MEGAPDF_STRUCTURE_HEURISTIC_ONLY` (`--heuristic`),
+`test_structure_tagged()` asserts every kind directly, and `test_structure_tagged_mutations()`
+runs 300 same-length byte mutations of the tree's own syntax through the default path under
+the Linux leg's ASan. `tools/stress/trust_threshold.py <battery-check.log>` bins the battery's
+per-tagged-page coverage and each order's agreement with `pdftotext` to justify (or move) the
+90% threshold; the battery summary reports how many tagged pages the tree served and how many
+the rule rejected.
+
 `tiny-font-size.pdf` (#382) pins the body size at the visible caption's 12 pt when most of a
 page's characters report a near-zero `Tf` (an invisible OCR layer scaled through `Tm`), the
 shape that used to round it to 0 and make every line a heading; `structure_check bodysizediag`

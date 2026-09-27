@@ -1,23 +1,30 @@
-// Contract 9: document structure (#142, #353, SDD §3.9/§6.2 contract 6).
+// Contract 9: document structure (#142, #353, #358, SDD §3.9/§6.2 contract 6).
 //
-// The heuristic path only — the tagged-PDF structure-tree path is #358. Every page in the
-// loaded range is read from PDFium's FPDF_TEXTPAGE (the same source megapdf_search_page
-// reads, not megapdf_text_load's page-level text objects — see megapdf_core.h's contract 9
-// banner and design §1 item 2, the 2026-09-24 staged-design comment on #142), grouped into
-// words, lines, regions and blocks by the rules in design §1.2, and returned as one
-// reading-ordered, page-range-wide snapshot.
+// Two paths, one contract. Every page in the loaded range is read from PDFium's
+// FPDF_TEXTPAGE (the same source megapdf_search_page reads, not megapdf_text_load's
+// page-level text objects — see megapdf_core.h's contract 9 banner and design §1 item 2, the
+// 2026-09-24 staged-design comment on #142), grouped into words, lines, regions and blocks by
+// the rules in design §1.2 (the heuristic path, #353), and returned as one reading-ordered,
+// page-range-wide snapshot. When the page has a structure tree that passes the trust rule
+// (design §1.1, #358, "Tagged path" below), the tree supplies the order and the block kinds
+// instead — headings at their tagged level, list items, table rows with cells, figures with
+// alt text — and only the character-level rules (words, lines, hyphens, spans) are shared.
+// The two are never merged on one page; `source` per page says which ran.
 //
 // Pipeline, in the order the code below runs it, per page:
 //   1. characters (from FPDF_TEXTPAGE) -> words (glyph-gap grouping) -> lines (BuildLines'
 //      vertical-centre-overlap rule, reused at word granularity)
 //   2. furniture candidates set aside (top/bottom-band lines, matched across the range)
 //   3. body size over the whole range (character-weighted modal size)
-//   4. remaining lines -> reading order, by recursive XY-cut
+//   4a. tagged page (unless MEGAPDF_STRUCTURE_HEURISTIC_ONLY): the structure tree's elements,
+//       depth-first, become blocks; characters reach them through marked-content IDs
+//   4b. otherwise, remaining lines -> reading order, by recursive XY-cut
 //   5. reading order -> blocks: headings, list items, paragraphs (hyphen-joining; a
 //      trailing paragraph for rotated/unclassified text)
 //   6. figures (image page objects) and form fields (contract 3) spliced into the order
 //   7. per-page confidence
-// then a whole-range pass assigns heading levels and cross-page paragraph continuation.
+// then a whole-range pass assigns heading levels (heuristic pages only; tagged levels are
+// the tree's) and cross-page paragraph continuation.
 //
 // Every numeric threshold below is a single named constant with a comment saying whether it
 // is design §1.2's own stated value (this phase has not run the corpus battery; #354 does
@@ -28,6 +35,7 @@
 #include "megapdf_core_internal.h"
 
 #include "fpdf_edit.h"
+#include "fpdf_structtree.h"
 #include "fpdf_text.h"
 #include "fpdfview.h"
 
@@ -39,6 +47,7 @@
 #include <new>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -225,6 +234,25 @@ constexpr double kConfidenceReadingOrderJumpBodySizes = 2.0;
 // page-to-page transition #384 asks this mitigation NOT to penalize, however large the jump.
 constexpr double kReadingOrderJumpOverlapFrac = 0.3;
 
+// #358, design §1.1's trust rule. A page's structure tree is used only when at least this
+// share of the page's real characters lands in a tree element of a known type (or in an
+// /Artifact sequence, which is outside the tree by definition -- furniture) AND the tree's
+// depth-first order visits no marked-content ID twice; otherwise the page falls back to the
+// heuristic path with its confidence capped at kTaggedFallbackConfidenceCap. Design §1.1
+// states 0.9; the corpus measurement behind keeping (or moving) it is in #358's PR: the
+// battery reports coverage and each path's order agreement with poppler per tagged page, so
+// the value is the coverage below which the tree's order agrees with poppler LESS than the
+// heuristic's does. A tree with any duplicate reference is not "slightly worse", it is not a
+// reading order at all (some content would be read twice), hence the separate hard rule.
+constexpr double kTaggedMinCoverage = 0.90;
+constexpr int kTaggedFallbackConfidenceCap = 80;
+// A page needs at least this many real characters before the coverage ratio means anything;
+// below it the tree is used whenever it covers every character there is (a title page with
+// one tagged word should not fall back over a single stray untagged glyph, nor be trusted
+// because 1 of 1 is 100%).
+constexpr int kTaggedMinCharsForRatio = 10;
+constexpr int kTaggedMaxDepth = 64;   // structure-tree recursion guard (a malformed /K loop)
+
 // Implementation choices below design §1.2's level of description:
 constexpr double kFontSizeSpanToleranceRatio = 0.02;   // +-2%: two adjacent same-style runs count as one span.
 constexpr int kBoldWeightThreshold = 600;              // FPDFText_GetFontWeight >= this is bold (400 normal, 700 bold).
@@ -348,6 +376,14 @@ struct Char {
     // fixture's own "hyphen-" / "ISO-" lines — U+002D read back as U+0002 both times), so
     // BuildPieces' hyphen-joining test cannot rely on the unicode value alone.
     bool is_hyphen = false;
+    // #358: the marked-content ID of this character's text object (FPDFPageObj_GetMarkedContentID,
+    // -1 when unmarked) — how the structure tree's elements find their characters — and whether
+    // that object sits inside an /Artifact marked-content sequence (pagination, layout and page
+    // artifacts are outside the tree by definition; the tagged path treats them as furniture).
+    int mcid = -1;
+    bool artifact = false;
+    // #358: set by the tagged path on characters under a /Link element (MEGAPDF_SPAN_LINK).
+    bool link = false;
 };
 
 // A run of consecutive (PDFium's own character order) real characters joined while the
@@ -412,6 +448,36 @@ std::unordered_map<FPDF_PAGEOBJECT, int> IndexPageObjects(FPDF_PAGE page) {
     return map;
 }
 
+// #358: a text object's marked-content facts, read once per distinct object (a page has far
+// fewer text objects than characters) — its marked-content ID, and whether one of its content
+// marks is named /Artifact.
+struct ObjectMarks {
+    int mcid = -1;
+    bool artifact = false;
+};
+
+ObjectMarks ReadObjectMarks(FPDF_PAGEOBJECT obj) {
+    ObjectMarks m;
+    if (obj == nullptr) return m;
+    m.mcid = FPDFPageObj_GetMarkedContentID(obj);
+    const int marks = FPDFPageObj_CountMarks(obj);
+    for (int k = 0; k < marks; k++) {
+        FPDF_PAGEOBJECTMARK mark = FPDFPageObj_GetMark(obj, k);
+        if (mark == nullptr) continue;
+        FPDF_WCHAR name[16] = {0};
+        unsigned long len = 0;
+        if (!FPDFPageObjMark_GetName(mark, name, sizeof(name), &len)) continue;
+        // "Artifact" as UTF-16LE, NUL-terminated: 9 code units.
+        static const FPDF_WCHAR kArtifact[] = {'A', 'r', 't', 'i', 'f', 'a', 'c', 't', 0};
+        bool same = true;
+        for (size_t i = 0; i < sizeof(kArtifact) / sizeof(kArtifact[0]); i++) {
+            if (name[i] != kArtifact[i]) { same = false; break; }
+        }
+        if (same) { m.artifact = true; break; }
+    }
+    return m;
+}
+
 // (std::min) and (std::max) in parentheses throughout this file: <windef.h>, which pdfium
 // pulls in on Windows, defines min and max macros (see megapdf_core.cpp's PaintBox comment).
 //
@@ -423,6 +489,7 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
     if (tp == nullptr) return;
     const double unit = PageUnit(page);
     const auto obj_index = IndexPageObjects(raw);
+    std::unordered_map<FPDF_PAGEOBJECT, ObjectMarks> marks_of;   // #358, per distinct text object
     const int count = FPDFText_CountChars(tp);
     out->chars.reserve(static_cast<size_t>((std::max)(0, count)));
     bool pending_break = false;   // a generated or whitespace character was skipped since the last real one
@@ -467,6 +534,12 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         FPDF_PAGEOBJECT obj = FPDFText_GetTextObject(tp, i);
         const auto it = obj != nullptr ? obj_index.find(obj) : obj_index.end();
         c.object_index = it != obj_index.end() ? it->second : -1;
+        if (obj != nullptr) {
+            auto mit = marks_of.find(obj);
+            if (mit == marks_of.end()) mit = marks_of.emplace(obj, ReadObjectMarks(obj)).first;
+            c.mcid = mit->second.mcid;
+            c.artifact = mit->second.artifact;
+        }
         ClassifyStyle(tp, i, &c.bold, &c.italic, &c.mono);
         c.preceded_by_break = pending_break;
         pending_break = false;
@@ -971,6 +1044,7 @@ struct BlockImpl {
     // Bookkeeping for the whole-range passes below; not part of the public surface.
     double heading_size = 0;
     bool heading_bold_at_body = false;
+    bool level_fixed = false;   // #358: a tagged heading's level is the tree's; AssignHeadingLevels leaves it
 };
 
 // One character (or one synthetic separator: a space, or nothing when a hyphen is joined
@@ -985,18 +1059,33 @@ struct Piece {
     double l = 0, b = 0, r = 0, t = 0;
     int object_index = -1;
     bool bold = false, italic = false, mono = false;
+    bool link = false;   // #358: under a /Link element (tagged pages only)
     double font_size = 0;
 };
 
-void AppendWordPieces(std::vector<Piece>* out, const PageWork& pw, const Word& w) {
+// The three parallel tables a block is built from: a page's characters, a word list over them
+// and a line list over the words. The heuristic path hands in PageWork's own three; the
+// leftover, furniture and (#358) tagged builders hand in a word/line list of their own over the
+// same characters, which is why this is a view rather than PageWork itself (the earlier shape
+// copied the whole character vector into a stand-in PageWork per block).
+struct TextView {
+    const std::vector<Char>& chars;
+    const std::vector<Word>& words;
+    const std::vector<Line>& lines;
+};
+
+TextView ViewOf(const PageWork& pw) { return TextView{pw.chars, pw.words, pw.lines}; }
+
+void AppendWordPieces(std::vector<Piece>* out, const TextView& v, const Word& w) {
     for (int ci : w.chars) {
-        const Char& c = pw.chars[static_cast<size_t>(ci)];
+        const Char& c = v.chars[static_cast<size_t>(ci)];
         Piece p;
         p.cp = c.unicode;
         p.has_bounds = true;
         p.l = c.l; p.b = c.b; p.r = c.r; p.t = c.t;
         p.object_index = c.object_index;
         p.bold = c.bold; p.italic = c.italic; p.mono = c.mono;
+        p.link = c.link;
         p.font_size = c.font_size;
         out->push_back(p);
     }
@@ -1010,6 +1099,7 @@ void AppendSeparator(std::vector<Piece>* out, unsigned int cp) {
         const Piece& prev = out->back();
         p.object_index = prev.object_index;
         p.bold = prev.bold; p.italic = prev.italic; p.mono = prev.mono;
+        p.link = prev.link;
         p.font_size = prev.font_size;
     }
     out->push_back(p);
@@ -1022,29 +1112,29 @@ void AppendSeparator(std::vector<Piece>* out, unsigned int cp) {
 // removed and joined with no space when the next line starts with a lowercase letter,
 // otherwise it stays and the halves still join with no space. `first_word_offset` skips a
 // list item's marker word (index 0) on its first line.
-std::vector<Piece> BuildPieces(const PageWork& pw, const std::vector<int>& line_indices, size_t first_word_offset) {
+std::vector<Piece> BuildPieces(const TextView& v, const std::vector<int>& line_indices, size_t first_word_offset) {
     std::vector<Piece> pieces;
     bool any_emitted = false;
     bool suppress_next_separator = false;
     for (size_t li = 0; li < line_indices.size(); li++) {
-        const Line& line = pw.lines[static_cast<size_t>(line_indices[li])];
+        const Line& line = v.lines[static_cast<size_t>(line_indices[li])];
         const size_t wstart = (li == 0) ? (std::min)(first_word_offset, line.words.size()) : 0;
         for (size_t wi = wstart; wi < line.words.size(); wi++) {
             if (any_emitted && !suppress_next_separator) AppendSeparator(&pieces, ' ');
             suppress_next_separator = false;
-            AppendWordPieces(&pieces, pw, pw.words[static_cast<size_t>(line.words[wi])]);
+            AppendWordPieces(&pieces, v, v.words[static_cast<size_t>(line.words[wi])]);
             any_emitted = true;
         }
         if (li + 1 < line_indices.size() && line.words.size() > wstart) {
-            const Word& last_word = pw.words[static_cast<size_t>(line.words.back())];
-            const auto last_cps = WordCodepoints(pw.chars, last_word);
+            const Word& last_word = v.words[static_cast<size_t>(line.words.back())];
+            const auto last_cps = WordCodepoints(v.chars, last_word);
             const unsigned int last_cp = last_cps.empty() ? 0 : last_cps.back();
             // Char::is_hyphen's comment explains why this cannot just compare last_cp: PDFium
             // masks a line-end hyphen's own GetUnicode to 2, so it is checked directly, and
             // the literal code points are kept as a second path for a hyphen PDFium did not
             // flag (e.g. one it did not consider to be at a line-wrap position).
-            const bool last_is_hyphen_char = !last_word.chars.empty() && pw.chars[static_cast<size_t>(last_word.chars.back())].is_hyphen;
-            const Line& next_line = pw.lines[static_cast<size_t>(line_indices[li + 1])];
+            const bool last_is_hyphen_char = !last_word.chars.empty() && v.chars[static_cast<size_t>(last_word.chars.back())].is_hyphen;
+            const Line& next_line = v.lines[static_cast<size_t>(line_indices[li + 1])];
             bool hyphen_join = false, strip = false;
             if (last_cp == kSoftHyphen) {
                 hyphen_join = true;
@@ -1052,7 +1142,7 @@ std::vector<Piece> BuildPieces(const PageWork& pw, const std::vector<int>& line_
             } else if (last_cp == kHyphenMinus || last_cp == kHyphenChar || last_is_hyphen_char) {
                 hyphen_join = true;
                 if (!next_line.words.empty()) {
-                    const auto next_cps = WordCodepoints(pw.chars, pw.words[static_cast<size_t>(next_line.words[0])]);
+                    const auto next_cps = WordCodepoints(v.chars, v.words[static_cast<size_t>(next_line.words[0])]);
                     strip = !next_cps.empty() && IsAsciiLower(next_cps[0]);
                 }
             }
@@ -1089,7 +1179,7 @@ std::vector<SpanImpl> SliceIntoSpans(const std::vector<Piece>& pieces) {
             const Piece& p = pieces[j];
             if (p.has_bounds) {
                 const bool same_style = p.object_index == anchor.object_index && p.bold == anchor.bold &&
-                    p.italic == anchor.italic && p.mono == anchor.mono &&
+                    p.italic == anchor.italic && p.mono == anchor.mono && p.link == anchor.link &&
                     std::fabs(p.font_size - anchor.font_size) <= kFontSizeSpanToleranceRatio * (std::max)(1.0, anchor.font_size);
                 if (!same_style) break;
                 l = (std::min)(l, p.l); b = (std::min)(b, p.b); r = (std::max)(r, p.r); t = (std::max)(t, p.t);
@@ -1100,7 +1190,7 @@ std::vector<SpanImpl> SliceIntoSpans(const std::vector<Piece>& pieces) {
         }
         SpanImpl span;
         span.info.flags = (anchor.bold ? MEGAPDF_SPAN_BOLD : 0) | (anchor.italic ? MEGAPDF_SPAN_ITALIC : 0) |
-                          (anchor.mono ? MEGAPDF_SPAN_MONOSPACE : 0);
+                          (anchor.mono ? MEGAPDF_SPAN_MONOSPACE : 0) | (anchor.link ? MEGAPDF_SPAN_LINK : 0);
         span.info.font_size = anchor.font_size;
         span.info.size_ratio = 0;   // filled in once the range's body size is known (needs a second pass)
         span.info.bounds = any_bounds ? megapdf_rect{l, b, r, t} : megapdf_rect{0, 0, 0, 0};
@@ -1232,7 +1322,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         out->info.object_index = -1;
         out->heading_size = line_size;
         out->heading_bold_at_body = false;
-        const auto pieces = BuildPieces(pw, group, 0);
+        const auto pieces = BuildPieces(ViewOf(pw), group,0);
         out->spans = SliceIntoSpans(pieces);
         out->text = ConcatSpanText(out->spans);
         double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
@@ -1260,7 +1350,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         out->heading_size = line_size;
         out->heading_bold_at_body = true;
         const std::vector<int> group{li};
-        const auto pieces = BuildPieces(pw, group, 0);
+        const auto pieces = BuildPieces(ViewOf(pw), group,0);
         out->spans = SliceIntoSpans(pieces);
         out->text = ConcatSpanText(out->spans);
         out->info.bounds = megapdf_rect{line.l, line.b, line.r, line.t};
@@ -1291,7 +1381,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         out->info.level = DepthForX(list_clusters, line.l);
         const auto marker_cps = WordCodepoints(pw.chars, marker_word);
         out->marker = EncodeUtf16(marker_cps);
-        const auto pieces = BuildPieces(pw, group, 1);
+        const auto pieces = BuildPieces(ViewOf(pw), group,1);
         out->spans = SliceIntoSpans(pieces);
         out->text = ConcatSpanText(out->spans);
         double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
@@ -1324,7 +1414,7 @@ size_t GatherOneBlock(const PageWork& pw, const std::vector<int>& order, size_t 
         out->info.kind = MEGAPDF_BLOCK_PARAGRAPH;
         out->info.page = page_index;
         out->info.object_index = -1;
-        const auto pieces = BuildPieces(pw, group, 0);
+        const auto pieces = BuildPieces(ViewOf(pw), group,0);
         out->spans = SliceIntoSpans(pieces);
         out->text = ConcatSpanText(out->spans);
         double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
@@ -1427,15 +1517,7 @@ bool BuildLeftoverParagraph(const PageWork& pw, int page_index, BlockImpl* out) 
             return leftover_lines[static_cast<size_t>(a)].t > leftover_lines[static_cast<size_t>(b)].t;
         return leftover_lines[static_cast<size_t>(a)].l < leftover_lines[static_cast<size_t>(b)].l;
     });
-    // BuildPieces/SliceIntoSpans read words through PageWork's own `words`/`chars`, so this
-    // paragraph is assembled directly against a small local PageWork standing in for the
-    // leftover words, keeping the rest of the pipeline (which only ever knows one `words`
-    // list) unchanged.
-    PageWork stand_in;
-    stand_in.chars = pw.chars;
-    stand_in.words = pw.leftover_words;
-    stand_in.lines = leftover_lines;
-    const auto pieces = BuildPieces(stand_in, all, 0);
+    const auto pieces = BuildPieces(TextView{pw.chars, pw.leftover_words, leftover_lines}, all, 0);
     out->info.kind = MEGAPDF_BLOCK_PARAGRAPH;
     out->info.page = page_index;
     out->info.object_index = -1;
@@ -1652,15 +1734,608 @@ BlockImpl BuildFurnitureBlock(const PageWork& pw, const Line& line, int page_ind
     b.info.page = page_index;
     b.info.object_index = -1;
     b.info.bounds = megapdf_rect{line.l, line.b, line.r, line.t};
-    PageWork stand_in;
-    stand_in.chars = pw.chars;
-    stand_in.words = pw.words;
-    stand_in.lines = {line};
+    const std::vector<Line> one{line};
     const std::vector<int> single{0};
-    const auto pieces = BuildPieces(stand_in, single, 0);
+    const auto pieces = BuildPieces(TextView{pw.chars, pw.words, one}, single, 0);
     b.spans = SliceIntoSpans(pieces);
     b.text = ConcatSpanText(b.spans);
     return b;
+}
+
+// ---------------------------------------------------------------------------
+// Tagged path (#358, design §1.1): the page's structure tree, read through PDFium's
+// FPDF_StructTree_* API, supplies the reading order and the block kinds. Characters reach an
+// element through marked-content IDs (Char::mcid on the object side,
+// FPDF_StructElement_GetChildMarkedContentID on the tree side); inside an element they keep
+// the heuristic path's word, line, hyphen and span rules (BuildWords/BuildPieces/
+// SliceIntoSpans above), so the two paths never disagree about what a word or a bold run is.
+// ---------------------------------------------------------------------------
+
+// Standard structure types (PDF 32000-1 §14.8.4, after PDFium's own /RoleMap resolution in
+// FPDF_StructElement_GetType — verified on tagged.pdf's /MyHeading -> /H2 mapping), grouped
+// by what the walker does with them. Anything else is Unknown: its own marked content counts
+// against the trust rule's coverage (design §1.1: "an element with a known type"), though its
+// typed descendants still map normally.
+enum class TagRole {
+    Container,       // Document, Part, Art, Sect, Div, ...: transparent, recurse
+    Heading,         // H, H1..H6, Title
+    Paragraph,       // P, Caption, TOCI, Formula, ...
+    Inline,          // Span, Quote, Em, Strong, ...: joins the enclosing block
+    Link,            // Link: inline, sets MEGAPDF_SPAN_LINK
+    List,            // L: nesting depth
+    ListItem,        // LI
+    Label,           // Lbl: a list item's marker
+    Table,           // Table
+    TableRow,        // TR
+    TableCell,       // TD
+    TableHeaderCell, // TH
+    Figure,          // Figure: alt text
+    Artifact,        // Artifact (as an element; the usual marked-content form is Char::artifact)
+    Unknown
+};
+
+std::string ElementTypeAscii(FPDF_STRUCTELEMENT el) {
+    unsigned short buf[64] = {0};
+    const unsigned long bytes = FPDF_StructElement_GetType(el, buf, sizeof(buf));
+    std::string out;
+    if (bytes == 0 || bytes > sizeof(buf)) return out;
+    for (size_t i = 0; i < bytes / 2; i++) {
+        if (buf[i] == 0) break;
+        out.push_back(buf[i] < 0x80 ? static_cast<char>(buf[i]) : '?');
+    }
+    return out;
+}
+
+U16 ElementAltText(FPDF_STRUCTELEMENT el) {
+    const unsigned long bytes = FPDF_StructElement_GetAltText(el, nullptr, 0);
+    if (bytes < 2 || bytes > 1u << 20) return U16();
+    std::vector<unsigned short> buf(bytes / 2 + 1, 0);
+    FPDF_StructElement_GetAltText(el, buf.data(), bytes);
+    U16 out;
+    for (unsigned short u : buf) {
+        if (u == 0) break;
+        out.push_back(u);
+    }
+    return out;
+}
+
+TagRole ClassifyTag(const std::string& t, int* heading_level) {
+    *heading_level = 0;
+    if (t.size() == 2 && t[0] == 'H' && t[1] >= '1' && t[1] <= '6') { *heading_level = t[1] - '0'; return TagRole::Heading; }
+    if (t == "H" || t == "Title") return TagRole::Heading;
+    if (t == "P" || t == "Caption" || t == "TOCI" || t == "Formula" || t == "FENote") return TagRole::Paragraph;
+    if (t == "Span" || t == "Quote" || t == "Em" || t == "Strong" || t == "Sub" || t == "Code" || t == "Note" ||
+        t == "Reference" || t == "BibEntry" || t == "Annot" || t == "Ruby" || t == "RB" || t == "RT" || t == "RP" ||
+        t == "Warichu" || t == "WT" || t == "WP") {
+        return TagRole::Inline;
+    }
+    if (t == "Link") return TagRole::Link;
+    if (t == "L") return TagRole::List;
+    if (t == "LI") return TagRole::ListItem;
+    if (t == "Lbl") return TagRole::Label;
+    if (t == "Table") return TagRole::Table;
+    if (t == "TR") return TagRole::TableRow;
+    if (t == "TD") return TagRole::TableCell;
+    if (t == "TH") return TagRole::TableHeaderCell;
+    if (t == "Figure") return TagRole::Figure;
+    if (t == "Artifact") return TagRole::Artifact;
+    if (t == "Document" || t == "Part" || t == "Art" || t == "Sect" || t == "Div" || t == "BlockQuote" ||
+        t == "TOC" || t == "Index" || t == "NonStruct" || t == "Private" || t == "Aside" || t == "DocumentFragment" ||
+        t == "Form" || t == "THead" || t == "TBody" || t == "TFoot" || t == "LBody") {
+        return TagRole::Container;
+    }
+    return TagRole::Unknown;
+}
+
+// One block-to-be, in tree order: which marked-content IDs feed it, and the per-kind extras.
+struct TaggedUnit {
+    int kind = 0;                            // MEGAPDF_BLOCK_*
+    int level = 0;                           // heading level, list depth, or 1-based row number
+    std::vector<int> mcids;                  // in tree order (a TABLE_ROW's include every cell's)
+    std::vector<int> marker_mcids;           // LIST_ITEM: the /Lbl's
+    std::vector<std::vector<int>> cells;     // TABLE_ROW: per cell, in order
+    std::vector<bool> cell_header;           // TABLE_ROW: TH rather than TD, per cell
+    U16 alt;                                 // FIGURE
+    bool continues = false;                  // TABLE_ROW: not the table's first row
+};
+
+struct TreeWalk {
+    std::vector<TaggedUnit> units;
+    std::unordered_map<int, int> owner;      // mcid -> unit index (a known-typed home)
+    std::unordered_set<int> link_mcids;
+    std::unordered_set<int> seen;            // every mcid the walk referenced, for the duplicate rule
+    bool duplicate = false;
+    int list_depth = 0;
+    int sect_depth = 0;
+    int rows_in_table = 0;
+    int cell_open = -1;                      // index into the open TABLE_ROW's cells, or -1
+};
+
+constexpr int kNoUnit = -1;
+
+void AddMcid(TreeWalk* w, int unit, int mcid, bool marker) {
+    if (mcid < 0) return;
+    if (!w->seen.insert(mcid).second) { w->duplicate = true; return; }
+    if (unit == kNoUnit) return;   // an unknown-typed home: counted as uncovered
+    TaggedUnit& u = w->units[static_cast<size_t>(unit)];
+    w->owner[mcid] = unit;   // a known-typed home either way: a marker's characters are covered too
+    if (marker) {
+        u.marker_mcids.push_back(mcid);
+        return;
+    }
+    u.mcids.push_back(mcid);
+    if (u.kind == MEGAPDF_BLOCK_TABLE_ROW) {
+        if (w->cell_open < 0 || static_cast<size_t>(w->cell_open) >= u.cells.size()) {
+            u.cells.emplace_back();
+            u.cell_header.push_back(false);
+            w->cell_open = static_cast<int>(u.cells.size()) - 1;
+        }
+        u.cells[static_cast<size_t>(w->cell_open)].push_back(mcid);
+    }
+}
+
+int OpenUnit(TreeWalk* w, int kind, int level) {
+    TaggedUnit u;
+    u.kind = kind;
+    u.level = level;
+    w->units.push_back(std::move(u));
+    return static_cast<int>(w->units.size()) - 1;
+}
+
+void WalkElement(FPDF_STRUCTELEMENT el, TreeWalk* w, int open, bool marker, bool in_link, int depth,
+                 bool homeless = false);
+
+// One element met while walking its parent. `open` is the unit the parent's content joins
+// (kNoUnit when this element must open its own), `marker` whether that content is a list
+// item's label, `in_link` whether it sits under a /Link. `*local` is the parent's implicit
+// paragraph for direct/inline content (opened on demand, closed by any block-level element).
+void VisitElement(FPDF_STRUCTELEMENT child, TreeWalk* w, int open, bool marker, bool in_link, int depth, int* local) {
+    int heading_level = 0;
+    const std::string type = ElementTypeAscii(child);
+    const TagRole role = ClassifyTag(type, &heading_level);
+    auto inline_target = [&]() {
+        if (open != kNoUnit) return open;
+        if (*local == kNoUnit) *local = OpenUnit(w, MEGAPDF_BLOCK_PARAGRAPH, 0);
+        return *local;
+    };
+    switch (role) {
+        case TagRole::Container: {
+            const bool sect = type == "Sect";
+            if (sect) w->sect_depth++;
+            *local = kNoUnit;
+            WalkElement(child, w, open, marker, in_link, depth + 1);
+            if (sect) w->sect_depth--;
+            break;
+        }
+        case TagRole::Inline:
+        case TagRole::Link:
+            WalkElement(child, w, inline_target(), marker, in_link || role == TagRole::Link, depth + 1);
+            break;
+        case TagRole::Heading: {
+            *local = kNoUnit;
+            if (open != kNoUnit) { WalkElement(child, w, open, marker, in_link, depth + 1); break; }
+            const int level = (std::max)(1, (std::min)(kMaxHeadingLevel, heading_level > 0 ? heading_level : 1 + w->sect_depth));
+            WalkElement(child, w, OpenUnit(w, MEGAPDF_BLOCK_HEADING, level), false, in_link, depth + 1);
+            break;
+        }
+        case TagRole::Paragraph:
+            *local = kNoUnit;
+            if (open != kNoUnit) { WalkElement(child, w, open, marker, in_link, depth + 1); break; }
+            WalkElement(child, w, OpenUnit(w, MEGAPDF_BLOCK_PARAGRAPH, 0), false, in_link, depth + 1);
+            break;
+        case TagRole::List:
+            *local = kNoUnit;
+            w->list_depth++;
+            WalkElement(child, w, kNoUnit, false, in_link, depth + 1);
+            w->list_depth--;
+            break;
+        case TagRole::ListItem:
+            *local = kNoUnit;
+            WalkElement(child, w, OpenUnit(w, MEGAPDF_BLOCK_LIST_ITEM, (std::max)(1, w->list_depth)), false, in_link,
+                        depth + 1);
+            break;
+        case TagRole::Label: {
+            const bool of_item = open != kNoUnit && w->units[static_cast<size_t>(open)].kind == MEGAPDF_BLOCK_LIST_ITEM;
+            WalkElement(child, w, inline_target(), of_item, in_link, depth + 1);
+            break;
+        }
+        case TagRole::Table: {
+            *local = kNoUnit;
+            const int saved_rows = w->rows_in_table;
+            w->rows_in_table = 0;
+            WalkElement(child, w, kNoUnit, false, in_link, depth + 1);
+            w->rows_in_table = saved_rows;
+            break;
+        }
+        case TagRole::TableRow: {
+            *local = kNoUnit;
+            w->rows_in_table++;
+            const int row = OpenUnit(w, MEGAPDF_BLOCK_TABLE_ROW, w->rows_in_table);
+            w->units[static_cast<size_t>(row)].continues = w->rows_in_table > 1;
+            const int saved_cell = w->cell_open;
+            w->cell_open = -1;
+            WalkElement(child, w, row, false, in_link, depth + 1);
+            w->cell_open = saved_cell;
+            break;
+        }
+        case TagRole::TableCell:
+        case TagRole::TableHeaderCell:
+            *local = kNoUnit;
+            if (open != kNoUnit && w->units[static_cast<size_t>(open)].kind == MEGAPDF_BLOCK_TABLE_ROW) {
+                TaggedUnit& row = w->units[static_cast<size_t>(open)];
+                row.cells.emplace_back();
+                row.cell_header.push_back(role == TagRole::TableHeaderCell);
+                w->cell_open = static_cast<int>(row.cells.size()) - 1;
+                WalkElement(child, w, open, false, in_link, depth + 1);
+            } else {
+                // A cell outside a row: read it as a paragraph rather than lose it.
+                WalkElement(child, w, open != kNoUnit ? open : OpenUnit(w, MEGAPDF_BLOCK_PARAGRAPH, 0), false, in_link,
+                            depth + 1);
+            }
+            break;
+        case TagRole::Figure: {
+            *local = kNoUnit;
+            const int fig = OpenUnit(w, MEGAPDF_BLOCK_FIGURE, 0);
+            w->units[static_cast<size_t>(fig)].alt = ElementAltText(child);
+            WalkElement(child, w, fig, false, in_link, depth + 1);
+            break;
+        }
+        case TagRole::Artifact:
+            *local = kNoUnit;
+            WalkElement(child, w, OpenUnit(w, MEGAPDF_BLOCK_FURNITURE, 0), false, in_link, depth + 1);
+            break;
+        case TagRole::Unknown:
+            // Inside a block, unknown content still belongs to that block; at block level its
+            // own direct marked content has no known home and stays uncovered (`homeless`),
+            // while any typed descendants are read normally.
+            *local = kNoUnit;
+            WalkElement(child, w, open, marker, in_link, depth + 1, /*homeless=*/open == kNoUnit);
+            break;
+    }
+}
+
+// Depth-first over `el`'s children in document order (marked-content references and child
+// elements interleaved exactly as the /K array lists them).
+void WalkElement(FPDF_STRUCTELEMENT el, TreeWalk* w, int open, bool marker, bool in_link, int depth, bool homeless) {
+    if (el == nullptr || depth > kTaggedMaxDepth) return;
+    const int n = FPDF_StructElement_CountChildren(el);
+    int local = kNoUnit;   // an implicit paragraph for a container's own direct content
+    for (int i = 0; i < n; i++) {
+        const int mcid = FPDF_StructElement_GetChildMarkedContentID(el, i);
+        if (mcid >= 0) {
+            int target = open;
+            if (target == kNoUnit && homeless) {
+                AddMcid(w, kNoUnit, mcid, false);   // referenced (the duplicate rule sees it), but uncovered
+                continue;
+            }
+            if (target == kNoUnit) {
+                if (local == kNoUnit) local = OpenUnit(w, MEGAPDF_BLOCK_PARAGRAPH, 0);   // a container's direct content
+                target = local;
+            }
+            AddMcid(w, target, mcid, marker);
+            if (in_link) w->link_mcids.insert(mcid);
+            continue;
+        }
+        FPDF_STRUCTELEMENT child = FPDF_StructElement_GetChildAtIndex(el, i);
+        if (child == nullptr) continue;   // a kid that is not on this page, or not an element
+        VisitElement(child, w, open, marker, in_link, depth, &local);
+    }
+}
+
+// Lines in tree order (not BuildLines' geometric sort): a new line starts wherever a word's
+// vertical centre leaves the current line's (BuildLines' own half-the-taller-height rule).
+// Within a tagged element the tree's order is authoritative, so words are never re-sorted.
+std::vector<Line> BuildLinesSequential(const std::vector<Word>& words) {
+    std::vector<Line> lines;
+    for (size_t i = 0; i < words.size(); i++) {
+        const Word& w = words[i];
+        bool same = false;
+        if (!lines.empty()) {
+            const Line& cur = lines.back();
+            const double tol = (std::max)(cur.t - cur.b, WordHeight(w)) * kLineCentreOverlapFactor;
+            same = std::fabs(LineCentre(cur) - WordCentre(w)) <= tol;
+        }
+        if (!same) {
+            Line line;
+            line.l = w.l; line.b = w.b; line.r = w.r; line.t = w.t;
+            lines.push_back(std::move(line));
+        }
+        Line& cur = lines.back();
+        cur.words.push_back(static_cast<int>(i));
+        cur.l = (std::min)(cur.l, w.l); cur.b = (std::min)(cur.b, w.b);
+        cur.r = (std::max)(cur.r, w.r); cur.t = (std::max)(cur.t, w.t);
+    }
+    return lines;
+}
+
+megapdf_rect UnionOfLines(const std::vector<Line>& lines) {
+    if (lines.empty()) return megapdf_rect{0, 0, 0, 0};
+    double l = 1e18, b = 1e18, r = -1e18, t = -1e18;
+    for (const Line& gl : lines) {
+        l = (std::min)(l, gl.l); b = (std::min)(b, gl.b); r = (std::max)(r, gl.r); t = (std::max)(t, gl.t);
+    }
+    return megapdf_rect{l, b, r, t};
+}
+
+// The characters (indices into pw.chars) behind a list of marked-content IDs, in tree order
+// and, within one ID, in PDFium's own character order.
+std::vector<int> CharsOfMcids(const std::unordered_map<int, std::vector<int>>& chars_by_mcid, const std::vector<int>& mcids) {
+    std::vector<int> out;
+    for (int mcid : mcids) {
+        const auto it = chars_by_mcid.find(mcid);
+        if (it != chars_by_mcid.end()) out.insert(out.end(), it->second.begin(), it->second.end());
+    }
+    return out;
+}
+
+// Pieces for a run of characters in tree order: words, sequential lines, then the shared
+// hyphen/spacing rules. Returns the union bounds through `bounds`.
+std::vector<Piece> TaggedPieces(const PageWork& pw, const std::vector<int>& indices, megapdf_rect* bounds) {
+    const std::vector<Word> words = BuildWords(pw.chars, indices);
+    const std::vector<Line> lines = BuildLinesSequential(words);
+    std::vector<int> all(lines.size());
+    for (size_t i = 0; i < all.size(); i++) all[i] = static_cast<int>(i);
+    *bounds = UnionOfLines(lines);
+    return BuildPieces(TextView{pw.chars, words, lines}, all, 0);
+}
+
+U16 MarkerText(const PageWork& pw, const std::vector<int>& indices) {
+    const std::vector<Word> words = BuildWords(pw.chars, indices);
+    std::vector<unsigned int> cps;
+    for (size_t k = 0; k < words.size(); k++) {
+        if (k > 0) cps.push_back(' ');
+        const auto wc = WordCodepoints(pw.chars, words[k]);
+        cps.insert(cps.end(), wc.begin(), wc.end());
+    }
+    return EncodeUtf16(cps);
+}
+
+BlockImpl TextBlockFromIndices(const PageWork& pw, const std::vector<int>& indices, int kind, int page_index) {
+    BlockImpl b;
+    b.info.kind = kind;
+    b.info.page = page_index;
+    b.info.object_index = -1;
+    const auto pieces = TaggedPieces(pw, indices, &b.info.bounds);
+    b.spans = SliceIntoSpans(pieces);
+    b.text = ConcatSpanText(b.spans);
+    return b;
+}
+
+// Image page objects by marked-content ID (a /Figure's content is usually one image object),
+// plus the image objects no tree element and no /Artifact sequence claims.
+struct TaggedImages {
+    std::unordered_map<int, std::pair<int, megapdf_rect>> by_mcid;   // mcid -> (object index, crop bounds)
+    std::vector<BlockImpl> unclaimed;                                  // FIGURE blocks (design §1.2's size rule)
+};
+
+TaggedImages ReadTaggedImages(const megapdf_page* page, int page_index) {
+    TaggedImages out;
+    FPDF_PAGE raw = PageHandle(page);
+    const int count = FPDFPage_CountObjects(raw);
+    for (int i = 0; i < count; i++) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(raw, i);
+        if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
+        megapdf_rect bounds{};
+        if (megapdf_object_bounds(page, i, &bounds) != MEGAPDF_OK) continue;
+        const ObjectMarks marks = ReadObjectMarks(obj);
+        if (marks.mcid >= 0) {
+            if (out.by_mcid.find(marks.mcid) == out.by_mcid.end()) out.by_mcid[marks.mcid] = {i, bounds};
+            continue;
+        }
+        if (marks.artifact) continue;
+        const double w_cm = (bounds.right - bounds.left) / kPointsPerCm;
+        const double h_cm = (bounds.top - bounds.bottom) / kPointsPerCm;
+        if (w_cm * h_cm < kFigureMinAreaCm2) continue;
+        BlockImpl b;
+        b.info.kind = MEGAPDF_BLOCK_FIGURE;
+        b.info.page = page_index;
+        b.info.bounds = bounds;
+        b.info.object_index = i;
+        out.unclaimed.push_back(std::move(b));
+    }
+    return out;
+}
+
+// The tagged path for one page. Returns false — nothing built — when the page has no usable
+// tree or the trust rule rejects it; the caller then runs the heuristic path. `*coverage`
+// (0..1, the share of real characters the tree or an /Artifact sequence accounts for) is set
+// whenever a tree was found at all, so a rejected page's cap can be applied.
+bool BuildTaggedPage(const megapdf_page* page, PageWork* pw, int page_index, unsigned int flags, bool* tree_present,
+                     double* coverage, PageResult* result) {
+    *tree_present = false;
+    *coverage = 0;
+    FPDF_STRUCTTREE tree = FPDF_StructTree_GetForPage(PageHandle(page));
+    if (tree == nullptr) return false;
+    TreeWalk walk;
+    const int top = FPDF_StructTree_CountChildren(tree);
+    int local = kNoUnit;
+    for (int i = 0; i < top; i++) {
+        FPDF_STRUCTELEMENT el = FPDF_StructTree_GetChildAtIndex(tree, i);
+        // The top-level elements (typically one /Document, but a page's tree may start
+        // straight at a /P or /Sect) are visited exactly as a container's children would be.
+        if (el != nullptr) VisitElement(el, &walk, kNoUnit, false, false, 0, &local);
+    }
+    FPDF_StructTree_Close(tree);
+    if (top <= 0) return false;
+    *tree_present = true;
+
+    // Coverage: every real character with a known-typed home, or inside an /Artifact.
+    std::unordered_map<int, std::vector<int>> chars_by_mcid;
+    int covered = 0;
+    std::vector<int> artifact_chars, uncovered_chars;
+    for (size_t ci = 0; ci < pw->chars.size(); ci++) {
+        Char& c = pw->chars[ci];
+        if (c.mcid >= 0 && walk.owner.find(c.mcid) != walk.owner.end()) {
+            chars_by_mcid[c.mcid].push_back(static_cast<int>(ci));
+            if (walk.link_mcids.count(c.mcid) != 0) c.link = true;
+            covered++;
+        } else if (c.artifact) {
+            artifact_chars.push_back(static_cast<int>(ci));
+            covered++;
+        } else {
+            uncovered_chars.push_back(static_cast<int>(ci));
+        }
+    }
+    const int total = static_cast<int>(pw->chars.size());
+    if (total <= 0) return false;
+    *coverage = static_cast<double>(covered) / total;
+    if (walk.duplicate) return false;
+    if (total < kTaggedMinCharsForRatio ? !uncovered_chars.empty() : *coverage < kTaggedMinCoverage) return false;
+    if (chars_by_mcid.empty()) return false;
+
+    const TaggedImages images = ReadTaggedImages(page, page_index);
+    std::vector<BlockImpl> content;
+    for (const TaggedUnit& u : walk.units) {
+        switch (u.kind) {
+            case MEGAPDF_BLOCK_HEADING:
+            case MEGAPDF_BLOCK_PARAGRAPH:
+            case MEGAPDF_BLOCK_FURNITURE: {
+                const std::vector<int> idx = CharsOfMcids(chars_by_mcid, u.mcids);
+                if (idx.empty()) break;
+                BlockImpl b = TextBlockFromIndices(*pw, idx, u.kind, page_index);
+                if (u.kind == MEGAPDF_BLOCK_HEADING) {
+                    b.info.level = u.level;
+                    b.level_fixed = true;
+                }
+                if (u.kind != MEGAPDF_BLOCK_FURNITURE || (flags & MEGAPDF_STRUCTURE_KEEP_FURNITURE)) content.push_back(std::move(b));
+                break;
+            }
+            case MEGAPDF_BLOCK_LIST_ITEM: {
+                const std::vector<int> idx = CharsOfMcids(chars_by_mcid, u.mcids);
+                const std::vector<int> marker_idx = CharsOfMcids(chars_by_mcid, u.marker_mcids);
+                if (idx.empty() && marker_idx.empty()) break;
+                BlockImpl b = TextBlockFromIndices(*pw, idx, MEGAPDF_BLOCK_LIST_ITEM, page_index);
+                b.info.level = u.level;
+                b.marker = MarkerText(*pw, marker_idx);
+                if (idx.empty()) {
+                    megapdf_rect mb{};
+                    TaggedPieces(*pw, marker_idx, &mb);
+                    b.info.bounds = mb;
+                }
+                content.push_back(std::move(b));
+                break;
+            }
+            case MEGAPDF_BLOCK_TABLE_ROW: {
+                BlockImpl b;
+                b.info.kind = MEGAPDF_BLOCK_TABLE_ROW;
+                b.info.page = page_index;
+                b.info.object_index = -1;
+                b.info.level = u.level;
+                b.info.continues = u.continues ? 1 : 0;
+                double l = 1e18, bb = 1e18, r = -1e18, t = -1e18;
+                bool any_bounds = false, any_text = false;
+                for (size_t k = 0; k < u.cells.size(); k++) {
+                    const std::vector<int> idx = CharsOfMcids(chars_by_mcid, u.cells[k]);
+                    megapdf_rect cb{};
+                    std::vector<Piece> pieces = TaggedPieces(*pw, idx, &cb);
+                    // Cells join with one space in the block's canonical text (a searchable,
+                    // tokenizable row); the writers know a cell boundary from CELL_START.
+                    if (k + 1 < u.cells.size() && !pieces.empty()) AppendSeparator(&pieces, ' ');
+                    std::vector<SpanImpl> spans = SliceIntoSpans(pieces);
+                    if (spans.empty()) {
+                        SpanImpl empty;
+                        empty.info.object_index = -1;
+                        spans.push_back(std::move(empty));
+                    } else {
+                        any_text = true;
+                    }
+                    spans.front().info.flags |= MEGAPDF_SPAN_CELL_START;
+                    if (u.cell_header[k]) spans.front().info.flags |= MEGAPDF_SPAN_CELL_HEADER;
+                    if (!idx.empty()) {
+                        any_bounds = true;
+                        l = (std::min)(l, cb.left); bb = (std::min)(bb, cb.bottom);
+                        r = (std::max)(r, cb.right); t = (std::max)(t, cb.top);
+                    }
+                    b.spans.insert(b.spans.end(), spans.begin(), spans.end());
+                }
+                if (!any_text) break;   // a row of empty cells
+                b.info.bounds = any_bounds ? megapdf_rect{l, bb, r, t} : megapdf_rect{0, 0, 0, 0};
+                b.text = ConcatSpanText(b.spans);
+                content.push_back(std::move(b));
+                break;
+            }
+            case MEGAPDF_BLOCK_FIGURE: {
+                BlockImpl b;
+                b.info.kind = MEGAPDF_BLOCK_FIGURE;
+                b.info.page = page_index;
+                b.info.object_index = -1;
+                b.alt = u.alt;
+                bool placed = false;
+                for (int mcid : u.mcids) {
+                    const auto it = images.by_mcid.find(mcid);
+                    if (it == images.by_mcid.end()) continue;
+                    b.info.object_index = it->second.first;
+                    b.info.bounds = it->second.second;
+                    placed = true;
+                    break;
+                }
+                const std::vector<int> idx = CharsOfMcids(chars_by_mcid, u.mcids);
+                BlockImpl text;
+                if (!idx.empty()) {
+                    text = TextBlockFromIndices(*pw, idx, MEGAPDF_BLOCK_PARAGRAPH, page_index);
+                    if (!placed) b.info.bounds = text.info.bounds;
+                }
+                if (placed || !idx.empty() || !u.alt.empty()) content.push_back(std::move(b));
+                // A figure's own text (a chart's labels, a caption drawn inside it) is still
+                // text: design §1 item 8, nothing is silently dropped.
+                if (!idx.empty()) content.push_back(std::move(text));
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    if (content.empty()) return false;
+
+    // Marked content the tree never referenced still becomes a block (design §1 item 8): one
+    // trailing paragraph, geometrically ordered, the same shape as the heuristic path's
+    // leftover text. /Artifact sequences are furniture: kept, one block per line, only with
+    // MEGAPDF_STRUCTURE_KEEP_FURNITURE.
+    if (!uncovered_chars.empty()) {
+        const std::vector<Word> words = BuildWords(pw->chars, uncovered_chars);
+        std::vector<Line> lines = BuildLines(words);
+        std::vector<int> all(lines.size());
+        for (size_t i = 0; i < all.size(); i++) all[i] = static_cast<int>(i);
+        BlockImpl b;
+        b.info.kind = MEGAPDF_BLOCK_PARAGRAPH;
+        b.info.page = page_index;
+        b.info.object_index = -1;
+        b.info.bounds = UnionOfLines(lines);
+        b.spans = SliceIntoSpans(BuildPieces(TextView{pw->chars, words, lines}, all, 0));
+        b.text = ConcatSpanText(b.spans);
+        content.push_back(std::move(b));
+    }
+    if (!artifact_chars.empty() && (flags & MEGAPDF_STRUCTURE_KEEP_FURNITURE)) {
+        const std::vector<Word> words = BuildWords(pw->chars, artifact_chars);
+        const std::vector<Line> lines = BuildLines(words);
+        std::vector<BlockImpl> furniture;
+        for (size_t li = 0; li < lines.size(); li++) {
+            BlockImpl b;
+            b.info.kind = MEGAPDF_BLOCK_FURNITURE;
+            b.info.page = page_index;
+            b.info.object_index = -1;
+            b.info.bounds = megapdf_rect{lines[li].l, lines[li].b, lines[li].r, lines[li].t};
+            const std::vector<int> one{static_cast<int>(li)};
+            b.spans = SliceIntoSpans(BuildPieces(TextView{pw->chars, words, lines}, one, 0));
+            b.text = ConcatSpanText(b.spans);
+            furniture.push_back(std::move(b));
+        }
+        SpliceByPosition(&content, std::move(furniture));
+    }
+
+    std::vector<BlockImpl> unclaimed = images.unclaimed;
+    SpliceByPosition(&content, std::move(unclaimed));
+    SpliceByPosition(&content, BuildFields(page, page_index, flags));
+
+    // Confidence on a tagged page is the tree's coverage: the one thing that can still be
+    // wrong about a trusted tree is the text it left out.
+    result->confidence = (std::max)(0, (std::min)(100, static_cast<int>(std::lround(*coverage * 100.0))));
+    for (auto& b : content) {
+        b.info.source = MEGAPDF_STRUCTURE_SOURCE_TAGGED;
+        b.info.confidence = result->confidence;
+    }
+    result->blocks = std::move(content);
+    return true;
 }
 
 // Global pass: heading levels (design §1.2 "Headings": "distinct heading sizes across the
@@ -1670,7 +2345,7 @@ void AssignHeadingLevels(std::vector<BlockImpl>* blocks) {
     std::vector<double> sizes;
     bool any_bold_at_body = false;
     for (const auto& b : *blocks) {
-        if (b.info.kind != MEGAPDF_BLOCK_HEADING) continue;
+        if (b.info.kind != MEGAPDF_BLOCK_HEADING || b.level_fixed) continue;
         if (b.heading_bold_at_body) { any_bold_at_body = true; continue; }
         sizes.push_back(b.heading_size);
     }
@@ -1681,7 +2356,7 @@ void AssignHeadingLevels(std::vector<BlockImpl>* blocks) {
     for (size_t i = 0; i < sizes.size(); i++) level_of.emplace_back(sizes[i], (std::min)(static_cast<int>(i) + 1, kMaxHeadingLevel));
     const int bold_level = (std::min)(static_cast<int>(sizes.size()) + 1, kMaxHeadingLevel);
     for (auto& b : *blocks) {
-        if (b.info.kind != MEGAPDF_BLOCK_HEADING) continue;
+        if (b.info.kind != MEGAPDF_BLOCK_HEADING || b.level_fixed) continue;
         if (b.heading_bold_at_body) {
             b.info.level = any_bold_at_body || !sizes.empty() ? bold_level : 1;
             continue;
@@ -1816,11 +2491,28 @@ std::unique_ptr<megapdf_structure> BuildStructure(megapdf_document* document, in
             SetLastError(static_cast<unsigned long>(MEGAPDF_ERR_CANCELLED), "structure load cancelled");
             return nullptr;
         }
-        PageResult pr = BuildPageContent(loaded[static_cast<size_t>(k)], &pages[static_cast<size_t>(k)],
-                                         pages[static_cast<size_t>(k)].page_index, result->body_size, flags,
-                                         furniture_blocks[static_cast<size_t>(k)]);
-        result->page_confidence[pages[static_cast<size_t>(k)].page_index] = pr.confidence;
-        result->page_source[pages[static_cast<size_t>(k)].page_index] = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
+        PageWork& pw = pages[static_cast<size_t>(k)];
+        const megapdf_page* page = loaded[static_cast<size_t>(k)];
+        PageResult pr;
+        int source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
+        bool tree_present = false;
+        double coverage = 0;
+        // #358: the tagged path first, unless HEURISTIC_ONLY; a page it declines (no tree, or
+        // the trust rule) runs the heuristic path, with the confidence cap when a tree WAS
+        // there — the tree said something about this page and was not believed.
+        const bool tagged = (flags & MEGAPDF_STRUCTURE_HEURISTIC_ONLY) == 0 && !pw.chars.empty() &&
+                            BuildTaggedPage(page, &pw, pw.page_index, flags, &tree_present, &coverage, &pr);
+        if (tagged) {
+            source = MEGAPDF_STRUCTURE_SOURCE_TAGGED;
+        } else {
+            pr = BuildPageContent(page, &pw, pw.page_index, result->body_size, flags, furniture_blocks[static_cast<size_t>(k)]);
+            if (tree_present) {
+                pr.confidence = (std::min)(pr.confidence, kTaggedFallbackConfidenceCap);
+                for (auto& b : pr.blocks) b.info.confidence = pr.confidence;
+            }
+        }
+        result->page_confidence[pw.page_index] = pr.confidence;
+        result->page_source[pw.page_index] = source;
         result->blocks.insert(result->blocks.end(), pr.blocks.begin(), pr.blocks.end());
     }
 

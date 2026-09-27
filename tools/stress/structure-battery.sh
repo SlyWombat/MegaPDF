@@ -128,7 +128,7 @@ MS_FILE="$OUT/scratch/ms_per_page.txt"
 : >"$MS_FILE"
 
 opened=0; ok=0; encrypted=0; format=0; crashed=0; hung=0
-sum_pages=0; sum_tagged=0; sum_textless=0; sum_multicol=0; sum_manycut=0
+sum_pages=0; sum_tagged=0; sum_tree=0; sum_textless=0; sum_multicol=0; sum_manycut=0
 sum_fid_matched=0; sum_fid_a=0; sum_fid_b=0; sum_fid_low09=0
 sum_cli_fid_matched=0; sum_cli_fid_a=0; sum_cli_fid_b=0; cli_bad_exit=0
 max_rss=0
@@ -219,6 +219,7 @@ while IFS= read -r pdf; do
             ok=$((ok + 1))
             pages=$(field "$line" pages); sum_pages=$((sum_pages + ${pages:-0}))
             sum_tagged=$((sum_tagged + $(field "$line" tagged 2>/dev/null || echo 0)))
+            sum_tree=$((sum_tree + $(field "$line" tree 2>/dev/null || echo 0)))
             sum_textless=$((sum_textless + $(field "$line" textless 2>/dev/null || echo 0)))
             sum_multicol=$((sum_multicol + $(field "$line" multicol 2>/dev/null || echo 0)))
             sum_manycut=$((sum_manycut + $(field "$line" manycut 2>/dev/null || echo 0)))
@@ -291,6 +292,7 @@ order_gates=0
     echo "seconds:              $elapsed"
     echo "pages processed:      $sum_pages"
     echo "tagged pages:         $sum_tagged"
+    echo "pages read via tree:  $sum_tree (#358: source TAGGED; tagged minus this = rejected by the trust rule: $((sum_tagged - sum_tree)))"
     echo "textless pages:       $sum_textless"
     echo "multi-column pages:   $sum_multicol (approximation: block left-edge clustering, not the core's own cut count — see structure_check.cpp)"
     echo "many-cut pages:       $sum_manycut (same approximation, >3 clusters)"
