@@ -228,7 +228,7 @@ def main(argv):
     if not argv:
         raise SystemExit(__doc__)
     captures = None if len(argv) > 1 and argv[1] == "--text-only" else (argv[1] if len(argv) > 1 else None)
-    if captures and captures.startswith("--"):
+    if captures and captures.startswith("--") and argv[0] in ("push", "readback"):
         raise SystemExit("the captures folder comes first, then the flags")
     if argv[0] == "status":
         cmd_status()
