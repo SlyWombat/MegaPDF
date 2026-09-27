@@ -17,7 +17,6 @@ import com.megapdf.engine.PdfRect
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -146,11 +145,11 @@ class RedactionMarkLifecycleTest {
 
     /**
      * Undo all the way back through a removal (#429): the mark comes back from the removal
-     * with a new id, so the move recorded before it cannot find the mark to put it back, and
-     * that Undo does nothing. Red until #429 is fixed; take the annotation off with the fix.
+     * under a new core id, and the move recorded before it has to follow the mark to that new
+     * id — or the Undo that should put the mark back where it was drawn does nothing at all,
+     * and every Undo after it is one step off.
      */
     @Test
-    @Ignore("#429: the move's undo names a mark id the removal's undo no longer has")
     fun undoAfterARemovalTakesBackTheMoveBeforeIt() {
         val file = Fixtures.demo("redact-346.pdf")
         val facts = PageFacts.of(file)

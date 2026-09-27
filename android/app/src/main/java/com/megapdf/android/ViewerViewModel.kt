@@ -254,11 +254,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val doc = document ?: return
         if (redactionMarkCount == 0) return
         launchEdit(R.string.redact_failed) {
-            val byPage = redactionMarks.mapValues { (_, marks) -> marks.map { it.rect } }
+            // The marks as they stand, ids and all: the undo re-marks the rectangles, and the
+            // history needs the ids it replaces to keep the rest of the operations pointed at
+            // the same marks (#429).
+            val marks = redactionMarks
             // The history wants one page; a clear can span several, so it takes the first.
-            val first = byPage.keys.minOrNull() ?: 0
+            val first = marks.keys.minOrNull() ?: 0
             selectedRedactionMark = null
-            perform(ClearRedactionMarksOperation(first, byPage), doc)
+            perform(ClearRedactionMarksOperation(first, marks), doc)
             statusMessage = str(R.string.redact_marks_cleared)
         }
     }
@@ -1616,14 +1619,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun undo() {
         val doc = document ?: return
         launchEdit(R.string.undo_failed) {
-            busy.pageWork(BusyLabel.APPLYING, null) { history.undo(doc) }?.let { afterHistoryChange(it) }
+            busy.pageWork(BusyLabel.APPLYING, null) { history.undo(doc.asEditTarget()) }?.let { afterHistoryChange(it) }
         }
     }
 
     fun redo() {
         val doc = document ?: return
         launchEdit(R.string.redo_failed) {
-            busy.pageWork(BusyLabel.APPLYING, null) { history.redo(doc) }?.let { afterHistoryChange(it) }
+            busy.pageWork(BusyLabel.APPLYING, null) { history.redo(doc.asEditTarget()) }?.let { afterHistoryChange(it) }
         }
     }
 
@@ -1639,7 +1642,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         busy.pageWork(BusyLabel.APPLYING, spot ?: BusySpot(operation.pageIndex)) {
-            history.perform(operation, doc)
+            history.perform(operation, doc.asEditTarget())
         }
         if (operation is BodyTextEditOperation || operation is BodyTextDeleteOperation) {
             // A change that regenerated the page already went in without a warning (#139, #145).
