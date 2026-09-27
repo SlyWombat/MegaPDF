@@ -614,6 +614,32 @@ double TransformBoxMaxX(const Linear2& inv, double l, double r, double b, double
     ApplyLinear(inv, r, t, &x, &y); m = (std::max)(m, x);
     return m;
 }
+// The Y-axis counterparts of the two functions above (#444): a composite font whose CMap
+// selects vertical writing (WMode 1 -- Identity-V or a CJK vertical CMap; found on veraPDF's
+// composite-font/CMap conformance fixtures, #444) advances each successive character DOWN the
+// page rather than across it, while the character's own glyph matrix stays upright (unlike a
+// 90-degree-rotated run, #363's `rotated` flag never fires: mat_b/mat_c measure zero skew).
+// BuildWords' existing test always treats local +x as "the" advance axis and local y as the
+// baseline, which is correct for horizontal and for matrix-rotated text but wrong here: every
+// consecutive pair fails the baseline test (the true advance shows up entirely as a y
+// difference) and the run comes out as one one-glyph "word" per character -- measured on #444's
+// two zero-F1 fixtures as a real "Hello"/"world" collapsing to ten single-letter tokens.
+double TransformBoxMinY(const Linear2& inv, double l, double r, double b, double t) {
+    double x, y, m;
+    ApplyLinear(inv, l, b, &x, &y); m = y;
+    ApplyLinear(inv, l, t, &x, &y); m = (std::min)(m, y);
+    ApplyLinear(inv, r, b, &x, &y); m = (std::min)(m, y);
+    ApplyLinear(inv, r, t, &x, &y); m = (std::min)(m, y);
+    return m;
+}
+double TransformBoxMaxY(const Linear2& inv, double l, double r, double b, double t) {
+    double x, y, m;
+    ApplyLinear(inv, l, b, &x, &y); m = y;
+    ApplyLinear(inv, l, t, &x, &y); m = (std::max)(m, y);
+    ApplyLinear(inv, r, b, &x, &y); m = (std::max)(m, y);
+    ApplyLinear(inv, r, t, &x, &y); m = (std::max)(m, y);
+    return m;
+}
 
 // design §1.2 "Words": consecutive real characters (PDFium's own order) on one baseline join
 // while the glyph-box gap is <= 0.2 em. `only_rotated` selects which half of PageWork::chars
@@ -648,7 +674,42 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
                 baseline_delta <= kSuperscriptOffsetEm * em) {
                 same_baseline = true;
             }
-            if (!same_baseline || gap > kWordGapEm * em) start_new = true;
+            bool same_run = same_baseline && gap <= kWordGapEm * em;
+            if (!same_run) {
+                // #444: a vertical-writing-mode (WMode 1) composite font run -- upright glyphs
+                // (mat_b/mat_c read ~0, so #363's `rotated` flag above never fires) whose true
+                // advance is along local y, not local x (found on veraPDF's composite-font/CMap
+                // conformance fixtures: PDFium reports each successive character's origin
+                // stepping DOWN the page while the glyph matrix stays identity-like). The test
+                // above always treats local +x as "the" advance axis and local y as the
+                // baseline -- correct for horizontal and for #363's matrix-rotated runs, wrong
+                // here -- so every consecutive pair failed the baseline test and a real
+                // "Hello"/"world" came out as ten one-glyph words. Recognised the same way #363
+                // recognises a matrix-rotated run: swap which axis is "along the advance" and
+                // which is "the baseline", then apply the exact same kBaselineEm/kWordGapEm
+                // thresholds. Gated on the local displacement being ACTUALLY more vertical than
+                // horizontal (|dx_local| <= baseline_delta), so an ordinary horizontal run or a
+                // #363 matrix-rotated run -- whose local displacement is overwhelmingly along x
+                // by construction -- never reaches it.
+                const double dx_local = c_origin_xp - p_origin_xp;
+                if (std::fabs(dx_local) <= baseline_delta) {
+                    const bool same_column = std::fabs(dx_local) <= kBaselineEm * em;
+                    double vgap;
+                    if (c_origin_yp <= p_origin_yp) {
+                        // c sits below p -- the common case (a vertical CMap's default DW2 w1 is
+                        // -1000: each next character moves one em down the page).
+                        const double p_min_y = TransformBoxMinY(inv, p.loose_l, p.loose_r, p.loose_b, p.loose_t);
+                        const double c_max_y = TransformBoxMaxY(inv, c.loose_l, c.loose_r, c.loose_b, c.loose_t);
+                        vgap = p_min_y - c_max_y;
+                    } else {
+                        const double p_max_y = TransformBoxMaxY(inv, p.loose_l, p.loose_r, p.loose_b, p.loose_t);
+                        const double c_min_y = TransformBoxMinY(inv, c.loose_l, c.loose_r, c.loose_b, c.loose_t);
+                        vgap = c_min_y - p_max_y;
+                    }
+                    same_run = same_column && vgap <= kWordGapEm * em;
+                }
+            }
+            if (!same_run) start_new = true;
         }
         if (start_new) {
             if (have) words.push_back(cur);

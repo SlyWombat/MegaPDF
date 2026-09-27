@@ -1,0 +1,6 @@
+body_size 24
+page 0 confidence 100 source 0
+blocks 1
+block 0 kind=2 level=0 page=0 bounds=65.33 582.57 143.09 696.64 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=00480065006c006c006f00200057006f0072006c0064
+  span 0 flags=0 font_size=24 size_ratio=1 bounds=65.33 582.57 78.67 696.64 object_index=0 text=00480065006c006c006f0020
+  span 1 flags=0 font_size=24 size_ratio=1 bounds=120.94 582.57 143.09 696.64 object_index=1 text=0057006f0072006c0064
