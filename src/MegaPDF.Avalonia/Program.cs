@@ -1667,6 +1667,41 @@ internal static class Program
             failures++;
         }
 
+        // --- The window title follows the active tab on every route (#399) ---
+        //
+        // A tab is added, and made active, before its document has loaded, so the
+        // title read at that moment is the empty one — and nothing forwarded the
+        // active tab's later change. Every external open left "MegaPDF" in the title
+        // bar until the next tab click; so did an edit's dirty bullet.
+        Console.WriteLine("the window title follows the active tab (#399):");
+        try
+        {
+            CheckWindowTitle(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::window title: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        // --- The same file handed over twice, mid-load (#398) ---
+        //
+        // What a directly-launched macOS binary gets: its argv files once from the
+        // app's own command-line routing and again from AppKit as open-file events,
+        // the second landing while the first's load is still running. The
+        // find-or-activate dedupe read DocumentPath, which is not set until the load
+        // has finished, so it missed the tab already opening the file.
+        Console.WriteLine("the same file handed over twice, mid-load (#398):");
+        try
+        {
+            CheckDuplicateHandover(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::duplicate hand-over: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Linux single-instance socket (#348 phase 2) ---
         //
         // The routing half only — Platform.SingleInstance.RoutePaths, exercised the
@@ -1683,6 +1718,24 @@ internal static class Program
         catch (Exception ex)
         {
             Console.Error.WriteLine($"::error::single-instance routing: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
+        // --- Launching the binary with files on the command line (#398, #399) ---
+        //
+        // The one check in this file that starts a second, real process: on macOS,
+        // AppKit hands a directly-launched binary's argv files over a second time, as
+        // open-file events, on top of the app's own command-line routing — and only a
+        // real NSApplication does that, so no headless harness can see it. The child
+        // runs --open-check with two fixtures and reports its tabs and title.
+        Console.WriteLine("launching the binary with files on the command line (#398, #399):");
+        try
+        {
+            CheckLaunchWithArguments(dir, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::launch with arguments: {ex.GetType().Name}: {ex.Message}");
             failures++;
         }
 
@@ -3095,6 +3148,155 @@ internal static class Program
     }
 
     /// <summary>
+    /// The window title on every route a document takes into a tab (#399): the
+    /// command line (queued before the window opens, opened by the launch sequence),
+    /// an OS open once the launch has settled, a tab click, an edit's dirty bullet,
+    /// and closing — first the active tab, then the last one. The single-instance
+    /// hand-over route is asserted in <see cref="CheckSingleInstanceRouting"/>, which
+    /// already drives it. Read off <c>window.Title</c>, the bound property, not the
+    /// view model: the binding is part of what is being checked.
+    /// </summary>
+    private static void CheckWindowTitle(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+        var titleA = Strings.WindowTitleFormat("fixture.pdf");
+        var titleB = Strings.WindowTitleFormat("forms.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+
+        // The command-line route: queued before the window opens, the way
+        // App.RouteExternalPaths does it, and opened by the launch sequence.
+        window.OpenFromSystem(fixtureA);
+        window.Show();
+        PumpUntil(() => window.Title == titleA, TimeSpan.FromSeconds(5));
+        check("a document opened from the command line puts its name in the title", window.Title == titleA);
+
+        // An OS open (Finder, a drop, a second launch) once the launch has settled.
+        window.OpenFromSystem(fixtureB);
+        PumpUntil(() => window.Title == titleB, TimeSpan.FromSeconds(5));
+        check("a document the OS hands over once the window is up puts its name in the title", window.Title == titleB);
+
+        var tabA = shell.Documents.First(d => SamePath(d.DocumentPath, fixtureA));
+        var tabB = shell.Documents.First(d => SamePath(d.DocumentPath, fixtureB));
+
+        shell.ActivateTab(tabA);
+        PumpUntil(() => window.Title == titleA, TimeSpan.FromSeconds(2));
+        check("clicking another tab switches the title to it", window.Title == titleA);
+
+        // The dirty bullet — the same forwarding, for the other half of the title.
+        tabA.TextFont = MegaPDF.Core.Engine.StandardTextBoxFonts.Sans;
+        tabA.TextSize = 12;
+        tabA.AddTextBox(0, new PdfPoint(100, 300), "title check");
+        PumpUntil(() => tabA.IsDirty && !tabA.Busy.IsBusy, TimeSpan.FromSeconds(5));
+        var dirtyA = Strings.WindowTitleFormat("• fixture.pdf");
+        PumpUntil(() => window.Title == dirtyA, TimeSpan.FromSeconds(2));
+        check("an edit puts the dirty bullet in the title without a tab switch", window.Title == dirtyA);
+        check("  and the inactive tab's name is not what changed", tabB.WindowTitle == titleB);
+
+        // Closing: the active tab, then the last.
+        shell.CloseTab(tabA);
+        PumpUntil(() => window.Title == titleB, TimeSpan.FromSeconds(2));
+        check("closing the active tab moves the title to the tab that takes its place", window.Title == titleB);
+        shell.CloseTab(tabB);
+        PumpUntil(() => window.Title == "MegaPDF", TimeSpan.FromSeconds(2));
+        check("closing the last tab leaves the app's own name", window.Title == "MegaPDF");
+
+        window.SkipCloseConfirmation();
+        window.Close();
+    }
+
+    /// <summary>
+    /// One file, delivered twice, each time while its first open is still loading
+    /// (#398) — the shape a directly-launched macOS binary produces, where AppKit hands
+    /// the argv files over a second time as open-file events on top of the app's own
+    /// command-line routing. Three arrivals are driven, because each reaches the
+    /// dedupe through a different door:
+    ///
+    /// * queued before the window opens (the command-line copy, App.RouteExternalPaths)
+    ///   and again the moment the launch sequence has started loading it (AppKit's
+    ///   copy, once _launchSettled is already true) — the exact race from the issue;
+    /// * both copies queued before the window opens (the launch-sequence loop's own
+    ///   IsOpen check, against a tab it added itself a moment earlier);
+    /// * back to back once settled, nothing awaited between (a second instance or a
+    ///   Finder re-open of a file whose tab is mid-load).
+    ///
+    /// The tab that wins is the one already opening the file; the second arrival
+    /// activates it rather than opening a twin. Waited out on IsDocumentOpen, then a
+    /// short quiet period, so a duplicate that only lands once the first load has
+    /// finished is still seen.
+    /// </summary>
+    private static void CheckDuplicateHandover(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        var fixtureA = Path.Combine(dir, "fixture.pdf");
+        var fixtureB = Path.Combine(dir, "forms.pdf");
+        var fixtureC = Path.Combine(dir, "stamped.pdf");
+
+        using var shell = new ShellViewModel(state);
+        var window = new Views.MainWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.SkipRecoveryOffer = true;
+
+        // 1. The command-line copy waits in the window's pending list until the
+        //    window opens; the launch sequence then starts loading it, synchronously
+        //    as far as its first real await — so when Show returns, the load is in
+        //    flight and _launchSettled is true. AppKit's copy lands right then.
+        window.OpenFromSystem(fixtureA);
+        window.Show();
+        check("the launched file's open is in flight the moment the window is up",
+              shell.Documents.Count == 1 && !shell.Documents[0].IsDocumentOpen);
+        window.OpenFromSystem(fixtureA);
+        PumpUntil(() => shell.Documents.Count >= 1 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(5));
+        PumpFor(TimeSpan.FromMilliseconds(300));
+        check("a second hand-over of the same file, landing mid-load, opens no second tab",
+              shell.Documents.Count == 1 && SamePath(shell.Documents[0].DocumentPath, fixtureA));
+
+        // 2. Back to back once settled, nothing pumped between: the second arrival
+        //    finds a tab whose OpeningPath is the file, not its DocumentPath.
+        window.OpenFromSystem(fixtureB);
+        window.OpenFromSystem(fixtureB);
+        PumpUntil(() => shell.Documents.Count >= 2 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(5));
+        PumpFor(TimeSpan.FromMilliseconds(300));
+        check("two back-to-back hand-overs of one file, once settled, make one tab",
+              shell.Documents.Count == 2 && shell.Documents.Count(d => SamePath(d.DocumentPath, fixtureB)) == 1);
+        check("  and it is the active tab", SamePath(shell.Active?.DocumentPath, fixtureB));
+
+        // 3. A third, fully open by the time it is handed over again: activates, as
+        //    before this fix — the case that never broke, kept so it never does.
+        window.OpenFromSystem(fixtureC);
+        PumpUntil(() => shell.Documents.Count >= 3 && shell.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(5));
+        shell.ActivateTab(shell.Documents.First(d => SamePath(d.DocumentPath, fixtureA)));
+        window.OpenFromSystem(fixtureC);
+        PumpUntil(() => SamePath(shell.Active?.DocumentPath, fixtureC), TimeSpan.FromSeconds(5));
+        check("a file already fully open activates its tab, as before",
+              shell.Documents.Count == 3 && SamePath(shell.Active?.DocumentPath, fixtureC));
+
+        window.SkipCloseConfirmation();
+        window.Close();
+
+        // 4. Both copies queued before the window opens — the launch-sequence loop's
+        //    own IsOpen check, run against a tab the loop itself added an iteration
+        //    earlier and whose load it awaited: one tab.
+        using var shell2 = new ShellViewModel(state);
+        var window2 = new Views.MainWindow { DataContext = shell2, Width = 1280, Height = 800 };
+        window2.SkipRecoveryOffer = true;
+        window2.OpenFromSystem(fixtureA);
+        window2.OpenFromSystem(fixtureA);
+        window2.Show();
+        PumpUntil(() => window2.LaunchSequence.IsCompleted && shell2.Documents.All(d => d.IsDocumentOpen), TimeSpan.FromSeconds(5));
+        PumpFor(TimeSpan.FromMilliseconds(300));
+        check("two copies of one file queued before the window opens make one tab",
+              shell2.Documents.Count == 1 && SamePath(shell2.Documents[0].DocumentPath, fixtureA));
+        window2.SkipCloseConfirmation();
+        window2.Close();
+    }
+
+    /// <summary>
     /// The routing half of the Linux single-instance socket (#348 phase 2 Part B),
     /// exercised the way App.axaml.cs wires it up, without a real second process or a
     /// real socket: this self-test runs on every platform the app ships on, most of
@@ -3178,6 +3380,11 @@ internal static class Program
                       TimeSpan.FromSeconds(5));
             check("the buffered path is delivered the moment the dispatcher is confirmed running",
                   shell.Documents.Count == 1 && SamePath(shell.Documents[0].DocumentPath, fixtureA));
+            // The title follows a hand-over too (#399): the tab was added, and made
+            // active, before its name was known.
+            var titleA = Strings.WindowTitleFormat("fixture.pdf");
+            PumpUntil(() => window.Title == titleA, TimeSpan.FromSeconds(2));
+            check("  and the window title names it", window.Title == titleA);
 
             // A second "connection" with a different file, now that routing is live:
             // its own tab, not a replacement of the first — the same rule the Linux
@@ -3203,6 +3410,9 @@ internal static class Program
             PumpUntil(() => SamePath(shell.Active?.DocumentPath, fixtureB), TimeSpan.FromSeconds(5));
             check("a path already open activates its tab instead of duplicating it",
                   shell.Documents.Count == countBeforeReopen && SamePath(shell.Active?.DocumentPath, fixtureB));
+            var titleB = Strings.WindowTitleFormat("forms.pdf");
+            PumpUntil(() => window.Title == titleB, TimeSpan.FromSeconds(2));
+            check("  and the window title follows the activated tab", window.Title == titleB);
 
             // A bare relaunch with no file (`megapdf` a second time, nothing selected):
             // bring the window to front, open nothing new.
@@ -3218,6 +3428,98 @@ internal static class Program
             window.SkipCloseConfirmation();
             window.Close();
         }
+    }
+
+    /// <summary>
+    /// The real thing, in a real process (#398, #399): this same binary launched with
+    /// two fixture paths on its command line and <c>--open-check</c>, which makes it
+    /// take the person's route for those paths (<c>App.RouteExternalPaths</c>), wait
+    /// for the opens to settle, print its tabs and window title, and exit. Read back
+    /// here from its stdout.
+    ///
+    /// Only a separate process can show the macOS bug: AppKit delivers a
+    /// directly-launched binary's argv files a second time, as open-file events, and
+    /// the find-or-activate dedupe used to lose the race against its own still-loading
+    /// first open of the same file — "Alpha, Alpha, Bravo". Nothing about that is
+    /// reachable from the headless platform the rest of this file runs on.
+    ///
+    /// Needs a display: Linux without one (a bare CI shell) says so and moves on
+    /// rather than failing; CI wraps the self-test in xvfb-run so it does run there.
+    /// </summary>
+    private static void CheckLaunchWithArguments(string dir, Action<string, bool> check)
+    {
+        if (OperatingSystem.IsLinux()
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"))
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
+        {
+            Console.WriteLine("  skipped: no display for a real window (set DISPLAY, or run under xvfb-run)");
+            return;
+        }
+
+        var fixtureA = Path.GetFullPath(Path.Combine(dir, "fixture.pdf"));
+        var fixtureB = Path.GetFullPath(Path.Combine(dir, "forms.pdf"));
+
+        // The apphost this self-test is running in — the bundle's binary on macOS,
+        // the published apphost on Linux, MegaPDF.exe on Windows. `dotnet run` runs
+        // the apphost too, but a plain `dotnet MegaPDF.dll` does not, and then the
+        // child has to be started the same way.
+        var host = Environment.ProcessPath ?? throw new InvalidOperationException("no process path to relaunch");
+        var start = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = host,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        if (Path.GetFileNameWithoutExtension(host).Equals("dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            var assembly = typeof(Program).Assembly.Location;
+            if (string.IsNullOrEmpty(assembly))
+                throw new InvalidOperationException("running under dotnet with no assembly path to relaunch");
+            start.ArgumentList.Add(assembly);
+        }
+        start.ArgumentList.Add("--open-check");
+        // English whatever the machine speaks, for the same reason this self-test
+        // forces it on itself: the title below is compared against Strings.* here.
+        start.ArgumentList.Add("--language");
+        start.ArgumentList.Add("en-US");
+        start.ArgumentList.Add(fixtureA);
+        start.ArgumentList.Add(fixtureB);
+
+        using var child = System.Diagnostics.Process.Start(start)
+                          ?? throw new InvalidOperationException("the child process did not start");
+        var stdout = child.StandardOutput.ReadToEndAsync();
+        var stderr = child.StandardError.ReadToEndAsync();
+        if (!child.WaitForExit((int)TimeSpan.FromSeconds(60).TotalMilliseconds))
+        {
+            try { child.Kill(entireProcessTree: true); } catch (Exception) { }
+            check("the launched process reported back within a minute", false);
+            return;
+        }
+        var report = stdout.GetAwaiter().GetResult();
+        var errors = stderr.GetAwaiter().GetResult();
+
+        // The child's own lines, indented under this block so a failure reads in place.
+        foreach (var line in report.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            Console.WriteLine($"    {line.TrimEnd()}");
+        foreach (var line in errors.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            Console.WriteLine($"    stderr: {line.TrimEnd()}");
+
+        var tabsLine = report.Split('\n').Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith("open-check: ", StringComparison.Ordinal) && l.Contains(" tab(s): ", StringComparison.Ordinal));
+        var titleLine = report.Split('\n').Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith("open-check: window title: ", StringComparison.Ordinal));
+        var tabs = tabsLine?["open-check: ".Length..].Split(" tab(s): ", 2) is [var count, var names] && int.TryParse(count, out var n)
+            ? (Count: n, Names: names.Split(", ").ToList())
+            : (Count: -1, Names: []);
+        var title = titleLine?["open-check: window title: ".Length..];
+
+        check("the launched process reported back", tabsLine is not null && titleLine is not null);
+        check("launching the binary with two files opens two tabs, one each (#398)",
+              tabs.Count == 2 && tabs.Names.Count(x => x == "fixture.pdf") == 1 && tabs.Names.Count(x => x == "forms.pdf") == 1);
+        check("and its window title names the last file (#399)",
+              title == Strings.WindowTitleFormat("forms.pdf"));
+        check($"and it passed its own checks (exit {child.ExitCode})", child.ExitCode == 0);
     }
 
     /// <summary>

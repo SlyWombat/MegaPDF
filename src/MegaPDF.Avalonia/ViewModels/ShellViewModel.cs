@@ -119,7 +119,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// <summary>The zoom box: the active tab's level, or 100 % — what a tab starts at.</summary>
     public string ZoomPercentLabel => Active?.ZoomPercentLabel ?? Strings.ZoomPercent(100);
 
-    /// <summary>The three fall-through properties change when the active tab's own do.</summary>
+    /// <summary>
+    /// The fall-through properties change when the active tab's own do — the window
+    /// title included (#399). A tab is added, and made active, before its document has
+    /// loaded (so a password prompt has a window to land in), so the title read at that
+    /// moment is the empty one, and it stayed that way until the next tab switch: every
+    /// document opened from Finder, `open`, the command line or a second launch left
+    /// the title at "MegaPDF", and so did an edit's dirty bullet.
+    /// </summary>
     private void OnActivePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (!ReferenceEquals(sender, Active))
@@ -134,6 +141,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 break;
             case nameof(DocumentViewModel.ZoomPercentLabel):
                 OnPropertyChanged(nameof(ZoomPercentLabel));
+                break;
+            case nameof(DocumentViewModel.WindowTitle):
+                OnPropertyChanged(nameof(WindowTitle));
                 break;
         }
     }
@@ -154,9 +164,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// </summary>
     public DocumentViewModel CreateDocument() => new(_settings, _signatures, _recoveryDirectory);
 
-    /// <summary>The tab already open on this path in this window, if any.</summary>
+    /// <summary>
+    /// The tab already open on this path in this window, if any — counting a tab whose
+    /// open of it is still in flight, or is waiting on its password (#398). The same
+    /// file can be handed over twice within milliseconds: a directly-launched macOS
+    /// binary gets its argv files once from the app's own command-line routing and
+    /// again from AppKit as open-file events, and the second arrives while the first's
+    /// load is still running, before <see cref="DocumentViewModel.DocumentPath"/> is
+    /// set. Matching only that gave "Alpha, Alpha, Bravo".
+    /// </summary>
     public DocumentViewModel? FindTab(string path) =>
-        Documents.FirstOrDefault(d => d.DocumentPath is { } open && LaunchedDocument.SameFile(open, path));
+        Documents.FirstOrDefault(d => (d.DocumentPath ?? d.OpeningPath ?? d.PendingPasswordPath) is { } open
+                                      && LaunchedDocument.SameFile(open, path));
 
     /// <summary>Whether this window already has a tab on this path.</summary>
     public bool IsOpen(string path) => FindTab(path) is not null;
