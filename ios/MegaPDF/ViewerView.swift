@@ -27,6 +27,10 @@ struct ViewerView: View {
     @State private var redactBand: RedactBand?
     /// The redaction confirmation is up: marks are on the document and a save was asked for.
     @State private var redactConfirm: RedactSaveChoice?
+    /// The signature confirmation is up (#481): Save was tapped on a signed document with
+    /// no redaction marks pending -- those ask their own question, which already mentions
+    /// the signature too (`redactConfirmMessage`).
+    @State private var signatureConfirm = false
     /// The More button's on-screen frame (#378): iPad's `UIActivityViewController` needs a
     /// popover source or it crashes, and it has to point at wherever the button actually is
     /// rather than a guessed coordinate — `MoreMenuAnchorKey` below reports it here.
@@ -168,14 +172,19 @@ struct ViewerView: View {
             // The confirmation #173 asks for, before either save path writes anything: what
             // redaction does, that it cannot be undone once saved, and Save a copy as the
             // DEFAULT action — the reversible choice, because the other cannot be taken back.
+            //
+            // #481's signature confirmation shares this one call rather than adding a second
+            // `.confirmationDialog` next to it: `body`'s modifier chain is already long enough
+            // that one more attached directly hit the type-checker's complexity ceiling
+            // ("unable to type-check this expression in reasonable time").
             .confirmationDialog(
-                "Remove the marked content?",
-                isPresented: redactConfirmPresented(regular: false),
+                saveConfirmTitle,
+                isPresented: saveConfirmPresented(regular: false),
                 titleVisibility: .visible
             ) {
-                redactConfirmButtons
+                saveConfirmButtons
             } message: {
-                redactConfirmMessage
+                saveConfirmMessage
             }
             .alert("", isPresented: Binding(get: { model.redactionSummary != nil },
                                             set: { if !$0 { model.redactionSummary = nil } })) {
@@ -232,6 +241,8 @@ struct ViewerView: View {
                     savesChanges: model.isDirty,
                     isBusy: model.isSaving || model.isUnlocking,
                     error: model.securityError,
+                    documentIsSigned: model.isSignedDocument,
+                    documentIsCertified: model.isCertifiedSignature,
                     onUnlock: model.unlock,
                     onSetPassword: model.setPassword,
                     onRemovePassword: model.removePassword,
@@ -328,15 +339,16 @@ struct ViewerView: View {
                 .disabled(!canSave)
                 // On the iPad the redaction question is a popover, and a popover
                 // points at something: the Save it was raised from (#172). The
-                // compact layouts keep the action sheet on the view, below.
+                // compact layouts keep the action sheet on the view, below. #481's
+                // signature confirmation shares this call too (see `body`'s twin).
                 .confirmationDialog(
-                    "Remove the marked content?",
-                    isPresented: redactConfirmPresented(regular: true),
+                    saveConfirmTitle,
+                    isPresented: saveConfirmPresented(regular: true),
                     titleVisibility: .visible
                 ) {
-                    redactConfirmButtons
+                    saveConfirmButtons
                 } message: {
-                    redactConfirmMessage
+                    saveConfirmMessage
                 }
             Menu {
                 Button("Save a copy") {
@@ -506,8 +518,17 @@ struct ViewerView: View {
 
     private func saveTapped() {
         // Marks on the document mean the question comes first (#173): nothing
-        // is written until it has been answered.
-        if model.redactionMarkCount > 0 { redactConfirm = .overwrite } else { model.save() }
+        // is written until it has been answered -- and that question already mentions
+        // the signature too, if there is one (`redactConfirmMessage`).
+        if model.redactionMarkCount > 0 {
+            redactConfirm = .overwrite
+        } else if model.isSignedDocument {
+            // #481: no marks to ask about, but Save would still overwrite a signed
+            // original -- ask the same way, on its own.
+            signatureConfirm = true
+        } else {
+            model.save()
+        }
     }
 
     private func closeTapped() {
@@ -522,14 +543,55 @@ struct ViewerView: View {
     /// The redaction question is raised from one place per layout — the view, as an
     /// action sheet, in compact width; the Save button, as a popover, in regular — so
     /// each presenter only answers for its own width and the question is never up twice.
+    /// #481's signature confirmation shares this one (`saveConfirmPresented`, below) rather
+    /// than getting a presenter and a `confirmationDialog` of its own -- redaction's marks
+    /// and Save's own signature check can never both be waiting at once (whichever the tap
+    /// found first is answered before the other is even asked), and `body`'s modifier chain
+    /// was already at the type-checker's complexity ceiling before this was added.
     private func redactConfirmPresented(regular: Bool) -> Binding<Bool> {
         Binding(get: { redactConfirm != nil && isRegular == regular },
                 set: { if !$0 { redactConfirm = nil } })
     }
 
+    /// One `confirmationDialog` for both #173's redaction question and #481's signature
+    /// question: `redactConfirm` wins when both could apply (its own message already
+    /// mentions the signature too, via `redactConfirmMessageText`), so this only reads
+    /// `signatureConfirm` once `redactConfirm` is nil.
+    private func saveConfirmPresented(regular: Bool) -> Binding<Bool> {
+        Binding(get: { (redactConfirm != nil || signatureConfirm) && isRegular == regular },
+                set: { if !$0 { redactConfirm = nil; signatureConfirm = false } })
+    }
+
+    private var saveConfirmTitle: String {
+        redactConfirm != nil
+            ? String(localized: "Remove the marked content?")
+            : String(localized: "Save over the signed original?")
+    }
+
     /// The confirmation #173 asks for, before either save path writes anything: what
     /// redaction does, that it cannot be undone once saved, and Save a copy as the
     /// DEFAULT action — the reversible choice, because the other cannot be taken back.
+    /// #481: when no marks are pending but Save would still overwrite a signed original,
+    /// the same dialog asks that question instead (`signatureConfirmButtons`).
+    @ViewBuilder
+    private var saveConfirmButtons: some View {
+        if redactConfirm != nil {
+            redactConfirmButtons
+        } else {
+            signatureConfirmButtons
+        }
+    }
+
+    private var saveConfirmMessage: some View {
+        Group {
+            if redactConfirm != nil {
+                redactConfirmMessage
+            } else {
+                signatureConfirmMessage
+            }
+        }
+    }
+
     @ViewBuilder
     private var redactConfirmButtons: some View {
         Button("Save as a copy") {
@@ -551,7 +613,47 @@ struct ViewerView: View {
     }
 
     private var redactConfirmMessage: some View {
-        Text("Redaction permanently removes the marked content. This can't be undone after saving.")
+        // #481: "Overwrite the original" above would also invalidate an existing signature --
+        // said here too, rather than as a second question, since this one already gates every
+        // way this dialog's buttons can write over the file.
+        Text(redactConfirmMessageText)
+    }
+
+    private var redactConfirmMessageText: String {
+        let base = String(localized: "Redaction permanently removes the marked content. This can't be undone after saving.")
+        guard model.isSignedDocument else { return base }
+        let signatureNote = model.isCertifiedSignature
+            ? String(localized: "This document is also certified as closed to changes; overwriting it will invalidate that certification too.")
+            : String(localized: "This document is also digitally signed; overwriting it will invalidate the signature too.")
+        return base + " " + signatureNote
+    }
+
+    /// The confirmation #481 asks for, before Save overwrites a signed original with no
+    /// redaction marks pending: Save a copy is the prominent, safe choice, and overwriting
+    /// needs its own deliberate, destructive-styled tap -- the same shape as
+    /// `redactConfirmButtons`.
+    @ViewBuilder
+    private var signatureConfirmButtons: some View {
+        Button("Save a copy") {
+            signatureConfirm = false
+            onSaveCopy()
+        }
+        Button(model.isCertifiedSignature
+               ? "Overwrite the certified original" : "Overwrite the signed original",
+               role: .destructive) {
+            signatureConfirm = false
+            model.save()
+        }
+        Button("Cancel", role: .cancel) { signatureConfirm = false }
+    }
+
+    /// A certification signature (`/DocMDP`) gets different wording (#481): the document's
+    /// own structure declares it closed to changes, not merely invalidated by one --
+    /// measured in #476 as the common case (33/33 of a real corpus), not the edge case.
+    private var signatureConfirmMessage: some View {
+        Text(model.isCertifiedSignature
+             ? "This document is certified as closed to changes. Saving here will invalidate that certification. Save a copy to keep the signed original intact."
+             : "This document has a digital signature. Saving here will invalidate it. Save a copy to keep the signed original intact.")
     }
 
     // MARK: - the iPad's toolbar (#172)

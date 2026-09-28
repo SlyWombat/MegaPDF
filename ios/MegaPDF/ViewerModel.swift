@@ -144,6 +144,9 @@ final class ViewerModel: ObservableObject {
     private var noticeTask: Task<Void, Never>?
     /// The scanned-page hint is shown once per document, not on every stray tap.
     private var scannedHintShown = false
+    /// The quiet, once-per-open note that Save a copy doesn't carry a signature to the copy
+    /// (#481) is shown once, not on every copy exported from the same open document.
+    private var signatureCopyNoticeShown = false
     @Published var draftSize = defaultTextSize
     @Published var draftFont = PdfEngine.defaultFont
 
@@ -161,6 +164,18 @@ final class ViewerModel: ObservableObject {
     /// arming a filling tool explains rather than acting (`startTextPlacement`,
     /// `startPlacement(_:)`, and the direct-tap field/mark path in `onPageTapped`).
     var isDynamicXfa: Bool { documentFlags.contains(.dynamicXFA) }
+    /// The open document carries an existing digital signature (#476, #481 phase 1): saving
+    /// over it -- Save itself, or the Password command's set/change/remove, which writes
+    /// over the file the same way (`changeSecurity`) -- invalidates it. `ViewerView` asks
+    /// before either does, steering to Save a copy, which stays unaffected and notes it once
+    /// (`exportFile`). Nothing here refuses the overwrite; it only makes it deliberate.
+    var isSignedDocument: Bool { documentFlags.contains(.signed) }
+    /// At least one of the document's signatures is a certification (`/DocMDP`) signature,
+    /// which can forbid modification outright rather than merely be invalidated by it -- the
+    /// wording wherever `isSignedDocument` is used differs when this is also true. Measured
+    /// in #476: not the edge case it sounds like -- every genuinely signed document in that
+    /// corpus (33/33, all GPO) is a certification signature.
+    var isCertifiedSignature: Bool { documentFlags.contains(.signedCertification) }
     /// The Password command's sheet, and what it says when an unlock fails (#131).
     @Published var securitySheet: SecuritySheetMode?
     @Published private(set) var securityError: String?
@@ -1916,6 +1931,12 @@ final class ViewerModel: ObservableObject {
             }
             exportEditCount = editsAtStart
             exportStagedURL = staged
+            // #481: quiet and once per open -- the common, already-safe path (the signed
+            // original is untouched) still deserves to know the copy isn't signed too.
+            if isSignedDocument, !signatureCopyNoticeShown {
+                signatureCopyNoticeShown = true
+                showNotice(String(localized: "The signature on this document doesn't carry over to the copy."))
+            }
             return staged
         } catch {
             try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
@@ -2196,6 +2217,7 @@ final class ViewerModel: ObservableObject {
         renderTask?.cancel()
         pendingBodyEdit = nil
         scannedHintShown = false
+        signatureCopyNoticeShown = false
         clearSearch()
         pageImages = [:]
         renderedWidths = [:]
