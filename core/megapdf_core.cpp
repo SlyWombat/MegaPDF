@@ -47,6 +47,7 @@
 #include "fpdf_progressive.h"  // the page check renders in slices it can stop between (#145)
 #include "fpdf_flatten.h"
 #include "fpdf_save.h"
+#include "fpdf_signature.h"   // MEGAPDF_DOC_SIGNED / MEGAPDF_DOC_SIGNED_CERTIFICATION (#476, #481)
 #include "fpdf_text.h"
 #include "fpdf_doc.h"   // FPDF_RemoveMetadata (patch 0027)
 #include "fpdf_transformpage.h"  // FPDFPage_GetCropBox; FPDF_CreateClipPathFromRects (patch 0026)
@@ -821,6 +822,33 @@ bool IsDynamicXfaPlaceholder(const megapdf_document* d) {
     return false;
 }
 
+// #476/#481: does `d` carry an existing digital signature, and is any of them a
+// certification (/DocMDP) signature? PDFium's own read (FPDF_GetSignatureCount /
+// FPDF_GetSignatureObject), not a raw-bytes search for `/Sig` or `/ByteRange` — the same
+// preference IsDynamicXfaPlaceholder above has for FPDF_GetFormType over guessing from the
+// AcroForm dictionary's own keys. Sets `*out_signed` and `*out_certified`; both start false
+// so a caller may pass a subset of them (out_certified may be null when the caller only
+// wants MEGAPDF_DOC_SIGNED, though megapdf_document_flags always wants both).
+void DetectSignature(const megapdf_document* d, bool* out_signed, bool* out_certified) {
+    *out_signed = false;
+    if (out_certified != nullptr) *out_certified = false;
+    const int count = FPDF_GetSignatureCount(d->doc);
+    if (count <= 0) return;   // 0: no signature. -1: PDFium error, treated the same as none.
+    *out_signed = true;
+    if (out_certified == nullptr) return;
+    // A certification signature's /DocMDP permission (1: no changes, 2: form-fill and
+    // signing only, 3: also annotations) is cheap -- one call per signature, no page load,
+    // no text search -- so every signature is checked rather than stopping at the first.
+    for (int i = 0; i < count; i++) {
+        FPDF_SIGNATURE sig = FPDF_GetSignatureObject(d->doc, i);
+        if (sig == nullptr) continue;
+        if (FPDFSignatureObj_GetDocMDPPermission(sig) != 0) {
+            *out_certified = true;
+            break;
+        }
+    }
+}
+
 }  // namespace
 
 // megapdf_core_internal.h: thin accessors so megapdf_structure.cpp (#353) can read a page's
@@ -1041,6 +1069,10 @@ MEGAPDF_API unsigned int megapdf_document_flags(const megapdf_document* d) {
     Guard guard(CoreLock());
     unsigned int flags = 0;
     if (IsDynamicXfaPlaceholder(d)) flags |= MEGAPDF_DOC_DYNAMIC_XFA;
+    bool is_signed = false, is_certified = false;
+    DetectSignature(d, &is_signed, &is_certified);
+    if (is_signed) flags |= MEGAPDF_DOC_SIGNED;
+    if (is_certified) flags |= MEGAPDF_DOC_SIGNED_CERTIFICATION;
     return flags;
 }
 

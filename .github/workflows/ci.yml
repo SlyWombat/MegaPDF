@@ -590,6 +590,9 @@ jobs:
           # #457: MEGAPDF_DOC_DYNAMIC_XFA fixtures (dynamic-xfa.pdf, hybrid-xfa.pdf) -- this
           # job runs the native core_tests suite directly, same as core-tests.yml.
           python tools/gen_xfa_fixtures.py $fixtures
+          # #481: MEGAPDF_DOC_SIGNED / MEGAPDF_DOC_SIGNED_CERTIFICATION fixtures
+          # (signed-approval.pdf, signed-certified.pdf), needed for the same reason.
+          python tools/gen_signature_fixtures.py $fixtures
           cmake -S core -B "$env:RUNNER_TEMP/core-build" -A ARM64 -DCMAKE_BUILD_TYPE=Debug `
             -DMEGAPDF_CORE_TESTS=ON -DMEGAPDF_FIXTURES_DIR="$fixtures"
           if ($LASTEXITCODE -ne 0) { throw "configure failed" }
