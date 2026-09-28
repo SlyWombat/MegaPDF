@@ -52,6 +52,19 @@
 #include "fpdf_transformpage.h"  // FPDFPage_GetCropBox; FPDF_CreateClipPathFromRects (patch 0026)
 #include "fpdfview.h"
 
+// How many patches (tools/pdfium/patches) the PDFium this file is compiled against carries,
+// set by whichever build system built it: core/CMakeLists.txt (desktop and the core test
+// target) and android/engine/src/main/cpp/CMakeLists.txt both read it from the linked
+// PDFium's own VERSION file and pass it as this definition (#452). It has never been
+// possible to detect at runtime which PDFium sits beside this file (a save-and-reopen probe
+// was tried, and rejected: see docs/adr and the commit that added and removed it), so a
+// build that does not set it -- today, ios/project.yml's Xcode build compiles this file
+// with no such wiring, a follow-up (#452) -- gets the conservative default here: the
+// behaviour every patch level below the one it names has always had.
+#ifndef MEGAPDF_PDFIUM_PATCHES
+#define MEGAPDF_PDFIUM_PATCHES 0
+#endif
+
 // --------------------------------------------------------------------------
 // Internals
 // --------------------------------------------------------------------------
@@ -5507,9 +5520,11 @@ bool VisitWidgets(const megapdf_document* d, const std::vector<int>* pages, Visi
     return true;
 }
 
-// Whether any widget on the given pages is a kid of a /Parent field dictionary: the shape
-// PDFium's page copy cannot carry across documents (see the header), so import and extract
-// refuse it whole.
+// Whether any widget on the given pages is a kid of a /Parent field dictionary. PDFium's
+// page copy carries the whole hierarchy now (#452, tools/pdfium/patches), so this is no
+// longer a reason to refuse the copy by itself; it is still a cheap gate before the more
+// expensive check import needs (HierarchicalFieldsWouldClash), since most pages have no
+// hierarchy at all.
 bool PagesCarryParentFields(const megapdf_document* d, const std::vector<int>* pages) {
     bool found = false;
     VisitWidgets(d, pages, [&](FPDF_ANNOTATION widget) {
@@ -5548,13 +5563,57 @@ bool CollectTopFieldNames(const megapdf_document* d, const std::vector<int>* pag
     });
 }
 
+// Same, but only the fields in a /Parent hierarchy: the ones RenameClashingFields cannot
+// reach, because it renames a clashing widget's own /T and a hierarchical widget has none
+// (its name lives on its /Parent, found the same way TopFieldName finds any widget's).
+bool CollectHierarchicalTopFieldNames(const megapdf_document* d, const std::vector<int>* pages, std::set<U16>* out) {
+    return VisitWidgets(d, pages, [&](FPDF_ANNOTATION widget) {
+        if (!FPDFAnnot_HasKey(widget, "Parent")) return true;
+        try {
+            U16 name = TopFieldName(d, widget);
+            if (!name.empty()) out->insert(std::move(name));
+        } catch (...) {
+            return false;
+        }
+        return true;
+    });
+}
+
+// Whether importing the hierarchical fields on `src_pages` of `src` into `dest` would
+// merge two different fields under one name (#452). PDFium now copies a field's /Parent
+// chain rather than dropping it, so such a field imports like any other -- except that
+// RenameClashingFields, below, cannot rename it out of the way of a clash (see
+// CollectHierarchicalTopFieldNames), so a clash here is still refused whole. `*out_ok` is
+// set to false on out of memory (the return value is then meaningless); the caller reads
+// it the way RenameClashingFields's own false already means "out of memory" to its caller.
+bool HierarchicalFieldsWouldClash(const megapdf_document* dest, const megapdf_document* src,
+                                  const std::vector<int>& src_pages, bool* out_ok) {
+    *out_ok = true;
+    std::set<U16> incoming;
+    if (!CollectHierarchicalTopFieldNames(src, &src_pages, &incoming)) {
+        *out_ok = false;
+        return false;
+    }
+    if (incoming.empty()) return false;   // the common case: no hierarchy on these pages
+    std::set<U16> existing;
+    if (!CollectTopFieldNames(dest, nullptr, &existing)) {
+        *out_ok = false;
+        return false;
+    }
+    for (const U16& name : incoming) {
+        if (existing.count(name) != 0) return true;
+    }
+    return false;
+}
+
 // Before an import (#174): a field on the pages coming across whose name already exists as
 // a top-level name in `dest` is renamed in `src` — "name" becomes "name_2", or the first
 // "name_<k>" nobody has — so the two never merge into one field. Done on the source, which
 // is the core's own open of the other file and is never saved, so the copy PDFium makes
-// carries the new name. Every widget coming across is its own field (the ones with a
-// /Parent were refused before this), so the name to change is the widget's /T. False only
-// when out of memory.
+// carries the new name. A hierarchical widget's name lives on its /Parent, never on its own
+// /T (HierarchicalFieldsWouldClash refuses the whole operation before this runs, for exactly
+// the case that would need one renamed), so the name to change is always the widget's own
+// /T. False only when out of memory.
 bool RenameClashingFields(const megapdf_document* dest, const megapdf_document* src, const std::vector<int>& src_pages) {
     try {
         std::set<U16> incoming;
@@ -5942,8 +6001,29 @@ MEGAPDF_API int megapdf_pages_import(megapdf_document* d, const char* other_path
     }
     if (chosen.empty()) return MEGAPDF_OK;
     if (PagesCarryParentFields(other, &chosen)) {
+#if MEGAPDF_PDFIUM_PATCHES >= 33
+        // The linked PDFium carries a field's /Parent chain across the copy (#452): refuse
+        // only the one case RenameClashingFields, below, cannot get out of the way -- a
+        // hierarchy whose top-level name would clash, which it can rename a flat field's own
+        // /T out of but not a hierarchical widget's (it has none).
+        bool ok = true;
+        const bool clash = HierarchicalFieldsWouldClash(d, other, chosen, &ok);
+        if (!ok) {
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return MEGAPDF_ERR_MEMORY;
+        }
+        if (clash) {
+            SetError(0, "a field in a hierarchy on these pages has the same name as one already "
+                        "in this document, and cannot be renamed");
+            return MEGAPDF_ERR_FIELDS;
+        }
+#else
+        // Below patch 0033, PDFium's page copy still leaves the widget's /Parent pointing
+        // into the other document (see the header): refuse the whole operation, as every
+        // patch level before this one always has.
         SetError(0, "the pages carry form fields in a hierarchy PDFium cannot copy between documents");
         return MEGAPDF_ERR_FIELDS;
+#endif
     }
     if (!RenameClashingFields(d, other, chosen)) {
         SetError(FPDF_ERR_UNKNOWN, "out of memory");
@@ -5987,6 +6067,15 @@ MEGAPDF_API int megapdf_pages_extract(const megapdf_document* d, const int* page
     }
     const int expected = count > 0 ? static_cast<int>(count) : page_count;
     if (cancel != nullptr && cancel->raised.load(std::memory_order_relaxed) != 0) return MEGAPDF_ERR_CANCELLED;
+#if MEGAPDF_PDFIUM_PATCHES >= 33
+    // A field in a /Parent hierarchy needs no check here (#452): there is no pre-existing
+    // name in a brand new document for RenameClashingFields's problem (megapdf_pages_import's
+    // HierarchicalFieldsWouldClash) to arise from, and the linked PDFium carries the
+    // hierarchy whole, registering its root in the new file's own /AcroForm as it does.
+#else
+    // Below patch 0033, PDFium's page copy still leaves the widget's /Parent pointing into
+    // this document (see the header): refuse the whole operation, as every patch level
+    // before this one always has.
     {
         std::vector<int> chosen;
         try {
@@ -6000,6 +6089,7 @@ MEGAPDF_API int megapdf_pages_extract(const megapdf_document* d, const int* page
             return MEGAPDF_ERR_FIELDS;
         }
     }
+#endif
     if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
     FPDF_DOCUMENT out = FPDF_CreateNewDocument();
     if (out == nullptr) {

@@ -7132,9 +7132,21 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
         check(names_str(field_names(p2.page)) == "agree_3", "pages: the next free suffix", names_str(field_names(p2.page)));
         check(names_str(field_names(p1.page)) == "agree_2", "pages: the earlier rename holds", names_str(field_names(p1.page)));
 
-        // Fields in a hierarchy (a /Parent field dictionary): PDFium's page copy cannot carry
-        // them across documents, so an import or an extract of such a page is refused whole,
-        // while a delete and its undo — a copy within the same document — keeps them.
+        // Fields in a hierarchy (a /Parent field dictionary): PDFium's page copy carries the
+        // chain across documents once the linked PDFium has the patch that fixes it (#452,
+        // tools/pdfium/patches/0033) -- megapdf_pages_import and megapdf_pages_extract are
+        // compiled with MEGAPDF_PDFIUM_PATCHES set to the count from that same PDFium's own
+        // VERSION file (core/CMakeLists.txt, android/engine/src/main/cpp/CMakeLists.txt), and
+        // gate their relaxed behaviour on it (>= 33) rather than trust it unconditionally: a
+        // save-and-reopen runtime probe was tried and rejected instead (PDFium's own
+        // orphan-widget recovery, CPDFSDK_PageView::FixPageFields, papers over the very bug
+        // such a probe looks for, on some real documents but not others -- see the commit
+        // that added and then removed it, kept out of this file). Below patch 33 both calls
+        // refuse a hierarchy exactly as every patch level always has (#174); this suite is
+        // built against one PDFium the way the app will be, so it asserts whichever of the
+        // two this build's own MEGAPDF_PDFIUM_PATCHES selects, precisely, in both branches. A
+        // delete and its undo — a copy within the same document — always kept the hierarchy
+        // either way, and still does below.
         const fs::path parents = dir / "parents.pdf";
         write(parents, parent_fields_pdf());
         Doc h(utf8(parents));
@@ -7144,15 +7156,98 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
             const auto hierarchy = field_shots(h0.page);
             check(names_str(field_names(h0.page)) == "person.first, person.last", "pages: the parent fixture's names",
                   names_str(field_names(h0.page)));
+
+            // Importing the fixture into itself always clashes: both copies would name a
+            // top-level field "person", which the rename below cannot reach (it renames a
+            // clashing widget's own /T, and a hierarchical widget has none) whether or not the
+            // linked PDFium can carry the hierarchy at all. Refused whole either way.
             check(megapdf_pages_import(h.doc, utf8(parents).c_str(), nullptr, nullptr, 0, 1, &imported) == MEGAPDF_ERR_FIELDS && imported == 0,
-                  "pages: importing a page with fields in a hierarchy is refused", megapdf_last_error_message());
+                  "pages: importing a clashing hierarchy is refused", megapdf_last_error_message());
             check(megapdf_page_count(h.doc) == 1, "pages: and nothing was imported");
-            check(megapdf_pages_import(d.doc, utf8(parents).c_str(), nullptr, nullptr, 0, 0, &imported) == MEGAPDF_ERR_FIELDS,
-                  "pages: into another document too");
-            check(megapdf_page_count(d.doc) == 3, "pages: which is unchanged");
-            check(megapdf_pages_extract(h.doc, nullptr, 0, utf8(dir / "parents-out.pdf").c_str(), nullptr) == MEGAPDF_ERR_FIELDS,
-                  "pages: extracting such a page is refused");
-            check(!fs::exists(dir / "parents-out.pdf", ec), "pages: and nothing was written");
+
+            // Importing it into a document with no field named "person" does not clash, so
+            // whether it succeeds depends only on whether the linked PDFium can carry the
+            // hierarchy.
+            const int before_import = megapdf_page_count(d.doc);
+            int hierarchy_imported = 0;
+            const int import_rc = megapdf_pages_import(d.doc, utf8(parents).c_str(), nullptr, nullptr, 0, 0, &hierarchy_imported);
+#if MEGAPDF_PDFIUM_PATCHES >= 33
+            check(import_rc == MEGAPDF_OK && hierarchy_imported == 1 && megapdf_page_count(d.doc) == before_import + 1,
+                  "pages: importing a non-clashing hierarchy now succeeds", megapdf_last_error_message());
+            if (import_rc == MEGAPDF_OK) {
+                Page imported_page(d.doc, 0);
+                check(names_str(field_names(imported_page.page)) == "person.first, person.last",
+                      "pages: the imported hierarchy keeps its own names", names_str(field_names(imported_page.page)));
+                check(same_fields(field_shots(imported_page.page), hierarchy),
+                      "pages: and its values and rects", shots_str(field_shots(imported_page.page)));
+                const auto saved = save_bytes(d.doc, "pages-import-hierarchy");
+                OpenDoc again0(saved);
+                Page q0(again0.doc, 0);
+                check(same_fields(field_shots(q0.page), hierarchy),
+                      "pages: the imported hierarchy survives a save and reopen", shots_str(field_shots(q0.page)));
+            }
+#else
+            check(import_rc == MEGAPDF_ERR_FIELDS && hierarchy_imported == 0 && megapdf_page_count(d.doc) == before_import,
+                  "pages: importing a non-clashing hierarchy is still refused below patch 33",
+                  std::to_string(import_rc) + " " + megapdf_last_error_message());
+#endif
+
+            // Extract: the page whose fields refuse whole on stock PDFium (#452, #174) copies
+            // clean once the patch is linked, reopens with the same names, types and values,
+            // and is still fillable -- a field that merely survives structurally but has lost
+            // its value or name is not a pass.
+            const fs::path parents_out = dir / "parents-out.pdf";
+            const int extract_rc = megapdf_pages_extract(h.doc, nullptr, 0, utf8(parents_out).c_str(), nullptr);
+#if MEGAPDF_PDFIUM_PATCHES >= 33
+            check(extract_rc == MEGAPDF_OK, "pages: extracting a page with fields in a hierarchy now succeeds",
+                  megapdf_last_error_message());
+            check(fs::exists(parents_out, ec), "pages: and the file was written");
+            if (extract_rc == MEGAPDF_OK) {
+                keep_saved("pages-extract-hierarchy", read_file(utf8(parents_out)));
+                megapdf_document* extracted = megapdf_open_file(utf8(parents_out).c_str(), nullptr);
+                check(extracted != nullptr && megapdf_page_count(extracted) == 1,
+                      "pages: the extract opens with its one page", megapdf_last_error_message());
+                if (extracted) {
+                    {
+                        Page e0(extracted, 0);
+                        check(names_str(field_names(e0.page)) == "person.first, person.last",
+                              "pages: the extracted page's fields are named correctly", names_str(field_names(e0.page)));
+                        check(same_fields(field_shots(e0.page), hierarchy),
+                              "pages: and keep their values and rects", shots_str(field_shots(e0.page)));
+                        // Still fillable: typing into "person.last" through the same
+                        // click-to-focus path every other text field in this file is edited
+                        // with, and having that survive a save and reopen, is what "fillable"
+                        // means here.
+                        auto extracted_fields = field_shots(e0.page);
+                        check(extracted_fields.size() == 2, "pages: two widgets on the extracted page", shots_str(extracted_fields));
+                        if (extracted_fields.size() == 2) {
+                            const megapdf_rect r = extracted_fields[1].bounds;
+                            const U16 new_value = u16("Byron");
+                            check(megapdf_form_set_text(e0.page, (r.left + r.right) / 2, (r.bottom + r.top) / 2, new_value.data()) == MEGAPDF_OK,
+                                  "pages: the extracted hierarchical field can still be typed into");
+                            megapdf_form_commit(extracted);
+                            extracted_fields = field_shots(e0.page);
+                            check(extracted_fields.size() == 2 && show(extracted_fields[1].name) == "person.last" &&
+                                      show(extracted_fields[1].value) == "Byron",
+                                  "pages: the new value reads back under the same name", shots_str(extracted_fields));
+                        }
+                    }
+                    const auto refilled = save_bytes(extracted, "pages-extract-hierarchy-refill");
+                    megapdf_close(extracted);
+                    OpenDoc again1(refilled);
+                    Page f0(again1.doc, 0);
+                    const auto after = field_shots(f0.page);
+                    check(after.size() == 2 && show(after[1].name) == "person.last" && show(after[1].value) == "Byron" &&
+                              show(after[0].name) == "person.first" && show(after[0].value) == "Ada",
+                          "pages: the edit survives a save and reopen, the untouched sibling too", shots_str(after));
+                }
+            }
+#else
+            check(extract_rc == MEGAPDF_ERR_FIELDS, "pages: extracting such a page is still refused below patch 33",
+                  megapdf_last_error_message());
+            check(!fs::exists(parents_out, ec), "pages: and nothing was written");
+#endif
+
             check(megapdf_page_insert_blank(h.doc, 1, 612, 792) == MEGAPDF_OK, "pages: a blank page after the form page");
             megapdf_removed_page* removed = nullptr;
             check(megapdf_page_delete(h.doc, 0, &removed) == MEGAPDF_OK && removed != nullptr, "pages: the form page is deleted with an undo");

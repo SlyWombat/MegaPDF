@@ -23,6 +23,21 @@ add_library(megapdf_engine SHARED engine.cpp ${CORE_ROOT}/megapdf_core.cpp
     ${CORE_ROOT}/megapdf_structure.cpp ${CORE_ROOT}/megapdf_write_text.cpp)
 target_include_directories(megapdf_engine PRIVATE ${PDFIUM_ROOT}/include ${CORE_ROOT})
 target_link_libraries(megapdf_engine pdfium android jnigraphics log)
+
+# How many MegaPDF patches this PDFium carries (tools/pdfium/patches, #119), the same value
+# and the same reason core/CMakeLists.txt's desktop build reads it (#452): a widget's
+# /Parent field-hierarchy chain is only carried across a page copy from the patch fixing
+# that on, and megapdf_core.cpp, compiled straight into this .so, checks the count rather
+# than assume it.
+set(MEGAPDF_PDFIUM_PATCHES 0)
+if(EXISTS ${PDFIUM_ROOT}/VERSION)
+    file(STRINGS ${PDFIUM_ROOT}/VERSION patch_line REGEX "^MEGAPDF_PATCHES=")
+    if(patch_line)
+        string(REGEX REPLACE "^MEGAPDF_PATCHES=" "" MEGAPDF_PDFIUM_PATCHES "${patch_line}")
+    endif()
+endif()
+message(STATUS "pdfium (android): MegaPDF patches: ${MEGAPDF_PDFIUM_PATCHES}")
+target_compile_definitions(megapdf_engine PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES})
 # Android 15 requirement: 16 KB-aligned load segments (Play rejects 4 KB-only).
 # The PDFium prebuilt is already 16 KB-aligned.
 target_link_options(megapdf_engine PRIVATE "-Wl,-z,max-page-size=16384")

@@ -1,0 +1,245 @@
+--- a/core/fpdfapi/edit/cpdf_pageorganizer.h
++++ b/core/fpdfapi/edit/cpdf_pageorganizer.h
+@@ -40,6 +40,14 @@
+     object_number_map_[old_page_obj_num] = new_page_obj_num;
+   }
+ 
++  // The destination object number `old_obj_num` was already mapped to, by
++  // AddObjectMapping() or by a prior UpdateReference() walk, or 0 if it has
++  // not been copied into dest() yet.
++  uint32_t GetObjectMapping(uint32_t old_obj_num) const {
++    const auto it = object_number_map_.find(old_obj_num);
++    return it != object_number_map_.end() ? it->second : 0;
++  }
++
+   void ClearObjectNumberMap() { object_number_map_.clear(); }
+ 
+   static bool CopyInheritable(RetainPtr<CPDF_Dictionary> dest_page_dict,
+--- a/core/fpdfapi/edit/cpdf_pageexporter.h
++++ b/core/fpdfapi/edit/cpdf_pageexporter.h
+@@ -9,9 +9,13 @@
+ 
+ #include <stdint.h>
+ 
++#include <set>
++
+ #include "core/fpdfapi/edit/cpdf_pageorganizer.h"
++#include "core/fxcrt/retain_ptr.h"
+ #include "core/fxcrt/span.h"
+ 
++class CPDF_Dictionary;
+ class CPDF_Document;
+ 
+ // Copies pages from a source document into a destination document.
+@@ -25,6 +29,50 @@
+   // indices, insert them into the destination document at page `index`.
+   // `page_indices` and `index` are 0-based.
+   bool ExportPages(pdfium::span<const uint32_t> page_indices, int index);
++
++ private:
++  // A widget copied onto one of the exported pages may belong to a field
++  // whose name, type or value lives on a /Parent field dictionary, rather
++  // than on the widget itself (the shape LiveCycle and most authoring tools
++  // write a hierarchical field in). CPDF_PageOrganizer::UpdateReference,
++  // used to copy everything else the page reaches, treats a dictionary's
++  // "Parent" key as a structural back-edge and leaves it pointing at src()
++  // -- correctly for a page's own /Parent (the source Pages tree, handled
++  // separately below) and for an outline item's, but for a field's /Parent
++  // that leaves the copied widget naming an object in the *source*
++  // document, so it would arrive without its name or type, and a later
++  // save would write "Parent" naming an object that is not its parent in
++  // the saved file (#452). CopyFieldAncestor copies the chain explicitly
++  // instead: it returns the destination object number of `src_field` (`0`
++  // if `src_field` is null), copying it first if this is the first time it
++  // is reached. Each level's own /Kids is rebuilt to hold only the kids
++  // already copied by the time it is built -- another widget on one of the
++  // pages exported so far (found in the object number map), or a child
++  // field whose own copy (found the same way, recursively) is not empty --
++  // so a field split across an export by page keeps exactly the part that
++  // came across; a widget on a page this exporter did not copy is dropped
++  // from its parent's /Kids, the same way megapdf_page_delete drops a
++  // field left with no widgets. The chain's true root (no /Parent of its
++  // own) is registered under dest()'s /AcroForm /Fields the first time it
++  // is reached.
++  uint32_t CopyFieldAncestor(RetainPtr<const CPDF_Dictionary> src_field);
++
++  // Registers `dest_field_obj_num` under dest()'s /AcroForm /Fields, once.
++  void RegisterRootField(uint32_t dest_field_obj_num);
++
++  // After every page in `page_indices` has been copied (so every widget on
++  // them already has a destination object number), points each copied
++  // widget that names a /Parent field at the destination copy of its field
++  // ancestry (see CopyFieldAncestor). Done as a pass over the already-
++  // copied pages, rather than inline in ExportPages's per-page loop, so a
++  // field shared between two of the pages being exported is copied, and
++  // registered, only once.
++  void CopyFormFieldHierarchies(pdfium::span<const uint32_t> page_indices);
++
++  // Destination object numbers of the root fields already registered under
++  // dest()'s /AcroForm /Fields, so a field reached from two different
++  // widgets is not listed twice.
++  std::set<uint32_t> registered_root_fields_;
+ };
+ 
+ #endif  // CORE_FPDFAPI_EDIT_CPDF_PAGEEXPORTER_H_
+--- a/core/fpdfapi/edit/cpdf_pageexporter.cpp
++++ b/core/fpdfapi/edit/cpdf_pageexporter.cpp
+@@ -6,10 +6,14 @@
+ 
+ #include "core/fpdfapi/edit/cpdf_pageexporter.h"
+ 
++#include "constants/annotation_common.h"
++#include "constants/form_fields.h"
+ #include "constants/page_object.h"
++#include "core/fpdfapi/parser/cpdf_array.h"
+ #include "core/fpdfapi/parser/cpdf_dictionary.h"
+ #include "core/fpdfapi/parser/cpdf_document.h"
+ #include "core/fpdfapi/parser/cpdf_object.h"
++#include "core/fpdfapi/parser/cpdf_reference.h"
+ 
+ CPDF_PageExporter::CPDF_PageExporter(CPDF_Document* dest_doc,
+                                      CPDF_Document* src_doc)
+@@ -88,5 +92,143 @@
+     ++curpage;
+   }
+ 
++  // Every page's own objects, including each widget on it, is copied by now
++  // (UpdateReference() above followed each page's /Annots). A widget whose
++  // field lives in a /Parent hierarchy still needs that hierarchy copied
++  // explicitly (see the declaration).
++  CopyFormFieldHierarchies(page_indices);
++
+   return true;
+ }
++
++uint32_t CPDF_PageExporter::CopyFieldAncestor(
++    RetainPtr<const CPDF_Dictionary> src_field) {
++  if (!src_field) {
++    return 0;
++  }
++
++  uint32_t src_obj_num = src_field->GetObjNum();
++  if (src_obj_num) {
++    uint32_t mapped = GetObjectMapping(src_obj_num);
++    if (mapped) {
++      return mapped;
++    }
++  }
++
++  RetainPtr<CPDF_Dictionary> dest_field = ToDictionary(src_field->Clone());
++  if (!dest_field) {
++    return 0;
++  }
++  // Rebuilt below, from only the parts of the hierarchy this export keeps.
++  dest_field->RemoveFor(pdfium::form_fields::kKids);
++  dest_field->RemoveFor(pdfium::form_fields::kParent);
++
++  uint32_t dest_obj_num = dest()->AddIndirectObject(dest_field);
++  if (src_obj_num) {
++    // Mapped before recursing into /Parent or /Kids below, so a field that
++    // is (invalidly) its own ancestor cannot recurse forever: the second
++    // visit finds this mapping and returns immediately.
++    AddObjectMapping(src_obj_num, dest_obj_num);
++  }
++  UpdateReference(dest_field);
++
++  RetainPtr<const CPDF_Dictionary> src_parent =
++      src_field->GetDictFor(pdfium::form_fields::kParent);
++  if (src_parent) {
++    uint32_t dest_parent_num = CopyFieldAncestor(src_parent);
++    if (dest_parent_num) {
++      dest_field->SetNewFor<CPDF_Reference>(pdfium::form_fields::kParent,
++                                            dest(), dest_parent_num);
++    }
++  } else {
++    RegisterRootField(dest_obj_num);
++  }
++
++  RetainPtr<const CPDF_Array> src_kids =
++      src_field->GetArrayFor(pdfium::form_fields::kKids);
++  if (src_kids) {
++    RetainPtr<CPDF_Array> dest_kids;
++    for (size_t i = 0; i < src_kids->size(); ++i) {
++      RetainPtr<const CPDF_Dictionary> src_kid = src_kids->GetDictAt(i);
++      if (!src_kid) {
++        continue;
++      }
++      // A terminal kid is the widget annotation itself: keep it only if it
++      // is one this exporter has already placed on a copied page. A
++      // non-terminal kid is another field node one level down the
++      // hierarchy: recurse, which keeps it only if it still has a kid of
++      // its own once the same rule is applied all the way down.
++      const bool is_widget =
++          src_kid->GetNameFor(pdfium::annotation::kSubtype) == "Widget";
++      const uint32_t dest_kid_num =
++          is_widget ? GetObjectMapping(src_kid->GetObjNum())
++                    : CopyFieldAncestor(src_kid);
++      if (!dest_kid_num) {
++        continue;
++      }
++      if (!dest_kids) {
++        dest_kids = dest_field->SetNewFor<CPDF_Array>(pdfium::form_fields::kKids);
++      }
++      dest_kids->AppendNew<CPDF_Reference>(dest(), dest_kid_num);
++    }
++  }
++
++  return dest_obj_num;
++}
++
++void CPDF_PageExporter::RegisterRootField(uint32_t dest_field_obj_num) {
++  if (!dest_field_obj_num ||
++      !registered_root_fields_.insert(dest_field_obj_num).second) {
++    return;
++  }
++  RetainPtr<CPDF_Dictionary> root = dest()->GetMutableRoot();
++  if (!root) {
++    return;
++  }
++  RetainPtr<CPDF_Dictionary> acroform = root->GetOrCreateDictFor("AcroForm");
++  RetainPtr<CPDF_Array> fields = acroform->GetOrCreateArrayFor("Fields");
++  fields->AppendNew<CPDF_Reference>(dest(), dest_field_obj_num);
++}
++
++void CPDF_PageExporter::CopyFormFieldHierarchies(
++    pdfium::span<const uint32_t> page_indices) {
++  for (uint32_t page_index : page_indices) {
++    RetainPtr<const CPDF_Dictionary> src_page_dict =
++        src()->GetPageDictionary(page_index);
++    if (!src_page_dict) {
++      continue;
++    }
++    RetainPtr<const CPDF_Array> annots = src_page_dict->GetArrayFor("Annots");
++    if (!annots) {
++      continue;
++    }
++    for (size_t i = 0; i < annots->size(); ++i) {
++      RetainPtr<const CPDF_Dictionary> src_widget = annots->GetDictAt(i);
++      if (!src_widget ||
++          src_widget->GetNameFor(pdfium::annotation::kSubtype) != "Widget") {
++        continue;
++      }
++      RetainPtr<const CPDF_Dictionary> src_parent =
++          src_widget->GetDictFor(pdfium::form_fields::kParent);
++      if (!src_parent) {
++        continue;  // its own field, not a hierarchy: already copied whole.
++      }
++      uint32_t dest_widget_num = GetObjectMapping(src_widget->GetObjNum());
++      if (!dest_widget_num) {
++        continue;  // should not happen: it is on a page just exported.
++      }
++      uint32_t dest_parent_num = CopyFieldAncestor(src_parent);
++      if (!dest_parent_num) {
++        continue;
++      }
++      RetainPtr<CPDF_Object> dest_widget_obj =
++          dest()->GetMutableIndirectObject(dest_widget_num);
++      CPDF_Dictionary* dest_widget =
++          dest_widget_obj ? dest_widget_obj->AsMutableDictionary() : nullptr;
++      if (dest_widget) {
++        dest_widget->SetNewFor<CPDF_Reference>(pdfium::form_fields::kParent,
++                                               dest(), dest_parent_num);
++      }
++    }
++  }
++}
