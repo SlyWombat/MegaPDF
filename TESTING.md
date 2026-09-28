@@ -469,14 +469,70 @@ different. Filed as **#476** — a behaviour finding per the task brief, `core/`
 gate adjusted. See the README section for the full detail (including the specific
 byte-count evidence) and the harness used.
 
-### Fourth run, 2026-09-28: 108 UK OGL forms + 7 large govinfo documents (#471 parts 3-4)
+### Fourth addition, 2026-09-28: 280 non-Latin-script documents, per-script battery (#471 part 2)
+
+`core/megapdf_structure.cpp`'s `BuildWords`, `BuildLines` and the XY-cut reading order
+assume left-to-right, horizontal text (#444). The corpus had essentially no Arabic, Hebrew,
+Han, Devanagari or Thai text to measure that assumption against. 280 rows were added, 40
+real Wikipedia articles per script (`wiki-ar/he/zh/ja/ko/hi/th` sources, titles pinned in
+`tools/stress/public-corpus/nonlatin_wiki_titles.py`); the corpus is now **1,662 documents,
+407.4 MB**. See `tools/stress/public-corpus/README.md`, "Non-Latin scripts", for sourcing,
+licence and a reproducibility caveat found while verifying the batch (Wikipedia's on-demand
+PDF export is not always byte-stable minutes apart).
+
+    tools/stress/public-corpus/build-manifest.py --add-source nonlatin-wiki
+    tools/stress/structure-battery.sh <structure_check> <script-dir> <out> --reference --cli <cli>
+
+All three batteries (structure, Markdown, pages) run per script, on a per-script corpus
+directory rather than the pooled corpus, so the breakdown below is exact rather than
+inferred from the `source` column after the fact:
+
+| script | docs | pages | structure F1 (internal / CLI) | pages F1 < 0.9 | order tau (tree / poppler) | crashes / hangs |
+|---|---:|---:|---|---:|---|---|
+| Arabic | 40 | 84 | 0.982495 / 0.985033 | 3 | 0.823 / 0.964 | 0 / 0 |
+| Hebrew | 40 | 118 | 0.998457 / 1.000000 | 5 | 0.863 / 0.957 | 0 / 0 |
+| Han (Chinese) | 40 | 74 | 0.984626 / 0.997121 | 1 | 0.942 / 0.988 | 0 / 0 |
+| Japanese (horizontal) | 40 | 123 | 0.997126 / 0.999669 | 0 | 0.956 / 0.993 | 0 / 0 |
+| Korean | 40 | 119 | 0.998822 / 1.000000 | 1 | 0.942 / 1.000 | 0 / 0 |
+| Devanagari (Hindi) | 40 | 89 | 0.998433 / 0.999060 | 1 | 0.799 / 0.996 | 0 / 0 |
+| Thai | 40 | 174 | 0.988943 / 0.999758 | 0 | 0.974 / 0.987 | 0 / 0 |
+| Japanese (vertical, bonus — not in manifest.tsv, see README) | 18 | 39 | 0.512555 / 0.512555 | 34 | 0.134 / 0.182 | 0 / 0 |
+
+Markdown and pages batteries: 0 crashes, 0 hangs, 0 cmark parse failures, 0 qpdf failures,
+0 page-count mismatches on every script, including the vertical-Japanese bonus sample.
+
+**As expected, and as instructed, the gate was not tuned to fit these numbers.** Three of
+seven real, horizontal, non-Latin scripts (Arabic, Han, Thai) fail the corpus-wide
+`>= 0.998` structure fidelity gate outright at just 40 documents each; the rest (Hebrew,
+Devanagari, Korean, and — marginally, on the internal measure only — Japanese-horizontal)
+sit within 0.003 of it, against the general corpus's comfortable 0.998590–0.998915. Every
+script under-segments slightly relative to PDFium's own tokenisation (engine/PDFium token
+ratio 0.976–0.999, worst on Han and Thai); vertical Japanese under-segments drastically
+(ratio 0.72) — the same family of bug #444 found, but the mirror image of its example
+(there the engine *over*-produced tokens 10:2 against PDFium; here it under-produces).
+Reading-order self-agreement (tree tau) is also markedly weaker for Arabic and Devanagari
+(0.80–0.86) than for the CJK/Thai group (0.94–0.97) even though token fidelity is close to
+passing for both — the RTL/Indic order risk `docs/reading-mode-plan.md` §7 named but had no
+population to measure. Filed as **#482** (vertical Japanese, the #444-shaped failure),
+**#483** (the horizontal-script fidelity-gate shortfall) and **#484** (Arabic/Devanagari
+reading-order self-disagreement); `core/megapdf_structure.cpp` was not touched, since
+another session is working there for #453.
+
+### Fifth run, 2026-09-28: 108 UK OGL forms + 7 large govinfo documents (#471 parts 3-4)
 
 Built on `main` including #452/#463's field-hierarchy relaxation, #457's XFA work, #470's
-k3 staging, and #471 part 1's `signed` category (the run directly above) — see the PR for
-the exact commit and manifest revision this was built on. The corpus is now
-**1,497 documents, ~4.29 GB** (dominated by the seven new `large` rows at ~4.25 GB;
-everything else is ~363 MB) — see `tools/stress/public-corpus/README.md`, "UK government forms" and "Very
-large documents", for how each set was chosen and licensed.
+k3 staging, and #471 part 1's `signed` category — see the #471 parts-3/4 PR for the exact
+commit and manifest revision this was actually run against. **The "whole corpus" row below
+is a snapshot of 1,489 documents (pre-#471-part-2's non-Latin rows, which landed on `main`
+while this run was already underway) — it does not include the 280 `wiki-*` rows the run
+directly above added.** The UK-specific and `large`-specific findings that follow it do not
+depend on total corpus composition (they are computed only from their own rows), so they
+stand regardless; the aggregate figure is reported for context, not as this PR's own
+authoritative "whole corpus" number — see the PR for a number against the true final
+manifest if one was re-run. The corpus's final size, including every population added by
+this point, is **1,777 documents, ~4.40 GB** (dominated by the seven `large` rows at
+~4.25 GB) — see `tools/stress/public-corpus/README.md`, "UK government forms" and "Very
+large documents", for how the UK/large sets were chosen and licensed.
 
     tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
     tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
@@ -487,9 +543,10 @@ large documents", for how each set was chosen and licensed.
     tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
     tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
 
-1,489 documents visited by `find -name '*.pdf'` for the non-`large` batteries (1,497 minus
-the same case-mismatched qpdf fixture #445 already noted, minus the fact that `large` rows
-were battery-tested separately, below, rather than mixed into the same run given their size):
+1,489 documents visited by `find -name '*.pdf'` for the non-`large` batteries (see the
+snapshot caveat above), minus the same case-mismatched qpdf fixture #445 already noted,
+minus the fact that `large` rows were battery-tested separately, below, rather than mixed
+into the same run given their size:
 
 | measure | whole corpus | gate | |
 |---|---|---|---|

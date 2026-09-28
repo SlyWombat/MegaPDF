@@ -5686,6 +5686,22 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         // axis's baseline test on every consecutive pair, so this fixture's golden would show
         // ten one-glyph words/paragraphs instead of the two five-letter ones below.
         {"vertical-cid", repo + "/structure/vertical-cid.pdf", 0, 0, 0},
+        // #453/#444: the same BuildWords defect at its COMMON trigger -- an ordinary Type1
+        // font on a rotated page, not a WMode-1 composite font. #363's matrix inversion leaves a
+        // rotated page's characters advancing along their local +y, the very condition the #444
+        // fix taught BuildWords to recognise, so "vertical-cid" above and this share a code path
+        // while only this one resembles a document anybody actually has. Before that fix the
+        // 90-degree page here reads `A lp h a B ra v o C h a rlieD e lta` and measure 1 comes out
+        // 44 tokens against PDFium's 16 (F1 0.267); after it, 16/16 exactly. #453 -- two qpdf
+        // page-rotation fixtures over-counting 1.9-2.7x -- was this, reported from a build made
+        // before the fix landed.
+        //
+        // The golden also PINS TWO KNOWN-WRONG BEHAVIOURS, both older than the #444 fix and both
+        // filed as #472: /Rotate 180 and 270 emit the page's words in reverse order, and
+        // /Rotate 90 and 270 lose the inter-word gaps. poppler reads all four pages correctly.
+        // Do not "correct" the golden by hand -- when the engine is fixed this golden SHOULD
+        // change, and that diff is the proof it worked.
+        {"rotated-pages", repo + "/structure/rotated-pages.pdf", 0, 0, 0},
     };
     for (const Case& c : cases) {
         test_structure_golden(c.name, c.path, c.first_page, c.page_count, c.flags, expected_dir, c.check_golden);
@@ -7651,6 +7667,251 @@ void test_rotation_coordinates(const std::string& fixtures) {
     }
 }
 
+// #446: content the core writes onto a rotated page is drawn the way the person placing it sees
+// the page — the right way up, the right shape, in the rectangle they asked for. #439 put every
+// coordinate in the rotated space the render draws; this is about the artwork itself, which used
+// to be built axis-aligned in unrotated user space, so a stamp appeared turned inside its
+// correctly-placed box and a text box read sideways.
+//
+// The invariant, and what these assert: at every rotation, the patch of the render inside the
+// rectangle the caller asked for looks the same as it does on an upright page. That fails for a
+// turn, a mirror, a squeeze or an offset, which is the whole list of ways this can go wrong.
+void test_rotated_content() {
+    const std::string helvetica = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
+
+    // A 2:1 image with one dark quadrant: a square image could not show a squeeze, and a
+    // symmetric one could not show a turn.
+    const int img_w = 24, img_h = 12;
+    std::vector<unsigned char> image(static_cast<size_t>(img_w) * img_h * 4, 0xFF);
+    for (int y = 0; y < img_h; y++) {
+        for (int x = 0; x < img_w; x++) {
+            unsigned char* q = &image[(static_cast<size_t>(y) * img_w + x) * 4];
+            const bool dark = x < img_w / 2 && y < img_h / 2;   // the bitmap's own top-left
+            q[0] = q[1] = q[2] = dark ? 0x10 : 0xFF;
+            q[3] = 0xFF;
+        }
+    }
+
+    // Where the content goes, in crop space. Inside 612 × 612, so the same rectangle is on the
+    // page at every rotation of a 612 × 792 page, and not square, so a swapped aspect cannot pass.
+    const megapdf_rect stamp_box{80, 300, 240, 380};
+    const double text_x = 80, text_baseline = 200;
+    const megapdf_rect text_box{75, 186, 275, 230};
+    // The tick is the sharpest probe of the three: it runs from the left edge down to 38% across
+    // and up to the far corner, so its emptiest quarter is the top left and a turn moves which.
+    const megapdf_rect mark_box{330, 300, 410, 380};
+
+    // The pixels a render put inside a crop-space rect, as an upright patch in the caller's own
+    // frame: one pixel per point, y flipped. The same rect at two rotations gives two patches
+    // that compare pixel for pixel.
+    auto patch = [](const std::vector<unsigned char>& px, int w, int h, const megapdf_rect& r, double page_h) {
+        const int pw = static_cast<int>(std::lround(r.right - r.left));
+        const int ph = static_cast<int>(std::lround(r.top - r.bottom));
+        std::vector<int> out(static_cast<size_t>((std::max)(pw, 0)) * static_cast<size_t>((std::max)(ph, 0)), 255);
+        for (int j = 0; j < ph; j++) {
+            for (int i = 0; i < pw; i++) {
+                const int x = static_cast<int>(std::lround(r.left + i + 0.5));
+                const int y = static_cast<int>(std::lround(page_h - (r.top - j - 0.5)));
+                if (x < 0 || x >= w || y < 0 || y >= h) continue;
+                const unsigned char* q = &px[(static_cast<size_t>(y) * w + x) * 4];
+                out[static_cast<size_t>(j) * pw + i] = (q[0] + q[1] + q[2]) / 3;
+            }
+        }
+        return out;
+    };
+
+    struct Shot {
+        std::vector<int> stamp, text, mark;
+        double w = 0, h = 0;
+        bool ok = false;
+    };
+
+    auto shot = [&](int quarter, bool arrives_rotated) {
+        Shot s;
+        const std::string page_extra =
+            arrives_rotated && quarter != 0 ? "/Rotate " + std::to_string(quarter * 90) : std::string();
+        OpenDoc d(one_page_pdf("", helvetica, "", "", {}, page_extra));
+        if (d.doc == nullptr) return s;
+        if (!arrives_rotated && quarter != 0 && megapdf_page_rotate(d.doc, 0, quarter) != MEGAPDF_OK) return s;
+        Page p(d.doc, 0);
+        if (p.page == nullptr) return s;
+        U16 stamp_id = u16("sig:446"), box_id = u16("text:446"), words = u16("Upright"), mark_id = u16("mark:446");
+        if (megapdf_add_image_stamp(p.page, image.data(), img_w, img_h, &stamp_box, stamp_id.data()) != MEGAPDF_OK) return s;
+        int object_index = -1;
+        if (megapdf_add_text_box(p.page, 0, words.data(), "Helvetica", 18.0, text_x, text_baseline,
+                                 box_id.data(), &object_index) != MEGAPDF_OK) {
+            return s;
+        }
+        if (megapdf_add_check_mark(p.page, &mark_box, MEGAPDF_MARK_CHECK, mark_id.data()) != MEGAPDF_OK) return s;
+        s.w = megapdf_page_width(p.page);
+        s.h = megapdf_page_height(p.page);
+        const int pw = static_cast<int>(std::lround(s.w)), ph = static_cast<int>(std::lround(s.h));
+        const auto px = pages::render_at(p.page, pw, ph);
+        if (px.size() != static_cast<size_t>(pw) * static_cast<size_t>(ph) * 4) return s;
+        s.stamp = patch(px, pw, ph, stamp_box, s.h);
+        s.text = patch(px, pw, ph, text_box, s.h);
+        s.mark = patch(px, pw, ph, mark_box, s.h);
+        s.ok = true;
+        return s;
+    };
+
+    // How much two patches disagree, measured against the ink in the upright one rather than
+    // against the patch: a few hundred glyph pixels in a 200 x 44 patch of paper stay under any
+    // sane share of the patch however wrong they are, so a share of the patch would pass text
+    // that reads straight down. Antialiasing differs a little between rotations, hence a ratio
+    // and not a count.
+    auto disagreement = [](const std::vector<int>& a, const std::vector<int>& b) {
+        if (a.empty() || a.size() != b.size()) return 99.0;
+        size_t differing = 0;
+        size_t ink = 0;
+        for (size_t i = 0; i < a.size(); i++) {
+            if (std::abs(a[i] - b[i]) > 60) differing++;
+            if (b[i] < 200) ink++;
+        }
+        if (ink == 0) return 99.0;   // nothing drawn upright: the patch is in the wrong place
+        return static_cast<double>(differing) / static_cast<double>(ink);
+    };
+    auto mean_of = [](const std::vector<int>& patch_, int pw, int ph, bool right_half, bool bottom_half) {
+        long total = 0;
+        long count = 0;
+        for (int j = 0; j < ph; j++) {
+            const bool lower = j >= ph / 2;
+            if (lower != bottom_half) continue;
+            for (int i = 0; i < pw; i++) {
+                const bool righter = i >= pw / 2;
+                if (righter != right_half) continue;
+                total += patch_[static_cast<size_t>(j) * pw + i];
+                count++;
+            }
+        }
+        return count > 0 ? static_cast<int>(total / count) : 255;
+    };
+    // The ink's box inside a patch, for the text's shape.
+    auto ink_of = [](const std::vector<int>& patch_, int pw, int ph) {
+        int l = pw, r = -1, t = ph, b = -1;
+        for (int j = 0; j < ph; j++) {
+            for (int i = 0; i < pw; i++) {
+                if (patch_[static_cast<size_t>(j) * pw + i] > 200) continue;
+                l = (std::min)(l, i);
+                r = (std::max)(r, i);
+                t = (std::min)(t, j);
+                b = (std::max)(b, j);
+            }
+        }
+        return std::tuple<int, int, int, int>{l, t, r, b};
+    };
+
+    const int stamp_w = static_cast<int>(std::lround(stamp_box.right - stamp_box.left));
+    const int stamp_h = static_cast<int>(std::lround(stamp_box.top - stamp_box.bottom));
+    const int text_w = static_cast<int>(std::lround(text_box.right - text_box.left));
+    const int text_h = static_cast<int>(std::lround(text_box.top - text_box.bottom));
+    const int mark_w = static_cast<int>(std::lround(mark_box.right - mark_box.left));
+    const int mark_h = static_cast<int>(std::lround(mark_box.top - mark_box.bottom));
+    // The tick's emptiest quarter, which says which way up it is drawn.
+    auto emptiest_quarter = [&](const std::vector<int>& patch_, int pw, int ph) {
+        const int tl = mean_of(patch_, pw, ph, false, false), tr = mean_of(patch_, pw, ph, true, false);
+        const int bl = mean_of(patch_, pw, ph, false, true), br = mean_of(patch_, pw, ph, true, true);
+        const int lightest = (std::max)((std::max)(tl, tr), (std::max)(bl, br));
+        if (lightest == tl) return std::string("top left");
+        if (lightest == tr) return std::string("top right");
+        if (lightest == bl) return std::string("bottom left");
+        return std::string("bottom right");
+    };
+
+    const Shot up = shot(0, false);
+    if (!up.ok) { check(false, "rotated content: an upright page takes a stamp and a text box"); return; }
+
+    // Upright, absolutely: the stamp's dark quadrant is up and to the left, the other three are
+    // paper, and the text is wider than it is tall and starts at its left edge. Everything below
+    // compares against this, so it is the anchor rather than a self-consistency check.
+    check(mean_of(up.stamp, stamp_w, stamp_h, false, false) < 120,
+          "rotated content: upright, the stamp's dark quarter is the top left",
+          std::to_string(mean_of(up.stamp, stamp_w, stamp_h, false, false)));
+    check(mean_of(up.stamp, stamp_w, stamp_h, true, false) > 200 &&
+          mean_of(up.stamp, stamp_w, stamp_h, false, true) > 200 &&
+          mean_of(up.stamp, stamp_w, stamp_h, true, true) > 200,
+          "rotated content: upright, the stamp's other three quarters are paper",
+          std::to_string(mean_of(up.stamp, stamp_w, stamp_h, true, false)) + "," +
+          std::to_string(mean_of(up.stamp, stamp_w, stamp_h, false, true)) + "," +
+          std::to_string(mean_of(up.stamp, stamp_w, stamp_h, true, true)));
+    {
+        const auto [l, t, r, b] = ink_of(up.text, text_w, text_h);
+        check(r > l && b > t && (r - l) > (b - t) * 2,
+              "rotated content: upright, the text reads across rather than down",
+              std::to_string(r - l) + "x" + std::to_string(b - t));
+        check(l < text_w / 4, "rotated content: upright, the text starts at the box's left", std::to_string(l));
+    }
+    check(emptiest_quarter(up.mark, mark_w, mark_h) == "top left",
+          "rotated content: upright, the tick leaves its top left quarter empty",
+          emptiest_quarter(up.mark, mark_w, mark_h));
+
+    for (int q = 1; q <= 3; q++) {
+        for (bool arrives : {false, true}) {
+            const std::string at = "rotated content: at " + std::to_string(q * 90) + "deg" +
+                                   (arrives ? " (arrived rotated)" : " (turned by the core)") + ": ";
+            const Shot s = shot(q, arrives);
+            if (!s.ok) { check(false, at + "takes a stamp and a text box"); continue; }
+            const bool swapped = (q & 1) != 0;
+            check(close_to(s.w, swapped ? up.h : up.w) && close_to(s.h, swapped ? up.w : up.h),
+                  at + "the page measures rotated", std::to_string(s.w) + "x" + std::to_string(s.h));
+
+            const double stamp_diff = disagreement(s.stamp, up.stamp);
+            check(stamp_diff < 0.08, at + "the stamp is the same picture, the same way up",
+                  std::to_string(static_cast<int>(stamp_diff * 100)) + "% of its ink differs");
+            check(mean_of(s.stamp, stamp_w, stamp_h, false, false) < 120 &&
+                  mean_of(s.stamp, stamp_w, stamp_h, true, true) > 200,
+                  at + "the stamp's dark quarter is still the top left",
+                  std::to_string(mean_of(s.stamp, stamp_w, stamp_h, false, false)) + " vs " +
+                  std::to_string(mean_of(s.stamp, stamp_w, stamp_h, true, true)));
+
+            const double text_diff = disagreement(s.text, up.text);
+            check(text_diff < 0.25, at + "the text is the same words, the same way up",
+                  std::to_string(static_cast<int>(text_diff * 100)) + "% of its ink differs");
+            const auto [l, t, r, b] = ink_of(s.text, text_w, text_h);
+            check(r > l && b > t && (r - l) > (b - t) * 2, at + "the text still reads across",
+                  std::to_string(r - l) + "x" + std::to_string(b - t));
+
+            const double mark_diff = disagreement(s.mark, up.mark);
+            check(mark_diff < 0.25, at + "the tick is the same tick, the same way up",
+                  std::to_string(static_cast<int>(mark_diff * 100)) + "% of its ink differs");
+            check(emptiest_quarter(s.mark, mark_w, mark_h) == "top left",
+                  at + "the tick still leaves its top left quarter empty",
+                  emptiest_quarter(s.mark, mark_w, mark_h));
+        }
+    }
+
+    // Four quarter turns are no turn at all, and the content placed after them is where the
+    // content placed before them would be: the cheap catch for a sign error.
+    {
+        OpenDoc d(one_page_pdf("", helvetica));
+        if (d.doc != nullptr) {
+            bool turned = true;
+            for (int i = 0; i < 4; i++) turned = turned && megapdf_page_rotate(d.doc, 0, 1) == MEGAPDF_OK;
+            check(turned && megapdf_page_rotation(d.doc, 0) == 0, "rotated content: four quarter turns come back to 0");
+            Page p(d.doc, 0);
+            U16 stamp_id = u16("sig:446"), box_id = u16("text:446"), words = u16("Upright");
+            int object_index = -1;
+            const bool placed = p.page != nullptr &&
+                megapdf_add_image_stamp(p.page, image.data(), img_w, img_h, &stamp_box, stamp_id.data()) == MEGAPDF_OK &&
+                megapdf_add_text_box(p.page, 0, words.data(), "Helvetica", 18.0, text_x, text_baseline,
+                                     box_id.data(), &object_index) == MEGAPDF_OK;
+            const int pw = static_cast<int>(std::lround(megapdf_page_width(p.page)));
+            const int ph = static_cast<int>(std::lround(megapdf_page_height(p.page)));
+            const auto px = placed ? pages::render_at(p.page, pw, ph) : std::vector<unsigned char>();
+            if (px.size() == static_cast<size_t>(pw) * static_cast<size_t>(ph) * 4) {
+                const double d_stamp = disagreement(patch(px, pw, ph, stamp_box, megapdf_page_height(p.page)), up.stamp);
+                const double d_text = disagreement(patch(px, pw, ph, text_box, megapdf_page_height(p.page)), up.text);
+                check(d_stamp < 0.08 && d_text < 0.25,
+                      "rotated content: after four turns the content is exactly as upright",
+                      std::to_string(static_cast<int>(d_stamp * 100)) + "% / " +
+                      std::to_string(static_cast<int>(d_text * 100)) + "% of their ink differs");
+            } else {
+                check(false, "rotated content: the page renders after four turns");
+            }
+        }
+    }
+}
+
 int main(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr,
@@ -7726,6 +7987,7 @@ int main(int argc, char** argv) {
     test_markdown_round_trips(std::string(MEGAPDF_REPO_FIXTURES), argv[4]);
     test_page_tools(argv[1], std::string(MEGAPDF_REPO_FIXTURES), std::string(MEGAPDF_SECURITY_FIXTURES));
     test_rotation_coordinates(argv[1]);
+    test_rotated_content();
     if (cli_path.empty()) {
         std::printf("cli tests: skipped (no megapdf-cli path given on the command line)\n");
     } else {
