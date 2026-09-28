@@ -73,6 +73,15 @@ public sealed partial class ShellViewModel : ObservableObject
     public DocumentViewModel AddDocument()
     {
         var doc = new DocumentViewModel(_window, Settings, RecentFiles, SignatureLibrary);
+        // Lost in the #348 phase 1 split (2d9960c): when there was one DocumentViewModel per
+        // window, MainWindow's constructor called this once, on the window's one instance.
+        // Now that AddDocument is where a document is actually born, this is where the call
+        // belongs — without it, a Busy transition after the initial open (Save, Shrink, an
+        // edit's #139 check) never tells IsEditingAllowed/IsSigningAllowed/IsTextBoxAllowed/
+        // IsPrintAllowed or Save/SaveAs/Security/ShrinkForEmail/Undo/Redo's CanExecute that
+        // anything changed, so the toolbar can be a stale step behind Busy for the rest of
+        // this tab's life (#427).
+        doc.WatchBusyState();
         doc.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(DocumentViewModel.WindowTitle) && doc == Active)
@@ -83,6 +92,16 @@ public sealed partial class ShellViewModel : ObservableObject
         // it becomes Active — MainWindow's per-active-tab wiring needs another nudge once it
         // is (see DocumentViewModel.ViewAttached).
         doc.ViewAttached += (_, _) =>
+        {
+            if (doc == Active)
+                OnPropertyChanged(nameof(Active));
+        };
+        // #427: a tab this method makes Active before its document has even started opening
+        // (below) can finish that open in a fast enough burst of PropertyChanged notifications
+        // that x:Bind drops one — see DocumentViewModel.OpenSettled for the full account. The
+        // fix is the same shape as ViewAttached just above: force one more Active-rooted
+        // refresh once the burst is over, rather than reaching into WinUI's binding engine.
+        doc.OpenSettled += (_, _) =>
         {
             if (doc == Active)
                 OnPropertyChanged(nameof(Active));

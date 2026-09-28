@@ -17,6 +17,20 @@ read one before running it.
   "MegaPDF WACK" scheduled task. The UAC prompt must be answered within about
   2 minutes, so only run it with someone at the console.
   `tools/Store-Submission.md` has the full recipe.
+- `redirect-toolbar-check.ps1` (#427): a standalone regression check, not tied to the
+  rc2 scratch layout below — it makes its own scratch copies of two repo fixtures under
+  `%TEMP%` and cleans up after itself. Launches an unpackaged `MegaPDF.exe` with one file,
+  then launches it again with a second (the single-instance redirect from #348 phase 2),
+  and asserts Signatures/Add text/Whiteout/Redact are all UIA `IsEnabled=True` on the
+  resulting second tab. This is a race (WinUI's x:Bind occasionally drops a PropertyChanged
+  notification fired in the burst a fast redirect-opened tab settles in — see
+  `DocumentViewModel.OpenSettled`), not a deterministic sequencing bug, so it repeats the
+  scenario (`-Attempts`, default 15) rather than trying it once:
+  `powershell.exe -NoProfile -ExecutionPolicy Bypass -File redirect-toolbar-check.ps1 -Exe <path to MegaPDF.exe>`
+  (or set `$env:MEGAPDF_EXE` and omit `-Exe`). Exits 0 on an all-enabled result every
+  attempt, 1 otherwise with a per-attempt report. There is no automated Windows
+  equivalent of the Avalonia apps' `--self-test` to fold this into — this is the closest
+  thing on this platform today.
 
 **Scratch location.** The scripts read and write their documents under
 `D:\megapdf-qa\rc2\`, the one Windows scratch folder for MegaPDF QA. Create it
