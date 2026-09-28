@@ -3670,6 +3670,149 @@ MEGAPDF_API int megapdf_shrink_images(const megapdf_document* d, megapdf_jpeg_en
 // Contract 7: render policy (#111)
 // --------------------------------------------------------------------------
 
+namespace {
+
+// The page tints of #509 (#168's reading mode, docs/reading-mode-plan.md section 2 tier 2),
+// applied as a post-pass over the caller's rendered buffer rather than through PDFium.
+//
+// Why a post-pass and not FPDF_COLORSCHEME (fpdfview.h) with
+// FPDF_RenderPageBitmapWithColorScheme_Start (fpdf_progressive.h): that pair recolours text
+// and paths and would leave images alone, which is the nicer answer for photographs, but it
+// flattens every path to a single fill colour, so a diagram arrives as a silhouette, and
+// there is no FPDF_FFLDraw taking a colour scheme, so the form-field values drawn below
+// would stay in daylight colours over a night page. Rejected on #168 for those two reasons;
+// kept in the header as the documented alternative so it is not rediscovered and reproposed.
+//
+// The consequence, chosen deliberately on #168 and not a defect: a post-pass cannot tell a
+// photograph from a paragraph, so night inverts pictures too. Edge and Chrome do the same in
+// their PDF dark modes, scans invert the way a night reader wants, and the apps' settings
+// copy says "Night inverts the page, pictures included".
+
+// Sepia's paper white: what pure white becomes. #F4ECD8.
+constexpr int kSepiaR = 0xF4, kSepiaG = 0xEC, kSepiaB = 0xD8;
+// Night's ends of the luminance ramp: what white becomes (#1A1A1A) and what black becomes.
+constexpr int kNightDark = 0x1A, kNightLight = 0xE5;
+
+// Rec. 709 luma in 16-bit fixed point. The three weights sum to exactly 65536, so a grey
+// comes back as exactly itself and the result never leaves 0..255.
+constexpr unsigned kLumaR = 13933, kLumaG = 46871, kLumaB = 4732;
+
+// Both tints are mostly a function of one byte, so both are mostly a table: built at
+// compile time, and with not one divide left in either inner loop.
+//
+// The cost, measured (#509's sanity check, a release build on an x86-64 container, best of
+// seven, 2026-09-28): sepia about 1.0 ns and night about 2.0 ns per pixel. On the #98
+// schematic at 1224x1584 -- a dense page at the size a 2x desktop display asks for -- that
+// is a 16.3 ms render going to 19.3 ms under sepia and 19.9 ms under night; at
+// MEGAPDF_RENDER_MAX_PIXELS it is about 32 ms and 68 ms on top of a render. Night costs
+// roughly twice sepia because sepia is three table lookups while night must weigh the three
+// channels together first. The tables are what make those numbers: the straightforward
+// expression of the same arithmetic, with its divides and its six compares per pixel,
+// measured about 1.5x that for sepia and 1.9x for night. Anything faster than this wants
+// SIMD, which would be four architectures' worth of intrinsics for a pass that a render
+// cache (docs/reading-mode-plan.md section 2, tier 2: caches key on the tint) already keeps
+// off the scroll path.
+struct SepiaTable {
+    unsigned char r[256], g[256], b[256];
+    constexpr SepiaTable() : r(), g(), b() {
+        for (int v = 0; v < 256; v++) {
+            // v * paper / 255: 0 stays 0, so black is still black, and 255 lands exactly on
+            // the paper white. Monotonic, so no two values ever cross and contrast is
+            // compressed a little rather than inverted or flattened.
+            r[v] = static_cast<unsigned char>((v * kSepiaR + 127) / 255);
+            g[v] = static_cast<unsigned char>((v * kSepiaG + 127) / 255);
+            b[v] = static_cast<unsigned char>((v * kSepiaB + 127) / 255);
+        }
+    }
+};
+constexpr SepiaTable kSepia{};
+
+struct NightTable {
+    short shift[256];
+    constexpr NightTable() : shift() {
+        for (int y = 0; y < 256; y++) {
+            // The inverted luminance, squeezed into [kNightDark, kNightLight]: white (255)
+            // lands on #1A1A1A and black (0) on a light grey, and what the pixel gets is
+            // the difference, so every channel moves by the same amount.
+            const int inverted = kNightDark + ((255 - y) * (kNightLight - kNightDark) + 127) / 255;
+            shift[y] = static_cast<short>(inverted - y);
+        }
+    }
+};
+constexpr NightTable kNight{};
+
+// Night's clamp, as a third table: every value a channel plus its shift can reach, already
+// clamped, so the inner loop costs one add and one load per channel instead of the two
+// compares and two conditional moves a clamp expression comes to. Six of those per pixel
+// was most of what the night pass cost before this table existed.
+//
+// Its bounds are derived from the ramp rather than written down beside it, so moving
+// kNightDark or kNightLight cannot quietly walk this table off either end: black (luma 0)
+// is the channel that moves up the furthest and white (luma 255) the one that moves down
+// the furthest, and the table spans exactly what lies between.
+constexpr int kMaxShiftUp = kNightLight;               // what black's shift adds
+constexpr int kMaxShiftDown = 255 - kNightDark;        // what white's shift subtracts
+constexpr int kSatBias = kMaxShiftDown;                // what to add to reach index 0
+constexpr int kSatSize = 256 + kMaxShiftDown + kMaxShiftUp;
+struct SaturateTable {
+    unsigned char v[kSatSize];
+    constexpr SaturateTable() : v() {
+        for (int i = 0; i < kSatSize; i++) {
+            const int x = i - kSatBias;
+            v[i] = static_cast<unsigned char>(x < 0 ? 0 : (x > 255 ? 255 : x));
+        }
+    }
+};
+constexpr SaturateTable kSaturate{};
+
+// The indices NightRow can reach: a channel of 0..255 plus a shift of
+// -kMaxShiftDown..+kMaxShiftUp, biased to start at 0. Both ends land inside the table by
+// construction; these say so where a change to the ramp would be made.
+static_assert(0 - kMaxShiftDown + kSatBias == 0, "the night ramp's lowest index is the table's first");
+static_assert(255 + kMaxShiftUp + kSatBias == kSatSize - 1, "the night ramp's highest index is the table's last");
+
+// One row. `red` and `blue` are the byte offsets the caller's order puts them at; alpha is
+// last in both orders and is not ours to touch.
+inline void SepiaRow(unsigned char* row, int width, int red, int blue) {
+    for (int x = 0; x < width; x++) {
+        unsigned char* px = row + static_cast<size_t>(x) * 4;
+        px[red] = kSepia.r[px[red]];
+        px[1] = kSepia.g[px[1]];
+        px[blue] = kSepia.b[px[blue]];
+    }
+}
+
+inline void NightRow(unsigned char* row, int width, int red, int blue) {
+    for (int x = 0; x < width; x++) {
+        unsigned char* px = row + static_cast<size_t>(x) * 4;
+        const unsigned luma = (kLumaR * px[red] + kLumaG * px[1] + kLumaB * px[blue] + 32768u) >> 16;
+        // Every channel moves by the same amount, which is what "keep hue" means here: the
+        // chroma offsets (r-luma, g-luma, b-luma) survive untouched, so the channel that led
+        // still leads and a blue pixel stays blue -- where a flat 255-c invert would have
+        // made it orange. Only the luma above cares which byte is red, so the three writes
+        // do not need the order at all.
+        const int shift = kNight.shift[luma] + kSatBias;
+        px[0] = kSaturate.v[px[0] + shift];
+        px[1] = kSaturate.v[px[1] + shift];
+        px[2] = kSaturate.v[px[2] + shift];
+    }
+}
+
+// The whole buffer, row by row, honouring `stride` so a row's padding is left alone. The
+// choice of tint is hoisted out of the pixel loop; `rgba` says which of megapdf_render's two
+// byte orders this buffer is in, and only red and blue move between them.
+void ApplyTint(unsigned char* buffer, int width, int height, int stride, bool rgba, bool night) {
+    const int red = rgba ? 0 : 2;
+    const int blue = rgba ? 2 : 0;
+    for (int y = 0; y < height; y++) {
+        unsigned char* row = buffer + static_cast<size_t>(y) * stride;
+        if (night) NightRow(row, width, red, blue);
+        else SepiaRow(row, width, red, blue);
+    }
+}
+
+}  // namespace
+
 extern "C" {
 
 MEGAPDF_API void megapdf_render_size(double ideal_width, double ideal_height, int* out_width, int* out_height) {
@@ -3704,24 +3847,47 @@ MEGAPDF_API int megapdf_render(const megapdf_page* p, void* buffer, int width, i
         SetError(0, "the requested raster is past the render clamp; ask megapdf_render_size first");
         return MEGAPDF_ERR_ARGUMENT;
     }
-    Guard guard(CoreLock());
-    FPDF_BITMAP bmp = FPDFBitmap_CreateEx(width, height, FPDFBitmap_BGRA, buffer, stride);
-    if (bmp == nullptr) {
-        SetError(FPDF_ERR_UNKNOWN, "PDFium refused the render bitmap");
-        return MEGAPDF_ERR_PDFIUM;
+    // Page colours are one choice of three (#509), so both tints at once is the caller
+    // having ORed two radio buttons together: say so instead of picking one for them.
+    if ((flags & MEGAPDF_RENDER_SEPIA) && (flags & MEGAPDF_RENDER_NIGHT)) {
+        SetError(0, "MEGAPDF_RENDER_SEPIA and MEGAPDF_RENDER_NIGHT are alternatives; pass at most one");
+        return MEGAPDF_ERR_ARGUMENT;
     }
-    // The shared recipe: white ground, page content, then live form-field values.
-    int render_flags = FPDF_ANNOT | FPDF_LCD_TEXT;
-    if (flags & MEGAPDF_RENDER_RGBA) render_flags |= FPDF_REVERSE_BYTE_ORDER;
-    FPDFBitmap_FillRect(bmp, 0, 0, width, height, 0xFFFFFFFF);
-    FPDF_RenderPageBitmap(bmp, p->page, 0, 0, width, height, 0, render_flags);
-    // Not for a deleted page (#174): FPDF_FFLDraw would register its widgets with the form
-    // environment again, and a restored copy of the page would then read their values from
-    // them. FPDF_ANNOT above has drawn the widgets' appearance streams already.
-    if (p->owner != nullptr && p->owner->form != nullptr && p->index >= 0) {
-        FPDF_FFLDraw(p->owner->form, bmp, p->page, 0, 0, width, height, 0, render_flags);
+    {
+        Guard guard(CoreLock());
+        FPDF_BITMAP bmp = FPDFBitmap_CreateEx(width, height, FPDFBitmap_BGRA, buffer, stride);
+        if (bmp == nullptr) {
+            SetError(FPDF_ERR_UNKNOWN, "PDFium refused the render bitmap");
+            return MEGAPDF_ERR_PDFIUM;
+        }
+        // The shared recipe: white ground, page content, then live form-field values.
+        int render_flags = FPDF_ANNOT | FPDF_LCD_TEXT;
+        if (flags & MEGAPDF_RENDER_RGBA) render_flags |= FPDF_REVERSE_BYTE_ORDER;
+        FPDFBitmap_FillRect(bmp, 0, 0, width, height, 0xFFFFFFFF);
+        FPDF_RenderPageBitmap(bmp, p->page, 0, 0, width, height, 0, render_flags);
+        // Not for a deleted page (#174): FPDF_FFLDraw would register its widgets with the form
+        // environment again, and a restored copy of the page would then read their values from
+        // them. FPDF_ANNOT above has drawn the widgets' appearance streams already.
+        if (p->owner != nullptr && p->owner->form != nullptr && p->index >= 0) {
+            FPDF_FFLDraw(p->owner->form, bmp, p->page, 0, 0, width, height, 0, render_flags);
+        }
+        FPDFBitmap_Destroy(bmp);
     }
-    FPDFBitmap_Destroy(bmp);
+    // The tint goes last, over everything the page drew: content, annotations and the form
+    // field values FPDF_FFLDraw put down. Anything drawn after this point would arrive in
+    // daylight colours -- which is precisely what FPDF_COLORSCHEME would have done to the
+    // form fields, and why this is a post-pass (see ApplyTint above).
+    //
+    // And outside the lock, which is why the PDFium half above is scoped: by here the
+    // bitmap is destroyed and nothing but the caller's own buffer is in play, so there is
+    // no PDFium state to protect. CoreLock is the whole core's lock (PDFium is not
+    // thread-safe), and on a large raster this pass is tens of milliseconds -- long enough
+    // that holding it across them would park every other page's render behind this one for
+    // no reason at all.
+    if (flags & (MEGAPDF_RENDER_SEPIA | MEGAPDF_RENDER_NIGHT)) {
+        ApplyTint(static_cast<unsigned char*>(buffer), width, height, stride,
+                  (flags & MEGAPDF_RENDER_RGBA) != 0, (flags & MEGAPDF_RENDER_NIGHT) != 0);
+    }
     return MEGAPDF_OK;
 }
 

@@ -1417,6 +1417,267 @@ void test_render_page(const std::string& fixtures) {
 }
 
 // --------------------------------------------------------------------------
+// Contract 7 (#509): the page tints, MEGAPDF_RENDER_SEPIA and MEGAPDF_RENDER_NIGHT.
+//
+// Pixel assertions, not goldens (docs/reading-mode-plan.md section 3 item 1 says so
+// explicitly): what these flags promise is an arithmetic relation between an input colour
+// and an output colour, and a golden file would pin a whole raster without ever saying
+// which relation it was pinning. pagecolours.pdf is built for this in
+// tools/gen_test_fixtures.py: rendered at 612x792 it is 1 pt to 1 px, every region is a
+// flat known colour, and device y is 792 - pdf y.
+//
+// What these would catch if the post-pass were dropped from megapdf_render entirely --
+// deleted, #ifdef'd out, lost in a merge, or left behind when the flag bits were
+// renumbered: every assertion below that compares a tinted pixel against the plain one
+// fails, because an untinted render returns the plain page for all three flag values.
+// Concretely, the first four to go would be the white pixel (255,255,255 instead of the
+// paper #F4ECD8 under sepia and #1A1A1A under night), the glyph pixel (still black under
+// night instead of light), the black bar (still black under night), and the image pixel
+// (unchanged instead of inverted). The suite cannot pass with the pass missing; nor can
+// it pass with the pass present but applied before FPDF_FFLDraw, which is what the
+// checkbox assertion at the end is for.
+
+// Every pixel this fixture is built around, as device coordinates of a 1:1 612x792 render.
+struct TintProbe { int x, y; };
+constexpr int kTintW = 612, kTintH = 792;
+constexpr TintProbe kBlackBar{172, 72};    // pdf (72,700)-(272,740), a solid 0,0,0 fill
+constexpr TintProbe kWhiteGap{560, 40};    // bare page: nothing is drawn in that corner
+constexpr TintProbe kBlueImage{172, 432};  // a 1x1 #1E5AC8 image over pdf (72,300)-(272,420)
+constexpr TintProbe kPaleImage{400, 432};  // a 1x1 #F0F0F0 image over pdf (300,300)-(500,420)
+constexpr TintProbe kBluePath{172, 612};   // the same colour again, as a vector fill
+
+struct Rgb {
+    int r = 0, g = 0, b = 0;
+    bool operator==(const Rgb& o) const { return r == o.r && g == o.g && b == o.b; }
+    std::string str() const { return std::to_string(r) + "," + std::to_string(g) + "," + std::to_string(b); }
+};
+
+// A BGRA render's pixel as r,g,b. The fourth byte is alpha and no tint may touch it.
+Rgb pixel_at(const std::vector<unsigned char>& px, int x, int y) {
+    const unsigned char* q = &px[(static_cast<size_t>(y) * kTintW + x) * 4];
+    return Rgb{q[2], q[1], q[0]};
+}
+
+// Rec. 709, the weighting the night pass inverts; the tests judge "lighter" and "darker"
+// by the same measure the implementation moves.
+double luma(const Rgb& c) { return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b; }
+
+void test_render_tints(const std::string& fixtures) {
+    Doc d(fixtures + "/pagecolours.pdf");
+    Page p(d.doc, 0);
+    if (!p.page) { check(false, "pagecolours.pdf page loads"); return; }
+
+    const size_t bytes = static_cast<size_t>(kTintW) * kTintH * 4;
+    std::vector<unsigned char> plain(bytes, 0), sepia(bytes, 0), night(bytes, 0);
+    const bool rendered =
+        megapdf_render(p.page, plain.data(), kTintW, kTintH, kTintW * 4, MEGAPDF_RENDER_BGRA) == MEGAPDF_OK &&
+        megapdf_render(p.page, sepia.data(), kTintW, kTintH, kTintW * 4,
+                       MEGAPDF_RENDER_BGRA | MEGAPDF_RENDER_SEPIA) == MEGAPDF_OK &&
+        megapdf_render(p.page, night.data(), kTintW, kTintH, kTintW * 4,
+                       MEGAPDF_RENDER_BGRA | MEGAPDF_RENDER_NIGHT) == MEGAPDF_OK;
+    check(rendered, "the fixture renders plain, sepia and night");
+    if (!rendered) return;
+
+    auto at = [&](const std::vector<unsigned char>& px, const TintProbe& probe) { return pixel_at(px, probe.x, probe.y); };
+
+    // The fixture is only worth anything if it is the page it claims to be: if PDFium ever
+    // draws it differently these coordinates stop meaning what the assertions below read
+    // them as, and that must fail here rather than as a confusing tint failure.
+    check(at(plain, kBlackBar) == (Rgb{0, 0, 0}), "plain: the black bar is pure black", at(plain, kBlackBar).str());
+    check(at(plain, kWhiteGap) == (Rgb{255, 255, 255}), "plain: the ground is pure white", at(plain, kWhiteGap).str());
+    check(at(plain, kBlueImage) == (Rgb{0x1E, 0x5A, 0xC8}), "plain: the image is the blue it carries", at(plain, kBlueImage).str());
+    check(at(plain, kPaleImage) == (Rgb{0xF0, 0xF0, 0xF0}), "plain: the pale image is #F0F0F0", at(plain, kPaleImage).str());
+
+    // ---- Sepia: white warms to paper, black stays black, contrast survives. ----
+
+    check(at(sepia, kWhiteGap) == (Rgb{0xF4, 0xEC, 0xD8}), "sepia: white becomes the paper white #F4ECD8",
+          at(sepia, kWhiteGap).str());
+    check(at(sepia, kBlackBar) == (Rgb{0, 0, 0}), "sepia: black stays black", at(sepia, kBlackBar).str());
+    // The paper is warm, not merely darker: red survives more than green, green more than blue.
+    const Rgb paper = at(sepia, kWhiteGap);
+    check(paper.r > paper.g && paper.g > paper.b, "sepia: the paper is warm, r > g > b", paper.str());
+
+    // Contrast usable: ink on that paper must still be far enough from it to read. The
+    // measure is WCAG's contrast ratio over sRGB relative luminance, which is the number a
+    // reading mode is actually judged on -- 4.5:1 is AA for body text and 7:1 is AAA, and a
+    // page colour that only just cleared AA would not be worth shipping.
+    auto relative_luminance = [](const Rgb& c) {
+        auto channel = [](int v) {
+            const double s = v / 255.0;
+            return s <= 0.03928 ? s / 12.92 : std::pow((s + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
+    };
+    auto contrast = [&](const Rgb& a, const Rgb& b) {
+        const double la = relative_luminance(a), lb = relative_luminance(b);
+        return (std::max(la, lb) + 0.05) / (std::min(la, lb) + 0.05);
+    };
+    const double sepia_contrast = contrast(at(sepia, kBlackBar), at(sepia, kWhiteGap));
+    check(sepia_contrast > 7.0, "sepia: ink on paper clears WCAG AAA (7:1) for body text",
+          std::to_string(sepia_contrast) + ":1");
+    // And nothing inverted on the way: sepia darkens, it never makes a dark thing light.
+    check(luma(at(sepia, kBlackBar)) < luma(at(sepia, kBlueImage)) &&
+              luma(at(sepia, kBlueImage)) < luma(at(sepia, kPaleImage)) &&
+              luma(at(sepia, kPaleImage)) < luma(at(sepia, kWhiteGap)),
+          "sepia: the page's light-to-dark ordering is unchanged");
+
+    // ---- Night: luminance inverted, hue kept. ----
+
+    check(at(night, kWhiteGap) == (Rgb{0x1A, 0x1A, 0x1A}), "night: white becomes #1A1A1A", at(night, kWhiteGap).str());
+    const Rgb night_black = at(night, kBlackBar);
+    check(night_black.r == night_black.g && night_black.g == night_black.b && night_black.r > 200,
+          "night: black becomes a light grey", night_black.str());
+    check(contrast(night_black, at(night, kWhiteGap)) > 7.0, "night: light ink on dark page clears 7:1",
+          std::to_string(contrast(night_black, at(night, kWhiteGap))) + ":1");
+
+    // Hue kept, not a flat invert. A flat 255-c invert of #1E5AC8 is #E1A537, an orange whose
+    // red channel leads; the blue channel must still be the one that leads.
+    const Rgb night_blue = at(night, kBlueImage);
+    check(night_blue.b > night_blue.g && night_blue.g > night_blue.r,
+          "night: the blue keeps its hue -- b > g > r, where a flat invert would give an orange",
+          night_blue.str());
+    check(!(night_blue == (Rgb{255 - 0x1E, 255 - 0x5A, 255 - 0xC8})),
+          "night: the blue is not the flat RGB complement", night_blue.str());
+
+    // The #168 decision, asserted so that changing it is deliberate: night inverts pictures
+    // too. The pale image is a photograph's highlight and must come out dark -- a negative.
+    // If someone later implements "leave images alone", this is the test that will say so.
+    const Rgb night_pale = at(night, kPaleImage);
+    check(luma(night_pale) < 64.0,
+          "night: an image inverts too -- a #F0F0F0 photo highlight comes out dark (#168's accepted trade-off)",
+          night_pale.str());
+    check(!(night_pale == at(plain, kPaleImage)), "night: the image pixel is not left alone", night_pale.str());
+
+    // And the reason that trade-off exists at all: a post-pass cannot tell a picture from a
+    // path. The same colour drawn both ways comes out the same both ways, in every mode.
+    check(at(plain, kBluePath) == at(plain, kBlueImage) && at(sepia, kBluePath) == at(sepia, kBlueImage) &&
+              at(night, kBluePath) == at(night, kBlueImage),
+          "a path and an image of one colour tint identically -- what FPDF_COLORSCHEME was rejected over");
+
+    // ---- A real glyph: black text on white reads as light on dark. ----
+    //
+    // Found, not hard-coded: the darkest pixel of the 36 pt line, so this is a glyph
+    // interior whatever PDFium's hinting does to the outline on this platform.
+    int gx = 0, gy = 0, darkest = 1 << 20;
+    for (int y = 130; y < 185; y++) {
+        for (int x = 72; x < 420; x++) {
+            const Rgb c = pixel_at(plain, x, y);
+            if (c.r + c.g + c.b < darkest) { darkest = c.r + c.g + c.b; gx = x; gy = y; }
+        }
+    }
+    const Rgb plain_glyph = pixel_at(plain, gx, gy);
+    check(plain_glyph == (Rgb{0, 0, 0}), "the text band has a solid black glyph pixel",
+          plain_glyph.str() + " at " + std::to_string(gx) + "," + std::to_string(gy));
+    // Its background, a few rows above the line, is the white the glyph sits on.
+    const Rgb plain_ground = pixel_at(plain, gx, 125);
+    check(plain_ground == (Rgb{255, 255, 255}), "the text sits on white", plain_ground.str());
+
+    const Rgb night_glyph = pixel_at(night, gx, gy), night_ground = pixel_at(night, gx, 125);
+    check(luma(night_glyph) > luma(night_ground) + 100.0,
+          "night: the black glyph is now lighter than the page it sits on -- light-on-dark",
+          night_glyph.str() + " on " + night_ground.str());
+    check(contrast(night_glyph, night_ground) > 7.0, "night: the inverted glyph still clears 7:1",
+          std::to_string(contrast(night_glyph, night_ground)) + ":1");
+
+    const Rgb sepia_glyph = pixel_at(sepia, gx, gy), sepia_ground = pixel_at(sepia, gx, 125);
+    check(luma(sepia_glyph) < luma(sepia_ground), "sepia: the glyph is still darker than its page");
+    check(contrast(sepia_glyph, sepia_ground) > 7.0, "sepia: the glyph on paper still clears 7:1",
+          std::to_string(contrast(sepia_glyph, sepia_ground)) + ":1");
+
+    // ---- The pass is a post-pass over the caller's buffer, in the caller's terms. ----
+
+    // Alpha is not a colour channel: opaque before, opaque after.
+    bool opaque = true;
+    for (size_t i = 3; i < bytes && opaque; i += 4) opaque = night[i] == 0xFF && sepia[i] == 0xFF;
+    check(opaque, "the tints leave alpha alone");
+
+    // RGBA (Android's buffers) tints identically -- the luma weighting is per colour, not
+    // per byte offset, so getting the channel order wrong here would weight red as blue.
+    std::vector<unsigned char> night_rgba(bytes, 0);
+    check(megapdf_render(p.page, night_rgba.data(), kTintW, kTintH, kTintW * 4,
+                         MEGAPDF_RENDER_RGBA | MEGAPDF_RENDER_NIGHT) == MEGAPDF_OK,
+          "night renders into an RGBA buffer");
+    bool swapped_ok = true;
+    for (size_t i = 0; i < bytes; i += 4) {
+        if (night[i] != night_rgba[i + 2] || night[i + 2] != night_rgba[i] || night[i + 1] != night_rgba[i + 1] ||
+            night[i + 3] != night_rgba[i + 3]) { swapped_ok = false; break; }
+    }
+    check(swapped_ok, "night in RGBA is night in BGRA with red and blue exchanged");
+
+    // A row's padding past width * 4 is the caller's, and a post-pass must not walk into it.
+    const int padded = kTintW * 4 + 64;
+    std::vector<unsigned char> wide(static_cast<size_t>(padded) * kTintH, 0xAB);
+    check(megapdf_render(p.page, wide.data(), kTintW, kTintH, padded,
+                         MEGAPDF_RENDER_BGRA | MEGAPDF_RENDER_NIGHT) == MEGAPDF_OK,
+          "night renders into a buffer with a padded stride");
+    bool padding_kept = true, rows_match = true;
+    for (int y = 0; y < kTintH; y++) {
+        const unsigned char* row = &wide[static_cast<size_t>(y) * padded];
+        if (std::memcmp(row, &night[static_cast<size_t>(y) * kTintW * 4], kTintW * 4) != 0) rows_match = false;
+        for (int i = kTintW * 4; i < padded; i++) if (row[i] != 0xAB) padding_kept = false;
+    }
+    check(rows_match, "a padded stride tints to the same pixels");
+    check(padding_kept, "the tint does not write into the row padding");
+
+    // Both tints at once is the caller ORing two radio buttons together, and is refused
+    // rather than silently resolved. The buffer is not touched on the way out.
+    std::vector<unsigned char> untouched(bytes, 0x5A);
+    check(megapdf_render(p.page, untouched.data(), kTintW, kTintH, kTintW * 4,
+                         MEGAPDF_RENDER_SEPIA | MEGAPDF_RENDER_NIGHT) == MEGAPDF_ERR_ARGUMENT,
+          "sepia and night together are an argument error");
+    check(std::count(untouched.begin(), untouched.end(), 0x5A) == static_cast<std::ptrdiff_t>(bytes),
+          "the refused render left the buffer alone");
+
+    // The tint is a way of looking at the page, never a change to it: the plain render after
+    // three tinted ones is the plain render from before them.
+    std::vector<unsigned char> again(bytes, 0);
+    megapdf_render(p.page, again.data(), kTintW, kTintH, kTintW * 4, MEGAPDF_RENDER_BGRA);
+    check(again == plain, "a tinted render changes nothing for the next plain one");
+}
+
+// The tint goes after FPDF_FFLDraw, so a live form-field value is tinted with the rest of
+// the page. This is the assertion that FPDF_COLORSCHEME could not have satisfied -- it has
+// no FPDF_FFLDraw variant, so the check in a checked box would have stayed daylight-dark
+// over a night page. forms.pdf, because it has the widget; test_render_page above already
+// establishes that clicking the box puts ink in it.
+void test_render_tint_over_form_fields(const std::string& fixtures) {
+    Doc d(fixtures + "/forms.pdf");
+    Page p(d.doc, 0);
+    if (!p.page) { check(false, "forms.pdf page loads for the tint test"); return; }
+    megapdf_form_fields* f = megapdf_form_fields_load(p.page);
+    megapdf_form_field field{};
+    megapdf_form_field_get(f, 0, &field);
+    megapdf_form_fields_free(f);
+    megapdf_form_click(p.page, (field.bounds.left + field.bounds.right) / 2,
+                       (field.bounds.bottom + field.bounds.top) / 2);
+
+    // The same 1:1 612x792 raster the tint tests use, so pixel_at's row stride is right.
+    const int w = kTintW, h = kTintH;
+    const size_t bytes = static_cast<size_t>(w) * h * 4;
+    std::vector<unsigned char> plain(bytes, 0), night(bytes, 0);
+    megapdf_render(p.page, plain.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA);
+    megapdf_render(p.page, night.data(), w, h, w * 4, MEGAPDF_RENDER_BGRA | MEGAPDF_RENDER_NIGHT);
+
+    // The widget's box, in device pixels, and the darkest pixel the drawn check puts in it.
+    const int x0 = static_cast<int>(field.bounds.left), x1 = static_cast<int>(field.bounds.right);
+    const int y0 = static_cast<int>(792.0 - field.bounds.top), y1 = static_cast<int>(792.0 - field.bounds.bottom);
+    int cx = 0, cy = 0, darkest = 1 << 20;
+    for (int y = y0; y <= y1 && y < h; y++) {
+        for (int x = x0; x <= x1 && x < w; x++) {
+            const unsigned char* q = &plain[(static_cast<size_t>(y) * w + x) * 4];
+            const int sum = q[0] + q[1] + q[2];
+            if (sum < darkest) { darkest = sum; cx = x; cy = y; }
+        }
+    }
+    check(darkest < 3 * 0x40, "the checked box draws dark ink through the form environment",
+          std::to_string(darkest));
+    const Rgb tinted = pixel_at(night, cx, cy);
+    check(luma(tinted) > 150.0,
+          "night: the form field's own ink is tinted with the page, not left in daylight colours "
+          "(FPDF_FFLDraw runs before the post-pass)", tinted.str());
+}
+
+// --------------------------------------------------------------------------
 // Phase 3 (#112): body-text editing. FontSubstitutionTests and TextEditSpikeTests
 // make the same assertions through the desktop binding.
 
@@ -8114,6 +8375,8 @@ int main(int argc, char** argv) {
     test_cid_font_glyphs();
     test_render();
     test_render_page(argv[1]);
+    test_render_tints(argv[1]);
+    test_render_tint_over_form_fields(argv[1]);
     test_text_editing(argv[1]);
     test_rewrite_fidelity();
     test_edit_scenarios();
