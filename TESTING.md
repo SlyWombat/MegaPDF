@@ -751,6 +751,15 @@ The first baseline recorded against a **manifest revision** rather than a date, 
 #455 asks for: a gate number without the manifest it was measured on cannot tell you whether
 it moved because the engine changed or because the corpus reshuffled.
 
+**Measured before #519, so the internal-API figures below read very slightly low.** That fix
+(#479/#495) taught the fidelity measure to count a list item's marker, which the engine keeps
+in its own field and the CLI's writer puts back when it renders — so every alphanumeric list
+marker had been counting as a token the engine lost. The correction is small and always in
+the same direction: on a 300-document sample the internal aggregate moved from 0.971414 to
+0.971436, matching the CLI leg exactly. Compare a later run's internal-API numbers against a
+re-measurement, not against these, and note it the way #455 asks: a gate number names both
+the manifest it was measured on **and** the tool that measured it.
+
     manifest revision: sha256:d1c084b1cedb7583dfbef03e3b8fb59c9eac55c39b1dbed0fdd132cde7dd079e
     1,777 rows  (363 form, 300 tagged, 250 report, 150 malformed, 100 scan, 0 large,
                  614 opt-in: 136 irs, 50 uscis, 108 uk-*, 33 govinfo-signed, 7 govinfo-large,
