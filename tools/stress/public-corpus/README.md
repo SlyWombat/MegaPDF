@@ -227,6 +227,32 @@ Each rebuild's stderr also prints the manifest's own **revision**: the sha256 of
 recorded against this hash, not just a date, so a gate number always names the exact manifest
 it was measured against.
 
+**What happens when a brand-new source shows up — a source the pin was written before —
+stated explicitly, because it is the question that matters most.** Two shapes exist, and
+they are handled differently on purpose:
+
+* **A new opt-in HTTP source** (the `irs`/`uscis`/`govinfo-signed`/`nonlatin-wiki` shape,
+  added via `--add-source` and merged by `merge_and_report()`) never goes through
+  `CATEGORIES`/`spread()`/`pin_selection()` at all — it is excluded from the pinning
+  machinery by construction (see `main()`'s `opt_in_source_keys`) and carried over
+  unconditionally, the same as the federal-forms rows always were. Its rows are simply
+  **appended**: they compete with nothing, so they cannot reshuffle anything and nothing
+  can crowd them out. This is proven live in TESTING.md's fifth run: pin against a manifest
+  from *before* `nonlatin-wiki` existed, run `--add-source nonlatin-wiki` for real, and the
+  1,382 previously-selected rows come back **byte-identical**, with exactly 280 new rows
+  added.
+* **A new git-cloned source** (the `verapdf`/`qpdf`/`pdfium` shape, added to `SOURCES`) *does*
+  go through the normal pipeline: its files are `classify()`d into ordinary categories and
+  become `pool_by_path` candidates like any other source's. `pin_selection()` treats "a
+  brand-new source's files" exactly the same as "an existing source's newly-added files" —
+  there is no special case, because there does not need to be one: every previously-selected
+  row from *any* source is pinned regardless of which source it came from, and a new source's
+  rows are `spread()`-selected into whatever quota room is left (none, today, for `tagged`/
+  `malformed`/`scan`/`report`, all four already at capacity; unlimited for `form`). A future
+  git source that should guarantee itself real representation needs either its own quota
+  bump (a visible, deliberate `QUOTAS` edit) or, like `govinfo-signed`, a forced `category`
+  that sidesteps competition entirely — not a change to `pin_selection()` itself.
+
 ### A classification bug this extension found and fixed
 
 `classify()` used to require **both** `/AcroForm` and `/Widget` to appear literally in a
