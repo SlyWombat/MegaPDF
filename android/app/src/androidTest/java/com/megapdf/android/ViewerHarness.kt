@@ -42,8 +42,20 @@ object Fixtures {
     /** The app's demo agreement: one page, three drawn checkboxes, a paragraph of body text. */
     const val DEMO_ASSET = "demo.pdf"
 
+    /**
+     * #456/#457's synthetic fixtures (`tools/gen_xfa_fixtures.py`), test-only: this test APK's
+     * own assets, not the app's — a real IRCC form is Crown copyright and stays local-only
+     * (Dave, 2026-09-27), so nothing here ships in the app.
+     */
+    const val DYNAMIC_XFA_ASSET = "dynamic-xfa.pdf"
+    const val HYBRID_XFA_ASSET = "hybrid-xfa.pdf"
+
     val appContext: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
+
+    /** This test APK's own context, for assets that are not part of the app under test. */
+    private val testContext: Context
+        get() = InstrumentationRegistry.getInstrumentation().context
 
     /**
      * Where the fixtures live: `cacheDir/share/fixtures-346/`, inside the one subtree the
@@ -65,6 +77,15 @@ object Fixtures {
     fun demo(name: String): File {
         val file = File(dir(), name)
         appContext.assets.open(DEMO_ASSET).use { input ->
+            file.outputStream().use { input.copyTo(it) }
+        }
+        return file
+    }
+
+    /** A fresh copy of [asset] from this test APK's own assets — see [DYNAMIC_XFA_ASSET]. */
+    fun testAsset(asset: String, name: String = asset): File {
+        val file = File(dir(), name)
+        testContext.assets.open(asset).use { input ->
             file.outputStream().use { input.copyTo(it) }
         }
         return file
