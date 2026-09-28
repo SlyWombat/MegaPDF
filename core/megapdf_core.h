@@ -247,14 +247,56 @@ enum {
      * neither (T4 and ISP-1000 spot-checked as extracting their real content) — an exact
      * split, not a heuristic guess.
      */
-    MEGAPDF_DOC_DYNAMIC_XFA = 1u << 0
+    MEGAPDF_DOC_DYNAMIC_XFA = 1u << 0,
+
+    /**
+     * The document carries an existing digital signature (#476, #481 phase 1): PDFium's
+     * FPDF_GetSignatureCount() is greater than zero. This is a fact about the document as
+     * opened, not a verdict on the signature's cryptographic validity — the core does not
+     * verify one, the same way it does not verify a password beyond what open already
+     * requires.
+     *
+     * It exists because `megapdf_save()` cannot preserve a signature: it calls PDFium's
+     * FPDF_SaveAsCopy, which re-serialises the whole file, so any `/ByteRange` a signature
+     * recorded no longer covers the saved file. Measured in #476 against 33 genuinely
+     * signed GPO documents (verified with poppler's `pdfsig`, independent of MegaPDF):
+     * every one goes from "Signature is Valid" to "Digest Mismatch" after
+     * `megapdf_save()`, whether or not anything was actually edited. Nothing refuses the
+     * save — this flag exists so a caller can warn before it happens, at the point of
+     * save, not as a banner on open (the common case, saving a copy, is unaffected: the
+     * signed original is untouched). See MEGAPDF_DOC_SIGNED_CERTIFICATION for the one case
+     * where the wording should differ.
+     */
+    MEGAPDF_DOC_SIGNED = 1u << 1,
+
+    /**
+     * At least one of the document's signatures is a certification signature carrying a
+     * `/DocMDP` transform (FPDFSignatureObj_GetDocMDPPermission() succeeds, answering 1, 2
+     * or 3) rather than an ordinary approval signature. Always accompanied by
+     * MEGAPDF_DOC_SIGNED; the two are separate bits because the wording differs, not
+     * because either implies the document is otherwise safe to overwrite.
+     *
+     * A certification signature can *forbid* modification outright (DocMDP permission 1,
+     * "no changes"), rather than merely being invalidated by one the way an ordinary
+     * signature is — the document may say, in its own structure, that MegaPDF's save was
+     * never allowed to happen. Measured across the same 33-document #476 corpus (all
+     * `govinfo-signed`, staged read-only at ~/pdf-public on kdocker3): 33 of 33 are
+     * certification signatures, and every one is permission 1 (no changes allowed at
+     * all) — GPO certifies its publications closed to any modification, not merely to
+     * form-filling (permission 2) or annotation (permission 3). This split was
+     * unmeasured going into #481; a corpus of one signer's homogeneous population, so a
+     * more varied sample could change the proportions without changing the qualitative
+     * finding that DocMDP is cheap to read and worth a different warning.
+     */
+    MEGAPDF_DOC_SIGNED_CERTIFICATION = 1u << 2
 };
 
 /**
  * MEGAPDF_DOC_* bits describing `document` as a whole. 0 for a NULL document or an ordinary
- * one. Cheap — a form-type check, and (only when that says XFA_FULL) a substring search over
- * the first few pages' text, the same search megapdf_search_page already does — so it is safe
- * to call right after megapdf_open() and as often as wanted.
+ * one. Cheap — a form-type check (and, only when that says XFA_FULL, a substring search over
+ * the first few pages' text), and a PDFium signature-table read (and, only for a document
+ * that has a signature, one DocMDP-permission call per signature) — so it is safe to call
+ * right after megapdf_open() and as often as wanted.
  */
 MEGAPDF_API unsigned int megapdf_document_flags(const megapdf_document* document);
 
