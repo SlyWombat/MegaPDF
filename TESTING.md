@@ -270,9 +270,9 @@ There are two corpora, and they answer different questions.
 | | private | public |
 |---|---|---|
 | where | `GPD-DAVE`, `k2`, `k3` only | anywhere — CI, a cloud sandbox, a laptop |
-| what | 4,337 of the owner's real documents | 1,349 fetched from a committed manifest |
+| what | 4,337 of the owner's real documents | 1,464 fetched from a committed manifest |
 | how | already on disk | `tools/stress/public-corpus/fetch.sh` |
-| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **and 186 real IRS/USCIS forms** |
+| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **186 real IRS/USCIS forms, 108 real UK OGL forms, and 7 very large documents** |
 | depth | the deeper battery: real-world shapes nothing synthetic reproduces | the reproducible one: anyone can run it and get the same documents |
 
 Neither replaces the other. The private corpus stays the deeper gate and stays local; the
@@ -379,6 +379,85 @@ other measure above is unaffected.
 Read #445 before treating a red pages battery on the public corpus as an engine defect: on
 this run, as before, every qpdf-failure/count-mismatch/other-refusal was the harness or the
 population, not the engine.
+
+### Third run, 2026-09-28: 108 UK OGL forms + 7 large govinfo documents (#471 parts 3-4)
+
+Built on `main` @ `8b09807` (includes #452/#463's field-hierarchy relaxation and #457's XFA
+work). The corpus is now **1,464 documents, ~4.24 GB** (dominated by the seven new `large`
+rows; everything else is ~197 MB) — see `tools/stress/public-corpus/README.md`, "UK
+government forms" and "Very large documents", for how each set was chosen and licensed.
+
+    tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
+    tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
+    tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo
+    tools/stress/public-corpus/fetch.sh                                # → ~/megapdf-public-corpus
+    bash tools/stress/pages-battery.sh    <cli> ~/megapdf-public-corpus <out> --jobs 3
+    tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
+    tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
+
+1,456 documents visited by `find -name '*.pdf'` for the non-`large` batteries (1,464 minus
+the same case-mismatched qpdf fixture #445 already noted, minus the fact that `large` rows
+were battery-tested separately, below, rather than mixed into the same run given their size):
+
+| measure | whole corpus | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 (internal API) | 0.998390 | >= 0.998 | pass — up from #453's 0.996178 now that #453/#463 have landed |
+| structure: F1 through `megapdf-cli` | 0.999412 | >= 0.998 | pass |
+| structure: order agreement tau (median, 2,403 tagged pages) | 0.945 | >= 0.9 | pass |
+| structure: poppler agreement tau (median, informational) | 0.987 | — | — |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | 0 | 0 | pass — the two pdfium fixtures #443 named no longer misfire |
+| structure: pages F1 < 0.9 | 3 | informational | down from 23 |
+| structure: poppler (`pdftotext`) timeouts | 1 | informational (#442) | bounded, did not stall the run |
+| markdown: cmark parse failures | 0 | 0 | pass |
+| markdown: crashes / hangs / bad exit codes | 0 / 0 / 0 | 0 / 0 / 0 | pass |
+| pages: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+
+**Per-source breakdown, UK rows** (structure-battery measure 1, pages-battery `extract`):
+
+| source | documents | structure F1 (internal) | structure F1 (cli) | `extract` refused-fields |
+|---|---:|---:|---:|---:|
+| uk-hmrc | 62 | 0.999535 | 0.999535 | **0** |
+| uk-homeoffice | 22 | **0.991581** (below gate) | 0.999733 | **0** |
+| uk-dwp | 24 | 0.999958 | 0.999984 | **0** |
+
+**Zero field-`/Parent`-hierarchy refusals across all 108 UK forms** — including CT600A/B/C/J,
+SA800 and SA900, the deepest hierarchies in the set. This is the evidence #471 part 3 asked
+for: #463's relaxation holds on a second jurisdiction's forms, not just the US federal ones
+it was built and measured against (compare the second run above: 90% of real IRS forms
+refused `extract` before #463).
+
+`uk-homeoffice`'s internal-API F1 (0.991581) is below the 0.998 gate even though the whole
+corpus passes and `uk-homeoffice`'s own CLI-measured F1 (0.999733) does not — filed as #479,
+a fidelity gap concentrated in the Home Office nationality-form family specifically (not
+furniture volume, page count, or anything else common to every `uk-homeoffice` document).
+Filed as the finding per #471's "never fix, never gate-adjust" instruction. #480 records the
+addition and its overall results.
+
+**`large` category (7 govinfo Federal Register documents, 48.4 MB - 2.07 GB), tested
+separately given their size:**
+
+| measure | large category | gate | |
+|---|---|---|---|
+| pages: crashes / hangs | [FILL] | 0 / 0 | [FILL] |
+| pages: slowest single operation | [FILL] | — | informational |
+| structure: crashes / hangs | [FILL] | 0 / 0 | [FILL] |
+| structure: slowest document | [FILL] | — | informational |
+| markdown: crashes / hangs | [FILL] | 0 / 0 | [FILL] |
+
+Wall time / peak RSS per document (via `megapdf-cli extract`, outside the batteries, as a
+baseline for a future regression to compare against): see
+`tools/stress/public-corpus/README.md`, "Very large documents" — from 1.42s/290MB (48.4 MB
+document) to 14.75s/2.40GB (the 2.07 GB document), scaling roughly linearly with size, no
+sign of a blow-up at the top of the range.
+
+**Battery timeouts and the `large` category.** [FILL: verdict based on the actual battery
+run above — whether `structure-battery.sh`/`markdown-battery.sh`'s 120s default and
+`pages-battery.sh`'s 300s default gave enough headroom for the 2.07 GB document, or came
+close enough that the category should get its own value.] Raised in the #471 PR as a
+request rather than changed here — `tools/stress/*-battery.sh` was out of bounds for #442/
+#445 and stays out of bounds here.
 
 ### Android app UI tests (#346)
 
