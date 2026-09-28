@@ -343,6 +343,57 @@ FEDERAL_ATTRIBUTION_GOVINFO_SIGNED = (
     "(Signature Field Name \"USGPOSignature\") attesting the authenticity of the "
     "version published at govinfo.gov")
 
+# --------------------------------------------------------------------------------------
+# Non-Latin scripts (#471 part 2). core/megapdf_structure.cpp's BuildWords, BuildLines and
+# the XY-cut reading order assume left-to-right, horizontal text -- #444 found this the
+# hard way when a vertical-writing CMap turned "Hello world" into ten one-letter words. The
+# public corpus otherwise has almost no Arabic, Hebrew, Han, Devanagari or Thai text, so
+# there was no population to measure that risk against.
+#
+# Source: real Wikipedia articles, one PDF per article, fetched from that wiki's own REST
+# "page/pdf" export endpoint (the same mechanism #434's README names under "good sources").
+# Titles were chosen by MediaWiki's own list=random (mainspace only), then pinned here --
+# exactly the IRS_FORMS/USCIS_FORMS shape above -- so a rebuild fetches the same articles
+# rather than a fresh random sample each time (#455 asks that adding documents not reshuffle
+# what is already measured). 40 titles per language, chosen 2026-09-28 on kdocker3;
+# NONLATIN_WIKI_TITLES is the exact, pinned list.
+#
+# Licence: Wikipedia article text is dual CC BY-SA 4.0 / GFDL (enwiki's own "Reusing
+# Wikipedia content" page, checked 2026-09-28). CC BY-SA requires attribution (a hyperlink
+# or URL to the article, or a list of authors), a licence notice, and -- because the PDF
+# rendering is the wiki's own, not further modified here -- no "changes made" notice is
+# owed beyond noting the export mechanism, which this comment and the README do. Recorded
+# per row as licence CC-BY-SA-4.0; NONLATIN_ATTRIBUTION carries the notice text.
+#
+# Scripts: Arabic, Hebrew, Han (Chinese, both flavours as the sources happen to serve them),
+# Devanagari (Hindi) and Thai are each a plain horizontal-text wiki export -- real body
+# text, real fonts, real ToUnicode/CMap data, but not vertical. Korean and Japanese add
+# Hangul and a second horizontal CJK sample. None of these are vertical writing, which is
+# the one axis #444 actually broke on -- see gen-ja-vertical.py alongside this file for
+# that gap, which is NOT part of manifest.tsv (its bytes are not reproducible enough for a
+# checksum-pinned row; see that file's own docstring for why).
+NONLATIN_WIKI_SCRIPTS = {
+    "ar": "arabic",
+    "he": "hebrew",
+    "zh": "han-chinese",
+    "ja": "japanese-horizontal",
+    "ko": "hangul-korean",
+    "hi": "devanagari",
+    "th": "thai",
+}
+
+NONLATIN_LICENCE = "CC-BY-SA-4.0"
+NONLATIN_ATTRIBUTION = (
+    "Wikipedia contributors -- article text is CC BY-SA 4.0 "
+    "(https://creativecommons.org/licenses/by-sa/4.0/), dual-licensed GFDL; each row's "
+    "own URL is the article's canonical attribution link (replace '/api/rest_v1/page/pdf/' "
+    "with '/wiki/' for the human-readable page). PDF rendering is the wiki's own REST "
+    "export, unmodified further here.")
+
+# See "Extending" below and NONLATIN_WIKI_TITLES's own comment for the pinned title list
+# (kept in a companion module to keep this file's line count sane).
+from nonlatin_wiki_titles import NONLATIN_WIKI_TITLES  # noqa: E402
+
 FEDERAL_SOURCES = {
     "irs": HttpSource(
         key="irs",
@@ -600,6 +651,88 @@ def fetch_federal(source, cache_dir):
     return rows, skipped
 
 
+def fetch_nonlatin_wiki(cache_dir):
+    """Fetch every title in NONLATIN_WIKI_TITLES, one language at a time (#471 part 2).
+
+    Same politeness and caching shape as fetch_federal above (this reuses
+    FEDERAL_REQUEST_GAP / FEDERAL_USER_AGENT rather than duplicating them under a new
+    name -- one wiki host is exactly as polite a target as one government host). Not
+    folded into fetch_federal/HttpSource itself: the row `path` federal forms use is
+    the filename an agency already gave it (`f1040.pdf`), which is a bad fit here --
+    percent-encoding an Arabic or Thai title into a filename is legal but ugly and, for
+    a long title, can overflow a filesystem's 255-byte name limit. Rows here use the
+    content hash for `path` instead, which every corpus row could in principle do but
+    federal doesn't need to.
+
+    Each `source` value is `wiki-<lang>` (not a single `wikipedia` source): the point
+    of this extension is a per-script breakdown, and the manifest's existing `source`
+    column is already what the battery tables key on, so a language-per-source-value
+    reproduces the breakdown with no new column and no change to any battery script.
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+    rows = []
+    skipped = []
+    transport_failures = 0
+    total_requests = 0
+    last_request = 0.0
+    for lang in NONLATIN_WIKI_SCRIPTS:
+        titles = NONLATIN_WIKI_TITLES[lang]
+        base_url = f"https://{lang}.wikipedia.org/api/rest_v1/page/pdf/"
+        for i, title in enumerate(titles):
+            total_requests += 1
+            quoted = urllib.parse.quote(title.replace(" ", "_"), safe="")
+            tag = f"{lang}/{title}"
+            cachefile = os.path.join(cache_dir, f"{lang}-{i:03d}.pdf")
+            if os.path.exists(cachefile):
+                with open(cachefile, "rb") as fh:
+                    data = fh.read()
+            else:
+                wait = FEDERAL_REQUEST_GAP - (time.monotonic() - last_request)
+                if wait > 0:
+                    time.sleep(wait)
+                url = base_url + quoted
+                req = urllib.request.Request(url, headers={"User-Agent": FEDERAL_USER_AGENT})
+                try:
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        data = resp.read()
+                except urllib.error.HTTPError as exc:
+                    last_request = time.monotonic()
+                    skipped.append((tag, f"HTTP {exc.code}"))
+                    print(f"  nonlatin-wiki: {tag}: HTTP {exc.code}, skipping", file=sys.stderr)
+                    continue
+                except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                    last_request = time.monotonic()
+                    transport_failures += 1
+                    skipped.append((tag, str(exc)))
+                    continue
+                last_request = time.monotonic()
+                # A stub-length rendering (a redirect, a disambiguation page, a page the
+                # renderer gave up on) is not useful corpus material -- 15 KB is comfortably
+                # below every real article seen in the 2026-09-28 sample and comfortably
+                # above an almost-empty render.
+                if not data.startswith(b"%PDF") or len(data) < 15000:
+                    skipped.append((tag, "not a usable PDF (missing header or under 15 KB)"))
+                    continue
+                with open(cachefile, "wb") as fh:
+                    fh.write(data)
+            sha = hashlib.sha256(data).hexdigest()
+            rows.append({
+                "path": f"nonlatin/wiki-{lang}/{sha[:16]}.pdf",
+                "url": base_url + quoted,
+                "sha256": sha,
+                "bytes": str(len(data)),
+                "source": f"wiki-{lang}",
+                "licence": NONLATIN_LICENCE,
+                "category": classify(data, f"nonlatin/wiki-{lang}/{sha[:16]}.pdf"),
+            })
+
+    if not rows and transport_failures == total_requests:
+        raise FederalHostUnreachable(
+            f"every one of {total_requests} requests to *.wikipedia.org failed at the "
+            f"transport level; the host looks unreachable from here")
+    return rows, skipped
+
+
 COLUMNS = ["url", "sha256", "bytes", "source", "licence", "category", "path"]
 
 
@@ -630,6 +763,33 @@ def read_manifest(path):
     return rows
 
 
+def merge_and_report(key, rows, skipped, out_path):
+    """Merge `rows` (by URL: a matching sha256 is left alone, a changed one refreshed,
+    a new one added) into the manifest at `out_path`, and print the same shape of
+    summary every --add-source generator has printed since the federal-forms extension.
+    Shared by fetch_federal and fetch_nonlatin_wiki so the two opt-in HTTP generators
+    report identically rather than drifting apart.
+    """
+    existing = read_manifest(out_path) if os.path.exists(out_path) else []
+    by_url = {r["url"]: r for r in existing}
+    added = updated = 0
+    for row in rows:
+        if row["url"] in by_url and by_url[row["url"]]["sha256"] == row["sha256"]:
+            continue
+        added += (row["url"] not in by_url)
+        updated += (row["url"] in by_url)
+        by_url[row["url"]] = row
+    write_manifest(list(by_url.values()), out_path)
+
+    by_cat = collections.Counter(r["category"] for r in rows)
+    print(f"{key}: {len(rows)} documents fetched and verified "
+          f"({dict(sorted(by_cat.items()))}), {len(skipped)} skipped", file=sys.stderr)
+    for tag, reason in skipped:
+        print(f"  skipped {tag}: {reason}", file=sys.stderr)
+    print(f"{out_path}: {added} new row(s), {updated} row(s) refreshed, "
+          f"{len(by_url)} total", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -640,9 +800,9 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                   "manifest.tsv"))
     ap.add_argument("--add-source", metavar="KEY",
-                    help="fetch and merge one federal-forms source into --out (%s); or, "
+                    help="fetch and merge one opt-in HTTP source into --out (%s); or, "
                          "for %s, refuse with why (no verified generator yet)"
-                         % (", ".join(sorted(FEDERAL_SOURCES)),
+                         % (", ".join(sorted(list(FEDERAL_SOURCES) + ["nonlatin-wiki"])),
                             ", ".join(sorted(SOURCES_BLOCKED))))
     args = ap.parse_args()
 
@@ -656,10 +816,25 @@ def main():
                 f"that has never produced a verified row does not belong in the repository.\n"
                 f"Add one from a machine that can reach {host}, following the shape of\n"
                 f"FEDERAL_SOURCES (irs, uscis) in this file, which is real and verified.")
+
+        if args.add_source == "nonlatin-wiki":
+            cache_dir = os.path.join(args.work, "nonlatin-wiki-fetch-cache")
+            try:
+                rows, skipped = fetch_nonlatin_wiki(cache_dir)
+            except FederalHostUnreachable as exc:
+                sys.exit(
+                    f"--add-source nonlatin-wiki: {exc}.\n"
+                    f"That is a network problem here, not a design problem: this generator is\n"
+                    f"real and was verified against *.wikipedia.org on kdocker3, 2026-09-28\n"
+                    f"(#471 part 2). Run it from a machine that can reach the *.wikipedia.org\n"
+                    f"hosts named in NONLATIN_WIKI_SCRIPTS.")
+            merge_and_report("nonlatin-wiki", rows, skipped, args.out)
+            return
+
         source = FEDERAL_SOURCES.get(args.add_source)
         if source is None:
             sys.exit(f"unknown source {args.add_source!r}; known: "
-                      f"{', '.join(sorted(list(FEDERAL_SOURCES) + list(SOURCES_BLOCKED)))}")
+                      f"{', '.join(sorted(list(FEDERAL_SOURCES) + ['nonlatin-wiki'] + list(SOURCES_BLOCKED)))}")
 
         cache_dir = os.path.join(args.work, f"{source.key}-fetch-cache")
         try:
@@ -672,24 +847,7 @@ def main():
                 f"(#434 federal-forms extension). Run it from a machine that can reach\n"
                 f"{source.base_url}.")
 
-        existing = read_manifest(args.out) if os.path.exists(args.out) else []
-        by_url = {r["url"]: r for r in existing}
-        added = updated = 0
-        for row in rows:
-            if row["url"] in by_url and by_url[row["url"]]["sha256"] == row["sha256"]:
-                continue
-            added += (row["url"] not in by_url)
-            updated += (row["url"] in by_url)
-            by_url[row["url"]] = row
-        write_manifest(list(by_url.values()), args.out)
-
-        by_cat = collections.Counter(r["category"] for r in rows)
-        print(f"{source.key}: {len(rows)} forms fetched and verified "
-              f"({dict(sorted(by_cat.items()))}), {len(skipped)} skipped", file=sys.stderr)
-        for relpath, reason in skipped:
-            print(f"  skipped {relpath}: {reason}", file=sys.stderr)
-        print(f"{args.out}: {added} new row(s), {updated} row(s) refreshed, "
-              f"{len(by_url)} total", file=sys.stderr)
+        merge_and_report(source.key, rows, skipped, args.out)
         return
 
     overrides = {}
@@ -719,18 +877,20 @@ def main():
         print(f"  {category:10s} {len(keep):5d} of {len(rows):5d} found",
               file=sys.stderr)
 
-    # A plain rebuild never touches the network for FEDERAL_SOURCES (that is what
-    # --add-source is for, and what keeps this path reproducible from a sandbox that
-    # cannot reach irs.gov/uscis.gov). But it must not silently DELETE federal rows a
-    # previous --add-source run already put in --out, either -- so whatever is there
-    # under a federal source key is carried over unchanged.
+    # A plain rebuild never touches the network for FEDERAL_SOURCES or the nonlatin-wiki
+    # rows (that is what --add-source is for, and what keeps this path reproducible from a
+    # sandbox that cannot reach irs.gov/uscis.gov/*.wikipedia.org). But it must not
+    # silently DELETE opt-in rows a previous --add-source run already put in --out,
+    # either -- so whatever is there under one of those source keys is carried over
+    # unchanged.
+    opt_in_source_keys = set(FEDERAL_SOURCES) | {f"wiki-{lang}" for lang in NONLATIN_WIKI_SCRIPTS}
     if os.path.exists(args.out):
-        federal_kept = [r for r in read_manifest(args.out) if r["source"] in FEDERAL_SOURCES]
-        if federal_kept:
-            print(f"  preserving {len(federal_kept)} federal rows already in {args.out} "
-                  f"(source in {sorted(FEDERAL_SOURCES)}); re-run --add-source to refresh "
+        opt_in_kept = [r for r in read_manifest(args.out) if r["source"] in opt_in_source_keys]
+        if opt_in_kept:
+            print(f"  preserving {len(opt_in_kept)} opt-in rows already in {args.out} "
+                  f"(source in {sorted(opt_in_source_keys)}); re-run --add-source to refresh "
                   f"them from the network", file=sys.stderr)
-            selected.extend(federal_kept)
+            selected.extend(opt_in_kept)
 
     write_manifest(selected, args.out)
     total = sum(int(r["bytes"]) for r in selected)

@@ -469,6 +469,55 @@ different. Filed as **#476** — a behaviour finding per the task brief, `core/`
 gate adjusted. See the README section for the full detail (including the specific
 byte-count evidence) and the harness used.
 
+### Fourth addition, 2026-09-28: 280 non-Latin-script documents, per-script battery (#471 part 2)
+
+`core/megapdf_structure.cpp`'s `BuildWords`, `BuildLines` and the XY-cut reading order
+assume left-to-right, horizontal text (#444). The corpus had essentially no Arabic, Hebrew,
+Han, Devanagari or Thai text to measure that assumption against. 280 rows were added, 40
+real Wikipedia articles per script (`wiki-ar/he/zh/ja/ko/hi/th` sources, titles pinned in
+`tools/stress/public-corpus/nonlatin_wiki_titles.py`); the corpus is now **1,662 documents,
+407.4 MB**. See `tools/stress/public-corpus/README.md`, "Non-Latin scripts", for sourcing,
+licence and a reproducibility caveat found while verifying the batch (Wikipedia's on-demand
+PDF export is not always byte-stable minutes apart).
+
+    tools/stress/public-corpus/build-manifest.py --add-source nonlatin-wiki
+    tools/stress/structure-battery.sh <structure_check> <script-dir> <out> --reference --cli <cli>
+
+All three batteries (structure, Markdown, pages) run per script, on a per-script corpus
+directory rather than the pooled corpus, so the breakdown below is exact rather than
+inferred from the `source` column after the fact:
+
+| script | docs | pages | structure F1 (internal / CLI) | pages F1 < 0.9 | order tau (tree / poppler) | crashes / hangs |
+|---|---:|---:|---|---:|---|---|
+| Arabic | 40 | 84 | 0.982495 / 0.985033 | 3 | 0.823 / 0.964 | 0 / 0 |
+| Hebrew | 40 | 118 | 0.998457 / 1.000000 | 5 | 0.863 / 0.957 | 0 / 0 |
+| Han (Chinese) | 40 | 74 | 0.984626 / 0.997121 | 1 | 0.942 / 0.988 | 0 / 0 |
+| Japanese (horizontal) | 40 | 123 | 0.997126 / 0.999669 | 0 | 0.956 / 0.993 | 0 / 0 |
+| Korean | 40 | 119 | 0.998822 / 1.000000 | 1 | 0.942 / 1.000 | 0 / 0 |
+| Devanagari (Hindi) | 40 | 89 | 0.998433 / 0.999060 | 1 | 0.799 / 0.996 | 0 / 0 |
+| Thai | 40 | 174 | 0.988943 / 0.999758 | 0 | 0.974 / 0.987 | 0 / 0 |
+| Japanese (vertical, bonus — not in manifest.tsv, see README) | 18 | 39 | 0.512555 / 0.512555 | 34 | 0.134 / 0.182 | 0 / 0 |
+
+Markdown and pages batteries: 0 crashes, 0 hangs, 0 cmark parse failures, 0 qpdf failures,
+0 page-count mismatches on every script, including the vertical-Japanese bonus sample.
+
+**As expected, and as instructed, the gate was not tuned to fit these numbers.** Three of
+seven real, horizontal, non-Latin scripts (Arabic, Han, Thai) fail the corpus-wide
+`>= 0.998` structure fidelity gate outright at just 40 documents each; the rest (Hebrew,
+Devanagari, Korean, and — marginally, on the internal measure only — Japanese-horizontal)
+sit within 0.003 of it, against the general corpus's comfortable 0.998590–0.998915. Every
+script under-segments slightly relative to PDFium's own tokenisation (engine/PDFium token
+ratio 0.976–0.999, worst on Han and Thai); vertical Japanese under-segments drastically
+(ratio 0.72) — the same family of bug #444 found, but the mirror image of its example
+(there the engine *over*-produced tokens 10:2 against PDFium; here it under-produces).
+Reading-order self-agreement (tree tau) is also markedly weaker for Arabic and Devanagari
+(0.80–0.86) than for the CJK/Thai group (0.94–0.97) even though token fidelity is close to
+passing for both — the RTL/Indic order risk `docs/reading-mode-plan.md` §7 named but had no
+population to measure. Filed as **#482** (vertical Japanese, the #444-shaped failure),
+**#483** (the horizontal-script fidelity-gate shortfall) and **#484** (Arabic/Devanagari
+reading-order self-disagreement); `core/megapdf_structure.cpp` was not touched, since
+another session is working there for #453.
+
 ### Android app UI tests (#346)
 
 `android/app/src/androidTest/` drives the Android app's own screen on an emulator — the
