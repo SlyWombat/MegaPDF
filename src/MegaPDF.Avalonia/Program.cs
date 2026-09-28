@@ -760,6 +760,66 @@ internal static class Program
             failures++;
         }
 
+        // --- Signed document (#476, #481): megapdf_document_flags() detection, read into
+        // IsSigned/IsSignedCertification the same way IsDynamicXfa is above. The actual
+        // overwrite warning (ConfirmOverwriteSignedAsync) lives in MainWindow.axaml.cs, the
+        // View, not here -- this checks the fact the View reads and that nothing at the
+        // view-model/engine level refuses a save just because the document is signed.
+        // Needs signed-approval.pdf/signed-certified.pdf (tools/gen_signature_fixtures.py)
+        // beside the other fixtures. ---
+        Console.WriteLine("signed document (#481):");
+        try
+        {
+            var approvalPath = Path.Combine(dir, "signed-approval.pdf");
+            var certifiedPath = Path.Combine(dir, "signed-certified.pdf");
+            if (!File.Exists(approvalPath) || !File.Exists(certifiedPath))
+            {
+                Console.Error.WriteLine(
+                    "::error::signed document: signed-approval.pdf/signed-certified.pdf not in the fixtures dir " +
+                    "-- run tools/gen_signature_fixtures.py against it too");
+                failures++;
+            }
+            else
+            {
+                using var approval = new DocumentViewModel(state);
+                approval.Open(approvalPath);
+                Check("signed-approval.pdf opens", approval.IsDocumentOpen);
+                Check("IsSigned is true", approval.IsSigned);
+                Check("IsSignedCertification is false (no /DocMDP)", !approval.IsSignedCertification);
+
+                using var certified = new DocumentViewModel(state);
+                certified.Open(certifiedPath);
+                Check("signed-certified.pdf opens", certified.IsDocumentOpen);
+                Check("IsSigned is true", certified.IsSigned);
+                Check("IsSignedCertification is true (/DocMDP permission 1)", certified.IsSignedCertification);
+
+                // #481's whole point: nothing is refused -- overwriting a signed document
+                // is available at the engine/view-model level, it just needs the View's
+                // warning to make doing so deliberate rather than an accident.
+                var sigSavePath = Path.Combine(saveDir, $"megapdf-selftest-sig-{Guid.NewGuid():N}.pdf");
+                try
+                {
+                    using (var file = File.Create(sigSavePath))
+                        certified.SaveTo(file);
+                    Check("saving a signed/certified document still writes a real file", new FileInfo(sigSavePath).Length > 0);
+                }
+                finally
+                {
+                    if (File.Exists(sigSavePath)) File.Delete(sigSavePath);
+                }
+
+                using var plain = new DocumentViewModel(state);
+                plain.Open(Path.Combine(dir, "fixture.pdf"));
+                Check("an unsigned document does NOT set IsSigned", !plain.IsSigned);
+                Check("an unsigned document does NOT set IsSignedCertification", !plain.IsSignedCertification);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::signed document: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Find in document (SDD §3.6) ---
         Console.WriteLine("find in document:");
         try

@@ -110,6 +110,27 @@ internal static class CoreNative
     /// </summary>
     public const uint DocFlagDynamicXfa = 1u << 0;
 
+    /// <summary>
+    /// The document carries an existing digital signature (#476, #481): PDFium's
+    /// FPDF_GetSignatureCount() is greater than zero. Not a verdict on cryptographic
+    /// validity — only that a `/Sig` is present. It exists because `megapdf_save()`
+    /// cannot preserve one: the whole-file rewrite behind it invalidates every signature's
+    /// `/ByteRange`, measured 33/33 against a real signed corpus (#476). See
+    /// <see cref="DocFlagSignedCertification"/> for the stronger, separate fact.
+    /// </summary>
+    public const uint DocFlagSigned = 1u << 1;
+
+    /// <summary>
+    /// At least one of the document's signatures is a certification signature carrying a
+    /// `/DocMDP` transform, rather than an ordinary approval signature. Always accompanied
+    /// by <see cref="DocFlagSigned"/>. A `/DocMDP` permission of 1 ("no changes") means the
+    /// document's own author declared it closed to modification outright — not merely that
+    /// a save would invalidate the signature. Measured 33/33 permission-1 certification
+    /// across #476's real corpus, so on real-world documents this, not the plain
+    /// <see cref="DocFlagSigned"/> case, is what fires.
+    /// </summary>
+    public const uint DocFlagSignedCertification = 1u << 2;
+
     // Pages ----------------------------------------------------------------
 
     [DllImport(Dll)]

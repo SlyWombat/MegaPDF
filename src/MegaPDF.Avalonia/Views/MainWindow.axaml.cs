@@ -2293,9 +2293,57 @@ public partial class MainWindow : Window
         set { if (Active is { } vm) _openedFiles[vm] = value; }
     }
 
+    /// <summary>
+    /// #476, #481: the warning before Save overwrites a signed original. Explains what
+    /// saving here will do, offers Save a copy as the DEFAULT choice, and requires a
+    /// deliberate secondary choice to overwrite anyway. Nothing is refused — overwriting a
+    /// signed document is available, it just cannot be an accident. Returns true when the
+    /// caller should go on and overwrite; false when Save a copy already handled the save
+    /// (or the user cancelled), so the caller must not save again.
+    /// </summary>
+    private async Task<bool> ConfirmOverwriteSignedAsync()
+    {
+        if (Active is not { IsSigned: true } vm)
+            return true;
+
+        var dialog = new ConfirmSignedSaveWindow();
+        dialog.SetCertification(vm.IsSignedCertification);
+        await dialog.ShowDialog(this);
+        switch (dialog.Choice)
+        {
+            case ConfirmSignedSaveWindow.Decision.SaveAsCopy:
+                await SaveAsAsync();
+                return false;   // the copy path has saved; the caller must not save again
+            case ConfirmSignedSaveWindow.Decision.Overwrite:
+                return true;    // deliberate: overwrite the signed original anyway
+            default:
+                return false;   // cancelled: nothing saved
+        }
+    }
+
+    /// <summary>
+    /// Opens the signed-save warning, for the `signed-save` screenshot state (#476,
+    /// #481) — rendered beside the window to &lt;out&gt;-dialog.png, the same as
+    /// <see cref="ShowUnsavedChangesForScreenshot"/>. Show, not ShowDialog: state setup
+    /// must return promptly, and nothing will close this during a capture run anyway.
+    /// </summary>
+    internal Window ShowSignedSaveDialogForScreenshot(bool certified)
+    {
+        var dialog = new ConfirmSignedSaveWindow();
+        dialog.SetCertification(certified);
+        dialog.Show(this);
+        return dialog;
+    }
+
     private async Task<bool> SaveAsync()
     {
         if (Active is not { } vm)
+            return false;
+
+        // #476, #481: warn before overwriting a signed original, ahead of the redaction
+        // confirmation — either dialog choosing Save a copy already hands the whole save
+        // to SaveAsAsync, so only one of them should ever fire per Save click.
+        if (!await ConfirmOverwriteSignedAsync())
             return false;
 
         if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
@@ -2399,8 +2447,18 @@ public partial class MainWindow : Window
             // One call, so the journal is marked against the file the bytes went to
             // and DocumentPath follows the copy (#68). The file is opened — and so
             // truncated — only once the verified bytes exist (#145).
+            var wasSigned = vm.IsSigned;
             if (await vm.SaveAsThroughAsync(async () => await file.OpenWriteAsync(), file.TryGetLocalPath(), file.Name))
+            {
                 OpenedFile = file;
+                // #476, #481: said quietly, once, then out of the way — the common,
+                // already-safe path (Dave's framing) still deserves the one fact that
+                // the signature on the original does not carry to this copy, but never
+                // a dialog to dismiss. Replaces the ordinary "Saved file" status: the
+                // save having worked is otherwise obvious (the picker closed).
+                if (wasSigned)
+                    vm.Status = Strings.SignatureNotCarriedNotice;
+            }
         }
         catch (Exception ex)
         {

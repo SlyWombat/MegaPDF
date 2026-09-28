@@ -98,6 +98,22 @@ internal static class Screenshot
                 window.OpenToolbarOverflow();
                 return true;
 
+            // The warning before Save overwrites a signed original (#476, #481). A
+            // ContentDialog is a popup too, so like `more` this is for a screen capture
+            // taken during --hold; the rendered PNG shows the window behind it. Needs a
+            // signed document already open (signed-approval.pdf or signed-certified.pdf,
+            // tools/gen_signature_fixtures.py).
+            case "signed-save":
+                if (!vm.IsSigned)
+                {
+                    Console.Error.WriteLine(
+                        "--screenshot-state signed-save: the open document is not signed.");
+                    return false;
+                }
+                vm.ShowSignedSaveWarningForScreenshot();
+                await Task.Delay(500);
+                return true;
+
             case "sign":
                 return await OpenSignatureLibraryAsync(window);
 

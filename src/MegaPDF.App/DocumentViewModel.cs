@@ -447,6 +447,28 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private bool _isDynamicXfaNoticeOpen;
 
     /// <summary>
+    /// True for the life of this open when the document carries an existing digital
+    /// signature (#476, #481): <c>megapdf_save()</c>'s full rewrite cannot preserve one, so
+    /// saving over this document's own file will invalidate it. Deliberately not a banner
+    /// on open — Dave's framing is that the common path, saving a copy under your own
+    /// name, is already safe, so this is read quietly here and only shown at the point
+    /// that matters: <see cref="SaveAsync"/> warning before it overwrites the original.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSigned;
+
+    /// <summary>
+    /// True when at least one of the document's signatures is a certification signature
+    /// (`/DocMDP`) rather than an ordinary approval one. Always accompanied by
+    /// <see cref="IsSigned"/>. A certification signature can declare the document closed
+    /// to modification outright, not merely be invalidated by one — measured 33/33 on
+    /// #476's real signed corpus — so the overwrite warning's wording differs when this is
+    /// true; it is the case a real document is expected to hit, not the rare one.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSignedCertification;
+
+    /// <summary>
     /// Whether a click on this kind of region may do anything. When it may not, the
     /// restricted notice says why rather than the click silently doing nothing.
     /// </summary>
@@ -568,6 +590,12 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         // with no form at all never sets this.
         IsDynamicXfa = doc.IsDynamicXfa;
         IsDynamicXfaNoticeOpen = IsDynamicXfa;
+        // #476, #481: read the same way — a save that overwrites this document will
+        // invalidate its signature. Not a banner on open (Dave's framing: the common
+        // path, saving a copy, is already safe) — just facts this open remembers so
+        // SaveAsync can warn at the point that actually matters.
+        IsSigned = doc.IsSigned;
+        IsSignedCertification = doc.IsSignedCertification;
 
         DocumentPath = path;
         HasUnsavedChanges = false;
@@ -1794,6 +1822,54 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private bool CanSave() => IsDocumentOpen && !Busy.IsBusy;
 
     /// <summary>
+    /// #476, #481: the warning before Save overwrites a signed original — the one
+    /// destructive path (Dave's framing: filling in a form and saving a copy under your
+    /// own name is the common case and is already safe, so this never appears there).
+    /// Explains what saving here will do, offers Save a copy as the prominent, DEFAULT
+    /// choice, and requires a deliberate secondary choice to overwrite anyway. Nothing is
+    /// refused: overwriting a signed document is available, it just cannot be an accident.
+    /// Returns true when the caller should go on and overwrite; false when Save a copy
+    /// already handled the save (or the user cancelled), so the caller must not save again.
+    /// </summary>
+    private async Task<bool> ConfirmOverwriteSignedAsync()
+    {
+        if (_document is null || !IsSigned || window.Content?.XamlRoot is not { } xamlRoot)
+            return true;
+
+        var dialog = new ContentDialog
+        {
+            Title = IsSignedCertification ? Strings.CertifiedSaveWarningTitle : Strings.SignedSaveWarningTitle,
+            Content = IsSignedCertification ? Strings.CertifiedSaveWarningBody : Strings.SignedSaveWarningBody,
+            // Save a copy is primary/default because it is the safe path and the common
+            // one (Dave's framing); overwriting needs a deliberate secondary click.
+            PrimaryButtonText = Strings.SaveACopyButton,
+            SecondaryButtonText = Strings.OverwriteSignedButton,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        switch (await dialog.ShowOneAtATimeAsync())
+        {
+            case ContentDialogResult.Primary:
+                await SaveAsCommand.ExecuteAsync(null);
+                return false;   // the copy path has saved; the caller must not save again
+            case ContentDialogResult.Secondary:
+                return true;    // deliberate: overwrite the signed original anyway
+            default:
+                return false;   // cancelled: nothing saved
+        }
+    }
+
+    /// <summary>
+    /// Opens the signed-save warning and leaves it open, for the `signed-save`
+    /// screenshot state (#476, #481) — a ContentDialog is a popup RenderTargetBitmap
+    /// cannot see, so it is photographed from outside during --hold, the same as `more`.
+    /// Fire-and-forget on purpose: nothing in a capture run will ever click a button on
+    /// it, so awaiting <see cref="ConfirmOverwriteSignedAsync"/> would hang forever.
+    /// </summary>
+    internal void ShowSignedSaveWarningForScreenshot() => _ = ConfirmOverwriteSignedAsync();
+
+    /// <summary>
     /// The confirmation #173 asks for, before either save path writes anything: what
     /// redaction does, that it cannot be undone once saved, and Save as a copy as the
     /// DEFAULT action. Returns false when the user cancelled or the redaction refused, in
@@ -1932,6 +2008,12 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (_document is null || DocumentPath is null || Busy.IsBusy)
             return;
 
+        // #476, #481: warn before overwriting a signed original, ahead of the redaction
+        // confirmation — either dialog choosing Save a copy already hands the whole save
+        // to SaveAsAsync, so only one of them should ever fire per Save click.
+        if (!await ConfirmOverwriteSignedAsync())
+            return;
+
         if (!await ConfirmAndApplyRedactionsAsync(alreadySavingACopy: false))
             return;
 
@@ -2061,6 +2143,14 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             }
             if (flattened)
                 await OnDocumentFlattenedAsync();
+            // #476, #481: said quietly, once, then out of the way — the common, already-safe
+            // path (Dave's framing) still deserves the one fact that the signature on the
+            // original does not carry to this copy, but never a dialog to dismiss.
+            if (IsSigned)
+            {
+                SecurityNotice = Strings.SignatureNotCarriedNotice;
+                IsSecurityNoticeOpen = true;
+            }
         }
         catch (Exception ex)
         {
