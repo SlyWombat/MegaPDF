@@ -526,6 +526,32 @@ std::vector<unsigned short> BlockString(const megapdf_structure* s, size_t i, me
     return buf;
 }
 
+// #479/#495: a LIST_ITEM's marker ("73.", "(a)", "*") is real text drawn on the page --
+// core/megapdf_core.h:1287 -- but contract 9 (design §1.2 "Lists") deliberately keeps it out
+// of MEGAPDF_BLOCK_TEXT, in its own MEGAPDF_BLOCK_MARKER field, so a screen reader can announce
+// "list item 3: ..." instead of reading the "3." as body prose (core/megapdf_structure.cpp's
+// LIST_ITEM cases, both the tagged-tree and heuristic paths, split it out the same way). The
+// CLI's own plain-text/Markdown writer (core/megapdf_write_text.cpp, ~L726-793) puts the marker
+// back in front of the item's text when it renders a line, so `megapdf-cli extract`'s token
+// count already includes it and matches PDFium's raw GetText almost exactly. Every place in
+// this file that assembles "the tokens the engine produced for this page/block" to compare
+// against PDFium's raw side (or against megapdf-cli's own rendered output) has to do the same
+// concatenation, or every alphanumeric list marker in the document counts as a token the engine
+// "lost" -- it was never lost, it is one field over. Order matches the writer's own rendering:
+// marker, then body text, with the same single-space join megapdf_write_text.cpp uses between
+// them (WriteMarkdown/WritePlain, "marker + \" \" + text" when both are non-empty) -- without
+// it, the marker's last token and the text's first token concatenate into one fused token
+// (e.g. a "1.42" marker butted straight against "Name at birth:" reads as "42Name"), which is
+// its own new mismatch against PDFium's raw side, where the two are two separate tokens.
+std::vector<unsigned short> BlockContentString(const megapdf_structure* s, size_t i, int kind) {
+    std::vector<unsigned short> out;
+    if (kind == MEGAPDF_BLOCK_LIST_ITEM) out = BlockString(s, i, MEGAPDF_BLOCK_MARKER);
+    std::vector<unsigned short> text = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+    if (!out.empty() && !text.empty()) out.push_back(static_cast<unsigned short>(' '));
+    out.insert(out.end(), text.begin(), text.end());
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Percentile deciles of an int vector already in [0, 100] (confidence): count per decile
 // bucket 0-9 (bucket k = [10k, 10k+10), bucket 9 also takes 100).
@@ -566,7 +592,7 @@ std::vector<Token> HeuristicTokensForPage(megapdf_document* doc, int p, const st
     for (size_t i = 0; i < n; i++) {
         megapdf_block b{};
         if (megapdf_block_get(h, i, &b) != MEGAPDF_OK || b.kind == MEGAPDF_BLOCK_FIELD) continue;
-        const std::vector<Token> toks = Tokenize(Utf16ToCodepoints(BlockString(h, i, MEGAPDF_BLOCK_TEXT)));
+        const std::vector<Token> toks = Tokenize(Utf16ToCodepoints(BlockContentString(h, i, b.kind)));
         out.insert(out.end(), toks.begin(), toks.end());
     }
     megapdf_structure_free(h);
@@ -632,7 +658,7 @@ int RunCheck(const Options& opt) {
         if (b.kind >= 1 && b.kind <= 8) block_kind_counts[b.kind]++;
         blocks_by_page[static_cast<size_t>(b.page)].push_back(b);
         if (b.kind == MEGAPDF_BLOCK_FIELD) continue;  // measures exclude FIELD blocks
-        const std::vector<unsigned short> text16 = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+        const std::vector<unsigned short> text16 = BlockContentString(s, i, b.kind);
         const std::vector<Token> toks = Tokenize(Utf16ToCodepoints(text16));
         tokens_by_page[static_cast<size_t>(b.page)].insert(tokens_by_page[static_cast<size_t>(b.page)].end(),
                                                             toks.begin(), toks.end());
@@ -903,7 +929,7 @@ int RunCheck(const Options& opt) {
                 if (last_page != -1) out << "\f";
                 last_page = b.page;
             }
-            const std::vector<unsigned short> text16 = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+            const std::vector<unsigned short> text16 = BlockContentString(s, i, b.kind);
             for (unsigned short u : text16) {
                 // Minimal UTF-16 -> UTF-8 for the dump file only (never printed).
                 if (u < 0x80) out << static_cast<char>(u);
@@ -1031,7 +1057,7 @@ void RunDiagOnDoc(const std::string& pdf, DiagTotals* totals) {
         if (b.kind == MEGAPDF_BLOCK_FIELD) continue;  // measure 1 excludes FIELD blocks
         BlockToks bt;
         bt.kind = b.kind;
-        const std::vector<unsigned short> text16 = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+        const std::vector<unsigned short> text16 = BlockContentString(s, i, b.kind);
         bt.tokens = Tokenize(Utf16ToCodepoints(text16));
         by_page[static_cast<size_t>(b.page)].push_back(std::move(bt));
     }
@@ -2186,7 +2212,7 @@ void RunGarbageOnDoc(const std::string& pdf, const std::string& dump_dir, const 
         if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
         if (b.page < 0 || b.page >= pages) continue;
         if (b.kind == MEGAPDF_BLOCK_FIELD) continue;  // measure 1 excludes FIELD blocks
-        const std::vector<unsigned short> text16 = BlockString(s, i, MEGAPDF_BLOCK_TEXT);
+        const std::vector<unsigned short> text16 = BlockContentString(s, i, b.kind);
         const std::vector<Token> toks = Tokenize(Utf16ToCodepoints(text16));
         tokens_by_page[static_cast<size_t>(b.page)].insert(tokens_by_page[static_cast<size_t>(b.page)].end(),
                                                             toks.begin(), toks.end());
