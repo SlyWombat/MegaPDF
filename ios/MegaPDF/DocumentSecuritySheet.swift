@@ -27,6 +27,12 @@ struct DocumentSecuritySheet: View {
     let isBusy: Bool
     /// Set by the model when an unlock fails; shown under the field.
     let error: String?
+    /// The open document carries an existing signature (#481): setting, changing or
+    /// removing the password writes over the file exactly as Save does
+    /// (`ViewerModel.changeSecurity`), so Continue here asks the same question Save does.
+    /// Never relevant to `.unlock`, which only reopens the document in memory.
+    let documentIsSigned: Bool
+    let documentIsCertified: Bool
     let onUnlock: (String) -> Void
     let onSetPassword: (String) -> Void
     let onRemovePassword: () -> Void
@@ -39,6 +45,8 @@ struct DocumentSecuritySheet: View {
     @State private var entry = ""
     @State private var confirmation = ""
     @FocusState private var focused: Bool
+    /// Up once Continue/Cancel is needed before writing over a signed original (#481).
+    @State private var signatureConfirm = false
 
     private var step: Step {
         switch mode {
@@ -122,6 +130,19 @@ struct DocumentSecuritySheet: View {
                 }
             }
             .onAppear { focused = mode != .change }
+            // #481: the same wording and choice Save itself offers, reused here because
+            // this sheet's Continue writes over the file the same way.
+            .alert(documentIsCertified ? "Save over the certified original?" : "Save over the signed original?",
+                   isPresented: $signatureConfirm) {
+                Button("Continue", role: .destructive) { performCommit() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                if documentIsCertified {
+                    Text("This document is certified as closed to changes. Saving here will invalidate that certification.")
+                } else {
+                    Text("This document has a digital signature. Saving here will invalidate it.")
+                }
+            }
         }
         .presentationDetents([.medium, .large])
         .interactiveDismissDisabled(isBusy)
@@ -179,6 +200,16 @@ struct DocumentSecuritySheet: View {
 
     private func commit() {
         guard canCommit else { return }
+        // #481: ask first when this would write over a signed original -- the same moment
+        // Save itself asks. Unlock never writes to the file, so it is exempt.
+        if step != .unlock, documentIsSigned {
+            signatureConfirm = true
+            return
+        }
+        performCommit()
+    }
+
+    private func performCommit() {
         switch step {
         case .unlock:
             // Cleared now: a wrong password is retyped, not edited.

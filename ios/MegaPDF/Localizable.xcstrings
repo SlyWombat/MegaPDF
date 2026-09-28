@@ -1851,6 +1851,23 @@
         }
       }
     },
+    "Overwrite the certified original" : {
+      "comment" : "#481, the Save confirmation's destructive button for a certification (/DocMDP) signature",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écraser l'original certifié"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écraser l'original certifié"
+          }
+        }
+      }
+    },
     "Overwrite the original" : {
       "localizations" : {
         "fr" : {
@@ -1863,6 +1880,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Remplacer l'original"
+          }
+        }
+      }
+    },
+    "Overwrite the signed original" : {
+      "comment" : "#481, the Save confirmation's destructive button for an ordinary signature",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écraser l'original signé"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écraser l'original signé"
           }
         }
       }
@@ -2369,6 +2403,23 @@
         }
       }
     },
+    "Save over the signed original?" : {
+      "comment" : "#481: the Save confirmation title when the open document carries an existing signature and no redaction marks are pending -- also reused by the Password sheet's own confirmation, since it writes over the file the same way",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer par-dessus l'original signé ?"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer par-dessus l'original signé?"
+          }
+        }
+      }
+    },
     "Saved" : {
       "localizations" : {
         "fr" : {
@@ -2852,6 +2903,23 @@
         }
       }
     },
+    "The signature on this document doesn't carry over to the copy." : {
+      "comment" : "#481: the quiet, once-per-open notice shown the first time Save a copy is used on a signed document -- the common, already-safe path still deserves to know the copy isn't signed",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La signature de ce document ne sera pas reportée dans la copie."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La signature de ce document ne sera pas reportée dans la copie."
+          }
+        }
+      }
+    },
     "The text there is in a font MegaPDF can't redraw around your marks." : {
       "localizations" : {
         "fr" : {
@@ -2948,6 +3016,23 @@
         }
       }
     },
+    "This document has a digital signature. Saving here will invalidate it. Save a copy to keep the signed original intact." : {
+      "comment" : "#476, #481: the ordinary-signature case of the Save confirmation's message -- says what will happen before naming the safe alternative",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document porte une signature numérique. L'enregistrer ici invalidera la signature. Enregistrez une copie pour garder l'original signé intact."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document porte une signature numérique. L'enregistrer ici invalidera la signature. Enregistrez une copie pour garder l'original signé intact."
+          }
+        }
+      }
+    },
     "This document has unsaved changes." : {
       "localizations" : {
         "fr" : {
@@ -2977,6 +3062,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce document contient des modifications non enregistrées. Elles ne feront pas partie de la copie partagée si vous ne l'enregistrez pas d'abord."
+          }
+        }
+      }
+    },
+    "This document is also certified as closed to changes; overwriting it will invalidate that certification too." : {
+      "comment" : "#481: the certification twin of the note above, appended to the redaction confirmation's message",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est aussi certifié fermé aux modifications ; l'écraser invalidera aussi cette certification."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est aussi certifié fermé aux modifications; l'écraser invalidera aussi cette certification."
+          }
+        }
+      }
+    },
+    "This document is also digitally signed; overwriting it will invalidate the signature too." : {
+      "comment" : "#481: appended to the redaction confirmation's message (#173) when the document is also signed -- that dialog's own \"Overwrite the original\" button is the same write, so the question is asked once, not twice",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document porte aussi une signature numérique ; l'écraser invalidera aussi la signature."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document porte aussi une signature numérique; l'écraser invalidera aussi la signature."
+          }
+        }
+      }
+    },
+    "This document is certified as closed to changes. Saving here will invalidate that certification. Save a copy to keep the signed original intact." : {
+      "comment" : "#476, #481: the certification-signature (/DocMDP) case -- measured as the common case, not the edge case (33/33 of #476's real corpus), so it gets its own, stronger wording rather than the ordinary-signature sentence",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est certifié fermé aux modifications. L'enregistrer ici invalidera cette certification. Enregistrez une copie pour garder l'original signé intact."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce document est certifié fermé aux modifications. L'enregistrer ici invalidera cette certification. Enregistrez une copie pour garder l'original signé intact."
           }
         }
       }
