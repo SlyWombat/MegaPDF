@@ -320,6 +320,17 @@ class PdfDocument internal constructor(
     }
 
     /**
+     * Facts about the document as a whole (#456/#457): today just whether it is dynamic XFA
+     * (a form built to be filled by Acrobat's XFA engine, which PDFium — and so MegaPDF —
+     * cannot render; the page content is Adobe's own placeholder). Cheap, and available right
+     * after open, like [security] and [pageCount].
+     */
+    suspend fun documentFlags(): DocumentFlags = withContext(engine.dispatcher) {
+        check(!closed) { "document is closed" }
+        DocumentFlags.of(PdfiumNative.nativeDocumentFlags(handle))
+    }
+
+    /**
      * Writes a copy encrypted with AES-256 under new passwords, in place of any security
      * the document had (#131). The owner password opens it with every permission; null
      * means the same as the user password. The copy no longer opens like this document:

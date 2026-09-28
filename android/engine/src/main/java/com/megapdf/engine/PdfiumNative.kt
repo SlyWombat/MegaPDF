@@ -27,6 +27,11 @@ internal object PdfiumNative {
     external fun nativeLastError(): Int
     external fun nativeCloseDocument(handle: Long)
     external fun nativePageCount(handle: Long): Int
+    /**
+     * megapdf_document_flags() (#457): MEGAPDF_DOC_* bits — facts about the document as a
+     * whole, read once at open the same way [nativePageCount] and [nativeSecurityInfo] are.
+     */
+    external fun nativeDocumentFlags(handle: Long): Int
     external fun nativeOpenPage(handle: Long, index: Int): Long
     external fun nativeClosePage(handle: Long)
     external fun nativePageWidth(handle: Long): Double
@@ -187,4 +192,13 @@ internal object PdfiumNative {
     const val ERR_FILE = 2
     /** MEGAPDF_OPEN_ERR_TOO_LARGE: past what the platform can address (#147); not reachable on 64-bit Android. */
     const val ERR_TOO_LARGE = 100
+
+    /**
+     * MEGAPDF_DOC_DYNAMIC_XFA (megapdf_core.h, #456/#457): the document is dynamic XFA — its
+     * AcroForm needs Acrobat's XFA engine to render, which PDFium does not implement, so the
+     * only page content there is is Adobe's own "please wait, install Adobe Reader" placeholder.
+     * Never set for a hybrid-XFA document (CRA's, Service Canada's and most of IRCC's own
+     * fillable forms), whose static content is the real, complete form.
+     */
+    const val DOC_DYNAMIC_XFA = 1
 }
