@@ -218,6 +218,58 @@ void test_document_and_geometry(const std::string& fixtures) {
     check(close_to(x, 0) && close_to(y, 0), "fixture.pdf crop origin is (0,0)");
 }
 
+// #456/#457: a dynamic-XFA document reports MEGAPDF_DOC_DYNAMIC_XFA; a hybrid-XFA one (static
+// content is the real, complete form; the XFA entry is a foreground layer, as on CRA's and
+// Service Canada's fillable forms) and an ordinary AcroForm document must not. Fixtures:
+// tools/gen_xfa_fixtures.py (dynamic-xfa.pdf, hybrid-xfa.pdf); forms.pdf is
+// tools/gen_test_fixtures.py's plain AcroForm checkbox fixture, with no /XFA at all.
+void test_dynamic_xfa(const std::string& fixtures) {
+    check(megapdf_document_flags(nullptr) == 0, "document_flags: a null document is 0, not a crash");
+
+    Doc dynamic(fixtures + "/dynamic-xfa.pdf");
+    check(dynamic.doc != nullptr, "dynamic-xfa.pdf opens");
+    if (dynamic.doc) {
+        check(megapdf_page_count(dynamic.doc) == 1, "dynamic-xfa.pdf still reports a plausible page count",
+              std::to_string(megapdf_page_count(dynamic.doc)));
+        const unsigned int flags = megapdf_document_flags(dynamic.doc);
+        check((flags & MEGAPDF_DOC_DYNAMIC_XFA) != 0, "dynamic-xfa.pdf sets MEGAPDF_DOC_DYNAMIC_XFA",
+              std::to_string(flags));
+        // Everything that does not depend on filling still works: the page opens, has size,
+        // and its (placeholder) text is still there to view/search/extract -- only the "this
+        // is the real form" expectation is false, which is exactly what the flag is for.
+        Page p(dynamic.doc, 0);
+        check(p.page != nullptr, "dynamic-xfa.pdf's page still loads");
+        if (p.page) {
+            check(megapdf_page_width(p.page) > 0 && megapdf_page_height(p.page) > 0,
+                  "dynamic-xfa.pdf's page still has a size");
+        }
+    }
+
+    Doc hybrid(fixtures + "/hybrid-xfa.pdf");
+    check(hybrid.doc != nullptr, "hybrid-xfa.pdf opens");
+    if (hybrid.doc) {
+        const unsigned int flags = megapdf_document_flags(hybrid.doc);
+        check((flags & MEGAPDF_DOC_DYNAMIC_XFA) == 0,
+              "hybrid-xfa.pdf (real content, /XFA present) does NOT set MEGAPDF_DOC_DYNAMIC_XFA",
+              std::to_string(flags));
+    }
+
+    Doc acroform(fixtures + "/forms.pdf");
+    check(acroform.doc != nullptr, "forms.pdf opens");
+    if (acroform.doc) {
+        const unsigned int flags = megapdf_document_flags(acroform.doc);
+        check(flags == 0, "forms.pdf (ordinary AcroForm, no /XFA) does not set MEGAPDF_DOC_DYNAMIC_XFA",
+              std::to_string(flags));
+    }
+
+    // fixture.pdf has no form at all: FORMTYPE_NONE, same as an ordinary AcroForm for this test.
+    Doc plain(fixtures + "/fixture.pdf");
+    check(plain.doc != nullptr, "fixture.pdf opens");
+    if (plain.doc) {
+        check(megapdf_document_flags(plain.doc) == 0, "fixture.pdf (no form) does not set MEGAPDF_DOC_DYNAMIC_XFA");
+    }
+}
+
 // Pages still open when the document closes are closed by the core, and a page
 // closed explicitly is removed from the document's list (ASan catches a double free).
 void test_lifecycle(const std::string& fixtures) {
@@ -7519,6 +7571,7 @@ int main(int argc, char** argv) {
     test_null_handles();
     test_open_failures(argv[1]);
     test_document_and_geometry(argv[1]);
+    test_dynamic_xfa(argv[1]);
     test_lifecycle(argv[1]);
     test_open_from_file(argv[1]);
     test_read_from_copy(argv[1]);
