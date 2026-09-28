@@ -1374,6 +1374,23 @@
         }
       }
     },
+    "Get Adobe Reader" : {
+      "comment" : "#457, the dynamic-XFA banner's link -- opens the same reader-download page the document's own placeholder text already names",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obtenir Adobe Reader"
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Obtenir Adobe Reader"
+          }
+        }
+      }
+    },
     "Insurance Claim Form.pdf" : {
       "localizations" : {
         "fr" : {
@@ -3008,6 +3025,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce fichier est trop volumineux pour que MegaPDF puisse l'ouvrir."
+          }
+        }
+      }
+    },
+    "This form is built to be filled in with Adobe Reader. You can still view, print, save and share it here — only filling it in isn't possible." : {
+      "comment" : "#456, #457: the calm, persistent dynamic-XFA banner shown for the life of an open whose megapdf_document_flags() reports MEGAPDF_DOC_DYNAMIC_XFA",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce formulaire est conçu pour être rempli dans Adobe Reader. Vous pouvez tout de même l'afficher, l'imprimer, l'enregistrer et le partager ici — seul le remplir n'est pas possible."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce formulaire est conçu pour être rempli dans Adobe Reader. Vous pouvez tout de même l'afficher, l'imprimer, l'enregistrer et le partager ici — seul le remplir n'est pas possible."
+          }
+        }
+      }
+    },
+    "This form needs Adobe Reader to fill in." : {
+      "comment" : "#457: said instead of arming Sign or Add text on a dynamic-XFA document -- explains rather than silently doing nothing",
+      "localizations" : {
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce formulaire doit être rempli dans Adobe Reader."
+          }
+        },
+        "fr-CA" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce formulaire doit être rempli dans Adobe Reader."
           }
         }
       }

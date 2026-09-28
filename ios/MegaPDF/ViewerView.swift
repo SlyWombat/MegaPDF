@@ -465,11 +465,20 @@ struct ViewerView: View {
     }
 
     /// What sits between the navigation bar and the page: the iPad's tools (#172), the
-    /// find bar, and the document-level busy strip (#145), in that order.
+    /// find bar, the dynamic-XFA banner (#456, #457), and the document-level busy strip
+    /// (#145), in that order.
     private var topChrome: some View {
         VStack(spacing: 0) {
             if isRegular { regularToolStrip }
             if searchOpen { searchBar }
+            // Calm and persistent, not a dialog and not the transient `NoticeBanner`
+            // (below, over the page): up for as long as the document is open, in the same
+            // place the find bar and the busy strip live, so it reads as part of the
+            // document's own chrome rather than a passing message.
+            if model.isDynamicXfa {
+                DynamicXfaBanner()
+                    .transition(.opacity)
+            }
             if let work = busy.strip {
                 BusyStrip(label: work.label.text)
                     .transition(.opacity)
@@ -948,6 +957,31 @@ struct ViewerView: View {
         guard let first = visible.min(), let last = visible.max() else { return }
         let widthPx = Int(containerWidth * effectiveZoom * displayScale)
         model.updateRenderWindow(first: first, last: last, widthPx: widthPx)
+    }
+}
+
+/// The calm, persistent explanation for a dynamic-XFA document (#456, #457): this form is
+/// built to be filled in with Adobe Reader, and everything except filling it in still
+/// works. Deliberately not an alert (nothing to confirm) and not `NoticeBanner` (which
+/// clears itself after a few seconds and must not be the only place this is said): a fixed
+/// strip under the navigation bar, in `topChrome`, for as long as the document stays open.
+/// Arming Sign or Add text on this document explains again at the moment it is tapped
+/// (`ViewerModel.showDynamicXfaNotice`), so this banner never needs a dismiss button that
+/// would have to be reopened.
+struct DynamicXfaBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("This form is built to be filled in with Adobe Reader. You can still view, print, save and share it here — only filling it in isn't possible.")
+                .font(.footnote)
+                .fixedSize(horizontal: false, vertical: true)
+            Link("Get Adobe Reader", destination: URL(string: "https://www.adobe.com/go/reader_download")!)
+                .font(.footnote.weight(.semibold))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .accessibilityIdentifier("dynamicXfaBanner")
     }
 }
 

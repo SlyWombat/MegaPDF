@@ -239,6 +239,15 @@ actor PdfEngine {
         return try serialize { write, context in megapdf_save(document.core, write, context) }
     }
 
+    /// Facts about `document` as a whole (#456, #457): today just whether it is dynamic
+    /// XFA. Cheap — a form-type check, and only for a full-XFA form a substring search
+    /// over the first pages' text — so it is safe to call right after open, alongside
+    /// `security(_:)`.
+    func documentFlags(_ document: PdfDocument) -> PdfDocumentFlags {
+        guard !document.isDestroyed else { return [] }
+        return PdfDocumentFlags(rawValue: megapdf_document_flags(document.core))
+    }
+
     /// Whether the document is encrypted and what this open may do (#131).
     func security(_ document: PdfDocument) -> PdfSecurity {
         guard !document.isDestroyed else { return .unprotected }
