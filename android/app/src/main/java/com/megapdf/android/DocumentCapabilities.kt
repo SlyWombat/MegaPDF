@@ -1,5 +1,6 @@
 package com.megapdf.android
 
+import com.megapdf.engine.DocumentFlags
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfSecurity
 
@@ -22,6 +23,14 @@ data class DocumentCapabilities(
     val isEncrypted: Boolean,
     /** Protected, and this open is not the owner's: the restricted notice and Unlock apply. */
     val isRestricted: Boolean,
+    /**
+     * The document is dynamic XFA (#456/#457): built to be filled in Adobe Reader, which
+     * MegaPDF cannot do. Deliberately does not turn [canSign]/[canFillForms]/[canAddText]
+     * off — those tools stay armable, so the view model can explain instead of silently
+     * doing nothing, rather than a greyed-out button that looks like nothing is wrong here
+     * either. View, save, share, export and every page tool are untouched.
+     */
+    val isDynamicXfa: Boolean = false,
 ) {
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
@@ -36,13 +45,27 @@ data class DocumentCapabilities(
         else -> canChangeSecurity
     }
 
+    /**
+     * Whether [operation] is one of the "fill this form" tools #457 explains rather than
+     * performs on a dynamic-XFA document: signing/stamping, added text, a check mark, a form
+     * field. Redaction and the document's own text ([allows]'s [canEditContent] group) are
+     * page tools, not filling, and keep working exactly as they do today.
+     */
+    fun isFillingOperation(operation: PdfEditOperation): Boolean = when (operation) {
+        is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
+        is StampOperation, is MoveStampOperation, is MarkOperation,
+        is FieldToggleOperation,
+        -> true
+        else -> false
+    }
+
     companion object {
         /**
          * A form that allows filling lets people fill in everything it offers: its fields,
          * check marks, signatures and text boxes. Changing the document's own text needs
          * modify. Annotate implies form filling (ISO 32000).
          */
-        fun fromSecurity(security: PdfSecurity): DocumentCapabilities {
+        fun fromSecurity(security: PdfSecurity, flags: DocumentFlags = DocumentFlags.NONE): DocumentCapabilities {
             fun may(permission: Int) = security.hasFullAccess || security.allows(permission)
             val modify = may(PdfPermissions.MODIFY)
             val fillIn = may(PdfPermissions.FILL_FORMS) || may(PdfPermissions.ANNOTATE)
@@ -54,6 +77,7 @@ data class DocumentCapabilities(
                 canChangeSecurity = security.hasFullAccess,
                 isEncrypted = security.isEncrypted,
                 isRestricted = security.isEncrypted && !security.hasFullAccess,
+                isDynamicXfa = flags.isDynamicXfa,
             )
         }
 

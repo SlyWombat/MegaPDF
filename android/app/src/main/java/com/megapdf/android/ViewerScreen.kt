@@ -202,6 +202,10 @@ fun ViewerScreen(
         { _, _, _ -> },
     // Document security (#131).
     capabilities: DocumentCapabilities = DocumentCapabilities.FULL,
+    /** #456/#457: this document is dynamic XFA — built for Adobe Reader, which MegaPDF can't
+     *  fill in. Drives the persistent banner below; everything else in this screen already
+     *  reads the answer from [capabilities] instead (armed tools explain rather than act). */
+    isDynamicXfa: Boolean = false,
     hasDocumentFile: Boolean = false,
     unlockPrompt: UnlockPrompt? = null,
     passwordPrompt: PasswordCommandMode? = null,
@@ -654,6 +658,10 @@ fun ViewerScreen(
                         },
                     )
                 }
+                // #457: a calm, persistent explanation, directly under the bar like the busy
+                // strip below it — not a dialog, not a snackbar. Stays up for as long as the
+                // document is open, in both languages, regardless of what else is happening.
+                if (isDynamicXfa) DynamicXfaBanner()
                 // #145: document-level work (opening, saving, searching) directly under the bar.
                 if (busy != null) BusyStrip(busy.document)
             }
@@ -1004,6 +1012,53 @@ fun ViewerScreen(
     // A full-screen overlay with its own Scaffold, drawn over the viewer (as on Home).
     if (noticesOpen) {
         ThirdPartyNoticesScreen(onClose = { noticesOpen = false })
+    }
+}
+
+/**
+ * The calm, persistent explanation for a dynamic-XFA document (#456/#457): this form is built
+ * to be filled in Adobe Reader, MegaPDF can't fill it in, and here is where to get Reader —
+ * the same address the form's own placeholder page names. Deliberately not a dialog (nothing
+ * to confirm or dismiss) and not a snackbar (it must not time out before it has been read, and
+ * must still be there the next time the person looks): a banner on the document itself, up for
+ * as long as the document is open, right below the app bar like [BusyStrip]. Says nothing about
+ * viewing, saving, sharing, exporting or the page tools, because none of them are affected —
+ * only filling is, and the tools that would fill say so themselves when armed.
+ */
+@Composable
+private fun DynamicXfaBanner() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 4.dp),
+    ) {
+        Text(
+            stringResource(R.string.dynamic_xfa_banner_title),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+        Text(
+            stringResource(R.string.dynamic_xfa_banner_body),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+        TextButton(
+            onClick = {
+                context.startActivity(
+                    android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse(context.getString(R.string.dynamic_xfa_reader_url)),
+                    )
+                )
+            },
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp),
+            modifier = Modifier.offset(x = (-12).dp),
+        ) {
+            Text(stringResource(R.string.dynamic_xfa_get_reader))
+        }
     }
 }
 

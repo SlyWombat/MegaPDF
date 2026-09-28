@@ -259,6 +259,7 @@ fun MegaPdfApp(viewModel: ViewerViewModel = viewModel(), screenshotState: String
                     }
                 },
                 capabilities = viewModel.capabilities,
+                isDynamicXfa = state.isDynamicXfa,
                 hasDocumentFile = viewModel.hasDocumentFile,
                 unlockPrompt = viewModel.unlockPrompt,
                 passwordPrompt = viewModel.passwordPrompt,
