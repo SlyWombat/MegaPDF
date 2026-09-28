@@ -3,10 +3,11 @@
 # a VM, not a container, which is what makes the confinement here the real one.
 #
 # Nothing is uploaded unless all three hold: the run was started by hand, the `upload`
-# input was ticked, and the SNAPCRAFT_STORE_CREDENTIALS secret exists. It does not exist
-# yet. Creating it is Dave's step, in tools/Linux-Packaging.md, "The Snap Store", and
-# even then the upload goes to the edge channel, which no one is on unless they ask for
-# it. Promotion to stable is a click in the Snap Store dashboard, never this workflow.
+# input was ticked, and the SNAPCRAFT_STORE_CREDENTIALS secret exists. It does exist as of
+# 2026-09-28 (revision 1, 2.1.1, on edge); how it was made, and how to remake it when it
+# expires, is in tools/Linux-Packaging.md, "The Snap Store". The upload goes to the edge
+# channel, which no one is on unless they ask for it. Promotion to stable is a click in the
+# Snap Store dashboard, never this workflow.
 name: Snap
 
 on:

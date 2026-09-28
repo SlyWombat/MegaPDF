@@ -206,6 +206,9 @@ The full 2.0 site went up on 2026-09-19 at 14:25 EDT with
 2.0.0-2 were live and while Apple and Microsoft 2.0 were still in review (Dave:
 "update website completely"). The APT repository was re-uploaded byte for byte
 (it holds 2.0.0 and 2.0.0-2), and the Snap section is still held back (#314).
+It stays held back until the snap reaches the **stable** channel: as of 2026-09-28 the
+store has 2.1.1 on edge only, and the section's install line is `snap install megapdf`
+with no channel flag, which would fail for every reader.
 The `website/254-app-store-link-now` branch this section used to describe
 had no use after this deploy and was deleted.
 

@@ -9,7 +9,8 @@ ID reserved, no repository requested. Everything below was built and run on kdoc
 runs again in CI on every push.
 
 **The channels (Dave, 2026-09-19):** GitHub Releases, our own signed APT repository on
-electricrv.ca, and the Snap Store. Flathub is on hold: it now accepts AI-assisted apps only
+electricrv.ca, and the Snap Store (live on edge since 2026-09-28; stable is Dave's
+promotion). Flathub is on hold: it now accepts AI-assisted apps only
 on disclosure and at a reviewer's discretion, and its submission pull request must be
 written by a person. The Flathub work below stays because CI proves it and it costs
 nothing. How each channel goes live is § "Going live".
@@ -393,8 +394,9 @@ minimal system crashed at the first save (#315–#322, PR #323):
 
   The tag run's CI covered the same distributions, plus the 2.0.0 → 2.0.0-2 upgrade.
 
-The Snap Store is not released: it waits on Dave's Snap account (see "The Snap Store").
-The steps below are the recipe, and are what was done.
+The Snap Store publishes to **edge** from `snap.yml` as of 2026-09-28; stable is a
+promotion in the dashboard and has not been made (see "The Snap Store"). The steps below
+are the recipe, and are what was done.
 
 ### The signing key
 
@@ -440,9 +442,11 @@ to miss the date.
    commands on `https://electricrv.ca/megapdf/linux/` exactly as written:
    `apt update` must fetch `electricrv.ca/megapdf/apt stable InRelease`, and after
    `apt install megapdf`, `/opt/MegaPDF/MegaPDF --install-kind` must print `AptRepository`.
-7. **The Snap Store**, when its listing is public: `deploy.py --linux --snap --privacy`,
-   which adds the Snap section of the Linux page and the Snap Store in the privacy
-   policy's list.
+7. **The Snap Store**: `gh workflow run snap.yml -f upload=true --ref main` puts the
+   build on **edge**, and promoting that revision to stable in the dashboard is what makes
+   `sudo snap install megapdf` work. Only once stable holds it does the website follow:
+   `deploy.py --linux --snap --privacy`, which adds the Snap section of the Linux page and
+   the Snap Store in the privacy policy's list.
 
 **A later release** is the same, from step 1, with the Linux page's version (its download
 links and the `.deb` file name) bumped in `website/megapdf/linux/index.html`.
@@ -575,32 +579,63 @@ About 130 ms per launch is `snap run` and the gnome extension's `desktop-launch`
 The cold figure also includes reading the compressed squashfs, which is why the snap is
 built with lzo rather than xz.
 
-### What Dave has to do before the first upload
+### Getting on the store — done 2026-09-28
 
-In this order. Every step happens in Dave's own account, so none of it can be delegated.
+Steps 1 to 3 happen in Dave's own account and cannot be delegated. They are done, and
+the credential is good: **revision 1, version 2.1.1, on edge**, from run
+[36483752994](https://github.com/SlyWombat/MegaPDF/actions/runs/36483752994). Keep them
+written down for the day the credential expires or the account moves.
 
-1. **An Ubuntu One account.** Then sign in at <https://snapcraft.io/account> and accept
-   the developer agreement.
-2. **Register the name `megapdf`** at <https://snapcraft.io/register-snap>. On
-   2026-09-19 no published snap is called `megapdf`, `mega-pdf` or `megapdf-editor` (the
-   store API answers 404 for all three), but a name that was registered and never
-   published cannot be seen from outside an account. If `megapdf` is taken, pick another
-   and change the `name:` line in `snapcraft.yaml.in`, the `snap/gui/megapdf.*` names in
-   `build-snap.sh`, and the website's install line.
-3. **A store credential for CI**, made on any machine with snapcraft after
-   `snapcraft login`: `snapcraft export-login` with `--snaps=megapdf`,
-   `--acls=package_access,package_push,package_update,package_release` and an
-   `--expires` date a year out, written to a file. Put that file's contents into the
-   repository secret `SNAPCRAFT_STORE_CREDENTIALS` with `gh secret set`, reading it from
-   the file rather than typing it, then delete the file. Scoped to this one snap and
-   expiring; never pasted anywhere else.
+1. **An Ubuntu One account**, then sign in at <https://snapcraft.io/account> and accept
+   the developer agreement. Publisher: `slywombat`, David Seaman.
+2. **Register the name** at <https://snapcraft.io/register-snap>: `snapcraft register megapdf`
+   does the same from a terminal. If the name ever has to change, so do the `name:` line in
+   `snapcraft.yaml.in`, the `snap/gui/megapdf.*` names in `build-snap.sh`, and the website's
+   install line.
+3. **A store credential for CI**, on any machine with snapcraft, after `snapcraft login`:
+
+   ```sh
+   snapcraft export-login --acls package_access,package_upload,package_release \
+       --channels edge,stable megapdf-creds.txt
+   chmod 600 megapdf-creds.txt
+   ```
+
+   Then the contents go into the repository secret `SNAPCRAFT_STORE_CREDENTIALS`, read
+   from the file and never typed or pasted anywhere else, and the file is destroyed
+   (`shred -u`). With `gh` that is `gh secret set SNAPCRAFT_STORE_CREDENTIALS --repo
+   SlyWombat/MegaPDF < megapdf-creds.txt` — stdin, so the value never reaches the process
+   table. Consider `--snaps=megapdf` and an `--expires` date to narrow it further; a
+   narrower credential is worth the renewal.
+
+   **Two traps, both hit on 2026-09-28:**
+
+   - `SNAPCRAFT_STORE_AUTH=candid` is **refused** by snapcraft 8 — *"no longer supported.
+     Unset SNAPCRAFT_STORE_AUTH to login with Ubuntu One."* Older recipes on the web still
+     set it. Run the plain command.
+   - Dave's Debian box has **no `gh`**. The GitHub web form at
+     `github.com/SlyWombat/MegaPDF/settings/secrets/actions/new` is the one-step way to set
+     the secret from a machine without the CLI. Paste the credential into that form and
+     nowhere else.
+
 4. **The listing page** (snapcraft.io/megapdf/listing): the six Linux screenshots in
    `website/megapdf/screenshots/linux/en/`, the category (Productivity or Office), the
    website and the contact. The summary and description arrive with the upload.
-5. **The first upload**: Actions → Snap → Run workflow, with `upload` ticked. It goes to
+5. **Each upload**: Actions → Snap → Run workflow with `upload` ticked, or
+   `gh workflow run snap.yml -f upload=true --ref main`. About six minutes, and it goes to
    the **edge** channel only. Try it with `sudo snap install megapdf --edge`.
-6. **Stable**: promote that revision in the dashboard's Releases tab. From then on
-   `sudo snap install megapdf` works for everyone, and Ubuntu's App Center lists it.
+6. **Stable**: promote that revision in the dashboard's Releases tab. Deliberately not
+   something this workflow can do — like every other store, going live is Dave's click.
+   From then on `sudo snap install megapdf` works for everyone, and Ubuntu's App Center
+   lists it. **Until then the website's Snap section stays off** (`deploy.py --snap`), so
+   the page never offers an install command that only works with `--edge`.
+
+**Read it back from outside the account**, which is how the edge upload above was
+confirmed:
+
+```sh
+curl -s -H 'Snap-Device-Series: 16' \
+  'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,confinement,private,publisher'
+```
 
 Nothing here needs a store review of the app's permissions: any snap may plug `home` and
 `removable-media`, and neither is asked to auto-connect. Asking for `removable-media` to
