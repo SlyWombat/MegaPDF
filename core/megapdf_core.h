@@ -207,6 +207,52 @@ MEGAPDF_API void megapdf_close(megapdf_document* document);
 
 MEGAPDF_API int megapdf_page_count(const megapdf_document* document);
 
+/**
+ * megapdf_document_flags(). Facts about `document` as a whole, not about a page range —
+ * available right after megapdf_open() (unlike contract 9's structure, which needs an
+ * explicit load over a range) — MEGAPDF_DOC_* bits, grown the same "frozen struct, grown by
+ * new fields/enum values, never new parameters" way contract 9 itself is (#457's design note
+ * on structure, :1231): a future fact is a new bit here, never a new parameter or a second
+ * call.
+ */
+enum {
+    /**
+     * The document is dynamic XFA (#456, #457): PDFium's FPDF_GetFormType() reports
+     * FORMTYPE_XFA_FULL — its AcroForm's /XFA entry needs rendering — and the static page
+     * content PDFium actually draws, the only content there is because PDFium does not run
+     * Acrobat's XFA/JavaScript engine, is Adobe's own stable "please wait... install Adobe
+     * Reader" placeholder rather than the real form. Every one of these still opens, reports
+     * a plausible page count and draws a page, so nothing *looks* wrong; only filling it is
+     * unavailable (that is #458) — view, print, save, share, export and every page tool keep
+     * working exactly as before, because none of them depend on the field values XFA would
+     * have supplied.
+     *
+     * An `/XFA` key alone does NOT set this bit: 78% of a real Canadian federal-forms corpus
+     * carries one (#456), and most of those are "hybrid" XFA — FPDF_GetFormType() reports
+     * FORMTYPE_XFA_FOREGROUND, meaning the static content *is* the complete, real form and
+     * the XFA entry is a foreground layer Acrobat may add but does not need to draw the page
+     * (CRA's and Service Canada's fillable forms, and a minority of IRCC's, all extract their
+     * real content today and must go on doing so). Nor does an ordinary AcroForm document, or
+     * one with no form at all (FORMTYPE_ACRO_FORM / FORMTYPE_NONE).
+     *
+     * The bit is 1 only when both hold: FPDF_GetFormType() answers FORMTYPE_XFA_FULL, and one
+     * of Adobe's two known placeholder templates appears verbatim in the first pages' own
+     * text. Measured against #456's 134-document Canadian corpus (105 with `/XFA`): every one
+     * of the 40 real dynamic-XFA forms matches on both counts, all 65 hybrid-XFA forms match
+     * neither (T4 and ISP-1000 spot-checked as extracting their real content) — an exact
+     * split, not a heuristic guess.
+     */
+    MEGAPDF_DOC_DYNAMIC_XFA = 1u << 0
+};
+
+/**
+ * MEGAPDF_DOC_* bits describing `document` as a whole. 0 for a NULL document or an ordinary
+ * one. Cheap — a form-type check, and (only when that says XFA_FULL) a substring search over
+ * the first few pages' text, the same search megapdf_search_page already does — so it is safe
+ * to call right after megapdf_open() and as often as wanted.
+ */
+MEGAPDF_API unsigned int megapdf_document_flags(const megapdf_document* document);
+
 /* --------------------------------------------------------------------------
  * Pages
  * ----------------------------------------------------------------------- */

@@ -14,6 +14,7 @@ on:
       - 'libs/pdfium/RELEASE'
       - 'tools/gen_test_fixtures.py'
       - 'tools/gen_redaction_fixtures.py'
+      - 'tools/gen_xfa_fixtures.py'
       - 'tools/leakcheck/**'
       - 'tools/structure-check/**'
       - 'tools/compare_cli_pdftotext.py'
@@ -27,6 +28,7 @@ on:
       - 'libs/pdfium/RELEASE'
       - 'tools/gen_test_fixtures.py'
       - 'tools/gen_redaction_fixtures.py'
+      - 'tools/gen_xfa_fixtures.py'
       - 'tools/leakcheck/**'
       - 'tools/structure-check/**'
       - 'tools/compare_cli_pdftotext.py'
@@ -76,6 +78,8 @@ jobs:
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
           # The #173 redaction fixtures land in the same directory; the names do not clash.
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #457: MEGAPDF_DOC_DYNAMIC_XFA fixtures (dynamic-xfa.pdf, hybrid-xfa.pdf).
+          python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
 
       - name: Configure
         shell: bash

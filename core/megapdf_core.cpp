@@ -718,6 +718,64 @@ void ClosePageUnlocked(megapdf_page* p) {
     delete p;
 }
 
+// #457: Adobe's own two placeholder templates for a dynamic-XFA page, stable and
+// vendor-supplied, verified verbatim against #456's 134-document Canadian federal-forms
+// corpus (40 real dynamic-XFA forms match one of these on every page PDFium draws; all 65
+// hybrid-XFA forms in the same corpus match neither). ASCII only, so widening to UTF-16 for
+// FPDFText_FindStart below is a plain zero-extend -- no decoding needed.
+//
+// Plain C++ linkage, not inside `extern "C"` (unlike megapdf_document_flags() itself, further
+// down): a function with C language linkage may not return a non-POD class type such as
+// std::vector by value (MSVC enforces this; GCC/Clang do not, so this only shows up on
+// Windows) -- every helper here stays in this anonymous namespace for exactly that reason.
+const char* const kDynamicXfaMarkers[] = {
+    "If this message is not eventually replaced by the proper contents of the document",
+    "The document you are trying to load requires Adobe Reader 8 or higher",
+};
+
+std::vector<unsigned short> AsciiToUtf16Z(const char* ascii) {
+    std::vector<unsigned short> out;
+    for (const char* c = ascii; *c != '\0'; ++c) out.push_back(static_cast<unsigned char>(*c));
+    out.push_back(0);
+    return out;
+}
+
+// Case-insensitive substring search, the same FPDFText_FindStart megapdf_search_page already
+// uses -- one hit is enough, the match's position and count are not needed here.
+bool PageHasMarker(FPDF_TEXTPAGE text, const char* marker) {
+    const std::vector<unsigned short> needle = AsciiToUtf16Z(marker);
+    FPDF_SCHHANDLE find = FPDFText_FindStart(text, reinterpret_cast<FPDF_WIDESTRING>(needle.data()), 0, 0);
+    if (find == nullptr) return false;
+    const bool hit = FPDFText_FindNext(find) != 0;
+    FPDFText_FindClose(find);
+    return hit;
+}
+
+// The `/XFA` gate first: FORMTYPE_XFA_FULL is PDFium's own read of the AcroForm's /XFA entry
+// needing rendering (the PDF-spec distinction between dynamic and hybrid/static XFA), so a
+// hybrid document (FORMTYPE_XFA_FOREGROUND) or an ordinary one (FORMTYPE_ACRO_FORM/NONE)
+// never even loads a page for this -- an `/XFA` key alone is not the test (#456/#457).
+bool IsDynamicXfaPlaceholder(const megapdf_document* d) {
+    if (FPDF_GetFormType(d->doc) != FORMTYPE_XFA_FULL) return false;
+    const int page_count = FPDF_GetPageCount(d->doc);
+    const int scan = page_count < 3 ? page_count : 3;   // the real corpus's dynamic forms are all one page
+    for (int i = 0; i < scan; i++) {
+        FPDF_PAGE page = FPDF_LoadPage(d->doc, i);
+        if (page == nullptr) continue;
+        FPDF_TEXTPAGE text = FPDFText_LoadPage(page);
+        bool hit = false;
+        if (text != nullptr) {
+            for (const char* marker : kDynamicXfaMarkers) {
+                if (PageHasMarker(text, marker)) { hit = true; break; }
+            }
+            FPDFText_ClosePage(text);
+        }
+        FPDF_ClosePage(page);
+        if (hit) return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 // megapdf_core_internal.h: thin accessors so megapdf_structure.cpp (#353) can read a page's
@@ -931,6 +989,14 @@ MEGAPDF_API int megapdf_page_count(const megapdf_document* d) {
     if (d == nullptr) return 0;
     Guard guard(CoreLock());
     return FPDF_GetPageCount(d->doc);
+}
+
+MEGAPDF_API unsigned int megapdf_document_flags(const megapdf_document* d) {
+    if (d == nullptr) return 0;
+    Guard guard(CoreLock());
+    unsigned int flags = 0;
+    if (IsDynamicXfaPlaceholder(d)) flags |= MEGAPDF_DOC_DYNAMIC_XFA;
+    return flags;
 }
 
 // --------------------------------------------------------------------------
