@@ -879,7 +879,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val current = currentUri ?: return openUri(uri).also { pendingExternalOpen = null }
         val doc = document
         pendingExternalOpen = null
-        writeTo(current, isSaveAs = false) {
+        requestOverwrite(current) {
             if (document === doc && !isDirty) openUri(uri)
         }
     }
@@ -1963,20 +1963,66 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun save() {
         val uri = currentUri ?: return
-        writeTo(uri, isSaveAs = false)
+        requestOverwrite(uri)
     }
 
     /** Save from the unsaved-changes prompt: the document closes once it is saved and still clean. */
     fun saveAndClose() {
         val uri = currentUri ?: return
         val doc = document ?: return
-        writeTo(uri, isSaveAs = false) {
+        requestOverwrite(uri) {
             if (document === doc && !isDirty) closeDocument()
         }
     }
 
     /** "Save a copy" destination picked via ACTION_CREATE_DOCUMENT, as a PDF. */
     fun saveAs(uri: Uri) = writeTo(uri, isSaveAs = true)
+
+    // --- Digital-signature overwrite warning (#476/#481) ---
+
+    /**
+     * Set while the #481 confirmation is up: [save], [saveAndClose], [saveAndShare] and
+     * [saveAndOpenExternal] all write back to the document's own file (`isSaveAs = false` in
+     * [writeTo]), which is exactly the move that invalidates an existing signature — measured
+     * 33/33 on real GPO documents in #476, because [writeTo] re-serialises the whole file and
+     * the original `/ByteRange` no longer covers it. [saveAs] (Save a copy) writes somewhere
+     * else and is deliberately not gated here: the signed original stays untouched, so it only
+     * earns the quiet, one-time notice [writeTo] shows once the copy lands.
+     */
+    var isSignedOverwritePending: Boolean by mutableStateOf(false)
+        private set
+
+    private var pendingOverwrite: Pair<Uri, (() -> Unit)?>? = null
+
+    /** Asks first when the open document is signed; otherwise writes immediately, as before. */
+    private fun requestOverwrite(uri: Uri, afterSaved: (() -> Unit)? = null) {
+        if (capabilities.isSigned) {
+            pendingOverwrite = uri to afterSaved
+            isSignedOverwritePending = true
+        } else {
+            writeTo(uri, isSaveAs = false, afterSaved)
+        }
+    }
+
+    /** The confirmation's deliberate choice: overwrite the signed original anyway. Refuses nothing. */
+    fun confirmSignedOverwrite() {
+        val (uri, afterSaved) = pendingOverwrite ?: return
+        pendingOverwrite = null
+        isSignedOverwritePending = false
+        writeTo(uri, isSaveAs = false, afterSaved)
+    }
+
+    /**
+     * The confirmation's other two answers — Cancel, or Save a copy (its own picker, launched
+     * by the UI with [onSaveAs] the same way the menu row does): either way, nothing is
+     * written to the signed original, and whatever [save]/[saveAndClose]/[saveAndShare]/
+     * [saveAndOpenExternal] was trying to do beyond writing is simply not carried out — the
+     * person can ask for it again once they have decided what to do about the signature.
+     */
+    fun cancelSignedOverwrite() {
+        pendingOverwrite = null
+        isSignedOverwritePending = false
+    }
 
     /**
      * "Export as Markdown" — its own menu row since #409, with its own `text/markdown` picker
@@ -2035,7 +2081,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     fun saveAndShare() {
         val uri = currentUri ?: return
         val doc = document ?: return
-        writeTo(uri, isSaveAs = false) {
+        requestOverwrite(uri) {
             if (document === doc) exportForShare()
         }
     }
@@ -2101,6 +2147,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 // document dirty, so a later close still asks.
                 dirty.markSaved(mark)
                 statusMessage = str(R.string.saved)
+                // #481: Save a copy of a signed document says so, quietly and once — the
+                // signed original this came from was untouched ([requestOverwrite] never gated
+                // this path), but the new copy does not carry a valid signature either, since
+                // it went through the same full-rewrite save that invalidates one.
+                if (isSaveAs && capabilities.isSigned) showNotice(str(R.string.signed_copy_notice))
                 saved = true
             } catch (e: CancellationException) {
                 throw e

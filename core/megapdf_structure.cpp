@@ -55,6 +55,7 @@ namespace {
 using megapdf_internal::IsCancelled;
 using megapdf_internal::Lock;
 using megapdf_internal::PageHandle;
+using megapdf_internal::PageTurns;
 using megapdf_internal::PageUnit;
 using megapdf_internal::SetLastError;
 using megapdf_internal::ToCropPoint;
@@ -399,6 +400,116 @@ struct Line {
     double l = 0, b = 0, r = 0, t = 0;
 };
 
+// #472: THE LAYOUT FRAME.
+//
+// Contract 9 lays a page out in crop space — the frame the reader sees, which #439 made every
+// reported rectangle turn with. Two of its tests are direction-sensitive: BuildWords measures a
+// gap along the advance axis, and BuildLines clusters on a vertical centre and then sorts on a
+// left edge. Both are right when the page's text advances along crop +x, which is the ordinary
+// case and also the case of a page whose content was authored sideways precisely so that
+// /Rotate turns it upright.
+//
+// They are wrong when a page's text advances along some other crop-space axis — content drawn
+// upright and then turned by /Rotate, which is what qpdf's own page-rotation fixtures do and
+// what #472 reported: at 180 the advance runs backwards, so a line's words sort into reverse
+// order, and at 90 or 270 the gap is measured across the axis the text advances along, so every
+// word splits off alone and the spaces between them vanish.
+//
+// The fix is to lay such a page out in the frame its own text reads in, then put the turn back
+// before reporting. Crucially the frame is derived from THE TEXT, not from /Rotate: a page whose
+// content is already upright in crop space keeps a frame of 0 whatever its /Rotate says, and so
+// does a page of mixed orientations — an overlay or a stamp turned one way over body text turned
+// another — where no single frame is right and crop space, which is what the reader sees, stays
+// the least wrong choice. Only a page that is overwhelmingly one non-zero direction turns.
+struct PageFrame {
+    int turns = 0;    // quarter turns clockwise to undo for layout, 0-3
+    double w = 0;     // the page's crop width with that turn undone, in points
+    double h = 0;     // ... and its height
+};
+
+// Crop -> layout. The same switch megapdf_core.cpp's InPoint uses, on points already scaled.
+void UnturnPoint(const PageFrame& f, double x, double y, double* out_x, double* out_y) {
+    switch (f.turns) {
+        case 1:  *out_x = f.w - y; *out_y = x;       break;
+        case 2:  *out_x = f.w - x; *out_y = f.h - y; break;
+        case 3:  *out_x = y;       *out_y = f.h - x; break;
+        default: *out_x = x;       *out_y = y;       break;
+    }
+}
+// Layout -> crop. The same switch OutPoint uses, likewise.
+void TurnPoint(const PageFrame& f, double x, double y, double* out_x, double* out_y) {
+    switch (f.turns) {
+        case 1:  *out_x = y;       *out_y = f.w - x; break;
+        case 2:  *out_x = f.w - x; *out_y = f.h - y; break;
+        case 3:  *out_x = f.h - y; *out_y = x;       break;
+        default: *out_x = x;       *out_y = y;       break;
+    }
+}
+// Both corners turn and the result is normalised, because a turn swaps which corner is which —
+// the same reason megapdf_core.cpp's SpaceRect normalises.
+megapdf_rect TurnedRect(const PageFrame& f, const megapdf_rect& r, bool forward) {
+    double ax, ay, cx, cy;
+    if (forward) { TurnPoint(f, r.left, r.bottom, &ax, &ay);   TurnPoint(f, r.right, r.top, &cx, &cy); }
+    else         { UnturnPoint(f, r.left, r.bottom, &ax, &ay); UnturnPoint(f, r.right, r.top, &cx, &cy); }
+    return megapdf_rect{(std::min)(ax, cx), (std::min)(ay, cy), (std::max)(ax, cx), (std::max)(ay, cy)};
+}
+megapdf_rect ToLayoutRect(const PageFrame& f, const megapdf_rect& r) { return TurnedRect(f, r, false); }
+megapdf_rect ToReportedRect(const PageFrame& f, const megapdf_rect& r) { return TurnedRect(f, r, true); }
+
+// A character's advance direction in CROP space, as a quarter turn (0 = crop +x, 1 = +y, and so
+// on), or -1 when it is not within kFrameAxisTolerance of an axis. The character's own matrix is
+// page-space (FPDFText_GetMatrix does not turn with /Rotate), so the page's turn composes onto it
+// -- that composition is the whole of the mismatch #472 is about.
+constexpr double kFrameAxisTolerance = 0.25;   // |off-axis| / |along-axis| for "this is that axis"
+
+int AdvanceQuarter(const Char& c, int page_turns) {
+    // The text matrix's own advance (its +x column), then the page's turn on top of it.
+    double dx = c.mat_a, dy = c.mat_b;
+    for (int i = 0; i < page_turns; i++) { const double t = dx; dx = dy; dy = -t; }
+    const double ax = std::fabs(dx), ay = std::fabs(dy);
+    if (ax >= ay) {
+        if (ax <= 1e-9 || ay > kFrameAxisTolerance * ax) return -1;
+        return dx >= 0 ? 0 : 2;
+    }
+    if (ay <= 1e-9 || ax > kFrameAxisTolerance * ay) return -1;
+    return dy >= 0 ? 1 : 3;
+}
+
+// The share of a page's characters that must agree before the page is laid out in their frame.
+// Deliberately high: a frame is a page-wide decision, and getting it wrong on a mixed page costs
+// more than leaving a uniformly turned page in crop space would.
+constexpr double kFrameDominantShare = 0.9;
+
+PageFrame ChooseFrame(const megapdf_page* page, const std::vector<Char>& chars) {
+    PageFrame f;
+    const double cw = megapdf_page_width(page);
+    const double ch = megapdf_page_height(page);
+    f.w = cw;
+    f.h = ch;
+    const int page_turns = PageTurns(page);
+    if (page_turns == 0 || chars.empty()) return f;   // nothing to undo
+    int counts[4] = {0, 0, 0, 0};
+    int classified = 0;
+    for (const Char& c : chars) {
+        const int q = AdvanceQuarter(c, page_turns);
+        if (q < 0) continue;
+        counts[q]++;
+        classified++;
+    }
+    if (classified == 0) return f;
+    int best = 0;
+    for (int q = 1; q < 4; q++) if (counts[q] > counts[best]) best = q;
+    if (best == 0) return f;                                                   // already reads along crop +x
+    if (counts[best] < kFrameDominantShare * static_cast<double>(chars.size())) return f;   // mixed: leave it
+    // `best` is the direction the text advances in; the frame is the turn that UNDOES it, so
+    // that in the layout frame the advance points along +x again. The two coincide at 180 and
+    // are each other's opposite at 90 and 270.
+    f.turns = (4 - best) % 4;
+    // Undoing an odd turn swaps which way round the page is.
+    if ((f.turns & 1) != 0) { f.w = ch; f.h = cw; }
+    return f;
+}
+
 struct PageWork {
     int page_index = 0;
     double width = 0, height = 0;
@@ -408,6 +519,7 @@ struct PageWork {
     std::vector<Line> lines;          // built from `words`; furniture lines removed before block-building
     int total_real_chars = 0;
     int rotated_chars = 0;
+    PageFrame frame;                  // #472: the frame this page's layout ran in
 };
 
 double Em(double font_size) { return font_size > 0 ? font_size : 1.0; }
@@ -556,6 +668,20 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
     FPDFText_ClosePage(tp);
     out->total_real_chars = static_cast<int>(out->chars.size());
     for (const Char& c : out->chars) if (c.rotated) out->rotated_chars++;
+
+    // #472: everything above is crop space. Pick the frame this page's text actually reads in
+    // and take that turn back out, so every gap and ordering test below runs along the axis the
+    // text advances on. For the overwhelming majority of pages this is the identity.
+    out->frame = ChooseFrame(page, out->chars);
+    if (out->frame.turns != 0) {
+        for (Char& c : out->chars) {
+            const megapdf_rect box = ToLayoutRect(out->frame, megapdf_rect{c.l, c.b, c.r, c.t});
+            c.l = box.left; c.b = box.bottom; c.r = box.right; c.t = box.top;
+            const megapdf_rect loose = ToLayoutRect(out->frame, megapdf_rect{c.loose_l, c.loose_b, c.loose_r, c.loose_t});
+            c.loose_l = loose.left; c.loose_b = loose.bottom; c.loose_r = loose.right; c.loose_t = loose.top;
+            UnturnPoint(out->frame, c.origin_x, c.origin_y, &c.origin_x, &c.origin_y);
+        }
+    }
 }
 
 // #363 (rotation-aware BuildWords, "variant H" of the issue's investigation): the gap and
@@ -1592,13 +1718,14 @@ bool BuildLeftoverParagraph(const PageWork& pw, int page_index, BlockImpl* out) 
 }
 
 // design §1.2 "Figures": image page objects with an area >= 1 cm^2.
-std::vector<BlockImpl> BuildFigures(const megapdf_page* page, int page_index) {
+std::vector<BlockImpl> BuildFigures(const megapdf_page* page, int page_index, const PageFrame& frame) {
     std::vector<BlockImpl> figures;
     const int count = megapdf_page_object_count(page);
     for (int i = 0; i < count; i++) {
         if (megapdf_object_type(page, i) != 3 /* FPDF_PAGEOBJ_IMAGE */) continue;
         megapdf_rect bounds{};
         if (megapdf_object_bounds(page, i, &bounds) != MEGAPDF_OK) continue;
+        bounds = ToLayoutRect(frame, bounds);   // #472: reported turned, laid out in the text's frame
         const double w_cm = (bounds.right - bounds.left) / kPointsPerCm;
         const double h_cm = (bounds.top - bounds.bottom) / kPointsPerCm;
         if (w_cm * h_cm < kFigureMinAreaCm2) continue;
@@ -1615,7 +1742,7 @@ std::vector<BlockImpl> BuildFigures(const megapdf_page* page, int page_index) {
 // design §1 item 7: form fields are blocks (kind FIELD), from the existing
 // megapdf_form_fields_load (contract 3); empty text fields and unchecked boxes are omitted
 // unless MEGAPDF_STRUCTURE_ALL_FIELDS.
-std::vector<BlockImpl> BuildFields(const megapdf_page* page, int page_index, unsigned int flags) {
+std::vector<BlockImpl> BuildFields(const megapdf_page* page, int page_index, unsigned int flags, const PageFrame& frame) {
     std::vector<BlockImpl> out;
     megapdf_form_fields* fields = megapdf_form_fields_load(page);
     if (fields == nullptr) return out;
@@ -1638,7 +1765,7 @@ std::vector<BlockImpl> BuildFields(const megapdf_page* page, int page_index, uns
         BlockImpl b;
         b.info.kind = MEGAPDF_BLOCK_FIELD;
         b.info.page = page_index;
-        b.info.bounds = f.bounds;
+        b.info.bounds = ToLayoutRect(frame, f.bounds);   // #472
         b.info.object_index = -1;
         b.marker = name;
         b.text = value;
@@ -1777,8 +1904,8 @@ PageResult BuildPageContent(const megapdf_page* page, PageWork* pw, int page_ind
         SpliceByPosition(&content, std::move(furniture_copy));
     }
 
-    SpliceByPosition(&content, BuildFigures(page, page_index));
-    SpliceByPosition(&content, BuildFields(page, page_index, flags));
+    SpliceByPosition(&content, BuildFigures(page, page_index, pw->frame));
+    SpliceByPosition(&content, BuildFields(page, page_index, flags, pw->frame));
     for (auto& b : content) {
         b.info.source = MEGAPDF_STRUCTURE_SOURCE_HEURISTIC;
         b.info.confidence = result.confidence;   // one score per page (design §1 item 6); every block on it carries it
@@ -2167,7 +2294,7 @@ struct TaggedImages {
     std::vector<BlockImpl> unclaimed;                                  // FIGURE blocks (design §1.2's size rule)
 };
 
-TaggedImages ReadTaggedImages(const megapdf_page* page, int page_index) {
+TaggedImages ReadTaggedImages(const megapdf_page* page, int page_index, const PageFrame& frame) {
     TaggedImages out;
     FPDF_PAGE raw = PageHandle(page);
     const int count = FPDFPage_CountObjects(raw);
@@ -2176,6 +2303,7 @@ TaggedImages ReadTaggedImages(const megapdf_page* page, int page_index) {
         if (obj == nullptr || FPDFPageObj_GetType(obj) != FPDF_PAGEOBJ_IMAGE) continue;
         megapdf_rect bounds{};
         if (megapdf_object_bounds(page, i, &bounds) != MEGAPDF_OK) continue;
+        bounds = ToLayoutRect(frame, bounds);   // #472: reported turned, laid out in the text's frame
         const ObjectMarks marks = ReadObjectMarks(obj);
         if (marks.mcid >= 0) {
             if (out.by_mcid.find(marks.mcid) == out.by_mcid.end()) out.by_mcid[marks.mcid] = {i, bounds};
@@ -2242,7 +2370,7 @@ bool BuildTaggedPage(const megapdf_page* page, PageWork* pw, int page_index, uns
     if (total < kTaggedMinCharsForRatio ? !uncovered_chars.empty() : *coverage < kTaggedMinCoverage) return false;
     if (chars_by_mcid.empty()) return false;
 
-    const TaggedImages images = ReadTaggedImages(page, page_index);
+    const TaggedImages images = ReadTaggedImages(page, page_index, pw->frame);
     std::vector<BlockImpl> content;
     for (const TaggedUnit& u : walk.units) {
         switch (u.kind) {
@@ -2384,7 +2512,7 @@ bool BuildTaggedPage(const megapdf_page* page, PageWork* pw, int page_index, uns
 
     std::vector<BlockImpl> unclaimed = images.unclaimed;
     SpliceByPosition(&content, std::move(unclaimed));
-    SpliceByPosition(&content, BuildFields(page, page_index, flags));
+    SpliceByPosition(&content, BuildFields(page, page_index, flags, pw->frame));
 
     // Confidence on a tagged page is the tree's coverage: the one thing that can still be
     // wrong about a trusted tree is the text it left out.
@@ -2494,9 +2622,10 @@ std::unique_ptr<megapdf_structure> BuildStructure(megapdf_document* document, in
         loaded[static_cast<size_t>(k)] = page;
         PageWork& pw = pages[static_cast<size_t>(k)];
         pw.page_index = doc_page;
-        pw.width = megapdf_page_width(page);
-        pw.height = megapdf_page_height(page);
         ReadChars(page, &pw);
+        // #472: the frame ReadChars chose decides which way round the page is for layout.
+        pw.width = pw.frame.w;
+        pw.height = pw.frame.h;
         std::vector<int> normal_idx, rotated_idx;
         normal_idx.reserve(pw.chars.size());
         for (size_t ci = 0; ci < pw.chars.size(); ci++) {
@@ -2573,6 +2702,21 @@ std::unique_ptr<megapdf_structure> BuildStructure(megapdf_document* document, in
         result->page_confidence[pw.page_index] = pr.confidence;
         result->page_source[pw.page_index] = source;
         result->blocks.insert(result->blocks.end(), pr.blocks.begin(), pr.blocks.end());
+    }
+
+    // #472: every layout decision above was made in the page's own reading frame. Put that turn
+    // back on now, once, so what the caller is handed is crop space exactly as megapdf_block
+    // .bounds promises. A page laid out in crop space already (frame.turns == 0) is untouched.
+    {
+        std::unordered_map<int, const PageFrame*> frames;
+        for (int k = 0; k < page_count; k++) frames.emplace(pages[static_cast<size_t>(k)].page_index,
+                                                            &pages[static_cast<size_t>(k)].frame);
+        for (BlockImpl& b : result->blocks) {
+            const auto it = frames.find(b.info.page);
+            if (it == frames.end() || it->second->turns == 0) continue;
+            b.info.bounds = ToReportedRect(*it->second, b.info.bounds);
+            for (SpanImpl& sp : b.spans) sp.info.bounds = ToReportedRect(*it->second, sp.info.bounds);
+        }
     }
 
     close_all();

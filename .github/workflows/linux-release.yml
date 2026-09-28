@@ -118,6 +118,8 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # A bundle that exists proves nothing: this installs it and drives the app inside
       # the sandbox, which is the same check ci.yml runs against the locally built one.

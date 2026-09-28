@@ -1,4 +1,5 @@
 using System.Text;
+using System.Linq;
 
 namespace MegaPDF.Core.Tests;
 
@@ -109,6 +110,59 @@ internal static class SamplePdf
             // bytes never matter — only the AcroForm's /XFA key and the Catalog's
             // /NeedsRendering key do.
             $"7 0 obj\n<< /Length {xfaPacket.Length} >>\nstream\n{xfaPacket}\nendstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
+    /// An ordinary ("approval") digital signature (#476, #481): one AcroForm field,
+    /// /FT /Sig, whose /V is a /Sig dictionary with no /Reference entry. PDFium's
+    /// FPDF_GetSignatureCount() answers 1; FPDFSignatureObj_GetDocMDPPermission() fails
+    /// because there is no /DocMDP transform. Mirrors
+    /// <c>tools/gen_signature_fixtures.py</c>'s <c>signed-approval.pdf</c> (core/tests
+    /// uses that one at the C level); built here too so the .NET suite needs no Python at
+    /// test time. <c>IPdfDocument.IsSigned</c> must be true, <c>IsSignedCertification</c>
+    /// false.
+    /// </summary>
+    public static byte[] BuildSignedApproval() => BuildSignatureDocument(certification: false);
+
+    /// <summary>
+    /// A certification signature (#476, #481): the same shape as
+    /// <see cref="BuildSignedApproval"/>, but the /Sig dictionary also carries a
+    /// /Reference entry whose /TransformMethod is /DocMDP with /TransformParams /P 1 ("no
+    /// changes allowed"), and the Catalog's /Perms /DocMDP points at it — the shape every
+    /// one of #476's 33 genuinely-signed GPO documents turned out to carry. Mirrors
+    /// <c>tools/gen_signature_fixtures.py</c>'s <c>signed-certified.pdf</c>. Both
+    /// <c>IsSigned</c> and <c>IsSignedCertification</c> must be true.
+    /// </summary>
+    public static byte[] BuildSignedCertified() => BuildSignatureDocument(certification: true);
+
+    private static byte[] BuildSignatureDocument(bool certification)
+    {
+        const string content = "BT /F1 12 Tf 72 700 Td (signed) Tj ET\n";
+        // Not a real digest or byte range: FPDFSignatureObj_GetDocMDPPermission and
+        // FPDF_GetSignatureCount only read the /Sig dictionary's own structure, the same
+        // as tools/gen_signature_fixtures.py's own comment explains (verified by that
+        // script's author against a real #476 corpus document before relying on it).
+        var placeholderContents = string.Concat(Enumerable.Repeat("00", 128));
+        var sigExtra = certification
+            ? " /Reference [ << /Type /SigRef /TransformMethod /DocMDP /DigestMethod /MD5 "
+              + "/TransformParams << /Type /TransformParams /P 1 /V /1.2 >> >> ]"
+            : "";
+        var catalogExtra = certification ? " /Perms << /DocMDP 7 0 R >>" : "";
+        return Assemble(
+        [
+            $"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R{catalogExtra} >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                + "/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R /Annots [8 0 R] >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "6 0 obj\n<< /Fields [8 0 R] /SigFlags 3 >>\nendobj\n",
+            $"7 0 obj\n<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached "
+                + $"/ByteRange [0 9 9 9] /Contents <{placeholderContents}> "
+                + $"/M (D:20250101000000+00'00'){sigExtra} >>\nendobj\n",
+            "8 0 obj\n<< /FT /Sig /Type /Annot /Subtype /Widget /Rect [0 0 0 0] /F 132 "
+                + "/T (Signature1) /V 7 0 R >>\nendobj\n",
         ]);
     }
 

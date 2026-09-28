@@ -3,24 +3,12 @@ page 0 confidence 100 source 0
 page 1 confidence 100 source 0
 page 2 confidence 100 source 0
 page 3 confidence 100 source 0
-blocks 10
+blocks 4
 block 0 kind=2 level=0 page=0 bounds=72.14 696.27 302.69 713.68 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
   span 0 flags=0 font_size=18 size_ratio=1 bounds=72.14 696.27 302.69 713.68 object_index=0 text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
-block 1 kind=2 level=0 page=1 bounds=696.27 490.45 713.68 539.86 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0041006c007000680061
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=696.27 490.45 713.68 539.86 object_index=0 text=0041006c007000680061
-block 2 kind=2 level=0 page=1 bounds=699.77 431.62 713.12 481.32 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=0042007200610076006f
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=699.77 431.62 713.12 481.32 object_index=0 text=0042007200610076006f
-block 3 kind=2 level=0 page=1 bounds=699.77 362.38 713.68 423.90 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=0043006800610072006c00690065
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=699.77 362.38 713.68 423.90 object_index=0 text=0043006800610072006c00690065
-block 4 kind=2 level=0 page=1 bounds=699.77 309.31 713.68 353.93 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=00440065006c00740061
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=699.77 309.31 713.68 353.93 object_index=0 text=00440065006c00740061
-block 5 kind=2 level=0 page=2 bounds=309.31 78.32 539.86 95.73 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=00440065006c0074006100200043006800610072006c0069006500200042007200610076006f00200041006c007000680061
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=309.31 78.32 539.86 95.73 object_index=0 text=00440065006c0074006100200043006800610072006c0069006500200042007200610076006f00200041006c007000680061
-block 6 kind=2 level=0 page=3 bounds=78.32 258.07 92.23 302.69 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=00440065006c00740061
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=78.32 258.07 92.23 302.69 object_index=0 text=00440065006c00740061
-block 7 kind=2 level=0 page=3 bounds=78.32 188.10 92.23 249.62 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=0043006800610072006c00690065
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=78.32 188.10 92.23 249.62 object_index=0 text=0043006800610072006c00690065
-block 8 kind=2 level=0 page=3 bounds=78.88 130.68 92.23 180.38 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=0042007200610076006f
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=78.88 130.68 92.23 180.38 object_index=0 text=0042007200610076006f
-block 9 kind=2 level=0 page=3 bounds=78.32 72.14 95.73 121.55 object_index=-1 continues=0 source=0 confidence=100 marker=- alt=- text=0041006c007000680061
-  span 0 flags=0 font_size=18 size_ratio=1 bounds=78.32 72.14 95.73 121.55 object_index=0 text=0041006c007000680061
+block 1 kind=2 level=0 page=1 bounds=696.27 309.31 713.68 539.86 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
+  span 0 flags=0 font_size=18 size_ratio=1 bounds=696.27 309.31 713.68 539.86 object_index=0 text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
+block 2 kind=2 level=0 page=2 bounds=309.31 78.32 539.86 95.73 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
+  span 0 flags=0 font_size=18 size_ratio=1 bounds=309.31 78.32 539.86 95.73 object_index=0 text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
+block 3 kind=2 level=0 page=3 bounds=78.32 72.14 95.73 302.69 object_index=-1 continues=1 source=0 confidence=100 marker=- alt=- text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061
+  span 0 flags=0 font_size=18 size_ratio=1 bounds=78.32 72.14 95.73 302.69 object_index=0 text=0041006c00700068006100200042007200610076006f00200043006800610072006c00690065002000440065006c00740061

@@ -113,6 +113,8 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # --render-check returns before Avalonia is ever initialised, so it proves
       # the app's own libmegapdf_core.so and libpdfium.so load from beside it —
@@ -410,6 +412,8 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # --- the .deb -------------------------------------------------------------
 
@@ -590,6 +594,9 @@ jobs:
           # #457: MEGAPDF_DOC_DYNAMIC_XFA fixtures (dynamic-xfa.pdf, hybrid-xfa.pdf) -- this
           # job runs the native core_tests suite directly, same as core-tests.yml.
           python tools/gen_xfa_fixtures.py $fixtures
+          # #481: MEGAPDF_DOC_SIGNED / MEGAPDF_DOC_SIGNED_CERTIFICATION fixtures
+          # (signed-approval.pdf, signed-certified.pdf), needed for the same reason.
+          python tools/gen_signature_fixtures.py $fixtures
           cmake -S core -B "$env:RUNNER_TEMP/core-build" -A ARM64 -DCMAKE_BUILD_TYPE=Debug `
             -DMEGAPDF_CORE_TESTS=ON -DMEGAPDF_FIXTURES_DIR="$fixtures"
           if ($LASTEXITCODE -ne 0) { throw "configure failed" }

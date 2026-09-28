@@ -164,6 +164,39 @@ class DocumentCapabilitiesTest {
         contentEdits.forEach { assertFalse("${it.name} is not filling", c.isFillingOperation(it)) }
     }
 
+    // --- Digital signature (#476/#481) ---
+
+    @Test
+    fun `an ordinary document is not signed`() {
+        assertFalse(DocumentCapabilities.FULL.isSigned)
+        assertFalse(DocumentCapabilities.FULL.isCertificationSigned)
+        assertFalse(DocumentCapabilities.fromSecurity(PdfSecurity.UNPROTECTED, DocumentFlags.NONE).isSigned)
+    }
+
+    @Test
+    fun `a signed document leaves every capability untouched — nothing is refused`() {
+        // #481: the flag only drives the ViewerViewModel's overwrite confirmation. A person
+        // may still fill in and overwrite a signed document if that is genuinely what they
+        // want, so canSign/canFillForms/canAddText/canEditContent stay exactly as security
+        // alone would set them.
+        val signed = DocumentCapabilities.fromSecurity(
+            PdfSecurity.UNPROTECTED, DocumentFlags(isDynamicXfa = false, isSigned = true))
+        assertTrue(signed.isSigned)
+        assertFalse(signed.isCertificationSigned)
+        assertTrue(signed.canSign && signed.canFillForms && signed.canAddText && signed.canEditContent)
+        (contentEdits + formEdits).forEach { assertTrue(signed.allows(it)) }
+    }
+
+    @Test
+    fun `a certification signature also sets isSigned`() {
+        // Always accompanied by isSigned (megapdf_core.h's own note); the two bits are separate
+        // only because the overwrite warning's wording differs.
+        val certified = DocumentCapabilities.fromSecurity(
+            PdfSecurity.UNPROTECTED, DocumentFlags(isDynamicXfa = false, isSigned = true, isCertificationSigned = true))
+        assertTrue(certified.isSigned)
+        assertTrue(certified.isCertificationSigned)
+    }
+
     @Test
     fun `a new password must be non-empty and confirmed`() {
         assertEquals(NewPasswordProblem.EMPTY, newPasswordProblem("", ""))
