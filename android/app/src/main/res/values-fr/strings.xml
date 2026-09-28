@@ -106,6 +106,13 @@
     <string name="security_password_changed">Mot de passe modifié.</string>
     <string name="security_password_removed">Mot de passe retiré.</string>
 
+    <!-- Dynamic XFA (#456/#457) -->
+    <string name="dynamic_xfa_banner_title">Conçu pour Adobe Reader</string>
+    <string name="dynamic_xfa_banner_body">Ce formulaire est conçu pour être rempli avec Adobe Reader. MegaPDF ne peut pas le remplir, mais vous pouvez quand même le consulter, l\'enregistrer, le partager et l\'exporter.</string>
+    <string name="dynamic_xfa_get_reader">Obtenir Adobe Reader</string>
+    <string name="dynamic_xfa_reader_url" translatable="false">https://www.adobe.com/go/reader_download</string>
+    <string name="dynamic_xfa_fill_notice">Ce formulaire ne peut être rempli qu\'avec Adobe Reader.</string>
+
     <!-- Added text -->
     <string name="add_text">Ajouter du texte</string>
     <string name="edit_text">Modifier le texte</string>
