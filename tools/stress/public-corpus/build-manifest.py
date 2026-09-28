@@ -700,9 +700,18 @@ QUOTAS = {
     "malformed": 150,
     "scan": 100,
     "report": 250,
+    "large": None,     # #471 part 4: none of the pinned git sources currently carries a
+                       # file >= 20 MB (today's largest is ~10.9 MB), but classify() will
+                       # call one "large" the moment one ever does. Take every one found,
+                       # the same as "form" -- a category the selection loop below does not
+                       # know about is a row that silently disappears from the manifest with
+                       # no error and no line in the summary print (caught by code review
+                       # before this ever happened in practice, since govinfo's own "large"
+                       # rows go through the DIRECT_SOURCES/NON_GIT_SOURCES carry-over path
+                       # below, not this loop, and so never exercised this bucket).
 }
 
-CATEGORIES = ["form", "tagged", "malformed", "scan", "report"]
+CATEGORIES = ["form", "tagged", "malformed", "scan", "report", "large"]
 
 # #471 part 4: a document large enough to exercise the paging-in path #147-#151 built (the
 # public corpus's largest existing document is ~10.9 MB; the govinfo Federal Register/CFR
@@ -927,6 +936,14 @@ def fetch_federal(source, cache_dir):
 # Direct-URL sources (#471): UK OGL forms and govinfo large documents. Unlike FEDERAL_SOURCES
 # there is no shared base_url -- every item already carries its own full, hand-resolved URL
 # -- so `items` here is a plain (url, relpath) pair rather than (relpath, group).
+#
+# fetch_direct() below duplicates fetch_federal()'s request-gap throttle and HTTP-error
+# handling rather than factoring them into one shared helper -- a deliberate call, not an
+# oversight: three other agents are editing this same file concurrently (#455's sampling
+# rewrite among them) as this is written, and fetch_federal() is exactly the kind of
+# already-working, already-tested code a refactor-for-its-own-sake risks conflicting with
+# mid-flight for no behavioural gain. Worth doing once the concurrent work has landed and
+# this file is quiet again.
 # --------------------------------------------------------------------------------------
 
 def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=None,
@@ -943,7 +960,24 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
     GOVINFO_DOCS -- and there is no reason to read a 2 GB file a second time just to
     confirm what its own size already says via LARGE_THRESHOLD_BYTES). Left as None (UK
     forms; at most a few MB each) it reads the cached file once and classifies it the same
-    way every git-sourced row is classified.
+    way every git-sourced row is classified. Because `force_category` bypasses that read,
+    it does NOT re-derive any confidence that the bytes on disk are complete -- that is
+    what the Content-Length check below is for; a category forced without a size check
+    would happily label a silently-truncated download "large" just because it was told to.
+
+    A server that closes the connection early (a clean EOF, not a reset) raises nothing in
+    `urllib` -- `resp.read()` just returns less data and then `b""`, and a truncated PDF can
+    easily still start with `%PDF`. So when the response gives a `Content-Length`, the
+    bytes actually written are checked against it before the file is accepted into the
+    cache; a mismatch is treated exactly like an HTTP error (skipped, temp file removed),
+    not silently kept. A server that omits `Content-Length` gets no such check -- the same
+    trust fetch_federal() already places in a completed, non-raising `resp.read()`.
+
+    The sha256 is computed once, incrementally, while a fresh download is written (never a
+    second full read of a file that can be multiple GB); a cache hit -- already on disk
+    from an earlier run -- is read once here to hash it, since nothing persists the digest
+    across runs (the same cost fetch_federal() accepts for its own, much smaller, cached
+    federal forms).
 
     Politeness: sequential, one request in flight, at least `request_gap` seconds apart --
     manifest *generation*, run rarely by a maintainer; not the corpus *download* everyone
@@ -963,6 +997,7 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
     for url, relpath in items:
         cachefile = os.path.join(cache_dir, relpath)
         os.makedirs(os.path.dirname(cachefile) or ".", exist_ok=True)
+        fresh_digest = None
         if not os.path.exists(cachefile):
             wait = request_gap - (time.monotonic() - last_request)
             if wait > 0:
@@ -972,8 +1007,14 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as resp, \
                         open(tmp, "wb") as out:
+                    want_bytes = resp.headers.get("Content-Length")
+                    want_bytes = int(want_bytes) if want_bytes is not None else None
+                    got_bytes = 0
+                    digest = hashlib.sha256()
                     for chunk in iter(lambda: resp.read(chunk_size), b""):
                         out.write(chunk)
+                        digest.update(chunk)
+                        got_bytes += len(chunk)
             except urllib.error.HTTPError as exc:
                 last_request = time.monotonic()
                 skipped.append((relpath, f"HTTP {exc.code}"))
@@ -989,6 +1030,14 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
                     os.remove(tmp)
                 continue
             last_request = time.monotonic()
+            if want_bytes is not None and got_bytes != want_bytes:
+                skipped.append((relpath,
+                                 f"truncated: got {got_bytes} bytes, "
+                                 f"server said Content-Length {want_bytes}"))
+                print(f"  {key}: {relpath}: truncated download ({got_bytes} of "
+                      f"{want_bytes} bytes), skipping", file=sys.stderr)
+                os.remove(tmp)
+                continue
             with open(tmp, "rb") as fh:
                 head = fh.read(4)
             if head != b"%PDF":
@@ -996,12 +1045,16 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
                 os.remove(tmp)
                 continue
             os.replace(tmp, cachefile)
+            fresh_digest = digest
 
         size = os.path.getsize(cachefile)
-        digest = hashlib.sha256()
-        with open(cachefile, "rb") as fh:
-            for chunk in iter(lambda: fh.read(chunk_size), b""):
-                digest.update(chunk)
+        if fresh_digest is not None:
+            digest = fresh_digest
+        else:
+            digest = hashlib.sha256()
+            with open(cachefile, "rb") as fh:
+                for chunk in iter(lambda: fh.read(chunk_size), b""):
+                    digest.update(chunk)
 
         if force_category is not None:
             category = force_category
@@ -1030,6 +1083,17 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
 # force_category=None means "classify from content" (UK forms); "large" means "this item's
 # category is already known by construction and is never re-derived from a content scan"
 # (govinfo -- see fetch_direct()'s docstring).
+#
+# `attribution` here is not read by any code path, on purpose and consistently with
+# FEDERAL_ATTRIBUTION_IRS/USCIS above: `manifest.tsv`'s COLUMNS has no attribution field,
+# so it was never going to be. The manifest schema exists to make a source, licence and
+# hash reproducible; the human-readable attribution text a reader must actually carry is
+# licence-specific prose that lives in README.md ("Licences and attribution"), keyed by
+# the `licence` column each row already carries (`OGL-UK-3.0` here). Recorded on the
+# `DirectSource` anyway, the same way FEDERAL_ATTRIBUTION_* is recorded on `HttpSource`, as
+# a provenance trail next to the code that fetches each source -- not as an enforcement
+# mechanism, which OGL's real, binding requirement (unlike the federal forms') deserves to
+# be stated plainly rather than implied by a namedtuple field nothing reads.
 DirectSource = collections.namedtuple(
     "DirectSource", "key licence attribution items request_gap force_category")
 
@@ -1129,7 +1193,8 @@ def main():
                 ds = DIRECT_SOURCES[args.add_source]
                 rows, skipped = fetch_direct(ds.key, ds.licence, ds.items, cache_dir,
                                               ds.request_gap, force_category=ds.force_category)
-                host_for_error = (ds.items[0][0] if ds.items else "its source host")
+                host_for_error = (urllib.parse.urlparse(ds.items[0][0]).netloc
+                                   if ds.items else "its source host")
         except FederalHostUnreachable as exc:
             sys.exit(
                 f"--add-source {args.add_source}: {exc}.\n"
