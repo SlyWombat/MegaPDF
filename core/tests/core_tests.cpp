@@ -7681,6 +7681,9 @@ void test_rotated_content() {
     const megapdf_rect stamp_box{80, 300, 240, 380};
     const double text_x = 80, text_baseline = 200;
     const megapdf_rect text_box{75, 186, 275, 230};
+    // The tick is the sharpest probe of the three: it runs from the left edge down to 38% across
+    // and up to the far corner, so its emptiest quarter is the top left and a turn moves which.
+    const megapdf_rect mark_box{330, 300, 410, 380};
 
     // The pixels a render put inside a crop-space rect, as an upright patch in the caller's own
     // frame: one pixel per point, y flipped. The same rect at two rotations gives two patches
@@ -7702,7 +7705,7 @@ void test_rotated_content() {
     };
 
     struct Shot {
-        std::vector<int> stamp, text;
+        std::vector<int> stamp, text, mark;
         double w = 0, h = 0;
         bool ok = false;
     };
@@ -7716,13 +7719,14 @@ void test_rotated_content() {
         if (!arrives_rotated && quarter != 0 && megapdf_page_rotate(d.doc, 0, quarter) != MEGAPDF_OK) return s;
         Page p(d.doc, 0);
         if (p.page == nullptr) return s;
-        U16 stamp_id = u16("sig:446"), box_id = u16("text:446"), words = u16("Upright");
+        U16 stamp_id = u16("sig:446"), box_id = u16("text:446"), words = u16("Upright"), mark_id = u16("mark:446");
         if (megapdf_add_image_stamp(p.page, image.data(), img_w, img_h, &stamp_box, stamp_id.data()) != MEGAPDF_OK) return s;
         int object_index = -1;
         if (megapdf_add_text_box(p.page, 0, words.data(), "Helvetica", 18.0, text_x, text_baseline,
                                  box_id.data(), &object_index) != MEGAPDF_OK) {
             return s;
         }
+        if (megapdf_add_check_mark(p.page, &mark_box, MEGAPDF_MARK_CHECK, mark_id.data()) != MEGAPDF_OK) return s;
         s.w = megapdf_page_width(p.page);
         s.h = megapdf_page_height(p.page);
         const int pw = static_cast<int>(std::lround(s.w)), ph = static_cast<int>(std::lround(s.h));
@@ -7730,6 +7734,7 @@ void test_rotated_content() {
         if (px.size() != static_cast<size_t>(pw) * static_cast<size_t>(ph) * 4) return s;
         s.stamp = patch(px, pw, ph, stamp_box, s.h);
         s.text = patch(px, pw, ph, text_box, s.h);
+        s.mark = patch(px, pw, ph, mark_box, s.h);
         s.ok = true;
         return s;
     };
@@ -7784,6 +7789,18 @@ void test_rotated_content() {
     const int stamp_h = static_cast<int>(std::lround(stamp_box.top - stamp_box.bottom));
     const int text_w = static_cast<int>(std::lround(text_box.right - text_box.left));
     const int text_h = static_cast<int>(std::lround(text_box.top - text_box.bottom));
+    const int mark_w = static_cast<int>(std::lround(mark_box.right - mark_box.left));
+    const int mark_h = static_cast<int>(std::lround(mark_box.top - mark_box.bottom));
+    // The tick's emptiest quarter, which says which way up it is drawn.
+    auto emptiest_quarter = [&](const std::vector<int>& patch_, int pw, int ph) {
+        const int tl = mean_of(patch_, pw, ph, false, false), tr = mean_of(patch_, pw, ph, true, false);
+        const int bl = mean_of(patch_, pw, ph, false, true), br = mean_of(patch_, pw, ph, true, true);
+        const int lightest = (std::max)((std::max)(tl, tr), (std::max)(bl, br));
+        if (lightest == tl) return std::string("top left");
+        if (lightest == tr) return std::string("top right");
+        if (lightest == bl) return std::string("bottom left");
+        return std::string("bottom right");
+    };
 
     const Shot up = shot(0, false);
     if (!up.ok) { check(false, "rotated content: an upright page takes a stamp and a text box"); return; }
@@ -7808,6 +7825,9 @@ void test_rotated_content() {
               std::to_string(r - l) + "x" + std::to_string(b - t));
         check(l < text_w / 4, "rotated content: upright, the text starts at the box's left", std::to_string(l));
     }
+    check(emptiest_quarter(up.mark, mark_w, mark_h) == "top left",
+          "rotated content: upright, the tick leaves its top left quarter empty",
+          emptiest_quarter(up.mark, mark_w, mark_h));
 
     for (int q = 1; q <= 3; q++) {
         for (bool arrives : {false, true}) {
@@ -7834,6 +7854,13 @@ void test_rotated_content() {
             const auto [l, t, r, b] = ink_of(s.text, text_w, text_h);
             check(r > l && b > t && (r - l) > (b - t) * 2, at + "the text still reads across",
                   std::to_string(r - l) + "x" + std::to_string(b - t));
+
+            const double mark_diff = disagreement(s.mark, up.mark);
+            check(mark_diff < 0.25, at + "the tick is the same tick, the same way up",
+                  std::to_string(static_cast<int>(mark_diff * 100)) + "% of its ink differs");
+            check(emptiest_quarter(s.mark, mark_w, mark_h) == "top left",
+                  at + "the tick still leaves its top left quarter empty",
+                  emptiest_quarter(s.mark, mark_w, mark_h));
         }
     }
 
