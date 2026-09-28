@@ -102,7 +102,7 @@ generator is eventually written.
 
 ## What is in it
 
-1,382 documents, 298.1 MB. Categories are assigned from each file's own bytes by
+1,662 documents, 407.4 MB. Categories are assigned from each file's own bytes by
 `build-manifest.py`'s `classify()`, not from the directory it arrived in, so a row says what
 the battery will actually meet — except `signed` (below), whose category is forced rather
 than derived, because the whole point of that row is the signature.
@@ -110,14 +110,76 @@ than derived, because the whole point of that row is the signature.
 | category | count | what it is |
 |---|---:|---|
 | `form` | 549 | `/AcroForm` — fields, checkboxes, radio groups, signature fields (see below: `/Widget` alone is not required any more) |
-| `tagged` | 300 | a `/StructTreeRoot`, for the tagged-PDF path (#358) |
+| `tagged` | 580 | a `/StructTreeRoot`, for the tagged-PDF path (#358) — includes the 280 non-Latin-script rows below: Wikipedia's own PDF export tags its output |
 | `report` | 250 | ordinary text documents, for extraction fidelity and reading order |
 | `malformed` | 150 | deliberately broken or deliberately non-conforming — crash/hang resistance only |
 | `scan` | 100 | image pages with no font resources |
 | `signed` | 33 | already carries a valid digital signature — for #471 part 1's measurement of what `megapdf_save()`'s full rewrite does to it (see below) |
 
-By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**, **govinfo-signed 33**.
+By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**, **govinfo-signed 33**,
+**non-Latin wiki 280**.
 
+## Non-Latin scripts (#471 part 2)
+
+`core/megapdf_structure.cpp`'s `BuildWords`, `BuildLines` and the XY-cut reading order
+assume left-to-right, horizontal text (#444, #471). Before this addition the corpus had
+essentially no Arabic, Hebrew, Han, Devanagari or Thai text to measure that assumption
+against. 280 rows were added, 40 real articles from each of seven Wikipedia language
+editions, fetched from that wiki's own REST `page/pdf` export endpoint:
+
+| `source` | script | count |
+|---|---|---:|
+| `wiki-ar` | Arabic | 40 |
+| `wiki-he` | Hebrew | 40 |
+| `wiki-zh` | Han (Chinese) | 40 |
+| `wiki-ja` | Japanese (horizontal) | 40 |
+| `wiki-ko` | Hangul (Korean) | 40 |
+| `wiki-hi` | Devanagari (Hindi) | 40 |
+| `wiki-th` | Thai | 40 |
+
+Titles were chosen by MediaWiki's own `list=random` (mainspace only, so an unbiased sample
+of real body text, not hand-picked) and pinned in `nonlatin_wiki_titles.py` so a rebuild
+fetches the same 280 articles rather than a fresh random sample each time (#455 asks that
+adding documents not reshuffle what is already measured). Regenerate or extend with:
+
+    tools/stress/public-corpus/build-manifest.py --add-source nonlatin-wiki
+
+**A reproducibility limitation worth stating plainly, found while re-verifying this batch
+(2026-09-28, kdocker3): Wikipedia's PDF export is rendered on demand, and is not always
+byte-stable even minutes apart.** Two sequential fetches of the same article URL, seconds
+apart, matched each other; a `fetch.sh` run later the same day, fetching the same 280 URLs
+concurrently, produced different bytes for roughly a third of them (`MISMATCH-ON-FETCH`, a
+hard failure per `fetch.sh`'s own design). This is a real difference from every other
+source in this manifest: the git-pinned sources are true forever, and even the federal
+forms (pinned to "today's bytes", not a commit) are stable within a day. A `wiki-*`
+mismatch is disclosed here as an expected property of the source, not corruption or a
+network fault — re-run `--add-source nonlatin-wiki` to refresh a row's hash from whatever
+the wiki serves now, the same remedy a federal-forms revision gets.
+
+**Licence.** Wikipedia article text is dual-licensed CC BY-SA 4.0 / GFDL (confirmed against
+`Wikipedia:Reusing Wikipedia content`, 2026-09-28). CC BY-SA requires attribution (a
+hyperlink or URL to the article, or a list of authors), a licence notice, and — for a
+further-modified copy — an indication that changes were made; recorded per row as licence
+`CC-BY-SA-4.0`. Each row's own URL doubles as its attribution link (replace
+`/api/rest_v1/page/pdf/` with `/wiki/` for the human-readable article). See
+`NONLATIN_ATTRIBUTION` in `build-manifest.py` for the full notice text.
+
+**Vertical Japanese is not in this table, and not in manifest.tsv at all.** #444 found its
+bug on a *vertical*-writing CMap, and none of the seven sources above are vertical — a
+plain Wikipedia PDF export is always horizontal. `gen-ja-vertical.py` generates a bonus,
+best-effort sample instead: 18 ja.wikipedia.org article extracts (same licence as `wiki-ja`
+above), laid out with a genuine `tb-rl` paragraph direction via LibreOffice, so the
+resulting PDF carries real downward glyph-advance geometry. It is a **recipe, not a
+manifest row**, because neither the wiki-render step nor the local LibreOffice-render step
+is byte-stable enough to pin a sha256 to (see `gen-ja-vertical.py`'s own docstring for the
+full reasoning, including the one real caveat: the embedded font is a simple TrueType
+subset, not a composite Type0/Identity-V CMap font). Run it yourself with:
+
+    tools/stress/public-corpus/gen-ja-vertical.py /tmp/ja-vertical
+
+The battery results this bonus sample produced are in the #471 part 2 PR and its filed
+issues, not repeated here, because the bytes that produced them cannot be reproduced from
+this repository alone.
 `form` is the one category taken **whole** — every one the sources contain — because it is
 what MegaPDF is for and the category #434 calls the private corpus thinnest on. The others
 are sampled on an even stride across the sorted tree, which is reproducible and does not
@@ -260,6 +322,7 @@ and keep the file.
 | IRS fillable forms (`www.irs.gov/pub/irs-pdf/`) | **public domain — 17 U.S.C. § 105** | no |
 | USCIS forms (`www.uscis.gov/.../document/forms/`) | **public domain — 17 U.S.C. § 105** | no |
 | GPO-signed documents (`www.govinfo.gov/content/pkg/`) | **public domain — 17 U.S.C. § 105** | no |
+| Wikipedia (`ar/he/zh/ja/ko/hi/th.wikipedia.org`) | **CC BY-SA 4.0** (dual GFDL) | **yes** — see below |
 
 CC BY 4.0 requires attribution wherever these files or results derived from them are
 published. The required credit:
@@ -334,3 +397,5 @@ that can reach the host, don't just delete the refusal.
 | `manifest.tsv` | the corpus: one row per document. Generated — never edit by hand |
 | `fetch.sh` | reproduces the documents and proves every byte |
 | `build-manifest.py` | how the manifest was generated, so it can be regenerated and extended |
+| `nonlatin_wiki_titles.py` | the pinned per-language article titles for the `wiki-*` sources (#471 part 2) |
+| `gen-ja-vertical.py` | bonus vertical-Japanese recipe, NOT part of manifest.tsv — see "Non-Latin scripts" above |
