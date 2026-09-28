@@ -50,6 +50,28 @@ public interface IPdfDocument : IDisposable
     bool IsDynamicXfa { get; }
 
     /// <summary>
+    /// True when the document carries an existing digital signature (#476, #481): a save
+    /// that overwrites this document will invalidate it, because <c>megapdf_save()</c>'s
+    /// full rewrite cannot preserve a signature's `/ByteRange` — measured 33/33 against a
+    /// real signed corpus (#476). Not a verdict on whether the signature is cryptographically
+    /// valid right now, only that one is present. Read once per open, next to
+    /// <see cref="Security"/>. See <see cref="IsSignedCertification"/> for the stronger,
+    /// separate fact that changes the wording.
+    /// </summary>
+    bool IsSigned { get; }
+
+    /// <summary>
+    /// True when at least one of the document's signatures is a certification signature
+    /// carrying a `/DocMDP` transform, rather than an ordinary approval signature. Always
+    /// accompanied by <see cref="IsSigned"/>. A `/DocMDP` permission of 1 means the
+    /// document's own author declared it closed to modification outright, which is a
+    /// stronger statement than "saving will invalidate the signature" — measured 33/33
+    /// permission-1 certification across #476's real corpus, so this, not the plain
+    /// <see cref="IsSigned"/> case, is what a real signed document is expected to set.
+    /// </summary>
+    bool IsSignedCertification { get; }
+
+    /// <summary>
     /// Writes a copy encrypted with AES-256 under new passwords, in place of any security
     /// the document had (#131). <paramref name="userPassword"/> opens the copy with
     /// <paramref name="permissions"/>; <paramref name="ownerPassword"/> opens it with all of

@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:MegaPDF.Avalonia"
+        x:Class="MegaPDF.Avalonia.Views.ConfirmSignedSaveWindow"
+        Title="{x:Static loc:Strings.SignedSaveWarningTitle}"
+        Width="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+  <!-- #476, #481: the warning before Save overwrites a signed original. Save a copy is the
+       DEFAULT action, same shape as ConfirmRedactionWindow — the safe path (Dave's framing:
+       filling in a form and saving a copy under your own name is the common case and is
+       already safe) should be the easy one, and overwriting the signed original needs a
+       deliberate second choice. Nothing here is refused. -->
+  <StackPanel Margin="24" Spacing="{DynamicResource SpaceM}">
+    <TextBlock Name="PromptText" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <TextBlock Name="BodyText" TextWrapping="Wrap" Opacity="0.85" />
+    <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,8,0,0">
+      <Button Name="OverwriteButton" Grid.Column="0"
+              Content="{x:Static loc:Strings.OverwriteSignedButton}" />
+      <Button Name="CancelButton" Grid.Column="2" Margin="0,0,8,0"
+              Content="{x:Static loc:Strings.Cancel}" IsCancel="True" />
+      <Button Name="SaveCopyButton" Grid.Column="3" Classes="accent"
+              Content="{x:Static loc:Strings.SaveACopyButton}" IsDefault="True" />
+    </Grid>
+  </StackPanel>
+</Window>

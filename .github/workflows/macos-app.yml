@@ -83,6 +83,8 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
           dotnet run --project src/MegaPDF.Avalonia/MegaPDF.Avalonia.csproj -c Release --no-build -- \
             --self-test "$RUNNER_TEMP/fixtures"
 
@@ -116,6 +118,8 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
           "$RUNNER_TEMP/app/MegaPDF.app/Contents/MacOS/MegaPDF" --render-check \
             "$RUNNER_TEMP/fixtures/stamped.pdf"
 

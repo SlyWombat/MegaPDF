@@ -214,6 +214,24 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
     }
 
+    public bool IsSigned
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return (CoreNative.megapdf_document_flags(_core) & CoreNative.DocFlagSigned) != 0;
+        }
+    }
+
+    public bool IsSignedCertification
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return (CoreNative.megapdf_document_flags(_core) & CoreNative.DocFlagSignedCertification) != 0;
+        }
+    }
+
     public void SaveWithSecurity(Stream target, string userPassword, string? ownerPassword, PdfPermissions permissions)
     {
         ThrowIfDisposed();

@@ -70,6 +70,8 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: signed-approval.pdf/signed-certified.pdf, the self-test's "signed document" check.
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
           "$BIN" > "$RUNNER_TEMP/first-launch.log" 2>&1 &
           PID=$!; sleep 8; kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true
