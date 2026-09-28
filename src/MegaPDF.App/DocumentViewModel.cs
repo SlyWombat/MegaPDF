@@ -341,6 +341,31 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     /// </summary>
     internal event EventHandler? ViewAttached;
 
+    /// <summary>
+    /// Raised once this document's own open (or a crash-recovery restore) has finished
+    /// settling — every property an open touches (<see cref="DocumentPath"/>, <see
+    /// cref="Capabilities"/>, and anything <see cref="Busy"/> does along the way) has reached
+    /// its final value (#427). <see cref="ShellViewModel.AddDocument"/> becomes <see
+    /// cref="ShellViewModel.Active"/> synchronously, before its open has even started — a tab
+    /// opened by the external-open redirect (#348 phase 2) or crash recovery runs through
+    /// <c>DocumentPath</c>, <c>Capabilities</c> and several <c>Busy</c> transitions in a burst
+    /// fast enough (no splash, no dialog, nothing else on the UI thread in between) that
+    /// WinUI's x:Bind sometimes drops one of the PropertyChanged notifications it fires in
+    /// that burst — verified live on GPD-DAVE (#427): the toolbar's {x:Bind
+    /// Shell.Active.IsSigningAllowed} et al. stayed at the value from the instant the tab
+    /// became Active (everything disabled) even though <see cref="IsSigningAllowed"/> and
+    /// friends had already settled to their correct, final value on the view-model side —
+    /// three of eight redirect attempts on one run, all fixed the instant the tab was
+    /// reselected. Reselecting works because it raises <c>Active</c> itself again, which
+    /// forces x:Bind to resubscribe and refresh from scratch; this event lets <see
+    /// cref="ShellViewModel"/> do that same forced refresh once, right when the burst is
+    /// over, without waiting for the user to click a tab. This is not "poke the bindings
+    /// on a timer" — it fires exactly once, tied to the one moment (the open settling) the
+    /// race can leave stale, the same way <see cref="ViewAttached"/> already does for the
+    /// unrelated view-realization gap.
+    /// </summary>
+    internal event EventHandler? OpenSettled;
+
     public ObservableCollection<PageView> Pages { get; } = [];
 
     [ObservableProperty]
@@ -574,6 +599,8 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
 
         if (rememberedView is { ScrollOffset: > 0 })
             ScrollRestoreRequested?.Invoke(rememberedView.ScrollOffset);
+
+        OpenSettled?.Invoke(this, EventArgs.Empty); // #427: force a resync once the burst above is over
     }
 
     // --- Fit zoom presets ---
@@ -2245,6 +2272,12 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                 Pages[i] = Placeholder(i, Pages[i].PointsWidth, Pages[i].PointsHeight);
         }
         await UpdateViewportAsync(_viewFirst, _viewLast);
+
+        // #427/#404: the replay above is its own burst of Busy transitions on top of the
+        // OpenDocumentAsync burst OpenSettled already fired for — a second nudge here closes
+        // the same gap for a crash-recovery restore, which OfferCrashRecoveryAsync drives
+        // straight from AddDocument rather than through ShellViewModel.OpenInTabAsync.
+        OpenSettled?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Called when the window closes with the user's consent — nothing left to recover.</summary>
