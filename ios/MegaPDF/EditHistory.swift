@@ -1,14 +1,18 @@
 import Foundation
 
 // Undo/redo (#34) — the mobile port of the desktop `IEditOperation` + `UndoStack`
-// (SDD §4.2, command pattern). Two rules make it safe on a document that other
-// edits are reshaping underneath it:
+// (SDD §4.2, command pattern), and the twin of Android's EditHistory.kt. Two rules
+// make it safe on a document that other edits are reshaping underneath it:
 //
 //   1. **Operations address their target by id, never by index.** Annotation and
 //      page-object indices shift as things are added and removed; `MegaPDF_Id`
 //      and the text box's mark id do not.
-//   2. **Revert restores the same id.** Undoing a delete and redoing it must not
-//      invent a new handle, or a second undo would miss.
+//   2. **Revert restores the same id, so a second undo still finds it.** The redaction marks
+//      are the one place this is not in the history's gift: the core hands out a fresh mark
+//      id every time an area is marked and never reuses one, so a mark that comes back from
+//      an undo comes back under a new id. The history rebinds the operations that named the
+//      old one (`RedactionMarkEdit`, #429/#441) — without that, the undo of a move recorded
+//      before a removal looks for a mark the removal's own undo has already replaced.
 
 /// A reversible edit. Reference type: an operation may learn things when applied
 /// (an image read back before deletion) that its revert needs.
@@ -49,6 +53,7 @@ final class EditHistory {
     func perform(_ operation: PdfEditOperation,
                  _ engine: PdfEngine, _ document: PdfDocument) async throws {
         try await operation.apply(engine, document)
+        rebindRedactionMarks(operation)
         record(operation)
     }
 
@@ -75,6 +80,7 @@ final class EditHistory {
             throw error
         }
         undone.append(operation)
+        rebindRedactionMarks(operation)
         return operation
     }
 
@@ -88,12 +94,32 @@ final class EditHistory {
             throw error
         }
         done.append(operation)
+        rebindRedactionMarks(operation)
         return operation
     }
 
     func clear() {
         done.removeAll()
         undone.removeAll()
+    }
+
+    /// Hands every other operation the mark ids the one just applied or reverted re-marked
+    /// under (#429/#441).
+    ///
+    /// A mark cannot come back under the id it had: the core hands out a fresh one and never
+    /// reuses the old. So the operation that re-marked is the only one that knows the mark's
+    /// new id, and every operation still holding the old one — the move recorded before a
+    /// removal, the placement under it, the clear that swept it up — would otherwise name a
+    /// mark the core no longer has, and quietly do nothing when its turn came.
+    private func rebindRedactionMarks(_ source: PdfEditOperation) {
+        guard let edit = source as? RedactionMarkEdit, !edit.lastRenames.isEmpty else { return }
+        let renames = edit.lastRenames
+        for operation in done where operation !== source {
+            (operation as? RedactionMarkEdit)?.rebind(renames)
+        }
+        for operation in undone where operation !== source {
+            (operation as? RedactionMarkEdit)?.rebind(renames)
+        }
     }
 }
 
@@ -434,31 +460,72 @@ final class MoveTextBoxOperation: PdfEditOperation {
 // re-renders nothing — the overlay draw is the visible change. They are in the history
 // because Undo has to be able to take a mark back, which is the whole of #329.
 //
-// Inverse pairs, one type each, as everywhere above.
+// Inverse pairs, one type each, as everywhere above — and all three of them
+// `RedactionMarkEdit`s, because a mark is the one target whose id the history does not own.
+
+/// A mark that has come back under a new core id, from the operation that re-marked it (#429/#441).
+struct RedactionMarkRename {
+    let pageIndex: Int
+    let oldId: Int
+    let newId: Int
+}
+
+/// An operation that names redaction marks by the id the core gave them.
+///
+/// `markForRedaction` hands out a fresh id for every area marked and the core never reuses one
+/// for the life of the document, so a mark that an undo puts back is not the id anything
+/// recorded earlier is holding (#429/#441). An operation that re-marks reports the swap in
+/// `lastRenames`; `EditHistory` hands that to every other operation, which follows it in
+/// `rebind`. Without it the undo of a move recorded before a removal names a mark the
+/// removal's own undo has already replaced, the core answers false, and the Undo the person
+/// pressed does nothing at all.
+protocol RedactionMarkEdit: PdfEditOperation {
+    /// What the last apply or revert re-marked. Empty unless this operation handed out ids.
+    var lastRenames: [RedactionMarkRename] { get }
+
+    /// Follows `renames`: the same marks, under the ids the core has for them now.
+    func rebind(_ renames: [RedactionMarkRename])
+}
+
+/// Points every id this array holds that `rename` renames at the mark's new id (#429/#441).
+private func rebindIds(_ ids: inout [Int?], _ rename: RedactionMarkRename) {
+    for i in ids.indices where ids[i] == rename.oldId { ids[i] = rename.newId }
+}
 
 /// Marking areas for redaction, and removing them — each other's inverse.
 ///
 /// `rects` are the areas as they now exist in crop space: the marks a drag made, already
 /// grown to whole glyphs by the core, or the marks being removed. `adding` says which way
-/// round the operation goes.
+/// round the operation goes. `rects` and `ids` must already be paired one to one, by the
+/// same mark, in the same order — a caller that built them from two differently-ordered
+/// lists would rename or move the wrong mark (#441; the same trap the desktop port hit).
 ///
 /// Redo replays the recorded rectangles rather than re-running the text selection: that
 /// would re-derive glyph runs from the page as it is *now*, and the person is owed the
 /// rectangle they saw. Re-marking a rectangle goes through the plain rect path — a mark is
 /// an area, and the glyph snapping only decided what the area was. The core never reuses an
-/// id for the life of a document, so a redo takes fresh ids; `ids` is what the page carries
-/// at this moment and is re-read after every apply.
-final class RedactMarkOperation: PdfEditOperation {
+/// id for the life of a document, so every re-mark takes fresh ids; what a re-mark replaces
+/// is reported as a rename (#429/#441).
+final class RedactMarkOperation: RedactionMarkEdit {
     let pageIndex: Int
     private let rects: [PdfRect]
-    private var ids: [Int]
     private let adding: Bool
+
+    /// Per rect, the id the core has for its mark now — nil while the mark is off the page.
+    private var live: [Int?]
+
+    /// Per rect, the last id its mark carried. Kept across a removal, because that is the id
+    /// the rest of the history is still holding when this operation marks the area again.
+    private var named: [Int?]
+
+    private(set) var lastRenames: [RedactionMarkRename] = []
 
     init(pageIndex: Int, rects: [PdfRect], ids: [Int], adding: Bool) {
         self.pageIndex = pageIndex
         self.rects = rects
-        self.ids = ids
         self.adding = adding
+        self.live = rects.indices.map { $0 < ids.count ? ids[$0] : nil }
+        self.named = live
     }
 
     var name: String { adding ? "redact" : "remove mark" }
@@ -474,30 +541,44 @@ final class RedactMarkOperation: PdfEditOperation {
 
     private func mark(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         // A loop, not `compactMap`: the engine is an actor, so each call is an await, and
-        // a `map` closure is synchronous — the marks would have to be made off the actor
-        // to fit in one, which is not possible and not what this wants anyway.
-        var made: [Int] = []
-        for rect in rects {
+        // a `map` closure is synchronous.
+        var renames: [RedactionMarkRename] = []
+        for (i, rect) in rects.enumerated() {
             let id = try await engine.markForRedaction(document, pageIndex: pageIndex, rect: rect)
-            if id >= 0 { made.append(id) }
+            live[i] = id >= 0 ? id : nil
+            guard id >= 0 else { continue }   // nothing in that area: no mark, no rename
+            if let was = named[i], was != id {
+                renames.append(RedactionMarkRename(pageIndex: pageIndex, oldId: was, newId: id))
+            }
+            named[i] = id
         }
-        ids = made
+        lastRenames = renames
     }
 
     private func remove(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         // Already gone counts as success on the core side, so an undo cannot fail.
-        for id in ids {
+        for case let id? in live {
             try await engine.removeRedactionMark(document, pageIndex: pageIndex, markId: id)
         }
-        ids = []
+        live = live.map { _ in nil }
+        lastRenames = []
+    }
+
+    func rebind(_ renames: [RedactionMarkRename]) {
+        for rename in renames where rename.pageIndex == pageIndex {
+            rebindIds(&live, rename)
+            rebindIds(&named, rename)
+        }
     }
 }
 
 /// Moving or resizing a mark. The core moves an id in place, so undo and redo keep the same
-/// id — which is why this is not the remove-and-re-place that `MoveStampOperation` needs.
-final class MoveRedactionMarkOperation: PdfEditOperation {
+/// mark — which is why this is not the remove-and-re-place that `MoveStampOperation` needs.
+/// The *id* is not as durable as the mark: a removal or a clear undone between this operation
+/// and its turn puts the mark back under a new one, and `rebind` is how this follows it (#429/#441).
+final class MoveRedactionMarkOperation: RedactionMarkEdit {
     let pageIndex: Int
-    private let markId: Int
+    private var markId: Int
     private let from: PdfRect
     private let to: PdfRect
 
@@ -511,12 +592,30 @@ final class MoveRedactionMarkOperation: PdfEditOperation {
     var name: String { "move mark" }
     var changesDocument: Bool { false }
 
+    /// A move never re-marks, so it has nothing to report; it only follows.
+    var lastRenames: [RedactionMarkRename] { [] }
+
     func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try await engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: to)
+        try await move(engine, document, to: to)
     }
 
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        try await engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: from)
+        try await move(engine, document, to: from)
+    }
+
+    private func move(_ engine: PdfEngine, _ document: PdfDocument, to rect: PdfRect) async throws {
+        // False means the id is not on the page. That used to be dropped on the floor, which
+        // is how #429/#441 stayed invisible: the Undo was pressed, the mark did not move, and
+        // nothing said so. It is a broken history, so it fails the way one does — the history
+        // puts the operation back and the screen says the edit failed.
+        let moved = try await engine.moveRedactionMark(document, pageIndex: pageIndex, markId: markId, rect: rect)
+        guard moved else { throw PdfError.editFailed }
+    }
+
+    func rebind(_ renames: [RedactionMarkRename]) {
+        for rename in renames where rename.pageIndex == pageIndex && rename.oldId == markId {
+            markId = rename.newId
+        }
     }
 }
 
@@ -524,15 +623,23 @@ final class MoveRedactionMarkOperation: PdfEditOperation {
 /// marks" means one action, not one per mark or one per page, and Undo puts every one of
 /// them back where it was.
 ///
-/// `marksByPage` is the whole document's marks as they were. `pageIndex` is the page the UI
-/// treats as this operation's own — a clear can span pages, and the history wants one page.
-final class ClearRedactionMarksOperation: PdfEditOperation {
+/// `marksByPage` is the whole document's marks as they were, ids and all: the rects are what
+/// the undo re-marks, and the ids are what it replaces, so a move recorded before the clear
+/// still finds its mark afterwards (#429/#441). `pageIndex` is the page the UI treats as this
+/// operation's own — a clear can span pages, and the history wants one page.
+final class ClearRedactionMarksOperation: RedactionMarkEdit {
     let pageIndex: Int
-    private let marksByPage: [Int: [PdfRect]]
+    private let rectsByPage: [Int: [PdfRect]]
 
-    init(pageIndex: Int, marksByPage: [Int: [PdfRect]]) {
+    /// Per page, per rect, the last id that mark carried — as `RedactMarkOperation.named`.
+    private var named: [Int: [Int?]]
+
+    private(set) var lastRenames: [RedactionMarkRename] = []
+
+    init(pageIndex: Int, marksByPage: [Int: [PdfRedactionMark]]) {
         self.pageIndex = pageIndex
-        self.marksByPage = marksByPage
+        self.rectsByPage = marksByPage.mapValues { $0.map(\.rect) }
+        self.named = marksByPage.mapValues { $0.map { Optional($0.markId) } }
     }
 
     var name: String { "clear marks" }
@@ -540,13 +647,33 @@ final class ClearRedactionMarksOperation: PdfEditOperation {
 
     func apply(_ engine: PdfEngine, _ document: PdfDocument) async throws {
         await engine.clearRedactionMarks(document)
+        lastRenames = []
     }
 
     func revert(_ engine: PdfEngine, _ document: PdfDocument) async throws {
-        for (page, rects) in marksByPage {
-            for rect in rects {
-                _ = try await engine.markForRedaction(document, pageIndex: page, rect: rect)
+        var renames: [RedactionMarkRename] = []
+        for (page, rects) in rectsByPage {
+            var ids = named[page] ?? []
+            for (i, rect) in rects.enumerated() {
+                let id = try await engine.markForRedaction(document, pageIndex: page, rect: rect)
+                guard id >= 0 else { continue }
+                if i < ids.count {
+                    if let was = ids[i], was != id {
+                        renames.append(RedactionMarkRename(pageIndex: page, oldId: was, newId: id))
+                    }
+                    ids[i] = id
+                }
             }
+            named[page] = ids
+        }
+        lastRenames = renames
+    }
+
+    func rebind(_ renames: [RedactionMarkRename]) {
+        for rename in renames {
+            guard var ids = named[rename.pageIndex] else { continue }
+            rebindIds(&ids, rename)
+            named[rename.pageIndex] = ids
         }
     }
 }

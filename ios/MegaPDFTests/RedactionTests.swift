@@ -174,7 +174,8 @@ final class RedactionTests: XCTestCase {
             .changesDocument)
         XCTAssertFalse(MoveRedactionMarkOperation(pageIndex: 0, markId: 1, from: rect, to: other)
             .changesDocument)
-        XCTAssertFalse(ClearRedactionMarksOperation(pageIndex: 0, marksByPage: [0: [rect]])
+        XCTAssertFalse(ClearRedactionMarksOperation(
+            pageIndex: 0, marksByPage: [0: [PdfRedactionMark(markId: 1, rect: rect)]])
             .changesDocument)
 
         // Everything else does, which is why the default is the safe answer.
@@ -297,8 +298,12 @@ final class RedactionTests: XCTestCase {
         XCTAssertEqual(count, 3)
 
         let history = EditHistory()
+        let marksByPage: [Int: [PdfRedactionMark]] = [
+            0: try await engine.redactionMarks(doc, pageIndex: 0),
+            1: try await engine.redactionMarks(doc, pageIndex: 1),
+        ]
         try await history.perform(
-            ClearRedactionMarksOperation(pageIndex: 0, marksByPage: [0: [page0, page1], 1: [page1]]),
+            ClearRedactionMarksOperation(pageIndex: 0, marksByPage: marksByPage),
             engine, doc)
         let cleared = await engine.redactionMarkCount(doc)
         XCTAssertEqual(cleared, 0, "every mark on every page went")
@@ -308,5 +313,154 @@ final class RedactionTests: XCTestCase {
         let onPage1 = try await engine.redactionMarks(doc, pageIndex: 1).map(\.rect)
         XCTAssertEqual(onPage0, [page0, page1], "one press of Undo brings both back")
         XCTAssertEqual(onPage1, [page1], "on the page each was on")
+    }
+
+    // MARK: - a mark's id survives a re-apply (#429/#441)
+    //
+    // The sequence #429 found on Android and #440 confirmed on desktop: mark, drag, remove,
+    // then Undo twice. The second Undo used to do nothing at all, because the removal's own
+    // undo re-marks under a fresh id and the move recorded before it was still naming the
+    // old one. From there every Undo was one step out. These are the iOS twins of
+    // `RedactionMarkTests` (`Undo_AfterARemoval_TakesBackTheMoveBeforeIt` and its neighbours).
+
+    /// The regression itself: a move recorded before a removal must still find its mark once
+    /// the removal's own undo has re-marked it under a new id.
+    @MainActor
+    func testUndoAfterARemovalTakesBackTheMoveBeforeIt() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("demo"))
+        defer { Task { await engine.close(doc) } }
+        let history = EditHistory()
+
+        // One mark over blank paper, so the sequence is about one mark and nothing else.
+        let drawn = PdfRect(left: 60, bottom: 80, right: 240, top: 130)
+        let placed = try await engine.markForRedaction(doc, pageIndex: 0, rect: drawn)
+        history.record(RedactMarkOperation(pageIndex: 0, rects: [drawn], ids: [placed], adding: true))
+
+        let moved = PdfRect(left: drawn.left, bottom: drawn.bottom - 48, right: drawn.right, top: drawn.top - 48)
+        try await history.perform(
+            MoveRedactionMarkOperation(pageIndex: 0, markId: placed, from: drawn, to: moved),
+            engine, doc)
+        var marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [moved])
+
+        try await history.perform(
+            RedactMarkOperation(pageIndex: 0, rects: [moved], ids: [placed], adding: false),
+            engine, doc)
+        var count = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(count, 0)
+
+        // Undo the removal: back where it was dropped, under an id nothing recorded earlier has.
+        _ = try await history.undo(engine, doc)
+        marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [moved])
+        XCTAssertNotEqual(marks.first?.markId, placed, "the core never reuses an id")
+
+        // Undo the move: back where the drag drew it. This is the step the stale id lost.
+        _ = try await history.undo(engine, doc)
+        marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [drawn], "the second undo must actually move the mark back")
+
+        // Undo the marking: nothing marked, nothing left to undo — the history came out even.
+        _ = try await history.undo(engine, doc)
+        count = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(count, 0)
+        XCTAssertFalse(history.canUndo)
+    }
+
+    /// Redo has the same trap in the forward direction: every redo re-marks and takes fresh
+    /// ids of its own, so the way forward needs the same following the way back did.
+    @MainActor
+    func testRedoForwardThroughTheRemovalFollowsTheSameMark() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("demo"))
+        defer { Task { await engine.close(doc) } }
+        let history = EditHistory()
+
+        let drawn = PdfRect(left: 60, bottom: 80, right: 240, top: 130)
+        let placed = try await engine.markForRedaction(doc, pageIndex: 0, rect: drawn)
+        history.record(RedactMarkOperation(pageIndex: 0, rects: [drawn], ids: [placed], adding: true))
+
+        let moved = PdfRect(left: drawn.left, bottom: drawn.bottom - 48, right: drawn.right, top: drawn.top - 48)
+        try await history.perform(
+            MoveRedactionMarkOperation(pageIndex: 0, markId: placed, from: drawn, to: moved),
+            engine, doc)
+        try await history.perform(
+            RedactMarkOperation(pageIndex: 0, rects: [moved], ids: [placed], adding: false),
+            engine, doc)
+        _ = try await history.undo(engine, doc)
+        _ = try await history.undo(engine, doc)
+        _ = try await history.undo(engine, doc)
+
+        _ = try await history.redo(engine, doc)
+        var marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [drawn])
+        _ = try await history.redo(engine, doc)
+        marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [moved])
+        _ = try await history.redo(engine, doc)
+        let count = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(count, 0)
+        XCTAssertFalse(history.canRedo)
+    }
+
+    /// A clear's undo re-marks everything it swept up, exactly as a removal's does, so a move
+    /// recorded before "clear all marks" carried the same bug for the same reason.
+    @MainActor
+    func testUndoAfterClearingEveryMarkTakesBackTheMoveBeforeIt() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("demo"))
+        defer { Task { await engine.close(doc) } }
+        let history = EditHistory()
+
+        let drawn = PdfRect(left: 60, bottom: 80, right: 240, top: 130)
+        let placed = try await engine.markForRedaction(doc, pageIndex: 0, rect: drawn)
+        history.record(RedactMarkOperation(pageIndex: 0, rects: [drawn], ids: [placed], adding: true))
+
+        let moved = PdfRect(left: drawn.left + 30, bottom: drawn.bottom, right: drawn.right + 30, top: drawn.top)
+        try await history.perform(
+            MoveRedactionMarkOperation(pageIndex: 0, markId: placed, from: drawn, to: moved),
+            engine, doc)
+
+        let marksByPage: [Int: [PdfRedactionMark]] = [0: try await engine.redactionMarks(doc, pageIndex: 0)]
+        try await history.perform(
+            ClearRedactionMarksOperation(pageIndex: 0, marksByPage: marksByPage),
+            engine, doc)
+        let count = await engine.redactionMarkCount(doc)
+        XCTAssertEqual(count, 0)
+
+        _ = try await history.undo(engine, doc)
+        var marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [moved])
+        _ = try await history.undo(engine, doc)
+        marks = try await engine.redactionMarks(doc, pageIndex: 0)
+        XCTAssertEqual(marks.map(\.rect), [drawn], "the move's undo must find the mark the clear re-marked")
+    }
+
+    /// The loud failure that replaces the silent no-op: a move whose mark the core no longer
+    /// has must throw, not quietly do nothing, and the step must stay on the stack.
+    @MainActor
+    func testMoveWhoseMarkTheCoreNoLongerHasFailsInsteadOfDoingNothing() async throws {
+        let engine = PdfEngine.shared
+        let doc = try await engine.open(try fixture("demo"))
+        defer { Task { await engine.close(doc) } }
+        let history = EditHistory()
+
+        // An id the core never handed out — the state #429/#441 left every move in once a
+        // removal had been undone under it.
+        let elsewhere = PdfRect(left: 60, bottom: 200, right: 240, top: 250)
+        history.record(MoveRedactionMarkOperation(
+            pageIndex: 0, markId: 4040,
+            from: PdfRect(left: 60, bottom: 80, right: 240, top: 130), to: elsewhere))
+
+        do {
+            _ = try await history.undo(engine, doc)
+            XCTFail("undoing a move whose mark is gone must throw, not silently do nothing")
+        } catch {
+            // Expected: PdfError.editFailed, the same failure the UI already turns into
+            // "Couldn't undo that."
+        }
+        // And the step is still on the stack, because it did not happen.
+        XCTAssertTrue(history.canUndo)
     }
 }

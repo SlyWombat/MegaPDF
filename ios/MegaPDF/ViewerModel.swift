@@ -238,12 +238,12 @@ final class ViewerModel: ObservableObject {
             guard !made.isEmpty else { return }
             // The rectangles to remember are the ones the core ended up with, not the ones
             // the drag asked for: the glyph snapping moved them, and redo has to put back
-            // what the person saw.
-            let rects = (redactionMarks[pageIndex] ?? [])
-                .filter { made.contains($0.markId) }
-                .map(\.rect)
-            history.record(RedactMarkOperation(pageIndex: pageIndex, rects: rects,
-                                               ids: made, adding: true))
+            // what the person saw. Pairing rect and id from the same filtered list — rather
+            // than building the rectangles and the ids from two lists that might not agree
+            // on order — is what keeps a rename from moving the wrong mark (#441).
+            let placedMarks = (redactionMarks[pageIndex] ?? []).filter { made.contains($0.markId) }
+            history.record(RedactMarkOperation(pageIndex: pageIndex, rects: placedMarks.map(\.rect),
+                                               ids: placedMarks.map(\.markId), adding: true))
             canUndo = history.canUndo
             canRedo = history.canRedo
         }
@@ -292,7 +292,9 @@ final class ViewerModel: ObservableObject {
     /// Removes every mark on the document, as one undo step (#329).
     func clearRedactionMarks() {
         guard let doc = document, canRedact, redactionMarkCount > 0 else { return }
-        let marksByPage = redactionMarks.mapValues { $0.map(\.rect) }
+        // Ids as well as rectangles: the undo re-marks the rectangles, and the ids are what
+        // its fresh marks replace in the rest of the history (#441).
+        let marksByPage = redactionMarks
         selectedRedactionMark = nil
         Task { @MainActor in
             try? await perform(
