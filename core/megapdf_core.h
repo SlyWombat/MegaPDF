@@ -464,6 +464,8 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* page, const megapdf_r
  */
 MEGAPDF_API int megapdf_add_image_stamp(const megapdf_page* page, const unsigned char* bgra, int width, int height,
                                         const megapdf_rect* bounds, const unsigned short* id_utf16);
+/* On a rotated page the image is turned with the page and fills `bounds` as given, not a box
+ * whose aspect the turn has swapped (#446, contract 10's Coordinates). */
 
 typedef struct megapdf_stamp {
     int annot_index;         /* the annotation's index on the page, valid until the page's annotations change */
@@ -535,6 +537,8 @@ MEGAPDF_API size_t megapdf_whiteouts(const megapdf_page* page, megapdf_object_re
 MEGAPDF_API int megapdf_add_text_box(const megapdf_page* page, int object_index, const unsigned short* text,
                                      const char* font_name, double font_size, double baseline_x, double baseline_y,
                                      const unsigned short* id, int* out_object_index);
+/* The baseline is a line in crop space, so on a rotated page the text reads along what the
+ * reader sees as the horizontal, not along user-space x (#446, contract 10's Coordinates). */
 
 /**
  * The id-preserving restyle (#45): inserts a box at `object_index` and then moves
@@ -1427,12 +1431,31 @@ MEGAPDF_API int megapdf_write_text(megapdf_document* document, int first_page, i
  * Before #439 these rects were unrotated user space while the render was rotated, so a tap
  * landed in the wrong place on exactly those pages.
  *
- * What rotation does *not* do is turn content the core writes: a stamp, a check mark or a
- * text box placed on a rotated page lands in the rectangle the caller asked for, in the
- * space above, but its own artwork is drawn in the page's unrotated orientation, so it
- * appears turned against the page it sits on (an image stamp) or reads sideways (a text
- * box). Filed separately as #446; it is a question about what belongs in the file, not
- * about which space a rectangle is in.
+ * Content the core *writes* onto a rotated page is turned with it (#446): the page's /Rotate
+ * is composed into the object's own matrix, so an image stamp, a check mark, a text box and a
+ * journalled text run are all drawn the way up they are seen by whoever is looking at the page
+ * as its /Rotate says to show it. A stamp fills the rectangle it was given rather than a
+ * turned one, and a text box reads along the line it was typed on.
+ *
+ * That is the choice, and the reason is what happens *later*. A page's /Rotate is set because
+ * the page is meant to be seen that way — a landscape scan in a portrait MediaBox has its own
+ * text drawn sideways in user space, and only reads upright because /Rotate turns it. Writing
+ * new content turned puts it in the same frame as that content: a signature that sat upright
+ * beside a paragraph still sits upright beside that paragraph at any later /Rotate, and
+ * un-rotating the page lays both on their side together, which is what the un-rotated page
+ * always looked like. Leaving the content axis-aligned in user space would instead put it in a
+ * frame of its own, agreeing with the page at one rotation and disagreeing at the other three —
+ * and the one where it agreed would be the rotation the document says *not* to show. Rewriting
+ * /Rotate to 0 and turning the page's whole content was the third option, and is refused: it
+ * rewrites content nobody edited.
+ *
+ * The one assumption this makes is the one /Rotate itself makes: that the page reads upright as
+ * shown. A page whose content is drawn upright in user space *and* carries a non-zero /Rotate —
+ * a document asking to be read sideways — gets new content upright-on-screen and therefore
+ * turned against its own text. megapdf_insert_text_run inherits the same assumption when it
+ * replays a journalled restore, because a journal entry carries a point and a font size, never
+ * the run's original matrix; what it owes is the line as it was on screen, and that is what it
+ * draws.
  *
  * megapdf_page_crop_origin() and megapdf_page_user_unit() report the two *unrotated* terms
  * of the transform, in user space, for a caller that needs the page's own geometry (a
