@@ -480,27 +480,109 @@ int AdvanceQuarter(const Char& c, int page_turns) {
 // more than leaving a uniformly turned page in crop space would.
 constexpr double kFrameDominantShare = 0.9;
 
+// #482: VERTICAL WRITING (tb-rl) IS A FRAME, TOO.
+//
+// AdvanceQuarter above reads a character's own GLYPH matrix, which is the right signal for
+// #472's case (content drawn upright and turned by /Rotate: every glyph's matrix says so). It
+// is the wrong signal for Japanese/Chinese vertical writing, where the glyphs stay upright —
+// their matrix is the identity — and it is the ORIGIN that steps down the page, one em at a
+// time, column by column from the right edge to the left. #451 already taught BuildWords to
+// recognise that shape one character pair at a time, so the words come out whole; but BuildLines
+// clusters words on a vertical centre and sorts them on a left edge, and the XY-cut cuts
+// horizontal bands before vertical gutters, so the page above that is still read as if it were
+// horizontal: every column lands in one enormous "line" sorted LEFT TO RIGHT — the exact reverse
+// of the order a tb-rl page is read in.
+//
+// Measured on 18 generated vertical-Japanese documents (39 pages, the #471-part-2 sample this
+// issue was filed from), scored against the source text the generator laid out, so the true
+// reading order is known exactly rather than inferred from another extractor: the heuristic path
+// returned every character but only 24.4% of them in source order. Nothing is lost, everything
+// is in the wrong place.
+//
+// So: derive the frame from the ORIGIN STEP between consecutive characters as well as from the
+// glyph matrix. A page whose text advances down is laid out with one quarter turn undone, which
+// maps "down the column" onto layout +x and "the next column to the left" onto layout -y — after
+// which every rule below is measuring the axis it was written for, unchanged.
+//
+// Columns march RIGHT to left, and that is taken as given rather than measured. Vertical writing
+// in PDF is CJK vertical writing: PDF 32000-1 §9.7.4.3's vertical writing mode (WMode 1) exists
+// for the CJK vertical CMaps, and those lay columns out right-to-left without exception. The one
+// vertical script that runs the other way, Mongolian, would in any case need a REFLECTION rather
+// than a quarter turn -- no frame in PageFrame's vocabulary can express it -- so nothing is given
+// up by not trying to tell the two apart.
+//
+// Measuring it was tried first and rejected on the evidence: on the 39-page sample the sign of
+// the origin step at a column break voted tb-rl on 27 pages, tb-lr on 8 and tied on 4, and the
+// correlation between a character's x and its position in PDFium's stream ran -0.97 to -0.99 on
+// most pages but +0.13 to +0.94 on four. Both signals read PDFium's CHARACTER ORDER, and that is
+// exactly what is not to be trusted here: PDFium re-sorts the text objects of one "line" group by
+// x before emitting them (CPDF_TextPage::ProcessTextObject), which on a page whose every glyph is
+// its own text object shuffles the stream in the one dimension the vote depends on. The frame
+// below does not need the stream to be in order -- it puts the GEOMETRY the right way round, and
+// BuildLines then derives the order from that -- so a wrong vote could only ever undo a page the
+// unmeasured constant gets right.
+constexpr double kVerticalAdvanceShare = 0.8;   // share of stepped pairs that must run down the page
+constexpr int kVerticalAdvanceMinPairs = 24;    // ...over at least this many, so a stray short run cannot decide
+constexpr double kVerticalAdvanceColumnEm = 0.35;   // |dx| within this of zero is "same column" (kBaselineEm)
+constexpr double kVerticalAdvanceStepEm = 0.5;      // |dy| beyond this is a real step, not glyph jitter
+
+// True when `chars` (crop space, PDFium's own order) advance down the page rather than across it.
+//
+// Counts only consecutive pairs PDFium did NOT break, which is both the population BuildWords'
+// own continuation test looks at and what keeps this off ordinary horizontal text: there, the
+// step from the end of one line to the start of the next is exactly where PDFium puts a generated
+// line break, so an ordinary page contributes essentially nothing to `down` however many lines it
+// has. What is counted is a character following its predecessor one em FURTHER DOWN THE SAME
+// COLUMN with no break between them, which horizontal text does not do.
+bool ReadsVertically(const std::vector<Char>& chars) {
+    long long down = 0, across = 0;
+    for (size_t i = 1; i < chars.size(); i++) {
+        const Char& c = chars[i];
+        const Char& p = chars[i - 1];
+        if (c.preceded_by_break) continue;
+        const double size = c.font_size > 0 ? c.font_size : p.font_size;
+        const double em = size > 0 ? size : 1.0;   // Em(), declared below with PageWork
+        const double dx = c.origin_x - p.origin_x;
+        const double dy = c.origin_y - p.origin_y;
+        if (dy < -kVerticalAdvanceStepEm * em && std::fabs(dx) <= kVerticalAdvanceColumnEm * em) {
+            down++;                                   // the next character, one em further down
+        } else if (std::fabs(dx) > kVerticalAdvanceColumnEm * em && std::fabs(dx) >= std::fabs(dy)) {
+            across++;                                 // ordinary horizontal advance
+        }
+    }
+    if (down < kVerticalAdvanceMinPairs) return false;
+    return static_cast<double>(down) >= kVerticalAdvanceShare * static_cast<double>(down + across);
+}
+
 PageFrame ChooseFrame(const megapdf_page* page, const std::vector<Char>& chars) {
     PageFrame f;
     const double cw = megapdf_page_width(page);
     const double ch = megapdf_page_height(page);
     f.w = cw;
     f.h = ch;
+    if (chars.empty()) return f;
     const int page_turns = PageTurns(page);
-    if (page_turns == 0 || chars.empty()) return f;   // nothing to undo
-    int counts[4] = {0, 0, 0, 0};
-    int classified = 0;
-    for (const Char& c : chars) {
-        const int q = AdvanceQuarter(c, page_turns);
-        if (q < 0) continue;
-        counts[q]++;
-        classified++;
-    }
-    if (classified == 0) return f;
     int best = 0;
-    for (int q = 1; q < 4; q++) if (counts[q] > counts[best]) best = q;
+    if (page_turns != 0) {
+        int counts[4] = {0, 0, 0, 0};
+        int classified = 0;
+        for (const Char& c : chars) {
+            const int q = AdvanceQuarter(c, page_turns);
+            if (q < 0) continue;
+            counts[q]++;
+            classified++;
+        }
+        if (classified > 0) {
+            for (int q = 1; q < 4; q++) if (counts[q] > counts[best]) best = q;
+            // mixed: leave it in crop space, the least wrong frame for a page with no one answer
+            if (counts[best] < kFrameDominantShare * static_cast<double>(chars.size())) best = 0;
+        }
+    }
+    // #482: no glyph-matrix frame applies, so ask whether the ORIGINS read down the page instead.
+    // Crop space is what `chars` is already in, so a tb-rl page wants exactly one quarter turn
+    // undone whatever its /Rotate was.
+    if (best == 0 && ReadsVertically(chars)) best = 3;
     if (best == 0) return f;                                                   // already reads along crop +x
-    if (counts[best] < kFrameDominantShare * static_cast<double>(chars.size())) return f;   // mixed: leave it
     // `best` is the direction the text advances in; the frame is the turn that UNDOES it, so
     // that in the layout frame the advance points along +x again. The two coincide at 180 and
     // are each other's opposite at 90 and 270.
