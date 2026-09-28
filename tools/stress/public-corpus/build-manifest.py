@@ -324,9 +324,305 @@ UK_ATTRIBUTION_DWP = ("Contains public sector information licensed under the Ope
 # (never guessed), the same discipline IRS_FORMS/USCIS_FORMS document for their own filenames.
 UkForm = collections.namedtuple("UkForm", "url relpath group")
 
-HMRC_FORMS = []
-HOME_OFFICE_FORMS = []
-DWP_FORMS = []
+# Selection (100-200 asked for; 108 chosen -- 62 HMRC + 22 Home Office + 24 DWP -- resolved
+# one publication page at a time, never scraped, verified 2026-09-28):
+#
+#   self-assessment-core/supplementary/entity-returns/specialist/short-return (21)
+#                       SA100 and the schedule family that attaches to it. The highest-value
+#                       hierarchy cases: SA106 repeats per country, SA108 per disposal,
+#                       SA800/SA900's partnership and trust statements repeat per partner/
+#                       beneficiary -- the two most deeply nested HMRC documents here.
+#   agent-repayment-admin (5)   64-8, R43, P87, P53, P55 -- short, mostly flat claim/
+#                       authorisation forms; P87 is a confirmed 8pp AcroForm.
+#   paye-p11d-worksheets (7)    P11D WS1-WS6 benefit-calculation worksheets; WS4 (loans)
+#                       and WS6 (mileage) are line-item/tabular, the rest single-item.
+#   paye-employer-admin (3)     BC539 App.1 + two Starter Checklist variants -- flat, short.
+#   paye-nic-settlement (2)     NSR Appendix 7A/7B -- each covers multiple employees, the
+#                       strongest explicit repeating-record evidence in the PAYE set.
+#   vat-registration/group/refunds-certificates/schemes-payments/option-to-tax/
+#   reliefs-vehicles (16)       the VAT forms that still exist as static PDFs (several core
+#                       VAT forms -- VAT1, VAT7, VAT50/51, VAT600 series -- have moved to
+#                       XFA .xdp interactive forms on a separate HMRC service and are out
+#                       of scope for this manifest, which is PDF-only; worth its own future
+#                       source if MegaPDF wants .xdp coverage). VAT2 and VAT1617A repeat rows.
+#   corporation-tax-registration/return-family (9)   CT41G plus CT600 and seven of its
+#                       supplementary pages (A/B/C/E/F/J/L) -- CT600A/B/C/J each repeat a
+#                       per-participator/CFC/group-member/scheme-reference row: the deepest
+#                       `/Parent` hierarchies in the HMRC set after SA800/SA900.
+#
+#   asylum-support (5)  ASF1 (36pp, whole-household/dependants -- the flagship Home Office
+#                       repeating form) plus its Section 4 and integration-loan siblings.
+#   visa-extension-humanitarian (3)   FLR(P) (27pp) and its 48pp fee-waiver form (an
+#                       itemised income/expenditure/household breakdown -- the single
+#                       longest, most repeating Home Office PDF found) plus a 1pp payment
+#                       slip: a useful complexity spread from one publication page.
+#   visa-settlement-other/forces-family/domestic-violence/detention-bail (4)
+#                       the visa-route PDFs that survived the 2018 move to online-only
+#                       applications (FLR(AF)/SET(AF)/SET(DV)/FLR(M)/SET(M)/SET(O) and most
+#                       of the rest of that family are paper-withdrawn and no longer exist
+#                       as PDFs -- confirmed on their own gov.uk pages, not guessed).
+#   nationality-naturalisation/registration/admin (10)   Form AN (29pp, repeating
+#                       employment/travel/address history) plus the postal registration
+#                       routes (MN1/T/B(OTA)/UKF/MN3, 17-30pp each) and short admin forms.
+#
+#   Home Office also publishes a `passport-admin` group (a guidance booklet, PD1/PD2, LS01,
+#   the overseas application form and its payment slip) that this manifest DELIBERATELY
+#   EXCLUDES: OGL v3.0's own exemptions list "identity documents such as the British
+#   Passport", and whether that carve-out reaches a blank application form or only the
+#   issued document itself could not be confirmed from HMPO's own Crown-copyright policy
+#   document (it would not render as extractable text during verification). "Do not assume"
+#   is the standing rule for this whole extension (Canada's forms are excluded from the
+#   public manifest for exactly the inverse reason -- Crown copyright with no clear
+#   permission, #456) so the group stays out rather than being included on a guess. It costs
+#   nothing structurally: every one of those forms is short and flat, the least valuable
+#   property here, and 108 forms clear the 100-200 target without it.
+#
+#   disability-benefits-long (6)   PIP1/PIP1(AI)/PIP2/WCA50/AA1/DLA1-Child. PIP2 (~50pp)
+#                       and WCA50 (24pp, replacing the former separate ESA50/UC50 as of
+#                       2026-05-05) are the DWP reference cases for repeating structure:
+#                       both iterate a fixed activity schema with per-activity sub-questions.
+#   industrial-injuries (4)   BI100A/PD/OAE/OD -- four near-sibling interactive claim forms
+#                       whose employment/exposure history repeats per employer or incident.
+#   carers-allowance (2), state-pension (4), pension-credit (2)   DS700 pair; BR1 plus the
+#                       living-abroad IPC BR1 / IPC BR1 NSP variants (repeating country-by-
+#                       country residence/work history) and flat BR19; PC1 plus PC1H's
+#                       explicit repeating table of accounts/investments over GBP 10,000.
+#   bereavement-maternity (5), winter-fuel-payment (1)   event-driven claims, mostly flat,
+#                       plus one short one-pager as the simple-bucket anchor.
+#
+# Every URL below was read off a fetched gov.uk publication page, the same discipline
+# IRS_FORMS/USCIS_FORMS document for their own filenames -- none guessed. A number of forms
+# named in earlier drafts of this list turned out to have no PDF at all any more (HMRC's
+# SA1/CWF1/SA303/SA370/SA371/R40/P85/P50 and the VAT forms above are online-only or XFA
+# .xdp now; several Home Office visa routes are paper-withdrawn; DWP's ESA50/UC50/AtW1/New
+# Style JSA/Cold Weather Payment have no separate paper form) and are left out rather than
+# guessed at, the same as IRS's f1099b.pdf in FEDERAL_SOURCES above.
+HMRC_FORMS = [
+    UkForm("https://assets.publishing.service.gov.uk/media/69c14d07cfa346b9d4704a8d/SA100-2026.pdf",
+           "SA100-2026.pdf", "self-assessment-core"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c25b9ab920af63be1c770c/SA101_2026.pdf",
+           "SA101_2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69bd6a7a7e02b81c0d1c75ae/SA102-2026.pdf",
+           "SA102-2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c12ae013101e9908704a53/SA103S-2026.pdf",
+           "SA103S-2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c2635b13101e9908704b36/SA103F_2026.pdf",
+           "SA103F_2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c4e2c4471d520038d0f651/SA104S_2026.pdf",
+           "SA104S_2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c1434ecfa346b9d4704a7f/SA104F_2026.pdf",
+           "SA104F_2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69cd19d6eafd66b876458ba9/SA105_2026_v0.1.pdf",
+           "SA105_2026_v0.1.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69bbd5d34b1db2e4ba9b645f/SA106_2026.pdf",
+           "SA106_2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69bd902913101e99087049e0/SA107-2026.pdf",
+           "SA107-2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69bd8990cfa346b9d47049e4/SA108-2026.pdf",
+           "SA108-2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c2ab5fbd142c66ffe4437a/SA109-2026.pdf",
+           "SA109-2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c4fc1123fcbcd838a6f6e8/SA110-2026.pdf",
+           "SA110-2026.pdf", "self-assessment-supplementary"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c16433bb0dfe55b83e4bc8/sa700-2026.pdf",
+           "sa700-2026.pdf", "self-assessment-entity-returns"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c525cacdfd19de13d0f6d0/SA800man-2026.pdf",
+           "SA800man-2026.pdf", "self-assessment-entity-returns"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69ba5b0626909a14239612e2/SA900man-2026.pdf",
+           "SA900man-2026.pdf", "self-assessment-entity-returns"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69bbe2a38006048065f73cd3/SA970-2026.pdf",
+           "SA970-2026.pdf", "self-assessment-entity-returns"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69bbd298f7b1c24d8e23ce0b/SA103L-2026.pdf",
+           "SA103L-2026.pdf", "self-assessment-specialist"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c14e217e02b81c0d1c7673/SA803-2026.pdf",
+           "SA803-2026.pdf", "self-assessment-specialist"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69baa6162f28cf1b45bbe536/SA901-2026.pdf",
+           "SA901-2026.pdf", "self-assessment-specialist"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c3cddeb66ff902f454414b/SA211-Notes-2026.pdf",
+           "SA211-Notes-2026.pdf", "self-assessment-short-return"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6852e9f02b367fdd44c15e8a/64-8.pdf",
+           "64-8.pdf", "agent-repayment-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6ab24f8cfceb6fb3a6500f75/R43_Manual.pdf",
+           "R43_Manual.pdf", "agent-repayment-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6a3a649433bc5beefd3c4772/P87.pdf",
+           "P87.pdf", "agent-repayment-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/64ba514aef537100147af055/P53_0622.pdf",
+           "P53_0622.pdf", "agent-repayment-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/67cab89cade26736dbf9ffe3/P55_2025.pdf",
+           "P55_2025.pdf", "agent-repayment-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69a991d02fd1694513b9b1d3/P11D-WS1-25-26.pdf",
+           "P11D-WS1-25-26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69afd36fd620c14fa183ef25/P11D_WS2_25_26.pdf",
+           "P11D_WS2_25_26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69afd395c78869bf8eb8a5a5/P11D_WS2b_25-26.pdf",
+           "P11D_WS2b_25-26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69b019d3187a6dea78233103/P11D-WS3-25-26.pdf",
+           "P11D-WS3-25-26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69aefb2c671a8a924c83eef1/P11D-WS4-25-26.pdf",
+           "P11D-WS4-25-26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69afe920d620c14fa183ef31/P11D-WS5-25-26.pdf",
+           "P11D-WS5-25-26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69aa876bac93547152b9b24e/P11D_WS6_25-26.pdf",
+           "P11D_WS6_25-26.pdf", "paye-p11d-worksheets"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69428b6b8f4636fa2c547d64/emp-history-consent-app1.pdf",
+           "emp-history-consent-app1.pdf", "paye-employer-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69959214bfdab2546272bf04/Starter_checklist.pdf",
+           "Starter_checklist.pdf", "paye-employer-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6995922cb33a4db7ff889d4a/Expat-starter-checklist.pdf",
+           "Expat-starter-checklist.pdf", "paye-employer-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5b752c4be5274a0bb1f7d5c5/NSR_EP_Appendix_7A_.pdf",
+           "NSR_EP_Appendix_7A_.pdf", "paye-nic-settlement"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5c389e8ded915d50bd133ac9/NSR_Appendix_7B_NICs_Settlement_Return.pdf",
+           "NSR_Appendix_7B_NICs_Settlement_Return.pdf", "paye-nic-settlement"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5fe31eaed3bf7f089a7919c9/VAT1A-12-20.pdf",
+           "VAT1A-12-20.pdf", "vat-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5fe1bee18fa8f56af97b1e1a/VAT1B-12-20.pdf",
+           "VAT1B-12-20.pdf", "vat-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/68dfb1bd750fcf90fa6ffd9f/VAT2.pdf",
+           "VAT2.pdf", "vat-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6a55f456c3d64d94cacab91b/VAT68.pdf",
+           "VAT68.pdf", "vat-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/664c7386bd01f5ed32793f34/VAT1TR-05-24-English.pdf",
+           "VAT1TR-05-24-English.pdf", "vat-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/681dbb72275cb67b18d87115/VAT56-11-22.pdf",
+           "VAT56-11-22.pdf", "vat-group"),
+    UkForm("https://assets.publishing.service.gov.uk/media/665ee6bf7b792ffff71a86a6/VAT65A.pdf",
+           "VAT65A.pdf", "vat-refunds-certificates"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5a7dfba0e5274a2e8ab45142/vat66a.pdf",
+           "vat66a.pdf", "vat-refunds-certificates"),
+    UkForm("https://assets.publishing.service.gov.uk/media/610a7a30e90e0706c8fede44/VAT623.pdf",
+           "VAT623.pdf", "vat-schemes-payments"),
+    UkForm("https://assets.publishing.service.gov.uk/media/62fa5938e90e0779df0337cf/VAT1614C.pdf",
+           "VAT1614C.pdf", "vat-option-to-tax"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5a7f1cdee5274a2e8ab4a310/vat1614d.pdf",
+           "vat1614d.pdf", "vat-option-to-tax"),
+    UkForm("https://assets.publishing.service.gov.uk/media/654102306de3b90012a7a6f2/VAT1614J.pdf",
+           "VAT1614J.pdf", "vat-option-to-tax"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5a74dba9ed915d502d6cb8e3/VAT1617A.pdf",
+           "VAT1617A.pdf", "vat-reliefs-vehicles"),
+    UkForm("https://assets.publishing.service.gov.uk/media/600169fd8fa8f55f6a3414a0/VAT411.pdf",
+           "VAT411.pdf", "vat-reliefs-vehicles"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5ff70524d3bf7f65cf03a513/VAT411A.pdf",
+           "VAT411A.pdf", "vat-reliefs-vehicles"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5a7e320040f0b62305b81691/ct41g.pdf",
+           "ct41g.pdf", "corporation-tax-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c543424a06660f085442bd/ct600.pdf",
+           "ct600.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69cbe2a9a60a12ca3913c668/CT600A.pdf",
+           "CT600A.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/623de3b6e90e075f0e144710/CT600B_2022.pdf",
+           "CT600B_2022.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5ad5dce3e5274a76be66c437/CT600C_2018.pdf",
+           "CT600C_2018.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69ccf8bd5cf899414a0bc5dc/CT600E.pdf",
+           "CT600E.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/67c0159c72e83aab48866b5c/CT600F.pdf",
+           "CT600F.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5a80293de5274a2e87db8360/CT600J_2015.pdf",
+           "CT600J_2015.pdf", "corporation-tax-return-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69ce28cab5210036050bc6ce/CT600L.pdf",
+           "CT600L.pdf", "corporation-tax-return-family"),
+]
+
+HOME_OFFICE_FORMS = [
+    UkForm("https://assets.publishing.service.gov.uk/media/660bbb71f9ab419db2eea36d/appendix2-af-04-24.pdf",
+           "appendix2-af-04-24.pdf", "visa-forces-family"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6997344c047739fe61889e67/MVDAC_02-26_-_reader_extended.pdf",
+           "MVDAC_02-26_-_reader_extended.pdf", "visa-domestic-violence"),
+    UkForm("https://assets.publishing.service.gov.uk/media/652e5016d86b1b00143a50c2/Asylum_Support_Application_Form_ASF1.pdf",
+           "Asylum_Support_Application_Form_ASF1.pdf", "asylum-support"),
+    UkForm("https://assets.publishing.service.gov.uk/media/68cc17e3a1e4472207995d68/Section+4_2_+Medical+Declaration.pdf",
+           "Section+4_2_+Medical+Declaration.pdf", "asylum-support"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5a7d7069ed915d2d2ac08f85/section_4_service_users_2014.pdf",
+           "section_4_service_users_2014.pdf", "asylum-support"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5e860120e90e0706ecc6942d/integration-loan-04-20-gov.uk.pdf",
+           "integration-loan-04-20-gov.uk.pdf", "asylum-support"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5e86015286650c7439bb0625/loan-information-sheet-amended-02.04.2020a.pdf",
+           "loan-information-sheet-amended-02.04.2020a.pdf", "asylum-support"),
+    UkForm("https://assets.publishing.service.gov.uk/media/699831f9b33a4db7ff889ea3/FLR_P__02-26.pdf",
+           "FLR_P__02-26.pdf", "visa-extension-humanitarian"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69972d8a9f2f510ba1d0b97e/FLR__P__Fee_Waiver_form_02-26_-_reader_extended.pdf",
+           "FLR__P__Fee_Waiver_form_02-26_-_reader_extended.pdf", "visa-extension-humanitarian"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6895dda5a6eb81a3f9b2e2aa/Payment+slip+for+FLR_P_+form.pdf",
+           "Payment+slip+for+FLR_P_+form.pdf", "visa-extension-humanitarian"),
+    UkForm("https://assets.publishing.service.gov.uk/media/699ed6ce532c9ad91ebbcc7d/set_gt_-form-03-26.pdf",
+           "set_gt_-form-03-26.pdf", "visa-settlement-other"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5fa26d298fa8f57899630c4f/application-for-sos-immigration-bail-_03-11-20___002_.pdf",
+           "application-for-sos-immigration-bail-_03-11-20___002_.pdf", "visa-detention-bail"),
+    UkForm("https://assets.publishing.service.gov.uk/media/699848a4339ee33f3ad0b9d1/form-an-03-26.pdf",
+           "form-an-03-26.pdf", "nationality-naturalisation"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69982ebd9f2f510ba1d0b9ab/form-mn1-03-26.pdf",
+           "form-mn1-03-26.pdf", "nationality-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69972c35a58a315dbe72c040/form-t-02-26.pdf",
+           "form-t-02-26.pdf", "nationality-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6995a3c5b33a4db7ff889d65/Form_B_OTA__02-26.pdf",
+           "Form_B_OTA__02-26.pdf", "nationality-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6996ed7c339ee33f3ad0b919/form-ukf-02-26.pdf",
+           "form-ukf-02-26.pdf", "nationality-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/699dd92c6457311dafbbcc29/Form_MN3_02-2026.pdf",
+           "Form_MN3_02-2026.pdf", "nationality-registration"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5caf5da3ed915d6f205c3982/form-rn-04-2019.pdf",
+           "form-rn-04-2019.pdf", "nationality-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/5caf607640f0b615d2a041ec/form-nc-04-19.pdf",
+           "form-nc-04-19.pdf", "nationality-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6995e632047739fe61889dba/form-roa-02-26.pdf",
+           "form-roa-02-26.pdf", "nationality-admin"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69ea1a88ed93f72cf81632ed/Nationality_Forms_Guide_-_April_2026.pdf",
+           "Nationality_Forms_Guide_-_April_2026.pdf", "nationality-admin"),
+    # passport-admin group DELIBERATELY EXCLUDED -- see the module comment above this list.
+]
+
+DWP_FORMS = [
+    UkForm("https://assets.publishing.service.gov.uk/media/6602ac7ca6c0f7699def9102/pip1-claim-form.pdf",
+           "pip1-claim-form.pdf", "disability-benefits-long"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6602ace9f1d3a0666832ad65/pip1-additional-information.pdf",
+           "pip1-additional-information.pdf", "disability-benefits-long"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6602af72f1d3a09b1f32ac81/pip2-form-and-information-booklet__1_.pdf",
+           "pip2-form-and-information-booklet__1_.pdf", "disability-benefits-long"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69e8e6ee20a498c16734ae44/wca-50.pdf",
+           "wca-50.pdf", "disability-benefits-long"),
+    UkForm("https://assets.publishing.service.gov.uk/media/695e704d2a4a53b73d513838/aa1.pdf",
+           "aa1.pdf", "disability-benefits-long"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69271ecfb3b9afff34e96074/dla-for-children-claim-form.pdf",
+           "dla-for-children-claim-form.pdf", "disability-benefits-long"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6984b30d2df808759a7bd746/bi100a-interactive-claim-form.pdf",
+           "bi100a-interactive-claim-form.pdf", "industrial-injuries"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69b18f1ccdd628b29e3496b8/Diseases-Industrial-Injuries-Disablement-Benefit-interactive-claim-form-BI100PD.pdf",
+           "Diseases-Industrial-Injuries-Disablement-Benefit-interactive-claim-form-BI100PD.pdf",
+           "industrial-injuries"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6942c1688f4636fa2c547dda/bi100oae-interactive-claim-form.pdf",
+           "bi100oae-interactive-claim-form.pdf", "industrial-injuries"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6942c1858f4636fa2c547ddb/bi100od-interactive-claim-form.pdf",
+           "bi100od-interactive-claim-form.pdf", "industrial-injuries"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69ca56b595a323ea3496ec93/ds700carers-allowance-claim-for-english.pdf",
+           "ds700carers-allowance-claim-for-english.pdf", "carers-allowance"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69ca56dd76f83be521bb3ced/ds700-state-pension-claim-form.pdf",
+           "ds700-state-pension-claim-form.pdf", "carers-allowance"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69835177afabc06c35d343e8/br1.pdf",
+           "br1.pdf", "state-pension"),
+    UkForm("https://assets.publishing.service.gov.uk/media/694953b872075a1d4a5089f0/ipc-br1.pdf",
+           "ipc-br1.pdf", "state-pension"),
+    UkForm("https://assets.publishing.service.gov.uk/media/696a24dc1c8a70fc0a3b0468/IPCBR1NSP_12_25_SECURE.pdf",
+           "IPCBR1NSP_12_25_SECURE.pdf", "state-pension"),
+    UkForm("https://assets.publishing.service.gov.uk/media/695f7ba2714f11cb49776587/br19.pdf",
+           "br19.pdf", "state-pension"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69a59bf0a56a5482312c7180/pc1-interactive.pdf",
+           "pc1-interactive.pdf", "pension-credit"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69a59fe3a56a5482312c7185/pc1h-money-savings-investments.pdf",
+           "pc1h-money-savings-investments.pdf", "pension-credit"),
+    UkForm("https://assets.publishing.service.gov.uk/media/698c58b7d7b51513fcd8a3b1/bereavement-support-payment-form.pdf",
+           "bereavement-support-payment-form.pdf", "bereavement-maternity"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6aa2ce629f95f408139c664f/ma1-claim-form.pdf",
+           "ma1-claim-form.pdf", "bereavement-maternity"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c510bdcdfd19de13d0f69e/sure-start-maternity-grant-sf100.pdf",
+           "sure-start-maternity-grant-sf100.pdf", "bereavement-maternity"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69d62bbf5f858b0a771d2a48/Funeral_expenses_payment_interactive_claim_form_adult.pdf",
+           "Funeral_expenses_payment_interactive_claim_form_adult.pdf", "bereavement-maternity"),
+    UkForm("https://assets.publishing.service.gov.uk/media/69c3f033cdfd19de13d0f5d3/SF200-funeral-expenses-payment-claim-form-child.pdf",
+           "SF200-funeral-expenses-payment-claim-form-child.pdf", "bereavement-maternity"),
+    UkForm("https://assets.publishing.service.gov.uk/media/6a998794f5b35599aec191ba/winter-fuel-payment-form-2026-to-2027.pdf",
+           "winter-fuel-payment-form-2026-to-2027.pdf", "winter-fuel-payment"),
+]
 
 # --------------------------------------------------------------------------------------
 # govinfo.gov: very large public-domain documents (#471 part 4). Federal Register and CFR
