@@ -201,4 +201,24 @@ internal object PdfiumNative {
      * fillable forms), whose static content is the real, complete form.
      */
     const val DOC_DYNAMIC_XFA = 1
+
+    /**
+     * MEGAPDF_DOC_SIGNED (megapdf_core.h, #476/#481): the document carries an existing digital
+     * signature (FPDF_GetSignatureCount() > 0) — a fact about the document as opened, not a
+     * verdict on the signature's cryptographic validity. It exists because MegaPDF's save
+     * re-serialises the whole file, which always invalidates a signature's `/ByteRange`
+     * (measured 33/33 on real GPO documents in #476), so the app warns before overwriting the
+     * signed original rather than on open.
+     */
+    const val DOC_SIGNED = 1 shl 1
+
+    /**
+     * MEGAPDF_DOC_SIGNED_CERTIFICATION (megapdf_core.h, #476/#481): at least one of the
+     * document's signatures is a certification (`/DocMDP`) signature, which can forbid
+     * modification outright rather than merely being invalidated by one — always accompanied
+     * by [DOC_SIGNED]. Every one of #476's 33 real corpus documents set this bit (DocMDP
+     * permission 1, "no changes allowed"), so it is the wording the app should expect to show
+     * most often, not the edge case.
+     */
+    const val DOC_SIGNED_CERTIFICATION = 1 shl 2
 }

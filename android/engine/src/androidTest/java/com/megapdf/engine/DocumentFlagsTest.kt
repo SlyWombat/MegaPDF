@@ -59,4 +59,50 @@ class DocumentFlagsTest {
             }
         }
     }
+
+    // --- Digital signature (#476/#481): the core's own detection is covered by
+    // core_tests.cpp's test_signature_detection against the same two fixtures
+    // (tools/gen_signature_fixtures.py); this just proves the bits cross the JNI boundary.
+
+    @Test
+    fun signedApprovalFixtureSetsSignedButNotCertification() {
+        runBlocking {
+            val doc = engine.open(assetBytes("signed-approval.pdf"))
+            try {
+                val flags = doc.documentFlags()
+                assertTrue(flags.isSigned)
+                assertFalse(flags.isCertificationSigned)
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
+    fun signedCertifiedFixtureSetsBothBits() {
+        runBlocking {
+            val doc = engine.open(assetBytes("signed-certified.pdf"))
+            try {
+                val flags = doc.documentFlags()
+                assertTrue(flags.isSigned)
+                assertTrue(flags.isCertificationSigned)
+            } finally {
+                doc.close()
+            }
+        }
+    }
+
+    @Test
+    fun anUnsignedDocumentSetsNeitherSignatureBit() {
+        runBlocking {
+            val doc = engine.open(assetBytes("forms.pdf"))
+            try {
+                val flags = doc.documentFlags()
+                assertFalse(flags.isSigned)
+                assertFalse(flags.isCertificationSigned)
+            } finally {
+                doc.close()
+            }
+        }
+    }
 }
