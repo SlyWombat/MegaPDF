@@ -15,6 +15,7 @@ on:
       - 'tools/gen_test_fixtures.py'
       - 'tools/gen_redaction_fixtures.py'
       - 'tools/gen_xfa_fixtures.py'
+      - 'tools/gen_signature_fixtures.py'
       - 'tools/leakcheck/**'
       - 'tools/structure-check/**'
       - 'tools/compare_cli_pdftotext.py'
@@ -29,6 +30,7 @@ on:
       - 'tools/gen_test_fixtures.py'
       - 'tools/gen_redaction_fixtures.py'
       - 'tools/gen_xfa_fixtures.py'
+      - 'tools/gen_signature_fixtures.py'
       - 'tools/leakcheck/**'
       - 'tools/structure-check/**'
       - 'tools/compare_cli_pdftotext.py'
@@ -80,6 +82,12 @@ jobs:
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
           # #457: MEGAPDF_DOC_DYNAMIC_XFA fixtures (dynamic-xfa.pdf, hybrid-xfa.pdf).
           python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #481: MEGAPDF_DOC_SIGNED / MEGAPDF_DOC_SIGNED_CERTIFICATION fixtures
+          # (signed-approval.pdf, signed-certified.pdf). The real-corpus half of the same
+          # test (test_signature_detection_corpus) stays skipped here: MEGAPDF_SIGNED_CORPUS
+          # is not set, and the corpus itself is not committed (run manually against
+          # ~/pdf-public/govinfo-signed on kdocker3).
+          python3 tools/gen_signature_fixtures.py "$RUNNER_TEMP/fixtures"
 
       - name: Configure
         shell: bash

@@ -195,6 +195,88 @@ what MegaPDF is for and the category #434 calls the private corpus thinnest on. 
 are sampled on an even stride across the sorted tree, which is reproducible and does not
 hand back every test for one specification clause and nothing after it.
 
+## UN parallel-language documents — investigated, not added (#471)
+
+#471's non-Latin-script sample above is 40 *unrelated* Wikipedia articles per script, so a
+fidelity gap between two scripts (#483: Arabic/Han/Thai fail the gate; #484: Arabic/
+Devanagari reading order disagrees with the structure tree) could be the script or could be
+the content. The UN publishes the same document in all six official languages (Arabic,
+Chinese, English, French, Russian, Spanish), which would hold the content fixed and vary
+only the script — exactly the instrument those two findings need. Investigated 2026-09-28;
+**no documents were fetched and no `un-*` rows exist in `manifest.tsv`**, because the
+licence check that #471 asks to run *before anything else* did not clear.
+
+**Two primary sources conflict, and neither wins outright.**
+
+1. `www.un.org/en/about-us/terms-of-use` — the terms that govern using any un.org-family
+   site, including `documents.un.org`, which is what actually serves the PDF bytes:
+
+   > The United Nations grants permission to Users to visit the Site and to download and
+   > copy the information, documents and materials … from the Site for the User's
+   > personal, non-commercial use, without any right to resell or redistribute them or to
+   > compile or create derivative works therefrom
+
+   `www.un.org/en/about-us/copyright` reinforces this ("Copyright © United Nations. All
+   rights reserved."), and points to `shop.un.org/rights-permissions`, which confirms there
+   is no blanket exception for research, testing, or non-resale redistribution — anything
+   beyond narrow excerpt limits requires prior written permission. Read alone, this rules
+   MegaPDF out immediately: MegaPDF is a commercial product, and a public, redistributable
+   manifest is not "personal" use by construction — the same reasoning that kept Canadian
+   Crown-copyright forms local-only (#456, #434's "Do NOT use" list).
+
+2. `ST/AI/189/Add.9/Rev.2` (17 September 1987), the UN Secretariat's own administrative
+   instruction on copyright practice — fetched and read directly (see "How the PDF URLs
+   were found" below). Paragraph 2(b) lists "United Nations documents: written material
+   officially issued under a United Nations document symbol" among the categories the UN
+   "will not seek copyright" for; paragraph 7: "The general rule for Official Records,
+   United Nations documents and public information material is that these publications
+   will be in the public domain." A resolution or Secretary-General report (symbol
+   `A/RES/…`, `A/74/…`, etc.) is exactly this. Read alone, this would clear the
+   commercial-use bar the same way 17 U.S.C. § 105 does for the IRS/USCIS/govinfo-signed
+   rows above, and it is the basis Wikimedia Commons currently cites for its
+   `{{PD-UN-doc}}` licence tag (still in active, non-deprecated use — some evidence it is
+   still treated as operative). But it is a 39-year-old internal staff instruction whose
+   own text frames itself as "experimental … until the end of 1989", and nothing reachable
+   from here confirms how the Organization reconciles it with (1) for material served
+   *today*: `digitallibrary.un.org`'s per-record rights metadata returned only an empty,
+   bot-challenge response (HTTP 202, zero-byte body) to both a plain fetch and to `curl`
+   with a browser user agent.
+
+Per #471: "If the terms are unclear or restrict commercial use, stop and report rather than
+adding the rows; a corpus whose licence column is guesswork is worth less than a smaller
+certain one." A live, specific, currently-displayed restriction against an old,
+unconfirmed-as-still-controlling permission is exactly that kind of unclear — unlike
+IRS/USCIS/govinfo-signed (17 U.S.C. § 105, no conflicting source found) or Wikipedia
+(CC BY-SA 4.0, no conflicting source found), both of which are clean. **Outcome: stop.**
+`build-manifest.py --add-source un-parallel` refuses with this reasoning
+(`SOURCES_BLOCKED_LICENCE`) rather than silently doing nothing — the same shape as
+`SOURCES_BLOCKED` for `govinfo`/`safedocs`, except the refusal is licence, not
+reachability or a missing generator.
+
+**How the PDF URLs were found, recorded for whoever eventually gets a written answer.**
+`docs.un.org` and `undocs.org` serve a JS-*looking* symbol-select landing page, but it is
+plain, un-rendered HTML that 302-redirects per language to a page whose `<iframe src=…>`
+is already the real, static, no-JS-needed URL:
+
+    https://documents.un.org/api/symbol/access?s=<SYMBOL>&l=<ar|zh|en|fr|ru|es>&t=pdf
+
+which itself 302s to a stable-looking direct path (e.g.
+`https://documents.un.org/doc/undoc/gen/ns0/000/81/img/ns000081.pdf` for
+`ST/AI/189/Add.9/Rev.2`'s English copy) — verified 2026-09-28 with plain `curl`, no
+Playwright needed for *this* part of the pipeline after all. Playwright would still be the
+right tool for the part not attempted here: discovering which ~10 document symbols exist
+in all six languages (`docs.un.org`'s own search UI is genuinely JS-driven), and confirming
+each direct URL's stability across repeated fetches the way #455/`fetch.sh` requires before
+anything is pinned by sha256.
+
+**If this is picked up again:** get a written answer from `permissions@un.org`, or from the
+Secretary of the Publications Board per `ST/AI/189/Add.9/Rev.2` paragraph 20, confirming
+that (a) documents bearing a UN document symbol remain in the public domain for material
+served today, and (b) a commercial company redistributing them (even indirectly, via a
+public URL+sha256 manifest rather than rehosting bytes) is within that permission. Only
+then resolve `un-parallel` in `SOURCES_BLOCKED_LICENCE` the way `irs`/`uscis`/
+`govinfo-signed` were resolved out of `SOURCES_BLOCKED`.
+
 ### A classification bug this extension found and fixed
 
 `classify()` used to require **both** `/AcroForm` and `/Widget` to appear literally in a
