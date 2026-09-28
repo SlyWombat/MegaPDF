@@ -151,6 +151,16 @@ final class ViewerModel: ObservableObject {
     /// until a document is open; reset on close.
     @Published private(set) var security: PdfSecurity = .unprotected
     var capabilities: DocumentCapabilities { DocumentCapabilities(security: security) }
+
+    /// Facts about the open document as a whole (#456, #457), read once alongside
+    /// `security` when it is adopted. Empty until a document is open; reset on close.
+    @Published private(set) var documentFlags: PdfDocumentFlags = []
+    /// The document is dynamic XFA (#456, #457): it opens, reports a plausible page count
+    /// and draws a page, but that page is Adobe's own placeholder — the real form is an
+    /// XFA template PDFium never renders. Drives the persistent banner in `ViewerView`;
+    /// arming a filling tool explains rather than acting (`startTextPlacement`,
+    /// `startPlacement(_:)`, and the direct-tap field/mark path in `onPageTapped`).
+    var isDynamicXfa: Bool { documentFlags.contains(.dynamicXFA) }
     /// The Password command's sheet, and what it says when an unlock fails (#131).
     @Published var securitySheet: SecuritySheetMode?
     @Published private(set) var securityError: String?
@@ -810,9 +820,12 @@ final class ViewerModel: ObservableObject {
                 sizes.append(try await PdfEngine.shared.pageSize(doc, index: i))
             }
             let openedSecurity = await PdfEngine.shared.security(doc)
+            // #457: read once, alongside the other document-level facts this open reads.
+            let openedFlags = await PdfEngine.shared.documentFlags(doc)
             closeCurrent()
             document = doc
             security = openedSecurity
+            documentFlags = openedFlags
             self.sourceURL = sourceURL
             // Held for the document's life (#147): it reads its file on demand, and Save writes it.
             if let sourceURL, sourceURL.startAccessingSecurityScopedResource() {
@@ -1068,6 +1081,13 @@ final class ViewerModel: ObservableObject {
                                               id: "mark:\(UUID().uuidString)", adding: true)
                 }
                 if let operation {
+                    // #457: a field toggle or a check mark is armed by the tap itself, with
+                    // no separate "arm" step to intercept earlier -- explain here instead of
+                    // silently ticking nothing on a dynamic-XFA document's placeholder page.
+                    if isDynamicXfa, DocumentCapabilities.isFillingOperation(operation) {
+                        showDynamicXfaNotice()
+                        return
+                    }
                     // Form fields need fill-forms, marks need annotate (#131).
                     guard permits(caps.allows(operation)) else { return }
                     guard document === doc else { return }
@@ -1182,11 +1202,25 @@ final class ViewerModel: ObservableObject {
         return allowed
     }
 
+    // MARK: - dynamic XFA (#456, #457)
+
+    /// Said instead of arming a filling tool on a dynamic-XFA document: signing/stamping,
+    /// added text, or a check mark. The persistent banner (`ViewerView`'s
+    /// `DynamicXfaBanner`) already says the document can't be filled in; this is the
+    /// moment-of-arming echo, so tapping Sign or Add text explains rather than silently
+    /// doing nothing — the whole point of #457 is removing that silence.
+    private func showDynamicXfaNotice() {
+        showNotice(String(localized: "This form needs Adobe Reader to fill in."))
+    }
+
     // MARK: - added text (#34)
 
     /// Arms the next tap to place text. Tapping the page opens the text field.
     func startTextPlacement() {
         guard !busy.isBlocked else { return }
+        // #457: arming Add text on a dynamic-XFA document explains rather than entering
+        // placement mode -- stamping text over Adobe's placeholder would not fill the form.
+        if isDynamicXfa { showDynamicXfaNotice(); return }
         guard permits(capabilities.canAddText) else { return }
         cancelPlacement()
         selectedStamp = nil
@@ -1578,6 +1612,12 @@ final class ViewerModel: ObservableObject {
 
     func startPlacement(_ entry: SignatureEntry) {
         guard !busy.isBlocked else { return }
+        // #457: signing is this app's way of filling in a form with no real AcroForm
+        // fields to click -- exactly this document's situation, except its visible page
+        // is Adobe's placeholder, not the real form, so a mark placed on it would land
+        // nowhere meaningful. Explain rather than arm placement and let it quietly go
+        // nowhere.
+        if isDynamicXfa { showDynamicXfaNotice(); return }
         guard permits(capabilities.canSign) else { return }
         selectedTextBox = nil
         pendingSignature = entry
@@ -2189,6 +2229,8 @@ final class ViewerModel: ObservableObject {
         draftText = ""
         // Security is the open document's; the next one reads its own (#131).
         security = .unprotected
+        // Likewise the document-level facts read at open (#457).
+        documentFlags = []
         securitySheet = nil
         securityError = nil
         // Marks are the open document's too (#329, ADR-005 decision 1): they live in the

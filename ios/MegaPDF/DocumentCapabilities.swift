@@ -62,4 +62,19 @@ struct DocumentCapabilities: Equatable {
             return canEditContent && canSign && canFillForms && canAddText
         }
     }
+
+    /// Whether `operation` is one of the "fill this form" tools #457 explains rather than
+    /// performs on a dynamic-XFA document: signing/stamping, added text, a check mark, a
+    /// form field. Redaction and the document's own text (`allows`'s `canEditContent`
+    /// group) are page tools, not filling, and keep working exactly as they do today.
+    static func isFillingOperation(_ operation: PdfEditOperation) -> Bool {
+        switch operation {
+        case is TextBoxOperation, is EditTextBoxOperation, is MoveTextBoxOperation,
+             is StampOperation, is MoveStampOperation, is MarkOperation,
+             is FieldToggleOperation:
+            return true
+        default:
+            return false
+        }
+    }
 }
