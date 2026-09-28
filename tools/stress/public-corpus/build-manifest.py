@@ -22,15 +22,18 @@ refuses rather than shipping an unverified generator.
 
 `irs` and `uscis`, by contrast, ARE implemented and verified (#434 federal-forms
 extension, kdocker3, 2026-09-27): both hosts are reachable from a real machine, just not
-from the cloud sandbox this file was first written in. Run
+from the cloud sandbox this file was first written in. `govinfo-signed` (#471 part 1,
+kdocker3, 2026-09-28) is the same shape, against www.govinfo.gov: a curated set of
+GPO-signed documents, forced into the `signed` category rather than classified. Run
 
     tools/stress/public-corpus/build-manifest.py --add-source irs
     tools/stress/public-corpus/build-manifest.py --add-source uscis
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed
 
-from a machine that can reach www.irs.gov / www.uscis.gov to (re)fetch the federal-forms
-rows and merge them into an existing --out manifest; a plain rebuild (no --add-source)
-never touches them, so it stays exactly as reproducible from a blocked sandbox as before.
-See FEDERAL_SOURCES below and README.md, "Extending".
+from a machine that can reach www.irs.gov / www.uscis.gov / www.govinfo.gov to (re)fetch
+the federal rows and merge them into an existing --out manifest; a plain rebuild (no
+--add-source) never touches them, so it stays exactly as reproducible from a blocked
+sandbox as before. See FEDERAL_SOURCES below and README.md, "Extending".
 """
 
 import argparse
@@ -89,6 +92,13 @@ SOURCES_BY_KEY = {s.key: s for s in SOURCES}
 # run against the real host (see FEDERAL_SOURCES below). Kept as a hard refusal rather
 # than a half-built generator: a manifest row whose hash nobody computed is worse than a
 # missing one.
+#
+# `govinfo` (the *bulk* generator #434 item 4 asks for, spanning the whole Federal
+# Register/CFR archive for large-file coverage) stays blocked here: nobody has designed
+# or verified that generator yet. `govinfo-signed` (#471 part 1, below) is a narrower,
+# already-verified generator against the same host for a different purpose -- a curated
+# set of GPO-signed documents -- and is intentionally a separate source key so the two
+# do not collide when both are eventually implemented.
 SOURCES_BLOCKED = {
     "govinfo": "www.govinfo.gov",
     "safedocs": "downloads.digitalcorpora.org",
@@ -255,7 +265,83 @@ FEDERAL_ATTRIBUTION_USCIS = ("U.S. Citizenship and Immigration Services -- a U.S
                               "Government work, no copyright (17 U.S.C. Sec 105)")
 
 HttpSource = collections.namedtuple(
-    "HttpSource", "key base_url licence attribution forms")
+    "HttpSource", "key base_url licence attribution forms category",
+    defaults=(None,))  # category: force a category rather than derive one with
+                        # classify() -- see GOVINFO_SIGNED_DOCS below. irs/uscis leave
+                        # this None, so their rows are classified exactly as before.
+
+# --------------------------------------------------------------------------------------
+# #471 part 1: documents that already carry a valid digital signature, to measure what
+# megapdf_save()'s full-rewrite does to it (see tools/stress/public-corpus/README.md,
+# "The signed category", for the measurement and its result). All from
+# www.govinfo.gov (U.S. Government Publishing Office): every GPO-published Federal
+# Register issue, Statutes at Large volume, Public Law, Congressional Record issue and
+# CFR title/volume is served as a PDF bearing GPO's own digital signature
+# (Signature Field Name "USGPOSignature", Signer CN "Government Publishing Office" or
+# "U.S. Government Publishing Office") -- verified with poppler's `pdfsig` against every
+# row below, kdocker3, 2026-09-28: 33/33 "Signature is Valid" before any MegaPDF
+# processing touches them. Same licence bucket as IRS/USCIS (a GPO publication is a
+# federal government work, 17 U.S.C. Sec 105 -- no copyright, so no licence to comply
+# with), with its own attribution string recording the signing fact as provenance.
+#
+# Grouped by GPO collection, matching govinfo's own package-ID prefixes:
+#   fr        Federal Register daily issues, 2019-2024, a spread of months so the
+#             sample is not one season's rulemaking.
+#   plaw      Public Laws -- enacted legislation, one PDF per law, chosen as a spread of
+#             well-known acts across four Congresses rather than sequential numbers.
+#   crec      Congressional Record daily issues, one per year 2019-2024.
+#   cfr       Code of Federal Regulations, one title/volume per year 2019-2023, a range
+#             of titles (agencies) and volume sizes (2.8-23 MB).
+#   statute   United States Statutes at Large, individual public-law excerpts by
+#             volume/page citation.
+# category is forced to "signed" (not derived from classify()) so these rows do not
+# fall under "form" just because a /Sig field is technically inside an /AcroForm --
+# the whole point of the row is the signature, and #471 asks for a `signed` category.
+GOVINFO_SIGNED_DOCS = [
+    ("FR-2019-03-15/pdf/FR-2019-03-15.pdf", "fr"),
+    ("FR-2020-06-10/pdf/FR-2020-06-10.pdf", "fr"),
+    ("FR-2021-09-01/pdf/FR-2021-09-01.pdf", "fr"),
+    ("FR-2021-09-08/pdf/FR-2021-09-08.pdf", "fr"),
+    ("FR-2022-04-06/pdf/FR-2022-04-06.pdf", "fr"),
+    ("FR-2022-08-16/pdf/FR-2022-08-16.pdf", "fr"),
+    ("FR-2023-01-12/pdf/FR-2023-01-12.pdf", "fr"),
+    ("FR-2023-07-05/pdf/FR-2023-07-05.pdf", "fr"),
+    ("FR-2024-01-02/pdf/FR-2024-01-02.pdf", "fr"),
+    ("FR-2024-05-14/pdf/FR-2024-05-14.pdf", "fr"),
+    ("FR-2024-10-01/pdf/FR-2024-10-01.pdf", "fr"),
+
+    ("PLAW-107publ56/pdf/PLAW-107publ56.pdf", "plaw"),
+    ("PLAW-109publ171/pdf/PLAW-109publ171.pdf", "plaw"),
+    ("PLAW-111publ148/pdf/PLAW-111publ148.pdf", "plaw"),
+    ("PLAW-113publ235/pdf/PLAW-113publ235.pdf", "plaw"),
+    ("PLAW-115publ97/pdf/PLAW-115publ97.pdf", "plaw"),
+    ("PLAW-116publ136/pdf/PLAW-116publ136.pdf", "plaw"),
+    ("PLAW-117publ58/pdf/PLAW-117publ58.pdf", "plaw"),
+
+    ("CREC-2019-07-17/pdf/CREC-2019-07-17.pdf", "crec"),
+    ("CREC-2020-02-12/pdf/CREC-2020-02-12.pdf", "crec"),
+    ("CREC-2021-10-05/pdf/CREC-2021-10-05.pdf", "crec"),
+    ("CREC-2022-03-08/pdf/CREC-2022-03-08.pdf", "crec"),
+    ("CREC-2023-06-13/pdf/CREC-2023-06-13.pdf", "crec"),
+    ("CREC-2024-01-02/pdf/CREC-2024-01-02.pdf", "crec"),
+
+    ("CFR-2019-title21-vol1/pdf/CFR-2019-title21-vol1.pdf", "cfr"),
+    ("CFR-2020-title29-vol5/pdf/CFR-2020-title29-vol5.pdf", "cfr"),
+    ("CFR-2021-title17-vol3/pdf/CFR-2021-title17-vol3.pdf", "cfr"),
+    ("CFR-2022-title26-vol1/pdf/CFR-2022-title26-vol1.pdf", "cfr"),
+    ("CFR-2023-title40-vol1/pdf/CFR-2023-title40-vol1.pdf", "cfr"),
+    ("CFR-2023-title47-vol1/pdf/CFR-2023-title47-vol1.pdf", "cfr"),
+
+    ("STATUTE-115/pdf/STATUTE-115-Pg272.pdf", "statute"),
+    ("STATUTE-124/pdf/STATUTE-124-Pg119.pdf", "statute"),
+    ("STATUTE-131/pdf/STATUTE-131-Pg2054.pdf", "statute"),
+]
+
+FEDERAL_ATTRIBUTION_GOVINFO_SIGNED = (
+    "U.S. Government Publishing Office -- a U.S. Government work, no copyright "
+    "(17 U.S.C. Sec 105); also bears GPO's own digital signature "
+    "(Signature Field Name \"USGPOSignature\") attesting the authenticity of the "
+    "version published at govinfo.gov")
 
 FEDERAL_SOURCES = {
     "irs": HttpSource(
@@ -271,6 +357,14 @@ FEDERAL_SOURCES = {
         licence=FEDERAL_LICENCE,
         attribution=FEDERAL_ATTRIBUTION_USCIS,
         forms=USCIS_FORMS,
+    ),
+    "govinfo-signed": HttpSource(
+        key="govinfo-signed",
+        base_url="https://www.govinfo.gov/content/pkg/",
+        licence=FEDERAL_LICENCE,
+        attribution=FEDERAL_ATTRIBUTION_GOVINFO_SIGNED,
+        forms=GOVINFO_SIGNED_DOCS,
+        category="signed",
     ),
 }
 
@@ -484,6 +578,9 @@ def fetch_federal(source, cache_dir):
             if not data.startswith(b"%PDF"):
                 skipped.append((relpath, "not a PDF"))
                 continue
+            # govinfo-signed's relpaths nest a "/pdf/" component (govinfo's own package
+            # layout); irs/uscis relpaths never did, so this was never needed before.
+            os.makedirs(os.path.dirname(cachefile), exist_ok=True)
             with open(cachefile, "wb") as fh:
                 fh.write(data)
         rows.append({
@@ -493,7 +590,7 @@ def fetch_federal(source, cache_dir):
             "bytes": str(len(data)),
             "source": source.key,
             "licence": source.licence,
-            "category": classify(data, relpath),
+            "category": source.category or classify(data, relpath),
         })
 
     if not rows and transport_failures == len(source.forms):

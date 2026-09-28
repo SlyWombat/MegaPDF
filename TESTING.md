@@ -270,9 +270,9 @@ There are two corpora, and they answer different questions.
 | | private | public |
 |---|---|---|
 | where | `GPD-DAVE`, `k2`, `k3` only | anywhere — CI, a cloud sandbox, a laptop |
-| what | 4,337 of the owner's real documents | 1,349 fetched from a committed manifest |
+| what | 4,337 of the owner's real documents | 1,382 fetched from a committed manifest |
 | how | already on disk | `tools/stress/public-corpus/fetch.sh` |
-| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **and 186 real IRS/USCIS forms** |
+| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, 186 real IRS/USCIS forms, **and 33 genuinely GPO-signed documents** |
 | depth | the deeper battery: real-world shapes nothing synthetic reproduces | the reproducible one: anyone can run it and get the same documents |
 
 Neither replaces the other. The private corpus stays the deeper gate and stays local; the
@@ -440,6 +440,34 @@ history above). The point of this run is narrower than the numbers: **a battery 
 the permanently staged `~/pdf-public` produces a normal, gate-passing report, end to end,
 with zero documents fetched over the network** — the staging in "Corpus staging on k3"
 above is a transparent substitute for `~/megapdf-public-corpus`, not a different corpus.
+
+### Third addition, 2026-09-28: 33 genuinely-signed documents (#471 part 1)
+
+Not a battery run — a targeted measurement, per the task brief, of what `megapdf_save()`'s
+full rewrite does to a signature already on a document. 33 documents from `www.govinfo.gov`
+(GPO Federal Register, Public Law, Congressional Record, CFR and Statutes at Large PDFs),
+every one independently verified `Signature is Valid` with poppler's `pdfsig` before any
+MegaPDF code touched it. The corpus is now **1,382 documents, 298.1 MB**; the new `signed`
+category and the `govinfo-signed` source are documented in
+`tools/stress/public-corpus/README.md`, "The signed category".
+
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed  # from a machine that can reach www.govinfo.gov
+    tools/stress/public-corpus/fetch.sh --category signed                    # → ~/megapdf-public-corpus/govinfo-signed
+
+**Result: the signature does not survive a MegaPDF save, with or without an edit.**
+
+| stage | result (33/33) |
+|---|---|
+| before any MegaPDF processing | `Signature is Valid` |
+| after `megapdf_save()`, no edit at all | `Digest Mismatch` |
+| after `megapdf_save()` following one edit | `Digest Mismatch` |
+
+The two after-save rows are identical: saving invalidates the signature regardless of
+whether the content changed, because `FPDF_SaveAsCopy` re-serialises the whole file and
+carries the original `/ByteRange` bounds over unchanged into a file whose length is now
+different. Filed as **#476** — a behaviour finding per the task brief, `core/` untouched, no
+gate adjusted. See the README section for the full detail (including the specific
+byte-count evidence) and the harness used.
 
 ### Android app UI tests (#346)
 
