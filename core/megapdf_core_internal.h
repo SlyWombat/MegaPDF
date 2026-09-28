@@ -35,6 +35,12 @@ double PageUnit(const megapdf_page* page);
 void ToCropPoint(const megapdf_page* page, double x, double y, double* out_x, double* out_y);
 megapdf_rect ToCropRect(const megapdf_page* page, double l, double b, double r, double t);
 
+// The turn alone, in quarter turns clockwise (0-3), read live from /Rotate the same way the
+// transform above reads it. Contract 9's layout needs it to undo that turn (#472): a glyph box
+// arrives already turned, but the text matrix it has to be measured against does not turn with
+// it, so the two must be brought back into one space before any gap or ordering test.
+int PageTurns(const megapdf_page* page);
+
 // megapdf_last_error()/megapdf_last_error_message()'s thread-local slot (SetError() in
 // megapdf_core.cpp), for a call outside megapdf_core.cpp that needs to report a failure the
 // same way megapdf_open() and the rest of the ABI do. `code` is usually a PDFium FPDF_ERR_*
