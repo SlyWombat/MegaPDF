@@ -15,22 +15,29 @@ Categories are assigned from what is actually in the file (see classify()), not 
 directory it came from, so a row says what the battery will meet.
 
 What this script cannot do from a sandboxed CI container: see SOURCES_BLOCKED below and
-the "Network reality" section of README.md. `govinfo` and `safedocs` are out of scope for
-now (#434 lists them, but nobody has yet built and verified a generator for either); their
-hosts are also unreachable from Anthropic's cloud sandbox, so `--add-source` for them still
-refuses rather than shipping an unverified generator.
+the "Network reality" section of README.md. `safedocs` is out of scope for now (#434 lists
+it, but nobody has yet built and verified a generator for it); its host is also unreachable
+from Anthropic's cloud sandbox, so `--add-source safedocs` still refuses rather than
+shipping an unverified generator.
 
-`irs` and `uscis`, by contrast, ARE implemented and verified (#434 federal-forms
-extension, kdocker3, 2026-09-27): both hosts are reachable from a real machine, just not
-from the cloud sandbox this file was first written in. Run
+`irs`, `uscis`, `uk-hmrc`, `uk-homeoffice`, `uk-dwp` and `govinfo`, by contrast, ARE
+implemented and verified (`irs`/`uscis`: #434 federal-forms extension, kdocker3,
+2026-09-27; the rest: #471 parts 3-4, kdocker3, 2026-09-28): every one of their hosts is
+reachable from a real machine, just not from the cloud sandbox this file was first written
+in. Run
 
     tools/stress/public-corpus/build-manifest.py --add-source irs
     tools/stress/public-corpus/build-manifest.py --add-source uscis
+    tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
+    tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
+    tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo
 
-from a machine that can reach www.irs.gov / www.uscis.gov to (re)fetch the federal-forms
-rows and merge them into an existing --out manifest; a plain rebuild (no --add-source)
-never touches them, so it stays exactly as reproducible from a blocked sandbox as before.
-See FEDERAL_SOURCES below and README.md, "Extending".
+from a machine that can reach the relevant host (www.irs.gov / www.uscis.gov / gov.uk's
+asset host / www.govinfo.gov) to (re)fetch that source's rows and merge them into an
+existing --out manifest; a plain rebuild (no --add-source) never touches any of them, so it
+stays exactly as reproducible from a blocked sandbox as before. See NON_GIT_SOURCES,
+FEDERAL_SOURCES and DIRECT_SOURCES below, and README.md, "Extending".
 """
 
 import argparse
@@ -84,13 +91,12 @@ SOURCES = [
 
 SOURCES_BY_KEY = {s.key: s for s in SOURCES}
 
-# Hosts #434 names for which no verified generator exists yet. `irs` and `uscis` used to
-# be listed here too; they moved out once a generator for each was actually written and
-# run against the real host (see FEDERAL_SOURCES below). Kept as a hard refusal rather
-# than a half-built generator: a manifest row whose hash nobody computed is worse than a
-# missing one.
+# Hosts #434 names for which no verified generator exists yet. `irs`, `uscis` and `govinfo`
+# used to be listed here too; they moved out once a generator for each was actually written
+# and run against the real host (see FEDERAL_SOURCES and GOVINFO_SOURCE below). Kept as a
+# hard refusal rather than a half-built generator: a manifest row whose hash nobody computed
+# is worse than a missing one.
 SOURCES_BLOCKED = {
-    "govinfo": "www.govinfo.gov",
     "safedocs": "downloads.digitalcorpora.org",
 }
 
@@ -285,6 +291,108 @@ FEDERAL_USER_AGENT = "MegaPDF-corpus-builder/1.0 (+https://github.com/SlyWombat/
 FEDERAL_REQUEST_GAP = 0.4
 
 # --------------------------------------------------------------------------------------
+# UK central-government forms (#471 part 3). Unlike the Canadian Crown-copyright forms
+# #456 keeps local-only, UK central-government material is published under the Open
+# Government Licence v3.0, which explicitly permits commercial use -- verified from the
+# licence's own page, https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/,
+# 2026-09-28: "You are free to ... exploit the Information commercially and
+# non-commercially", conditioned on attribution. Every gov.uk publication page these rows
+# were resolved from carries its own "All content is available under the Open Government
+# Licence v3.0, except where otherwise stated" footer plus a Crown copyright line -- also
+# checked directly, not assumed, per form group below. Unlike FEDERAL_LICENCE (US works,
+# no copyright at all under 17 U.S.C. Sec 105), OGL v3.0 *requires* attribution -- see
+# UK_ATTRIBUTION and README.md, "Licences and attribution", for the exact credit line this
+# corpus carries to satisfy it.
+#
+# One exception checked and excluded: OGL's own terms carve out "the paperwork associated
+# with passports" from its scope, so *completed/issued* travel-document artefacts are not
+# OGL material -- but a *blank application form* is ordinary published guidance like any
+# other gov.uk form, and is what is fetched here. Nothing that could be an actual identity
+# document (a passport photo page, a visa vignette, an issued document) is in scope.
+UK_LICENCE = "OGL-UK-3.0"
+UK_ATTRIBUTION_HMRC = ("Contains public sector information licensed under the Open "
+                        "Government Licence v3.0 -- HM Revenue & Customs, gov.uk")
+UK_ATTRIBUTION_HOME_OFFICE = ("Contains public sector information licensed under the Open "
+                               "Government Licence v3.0 -- Home Office, gov.uk")
+UK_ATTRIBUTION_DWP = ("Contains public sector information licensed under the Open "
+                       "Government Licence v3.0 -- Department for Work and Pensions, gov.uk")
+
+# Each row is (full PDF url, relpath under the source's key, group) -- unlike IRS_FORMS /
+# USCIS_FORMS there is no shared base_url to build a relpath against: gov.uk serves every
+# asset from its own content-addressed path under assets.publishing.service.gov.uk, so the
+# url is recorded in full and resolved by hand from the form's own gov.uk publication page
+# (never guessed), the same discipline IRS_FORMS/USCIS_FORMS document for their own filenames.
+UkForm = collections.namedtuple("UkForm", "url relpath group")
+
+HMRC_FORMS = []
+HOME_OFFICE_FORMS = []
+DWP_FORMS = []
+
+# --------------------------------------------------------------------------------------
+# govinfo.gov: very large public-domain documents (#471 part 4). Federal Register and CFR
+# annual volumes are U.S. Government works -- public domain, 17 U.S.C. Sec 105, the same
+# basis as FEDERAL_LICENCE -- confirmed from govinfo.gov's own About/terms page, 2026-09-28.
+# #434 listed `govinfo` in SOURCES_BLOCKED because nobody had written and verified a
+# generator that could reach it from the sandbox; kdocker3 reaches www.govinfo.gov fine
+# (see README.md, "Network reality"), so this is that generator -- scoped narrowly to the
+# handful of large volumes #471 part 4 asks for, not the bulk-download generator #434's
+# note also mentions and which remains unbuilt.
+GOVINFO_LICENCE = "US-PD-17-USC-105"
+GOVINFO_ATTRIBUTION = ("U.S. Government Publishing Office / govinfo.gov -- a U.S. "
+                       "Government work, no copyright (17 U.S.C. Sec 105)")
+
+GovinfoDoc = collections.namedtuple("GovinfoDoc", "url relpath collection label")
+
+# Selection (#471 part 4; verified by HTTP HEAD -- Content-Length, no download -- against
+# govinfo.gov, 2026-09-28): CFR annual title volumes turned out NOT to be a source of large
+# files at all -- checked the largest titles by XML size (7, 21, 26, 40, 48) and every CFR
+# title/volume PDF tops out around 4-9 MB, structurally: they are chunked per title
+# specifically to stay small. Federal Register historic issues are where the size is,
+# because pre-1995 issues are OCR'd scans of the printed page image, not born-digital, and
+# two of the issues below were also the special day each year the Unified Agenda of Federal
+# Regulations (a twice-yearly regulatory-plan compilation, then published as a section
+# inside that day's ordinary issue) ran to 1,700-2,000+ pages in one file. A deliberate
+# spread from just above the ~50 MB ask to the largest one found (2,066,415,812 bytes,
+# 1994-11-14) rather than every huge issue available -- several more equally large Unified
+# Agenda issues exist (1990, 1992) and are not needed to make the point.
+GOVINFO_DOCS = [
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1974-01-03/pdf/FR-1974-01-03.pdf",
+        relpath="fr/FR-1974-01-03.pdf", collection="Federal Register",
+        label="Vol. 39 No. 2, 1974-01-03, 179pp -- 48.4 MB, just above the size floor"),
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1976-10-01/pdf/FR-1976-10-01.pdf",
+        relpath="fr/FR-1976-10-01.pdf", collection="Federal Register",
+        label="1976-10-01 -- 83.4 MB"),
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1978-12-29/pdf/FR-1978-12-29.pdf",
+        relpath="fr/FR-1978-12-29.pdf", collection="Federal Register",
+        label="1978-12-29 -- 107.4 MB"),
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1980-01-02/pdf/FR-1980-01-02.pdf",
+        relpath="fr/FR-1980-01-02.pdf", collection="Federal Register",
+        label="Vol. 45 No. 1, 1980-01-02, 606pp -- 143.5 MB"),
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1983-04-25/pdf/FR-1983-04-25.pdf",
+        relpath="fr/FR-1983-04-25.pdf", collection="Federal Register",
+        label="Vol. 48 No. 80, 1983-04-25, 1031pp -- 232.0 MB"),
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1993-04-26/pdf/FR-1993-04-26.pdf",
+        relpath="fr/FR-1993-04-26.pdf", collection="Federal Register",
+        label="Vol. 58 No. 78, 1993-04-26, Spring Unified Agenda, 3648pp -- 1.57 GB"),
+    GovinfoDoc(
+        url="https://www.govinfo.gov/content/pkg/FR-1994-11-14/pdf/FR-1994-11-14.pdf",
+        relpath="fr/FR-1994-11-14.pdf", collection="Federal Register",
+        label="Vol. 59 No. 218, 1994-11-14, Fall Unified Agenda, 2006pp -- 2.07 GB, the largest found"),
+]
+
+# Direct-URL sources share one User-Agent and one polite, sequential fetch with the federal
+# forms above -- see fetch_direct()'s docstring for why a larger per-read timeout is used.
+DIRECT_USER_AGENT = FEDERAL_USER_AGENT
+UK_REQUEST_GAP = 0.4
+GOVINFO_REQUEST_GAP = 1.0  # #471: govinfo serves large single files; extra room, asked for.
+
+# --------------------------------------------------------------------------------------
 # Selection. Quotas keep one source from swamping the set and keep the priority category
 # -- forms -- whole: every form we can reach is taken, because forms are what MegaPDF is
 # for and the category #434 calls the private corpus thinnest on.
@@ -300,6 +408,15 @@ QUOTAS = {
 
 CATEGORIES = ["form", "tagged", "malformed", "scan", "report"]
 
+# #471 part 4: a document large enough to exercise the paging-in path #147-#151 built (the
+# public corpus's largest existing document is ~10.9 MB; the govinfo Federal Register/CFR
+# volumes this threshold is for are fetched to be 50 MB+). Set comfortably above the former
+# and comfortably below the latter so the category means what it says regardless of which
+# source a future large document arrives from -- this is a property of the bytes, checked
+# the same way every other category is (see the module comment on classify()), not a label
+# only govinfo rows can carry.
+LARGE_THRESHOLD_BYTES = 20 * 1024 * 1024
+
 
 def classify(data, relpath):
     """Category from the file's own bytes.
@@ -313,6 +430,13 @@ def classify(data, relpath):
     has_font = b"/Font" in data
     has_image = (b"/Image" in data or b"/DCTDecode" in data
                  or b"/JPXDecode" in data or b"/CCITTFaxDecode" in data)
+
+    # #471 part 4: size dominates every other test. A 300 MB Federal Register volume is
+    # still worth knowing is also a `form` or `tagged` page, but what this category exists
+    # to measure -- wall time and peak RSS on the paging-in path -- is a property of its
+    # size, not its content, so it is checked first and wins outright.
+    if len(data) >= LARGE_THRESHOLD_BYTES:
+        return "large"
 
     # Deliberately broken files, for crash/hang resistance only. Isartor's files violate
     # PDF/A rather than PDF syntax, but they are the same kind of input for our purposes:
@@ -503,6 +627,141 @@ def fetch_federal(source, cache_dir):
     return rows, skipped
 
 
+# --------------------------------------------------------------------------------------
+# Direct-URL sources (#471): UK OGL forms and govinfo large documents. Unlike FEDERAL_SOURCES
+# there is no shared base_url -- every item already carries its own full, hand-resolved URL
+# -- so `items` here is a plain (url, relpath) pair rather than (relpath, group).
+# --------------------------------------------------------------------------------------
+
+def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=None,
+                  timeout=60, chunk_size=1 << 20):
+    """Fetch a list of (url, relpath) pairs whose bytes already live at their own fully-
+    resolved URL, hash and classify each. The govinfo generator's reason to exist at all:
+    #471 part 4's documents run from tens of MB to just over 2 GB, so both the fetch and
+    the cached copy are streamed and hashed in `chunk_size` pieces rather than held in
+    memory whole -- one document's bytes are on disk at a time, never in a Python bytes
+    object as well.
+
+    `force_category` skips the content-based classify() scan entirely (used for govinfo:
+    every item there is already known, by construction, to be a `large` document -- see
+    GOVINFO_DOCS -- and there is no reason to read a 2 GB file a second time just to
+    confirm what its own size already says via LARGE_THRESHOLD_BYTES). Left as None (UK
+    forms; at most a few MB each) it reads the cached file once and classifies it the same
+    way every git-sourced row is classified.
+
+    Politeness: sequential, one request in flight, at least `request_gap` seconds apart --
+    manifest *generation*, run rarely by a maintainer; not the corpus *download* everyone
+    else does (fetch.sh, with its own --jobs-per-host). `timeout` is a per-`read()` socket
+    timeout, not a cap on total transfer time: a slow-but-steady multi-hundred-MB download
+    keeps resetting it on every chunk that arrives.
+
+    Returns (rows, skipped); raises FederalHostUnreachable (reused rather than duplicated;
+    its docstring already describes exactly this condition and is not specific to
+    FEDERAL_SOURCES) if every request failed at the transport level.
+    """
+    os.makedirs(cache_dir, exist_ok=True)
+    rows = []
+    skipped = []
+    transport_failures = 0
+    last_request = 0.0
+    for url, relpath in items:
+        cachefile = os.path.join(cache_dir, relpath)
+        os.makedirs(os.path.dirname(cachefile) or ".", exist_ok=True)
+        if not os.path.exists(cachefile):
+            wait = request_gap - (time.monotonic() - last_request)
+            if wait > 0:
+                time.sleep(wait)
+            req = urllib.request.Request(url, headers={"User-Agent": DIRECT_USER_AGENT})
+            tmp = cachefile + ".part"
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp, \
+                        open(tmp, "wb") as out:
+                    for chunk in iter(lambda: resp.read(chunk_size), b""):
+                        out.write(chunk)
+            except urllib.error.HTTPError as exc:
+                last_request = time.monotonic()
+                skipped.append((relpath, f"HTTP {exc.code}"))
+                print(f"  {key}: {relpath}: HTTP {exc.code}, skipping", file=sys.stderr)
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                continue
+            except (urllib.error.URLError, TimeoutError, OSError) as exc:
+                last_request = time.monotonic()
+                transport_failures += 1
+                skipped.append((relpath, str(exc)))
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                continue
+            last_request = time.monotonic()
+            with open(tmp, "rb") as fh:
+                head = fh.read(4)
+            if head != b"%PDF":
+                skipped.append((relpath, "not a PDF"))
+                os.remove(tmp)
+                continue
+            os.replace(tmp, cachefile)
+
+        size = os.path.getsize(cachefile)
+        digest = hashlib.sha256()
+        with open(cachefile, "rb") as fh:
+            for chunk in iter(lambda: fh.read(chunk_size), b""):
+                digest.update(chunk)
+
+        if force_category is not None:
+            category = force_category
+        else:
+            with open(cachefile, "rb") as fh:
+                category = classify(fh.read(), relpath)
+
+        rows.append({
+            "path": f"{key}/{relpath}",
+            "url": url,
+            "sha256": digest.hexdigest(),
+            "bytes": str(size),
+            "source": key,
+            "licence": licence,
+            "category": category,
+        })
+
+    if not rows and transport_failures == len(items):
+        raise FederalHostUnreachable(
+            f"every one of {len(items)} requests to {key} failed at the transport level; "
+            f"the host looks unreachable from here")
+    return rows, skipped
+
+
+# Assembled after HMRC_FORMS/HOME_OFFICE_FORMS/DWP_FORMS/GOVINFO_DOCS (above) are populated.
+# force_category=None means "classify from content" (UK forms); "large" means "this item's
+# category is already known by construction and is never re-derived from a content scan"
+# (govinfo -- see fetch_direct()'s docstring).
+DirectSource = collections.namedtuple(
+    "DirectSource", "key licence attribution items request_gap force_category")
+
+DIRECT_SOURCES = {
+    "uk-hmrc": DirectSource(
+        key="uk-hmrc", licence=UK_LICENCE, attribution=UK_ATTRIBUTION_HMRC,
+        items=[(f.url, f.relpath) for f in HMRC_FORMS],
+        request_gap=UK_REQUEST_GAP, force_category=None),
+    "uk-homeoffice": DirectSource(
+        key="uk-homeoffice", licence=UK_LICENCE, attribution=UK_ATTRIBUTION_HOME_OFFICE,
+        items=[(f.url, f.relpath) for f in HOME_OFFICE_FORMS],
+        request_gap=UK_REQUEST_GAP, force_category=None),
+    "uk-dwp": DirectSource(
+        key="uk-dwp", licence=UK_LICENCE, attribution=UK_ATTRIBUTION_DWP,
+        items=[(f.url, f.relpath) for f in DWP_FORMS],
+        request_gap=UK_REQUEST_GAP, force_category=None),
+    "govinfo": DirectSource(
+        key="govinfo", licence=GOVINFO_LICENCE, attribution=GOVINFO_ATTRIBUTION,
+        items=[(d.url, d.relpath) for d in GOVINFO_DOCS],
+        request_gap=GOVINFO_REQUEST_GAP, force_category="large"),
+}
+
+# Every source whose rows are fetched by direct URL rather than rebuilt from a pinned git
+# checkout: opt-in via --add-source, and -- like FEDERAL_SOURCES on its own used to be --
+# carried over unchanged by a plain rebuild rather than resampled or dropped (see main()).
+NON_GIT_SOURCES = {**FEDERAL_SOURCES, **DIRECT_SOURCES}
+
+
 COLUMNS = ["url", "sha256", "bytes", "source", "licence", "category", "path"]
 
 
@@ -543,9 +802,9 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                   "manifest.tsv"))
     ap.add_argument("--add-source", metavar="KEY",
-                    help="fetch and merge one federal-forms source into --out (%s); or, "
+                    help="fetch and merge one direct-URL source into --out (%s); or, "
                          "for %s, refuse with why (no verified generator yet)"
-                         % (", ".join(sorted(FEDERAL_SOURCES)),
+                         % (", ".join(sorted(NON_GIT_SOURCES)),
                             ", ".join(sorted(SOURCES_BLOCKED))))
     args = ap.parse_args()
 
@@ -558,22 +817,30 @@ def main():
                 f"manifest was built in, so no generator for it could be run, and a generator\n"
                 f"that has never produced a verified row does not belong in the repository.\n"
                 f"Add one from a machine that can reach {host}, following the shape of\n"
-                f"FEDERAL_SOURCES (irs, uscis) in this file, which is real and verified.")
-        source = FEDERAL_SOURCES.get(args.add_source)
-        if source is None:
+                f"NON_GIT_SOURCES (irs, uscis, uk-hmrc, uk-homeoffice, uk-dwp, govinfo) in\n"
+                f"this file, which is real and verified.")
+        if args.add_source not in NON_GIT_SOURCES:
             sys.exit(f"unknown source {args.add_source!r}; known: "
-                      f"{', '.join(sorted(list(FEDERAL_SOURCES) + list(SOURCES_BLOCKED)))}")
+                      f"{', '.join(sorted(list(NON_GIT_SOURCES) + list(SOURCES_BLOCKED)))}")
 
-        cache_dir = os.path.join(args.work, f"{source.key}-fetch-cache")
+        cache_dir = os.path.join(args.work, f"{args.add_source}-fetch-cache")
         try:
-            rows, skipped = fetch_federal(source, cache_dir)
+            if args.add_source in FEDERAL_SOURCES:
+                source = FEDERAL_SOURCES[args.add_source]
+                rows, skipped = fetch_federal(source, cache_dir)
+                host_for_error = source.base_url
+            else:
+                ds = DIRECT_SOURCES[args.add_source]
+                rows, skipped = fetch_direct(ds.key, ds.licence, ds.items, cache_dir,
+                                              ds.request_gap, force_category=ds.force_category)
+                host_for_error = (ds.items[0][0] if ds.items else "its source host")
         except FederalHostUnreachable as exc:
             sys.exit(
-                f"--add-source {source.key}: {exc}.\n"
+                f"--add-source {args.add_source}: {exc}.\n"
                 f"That is a network problem here, not a design problem: this generator is\n"
-                f"real and was verified against {source.base_url} on kdocker3, 2026-09-27\n"
-                f"(#434 federal-forms extension). Run it from a machine that can reach\n"
-                f"{source.base_url}.")
+                f"real and was verified on kdocker3 (#434 federal-forms extension; #471 for\n"
+                f"uk-hmrc/uk-homeoffice/uk-dwp/govinfo). Run it from a machine that can reach\n"
+                f"{host_for_error}.")
 
         existing = read_manifest(args.out) if os.path.exists(args.out) else []
         by_url = {r["url"]: r for r in existing}
@@ -587,7 +854,7 @@ def main():
         write_manifest(list(by_url.values()), args.out)
 
         by_cat = collections.Counter(r["category"] for r in rows)
-        print(f"{source.key}: {len(rows)} forms fetched and verified "
+        print(f"{args.add_source}: {len(rows)} document(s) fetched and verified "
               f"({dict(sorted(by_cat.items()))}), {len(skipped)} skipped", file=sys.stderr)
         for relpath, reason in skipped:
             print(f"  skipped {relpath}: {reason}", file=sys.stderr)
@@ -622,16 +889,18 @@ def main():
         print(f"  {category:10s} {len(keep):5d} of {len(rows):5d} found",
               file=sys.stderr)
 
-    # A plain rebuild never touches the network for FEDERAL_SOURCES (that is what
-    # --add-source is for, and what keeps this path reproducible from a sandbox that
-    # cannot reach irs.gov/uscis.gov). But it must not silently DELETE federal rows a
-    # previous --add-source run already put in --out, either -- so whatever is there
-    # under a federal source key is carried over unchanged.
+    # A plain rebuild never touches the network for NON_GIT_SOURCES (that is what
+    # --add-source is for, and what keeps this path reproducible from a sandbox that cannot
+    # reach irs.gov/uscis.gov/gov.uk/govinfo.gov). But it must not silently DELETE rows a
+    # previous --add-source run already put in --out, either -- so whatever is there under
+    # any of those source keys is carried over unchanged. (#471 generalizes this from
+    # "federal" to every direct-URL source; the doctrine -- opt-in fetch, never resampled,
+    # never silently dropped -- is the same one FEDERAL_SOURCES established for irs/uscis.)
     if os.path.exists(args.out):
-        federal_kept = [r for r in read_manifest(args.out) if r["source"] in FEDERAL_SOURCES]
+        federal_kept = [r for r in read_manifest(args.out) if r["source"] in NON_GIT_SOURCES]
         if federal_kept:
-            print(f"  preserving {len(federal_kept)} federal rows already in {args.out} "
-                  f"(source in {sorted(FEDERAL_SOURCES)}); re-run --add-source to refresh "
+            print(f"  preserving {len(federal_kept)} direct-URL rows already in {args.out} "
+                  f"(source in {sorted(NON_GIT_SOURCES)}); re-run --add-source to refresh "
                   f"them from the network", file=sys.stderr)
             selected.extend(federal_kept)
 
