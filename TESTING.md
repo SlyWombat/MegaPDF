@@ -289,6 +289,37 @@ Record the two separately.
     tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
     tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
 
+### Corpus staging on k3 (#470)
+
+k3 (kdocker3) is where batteries run repeatedly, so all three corpora are staged there
+permanently instead of being fetched or copied per run:
+
+| corpus | path on k3 | size | refreshed by |
+|---|---|---:|---|
+| private | `~/pdf-test` | 4,337 documents | never re-fetched — it is the owner's own machine copy |
+| private (Canadian forms) | `~/pdf-test-ca` | 135 documents | same |
+| public | `~/pdf-public` | 1,349 documents, 144 MB | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
+
+Point any battery at `~/pdf-public` exactly as at `~/megapdf-public-corpus` above — it is
+the same corpus, just not re-downloaded:
+
+    tools/stress/public-corpus/fetch.sh ~/pdf-public                  # after a manifest change: skips what it already has
+    tools/stress/public-corpus/fetch.sh --verify-only ~/pdf-public    # proves it byte-for-byte, no network at all
+    tools/stress/structure-battery.sh <structure_check> ~/pdf-public <out> --reference --cli <cli>
+
+`~/pdf-public` is chmod'd read-only the same way `~/pdf-test` is (`dr-xr-sr-x` directories,
+`r--r--r--` files), so an ordinary battery run cannot write into it, move a file, or repair
+a mismatch by accident — the same protection the private corpus has had all along.
+
+**Scratch is disposable; corpora persist.** Every agent brief says "leave the machine as
+you found it" and "clean up after yourself" — that means your own build directories,
+containers and pulled images, named for your issue (`~/megapdf-<n>*`, `megapdf-<n>*`
+containers/images). It does **not** mean deleting `~/pdf-test`, `~/pdf-test-ca` or
+`~/pdf-public`: those are shared, permanent fixtures the next agent would otherwise have to
+rebuild or re-download, and #470 exists precisely because three agents re-downloaded the
+public corpus on 2026-09-27 rather than leaving it staged. If a task's brief does not name
+one of these three paths as scratch, it is not scratch.
+
 First full run, 2026-09-27 (1,036 documents visited, 1,533 pages — see the #434 PR for the
 per-category breakdown). **Superseded by the run below**, kept for history:
 
@@ -379,6 +410,36 @@ other measure above is unaffected.
 Read #445 before treating a red pages battery on the public corpus as an engine defect: on
 this run, as before, every qpdf-failure/count-mismatch/other-refusal was the harness or the
 population, not the engine.
+
+### Third run, 2026-09-28: proving the k3 staging (#470)
+
+Structure battery only, run against **`~/pdf-public` on kdocker3** rather than a fresh
+`~/megapdf-public-corpus` fetch, to prove the staged copy is a drop-in replacement — same
+manifest revision as the second run above (`main` at `8b09807`, manifest unchanged since
+`d182085`), engine built fresh from that same commit:
+
+    tools/stress/public-corpus/fetch.sh --verify-only ~/pdf-public   # offline: 1,349 verified, 0 missing, 0 mismatched
+    tools/stress/structure-battery.sh <structure_check> ~/pdf-public <out> --reference --cli <cli>
+
+1,348 documents visited (the same case-mismatched `.Pdf` qpdf fixture noted above is still
+skipped by `find -name '*.pdf'`):
+
+| measure | public corpus (staged) | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 | 0.999167 | >= 0.998 | pass |
+| structure: F1 through `megapdf-cli` | 0.999206 | >= 0.998 | pass |
+| structure: order agreement tau (median, 1,396 tagged pages) | 0.956 | >= 0.9 | pass |
+| structure: poppler agreement tau (median, informational) | 0.998 | — | — |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | 0 | 0 | pass |
+
+Every gate is green on the engine as of `8b09807` — #443 and #453's CLI-exit-code and
+aggregate-F1 failures from the second run above are both resolved by now (unrelated to
+#470; recorded here only because this run would otherwise look inconsistent with the
+history above). The point of this run is narrower than the numbers: **a battery pointed at
+the permanently staged `~/pdf-public` produces a normal, gate-passing report, end to end,
+with zero documents fetched over the network** — the staging in "Corpus staging on k3"
+above is a transparent substitute for `~/megapdf-public-corpus`, not a different corpus.
 
 ### Android app UI tests (#346)
 
