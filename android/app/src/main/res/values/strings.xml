@@ -115,7 +115,7 @@
     <string name="security_password_removed">Password removed.</string>
 
     <!-- Dynamic XFA (#456/#457): a form built to be filled in Adobe Reader, which MegaPDF
-         can't do. A calm, persistent banner on the document, not a dialog or a snackbar --
+         can't do. A calm, persistent banner on the document, not a dialog and not a snackbar:
          it stays up for as long as the document is open. Viewing, saving, sharing, exporting
          and every page tool are unaffected; only filling explains rather than acting. -->
     <string name="dynamic_xfa_banner_title">Built for Adobe Reader</string>
