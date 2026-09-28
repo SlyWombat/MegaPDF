@@ -1,0 +1,65 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R 6 0 R] /Count 4 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 0 /Resources << /Font << /F1 11 0 R >> >> /Contents 7 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /Font << /F1 11 0 R >> >> /Contents 8 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 180 /Resources << /Font << /F1 11 0 R >> >> /Contents 9 0 R >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 270 /Resources << /Font << /F1 11 0 R >> >> /Contents 10 0 R >>
+endobj
+7 0 obj
+<< /Length 57 >>
+stream
+BT /F1 18 Tf 72 700 Td (Alpha Bravo Charlie Delta) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Length 57 >>
+stream
+BT /F1 18 Tf 72 700 Td (Alpha Bravo Charlie Delta) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Length 57 >>
+stream
+BT /F1 18 Tf 72 700 Td (Alpha Bravo Charlie Delta) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Length 57 >>
+stream
+BT /F1 18 Tf 72 700 Td (Alpha Bravo Charlie Delta) Tj ET
+endstream
+endobj
+11 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000133 00000 n 
+0000000270 00000 n 
+0000000408 00000 n 
+0000000547 00000 n 
+0000000687 00000 n 
+0000000793 00000 n 
+0000000899 00000 n 
+0000001005 00000 n 
+0000001112 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R >>
+startxref
+1183
+%%EOF
