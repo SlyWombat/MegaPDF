@@ -21,11 +21,31 @@ data class DocumentFlags(
      * forms), an ordinary AcroForm document, or one with no form at all.
      */
     val isDynamicXfa: Boolean,
+
+    /**
+     * The document carries an existing digital signature (#476/#481): PDFium's
+     * FPDF_GetSignatureCount() is greater than zero. Not a verdict on the signature's
+     * cryptographic validity — only that saving here rewrites the whole file and so always
+     * invalidates it (measured 33/33 on real GPO documents in #476), which is why the app
+     * warns before overwriting the signed original rather than on open.
+     */
+    val isSigned: Boolean = false,
+
+    /**
+     * At least one of the document's signatures is a certification (`/DocMDP`) signature,
+     * which can forbid modification outright rather than merely being invalidated by one.
+     * Always accompanied by [isSigned]. Every one of #476's 33 real corpus documents set
+     * this — the common case on real documents, not the edge case.
+     */
+    val isCertificationSigned: Boolean = false,
 ) {
     companion object {
         val NONE = DocumentFlags(isDynamicXfa = false)
 
-        fun of(bits: Int): DocumentFlags =
-            DocumentFlags(isDynamicXfa = (bits and PdfiumNative.DOC_DYNAMIC_XFA) != 0)
+        fun of(bits: Int): DocumentFlags = DocumentFlags(
+            isDynamicXfa = (bits and PdfiumNative.DOC_DYNAMIC_XFA) != 0,
+            isSigned = (bits and PdfiumNative.DOC_SIGNED) != 0,
+            isCertificationSigned = (bits and PdfiumNative.DOC_SIGNED_CERTIFICATION) != 0,
+        )
     }
 }

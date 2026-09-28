@@ -50,6 +50,14 @@ object Fixtures {
     const val DYNAMIC_XFA_ASSET = "dynamic-xfa.pdf"
     const val HYBRID_XFA_ASSET = "hybrid-xfa.pdf"
 
+    /**
+     * #476/#481's synthetic signed fixtures (`tools/gen_signature_fixtures.py`), test-only —
+     * never one of the 33 real GPO documents the finding was measured against, which stay off
+     * this repo (staged read-only at `~/pdf-public` on kdocker3).
+     */
+    const val SIGNED_APPROVAL_ASSET = "signed-approval.pdf"
+    const val SIGNED_CERTIFIED_ASSET = "signed-certified.pdf"
+
     val appContext: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 

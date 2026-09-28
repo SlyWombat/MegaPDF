@@ -31,6 +31,21 @@ data class DocumentCapabilities(
      * either. View, save, share, export and every page tool are untouched.
      */
     val isDynamicXfa: Boolean = false,
+    /**
+     * The document carries an existing digital signature (#476/#481). Deliberately does not
+     * restrict any capability here either — nothing is refused (a person may fill in and
+     * overwrite a signed document if that is genuinely what they want) — it only drives the
+     * confirmation [ViewerViewModel] asks before a save that would overwrite the signed
+     * original; Save a copy is unaffected because the signed original stays untouched.
+     */
+    val isSigned: Boolean = false,
+    /**
+     * At least one of the document's signatures is a certification (`/DocMDP`) signature,
+     * which can forbid modification outright rather than merely being invalidated by a save.
+     * Always accompanied by [isSigned]; the two are separate because the overwrite warning's
+     * wording differs, not because either changes what is allowed.
+     */
+    val isCertificationSigned: Boolean = false,
 ) {
     /** Whether this open may apply [operation]. An edit this list does not know needs full access. */
     fun allows(operation: PdfEditOperation): Boolean = when (operation) {
@@ -78,6 +93,8 @@ data class DocumentCapabilities(
                 isEncrypted = security.isEncrypted,
                 isRestricted = security.isEncrypted && !security.hasFullAccess,
                 isDynamicXfa = flags.isDynamicXfa,
+                isSigned = flags.isSigned,
+                isCertificationSigned = flags.isCertificationSigned,
             )
         }
 
