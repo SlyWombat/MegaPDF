@@ -65,10 +65,21 @@
 //
 // Tokens (measures 1-3): maximal runs of "word" code points, matched identically on both
 // sides of every comparison. NOT full Unicode NFKC + general-category letter/digit
-// classification (no ICU here) — ASCII, Latin-1 Supplement and Latin Extended-A, which is
-// what the corpus's English/French documents need (#91). A corpus with a lot of other scripts
-// would need this widened; the census does not measure script mix, so that is a follow-up to
-// notice by hand, not something this tool claims to have checked.
+// classification (no ICU here) — a hand-maintained block table, which is what a tool with no
+// ICU dependency can honestly do. Until #483 that table was ASCII, Latin-1 Supplement and
+// Latin Extended-A only, "what the corpus's English/French documents need (#91)", with this
+// comment's own warning that "a corpus with a lot of other scripts would need this widened;
+// the census does not measure script mix, so that is a follow-up to notice by hand". #471
+// part 2 added 280 non-Latin documents and nobody noticed by hand: every Arabic, Hebrew, Han,
+// Kana, Hangul, Devanagari, Thai and Cyrillic code point fell through as a SEPARATOR, so on
+// those documents measures 1-3 ran over only the incidental Latin-and-digit residue —
+// section numbers, dates, footnote markers, Latin names and URLs. Measured on the #490 UN
+// parallel corpus (the same document text in six languages, so the only variable is script):
+// 39 tokens/page for Arabic and 40 for Russian against 407 for English and 435 for Spanish,
+// a tenfold collapse of the denominator every one of these measures divides by, and on the
+// #471 part 2 wiki sample 74-108 tokens/page for the seven non-Latin scripts against 431 for
+// a same-population English control. See IsWordCodepoint below for the table and the two
+// classes it now distinguishes.
 //
 // Nothing about a document is printed beyond counts, indices and timings: the corpus is
 // personal (#151, #173, #354).
@@ -133,16 +144,134 @@ long long PeakRssKb() {
 }
 
 // ---------------------------------------------------------------------------
-// Tokens: vector<char32_t> code points -> vector<u32string> maximal word runs. See the file
-// header for what "word" covers here.
+// Tokens: vector<char32_t> code points -> vector<u32string> tokens. See the file header for
+// what "word" covers here and why the table below is not just Latin any more (#483).
+//
+// Two classes, because "what is one token" is not the same question in every script:
+//
+//   JOINING  — scripts that separate words with a space, so a maximal run of these code
+//     points is a word and the run boundaries are a real segmentation claim the engine can
+//     get right or wrong: Latin, Greek, Cyrillic, Armenian, Hebrew, Arabic, Syriac, Thaana,
+//     NKo, the Indic abugidas, Sinhala, Georgian, Ethiopic, Cherokee and Hangul, plus the
+//     combining marks and the ZWNJ/ZWJ that sit inside a word in several of them.
+//
+//   STANDALONE — scripts that do NOT put spaces between words (Han, Hiragana, Katakana,
+//     Bopomofo, Thai, Lao, Khmer, Myanmar, Tibetan, Mongolian). Each code point is its own
+//     token. This is deliberate and is the honest unit for them: nothing in the PDF marks a
+//     word boundary in these scripts, so neither PDFium's generated spaces (which come from
+//     geometric gaps, not from lexis) nor the engine's own gap test is an authority on where
+//     one is, and a measure that scored them against each other would be scoring noise.
+//     Character fidelity — did the same characters come out — is exactly what this measure
+//     can answer for them, and it keeps the denominator the same order of magnitude as a
+//     Latin page's, which is the whole point (see the file header).
+//
+// A mixed run does the obvious thing: "PDF\u6587\u4ef6" is the token "PDF" then two one-character
+// tokens, because a JOINING run ends wherever a STANDALONE code point starts and vice versa.
+//
+// The pre-#483 Latin rows are kept EXACTLY as they were, rather than folded into a tidier
+// range: every existing Latin-script corpus number has to be reproducible across this change,
+// and the general corpus's own aggregate is what the 0.998 gate was tuned against (#363).
+// The rows added below Latin Extended-A are all new script coverage, never a re-spelling of
+// an old row.
 // ---------------------------------------------------------------------------
+struct CpRange { unsigned int lo, hi; };
+
+// Scripts whose words are space-separated: a maximal run is one token.
+constexpr CpRange kJoiningRanges[] = {
+    {0x0180, 0x024F},   // Latin Extended-B
+    {0x0250, 0x02AF},   // IPA Extensions
+    {0x02B0, 0x02FF},   // Spacing Modifier Letters
+    {0x0300, 0x036F},   // Combining Diacritical Marks
+    {0x0370, 0x03FF},   // Greek and Coptic
+    {0x0400, 0x04FF},   // Cyrillic
+    {0x0500, 0x052F},   // Cyrillic Supplement
+    {0x0530, 0x058F},   // Armenian
+    {0x0590, 0x05FF},   // Hebrew
+    {0x0600, 0x06FF},   // Arabic (includes the Arabic-Indic digits)
+    {0x0700, 0x074F},   // Syriac
+    {0x0750, 0x077F},   // Arabic Supplement
+    {0x0780, 0x07BF},   // Thaana
+    {0x07C0, 0x07FF},   // NKo
+    {0x0800, 0x083F},   // Samaritan
+    {0x0840, 0x085F},   // Mandaic
+    {0x0860, 0x086F},   // Syriac Supplement
+    {0x08A0, 0x08FF},   // Arabic Extended-A
+    {0x0900, 0x097F},   // Devanagari
+    {0x0980, 0x09FF},   // Bengali
+    {0x0A00, 0x0A7F},   // Gurmukhi
+    {0x0A80, 0x0AFF},   // Gujarati
+    {0x0B00, 0x0B7F},   // Oriya
+    {0x0B80, 0x0BFF},   // Tamil
+    {0x0C00, 0x0C7F},   // Telugu
+    {0x0C80, 0x0CFF},   // Kannada
+    {0x0D00, 0x0D7F},   // Malayalam
+    {0x0D80, 0x0DFF},   // Sinhala
+    {0x10A0, 0x10FF},   // Georgian
+    {0x1100, 0x11FF},   // Hangul Jamo
+    {0x1200, 0x139F},   // Ethiopic (+ Supplement)
+    {0x13A0, 0x13FF},   // Cherokee
+    {0x1E00, 0x1EFF},   // Latin Extended Additional (Vietnamese)
+    {0x1F00, 0x1FFF},   // Greek Extended
+    {0x200C, 0x200D},   // ZWNJ / ZWJ: inside a word in Arabic and the Indic scripts
+    {0x2C80, 0x2CFF},   // Coptic
+    {0x2D00, 0x2D2F},   // Georgian Supplement
+    {0x2D30, 0x2D7F},   // Tifinagh
+    {0x3130, 0x318F},   // Hangul Compatibility Jamo
+    {0xA720, 0xA7FF},   // Latin Extended-D
+    {0xA960, 0xA97F},   // Hangul Jamo Extended-A
+    {0xAB30, 0xAB6F},   // Latin Extended-E
+    {0xAC00, 0xD7A3},   // Hangul syllables
+    {0xD7B0, 0xD7FF},   // Hangul Jamo Extended-B
+    {0xFB00, 0xFB4F},   // Alphabetic Presentation Forms (Latin ligatures, Hebrew)
+    {0xFB50, 0xFDFF},   // Arabic Presentation Forms-A
+    {0xFE70, 0xFEFF},   // Arabic Presentation Forms-B
+    {0xFF10, 0xFF19},   // Fullwidth digits
+    {0xFF21, 0xFF3A},   // Fullwidth Latin capitals
+    {0xFF41, 0xFF5A},   // Fullwidth Latin small letters
+};
+
+// Scripts written without spaces between words: one code point is one token.
+constexpr CpRange kStandaloneRanges[] = {
+    {0x0E00, 0x0E7F},   // Thai
+    {0x0E80, 0x0EFF},   // Lao
+    {0x0F00, 0x0FFF},   // Tibetan
+    {0x1000, 0x109F},   // Myanmar
+    {0x1780, 0x17FF},   // Khmer
+    {0x1800, 0x18AF},   // Mongolian
+    {0x2E80, 0x2EFF},   // CJK Radicals Supplement
+    {0x3005, 0x3007},   // Ideographic iteration mark, closing mark, ideographic zero
+    {0x3040, 0x30FF},   // Hiragana and Katakana
+    {0x3100, 0x312F},   // Bopomofo
+    {0x31A0, 0x31BF},   // Bopomofo Extended
+    {0x31F0, 0x31FF},   // Katakana Phonetic Extensions
+    {0x3400, 0x4DBF},   // CJK Unified Ideographs Extension A
+    {0x4E00, 0x9FFF},   // CJK Unified Ideographs
+    {0xF900, 0xFAFF},   // CJK Compatibility Ideographs
+    {0xFF66, 0xFF9D},   // Halfwidth Katakana
+    {0x20000, 0x3134F}, // CJK Unified Ideographs Extensions B-G
+};
+
+bool InRanges(unsigned int c, const CpRange* r, size_t n) {
+    for (size_t i = 0; i < n; i++) {
+        if (c < r[i].lo) return false;   // the tables are sorted, so an early miss is a miss
+        if (c <= r[i].hi) return true;
+    }
+    return false;
+}
+
+// A code point that joins its neighbours into one token.
 bool IsWordCodepoint(unsigned int c) {
     if (c >= '0' && c <= '9') return true;
     if (c >= 'A' && c <= 'Z') return true;
     if (c >= 'a' && c <= 'z') return true;
     if (c >= 0xC0 && c <= 0xFF && c != 0xD7 && c != 0xF7) return true;  // Latin-1 Supplement letters
     if (c >= 0x100 && c <= 0x17F) return true;                          // Latin Extended-A
-    return false;
+    return InRanges(c, kJoiningRanges, sizeof(kJoiningRanges) / sizeof(kJoiningRanges[0]));
+}
+
+// A code point that is one whole token by itself (a script with no inter-word spacing).
+bool IsStandaloneCodepoint(unsigned int c) {
+    return InRanges(c, kStandaloneRanges, sizeof(kStandaloneRanges) / sizeof(kStandaloneRanges[0]));
 }
 
 using Token = std::u32string;
@@ -153,10 +282,13 @@ std::vector<Token> Tokenize(const std::vector<unsigned int>& codepoints) {
     for (unsigned int c : codepoints) {
         if (IsWordCodepoint(c)) {
             cur.push_back(static_cast<char32_t>(c));
-        } else if (!cur.empty()) {
+            continue;
+        }
+        if (!cur.empty()) {
             out.push_back(cur);
             cur.clear();
         }
+        if (IsStandaloneCodepoint(c)) out.push_back(Token(1, static_cast<char32_t>(c)));
     }
     if (!cur.empty()) out.push_back(cur);
     return out;
