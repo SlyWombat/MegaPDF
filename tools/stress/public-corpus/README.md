@@ -241,16 +241,16 @@ it was measured against.
 stated explicitly, because it is the question that matters most.** Two shapes exist, and
 they are handled differently on purpose:
 
-* **A new opt-in HTTP source** (the `irs`/`uscis`/`govinfo-signed`/`nonlatin-wiki` shape,
-  added via `--add-source` and merged by `merge_and_report()`) never goes through
-  `CATEGORIES`/`spread()`/`pin_selection()` at all — it is excluded from the pinning
-  machinery by construction (see `main()`'s `opt_in_source_keys`) and carried over
-  unconditionally, the same as the federal-forms rows always were. Its rows are simply
-  **appended**: they compete with nothing, so they cannot reshuffle anything and nothing
-  can crowd them out. This is proven live in TESTING.md's fifth run: pin against a manifest
-  from *before* `nonlatin-wiki` existed, run `--add-source nonlatin-wiki` for real, and the
-  1,382 previously-selected rows come back **byte-identical**, with exactly 280 new rows
-  added.
+* **A new opt-in HTTP source** (the `irs`/`uscis`/`govinfo-signed`/`uk-*`/`govinfo-large`/
+  `nonlatin-wiki` shape, added via `--add-source` and merged by `merge_and_report()`) never
+  goes through `CATEGORIES`/`spread()`/`pin_selection()` at all — it is excluded from the
+  pinning machinery by construction (`main()` filters on `OPT_IN_SOURCE_VALUES`, the full
+  `NON_GIT_SOURCES` ∪ `wiki-*` set) and carried over unconditionally, the same as the
+  federal-forms rows always were. Its rows are simply **appended**: they compete for no
+  quota, so they cannot reshuffle anything and nothing can crowd them out. That exclusion
+  must be the *whole* opt-in set: scoped to `FEDERAL_SOURCES` alone it silently mis-reads
+  all 148 `uk-*`/`govinfo-*` rows as pinned rows that vanished, and every plain rebuild
+  refuses until each is named to `--allow-removed`.
 * **A new git-cloned source** (the `verapdf`/`qpdf`/`pdfium` shape, added to `SOURCES`) *does*
   go through the normal pipeline: its files are `classify()`d into ordinary categories and
   become `pool_by_path` candidates like any other source's. `pin_selection()` treats "a
@@ -258,10 +258,24 @@ they are handled differently on purpose:
   there is no special case, because there does not need to be one: every previously-selected
   row from *any* source is pinned regardless of which source it came from, and a new source's
   rows are `spread()`-selected into whatever quota room is left (none, today, for `tagged`/
-  `malformed`/`scan`/`report`, all four already at capacity; unlimited for `form`). A future
-  git source that should guarantee itself real representation needs either its own quota
-  bump (a visible, deliberate `QUOTAS` edit) or, like `govinfo-signed`, a forced `category`
-  that sidesteps competition entirely — not a change to `pin_selection()` itself.
+  `malformed`/`scan`/`report`, all four already at capacity; unlimited for `form` and
+  `large`). A future git source that should guarantee itself real representation needs either
+  its own quota bump (a visible, deliberate `QUOTAS` edit) or, like `govinfo-signed`, a forced
+  `category` that sidesteps competition entirely — not a change to `pin_selection()` itself.
+
+  Measured, on the 1,777-row manifest, by adding a fourth git source carrying four documents
+  (two that `classify()` calls `form`, two it calls `report`) and rebuilding:
+
+  | | rows lost | rows added | net |
+  |---|---:|---:|---:|
+  | unpinned (the behaviour #455 is about) | **189** | **191** | +2 |
+  | pinned (this design) | **0** | **2** | +2 |
+
+  Both land on the same net `+2`. Unpinned, that `+2` hides 380 changed rows — 189
+  previously-measured documents swapped out for 191 others, none of it visible in a row
+  count. Pinned, the diff is literally two added lines and nothing else: the two new `form`
+  documents are appended (that category has no quota), the two new `report` documents are
+  declined (that category is at 250/250), and not one of the 1,777 existing rows moves.
 ## UN parallel-language documents — investigated, not added (#471)
 
 #471's non-Latin-script sample above is 40 *unrelated* Wikipedia articles per script, so a
