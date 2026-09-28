@@ -185,6 +185,48 @@ what MegaPDF is for and the category #434 calls the private corpus thinnest on. 
 are sampled on an even stride across the sorted tree, which is reproducible and does not
 hand back every test for one specification clause and nothing after it.
 
+### Stable under addition, not just deterministic (#455)
+
+Deterministic (rebuild twice, get the same bytes) is not the same property as **stable under
+addition** (add documents, keep the same existing selection). #453 found the gap the hard
+way: adding 186 real federal forms didn't touch the `tagged`/`malformed`/`scan`/`report`
+categories' *content* directly, but it changed the total pool each category's even stride was
+computed over, so the stride landed on a different subset — including two qpdf fixtures that
+happened to over-count tokens against PDFium, dragging the aggregate fidelity gate down for a
+reason that had nothing to do with the new forms. A gate number is not evidence if you cannot
+tell whether it moved because the engine changed or because the corpus reshuffled.
+
+`build-manifest.py` now pins the sample (`pin_selection()`): every rebuild reads whatever
+`--out` already has selected for a category and keeps every one of those rows that is still
+in the freshly-collected pool, unconditionally — a document's seat is never taken by a stride
+recomputed over a larger or smaller pool. Only the quota room left over after pinning (if any)
+is handed to the even-stride `spread()`, and only over candidates that were never previously
+selected, so `spread()` can never reshuffle an existing pick. `form` (quota `None`) already
+took every match unconditionally, so it needed no change — it was never the reshuffling
+category. Chosen over the other two options #455 listed (sampling per source, or hash-based
+selection `sha256(path) mod N < k`) because it builds on what the manifest already is: an
+explicit, committed list of rows, so "the sample" has a literal, auditable home rather than
+being implicit in a formula that a reviewer has to re-derive to trust.
+
+A rebuild that would lose an existing row — a source checkout changed, or `classify()` now
+files a document under a different category — refuses outright rather than dropping or
+silently re-filing it:
+
+    refusing to rebuild manifest.tsv: 1 row(s) already selected there are missing from this
+    rebuild's pool -- a source checkout changed, or classify() now files them elsewhere.
+    #455: a removal must be deliberate and visible, never silent. If this is expected,
+    re-run with --allow-removed <path> for each (repeatable):
+      verapdf/ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-a.pdf  (was tagged)
+
+`--allow-removed <path>` (repeatable) is how a maintainer makes that removal deliberate; the
+manifest diff then shows exactly one row disappearing for a reason a PR description can state,
+never a silent reshuffle buried in a hundred other changed rows.
+
+Each rebuild's stderr also prints the manifest's own **revision**: the sha256 of the written
+`manifest.tsv`, e.g. `revision sha256:1e7a27ca...`. TESTING.md's public-corpus baselines are
+recorded against this hash, not just a date, so a gate number always names the exact manifest
+it was measured against.
+
 ### A classification bug this extension found and fixed
 
 `classify()` used to require **both** `/AcroForm` and `/Widget` to appear literally in a
@@ -352,9 +394,11 @@ never cite a run over them as a conformance claim.
 
 ## Extending
 
-`build-manifest.py` regenerates the **git-sourced** part of the manifest from scratch, so
-that part of the corpus is a function of its sources rather than a pile someone once
-assembled:
+`build-manifest.py` regenerates the **git-sourced** part of the manifest by re-collecting
+every source and re-deriving each file's category, so that part of the corpus is a function
+of its sources rather than a pile someone once assembled — but it does not re-*sample* from
+scratch (see "Stable under addition" above): whatever `--out` already has selected stays
+selected, and only a category's unfilled quota room is drawn from new candidates.
 
     tools/stress/public-corpus/build-manifest.py --work /var/tmp/pc-build
 
@@ -363,7 +407,10 @@ every sha256 in the file. To add one: give it a licence that permits redistribut
 `Source` row, pin the commit, and rebuild. **A plain rebuild never touches the network for
 the federal-forms rows and never deletes them either** — it preserves whatever `irs`/`uscis`/
 `govinfo-signed` rows are already in `--out`, so it stays exactly as reproducible from a
-blocked sandbox as it always was.
+blocked sandbox as it always was. If a rebuild would drop an existing row (a pinned commit's
+tree lost a file that a previous manifest selected, or `classify()`'s logic changed and now
+files it under a different category), it refuses and names the row; pass
+`--allow-removed <path>` once you have confirmed why.
 
 To (re)fetch the federal-sourced rows, from a machine that can reach the host — `www.irs.gov`,
 `www.uscis.gov` and `www.govinfo.gov` are all unreachable from Anthropic's cloud sandbox,

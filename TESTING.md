@@ -345,6 +345,11 @@ forms work."
 
 ### Second run, 2026-09-27: 136 real IRS forms + 50 real USCIS forms added
 
+**Its own gate numbers are superseded by the third run below**, which measured the identical
+manifest (byte-identical, #455) against a moved main — kept here for the corpus population
+history (the federal-forms extension) and because the fidelity-gate failure it recorded is
+exactly what #453 and #455 are about.
+
 `irs.gov` and `uscis.gov` are reachable from an ordinary machine (kdocker3) even though they
 are not reachable from Anthropic's cloud sandbox — see
 `tools/stress/public-corpus/README.md`, "Network reality", for the measured statuses and the
@@ -517,6 +522,10 @@ population to measure. Filed as **#482** (vertical Japanese, the #444-shaped fai
 **#483** (the horizontal-script fidelity-gate shortfall) and **#484** (Arabic/Devanagari
 reading-order self-disagreement); `core/megapdf_structure.cpp` was not touched, since
 another session is working there for #453.
+
+### Fifth run, 2026-09-28: manifest revision `sha256:PLACEHOLDER`, N rows (#455)
+
+PENDING-REWRITE-AFTER-FINAL-RERUN
 
 ### Android app UI tests (#346)
 
