@@ -839,6 +839,9 @@ void ToCropPoint(const megapdf_page* p, double x, double y, double* out_x, doubl
     if (out_y != nullptr) *out_y = c.y;
 }
 megapdf_rect ToCropRect(const megapdf_page* p, double l, double b, double r, double t) { return OutRect(p, l, b, r, t); }
+// Named apart from the file-local PageQuarterTurns above: inside this namespace an identically
+// named wrapper would find itself rather than that one, and recurse.
+int PageTurns(const megapdf_page* p) { return PageQuarterTurns(p); }
 void SetLastError(unsigned long code, const char* message) { SetError(code, message); }
 bool IsCancelled(const megapdf_cancel* c) { return c != nullptr && c->raised.load(std::memory_order_relaxed) != 0; }
 
