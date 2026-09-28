@@ -349,8 +349,28 @@ struct Char {
                                                             // leading corner along the advance is not always
                                                             // the one loose_l/loose_r alone would pick).
     double origin_x = 0, origin_y = 0;   // crop space
-    double font_size = 0;                // crop space points (the raw Tf operand -- #363's diagnosis on
-                                          // FPDFText_GetFontSize -- times the page's own unit scale)
+    double font_size = 0;                // crop space points: the size the glyph is actually DRAWN at.
+                                          // #496: FPDFText_GetFontSize hands back the raw Tf operand, which
+                                          // is only the drawn size when the text matrix carries no scale of
+                                          // its own. A producer that writes `/F 1 Tf` and puts the 10 in Tm
+                                          // reports 1 for 10 pt text -- measured on a 190-page UN document
+                                          // whose every one of 400,000+ characters does exactly that (mean
+                                          // Tf 1.000, mean drawn em 10.0), against a sibling document in the
+                                          // same corpus that reports 9.914 with a unit matrix. #382 hit the
+                                          // same thing from the other end (its kBodySizeFloorPt comment
+                                          // describes `/F 0.01 Tf` scaled through Tm) and floored the
+                                          // symptom; this is the size itself, so every page-space consumer
+                                          // below -- BuildLines' line split, ComputeBodySize, LineFontSize,
+                                          // LineStartsListItem, the span's own reported font_size -- gets a
+                                          // number that is in the same space as the box coordinates it is
+                                          // compared against. `text_em` below keeps the raw operand for the
+                                          // one caller that genuinely needs it.
+    double text_em = 0;                  // the raw Tf operand times the page unit -- the em in this
+                                          // character's OWN text space, which is the space #363's
+                                          // rotation-aware BuildWords does its gap/baseline arithmetic in
+                                          // (see the Char::mat_a comment). Page-space `font_size` is wrong
+                                          // there by exactly the matrix scale that BuildWords' `inv` has
+                                          // already divided out.
     // The linear (rotation/scale, no translation) part of FPDFText_GetMatrix, unscaled -- #363's
     // rotation-aware BuildWords inverts this to map a page-space gap/baseline test into this
     // character's own text space, where its advance runs along local +x and font_size (above) is
@@ -704,7 +724,7 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         c.b = box.bottom;
         c.t = box.top;
         ToCropPoint(page, ox, oy, &c.origin_x, &c.origin_y);
-        c.font_size = FPDFText_GetFontSize(tp, i) * unit;
+        c.text_em = FPDFText_GetFontSize(tp, i) * unit;
         // The tight ink box (above) understates many glyphs' true advance — "l", "i", a
         // narrow numeral — so gapping words on it alone over-splits exactly those words
         // (measured on the #98 schematic while building this: "Hardware" split into five
@@ -745,6 +765,15 @@ void ReadChars(const megapdf_page* page, PageWork* out) {
         // still the identity it was initialised to, which is exactly the fallback #363's
         // rotation-aware BuildWords wants (see the Char::mat_a comment).
         c.mat_a = m.a; c.mat_b = m.b; c.mat_c = m.c; c.mat_d = m.d;
+        // #496: the drawn em. A unit vector along the character's own local +y maps to
+        // (m.c, m.d) in page space (FS_MATRIX's convention, fpdfview.h: x' = a*x + c*y,
+        // y' = b*x + d*y), so that column's length is the factor between the Tf operand and
+        // the size the glyph is drawn at. Deliberately the y column and not sqrt(|det|): a run
+        // with horizontal scaling (Tz) has a != d, and Tz does not change the font's size. When
+        // FPDFText_GetMatrix failed, `m` is still the identity it was initialised to, the
+        // factor is 1, and this is exactly the old value.
+        const double em_scale = std::sqrt(m.c * m.c + m.d * m.d);
+        c.font_size = c.text_em * (em_scale > 1e-9 ? em_scale : 1.0);
         out->chars.push_back(c);
     }
     FPDFText_ClosePage(tp);
@@ -856,6 +885,7 @@ double TransformBoxMaxY(const Linear2& inv, double l, double r, double b, double
 std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<int>& indices) {
     std::vector<Word> words;
     Word cur;
+    double cur_text_em = 0;   // #496: Word::font_size is page space; this is the same word's text-space em.
     bool have = false;
     int prev = -1;
     for (int i : indices) {
@@ -873,7 +903,11 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
             ApplyLinear(inv, p.origin_x, p.origin_y, &p_origin_xp, &p_origin_yp);
             ApplyLinear(inv, c.origin_x, c.origin_y, &c_origin_xp, &c_origin_yp);
             const double baseline_delta = std::fabs(c_origin_yp - p_origin_yp);
-            const double em = Em(c.font_size > 0 ? c.font_size : cur.font_size);
+            // #496: the TEXT-space em, not the page-space one. Every quantity in this test has
+            // already been mapped through `inv`, which divides the matrix scale out, so the
+            // threshold has to be the raw operand or the two are in different spaces. Before
+            // #496 the two were the same number and this read `c.font_size`.
+            const double em = Em(c.text_em > 0 ? c.text_em : cur_text_em);
             bool same_baseline = baseline_delta <= kBaselineEm * em;
             // #363 follow-up: a tight forward gap with a moderate vertical offset (see the
             // kSuperscriptGapEm/kSuperscriptOffsetEm comment above) is treated as one word even
@@ -923,6 +957,7 @@ std::vector<Word> BuildWords(const std::vector<Char>& chars, const std::vector<i
             if (have) words.push_back(cur);
             cur = Word();
             cur.l = c.l; cur.b = c.b; cur.r = c.r; cur.t = c.t; cur.font_size = c.font_size;
+            cur_text_em = c.text_em;
             have = true;
         } else {
             cur.l = (std::min)(cur.l, c.l);
