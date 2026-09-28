@@ -270,6 +270,99 @@ void test_dynamic_xfa(const std::string& fixtures) {
     }
 }
 
+// #476/#481: MEGAPDF_DOC_SIGNED fires on a document that carries a /Sig, and NOT on an
+// unsigned one; MEGAPDF_DOC_SIGNED_CERTIFICATION additionally fires only when that
+// signature is a certification (/DocMDP) signature. Fixtures: tools/gen_signature_fixtures.py
+// (signed-approval.pdf, signed-certified.pdf); fixture.pdf and forms.pdf (both unsigned,
+// tools/gen_test_fixtures.py) stand in for "no signature at all" and "an ordinary AcroForm
+// with no signature", the same pair test_dynamic_xfa already opens.
+void test_signature_detection(const std::string& fixtures) {
+    Doc approval(fixtures + "/signed-approval.pdf");
+    check(approval.doc != nullptr, "signed-approval.pdf opens");
+    if (approval.doc) {
+        const unsigned int flags = megapdf_document_flags(approval.doc);
+        check((flags & MEGAPDF_DOC_SIGNED) != 0, "signed-approval.pdf sets MEGAPDF_DOC_SIGNED",
+              std::to_string(flags));
+        check((flags & MEGAPDF_DOC_SIGNED_CERTIFICATION) == 0,
+              "signed-approval.pdf (no /DocMDP) does NOT set MEGAPDF_DOC_SIGNED_CERTIFICATION",
+              std::to_string(flags));
+    }
+
+    Doc certified(fixtures + "/signed-certified.pdf");
+    check(certified.doc != nullptr, "signed-certified.pdf opens");
+    if (certified.doc) {
+        const unsigned int flags = megapdf_document_flags(certified.doc);
+        check((flags & MEGAPDF_DOC_SIGNED) != 0, "signed-certified.pdf sets MEGAPDF_DOC_SIGNED",
+              std::to_string(flags));
+        check((flags & MEGAPDF_DOC_SIGNED_CERTIFICATION) != 0,
+              "signed-certified.pdf (/DocMDP permission 1) sets MEGAPDF_DOC_SIGNED_CERTIFICATION",
+              std::to_string(flags));
+    }
+
+    Doc plain(fixtures + "/fixture.pdf");
+    check(plain.doc != nullptr, "fixture.pdf opens");
+    if (plain.doc) {
+        const unsigned int flags = megapdf_document_flags(plain.doc);
+        check((flags & (MEGAPDF_DOC_SIGNED | MEGAPDF_DOC_SIGNED_CERTIFICATION)) == 0,
+              "fixture.pdf (no signature) sets neither signature bit", std::to_string(flags));
+    }
+
+    Doc acroform(fixtures + "/forms.pdf");
+    check(acroform.doc != nullptr, "forms.pdf opens");
+    if (acroform.doc) {
+        const unsigned int flags = megapdf_document_flags(acroform.doc);
+        check((flags & (MEGAPDF_DOC_SIGNED | MEGAPDF_DOC_SIGNED_CERTIFICATION)) == 0,
+              "forms.pdf (ordinary AcroForm, no signature) sets neither signature bit",
+              std::to_string(flags));
+    }
+}
+
+// #476/#481, the real-document half of the same check: run megapdf_document_flags() over
+// every document in a directory of genuinely signed real-world PDFs, not just the synthetic
+// fixtures above. Off by default (a corpus is not committed to the repository, ADR the same
+// as #147's large-file fixtures above): set MEGAPDF_SIGNED_CORPUS to a directory of PDFs
+// (on kdocker3: ~/pdf-public/govinfo-signed/*/pdf, #476's 33 genuinely-signed GPO documents,
+// independently verified with poppler's pdfsig) to run it. Every document under that
+// directory is expected to set MEGAPDF_DOC_SIGNED -- that population is signed by
+// construction -- and this also reports, without asserting a particular split (a
+// homogeneous single-signer corpus of 33 is evidence, not a spec), how many additionally
+// carry MEGAPDF_DOC_SIGNED_CERTIFICATION.
+void test_signature_detection_corpus() {
+    const char* dir = std::getenv("MEGAPDF_SIGNED_CORPUS");
+    if (dir == nullptr || *dir == 0) {
+        std::printf("signature detection (real corpus): skipped -- set MEGAPDF_SIGNED_CORPUS to a "
+                    "directory of genuinely-signed PDFs (on kdocker3: ~/pdf-public/govinfo-signed/*/pdf) "
+                    "to run it (#476, #481)\n");
+        return;
+    }
+    std::error_code ec;
+    int total = 0, signed_count = 0, certified_count = 0, unopened = 0;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir, ec)) {
+        if (ec || !entry.is_regular_file()) continue;
+        if (entry.path().extension() != ".pdf") continue;
+        total++;
+        Doc d(entry.path().string());
+        if (d.doc == nullptr) {
+            unopened++;
+            std::printf("signature detection (real corpus): FAIL to open %s\n", entry.path().string().c_str());
+            continue;
+        }
+        const unsigned int flags = megapdf_document_flags(d.doc);
+        if (flags & MEGAPDF_DOC_SIGNED) signed_count++;
+        if (flags & MEGAPDF_DOC_SIGNED_CERTIFICATION) certified_count++;
+        if (!(flags & MEGAPDF_DOC_SIGNED)) {
+            check(false, "signature detection (real corpus): did not set MEGAPDF_DOC_SIGNED",
+                  entry.path().string());
+        }
+    }
+    check(total > 0, "signature detection (real corpus): MEGAPDF_SIGNED_CORPUS held at least one .pdf", dir);
+    check(unopened == 0, "signature detection (real corpus): every document opened",
+          std::to_string(unopened));
+    std::printf("signature detection (real corpus): %d/%d set MEGAPDF_DOC_SIGNED, %d of those also "
+                "MEGAPDF_DOC_SIGNED_CERTIFICATION (%s)\n",
+                signed_count, total, certified_count, dir);
+}
+
 // Pages still open when the document closes are closed by the core, and a page
 // closed explicitly is removed from the document's list (ASan catches a double free).
 void test_lifecycle(const std::string& fixtures) {
@@ -7667,6 +7760,8 @@ int main(int argc, char** argv) {
     test_open_failures(argv[1]);
     test_document_and_geometry(argv[1]);
     test_dynamic_xfa(argv[1]);
+    test_signature_detection(argv[1]);
+    test_signature_detection_corpus();
     test_lifecycle(argv[1]);
     test_open_from_file(argv[1]);
     test_read_from_copy(argv[1]);
