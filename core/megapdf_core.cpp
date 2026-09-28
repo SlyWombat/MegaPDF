@@ -5531,9 +5531,10 @@ bool HierarchicalFieldsWouldClash(const megapdf_document* dest, const megapdf_do
 // a top-level name in `dest` is renamed in `src` — "name" becomes "name_2", or the first
 // "name_<k>" nobody has — so the two never merge into one field. Done on the source, which
 // is the core's own open of the other file and is never saved, so the copy PDFium makes
-// carries the new name. Every widget coming across is its own field (the ones with a
-// /Parent were refused before this), so the name to change is the widget's /T. False only
-// when out of memory.
+// carries the new name. A hierarchical widget's name lives on its /Parent, never on its own
+// /T (HierarchicalFieldsWouldClash refuses the whole operation before this runs, for exactly
+// the case that would need one renamed), so the name to change is always the widget's own
+// /T. False only when out of memory.
 bool RenameClashingFields(const megapdf_document* dest, const megapdf_document* src, const std::vector<int>& src_pages) {
     try {
         std::set<U16> incoming;
