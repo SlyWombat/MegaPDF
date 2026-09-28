@@ -366,6 +366,28 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     private bool _isDynamicXfa;
 
     /// <summary>
+    /// True for the life of this open when the document carries an existing digital
+    /// signature (#476, #481): <c>megapdf_save()</c>'s full rewrite cannot preserve one, so
+    /// saving over this document's own file will invalidate it. Deliberately not a banner
+    /// on open (Dave's framing: the common path, saving a copy under your own name, is
+    /// already safe) — read here, next to <see cref="Capabilities"/>, only so the View's
+    /// Save flow can warn at the point that matters.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSigned;
+
+    /// <summary>
+    /// True when at least one of the document's signatures is a certification signature
+    /// (`/DocMDP`) rather than an ordinary approval one. Always accompanied by
+    /// <see cref="IsSigned"/>. A certification signature can declare the document closed to
+    /// modification outright, not merely be invalidated by one — measured 33/33 on #476's
+    /// real signed corpus, so the overwrite warning's wording differs when this is true; it
+    /// is the case a real document is expected to hit, not the rare one.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSignedCertification;
+
+    /// <summary>
     /// The edited-marker convention macOS and Windows share: the title carries the
     /// document name, and unsaved work is a bullet rather than an asterisk.
     /// </summary>
@@ -548,6 +570,10 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         // #457: read alongside Capabilities/Security, the other document-level fact this
         // open reads once.
         IsDynamicXfa = document.IsDynamicXfa;
+        // #476, #481: read the same way — a save that overwrites this document will
+        // invalidate its signature.
+        IsSigned = document.IsSigned;
+        IsSignedCertification = document.IsSignedCertification;
         _matches.Clear();
         MatchCount = 0;
         CurrentMatchIndex = -1;
@@ -3180,6 +3206,8 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         IsDirty = false;
         Capabilities = DocumentCapabilities.Unprotected;
         IsDynamicXfa = false;
+        IsSigned = false;
+        IsSignedCertification = false;
         // Marks belong to the document that carried them (#329): the old count and the old
         // overlays must not outlive it, and neither must the mode that places them.
         RedactionMarkCount = 0;

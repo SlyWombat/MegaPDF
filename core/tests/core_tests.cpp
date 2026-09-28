@@ -5840,6 +5840,78 @@ long find_block(const megapdf_structure* s, int page, int kind, const std::strin
 
 }  // namespace
 
+// #472: a page's text reads the same whatever its /Rotate. rotated-pages.pdf draws the same
+// four words on four pages that differ only in /Rotate, so anything that moves between them is
+// the rotation handling and nothing else. Before the fix, 180 and 270 came out in reverse word
+// order ("Delta Charlie Bravo Alpha") and 90 and 270 lost the gaps ("AlphaBravoCharlieDelta").
+void test_structure_rotated_pages(const std::string& repo) {
+    const std::string kExpected = "Alpha Bravo Charlie Delta";
+    const int kRotations[4] = {0, 90, 180, 270};
+
+    {
+        Doc d(repo + "/structure/rotated-pages.pdf");
+        if (!d.doc) { check(false, "structure rotated-pages: opens"); return; }
+        megapdf_structure* s = megapdf_structure_load(d.doc, 0, 4, 0, nullptr);
+        check(s != nullptr, "structure rotated-pages: loads");
+        if (s == nullptr) return;
+        for (int page = 0; page < 4; page++) {
+            const long bi = find_block(s, page, MEGAPDF_BLOCK_PARAGRAPH, "");
+            if (bi < 0) {
+                check(false, "structure rotated-pages: /Rotate " + std::to_string(kRotations[page]) +
+                                 " has one paragraph");
+                continue;
+            }
+            const std::string got = block_text_ascii(s, static_cast<size_t>(bi), MEGAPDF_BLOCK_TEXT);
+            check(got == kExpected,
+                  "structure rotated-pages: /Rotate " + std::to_string(kRotations[page]) +
+                      " reads \"" + kExpected + "\" (got \"" + got + "\")");
+        }
+        // One paragraph per page and no more: a lost word gap used to show up here as four.
+        check(megapdf_block_count(s) == 4,
+              "structure rotated-pages: four pages, one paragraph each (got " +
+                  std::to_string(megapdf_block_count(s)) + ")");
+        megapdf_structure_free(s);
+    }
+
+    // A quarter turn four times is the identity: the text must read the same at every step, and
+    // the page must come back to the bounds it started with rather than drifting a turn at a
+    // time. Driven through the shipped rotate contract (#174), on page 0 so it starts at
+    // /Rotate 0 and visits all four.
+    {
+        Doc d(repo + "/structure/rotated-pages.pdf");
+        if (!d.doc) { check(false, "structure rotated-pages round trip: opens"); return; }
+        megapdf_rect first{};
+        bool have_first = false;
+        for (int turn = 0; turn <= 4; turn++) {
+            if (turn > 0) {
+                check(megapdf_page_rotate(d.doc, 0, 1) == MEGAPDF_OK,
+                      "structure rotated-pages round trip: turn " + std::to_string(turn) + " rotates");
+            }
+            megapdf_structure* s = megapdf_structure_load(d.doc, 0, 1, 0, nullptr);
+            check(s != nullptr, "structure rotated-pages round trip: loads after turn " + std::to_string(turn));
+            if (s == nullptr) return;
+            const long bi = find_block(s, 0, MEGAPDF_BLOCK_PARAGRAPH, "");
+            const std::string got = bi < 0 ? std::string("<no paragraph>")
+                                           : block_text_ascii(s, static_cast<size_t>(bi), MEGAPDF_BLOCK_TEXT);
+            check(got == kExpected,
+                  "structure rotated-pages round trip: after " + std::to_string(turn) +
+                      " quarter turn(s) the text still reads \"" + kExpected + "\" (got \"" + got + "\")");
+            if (bi >= 0) {
+                megapdf_block b{};
+                if (megapdf_block_get(s, static_cast<size_t>(bi), &b) == MEGAPDF_OK) {
+                    if (!have_first) { first = b.bounds; have_first = true; }
+                    else if (turn == 4) {
+                        check(rect_close(first, b.bounds, 0.01),
+                              "structure rotated-pages round trip: four turns come back to the "
+                              "bounds it started with");
+                    }
+                }
+            }
+            megapdf_structure_free(s);
+        }
+    }
+}
+
 void test_structure_tagged(const std::string& repo) {
     Doc d(repo + "/structure/tagged.pdf");
     if (!d.doc) { check(false, "structure tagged: opens"); return; }
@@ -8073,6 +8145,7 @@ int main(int argc, char** argv) {
     test_structure_furniture(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
+    test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged_mutations(std::string(MEGAPDF_REPO_FIXTURES));

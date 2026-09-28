@@ -745,6 +745,34 @@
     <value>This form needs Adobe Reader to fill in.</value>
     <comment>#457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
   </data>
+  <data name="SignedSaveWarningTitle" xml:space="preserve">
+    <value>This document is signed</value>
+    <comment>#476, #481: Save's confirmation before overwriting a signed original (ordinary/approval signature)</comment>
+  </data>
+  <data name="SignedSaveWarningBody" xml:space="preserve">
+    <value>Saving over this document will invalidate its digital signature. Save a copy instead to keep the signed original intact.</value>
+    <comment>#476, #481</comment>
+  </data>
+  <data name="CertifiedSaveWarningTitle" xml:space="preserve">
+    <value>This document is signed and certified against changes</value>
+    <comment>#476, #481: shown instead of SignedSaveWarningTitle when the signature carries a /DocMDP certification — measured as the common case, not the rare one, on real signed documents</comment>
+  </data>
+  <data name="CertifiedSaveWarningBody" xml:space="preserve">
+    <value>This document's signature certifies it — its author declared that it should not be changed at all. Saving over it will invalidate the signature. Save a copy instead to keep the signed original intact.</value>
+    <comment>#476, #481</comment>
+  </data>
+  <data name="SaveACopyButton" xml:space="preserve">
+    <value>Save a copy</value>
+    <comment>#476, #481: the signed-document save warning's primary, default action</comment>
+  </data>
+  <data name="OverwriteSignedButton" xml:space="preserve">
+    <value>Overwrite the original</value>
+    <comment>#476, #481: the signed-document save warning's deliberate, secondary action</comment>
+  </data>
+  <data name="SignatureNotCarriedNotice" xml:space="preserve">
+    <value>The signature on the original doesn't carry over to this copy.</value>
+    <comment>#476, #481: said once, quietly, after Save a copy on a signed document</comment>
+  </data>
   <data name="UnsupportedProtection" xml:space="preserve">
     <value>This PDF uses a kind of protection MegaPDF can't open.</value>
     <comment>PdfLoadException FPDF_ERR_SECURITY</comment>

@@ -19,6 +19,27 @@ public static partial class Strings
     /// <summary>This form needs Adobe Reader to fill in.</summary>
     public static string DynamicXfaCannotFill => Get("DynamicXfaCannotFill");
 
+    /// <summary>This document is signed</summary>
+    public static string SignedSaveWarningTitle => Get("SignedSaveWarningTitle");
+
+    /// <summary>Saving over this document will invalidate its digital signature. Save a copy instead to keep the signed original intact.</summary>
+    public static string SignedSaveWarningBody => Get("SignedSaveWarningBody");
+
+    /// <summary>This document is signed and certified against changes</summary>
+    public static string CertifiedSaveWarningTitle => Get("CertifiedSaveWarningTitle");
+
+    /// <summary>This document's signature certifies it — its author declared that it should not be changed at all. Saving over it will invalidate the signature. Save a copy instead to keep the signed original intact.</summary>
+    public static string CertifiedSaveWarningBody => Get("CertifiedSaveWarningBody");
+
+    /// <summary>Save a copy</summary>
+    public static string SaveACopyButton => Get("SaveACopyButton");
+
+    /// <summary>Overwrite the original</summary>
+    public static string OverwriteSignedButton => Get("OverwriteSignedButton");
+
+    /// <summary>The signature on the original doesn't carry over to this copy.</summary>
+    public static string SignatureNotCarriedNotice => Get("SignatureNotCarriedNotice");
+
     /// <summary>A lightweight PDF editor — open, fix, save, done.</summary>
     public static string AppDescription => Get("AppDescription");
 

@@ -168,6 +168,27 @@
   <data name="DynamicXfaCannotFill" xml:space="preserve">
     <value>Ce formulaire doit être rempli dans Adobe Reader.</value>
   </data>
+  <data name="SignedSaveWarningTitle" xml:space="preserve">
+    <value>Ce document est signé</value>
+  </data>
+  <data name="SignedSaveWarningBody" xml:space="preserve">
+    <value>L'enregistrement par-dessus ce document invalidera sa signature numérique. Enregistrez plutôt une copie pour garder l'original signé intact.</value>
+  </data>
+  <data name="CertifiedSaveWarningTitle" xml:space="preserve">
+    <value>Ce document est signé et certifié contre toute modification</value>
+  </data>
+  <data name="CertifiedSaveWarningBody" xml:space="preserve">
+    <value>La signature de ce document le certifie — son auteur a déclaré qu'il ne devait subir aucune modification. L'enregistrer par-dessus invalidera la signature. Enregistrez plutôt une copie pour garder l'original signé intact.</value>
+  </data>
+  <data name="SaveACopyButton" xml:space="preserve">
+    <value>Enregistrer une copie</value>
+  </data>
+  <data name="OverwriteSignedButton" xml:space="preserve">
+    <value>Remplacer l'original</value>
+  </data>
+  <data name="SignatureNotCarriedNotice" xml:space="preserve">
+    <value>La signature de l'original ne s'applique pas à cette copie.</value>
+  </data>
 
   <!-- Barre de recherche -->
   <data name="FindQuery.PlaceholderText" xml:space="preserve">

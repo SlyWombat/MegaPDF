@@ -47,7 +47,8 @@ egress proxy refuses the tunnel outright, so the request never reaches the host.
 |---|---|---|---|
 | IRS fillable forms | `www.irs.gov` | **403 CONNECT** | now yes — added from kdocker3 |
 | USCIS forms | `www.uscis.gov` | **403 CONNECT** | now yes — added from kdocker3 |
-| govinfo bulk | `www.govinfo.gov`, `api.govinfo.gov` | **403 CONNECT** | no — out of scope for now, see below |
+| UK gov forms (#471) | `assets.publishing.service.gov.uk` | **403 CONNECT** (untested from the sandbox; same egress proxy as every other blocked host here) | now yes — added from kdocker3 |
+| govinfo large documents (#471) | `www.govinfo.gov` | **403 CONNECT** (untested from the sandbox) | now yes — added from kdocker3, scoped to a handful of large Federal Register issues (see below); the *bulk* generator #434 originally asked for remains unbuilt |
 | SafeDocs / UNSAFE-DOCS | `digitalcorpora.org`, `downloads.digitalcorpora.org` | **403 CONNECT** | no — out of scope for now |
 | Isartor suite | `pdfa.org` | **403 CONNECT** | yes, *via veraPDF* (below) |
 | veraPDF corpus | `github.com` (git), `raw.githubusercontent.com` | **200 / 206** | yes |
@@ -69,14 +70,19 @@ Two details worth knowing before you conclude a source is unreachable from the s
 |---|---|
 | `www.irs.gov` (`/pub/irs-pdf/f1040.pdf`) | **200** |
 | `www.uscis.gov` (`/sites/default/files/document/forms/i-9.pdf`) | **200** |
-| `www.govinfo.gov` | **200** (a specific Federal Register PDF); **302** on `/robots.txt` |
+| `assets.publishing.service.gov.uk` (a UK gov.uk form PDF) | **200** — re-checked 2026-09-28 for #471 part 3 |
+| `www.govinfo.gov` | **200** (a specific Federal Register PDF); **206** on a ranged request; **302** on `/robots.txt` — re-checked 2026-09-28 for #471 part 4 |
 
-All three #434 names are reachable from a real machine. `govinfo` and `safedocs` are **not**
-implemented here even though `govinfo` is reachable — #434 asks for a *bulk* generator for
-it and nobody has designed or verified one yet; that stays a future extension, not a silent
-scope-creep of this one. This change adds exactly the one category #434 and the current
-milestone call "the highest-value" and "what a cloud sandbox could not reach": real federal
-fillable forms, from IRS and USCIS.
+All #434/#471 names are reachable from a real machine. `safedocs` and the *bulk* `govinfo`
+generator #434 item 4 asks for are both still **not** implemented — nobody has designed or
+verified a generator for either. #471 instead added two narrow, curated generators against
+`www.govinfo.gov`, each kept under its own source key rather than `govinfo` so neither
+collides with the bulk generator whenever it is eventually written: `govinfo-signed` (33
+already-signed GPO documents, part 1) and `govinfo-large` (7 large Federal Register issues,
+part 4 — see "Very large documents" below). #434 added the highest-value category the
+original corpus and its milestone called out — real federal fillable forms, from IRS and
+USCIS; #471 adds a second jurisdiction's forms (UK, OGL-licensed) and the corpus's first
+large-document and genuinely-signed-document populations.
 
 **One fetching wrinkle, because it cost real time to find.** This container's apt-installed
 `curl` (8.5.0, OpenSSL 3.0.13) is refused outright by `www.uscis.gov` — `403`, `server:
@@ -102,22 +108,26 @@ generator is eventually written.
 
 ## What is in it
 
-1,662 documents, 407.4 MB. Categories are assigned from each file's own bytes by
+1,777 documents, ~4.40 GB (dominated by the seven `large` documents at ~4.25 GB; everything
+else is ~456 MB). Categories are assigned from each file's own bytes by
 `build-manifest.py`'s `classify()`, not from the directory it arrived in, so a row says what
-the battery will actually meet — except `signed` (below), whose category is forced rather
-than derived, because the whole point of that row is the signature.
+the battery will actually meet — except `signed` and `large` (both below), whose category is
+forced rather than derived: for `signed`, because the whole point of that row is the
+signature; for `large`, because the row is chosen to be large before it is ever fetched (see
+"Very large documents" below — a byte-size check in `classify()` would agree regardless).
 
 | category | count | what it is |
 |---|---:|---|
-| `form` | 549 | `/AcroForm` — fields, checkboxes, radio groups, signature fields (see below: `/Widget` alone is not required any more) |
-| `tagged` | 580 | a `/StructTreeRoot`, for the tagged-PDF path (#358) — includes the 280 non-Latin-script rows below: Wikipedia's own PDF export tags its output |
-| `report` | 250 | ordinary text documents, for extraction fidelity and reading order |
+| `form` | 605 | `/AcroForm` — fields, checkboxes, radio groups, signature fields (see below: `/Widget` alone is not required any more) |
+| `tagged` | 618 | a `/StructTreeRoot`, for the tagged-PDF path (#358) — includes the 280 non-Latin-script rows below: Wikipedia's own PDF export tags its output |
+| `report` | 264 | ordinary text documents, for extraction fidelity and reading order |
 | `malformed` | 150 | deliberately broken or deliberately non-conforming — crash/hang resistance only |
 | `scan` | 100 | image pages with no font resources |
-| `signed` | 33 | already carries a valid digital signature — for #471 part 1's measurement of what `megapdf_save()`'s full rewrite does to it (see below) |
+| `signed` | 33 | already carries a valid digital signature — for #471 part 1's measurement of what `megapdf_save()`'s full rewrite does to it |
+| `large` | 7 | 48.4 MB - 2.07 GB — the paging-in/performance path (#471 part 4, see below) |
 
 By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**, **govinfo-signed 33**,
-**non-Latin wiki 280**.
+**non-Latin wiki 280**, **HMRC 62**, **Home Office 22**, **DWP 24**, **govinfo-large 7**.
 
 ## Non-Latin scripts (#471 part 2)
 
@@ -184,6 +194,88 @@ this repository alone.
 what MegaPDF is for and the category #434 calls the private corpus thinnest on. The others
 are sampled on an even stride across the sorted tree, which is reproducible and does not
 hand back every test for one specification clause and nothing after it.
+
+## UN parallel-language documents — investigated, not added (#471)
+
+#471's non-Latin-script sample above is 40 *unrelated* Wikipedia articles per script, so a
+fidelity gap between two scripts (#483: Arabic/Han/Thai fail the gate; #484: Arabic/
+Devanagari reading order disagrees with the structure tree) could be the script or could be
+the content. The UN publishes the same document in all six official languages (Arabic,
+Chinese, English, French, Russian, Spanish), which would hold the content fixed and vary
+only the script — exactly the instrument those two findings need. Investigated 2026-09-28;
+**no documents were fetched and no `un-*` rows exist in `manifest.tsv`**, because the
+licence check that #471 asks to run *before anything else* did not clear.
+
+**Two primary sources conflict, and neither wins outright.**
+
+1. `www.un.org/en/about-us/terms-of-use` — the terms that govern using any un.org-family
+   site, including `documents.un.org`, which is what actually serves the PDF bytes:
+
+   > The United Nations grants permission to Users to visit the Site and to download and
+   > copy the information, documents and materials … from the Site for the User's
+   > personal, non-commercial use, without any right to resell or redistribute them or to
+   > compile or create derivative works therefrom
+
+   `www.un.org/en/about-us/copyright` reinforces this ("Copyright © United Nations. All
+   rights reserved."), and points to `shop.un.org/rights-permissions`, which confirms there
+   is no blanket exception for research, testing, or non-resale redistribution — anything
+   beyond narrow excerpt limits requires prior written permission. Read alone, this rules
+   MegaPDF out immediately: MegaPDF is a commercial product, and a public, redistributable
+   manifest is not "personal" use by construction — the same reasoning that kept Canadian
+   Crown-copyright forms local-only (#456, #434's "Do NOT use" list).
+
+2. `ST/AI/189/Add.9/Rev.2` (17 September 1987), the UN Secretariat's own administrative
+   instruction on copyright practice — fetched and read directly (see "How the PDF URLs
+   were found" below). Paragraph 2(b) lists "United Nations documents: written material
+   officially issued under a United Nations document symbol" among the categories the UN
+   "will not seek copyright" for; paragraph 7: "The general rule for Official Records,
+   United Nations documents and public information material is that these publications
+   will be in the public domain." A resolution or Secretary-General report (symbol
+   `A/RES/…`, `A/74/…`, etc.) is exactly this. Read alone, this would clear the
+   commercial-use bar the same way 17 U.S.C. § 105 does for the IRS/USCIS/govinfo-signed
+   rows above, and it is the basis Wikimedia Commons currently cites for its
+   `{{PD-UN-doc}}` licence tag (still in active, non-deprecated use — some evidence it is
+   still treated as operative). But it is a 39-year-old internal staff instruction whose
+   own text frames itself as "experimental … until the end of 1989", and nothing reachable
+   from here confirms how the Organization reconciles it with (1) for material served
+   *today*: `digitallibrary.un.org`'s per-record rights metadata returned only an empty,
+   bot-challenge response (HTTP 202, zero-byte body) to both a plain fetch and to `curl`
+   with a browser user agent.
+
+Per #471: "If the terms are unclear or restrict commercial use, stop and report rather than
+adding the rows; a corpus whose licence column is guesswork is worth less than a smaller
+certain one." A live, specific, currently-displayed restriction against an old,
+unconfirmed-as-still-controlling permission is exactly that kind of unclear — unlike
+IRS/USCIS/govinfo-signed (17 U.S.C. § 105, no conflicting source found) or Wikipedia
+(CC BY-SA 4.0, no conflicting source found), both of which are clean. **Outcome: stop.**
+`build-manifest.py --add-source un-parallel` refuses with this reasoning
+(`SOURCES_BLOCKED_LICENCE`) rather than silently doing nothing — the same shape as
+`SOURCES_BLOCKED` for `govinfo`/`safedocs`, except the refusal is licence, not
+reachability or a missing generator.
+
+**How the PDF URLs were found, recorded for whoever eventually gets a written answer.**
+`docs.un.org` and `undocs.org` serve a JS-*looking* symbol-select landing page, but it is
+plain, un-rendered HTML that 302-redirects per language to a page whose `<iframe src=…>`
+is already the real, static, no-JS-needed URL:
+
+    https://documents.un.org/api/symbol/access?s=<SYMBOL>&l=<ar|zh|en|fr|ru|es>&t=pdf
+
+which itself 302s to a stable-looking direct path (e.g.
+`https://documents.un.org/doc/undoc/gen/ns0/000/81/img/ns000081.pdf` for
+`ST/AI/189/Add.9/Rev.2`'s English copy) — verified 2026-09-28 with plain `curl`, no
+Playwright needed for *this* part of the pipeline after all. Playwright would still be the
+right tool for the part not attempted here: discovering which ~10 document symbols exist
+in all six languages (`docs.un.org`'s own search UI is genuinely JS-driven), and confirming
+each direct URL's stability across repeated fetches the way #455/`fetch.sh` requires before
+anything is pinned by sha256.
+
+**If this is picked up again:** get a written answer from `permissions@un.org`, or from the
+Secretary of the Publications Board per `ST/AI/189/Add.9/Rev.2` paragraph 20, confirming
+that (a) documents bearing a UN document symbol remain in the public domain for material
+served today, and (b) a commercial company redistributing them (even indirectly, via a
+public URL+sha256 manifest rather than rehosting bytes) is within that permission. Only
+then resolve `un-parallel` in `SOURCES_BLOCKED_LICENCE` the way `irs`/`uscis`/
+`govinfo-signed` were resolved out of `SOURCES_BLOCKED`.
 
 ### A classification bug this extension found and fixed
 
@@ -295,6 +387,172 @@ the identity rotate when none exists, as above), then called `megapdf_save` and 
 result to a temporary file for `pdfsig` to check — the same open/edit/save shape the apps
 use, with signature verification done entirely outside MegaPDF's own code.
 
+## UK government forms (#471 part 3)
+
+108 forms — 62 HMRC, 22 Home Office, 24 DWP — chosen deliberately, one gov.uk publication
+page at a time, never scraped:
+
+| group | count | why |
+|---|---:|---|
+| HMRC self-assessment (core/supplementary/entity-returns/specialist/short-return) | 21 | SA100 and the schedule family that attaches to it; SA106 repeats per country, SA108 per disposal, SA800/SA900's partnership and trust statements repeat per partner/beneficiary — the two most deeply nested HMRC documents here |
+| HMRC agent/repayment admin | 5 | 64-8, R43, P87, P53, P55 — short, mostly flat claim/authorisation forms; P87 is a confirmed 8pp AcroForm |
+| HMRC PAYE P11D worksheets | 7 | WS1-WS6 benefit-calculation worksheets; WS4 (loans) and WS6 (mileage) are line-item/tabular |
+| HMRC PAYE employer admin | 3 | BC539 App.1 + two Starter Checklist variants — flat, short |
+| HMRC PAYE NIC settlement | 2 | NSR Appendix 7A/7B — each explicitly covers multiple employees, the strongest repeating-record evidence in the PAYE set |
+| HMRC VAT (registration/group/refunds/schemes/option-to-tax/vehicles) | 16 | the VAT forms still published as static PDFs (several core VAT forms have moved to XFA `.xdp` interactive forms on a separate HMRC service — out of scope here, a candidate for a future source) |
+| HMRC corporation tax | 9 | CT41G plus CT600 and seven supplementary pages (A/B/C/E/F/J/L) — CT600A/B/C/J each repeat a per-participator/CFC/group-member/scheme-reference row: the deepest `/Parent` hierarchies in the HMRC set after SA800/SA900 |
+| Home Office asylum support | 5 | ASF1 (36pp, whole-household/dependants — the flagship Home Office repeating form) plus its Section 4 and integration-loan siblings |
+| Home Office visa extension (humanitarian) | 3 | FLR(P) (27pp) and its 48pp fee-waiver form (an itemised income/expenditure/household breakdown), plus a 1pp payment slip |
+| Home Office visa (settlement/forces/domestic-violence/detention) | 4 | the visa-route PDFs that survived the 2018 move to online-only applications |
+| Home Office nationality (naturalisation/registration/admin) | 10 | Form AN (29pp, repeating employment/travel/address history) plus the postal registration routes (17-30pp each) and short admin forms |
+| DWP disability benefits | 6 | PIP1/PIP1(AI)/PIP2/WCA50/AA1/DLA1-Child — PIP2 (~50pp) and WCA50 (24pp) iterate a fixed activity schema with per-activity sub-questions, the DWP reference case for repeating structure |
+| DWP industrial injuries | 4 | BI100A/PD/OAE/OD — four near-sibling interactive claim forms whose history repeats per employer/incident |
+| DWP carer's allowance / state pension / pension credit | 8 | DS700 pair; BR1 plus the living-abroad IPC BR1 variants (repeating country-by-country residence/work history); PC1H's explicit repeating table of accounts/investments |
+| DWP bereavement/maternity / winter fuel | 6 | event-driven claims, mostly flat, plus one short one-pager as the simple-bucket anchor |
+
+Every URL was resolved from the form's own gov.uk publication page and fetched, hashed and
+confirmed to start with `%PDF` before going in the manifest — see `build-manifest.py`'s
+`HMRC_FORMS` / `HOME_OFFICE_FORMS` / `DWP_FORMS` for the exact list and grouping.
+
+**What no longer exists as a static PDF**, and is therefore left out rather than guessed at:
+several core HMRC VAT/CT/payroll forms (VAT1, VAT7, VAT50/51, VAT600 series, CT2, P46(Car),
+P350) have moved to XFA `.xdp` interactive forms on a separate HMRC service — a real, and
+separately interesting, future source if MegaPDF wants `.xdp` coverage. HMRC's SA1, CWF1,
+SA303, SA370/371, R40, P85 and P50 are online-only digital services with no blank PDF. Most
+Home Office visa routes other than the ones listed (FLR(AF), SET(AF), SET(DV), FLR(M),
+SET(M), SET(O) and others) are paper-withdrawn since 2018 — confirmed on their own gov.uk
+pages, not assumed. DWP's ESA50 and UC50 were merged into WCA50 on 2026-05-05, and several
+benefits (Universal Credit's general claim, Access to Work, New Style JSA, Cold Weather
+Payment) are online-only with no separate paper form.
+
+### The Open Government Licence, verified rather than assumed
+
+Canadian Crown copyright is why CRA/IRCC forms are local-only (#456) — Crown copyright with
+no clear permission for third-party redistribution. UK central-government material is
+different, and this was checked from the licence's own text, not assumed:
+
+> "You are free to: copy, publish, distribute and transmit the Information; adapt the
+> Information; **exploit the Information commercially and non-commercially** for example, by
+> combining it with other Information, or by including it in your own product or application."
+> — [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/), "Open Government Licence for public sector information", nationalarchives.gov.uk, verified 2026-09-28
+
+Attribution is a **condition** of that permission, unlike the US federal forms above:
+
+> "You must (where you do any of the above): acknowledge the source of the Information in
+> your product or application by including or linking to any attribution statement specified
+> by the Information Provider(s) and, where possible, provide a link to this licence."
+
+None of the four gov.uk publication pages checked directly (one per agency, plus the Home
+Office visa-forms collection page) specify their own attribution statement, so OGL's own
+fallback applies, and is the credit this corpus carries (see "Licences and attribution"
+below):
+
+> "Contains public sector information licensed under the Open Government Licence v3.0."
+
+Every one of those four pages carries the identical footer, verbatim: "All content is
+available under the Open Government Licence v3.0, except where otherwise stated" plus a
+"© Crown copyright" line — and on none of the four is "except where otherwise stated"
+attached to anything specific (no per-item exclusion notice, no third-party carve-out), so
+the forms linked from them read as OGL-covered.
+
+**The one exception, checked and acted on rather than glossed over.** OGL v3.0's own
+exemptions list "identity documents such as the British Passport" as outside its scope. A
+blank *application form* for a passport is arguably different from the issued document
+itself, but this could not be confirmed from HMPO's own Crown-copyright policy statement (it
+would not render as extractable text during verification), so — following the same
+"do not assume" standard that keeps Canada's forms out entirely — Home Office's
+`passport-admin` group (a guidance booklet, PD1/PD2, LS01, the overseas application form and
+its payment slip: 6 forms) is **excluded** from this manifest. Nothing else in the 108 rows
+carries this ambiguity.
+
+## Very large documents (#471 part 4)
+
+#147-#151 did substantial work paging a 2.5 GB file in, and nothing in the public corpus
+before this was remotely large enough to exercise that path — every existing document tops
+out at 10.9 MB. Seven Federal Register issues from govinfo.gov close that gap, marked with a
+new `large` category (`classify()`'s `LARGE_THRESHOLD_BYTES`, 20 MB: comfortably above every
+prior document, comfortably below every one of these):
+
+| document | date | size | why this one |
+|---|---|---:|---|
+| `FR-1974-01-03.pdf` | 1974-01-03 | 48.4 MB | just above the ~50 MB floor asked for |
+| `FR-1976-10-01.pdf` | 1976-10-01 | 83.4 MB | |
+| `FR-1978-12-29.pdf` | 1978-12-29 | 107.4 MB | |
+| `FR-1980-01-02.pdf` | 1980-01-02 | 143.5 MB | Vol. 45 No. 1, 606pp |
+| `FR-1983-04-25.pdf` | 1983-04-25 | 232.0 MB | Vol. 48 No. 80, 1031pp |
+| `FR-1993-04-26.pdf` | 1993-04-26 | 1.57 GB | Vol. 58 No. 78, Spring Unified Agenda, 3648pp |
+| `FR-1994-11-14.pdf` | 1994-11-14 | 2.07 GB | Vol. 59 No. 218, Fall Unified Agenda, 2006pp — the largest found |
+
+**Why Federal Register and not CFR.** #434's original note named both Federal Register and
+CFR annual volumes as govinfo's large-document candidates. CFR turned out not to have any:
+checked by HTTP HEAD (`Content-Length`, no download) across the largest titles (7, 21, 26,
+40, 48), every CFR title/volume PDF tops out around 4-9 MB — they are chunked per title
+specifically to stay manageable. Federal Register issues are large for two reasons: pre-1995
+issues are OCR'd scans of the printed page image rather than born-digital text, and two of
+the seven above happen to be the day of the year the twice-yearly **Unified Agenda of Federal
+Regulations** (a regulatory-plan compilation) was published as a section inside that day's
+ordinary issue, running to 1,700-2,000+ pages in a single file. Several more Unified-Agenda
+issues of similar size exist (1990, 1992) and were not needed to make the point.
+
+**Public domain, verified rather than assumed.** From govinfo.gov's own policies page:
+
+> "Copyright protection under this title is not available for any work of the United States
+> Government" (17 U.S.C. § 105)
+
+with one caveat noted on the same page and checked against these specific documents: a
+government publication can incorporate copyrighted third-party material used with permission.
+The Federal Register is the agencies' own regulatory text, not a compilation of outside
+material, so this does not apply here.
+
+**Timing and memory: a number for a future regression to be compared against.** Wall time and
+peak RSS per document, running the shipped `megapdf-cli extract` (full text extraction — the
+same open-and-page-through-the-whole-document shape #147-#151's paging-in work targets)
+inside the same `--cpus=4 --memory=8g` container the rest of this extension used:
+
+| document | size | wall time | peak RSS |
+|---|---:|---:|---:|
+| `FR-1974-01-03.pdf` | 48.4 MB | 1.42 s | 290 MB |
+| `FR-1976-10-01.pdf` | 83.4 MB | 2.01 s | 423 MB |
+| `FR-1978-12-29.pdf` | 107.4 MB | 2.47 s | 513 MB |
+| `FR-1980-01-02.pdf` | 143.5 MB | 3.69 s | 703 MB |
+| `FR-1983-04-25.pdf` | 232.0 MB | 6.83 s | 1.26 GB |
+| `FR-1993-04-26.pdf` | 1.57 GB | 13.36 s | 2.08 GB |
+| `FR-1994-11-14.pdf` | 2.07 GB | 14.75 s | 2.40 GB |
+
+Both wall time and peak RSS scale roughly linearly with document size, with no sign of a
+pathological blow-up at the top of the range — the 2.07 GB document, the largest in the
+corpus, finishes in under 15 seconds and under 2.5 GB of RSS inside the `--cpus=4 --memory=8g`
+container the rest of this extension used. This is `megapdf-cli extract` only (full text
+extraction, the open-and-page-through-the-whole-document shape #147-#151's work targets);
+the three batteries below exercise more operations per document (page rotate/delete/move,
+the internal structure API, Markdown conversion) and are the fuller answer to the timeout
+question just below.
+
+**Battery results.** All three batteries were run against the `large` category separately
+(see TESTING.md, "Fourth run", for the full table): 0 crashes and 0 hangs across all three,
+on all 7 documents. `structure-battery`'s aggregate token-fidelity F1 (0.989, both through
+the internal API and through `megapdf-cli`) misses the corpus-wide 0.998 gate — these are
+largely pre-1995 OCR'd scans, and a scan-heavy population measuring differently from the
+mostly-born-digital rest of the corpus is exactly the kind of population-specific movement
+#471 expects rather than treats as a regression. Filed as #488; not fixed or gate-adjusted
+here.
+
+**Battery timeouts and this category: sufficient for every document tested, with real
+margin.** `structure-battery.sh` and `markdown-battery.sh` default `TIMEOUT` to 120s per
+document; `pages-battery.sh` to 300s. #442/#445 fixed how a battery *classifies* a timeout
+(bounded, counted separately, never silently stalling the whole run) but did not give the
+`large` category its own, longer value. Measured directly: **not one operation, across all
+three batteries and all 7 documents up to 2.07 GB, hit its timeout** — `pages-battery.sh`
+completed all 28 rotate/delete/move/extract operations (981s total, none individually
+timed out); `structure-battery.sh`'s `pdftotext --reference` call finished the 2.07 GB
+document inside 120s (the same call #442 found could hang indefinitely on a 2.5 KB
+adversarial fixture); `markdown-battery.sh` took 45s total for all 7. **No change requested
+for these sizes** — raised in the PR only as a note that this is 7 documents topping out at
+2.07 GB, and a meaningfully larger document or a slower host could still reach the existing
+limits, worth re-checking rather than assumed permanently settled if the category grows.
+Not changed here either way: `tools/stress/*-battery.sh` is out of bounds for this change
+the same way it was out of bounds for #442/#445 (see those issues).
+
 ## ⚠ The malformed set
 
 The 150 documents under `malformed` are **deliberately broken by design**. They exist to prove
@@ -323,6 +581,8 @@ and keep the file.
 | USCIS forms (`www.uscis.gov/.../document/forms/`) | **public domain — 17 U.S.C. § 105** | no |
 | GPO-signed documents (`www.govinfo.gov/content/pkg/`) | **public domain — 17 U.S.C. § 105** | no |
 | Wikipedia (`ar/he/zh/ja/ko/hi/th.wikipedia.org`) | **CC BY-SA 4.0** (dual GFDL) | **yes** — see below |
+| UK HMRC/Home Office/DWP forms (`assets.publishing.service.gov.uk`) | **Open Government Licence v3.0** | **yes** — see below |
+| govinfo.gov Federal Register volumes (`www.govinfo.gov`) | **public domain — 17 U.S.C. § 105** | no |
 
 CC BY 4.0 requires attribution wherever these files or results derived from them are
 published. The required credit:
@@ -331,14 +591,30 @@ published. The required credit:
 > [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not modified.
 
 **Federal works: 17 U.S.C. § 105.** "Copyright protection under this title is not available
-for any work of the United States Government." An IRS or USCIS form, or a GPO publication,
-is prepared by federal employees as part of their official duties, so no copyright ever
-attaches to it in the first place — there is no licence to comply with, and no attribution
-requirement, though the manifest records `source` (`irs` / `uscis` / `govinfo-signed`) and a
+for any work of the United States Government." An IRS or USCIS form, a GPO publication
+(signed or not), or a govinfo.gov Federal Register volume, is prepared by federal
+employees/agencies as part of their official duties, so no copyright ever attaches to it in
+the first place — there is no licence to comply with, and no attribution requirement, though
+the manifest records `source` (`irs` / `uscis` / `govinfo-signed` / `govinfo-large`) and a
 plain-English attribution string in `build-manifest.py` anyway, as a provenance trail rather
 than a legal obligation. This is a **stronger** position than any of the git sources above:
 those are copyrighted works licensed to permit redistribution; federal works are simply
-never copyrighted at all.
+never copyrighted at all. (govinfo.gov's own policies page notes one caveat, checked and not
+applicable here: a government publication can incorporate copyrighted third-party material
+used with permission; the Federal Register issues fetched for #471 part 4 are the agency's
+own regulatory text, not a reprint of someone else's work.)
+
+**UK Crown copyright, under the Open Government Licence v3.0: attribution IS required**, the
+one real difference from every other source in this corpus. See "UK government forms" above
+for the licence text and verification; the required credit, since none of the four gov.uk
+pages checked specifies its own attribution statement:
+
+> Contains public sector information licensed under the Open Government Licence v3.0.
+
+Every reader of this corpus, or of results derived from its `uk-hmrc` / `uk-homeoffice` /
+`uk-dwp` rows, must carry that credit forward — the same obligation CC BY 4.0 places on the
+veraPDF credit above, and the reason this paragraph exists rather than a bare licence name in
+the table.
 
 **One licence nuance, stated rather than buried.** 117 of the `malformed` rows are the
 **Isartor test files**, which arrive inside the veraPDF repository and are therefore covered
@@ -361,34 +637,50 @@ assembled:
 Each git source is pinned to a commit, never a branch — a branch would silently invalidate
 every sha256 in the file. To add one: give it a licence that permits redistribution, add a
 `Source` row, pin the commit, and rebuild. **A plain rebuild never touches the network for
-the federal-forms rows and never deletes them either** — it preserves whatever `irs`/`uscis`/
-`govinfo-signed` rows are already in `--out`, so it stays exactly as reproducible from a
-blocked sandbox as it always was.
+any direct-URL source and never deletes their rows either** — it preserves whatever
+`irs`/`uscis`/`govinfo-signed`/`uk-hmrc`/`uk-homeoffice`/`uk-dwp`/`govinfo-large` rows are
+already in `--out` (see `NON_GIT_SOURCES` in `build-manifest.py`), so it stays exactly as
+reproducible from a blocked sandbox as it always was.
 
-To (re)fetch the federal-sourced rows, from a machine that can reach the host — `www.irs.gov`,
-`www.uscis.gov` and `www.govinfo.gov` are all unreachable from Anthropic's cloud sandbox,
-reachable from an ordinary machine (see "Network reality" above):
+To (re)fetch a direct-URL source, from a machine that can reach its host — none of these are
+reachable from Anthropic's cloud sandbox, all reachable from an ordinary machine (see
+"Network reality" above):
 
     tools/stress/public-corpus/build-manifest.py --add-source irs
     tools/stress/public-corpus/build-manifest.py --add-source uscis
     tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed
+    tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
+    tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
+    tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-large
 
 Each merges its rows into the existing `manifest.tsv` (by URL: a matching sha256 is left
 alone, a changed one is refreshed, a new one is added) rather than rebuilding everything
-from nothing. `IRS_FORMS` / `USCIS_FORMS` / `GOVINFO_SIGNED_DOCS` in `build-manifest.py` are
-the exact, grouped lists; add an entry there (verified as `%PDF`-starting and fetchable
-first, and — for `GOVINFO_SIGNED_DOCS` specifically — verified as genuinely signed with
-`pdfsig` before it goes in) to extend any of the three, or add a new `HttpSource` to
-`FEDERAL_SOURCES` for a different agency under the same public-domain licence. Give an
-`HttpSource` a `category=` only when its category should be forced rather than derived from
-`classify()`, as `govinfo-signed` does — leave it unset (as `irs`/`uscis` do) to classify
-normally. `--add-source govinfo` and `--add-source safedocs` still refuse outright — see
-`SOURCES_BLOCKED` — because nobody has yet written and verified a generator for either (the
-*bulk* `govinfo` generator #434 item 4 asks for is a different, larger scope than
-`govinfo-signed`'s curated set, and is why the two are separate keys); that refusal is
-deliberate, the same way `irs`/`uscis`/`govinfo-signed` used to refuse before each was
-implemented, and should be resolved the same way: implement and verify it from a machine
-that can reach the host, don't just delete the refusal.
+from nothing. `IRS_FORMS` / `USCIS_FORMS` / `GOVINFO_SIGNED_DOCS` / `HMRC_FORMS` /
+`HOME_OFFICE_FORMS` / `DWP_FORMS` / `GOVINFO_DOCS` in `build-manifest.py` are the exact,
+grouped lists; add an entry to one (verified fetchable and `%PDF`-starting first, and — for
+`GOVINFO_SIGNED_DOCS` specifically — verified as genuinely signed with `pdfsig` before it
+goes in) to extend it, or add a new `HttpSource` to `FEDERAL_SOURCES` (shared `base_url` +
+filename; give it a `category=` only when its category should be forced rather than derived
+from `classify()`, as `govinfo-signed` does — leave it unset, as `irs`/`uscis` do, to
+classify normally) or `DirectSource` to `DIRECT_SOURCES` (each item its own full URL — what
+UK forms and govinfo need, since neither shares one prefix) for a different agency or host
+under a licence that permits redistribution. `--add-source safedocs` still refuses
+outright — see `SOURCES_BLOCKED` — because nobody has yet written and verified a generator
+for it; that refusal is deliberate, the same way every source above used to refuse before its
+own generator was written, and should be resolved the same way: implement and verify it from
+a machine that can reach the host, don't just delete the refusal.
+
+**`govinfo-signed` and `govinfo-large`'s scope, stated precisely.** Neither is the *bulk*
+generator #434 item 4 originally named (`--add-source govinfo` itself still refuses — see
+`SOURCES_BLOCKED`). `govinfo-signed` is a hand-picked set of 33 already-signed GPO documents
+(`GOVINFO_SIGNED_DOCS`) for the `signed` category (#471 part 1). `govinfo-large` is a
+hand-picked list of 7 large Federal Register issues (`GOVINFO_DOCS`) for the `large` category
+(#471 part 4) — CFR annual title volumes, also named in #434's original note, turned out to be
+structurally incapable of being large (checked by HTTP HEAD across the biggest titles: every
+one tops out around 4-9 MB) and are not fetched at all. A bulk generator over govinfo's full
+holdings remains unbuilt and would be a separate, future extension, under its own `govinfo`
+key once someone writes it.
 
 ## Files
 

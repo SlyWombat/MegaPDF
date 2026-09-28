@@ -108,6 +108,29 @@ public partial class App : Application
                 window.ShowSignaturesFlyout();
                 return true;
 
+            // The warning before Save overwrites a signed original (#476, #481), rendered
+            // beside the window to <out>-dialog.png, the same as `unsaved`/`about`.
+            case "signed-save":
+                if (window is null)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state signed-save has no window to open the dialog on.");
+                    return false;
+                }
+                if (!viewModel.IsDocumentOpen)
+                {
+                    Console.Error.WriteLine("::error::--screenshot-state signed-save needs a document.");
+                    return false;
+                }
+                if (!viewModel.IsSigned)
+                {
+                    Console.Error.WriteLine(
+                        "::error::--screenshot-state signed-save: the open document is not signed "
+                        + "(open signed-approval.pdf or signed-certified.pdf, tools/gen_signature_fixtures.py).");
+                    return false;
+                }
+                ScreenshotDialog = window.ShowSignedSaveDialogForScreenshot(viewModel.IsSignedCertification);
+                return true;
+
             // Search hits: cyan for every match, brand blue for the one you are on.
             //
             // The term follows the capture language, like everything else the demo puts

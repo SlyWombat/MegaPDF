@@ -270,9 +270,9 @@ There are two corpora, and they answer different questions.
 | | private | public |
 |---|---|---|
 | where | `GPD-DAVE`, `k2`, `k3` only | anywhere — CI, a cloud sandbox, a laptop |
-| what | 4,337 of the owner's real documents | 1,382 fetched from a committed manifest |
+| what | 4,337 of the owner's real documents | 1,497 fetched from a committed manifest |
 | how | already on disk | `tools/stress/public-corpus/fetch.sh` |
-| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, 186 real IRS/USCIS forms, **and 33 genuinely GPO-signed documents** |
+| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **186 real IRS/USCIS forms, 33 genuinely GPO-signed documents, 108 real UK OGL forms, and 7 very large documents** |
 | depth | the deeper battery: real-world shapes nothing synthetic reproduces | the reproducible one: anyone can run it and get the same documents |
 
 Neither replaces the other. The private corpus stays the deeper gate and stays local; the
@@ -517,6 +517,110 @@ population to measure. Filed as **#482** (vertical Japanese, the #444-shaped fai
 **#483** (the horizontal-script fidelity-gate shortfall) and **#484** (Arabic/Devanagari
 reading-order self-disagreement); `core/megapdf_structure.cpp` was not touched, since
 another session is working there for #453.
+
+### Fifth run, 2026-09-28: 108 UK OGL forms + 7 large govinfo documents (#471 parts 3-4)
+
+Built on `main` including #452/#463's field-hierarchy relaxation, #457's XFA work, #470's
+k3 staging, and #471 part 1's `signed` category — see the #471 parts-3/4 PR for the exact
+commit and manifest revision this was actually run against. **The "whole corpus" row below
+is a snapshot of 1,489 documents (pre-#471-part-2's non-Latin rows, which landed on `main`
+while this run was already underway) — it does not include the 280 `wiki-*` rows the run
+directly above added.** The UK-specific and `large`-specific findings that follow it do not
+depend on total corpus composition (they are computed only from their own rows), so they
+stand regardless; the aggregate figure is reported for context, not as this PR's own
+authoritative "whole corpus" number — see the PR for a number against the true final
+manifest if one was re-run. The corpus's final size, including every population added by
+this point, is **1,777 documents, ~4.40 GB** (dominated by the seven `large` rows at
+~4.25 GB) — see `tools/stress/public-corpus/README.md`, "UK government forms" and "Very
+large documents", for how the UK/large sets were chosen and licensed.
+
+    tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
+    tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
+    tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-large
+    tools/stress/public-corpus/fetch.sh                                # → ~/megapdf-public-corpus
+    bash tools/stress/pages-battery.sh    <cli> ~/megapdf-public-corpus <out> --jobs 3
+    tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
+    tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
+
+1,489 documents visited by `find -name '*.pdf'` for the non-`large` batteries (see the
+snapshot caveat above), minus the same case-mismatched qpdf fixture #445 already noted,
+minus the fact that `large` rows were battery-tested separately, below, rather than mixed
+into the same run given their size:
+
+| measure | whole corpus | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 (internal API) | 0.998390 | >= 0.998 | pass — up from #453's 0.996178 now that #453/#463 have landed |
+| structure: F1 through `megapdf-cli` | 0.999412 | >= 0.998 | pass |
+| structure: order agreement tau (median, 2,403 tagged pages) | 0.945 | >= 0.9 | pass |
+| structure: poppler agreement tau (median, informational) | 0.987 | — | — |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | 0 | 0 | pass — the two pdfium fixtures #443 named no longer misfire |
+| structure: pages F1 < 0.9 | 3 | informational | down from 23 |
+| structure: poppler (`pdftotext`) timeouts | 1 | informational (#442) | bounded, did not stall the run |
+| markdown: cmark parse failures | 0 | 0 | pass |
+| markdown: crashes / hangs / bad exit codes | 0 / 0 / 0 | 0 / 0 / 0 | pass |
+| pages: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+
+**Per-source breakdown, UK rows** (structure-battery measure 1, pages-battery `extract`):
+
+| source | documents | structure F1 (internal) | structure F1 (cli) | `extract` refused-fields |
+|---|---:|---:|---:|---:|
+| uk-hmrc | 62 | 0.999535 | 0.999535 | **0** |
+| uk-homeoffice | 22 | **0.991581** (below gate) | 0.999733 | **0** |
+| uk-dwp | 24 | 0.999958 | 0.999984 | **0** |
+
+**Zero field-`/Parent`-hierarchy refusals across all 108 UK forms** — including CT600A/B/C/J,
+SA800 and SA900, the deepest hierarchies in the set. This is the evidence #471 part 3 asked
+for: #463's relaxation holds on a second jurisdiction's forms, not just the US federal ones
+it was built and measured against (compare the second run above: 90% of real IRS forms
+refused `extract` before #463).
+
+`uk-homeoffice`'s internal-API F1 (0.991581) is below the 0.998 gate even though the whole
+corpus passes and `uk-homeoffice`'s own CLI-measured F1 (0.999733) does not — filed as #479,
+a fidelity gap concentrated in the Home Office nationality-form family specifically (not
+furniture volume, page count, or anything else common to every `uk-homeoffice` document).
+Filed as the finding per #471's "never fix, never gate-adjust" instruction. #480 records the
+addition and its overall results.
+
+**`large` category (7 govinfo Federal Register documents, 48.4 MB - 2.07 GB), tested
+separately given their size (`--jobs 1`):**
+
+| measure | large category | gate | |
+|---|---|---|---|
+| pages: crashes / hangs | 0 / 0 (981s total, 28 operations) | 0 / 0 | pass |
+| pages: qpdf timeouts | 0 | 0 | pass |
+| structure: crashes / hangs | 0 / 0 (283s total) | 0 / 0 | pass |
+| structure: aggregate token F1 (internal API) | **0.989043** | >= 0.998 | **fail** — see #488 |
+| structure: F1 through `megapdf-cli` | 0.989950 | >= 0.998 | **fail** — same cause |
+| structure: poppler (`pdftotext`) timeouts | 0 | informational (#442) | pass — completed even on the 2.07 GB document |
+| markdown: crashes / hangs / bad exit codes | 0 / 0 / 0 (45s total) | 0 / 0 / 0 | pass |
+
+Wall time / peak RSS per document (via `megapdf-cli extract`, outside the batteries, as a
+baseline for a future regression to compare against): see
+`tools/stress/public-corpus/README.md`, "Very large documents" — from 1.42s/290MB (48.4 MB
+document) to 14.75s/2.40GB (the 2.07 GB document), scaling roughly linearly with size, no
+sign of a blow-up at the top of the range.
+
+The structure gate fails on this population — filed as **#488**: these are largely pre-1995
+OCR'd scans (see README, "Very large documents"), and 0.989 is well within the range other
+scan-heavy or non-standard populations have measured at elsewhere in this corpus. Not fixed
+or gate-adjusted here, per #471's own instruction — a gate moving on a new population is the
+information wanted.
+
+**Battery timeouts and the `large` category: the current defaults were sufficient for every
+document tested, with real margin.** Across all three batteries and all 7 documents up to
+2.07 GB, **not one operation hit its timeout** — `pages-battery.sh`'s 300s (28 rotate/delete/
+move/extract operations, 981s total, none individually timed out), `structure-battery.sh`'s
+120s (283s total across internal-API, `pdftotext --reference`, and CLI calls per document;
+poppler itself finished the 2.07 GB document inside 120s, where #442 found it can hang
+indefinitely on a much smaller, adversarial fixture), and `markdown-battery.sh`'s 120s
+(45s total for all 7). **No change requested for these sizes** — but this is 7 documents
+topping out at 2.07 GB; a document meaningfully larger, or a slower host, could still reach
+the existing limits, so this is worth re-checking rather than assumed permanently settled if
+the category ever grows. Not changed here either way — `tools/stress/*-battery.sh` was out
+of bounds for #442/#445 and stays out of bounds here.
+
 
 ### Android app UI tests (#346)
 
