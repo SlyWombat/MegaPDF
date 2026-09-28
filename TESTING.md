@@ -865,6 +865,54 @@ touched.
 One poppler timeout (`pdftotext` bounded at 120s by #442, on qpdf's `shared-unnamed-field.pdf`);
 that document is simply absent from measure 3's counts and does not touch the fidelity gate.
 
+### Seventh run, 2026-09-28: all three batteries over all four corpora, main at 88117b7
+
+The first measurement of every corpus on hand against one commit, and the first since the three
+changes that could have moved these numbers: **#521** (the layout frame now detects vertical
+writing), **#519** (the fidelity measure now counts a list item's marker) and **#452/#463**
+(PDFium at 33 patches, release `pdfium-7934-megapdf-2b3b415e86b1`). Run on kdocker3 in a
+container, `structure-battery.sh --reference --cli`, then `markdown-battery.sh`, then
+`pages-battery.sh`.
+
+**Zero crashes and zero hangs, in every battery, on every corpus. 5,763 documents.**
+
+Nothing was silently narrowed, which is the first thing to check in a run this size: each
+battery's own sweep visited exactly the document count on disk.
+
+| corpus | on disk | visited | opened | the rest |
+|---|---:|---:|---:|---|
+| private | 4,158 | 4,158 | 4,084 | 12 encrypted, 62 unreadable format |
+| public | 1,381 | 1,381 | 1,368 | 5 encrypted, 8 unreadable format |
+| Canadian | 134 | 134 | 134 | — |
+| UN | 90 | 90 | 90 | — |
+
+Structure, against F1 >= 0.998 and order agreement tau >= 0.9:
+
+| corpus | token F1, internal | token F1, CLI | tau median | CLI bad exits |
+|---|---:|---:|---:|---:|
+| private | **0.998880** pass | 0.998880 pass | 0.935 pass | 0 |
+| public | **0.971952** fail | 0.971952 fail | 0.956 pass | 0 |
+| Canadian | **0.999907** pass | 0.999907 pass | 0.959 pass | 0 |
+| UN | **0.996348** fail | 0.996348 fail | 0.967 pass | 0 |
+
+Markdown: every gate passes on all four corpora. Pages: all gates pass except public's five
+`refused, other`, which are the same two documents recorded above, tracked as #445's open point.
+The private corpus now shows **0 refused-fields**, down from 33, which is #452/#463 landing.
+
+**Both failures are already-open issues, measured again rather than newly found.** Neither is
+an artifact of #519's correction, whose effect is about 0.00002.
+
+- **Public** resolves to one category. The 33 `govinfo-signed` documents carry 96% of the
+  corpus's tokens and score 0.9707; every other category present scores 0.999 to 1.000. #498
+  already recorded 0.970684 for exactly that population.
+- **UN** resolves to one document. No document scores below 0.96, and a single 190-page one at
+  0.9662 carries the whole shortfall. Excluding it, the corpus reads **0.99960**. That document
+  is #496's, root-caused since as **#524**: `BuildLines` scales its split threshold off the raw
+  `Tf` operand, so a producer that puts its scale in the text matrix gets one block per word.
+
+Read the private corpus's 0.998880 as a first figure, not a comparison: no private baseline is
+committed, by design, because the corpus is personal.
+
 ## Reporting
 
 For each issue: what you clicked, what you expected, what happened, and the PDF
