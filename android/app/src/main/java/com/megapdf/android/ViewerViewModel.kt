@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.megapdf.engine.DocumentFlags
 import com.megapdf.engine.LayoutCause
 import com.megapdf.engine.PageCheck
 import com.megapdf.engine.PdfDocument
@@ -104,7 +105,12 @@ sealed interface ViewerUiState {
     data class Home(val recents: List<RecentRow>, val error: String? = null) : ViewerUiState
     data object Loading : ViewerUiState
     data class PasswordNeeded(val uri: Uri, val wrongPassword: Boolean) : ViewerUiState
-    data class Viewing(val displayName: String, val pageSizes: List<PageSize>) : ViewerUiState
+    data class Viewing(
+        val displayName: String,
+        val pageSizes: List<PageSize>,
+        /** #457: shows the calm, persistent explanation in place of a snackbar or a dialog. */
+        val isDynamicXfa: Boolean = false,
+    ) : ViewerUiState
 }
 
 /**
@@ -1053,6 +1059,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         val doc: PdfDocument,
         val pageSizes: List<PageSize>,
         val security: PdfSecurity,
+        val flags: DocumentFlags,
         val readsUri: Boolean,
     )
 
@@ -1066,7 +1073,8 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 sizes += PageSize(page.widthPoints, page.heightPoints)
                 page.close()
             }
-            return OpenedDocument(doc, sizes, doc.security(), readsUri)
+            // #457: read once at open, alongside security and the page sizes above.
+            return OpenedDocument(doc, sizes, doc.security(), doc.documentFlags(), readsUri)
         } catch (e: Throwable) {
             doc.close()
             throw e
@@ -1141,7 +1149,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         // just been thrown away. See RenderWindow (#146).
         val previousWindow = lastWindow
         closeCurrent()
-        attach(opened.doc, opened.security)
+        attach(opened.doc, opened.security, opened.flags)
         currentUri = uri
         documentReadsUri = if (opened.readsUri) uri else null
         val name = queryDisplayName(uri)
@@ -1156,7 +1164,7 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
                 DocumentLocations.segmentsFor(getApplication(), uri), uri.authority,
             )
         )
-        uiState = ViewerUiState.Viewing(name, opened.pageSizes)
+        uiState = ViewerUiState.Viewing(name, opened.pageSizes, opened.flags.isDynamicXfa)
         previousWindow?.clampedTo(opened.pageSizes.size)?.let {
             updateRenderWindow(it.firstVisible, it.lastVisible, it.targetWidthPx)
         }
@@ -1164,10 +1172,10 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (capabilities.isRestricted) showNotice(str(R.string.security_restricted_notice))
     }
 
-    /** Makes [doc] the open document: its permissions, and its page checks (#145). */
-    private fun attach(doc: PdfDocument, security: PdfSecurity) {
+    /** Makes [doc] the open document: its permissions, its document-wide facts (#457), and its page checks (#145). */
+    private fun attach(doc: PdfDocument, security: PdfSecurity, flags: DocumentFlags = DocumentFlags.NONE) {
         document = doc
-        capabilities = DocumentCapabilities.fromSecurity(security)
+        capabilities = DocumentCapabilities.fromSecurity(security, flags)
         // Marks belong to the document that carries them, and the view model outlives it
         // (#329): read them back from the document just adopted, which for a document that
         // has never been marked means the map and the count both go to nothing.
@@ -1455,6 +1463,14 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
     /** The notice for an edit the document's owner did not allow (#131). */
     private fun showRestricted() = showNotice(str(R.string.security_restricted_edit))
 
+    /**
+     * The notice for arming a filling tool on a dynamic-XFA document (#457): explains rather
+     * than silently doing nothing, or performing an edit that would not actually fill the
+     * form (the tool stays armable — [DocumentCapabilities.isDynamicXfa] deliberately leaves
+     * canSign/canFillForms/canAddText alone — so a tap must say why nothing happened).
+     */
+    private fun showDynamicXfaNotice() = showNotice(str(R.string.dynamic_xfa_fill_notice))
+
     // --- Added text (#34) ---
 
     /** Arms the next tap to place text. Tapping the page opens the text field. */
@@ -1462,6 +1478,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (editingBlocked) return
         if (!capabilities.canAddText) {
             showRestricted()
+            return
+        }
+        // #457: arming Add text on a dynamic-XFA document explains rather than entering
+        // placement mode — stamping text over Adobe's placeholder would not fill the form.
+        if (capabilities.isDynamicXfa) {
+            showDynamicXfaNotice()
             return
         }
         cancelPlacement()
@@ -1637,6 +1659,12 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
      * in, the page shows Applying… at [spot] once it takes long enough (#145).
      */
     private suspend fun perform(operation: PdfEditOperation, doc: PdfDocument, spot: BusySpot? = null) {
+        // #457: a filling tool on a dynamic-XFA document explains rather than acting — checked
+        // before the permission gate below, so the two never talk over each other.
+        if (capabilities.isDynamicXfa && capabilities.isFillingOperation(operation)) {
+            showDynamicXfaNotice()
+            return
+        }
         if (!capabilities.allows(operation)) {
             showRestricted()
             return
@@ -1782,6 +1810,11 @@ class ViewerViewModel(application: Application) : AndroidViewModel(application) 
         if (editingBlocked) return
         if (!capabilities.canSign) {
             showRestricted()
+            return
+        }
+        // #457: arming Sign on a dynamic-XFA document explains rather than arming placement.
+        if (capabilities.isDynamicXfa) {
+            showDynamicXfaNotice()
             return
         }
         selectedTextBox = null

@@ -234,6 +234,10 @@ Conventions (OQLF, Canadian French):
 | On My iPhone / On My iPad | Sur mon iPhone / Sur mon iPad | #165, where a recent file lives |
 | Downloads | Téléchargements | #165; on macOS the folder's name comes from the system (displayNameAtPath:), not from here |
 | Couldn't show {0} in the Finder. | Impossible d'afficher {0} dans le Finder. | #165 |
+| Built for Adobe Reader | Conçu pour Adobe Reader | #456/#457, the dynamic-XFA banner's title — persistent, on the document, not a dialog or a snackbar |
+| This form is designed to be filled in using Adobe Reader. MegaPDF can't fill it in, but you can still view, save, share and export it. | Ce formulaire est conçu pour être rempli avec Adobe Reader. MegaPDF ne peut pas le remplir, mais vous pouvez quand même le consulter, l'enregistrer, le partager et l'exporter. | #456/#457, the banner's body — says plainly what still works, rather than implying the document is unusable |
+| Get Adobe Reader | Obtenir Adobe Reader | #456/#457, the banner's link — the same address (adobe.com/go/reader_download) the form's own placeholder page names |
+| This form can only be filled in using Adobe Reader. | Ce formulaire ne peut être rempli qu'avec Adobe Reader. | #456/#457, shown when Sign or Add text is armed on a dynamic-XFA document: explains rather than silently doing nothing |
 
 ## Français (France)
 

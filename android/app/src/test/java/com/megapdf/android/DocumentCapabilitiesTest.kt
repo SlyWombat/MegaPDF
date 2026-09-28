@@ -1,5 +1,6 @@
 package com.megapdf.android
 
+import com.megapdf.engine.DocumentFlags
 import com.megapdf.engine.PdfPermissions
 import com.megapdf.engine.PdfRect
 import com.megapdf.engine.PdfSecurity
@@ -134,6 +135,33 @@ class DocumentCapabilitiesTest {
             PasswordCommandMode.RESTRICTED,
             PasswordCommandMode.of(DocumentCapabilities.fromSecurity(restricted(PdfPermissions.ALL and PdfPermissions.MODIFY.inv()))),
         )
+    }
+
+    // --- Dynamic XFA (#456/#457) ---
+
+    @Test
+    fun `an ordinary document is not dynamic XFA`() {
+        assertFalse(DocumentCapabilities.FULL.isDynamicXfa)
+        assertFalse(DocumentCapabilities.fromSecurity(PdfSecurity.UNPROTECTED, DocumentFlags.NONE).isDynamicXfa)
+    }
+
+    @Test
+    fun `dynamic XFA leaves canSign, canFillForms and canAddText untouched`() {
+        // #457: the tools stay armable, so arming one can explain rather than the button
+        // simply being greyed out — which would look like nothing else here is wrong either.
+        val unprotected = DocumentCapabilities.fromSecurity(
+            PdfSecurity.UNPROTECTED, DocumentFlags(isDynamicXfa = true))
+        assertTrue(unprotected.isDynamicXfa)
+        assertTrue(unprotected.canSign && unprotected.canFillForms && unprotected.canAddText && unprotected.canEditContent)
+        // allows() is unaffected too: it is [isFillingOperation] the view model checks first.
+        (contentEdits + formEdits).forEach { assertTrue(unprotected.allows(it)) }
+    }
+
+    @Test
+    fun `isFillingOperation is true for signing, added text and form fields, not body text or redaction`() {
+        val c = DocumentCapabilities.FULL
+        formEdits.forEach { assertTrue("${it.name} fills the form", c.isFillingOperation(it)) }
+        contentEdits.forEach { assertFalse("${it.name} is not filling", c.isFillingOperation(it)) }
     }
 
     @Test

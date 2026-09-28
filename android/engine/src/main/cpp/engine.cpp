@@ -182,6 +182,14 @@ Java_com_megapdf_engine_PdfiumNative_nativePageCount(JNIEnv*, jobject, jlong han
     return megapdf_page_count(reinterpret_cast<Document*>(handle)->core);
 }
 
+// megapdf_document_flags() (#457): MEGAPDF_DOC_* bits, read once at open alongside the page
+// count and security info. Cheap (a form-type check, and only for XFA_FULL a substring search
+// already this cheap in megapdf_search_page), so no caching is needed on this side either.
+JNIEXPORT jint JNICALL
+Java_com_megapdf_engine_PdfiumNative_nativeDocumentFlags(JNIEnv*, jobject, jlong handle) {
+    return static_cast<jint>(megapdf_document_flags(reinterpret_cast<Document*>(handle)->core));
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_megapdf_engine_PdfiumNative_nativeOpenPage(JNIEnv*, jobject, jlong handle, jint index) {
     auto* d = reinterpret_cast<Document*>(handle);
