@@ -16,6 +16,23 @@ anybody can reproduce.
 The two corpora are different populations and are **expected to give different numbers**.
 See TESTING.md, "Which corpus gates what".
 
+## Staged permanently on kdocker3 (#470)
+
+`~/megapdf-public-corpus` above is the *default* — right for a laptop, CI or a cloud
+sandbox running once. A machine that runs batteries repeatedly should not re-download
+1,300+ documents from `irs.gov`, `uscis.gov` and GitHub every time: **kdocker3 stages this
+corpus permanently at `~/pdf-public`**, beside `~/pdf-test` and `~/pdf-test-ca` (the private
+corpora — see TESTING.md, "Corpus staging on k3"). Point any battery at it directly:
+
+    tools/stress/public-corpus/fetch.sh ~/pdf-public                # refresh: only new/changed rows are fetched
+    tools/stress/public-corpus/fetch.sh --verify-only ~/pdf-public  # prove it intact, no network needed
+
+`~/pdf-public` is chmod'd read-only (`dr-xr-sr-x` dirs, `r--r--r--` files) the way
+`~/pdf-test` is, so a battery run cannot damage it by construction. `--verify-only` never
+writes to the destination (#470: it used to try to refresh the `WHERE-THESE-CAME-FROM.txt`
+marker even in this mode, which failed — harmlessly, since the shell does not run with
+`-e`, but noisily — against a read-only directory).
+
 ## Network reality — two different machines, two different answers
 
 The corpus was first built (#434) from the Anthropic cloud sandbox, which cannot reach any
