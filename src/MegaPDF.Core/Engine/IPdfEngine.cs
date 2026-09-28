@@ -37,6 +37,19 @@ public interface IPdfDocument : IDisposable
     PdfSecurity Security { get; }
 
     /// <summary>
+    /// True when the document is dynamic XFA (#456, #457): it opens, reports a plausible
+    /// page count and draws a page, but that page is Adobe's own "please wait, install
+    /// Adobe Reader" placeholder rather than the real form — Acrobat builds the actual
+    /// form from an XFA template at open time, which PDFium does not do. View, print,
+    /// save, share, export and every page tool are unaffected; only form filling has
+    /// nothing to act on, because the document itself carries no real fields. A
+    /// hybrid-XFA document (CRA, Service Canada, most of IRCC), an ordinary AcroForm, or
+    /// one with no form at all is never true here. Read once per open, next to
+    /// <see cref="Security"/>.
+    /// </summary>
+    bool IsDynamicXfa { get; }
+
+    /// <summary>
     /// Writes a copy encrypted with AES-256 under new passwords, in place of any security
     /// the document had (#131). <paramref name="userPassword"/> opens the copy with
     /// <paramref name="permissions"/>; <paramref name="ownerPassword"/> opens it with all of

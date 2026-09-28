@@ -161,6 +161,15 @@
   <data name="RecoveryOffNoticeBar.Message" xml:space="preserve">
     <value>La récupération après une fermeture inattendue est désactivée pour les documents protégés par mot de passe; les modifications non enregistrées ne pourront pas être restaurées.</value>
   </data>
+  <data name="DynamicXfaNoticeBar.Message" xml:space="preserve">
+    <value>Ce formulaire est conçu pour être rempli dans Adobe Reader. Vous pouvez tout de même l'afficher, l'imprimer, l'enregistrer et le partager ici — seul le remplir n'est pas possible.</value>
+  </data>
+  <data name="GetAdobeReaderButton.Content" xml:space="preserve">
+    <value>Obtenir Adobe Reader</value>
+  </data>
+  <data name="DynamicXfaCannotFill" xml:space="preserve">
+    <value>Ce formulaire doit être rempli dans Adobe Reader.</value>
+  </data>
 
   <!-- Barre de recherche -->
   <data name="FindQuery.PlaceholderText" xml:space="preserve">

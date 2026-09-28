@@ -413,6 +413,23 @@
       </DockPanel>
     </Border>
 
+    <!-- Dynamic XFA (#456, #457): the document opens, reports a plausible page count and
+         draws a page, but that page is Adobe's own "please wait, install Adobe Reader"
+         placeholder — the real form is an XFA template built at open time in Acrobat,
+         which PDFium never renders. Everything else keeps working; only filling it in
+         doesn't, because there is nothing here to fill. Not dismissable, the same as the
+         restricted banner above: it describes the document for as long as it is open. -->
+    <Border DockPanel.Dock="Top" Padding="8,8" IsVisible="{Binding Active.IsDynamicXfa, FallbackValue=False}"
+            Background="{DynamicResource BrandAccentSubtle}">
+      <DockPanel>
+        <HyperlinkButton Name="GetAdobeReaderButton" DockPanel.Dock="Right" Margin="12,0,0,0"
+                          Content="{x:Static loc:Strings.GetAdobeReader}"
+                          NavigateUri="https://www.adobe.com/go/reader_download" />
+        <TextBlock Text="{x:Static loc:Strings.DynamicXfaBanner}" VerticalAlignment="Center"
+                   TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
+
     <!-- Find bar (SDD §3.6). Hidden until asked for, so it costs nothing until it
          is wanted, and Escape closes it.
 

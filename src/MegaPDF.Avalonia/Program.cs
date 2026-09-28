@@ -9,6 +9,7 @@ using MegaPDF.Avalonia.ViewModels;
 using MegaPDF.Core.Engine;
 using MegaPDF.Core.Imaging;
 using MegaPDF.Core.Engine.Pdfium;
+using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia;
 
@@ -692,6 +693,71 @@ internal static class Program
         finally
         {
             if (File.Exists(signedPath)) File.Delete(signedPath);
+        }
+
+        // --- Dynamic XFA (#456, #457): the document opens, looks fine, and stays fully
+        // usable except for filling it in, which explains rather than silently doing
+        // nothing when a filling tool (Signatures) is armed. Needs dynamic-xfa.pdf and
+        // hybrid-xfa.pdf (tools/gen_xfa_fixtures.py) beside the other fixtures. ---
+        Console.WriteLine("dynamic XFA (#457):");
+        try
+        {
+            var dynamicPath = Path.Combine(dir, "dynamic-xfa.pdf");
+            var hybridPath = Path.Combine(dir, "hybrid-xfa.pdf");
+            if (!File.Exists(dynamicPath) || !File.Exists(hybridPath))
+            {
+                Console.Error.WriteLine(
+                    "::error::dynamic XFA: dynamic-xfa.pdf/hybrid-xfa.pdf not in the fixtures dir " +
+                    "-- run tools/gen_xfa_fixtures.py against it too");
+                failures++;
+            }
+            else
+            {
+                using var vm = new DocumentViewModel(state);
+                vm.Open(dynamicPath);
+                Check("dynamic-xfa.pdf opens", vm.IsDocumentOpen);
+                Check("IsDynamicXfa is true", vm.IsDynamicXfa);
+                Check("its one page still loads", vm.Pages.Count == 1);
+                Check("printing is still available", vm.CanPrint);
+                // Save.CanExecute needs an actual change to act on (unrelated to #457,
+                // and nothing here makes one) -- SaveTo itself, the always-available
+                // primitive every Save/Save As route runs through, is the real proof
+                // nothing about being dynamic-XFA gates saving.
+                var xfaSavePath = Path.Combine(saveDir, $"megapdf-selftest-xfa-{Guid.NewGuid():N}.pdf");
+                try
+                {
+                    using (var file = File.Create(xfaSavePath))
+                        vm.SaveTo(file);
+                    Check("saving still writes a real file", new FileInfo(xfaSavePath).Length > 0);
+                }
+                finally
+                {
+                    if (File.Exists(xfaSavePath)) File.Delete(xfaSavePath);
+                }
+                Check("signing is still available (the tool itself, not what it does)", vm.CanSign);
+
+                // Arming Signatures -- the closest thing this app has to a "fill this
+                // form in" tool for a document with no real AcroForm fields to click --
+                // must explain rather than silently arm a placement that would land on
+                // nothing meaningful.
+                var entry = new SignatureEntry(Guid.NewGuid(), "XFA test", "/nonexistent.png", DateTime.UtcNow);
+                vm.BeginPlacing(entry);
+                Check("arming Signatures does not arm placement", vm.PendingSignature is null);
+                Check("it explains instead of silently doing nothing", vm.Status == Strings.DynamicXfaCannotFill);
+
+                using var hybrid = new DocumentViewModel(state);
+                hybrid.Open(hybridPath);
+                Check("hybrid-xfa.pdf opens", hybrid.IsDocumentOpen);
+                Check("hybrid-xfa.pdf does NOT set IsDynamicXfa", !hybrid.IsDynamicXfa);
+                hybrid.BeginPlacing(entry);
+                Check("arming Signatures on hybrid-xfa.pdf arms placement normally",
+                      hybrid.PendingSignature is not null);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::dynamic XFA: {ex.GetType().Name}: {ex.Message}");
+            failures++;
         }
 
         // --- Find in document (SDD §3.6) ---

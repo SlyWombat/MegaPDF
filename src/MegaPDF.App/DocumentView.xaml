@@ -154,6 +154,25 @@
                 IsOpen="{x:Bind ViewModel.IsRecoveryOffNoticeOpen, Mode=TwoWay}"
                 Severity="Informational"
                 IsClosable="True" />
+            <!-- Dynamic XFA (#456, #457): the document opens, reports a plausible page
+                 count and draws a page, but that page is Adobe's own "please wait,
+                 install Adobe Reader" placeholder — the real form is an XFA template
+                 built at open time in Acrobat, which PDFium never renders. Everything
+                 else keeps working; only filling it in doesn't, because there is
+                 nothing here to fill. Closable like the notices above, but
+                 SelectSignatureForPlacement reopens it rather than silently arming a
+                 tool that would land on nothing. -->
+            <InfoBar
+                x:Uid="DynamicXfaNoticeBar"
+                AutomationProperties.AutomationId="DynamicXfaNoticeBar"
+                Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
+                IsOpen="{x:Bind ViewModel.IsDynamicXfaNoticeOpen, Mode=TwoWay}"
+                Severity="Informational"
+                IsClosable="True">
+                <InfoBar.ActionButton>
+                    <Button x:Uid="GetAdobeReaderButton" Click="OnGetAdobeReaderClicked" AutomationProperties.AutomationId="GetAdobeReaderButton" />
+                </InfoBar.ActionButton>
+            </InfoBar>
             <InfoBar
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                 IsOpen="{x:Bind ViewModel.IsSecurityNoticeOpen, Mode=TwoWay}"
@@ -174,6 +193,7 @@
 
         <StackPanel VerticalAlignment="Top" HorizontalAlignment="Center" Margin="24,12" Spacing="{ThemeResource SpaceS}">
             <InfoBar
+                AutomationProperties.AutomationId="PlacementHintBar"
                 Background="{ThemeResource SolidBackgroundFillColorSecondaryBrush}"
                 Visibility="{x:Bind ViewModel.PlacementHintVisibility, Mode=OneWay}"
                 IsOpen="True"

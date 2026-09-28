@@ -63,6 +63,56 @@ internal static class SamplePdf
     }
 
     /// <summary>
+    /// Dynamic XFA (#456, #457): AcroForm carries `/XFA` and the Catalog carries
+    /// `/NeedsRendering true` (PDFium's FPDF_GetFormType() answers FORMTYPE_XFA_FULL);
+    /// the one page's own content stream is exactly Adobe's stable "please wait, install
+    /// Adobe Reader" placeholder — the shape #456 found on 40 of 57 real IRCC forms.
+    /// Mirrors <c>tools/gen_xfa_fixtures.py</c>'s <c>dynamic-xfa.pdf</c> (core/tests uses
+    /// that one at the C level); built here too so the .NET suite needs no Python at
+    /// test time, and the two independently-written fixtures agreeing is itself evidence
+    /// the detection rule does not depend on incidental byte layout.
+    /// </summary>
+    public static byte[] BuildDynamicXfa() => BuildXfaDocument(needsRendering: true,
+        "The document you are trying to load requires Adobe Reader 8 or higher. "
+        + "You may not have the Adobe Reader installed or your viewing environment "
+        + "may not be properly configured to use Adobe Reader.");
+
+    /// <summary>
+    /// Hybrid XFA (#456, #457): AcroForm also carries `/XFA`, but the Catalog has no
+    /// `/NeedsRendering` (FORMTYPE_XFA_FOREGROUND) and the page's own content is real,
+    /// substantial text — the shape of CRA's and Service Canada's fillable forms, which
+    /// extract correctly today and must keep doing so untouched. Mirrors
+    /// <c>tools/gen_xfa_fixtures.py</c>'s <c>hybrid-xfa.pdf</c>.
+    /// </summary>
+    public static byte[] BuildHybridXfa() => BuildXfaDocument(needsRendering: false,
+        "Statement of Remuneration Paid - real, static form content, not a placeholder.");
+
+    private static byte[] BuildXfaDocument(bool needsRendering, string pageText)
+    {
+        var escaped = pageText.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
+        var content = $"BT /F1 12 Tf 72 700 Td ({escaped}) Tj ET\n";
+        var needsRenderingEntry = needsRendering ? " /NeedsRendering true" : "";
+        const string xfaPacket = "<xdp:xdp xmlns:xdp='http://ns.adobe.com/xdp/'></xdp:xdp>";
+        return Assemble(
+        [
+            $"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 5 0 R{needsRenderingEntry} >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                + "/Resources << /Font << /F1 6 0 R >> >> /Contents 4 0 R >>\nendobj\n",
+            $"4 0 obj\n<< /Length {content.Length} >>\nstream\n{content}endstream\nendobj\n",
+            // /NeedsRendering is the Catalog's own key (PDF 2.0 §12.7.8.2 / the XFA spec),
+            // not the AcroForm dictionary's (#456, confirmed against a real dynamic-XFA
+            // IRCC form and a real hybrid CRA form).
+            "5 0 obj\n<< /Fields [] /XFA [(template) 7 0 R] >>\nendobj\n",
+            "6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            // A dummy XFA packet: PDFium's non-XFA build never parses it, so its own
+            // bytes never matter — only the AcroForm's /XFA key and the Catalog's
+            // /NeedsRendering key do.
+            $"7 0 obj\n<< /Length {xfaPacket.Length} >>\nstream\n{xfaPacket}\nendstream\nendobj\n",
+        ]);
+    }
+
+    /// <summary>
     /// Two pages drawing the same line, for the checks that something is counted across the
     /// document while belonging to the page it was put on — a redaction mark (#329).
     /// </summary>

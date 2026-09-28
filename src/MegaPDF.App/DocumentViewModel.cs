@@ -432,6 +432,21 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private string _securityNotice = "";
 
     /// <summary>
+    /// True for the life of this open when the document is dynamic XFA (#456, #457):
+    /// it opens, reports a plausible page count and draws a page, but that page is
+    /// Adobe's own placeholder — the real form is an XFA template PDFium never
+    /// renders. Unlike <see cref="IsDynamicXfaNoticeOpen"/> this never goes false on
+    /// its own, so a tool that would otherwise silently do nothing can still explain
+    /// (<see cref="SelectSignatureForPlacement"/>) even after the notice is closed.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDynamicXfa;
+
+    /// <summary>The dynamic-XFA notice's open/closed state; starts open, closable like the others.</summary>
+    [ObservableProperty]
+    private bool _isDynamicXfaNoticeOpen;
+
+    /// <summary>
     /// Whether a click on this kind of region may do anything. When it may not, the
     /// restricted notice says why rather than the click silently doing nothing.
     /// </summary>
@@ -548,6 +563,11 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         IsRestrictedNoticeOpen = Capabilities.IsRestricted;
         IsRecoveryOffNoticeOpen = openedWithPassword;
         IsSecurityNoticeOpen = false;
+        // #457: read alongside Capabilities/Security, the other document-level facts
+        // this open reads once. A hybrid-XFA document, an ordinary AcroForm, or one
+        // with no form at all never sets this.
+        IsDynamicXfa = doc.IsDynamicXfa;
+        IsDynamicXfaNoticeOpen = IsDynamicXfa;
 
         DocumentPath = path;
         HasUnsavedChanges = false;
@@ -1519,6 +1539,16 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         if (!Capabilities.CanSign)
         {
             IsRestrictedNoticeOpen = true; // #131: the owner does not allow annotations
+            return;
+        }
+        if (IsDynamicXfa)
+        {
+            // #457: signing/checkmarks are this app's way of filling in a form that has
+            // no real AcroForm fields to click — exactly the situation a dynamic-XFA
+            // document is in, except its visible page is Adobe's placeholder, not the
+            // real form, so placing a mark on it would land nowhere meaningful. Explain
+            // rather than arm placement and let it quietly go nowhere.
+            IsDynamicXfaNoticeOpen = true;
             return;
         }
         PendingSignature = item;

@@ -1290,6 +1290,14 @@ public sealed partial class DocumentView : UserControl
     private async void OnUnlockClicked(object sender, RoutedEventArgs e) =>
         await ViewModel.UnlockAsync();
 
+    /// <summary>
+    /// #457: the dynamic-XFA notice's action button. The same download page Adobe's own
+    /// placeholder text on these forms already names ("visiting
+    /// http://www.adobe.com/go/reader_download", #456) — not a different link of our own.
+    /// </summary>
+    private async void OnGetAdobeReaderClicked(object sender, RoutedEventArgs e) =>
+        await Launcher.LaunchUriAsync(new Uri("https://www.adobe.com/go/reader_download"));
+
     // --- Find in document (toolbar Find / Ctrl+F, issue #26: the Edge-style find bar) ---
 
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _findDebounce;

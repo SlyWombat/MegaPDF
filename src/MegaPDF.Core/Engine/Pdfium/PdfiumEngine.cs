@@ -205,6 +205,15 @@ internal sealed class PdfiumDocument : IPdfDocument
         }
     }
 
+    public bool IsDynamicXfa
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return (CoreNative.megapdf_document_flags(_core) & CoreNative.DocFlagDynamicXfa) != 0;
+        }
+    }
+
     public void SaveWithSecurity(Stream target, string userPassword, string? ownerPassword, PdfPermissions permissions)
     {
         ThrowIfDisposed();

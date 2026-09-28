@@ -596,6 +596,15 @@ public static partial class Strings
     /// <summary>Crash recovery is off for password-protected documents.</summary>
     public static string RecoveryOffForProtected => Get("RecoveryOffForProtected");
 
+    /// <summary>This form is built to be filled in with Adobe Reader. You can still view, print, save and share it here — only filling it in isn't possible.</summary>
+    public static string DynamicXfaBanner => Get("DynamicXfaBanner");
+
+    /// <summary>Get Adobe Reader</summary>
+    public static string GetAdobeReader => Get("GetAdobeReader");
+
+    /// <summary>This form needs Adobe Reader to fill in.</summary>
+    public static string DynamicXfaCannotFill => Get("DynamicXfaCannotFill");
+
     /// <summary>This PDF uses a kind of protection MegaPDF can't open.</summary>
     public static string UnsupportedProtection => Get("UnsupportedProtection");
 

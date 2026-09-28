@@ -353,6 +353,19 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     public bool IsEncrypted => _document?.Security.IsEncrypted ?? false;
 
     /// <summary>
+    /// True for the life of this open when the document is dynamic XFA (#456, #457): it
+    /// opens, reports a plausible page count and draws a page, but that page is Adobe's
+    /// own placeholder — the real form is an XFA template PDFium never renders. A
+    /// hybrid-XFA document (CRA, Service Canada, most of IRCC), an ordinary AcroForm, or
+    /// one with no form at all is never true here. Read once, in <see cref="Adopt"/>,
+    /// next to <see cref="Capabilities"/>. The banner it drives has no dismiss button
+    /// (like <see cref="IsRestricted"/>'s), so <see cref="BeginPlacing(SignatureEntry)"/>
+    /// never needs to reopen anything — it is simply always there while the fact holds.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDynamicXfa;
+
+    /// <summary>
     /// The edited-marker convention macOS and Windows share: the title carries the
     /// document name, and unsaved work is a bullet rather than an asterisk.
     /// </summary>
@@ -532,6 +545,9 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         // Permissions before IsDocumentOpen, so no tool is enabled for a moment it should
         // not be (#131).
         Capabilities = DocumentCapabilities.From(document.Security);
+        // #457: read alongside Capabilities/Security, the other document-level fact this
+        // open reads once.
+        IsDynamicXfa = document.IsDynamicXfa;
         _matches.Clear();
         MatchCount = 0;
         CurrentMatchIndex = -1;
@@ -2523,6 +2539,17 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
             Status = Strings.ActionRestricted;
             return;
         }
+        if (IsDynamicXfa)
+        {
+            // #457: signing/checkmarks are this app's way of filling in a form with no
+            // real AcroForm fields to click — exactly this document's situation, except
+            // its visible page is Adobe's placeholder, not the real form, so a mark
+            // placed on it would land nowhere meaningful. Explain rather than arm
+            // placement and let it quietly go nowhere; the banner above says the same
+            // thing for as long as the document stays open.
+            Status = Strings.DynamicXfaCannotFill;
+            return;
+        }
         PendingSignature = entry;
         Status = Strings.ClickWhereSignatureGoes(entry.Name);
     }
@@ -3152,6 +3179,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         IsDocumentOpen = false;
         IsDirty = false;
         Capabilities = DocumentCapabilities.Unprotected;
+        IsDynamicXfa = false;
         // Marks belong to the document that carried them (#329): the old count and the old
         // overlays must not outlive it, and neither must the mode that places them.
         RedactionMarkCount = 0;
