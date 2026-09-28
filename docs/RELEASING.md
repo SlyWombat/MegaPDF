@@ -277,12 +277,20 @@ gh release download windows-cli-v<x.y.z> -D <scratch>      # then run megapdf-cl
 gh release edit windows-cli-v<x.y.z> --draft=false; gh release edit macos-cli-v<x.y.z> --draft=false
 ```
 
-**Snap** — not shippable until Dave's Snap Store account exists (#314). The snap builds
-in CI; nothing is uploaded.
+**Snap** — `tools/Linux-Packaging.md` § The Snap Store. The workflow only ever reaches
+**edge**; stable is a promotion in the Snap Store dashboard's Releases tab, which is
+Dave's click, the same as every other store's go-live.
+
+```
+gh workflow run snap.yml -f upload=true --ref main      # ~6 min, edge only
+sudo snap install megapdf --edge                        # then promote in the dashboard
+```
 
 **Website** — after the go-lives, never before (`website/README.md` § Launch runbook):
 run the 200 check, `python3 website/deploy.py --dry-run --privacy`, then
-`--privacy` (with `--linux` once the APT repository is up, `--snap` once #314 is).
+`--privacy` (with `--linux` once the APT repository is up, `--snap` once the snap is on
+**stable** — never while it is only on edge, or the page prints an install command that
+does not work).
 
 ## 4. Read-backs and close-out
 
@@ -295,6 +303,7 @@ curl -s 'https://itunes.apple.com/lookup?id=6799522972' | python3 -c 'import jso
 curl -s -o /dev/null -w '%{http_code}\n' 'https://play.google.com/store/apps/details?id=ca.electricrv.megapdf'   # 404 until public; tools/play.sh listing status for the track
 curl -s https://electricrv.ca/megapdf/apt/dists/stable/InRelease | head -5
 curl -s https://electricrv.ca/megapdf/apt/dists/stable/main/binary-amd64/Packages | grep -A1 '^Package: megapdf'
+curl -s -H 'Snap-Device-Series: 16' 'https://api.snapcraft.io/v2/snaps/info/megapdf?fields=version,revision,private,publisher'
 gh release view linux-v<x.y.z> --json assets -q '.assets[].name'      # and the two CLI tags
 ```
 
