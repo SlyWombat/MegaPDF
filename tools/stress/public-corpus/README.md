@@ -195,6 +195,87 @@ what MegaPDF is for and the category #434 calls the private corpus thinnest on. 
 are sampled on an even stride across the sorted tree, which is reproducible and does not
 hand back every test for one specification clause and nothing after it.
 
+### Stable under addition, not just deterministic (#455)
+
+Deterministic (rebuild twice, get the same bytes) is not the same property as **stable under
+addition** (add documents, keep the same existing selection). #453 found the gap the hard
+way: adding 186 real federal forms didn't touch the `tagged`/`malformed`/`scan`/`report`
+categories' *content* directly, but it changed the total pool each category's even stride was
+computed over, so the stride landed on a different subset — including two qpdf fixtures that
+happened to over-count tokens against PDFium, dragging the aggregate fidelity gate down for a
+reason that had nothing to do with the new forms. A gate number is not evidence if you cannot
+tell whether it moved because the engine changed or because the corpus reshuffled.
+
+`build-manifest.py` now pins the sample (`pin_selection()`): every rebuild reads whatever
+`--out` already has selected for a category and keeps every one of those rows that is still
+in the freshly-collected pool, unconditionally — a document's seat is never taken by a stride
+recomputed over a larger or smaller pool. Only the quota room left over after pinning (if any)
+is handed to the even-stride `spread()`, and only over candidates that were never previously
+selected, so `spread()` can never reshuffle an existing pick. `form` (quota `None`) already
+took every match unconditionally, so it needed no change — it was never the reshuffling
+category. Chosen over the other two options #455 listed (sampling per source, or hash-based
+selection `sha256(path) mod N < k`) because it builds on what the manifest already is: an
+explicit, committed list of rows, so "the sample" has a literal, auditable home rather than
+being implicit in a formula that a reviewer has to re-derive to trust.
+
+A rebuild that would lose an existing row — a source checkout changed, or `classify()` now
+files a document under a different category — refuses outright rather than dropping or
+silently re-filing it:
+
+    refusing to rebuild manifest.tsv: 1 row(s) already selected there are missing from this
+    rebuild's pool -- a source checkout changed, or classify() now files them elsewhere.
+    #455: a removal must be deliberate and visible, never silent. If this is expected,
+    re-run with --allow-removed <path> for each (repeatable):
+      verapdf/ISO 32000-1/veraPDF test suite 6-8-3-3-t01-fail-a.pdf  (was tagged)
+
+`--allow-removed <path>` (repeatable) is how a maintainer makes that removal deliberate; the
+manifest diff then shows exactly one row disappearing for a reason a PR description can state,
+never a silent reshuffle buried in a hundred other changed rows.
+
+Each rebuild's stderr also prints the manifest's own **revision**: the sha256 of the written
+`manifest.tsv`, e.g. `revision sha256:1e7a27ca...`. TESTING.md's public-corpus baselines are
+recorded against this hash, not just a date, so a gate number always names the exact manifest
+it was measured against.
+
+**What happens when a brand-new source shows up — a source the pin was written before —
+stated explicitly, because it is the question that matters most.** Two shapes exist, and
+they are handled differently on purpose:
+
+* **A new opt-in HTTP source** (the `irs`/`uscis`/`govinfo-signed`/`uk-*`/`govinfo-large`/
+  `nonlatin-wiki` shape, added via `--add-source` and merged by `merge_and_report()`) never
+  goes through `CATEGORIES`/`spread()`/`pin_selection()` at all — it is excluded from the
+  pinning machinery by construction (`main()` filters on `OPT_IN_SOURCE_VALUES`, the full
+  `NON_GIT_SOURCES` ∪ `wiki-*` set) and carried over unconditionally, the same as the
+  federal-forms rows always were. Its rows are simply **appended**: they compete for no
+  quota, so they cannot reshuffle anything and nothing can crowd them out. That exclusion
+  must be the *whole* opt-in set: scoped to `FEDERAL_SOURCES` alone it silently mis-reads
+  all 148 `uk-*`/`govinfo-*` rows as pinned rows that vanished, and every plain rebuild
+  refuses until each is named to `--allow-removed`.
+* **A new git-cloned source** (the `verapdf`/`qpdf`/`pdfium` shape, added to `SOURCES`) *does*
+  go through the normal pipeline: its files are `classify()`d into ordinary categories and
+  become `pool_by_path` candidates like any other source's. `pin_selection()` treats "a
+  brand-new source's files" exactly the same as "an existing source's newly-added files" —
+  there is no special case, because there does not need to be one: every previously-selected
+  row from *any* source is pinned regardless of which source it came from, and a new source's
+  rows are `spread()`-selected into whatever quota room is left (none, today, for `tagged`/
+  `malformed`/`scan`/`report`, all four already at capacity; unlimited for `form` and
+  `large`). A future git source that should guarantee itself real representation needs either
+  its own quota bump (a visible, deliberate `QUOTAS` edit) or, like `govinfo-signed`, a forced
+  `category` that sidesteps competition entirely — not a change to `pin_selection()` itself.
+
+  Measured, on the 1,777-row manifest, by adding a fourth git source carrying four documents
+  (two that `classify()` calls `form`, two it calls `report`) and rebuilding:
+
+  | | rows lost | rows added | net |
+  |---|---:|---:|---:|
+  | unpinned (the behaviour #455 is about) | **189** | **191** | +2 |
+  | pinned (this design) | **0** | **2** | +2 |
+
+  Both land on the same net `+2`. Unpinned, that `+2` hides 380 changed rows — 189
+  previously-measured documents swapped out for 191 others, none of it visible in a row
+  count. Pinned, the diff is literally two added lines and nothing else: the two new `form`
+  documents are appended (that category has no quota), the two new `report` documents are
+  declined (that category is at 250/250), and not one of the 1,777 existing rows moves.
 ## UN parallel-language documents — investigated, not added (#471)
 
 #471's non-Latin-script sample above is 40 *unrelated* Wikipedia articles per script, so a
@@ -276,7 +357,6 @@ served today, and (b) a commercial company redistributing them (even indirectly,
 public URL+sha256 manifest rather than rehosting bytes) is within that permission. Only
 then resolve `un-parallel` in `SOURCES_BLOCKED_LICENCE` the way `irs`/`uscis`/
 `govinfo-signed` were resolved out of `SOURCES_BLOCKED`.
-
 ### A classification bug this extension found and fixed
 
 `classify()` used to require **both** `/AcroForm` and `/Widget` to appear literally in a
@@ -628,9 +708,11 @@ never cite a run over them as a conformance claim.
 
 ## Extending
 
-`build-manifest.py` regenerates the **git-sourced** part of the manifest from scratch, so
-that part of the corpus is a function of its sources rather than a pile someone once
-assembled:
+`build-manifest.py` regenerates the **git-sourced** part of the manifest by re-collecting
+every source and re-deriving each file's category, so that part of the corpus is a function
+of its sources rather than a pile someone once assembled — but it does not re-*sample* from
+scratch (see "Stable under addition" above): whatever `--out` already has selected stays
+selected, and only a category's unfilled quota room is drawn from new candidates.
 
     tools/stress/public-corpus/build-manifest.py --work /var/tmp/pc-build
 
@@ -640,7 +722,10 @@ every sha256 in the file. To add one: give it a licence that permits redistribut
 any direct-URL source and never deletes their rows either** — it preserves whatever
 `irs`/`uscis`/`govinfo-signed`/`uk-hmrc`/`uk-homeoffice`/`uk-dwp`/`govinfo-large` rows are
 already in `--out` (see `NON_GIT_SOURCES` in `build-manifest.py`), so it stays exactly as
-reproducible from a blocked sandbox as it always was.
+reproducible from a blocked sandbox as it always was. If a rebuild would drop an existing row
+(a pinned commit's tree lost a file a previous manifest selected, or `classify()`'s logic
+changed and now files it under a different category), it refuses and names the row; pass
+`--allow-removed <path>` once you have confirmed why (#455).
 
 To (re)fetch a direct-URL source, from a machine that can reach its host — none of these are
 reachable from Anthropic's cloud sandbox, all reachable from an ordinary machine (see

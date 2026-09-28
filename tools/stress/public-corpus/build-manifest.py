@@ -1015,12 +1015,55 @@ def spread(items, limit):
     Not the first N: the sources are laid out by specification clause, so the first N of
     a sorted list is every test for clause 6.1 and nothing after it. An even stride over
     the sorted list samples the whole tree, and sorting first makes it reproducible.
+
+    #455: this alone is not stable under addition -- an even stride over a pool that grows
+    or shrinks lands on different indices, so which existing documents are kept changes too.
+    `pin_selection()` below is what makes the corpus stable: it calls this only on the
+    *new* candidates a category has room left for, never on the merged pool as a whole, so
+    a document already selected in a committed manifest keeps its seat regardless of how
+    many rows other sources add.
     """
     items = sorted(items)
     if limit is None or len(items) <= limit:
         return items
+    if limit <= 0:
+        return []
     step = len(items) / float(limit)
     return [items[int(i * step)] for i in range(limit)]
+
+
+def pin_selection(pool_by_path, existing_by_path, quota):
+    """#455: select this category's rows so that adding documents never reshuffles which
+    already-selected ones are kept.
+
+    `pool_by_path` is every candidate this rebuild found for the category (path -> row).
+    `existing_by_path` is whatever the manifest being rebuilt already had selected for the
+    category (path -> row) -- empty on a first build. Every one of those that is still in
+    `pool_by_path` is kept unconditionally: a document's seat, once given, is never taken
+    by a stride recomputed over a larger or smaller pool. Only the *unfilled* quota (if
+    any) is handed to spread(), and only over candidates that were not already selected --
+    so spread() never sees, and can never reshuffle, an existing pick.
+
+    Returns `(keep, dropped)`: `keep` is the set of paths selected (a subset of
+    pool_by_path's keys, filled as above even when some previous picks were dropped, so a
+    caller that decides to proceed anyway -- because every drop was acknowledged -- gets a
+    fully-formed selection rather than a partial one). `dropped` is the sorted list of
+    paths that were previously selected here but are missing from `pool_by_path` now (the
+    source stopped carrying them, or classify() now files them elsewhere) -- never silently
+    dropped: it is the caller's job to refuse unless each one is acknowledged, per #455.
+    """
+    existing_paths = set(existing_by_path)
+    pool_paths = set(pool_by_path)
+    dropped = sorted(existing_paths - pool_paths)
+    pinned = existing_paths & pool_paths
+
+    if quota is None:
+        return pool_paths, dropped  # form: take every one found, same as ever.
+
+    room = max(quota - len(pinned), 0)
+    candidates = sorted(pool_paths - pinned)
+    added = spread(candidates, room)
+    return pinned | set(added), dropped
 
 
 # --------------------------------------------------------------------------------------
@@ -1558,6 +1601,12 @@ def main():
                          % (", ".join(sorted(list(NON_GIT_SOURCES) + ["nonlatin-wiki"])),
                             ", ".join(sorted(SOURCES_BLOCKED)),
                             ", ".join(sorted(SOURCES_BLOCKED_LICENCE))))
+    ap.add_argument("--allow-removed", action="append", default=[], metavar="PATH",
+                    help="#455: acknowledge that PATH (the manifest's own `path` column), "
+                         "already selected in --out, is expected to drop out of this "
+                         "rebuild -- repeatable. Without this, a rebuild that would lose "
+                         "any previously-selected row refuses outright rather than doing "
+                         "it silently.")
     args = ap.parse_args()
 
     if args.add_source:
@@ -1642,13 +1691,58 @@ def main():
     for row in pool:
         by_category[row["category"]].append(row)
 
+    # #455: read whatever is already at --out once, up front, and use it to pin this
+    # category's previous picks -- see pin_selection(). Empty on a first build, which
+    # degrades to the old whole-pool spread() exactly (nothing pinned yet).
+    #
+    # Every opt-in HTTP source (OPT_IN_SOURCE_VALUES: NON_GIT_SOURCES' keys plus
+    # nonlatin-wiki's per-language `wiki-<lang>` values) never goes through
+    # CATEGORIES/spread()/pin_selection() at all -- those rows are fetched and merged by
+    # their own --add-source path (merge_and_report(), by URL) and carried over here
+    # unconditionally, below. Excluded from existing_by_category so pin_selection never sees
+    # them as something it could pin, drop or backfill room for. It must be the FULL opt-in
+    # set and not FEDERAL_SOURCES alone: a plain rebuild's pool is built from the pinned git
+    # checkouts only, so every uk-*/govinfo-* row would otherwise read as a pinned row that
+    # had vanished, and every rebuild would refuse until all 148 were named to
+    # --allow-removed. (That is what this rebase onto #471's rename had to fix.)
+    existing_rows = read_manifest(args.out) if os.path.exists(args.out) else []
+    opt_in_kept = [r for r in existing_rows if r["source"] in OPT_IN_SOURCE_VALUES]
+    existing_by_category = collections.defaultdict(dict)
+    for r in existing_rows:
+        if r["source"] in OPT_IN_SOURCE_VALUES:
+            continue
+        existing_by_category[r["category"]][r["path"]] = r
+
     selected = []
+    all_dropped = {}  # path -> category, across every category that lost a pinned row
     for category in CATEGORIES:
-        rows = {r["path"]: r for r in by_category[category]}
-        keep = spread(rows.keys(), QUOTAS[category])
-        selected.extend(rows[p] for p in keep)
-        print(f"  {category:10s} {len(keep):5d} of {len(rows):5d} found",
+        pool_by_path = {r["path"]: r for r in by_category[category]}
+        existing_by_path = existing_by_category[category]
+        keep, dropped = pin_selection(pool_by_path, existing_by_path, QUOTAS[category])
+        for path in dropped:
+            all_dropped[path] = category
+        selected.extend(pool_by_path[p] for p in keep)
+        pinned = len(set(existing_by_path) & set(pool_by_path))
+        print(f"  {category:10s} {len(keep):5d} of {len(pool_by_path):5d} found "
+              f"({pinned} pinned from the existing manifest, {len(keep) - pinned} new)",
               file=sys.stderr)
+
+    if all_dropped:
+        allowed = set(args.allow_removed)
+        unacknowledged = {p: c for p, c in all_dropped.items() if p not in allowed}
+        if unacknowledged:
+            lines = "\n".join(f"  {path}  (was {cat})"
+                              for path, cat in sorted(unacknowledged.items()))
+            sys.exit(
+                f"refusing to rebuild {args.out}: {len(unacknowledged)} row(s) already "
+                f"selected there are missing from this rebuild's pool -- a source checkout\n"
+                f"changed, or classify() now files them elsewhere. #455: a removal must be\n"
+                f"deliberate and visible, never silent. If this is expected, re-run with\n"
+                f"--allow-removed <path> for each (repeatable):\n{lines}")
+        unused = allowed - set(all_dropped)
+        if unused:
+            print(f"  note: --allow-removed named {len(unused)} path(s) that were not "
+                  f"actually missing: {sorted(unused)}", file=sys.stderr)
 
     # A plain rebuild never touches the network for any opt-in source (that is what
     # --add-source is for, and what keeps this path reproducible from a sandbox that cannot
@@ -1657,18 +1751,22 @@ def main():
     # there under any of those source keys is carried over unchanged. (#471 generalizes this
     # from "federal" to every opt-in HTTP source; the doctrine -- opt-in fetch, never
     # resampled, never silently dropped -- is the same one FEDERAL_SOURCES established for
-    # irs/uscis.)
-    if os.path.exists(args.out):
-        opt_in_kept = [r for r in read_manifest(args.out) if r["source"] in OPT_IN_SOURCE_VALUES]
-        if opt_in_kept:
-            print(f"  preserving {len(opt_in_kept)} opt-in rows already in {args.out} "
-                  f"(source in {sorted(OPT_IN_SOURCE_VALUES)}); re-run --add-source to refresh "
-                  f"them from the network", file=sys.stderr)
-            selected.extend(opt_in_kept)
+    # irs/uscis.) #455: this is the *other* pin -- pin_selection() above pins the
+    # CATEGORIES/spread() selection, this pins the opt-in rows that never went through
+    # CATEGORIES/spread() in the first place (excluded from existing_by_category above for
+    # exactly this reason), and it is why a brand-new opt-in source APPENDS without
+    # disturbing anything already selected.
+    if opt_in_kept:
+        print(f"  preserving {len(opt_in_kept)} opt-in rows already in {args.out} "
+              f"(source in {sorted(OPT_IN_SOURCE_VALUES)}); re-run --add-source to refresh "
+              f"them from the network", file=sys.stderr)
+        selected.extend(opt_in_kept)
 
     write_manifest(selected, args.out)
     total = sum(int(r["bytes"]) for r in selected)
-    print(f"wrote {args.out}: {len(selected)} rows, {total/1048576:.1f} MB", file=sys.stderr)
+    revision = hashlib.sha256(open(args.out, "rb").read()).hexdigest()
+    print(f"wrote {args.out}: {len(selected)} rows, {total/1048576:.1f} MB, "
+          f"revision sha256:{revision}", file=sys.stderr)
 
 
 if __name__ == "__main__":

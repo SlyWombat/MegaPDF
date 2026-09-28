@@ -345,6 +345,11 @@ forms work."
 
 ### Second run, 2026-09-27: 136 real IRS forms + 50 real USCIS forms added
 
+**Its own gate numbers are superseded by the third run below**, which measured the identical
+manifest (byte-identical, #455) against a moved main — kept here for the corpus population
+history (the federal-forms extension) and because the fidelity-gate failure it recorded is
+exactly what #453 and #455 are about.
+
 `irs.gov` and `uscis.gov` are reachable from an ordinary machine (kdocker3) even though they
 are not reachable from Anthropic's cloud sandbox — see
 `tools/stress/public-corpus/README.md`, "Network reality", for the measured statuses and the
@@ -621,7 +626,6 @@ the existing limits, so this is worth re-checking rather than assumed permanentl
 the category ever grows. Not changed here either way — `tools/stress/*-battery.sh` was out
 of bounds for #442/#445 and stays out of bounds here.
 
-
 ### Android app UI tests (#346)
 
 `android/app/src/androidTest/` drives the Android app's own screen on an emulator — the
@@ -740,6 +744,62 @@ about the MSIX or the Mac App Store submission changes.
 **Verifying the archives needs Windows/macOS hardware this repository's CI does not have
 outside the tag build itself** — download, unzip and run on a clean Windows 11 machine and a
 clean Mac (Gatekeeper's verdict on the unstapled zip in particular) is a manual check.
+
+### Sixth run, 2026-09-28: the sample pinned, baseline tied to a named revision (#455)
+
+The first baseline recorded against a **manifest revision** rather than a date, which is what
+#455 asks for: a gate number without the manifest it was measured on cannot tell you whether
+it moved because the engine changed or because the corpus reshuffled.
+
+    manifest revision: sha256:d1c084b1cedb7583dfbef03e3b8fb59c9eac55c39b1dbed0fdd132cde7dd079e
+    1,777 rows  (363 form, 300 tagged, 250 report, 150 malformed, 100 scan, 0 large,
+                 614 opt-in: 136 irs, 50 uscis, 108 uk-*, 33 govinfo-signed, 7 govinfo-large,
+                 280 wiki-*)
+
+**Measured over 1,163 of those 1,777 rows.** Only `raw.githubusercontent.com` is reachable
+from Anthropic's cloud sandbox; the 614 opt-in rows sit behind hosts that refuse the proxy's
+CONNECT outright (`irs.gov`, `uscis.gov`, `assets.publishing.service.gov.uk`, `govinfo.gov`,
+`*.wikipedia.org` — the same block #434 recorded). This is therefore the baseline for the
+**git-sourced subset** of that revision, not the whole corpus; a full-corpus number needs a
+machine that can reach the other five hosts.
+
+Run against a clean tree holding **only** this revision's rows. That matters and is itself a
+#455 point: the fetch directory on this machine still held 101 documents selected by *earlier*
+manifest revisions, and a battery walks the directory, not the manifest — so measuring it
+as-is would have reported 1,264 documents against a 1,163-row manifest and reproduced the
+exact ambiguity this issue exists to remove. `fetch.sh --verify-only` over the subset:
+`verified 1163, missing 0, mismatched 0`. Built against the pinned 33-patch PDFium
+(`pdfium-7934-megapdf-2b3b415e86b1`).
+
+| measure | this run | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 | **0.999450** | >= 0.998 | pass |
+| structure: F1 through `megapdf-cli` | **0.999670** | >= 0.998 | pass |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | **0** | 0 | pass |
+| structure: order agreement tau, median | 1.000 | >= 0.9 | pass |
+| structure: pages F1 < 0.9 | 2 | informational | |
+| markdown: cmark parse failures | **0** | 0 | pass |
+| markdown: crashes / hangs / bad exits | 0 / 0 / 0 | 0 / 0 / 0 | pass |
+| pages: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| pages: qpdf failures / count mismatches / write failures | 0 / 0 / 0 | 0 / 0 / 0 | pass |
+| pages: **refused, other** | **5** | 0 | **fail — #445** |
+
+1,162 documents seen by the structure and markdown batteries rather than 1,163: their `find`
+is case-sensitive `-name '*.pdf'` and one qpdf fixture is `split-exp-04.Pdf`. Cosmetic, noted
+so the counts reconcile.
+
+The one red gate is the same one TESTING.md already tells you how to read. All five `refused,
+other` come from **two** documents — `pdfium/testing/resources/bug_216.pdf` and
+`document_aactions.pdf` — refusing `rotate`/`move`/`extract` with exit 9, the pair #453
+identified and #445 filed. #450 since split out the buckets that were miscounted (`usage
+error`, `refused, damaged input`, `qpdf, carried damage`), and those now read 2 / 0 / 3 and are
+correctly **not** gated; what is left is #445's still-open point that a page the engine cannot
+load is a third legitimate refusal the contract does not list. Not re-filed, and no threshold
+touched.
+
+One poppler timeout (`pdftotext` bounded at 120s by #442, on qpdf's `shared-unnamed-field.pdf`);
+that document is simply absent from measure 3's counts and does not touch the fidelity gate.
 
 ## Reporting
 
