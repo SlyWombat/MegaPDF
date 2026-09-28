@@ -270,9 +270,9 @@ There are two corpora, and they answer different questions.
 | | private | public |
 |---|---|---|
 | where | `GPD-DAVE`, `k2`, `k3` only | anywhere — CI, a cloud sandbox, a laptop |
-| what | 4,337 of the owner's real documents | 1,464 fetched from a committed manifest |
+| what | 4,337 of the owner's real documents | 1,497 fetched from a committed manifest |
 | how | already on disk | `tools/stress/public-corpus/fetch.sh` |
-| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **186 real IRS/USCIS forms, 108 real UK OGL forms, and 7 very large documents** |
+| population | real producers, real typography, valid files | conformance fixtures, engine test suites, deliberately broken files, **186 real IRS/USCIS forms, 33 genuinely GPO-signed documents, 108 real UK OGL forms, and 7 very large documents** |
 | depth | the deeper battery: real-world shapes nothing synthetic reproduces | the reproducible one: anyone can run it and get the same documents |
 
 Neither replaces the other. The private corpus stays the deeper gate and stays local; the
@@ -288,6 +288,37 @@ Record the two separately.
     bash tools/stress/pages-battery.sh    <cli> ~/megapdf-public-corpus <out> --jobs 3
     tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
     tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
+
+### Corpus staging on k3 (#470)
+
+k3 (kdocker3) is where batteries run repeatedly, so all three corpora are staged there
+permanently instead of being fetched or copied per run:
+
+| corpus | path on k3 | size | refreshed by |
+|---|---|---:|---|
+| private | `~/pdf-test` | 4,337 documents | never re-fetched — it is the owner's own machine copy |
+| private (Canadian forms) | `~/pdf-test-ca` | 135 documents | same |
+| public | `~/pdf-public` | 1,349 documents, 144 MB | `tools/stress/public-corpus/fetch.sh ~/pdf-public` |
+
+Point any battery at `~/pdf-public` exactly as at `~/megapdf-public-corpus` above — it is
+the same corpus, just not re-downloaded:
+
+    tools/stress/public-corpus/fetch.sh ~/pdf-public                  # after a manifest change: skips what it already has
+    tools/stress/public-corpus/fetch.sh --verify-only ~/pdf-public    # proves it byte-for-byte, no network at all
+    tools/stress/structure-battery.sh <structure_check> ~/pdf-public <out> --reference --cli <cli>
+
+`~/pdf-public` is chmod'd read-only the same way `~/pdf-test` is (`dr-xr-sr-x` directories,
+`r--r--r--` files), so an ordinary battery run cannot write into it, move a file, or repair
+a mismatch by accident — the same protection the private corpus has had all along.
+
+**Scratch is disposable; corpora persist.** Every agent brief says "leave the machine as
+you found it" and "clean up after yourself" — that means your own build directories,
+containers and pulled images, named for your issue (`~/megapdf-<n>*`, `megapdf-<n>*`
+containers/images). It does **not** mean deleting `~/pdf-test`, `~/pdf-test-ca` or
+`~/pdf-public`: those are shared, permanent fixtures the next agent would otherwise have to
+rebuild or re-download, and #470 exists precisely because three agents re-downloaded the
+public corpus on 2026-09-27 rather than leaving it staged. If a task's brief does not name
+one of these three paths as scratch, it is not scratch.
 
 First full run, 2026-09-27 (1,036 documents visited, 1,533 pages — see the #434 PR for the
 per-category breakdown). **Superseded by the run below**, kept for history:
@@ -380,23 +411,83 @@ Read #445 before treating a red pages battery on the public corpus as an engine 
 this run, as before, every qpdf-failure/count-mismatch/other-refusal was the harness or the
 population, not the engine.
 
-### Third run, 2026-09-28: 108 UK OGL forms + 7 large govinfo documents (#471 parts 3-4)
+### Third run, 2026-09-28: proving the k3 staging (#470)
 
-Built on `main` @ `8b09807` (includes #452/#463's field-hierarchy relaxation and #457's XFA
-work). The corpus is now **1,464 documents, ~4.24 GB** (dominated by the seven new `large`
-rows; everything else is ~197 MB) — see `tools/stress/public-corpus/README.md`, "UK
-government forms" and "Very large documents", for how each set was chosen and licensed.
+Structure battery only, run against **`~/pdf-public` on kdocker3** rather than a fresh
+`~/megapdf-public-corpus` fetch, to prove the staged copy is a drop-in replacement — same
+manifest revision as the second run above (`main` at `8b09807`, manifest unchanged since
+`d182085`), engine built fresh from that same commit:
+
+    tools/stress/public-corpus/fetch.sh --verify-only ~/pdf-public   # offline: 1,349 verified, 0 missing, 0 mismatched
+    tools/stress/structure-battery.sh <structure_check> ~/pdf-public <out> --reference --cli <cli>
+
+1,348 documents visited (the same case-mismatched `.Pdf` qpdf fixture noted above is still
+skipped by `find -name '*.pdf'`):
+
+| measure | public corpus (staged) | gate | |
+|---|---|---|---|
+| structure: aggregate token F1 | 0.999167 | >= 0.998 | pass |
+| structure: F1 through `megapdf-cli` | 0.999206 | >= 0.998 | pass |
+| structure: order agreement tau (median, 1,396 tagged pages) | 0.956 | >= 0.9 | pass |
+| structure: poppler agreement tau (median, informational) | 0.998 | — | — |
+| structure: crashes / hangs | 0 / 0 | 0 / 0 | pass |
+| structure: CLI bad exit codes | 0 | 0 | pass |
+
+Every gate is green on the engine as of `8b09807` — #443 and #453's CLI-exit-code and
+aggregate-F1 failures from the second run above are both resolved by now (unrelated to
+#470; recorded here only because this run would otherwise look inconsistent with the
+history above). The point of this run is narrower than the numbers: **a battery pointed at
+the permanently staged `~/pdf-public` produces a normal, gate-passing report, end to end,
+with zero documents fetched over the network** — the staging in "Corpus staging on k3"
+above is a transparent substitute for `~/megapdf-public-corpus`, not a different corpus.
+
+### Third addition, 2026-09-28: 33 genuinely-signed documents (#471 part 1)
+
+Not a battery run — a targeted measurement, per the task brief, of what `megapdf_save()`'s
+full rewrite does to a signature already on a document. 33 documents from `www.govinfo.gov`
+(GPO Federal Register, Public Law, Congressional Record, CFR and Statutes at Large PDFs),
+every one independently verified `Signature is Valid` with poppler's `pdfsig` before any
+MegaPDF code touched it. The corpus is now **1,382 documents, 298.1 MB**; the new `signed`
+category and the `govinfo-signed` source are documented in
+`tools/stress/public-corpus/README.md`, "The signed category".
+
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed  # from a machine that can reach www.govinfo.gov
+    tools/stress/public-corpus/fetch.sh --category signed                    # → ~/megapdf-public-corpus/govinfo-signed
+
+**Result: the signature does not survive a MegaPDF save, with or without an edit.**
+
+| stage | result (33/33) |
+|---|---|
+| before any MegaPDF processing | `Signature is Valid` |
+| after `megapdf_save()`, no edit at all | `Digest Mismatch` |
+| after `megapdf_save()` following one edit | `Digest Mismatch` |
+
+The two after-save rows are identical: saving invalidates the signature regardless of
+whether the content changed, because `FPDF_SaveAsCopy` re-serialises the whole file and
+carries the original `/ByteRange` bounds over unchanged into a file whose length is now
+different. Filed as **#476** — a behaviour finding per the task brief, `core/` untouched, no
+gate adjusted. See the README section for the full detail (including the specific
+byte-count evidence) and the harness used.
+
+### Fourth run, 2026-09-28: 108 UK OGL forms + 7 large govinfo documents (#471 parts 3-4)
+
+Built on `main` including #452/#463's field-hierarchy relaxation, #457's XFA work, #470's
+k3 staging, and #471 part 1's `signed` category (the run directly above) — see the PR for
+the exact commit and manifest revision this was built on. The corpus is now
+**1,497 documents, ~4.29 GB** (dominated by the seven new `large` rows at ~4.25 GB;
+everything else is ~363 MB) — see `tools/stress/public-corpus/README.md`, "UK government forms" and "Very
+large documents", for how each set was chosen and licensed.
 
     tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
     tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
     tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
-    tools/stress/public-corpus/build-manifest.py --add-source govinfo
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-large
     tools/stress/public-corpus/fetch.sh                                # → ~/megapdf-public-corpus
     bash tools/stress/pages-battery.sh    <cli> ~/megapdf-public-corpus <out> --jobs 3
     tools/stress/markdown-battery.sh      <cli> $(command -v cmark) ~/megapdf-public-corpus <out>
     tools/stress/structure-battery.sh     <structure_check> ~/megapdf-public-corpus <out> --reference --cli <cli>
 
-1,456 documents visited by `find -name '*.pdf'` for the non-`large` batteries (1,464 minus
+1,489 documents visited by `find -name '*.pdf'` for the non-`large` batteries (1,497 minus
 the same case-mismatched qpdf fixture #445 already noted, minus the fact that `large` rows
 were battery-tested separately, below, rather than mixed into the same run given their size):
 
@@ -436,15 +527,17 @@ Filed as the finding per #471's "never fix, never gate-adjust" instruction. #480
 addition and its overall results.
 
 **`large` category (7 govinfo Federal Register documents, 48.4 MB - 2.07 GB), tested
-separately given their size:**
+separately given their size (`--jobs 1`):**
 
 | measure | large category | gate | |
 |---|---|---|---|
-| pages: crashes / hangs | [FILL] | 0 / 0 | [FILL] |
-| pages: slowest single operation | [FILL] | — | informational |
-| structure: crashes / hangs | [FILL] | 0 / 0 | [FILL] |
-| structure: slowest document | [FILL] | — | informational |
-| markdown: crashes / hangs | [FILL] | 0 / 0 | [FILL] |
+| pages: crashes / hangs | 0 / 0 (981s total, 28 operations) | 0 / 0 | pass |
+| pages: qpdf timeouts | 0 | 0 | pass |
+| structure: crashes / hangs | 0 / 0 (283s total) | 0 / 0 | pass |
+| structure: aggregate token F1 (internal API) | **0.989043** | >= 0.998 | **fail** — see #488 |
+| structure: F1 through `megapdf-cli` | 0.989950 | >= 0.998 | **fail** — same cause |
+| structure: poppler (`pdftotext`) timeouts | 0 | informational (#442) | pass — completed even on the 2.07 GB document |
+| markdown: crashes / hangs / bad exit codes | 0 / 0 / 0 (45s total) | 0 / 0 / 0 | pass |
 
 Wall time / peak RSS per document (via `megapdf-cli extract`, outside the batteries, as a
 baseline for a future regression to compare against): see
@@ -452,12 +545,25 @@ baseline for a future regression to compare against): see
 document) to 14.75s/2.40GB (the 2.07 GB document), scaling roughly linearly with size, no
 sign of a blow-up at the top of the range.
 
-**Battery timeouts and the `large` category.** [FILL: verdict based on the actual battery
-run above — whether `structure-battery.sh`/`markdown-battery.sh`'s 120s default and
-`pages-battery.sh`'s 300s default gave enough headroom for the 2.07 GB document, or came
-close enough that the category should get its own value.] Raised in the #471 PR as a
-request rather than changed here — `tools/stress/*-battery.sh` was out of bounds for #442/
-#445 and stays out of bounds here.
+The structure gate fails on this population — filed as **#488**: these are largely pre-1995
+OCR'd scans (see README, "Very large documents"), and 0.989 is well within the range other
+scan-heavy or non-standard populations have measured at elsewhere in this corpus. Not fixed
+or gate-adjusted here, per #471's own instruction — a gate moving on a new population is the
+information wanted.
+
+**Battery timeouts and the `large` category: the current defaults were sufficient for every
+document tested, with real margin.** Across all three batteries and all 7 documents up to
+2.07 GB, **not one operation hit its timeout** — `pages-battery.sh`'s 300s (28 rotate/delete/
+move/extract operations, 981s total, none individually timed out), `structure-battery.sh`'s
+120s (283s total across internal-API, `pdftotext --reference`, and CLI calls per document;
+poppler itself finished the 2.07 GB document inside 120s, where #442 found it can hang
+indefinitely on a much smaller, adversarial fixture), and `markdown-battery.sh`'s 120s
+(45s total for all 7). **No change requested for these sizes** — but this is 7 documents
+topping out at 2.07 GB; a document meaningfully larger, or a slower host, could still reach
+the existing limits, so this is worth re-checking rather than assumed permanently settled if
+the category ever grows. Not changed here either way — `tools/stress/*-battery.sh` was out
+of bounds for #442/#445 and stays out of bounds here.
+
 
 ### Android app UI tests (#346)
 

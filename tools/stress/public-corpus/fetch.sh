@@ -86,10 +86,14 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-mkdir -p "$DEST" || exit 2
-# The corpus directory says what it is, so a stray `git add` in the wrong place, or a
-# later reader wondering what these files are, has an answer sitting next to them.
-cat > "$DEST/WHERE-THESE-CAME-FROM.txt" <<TXT
+if [ "$VERIFY_ONLY" -eq 0 ]; then
+    mkdir -p "$DEST" || exit 2
+    # The corpus directory says what it is, so a stray `git add` in the wrong place, or a
+    # later reader wondering what these files are, has an answer sitting next to them.
+    # Skipped in --verify-only (#470): that mode only reads, and a permanently staged
+    # corpus is chmod'd read-only, so writing this marker on every check would fail --
+    # harmlessly (set -u but not -e, so the script presses on), but noisily.
+    cat > "$DEST/WHERE-THESE-CAME-FROM.txt" <<TXT
 MegaPDF public test corpus (#434) -- fetched by tools/stress/public-corpus/fetch.sh
 from tools/stress/public-corpus/manifest.tsv. Every file here is redistributable;
 licences and attribution are in that directory's README.md. Nothing here is committed
@@ -97,6 +101,7 @@ to the MegaPDF repository and nothing here is the owner's private corpus.
 Files under malformed/ are DELIBERATELY BROKEN and may trip anti-malware. Open them
 with the engine under test, not with anything you care about.
 TXT
+fi
 
 # ---- one document ----------------------------------------------------------------
 fetch_one() {

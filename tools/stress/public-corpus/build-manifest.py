@@ -20,24 +20,30 @@ it, but nobody has yet built and verified a generator for it); its host is also 
 from Anthropic's cloud sandbox, so `--add-source safedocs` still refuses rather than
 shipping an unverified generator.
 
-`irs`, `uscis`, `uk-hmrc`, `uk-homeoffice`, `uk-dwp` and `govinfo`, by contrast, ARE
-implemented and verified (`irs`/`uscis`: #434 federal-forms extension, kdocker3,
-2026-09-27; the rest: #471 parts 3-4, kdocker3, 2026-09-28): every one of their hosts is
-reachable from a real machine, just not from the cloud sandbox this file was first written
-in. Run
+`irs`, `uscis`, `govinfo-signed`, `uk-hmrc`, `uk-homeoffice`, `uk-dwp` and `govinfo-large`,
+by contrast, ARE implemented and verified (`irs`/`uscis`: #434 federal-forms extension,
+kdocker3, 2026-09-27; `govinfo-signed`: #471 part 1, kdocker3, 2026-09-28; the rest: #471
+parts 3-4, kdocker3, 2026-09-28): every one of their hosts is reachable from a real
+machine, just not from the cloud sandbox this file was first written in. Run
 
     tools/stress/public-corpus/build-manifest.py --add-source irs
     tools/stress/public-corpus/build-manifest.py --add-source uscis
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed
     tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
     tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
     tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
-    tools/stress/public-corpus/build-manifest.py --add-source govinfo
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-large
 
-from a machine that can reach the relevant host (www.irs.gov / www.uscis.gov / gov.uk's
-asset host / www.govinfo.gov) to (re)fetch that source's rows and merge them into an
-existing --out manifest; a plain rebuild (no --add-source) never touches any of them, so it
-stays exactly as reproducible from a blocked sandbox as before. See NON_GIT_SOURCES,
-FEDERAL_SOURCES and DIRECT_SOURCES below, and README.md, "Extending".
+from a machine that can reach the relevant host (www.irs.gov / www.uscis.gov /
+www.govinfo.gov / gov.uk's asset host) to (re)fetch that source's rows and merge them into
+an existing --out manifest; a plain rebuild (no --add-source) never touches any of them, so
+it stays exactly as reproducible from a blocked sandbox as before. `govinfo-signed` (a
+curated set of GPO-signed documents, forced into the `signed` category) and
+`govinfo-large` (a curated set of large Federal Register issues, forced into the `large`
+category) are deliberately separate source keys against the same host for two different
+purposes -- see SOURCES_BLOCKED below for why plain `govinfo` (the *bulk* generator #434
+item 4 asks for) stays blocked regardless. See NON_GIT_SOURCES, FEDERAL_SOURCES and
+DIRECT_SOURCES below, and README.md, "Extending".
 """
 
 import argparse
@@ -91,12 +97,22 @@ SOURCES = [
 
 SOURCES_BY_KEY = {s.key: s for s in SOURCES}
 
-# Hosts #434 names for which no verified generator exists yet. `irs`, `uscis` and `govinfo`
-# used to be listed here too; they moved out once a generator for each was actually written
-# and run against the real host (see FEDERAL_SOURCES and GOVINFO_SOURCE below). Kept as a
-# hard refusal rather than a half-built generator: a manifest row whose hash nobody computed
-# is worse than a missing one.
+# Hosts #434 names for which no verified generator exists yet. `irs` and `uscis` used to
+# be listed here too; they moved out once a generator for each was actually written and
+# run against the real host (see FEDERAL_SOURCES below). Kept as a hard refusal rather
+# than a half-built generator: a manifest row whose hash nobody computed is worse than a
+# missing one.
+#
+# `govinfo` (the *bulk* generator #434 item 4 asks for, spanning the whole Federal
+# Register/CFR archive for large-file coverage) stays blocked here: nobody has designed or
+# verified that generator yet. `govinfo-signed` (#471 part 1) and `govinfo-large` (#471
+# part 4) are both narrower, already-verified generators against the same host for two
+# different purposes -- a curated set of GPO-signed documents, and a curated set of large
+# Federal Register issues -- and are each intentionally kept under their own source key, not
+# `govinfo`, so neither collides with the other or with the bulk generator whenever that is
+# eventually implemented.
 SOURCES_BLOCKED = {
+    "govinfo": "www.govinfo.gov",
     "safedocs": "downloads.digitalcorpora.org",
 }
 
@@ -261,7 +277,83 @@ FEDERAL_ATTRIBUTION_USCIS = ("U.S. Citizenship and Immigration Services -- a U.S
                               "Government work, no copyright (17 U.S.C. Sec 105)")
 
 HttpSource = collections.namedtuple(
-    "HttpSource", "key base_url licence attribution forms")
+    "HttpSource", "key base_url licence attribution forms category",
+    defaults=(None,))  # category: force a category rather than derive one with
+                        # classify() -- see GOVINFO_SIGNED_DOCS below. irs/uscis leave
+                        # this None, so their rows are classified exactly as before.
+
+# --------------------------------------------------------------------------------------
+# #471 part 1: documents that already carry a valid digital signature, to measure what
+# megapdf_save()'s full-rewrite does to it (see tools/stress/public-corpus/README.md,
+# "The signed category", for the measurement and its result). All from
+# www.govinfo.gov (U.S. Government Publishing Office): every GPO-published Federal
+# Register issue, Statutes at Large volume, Public Law, Congressional Record issue and
+# CFR title/volume is served as a PDF bearing GPO's own digital signature
+# (Signature Field Name "USGPOSignature", Signer CN "Government Publishing Office" or
+# "U.S. Government Publishing Office") -- verified with poppler's `pdfsig` against every
+# row below, kdocker3, 2026-09-28: 33/33 "Signature is Valid" before any MegaPDF
+# processing touches them. Same licence bucket as IRS/USCIS (a GPO publication is a
+# federal government work, 17 U.S.C. Sec 105 -- no copyright, so no licence to comply
+# with), with its own attribution string recording the signing fact as provenance.
+#
+# Grouped by GPO collection, matching govinfo's own package-ID prefixes:
+#   fr        Federal Register daily issues, 2019-2024, a spread of months so the
+#             sample is not one season's rulemaking.
+#   plaw      Public Laws -- enacted legislation, one PDF per law, chosen as a spread of
+#             well-known acts across four Congresses rather than sequential numbers.
+#   crec      Congressional Record daily issues, one per year 2019-2024.
+#   cfr       Code of Federal Regulations, one title/volume per year 2019-2023, a range
+#             of titles (agencies) and volume sizes (2.8-23 MB).
+#   statute   United States Statutes at Large, individual public-law excerpts by
+#             volume/page citation.
+# category is forced to "signed" (not derived from classify()) so these rows do not
+# fall under "form" just because a /Sig field is technically inside an /AcroForm --
+# the whole point of the row is the signature, and #471 asks for a `signed` category.
+GOVINFO_SIGNED_DOCS = [
+    ("FR-2019-03-15/pdf/FR-2019-03-15.pdf", "fr"),
+    ("FR-2020-06-10/pdf/FR-2020-06-10.pdf", "fr"),
+    ("FR-2021-09-01/pdf/FR-2021-09-01.pdf", "fr"),
+    ("FR-2021-09-08/pdf/FR-2021-09-08.pdf", "fr"),
+    ("FR-2022-04-06/pdf/FR-2022-04-06.pdf", "fr"),
+    ("FR-2022-08-16/pdf/FR-2022-08-16.pdf", "fr"),
+    ("FR-2023-01-12/pdf/FR-2023-01-12.pdf", "fr"),
+    ("FR-2023-07-05/pdf/FR-2023-07-05.pdf", "fr"),
+    ("FR-2024-01-02/pdf/FR-2024-01-02.pdf", "fr"),
+    ("FR-2024-05-14/pdf/FR-2024-05-14.pdf", "fr"),
+    ("FR-2024-10-01/pdf/FR-2024-10-01.pdf", "fr"),
+
+    ("PLAW-107publ56/pdf/PLAW-107publ56.pdf", "plaw"),
+    ("PLAW-109publ171/pdf/PLAW-109publ171.pdf", "plaw"),
+    ("PLAW-111publ148/pdf/PLAW-111publ148.pdf", "plaw"),
+    ("PLAW-113publ235/pdf/PLAW-113publ235.pdf", "plaw"),
+    ("PLAW-115publ97/pdf/PLAW-115publ97.pdf", "plaw"),
+    ("PLAW-116publ136/pdf/PLAW-116publ136.pdf", "plaw"),
+    ("PLAW-117publ58/pdf/PLAW-117publ58.pdf", "plaw"),
+
+    ("CREC-2019-07-17/pdf/CREC-2019-07-17.pdf", "crec"),
+    ("CREC-2020-02-12/pdf/CREC-2020-02-12.pdf", "crec"),
+    ("CREC-2021-10-05/pdf/CREC-2021-10-05.pdf", "crec"),
+    ("CREC-2022-03-08/pdf/CREC-2022-03-08.pdf", "crec"),
+    ("CREC-2023-06-13/pdf/CREC-2023-06-13.pdf", "crec"),
+    ("CREC-2024-01-02/pdf/CREC-2024-01-02.pdf", "crec"),
+
+    ("CFR-2019-title21-vol1/pdf/CFR-2019-title21-vol1.pdf", "cfr"),
+    ("CFR-2020-title29-vol5/pdf/CFR-2020-title29-vol5.pdf", "cfr"),
+    ("CFR-2021-title17-vol3/pdf/CFR-2021-title17-vol3.pdf", "cfr"),
+    ("CFR-2022-title26-vol1/pdf/CFR-2022-title26-vol1.pdf", "cfr"),
+    ("CFR-2023-title40-vol1/pdf/CFR-2023-title40-vol1.pdf", "cfr"),
+    ("CFR-2023-title47-vol1/pdf/CFR-2023-title47-vol1.pdf", "cfr"),
+
+    ("STATUTE-115/pdf/STATUTE-115-Pg272.pdf", "statute"),
+    ("STATUTE-124/pdf/STATUTE-124-Pg119.pdf", "statute"),
+    ("STATUTE-131/pdf/STATUTE-131-Pg2054.pdf", "statute"),
+]
+
+FEDERAL_ATTRIBUTION_GOVINFO_SIGNED = (
+    "U.S. Government Publishing Office -- a U.S. Government work, no copyright "
+    "(17 U.S.C. Sec 105); also bears GPO's own digital signature "
+    "(Signature Field Name \"USGPOSignature\") attesting the authenticity of the "
+    "version published at govinfo.gov")
 
 FEDERAL_SOURCES = {
     "irs": HttpSource(
@@ -277,6 +369,14 @@ FEDERAL_SOURCES = {
         licence=FEDERAL_LICENCE,
         attribution=FEDERAL_ATTRIBUTION_USCIS,
         forms=USCIS_FORMS,
+    ),
+    "govinfo-signed": HttpSource(
+        key="govinfo-signed",
+        base_url="https://www.govinfo.gov/content/pkg/",
+        licence=FEDERAL_LICENCE,
+        attribution=FEDERAL_ATTRIBUTION_GOVINFO_SIGNED,
+        forms=GOVINFO_SIGNED_DOCS,
+        category="signed",
     ),
 }
 
@@ -913,6 +1013,9 @@ def fetch_federal(source, cache_dir):
             if not data.startswith(b"%PDF"):
                 skipped.append((relpath, "not a PDF"))
                 continue
+            # govinfo-signed's relpaths nest a "/pdf/" component (govinfo's own package
+            # layout); irs/uscis relpaths never did, so this was never needed before.
+            os.makedirs(os.path.dirname(cachefile), exist_ok=True)
             with open(cachefile, "wb") as fh:
                 fh.write(data)
         rows.append({
@@ -922,7 +1025,7 @@ def fetch_federal(source, cache_dir):
             "bytes": str(len(data)),
             "source": source.key,
             "licence": source.licence,
-            "category": classify(data, relpath),
+            "category": source.category or classify(data, relpath),
         })
 
     if not rows and transport_failures == len(source.forms):
@@ -1110,8 +1213,12 @@ DIRECT_SOURCES = {
         key="uk-dwp", licence=UK_LICENCE, attribution=UK_ATTRIBUTION_DWP,
         items=[(f.url, f.relpath) for f in DWP_FORMS],
         request_gap=UK_REQUEST_GAP, force_category=None),
-    "govinfo": DirectSource(
-        key="govinfo", licence=GOVINFO_LICENCE, attribution=GOVINFO_ATTRIBUTION,
+    # Named "govinfo-large", not "govinfo": #471 part 1's `govinfo-signed` (FEDERAL_SOURCES
+    # above) already established the convention of keeping a narrow, curated govinfo.gov
+    # generator under its own specific key, precisely so a future *bulk* `govinfo` generator
+    # (still blocked -- see SOURCES_BLOCKED) never collides with either.
+    "govinfo-large": DirectSource(
+        key="govinfo-large", licence=GOVINFO_LICENCE, attribution=GOVINFO_ATTRIBUTION,
         items=[(d.url, d.relpath) for d in GOVINFO_DOCS],
         request_gap=GOVINFO_REQUEST_GAP, force_category="large"),
 }
@@ -1177,8 +1284,8 @@ def main():
                 f"manifest was built in, so no generator for it could be run, and a generator\n"
                 f"that has never produced a verified row does not belong in the repository.\n"
                 f"Add one from a machine that can reach {host}, following the shape of\n"
-                f"NON_GIT_SOURCES (irs, uscis, uk-hmrc, uk-homeoffice, uk-dwp, govinfo) in\n"
-                f"this file, which is real and verified.")
+                f"NON_GIT_SOURCES (irs, uscis, govinfo-signed, uk-hmrc, uk-homeoffice,\n"
+                f"uk-dwp, govinfo-large) in this file, which is real and verified.")
         if args.add_source not in NON_GIT_SOURCES:
             sys.exit(f"unknown source {args.add_source!r}; known: "
                       f"{', '.join(sorted(list(NON_GIT_SOURCES) + list(SOURCES_BLOCKED)))}")
@@ -1200,8 +1307,8 @@ def main():
                 f"--add-source {args.add_source}: {exc}.\n"
                 f"That is a network problem here, not a design problem: this generator is\n"
                 f"real and was verified on kdocker3 (#434 federal-forms extension; #471 for\n"
-                f"uk-hmrc/uk-homeoffice/uk-dwp/govinfo). Run it from a machine that can reach\n"
-                f"{host_for_error}.")
+                f"govinfo-signed/uk-hmrc/uk-homeoffice/uk-dwp/govinfo-large). Run it from a\n"
+                f"machine that can reach {host_for_error}.")
 
         existing = read_manifest(args.out) if os.path.exists(args.out) else []
         by_url = {r["url"]: r for r in existing}

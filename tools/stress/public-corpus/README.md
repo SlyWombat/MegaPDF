@@ -16,6 +16,23 @@ anybody can reproduce.
 The two corpora are different populations and are **expected to give different numbers**.
 See TESTING.md, "Which corpus gates what".
 
+## Staged permanently on kdocker3 (#470)
+
+`~/megapdf-public-corpus` above is the *default* — right for a laptop, CI or a cloud
+sandbox running once. A machine that runs batteries repeatedly should not re-download
+1,300+ documents from `irs.gov`, `uscis.gov` and GitHub every time: **kdocker3 stages this
+corpus permanently at `~/pdf-public`**, beside `~/pdf-test` and `~/pdf-test-ca` (the private
+corpora — see TESTING.md, "Corpus staging on k3"). Point any battery at it directly:
+
+    tools/stress/public-corpus/fetch.sh ~/pdf-public                # refresh: only new/changed rows are fetched
+    tools/stress/public-corpus/fetch.sh --verify-only ~/pdf-public  # prove it intact, no network needed
+
+`~/pdf-public` is chmod'd read-only (`dr-xr-sr-x` dirs, `r--r--r--` files) the way
+`~/pdf-test` is, so a battery run cannot damage it by construction. `--verify-only` never
+writes to the destination (#470: it used to try to refresh the `WHERE-THESE-CAME-FROM.txt`
+marker even in this mode, which failed — harmlessly, since the shell does not run with
+`-e`, but noisily — against a read-only directory).
+
 ## Network reality — two different machines, two different answers
 
 The corpus was first built (#434) from the Anthropic cloud sandbox, which cannot reach any
@@ -56,14 +73,16 @@ Two details worth knowing before you conclude a source is unreachable from the s
 | `assets.publishing.service.gov.uk` (a UK gov.uk form PDF) | **200** — re-checked 2026-09-28 for #471 part 3 |
 | `www.govinfo.gov` | **200** (a specific Federal Register PDF); **206** on a ranged request; **302** on `/robots.txt` — re-checked 2026-09-28 for #471 part 4 |
 
-All #434/#471 names are reachable from a real machine. `safedocs` is still **not** implemented
-— nobody has designed or verified a generator for it. `govinfo` moved from blocked to
-implemented in #471, but **scoped narrowly**: #434 originally asked for a *bulk* generator,
-and this is a hand-picked set of large Federal Register issues (see "Very large documents"
-below), not that bulk generator — a future extension, not a silent scope-creep of this one.
-This change (#434) added the highest-value category the original corpus and its milestone
-called out — real federal fillable forms, from IRS and USCIS; #471 adds a second
-jurisdiction's forms (UK, OGL-licensed) and the corpus's first large-document population.
+All #434/#471 names are reachable from a real machine. `safedocs` and the *bulk* `govinfo`
+generator #434 item 4 asks for are both still **not** implemented — nobody has designed or
+verified a generator for either. #471 instead added two narrow, curated generators against
+`www.govinfo.gov`, each kept under its own source key rather than `govinfo` so neither
+collides with the bulk generator whenever it is eventually written: `govinfo-signed` (33
+already-signed GPO documents, part 1) and `govinfo-large` (7 large Federal Register issues,
+part 4 — see "Very large documents" below). #434 added the highest-value category the
+original corpus and its milestone called out — real federal fillable forms, from IRS and
+USCIS; #471 adds a second jurisdiction's forms (UK, OGL-licensed) and the corpus's first
+large-document and genuinely-signed-document populations.
 
 **One fetching wrinkle, because it cost real time to find.** This container's apt-installed
 `curl` (8.5.0, OpenSSL 3.0.13) is refused outright by `www.uscis.gov` — `403`, `server:
@@ -76,12 +95,26 @@ hashes — it just downloads and verifies bytes, it does not need to out-fingerp
 If `fetch.sh` itself is ever refused this way on some other machine, that is the same
 symptom and the same fix (a different HTTP client, or a newer curl/OpenSSL build).
 
+**#471 part 1 (2026-09-28, kdocker3)** used the already-reachable `www.govinfo.gov` (see
+the table above — reachable from kdocker3 since the #434 federal-forms extension, just not
+yet used for anything) to add the `govinfo-signed` source: no new network finding, the same
+host and the same `urllib`-vs-`curl` non-issue (plain `curl` was not refused by
+`www.govinfo.gov`, unlike `www.uscis.gov`). This is **not** the bulk `govinfo` generator
+#434 item 4 still asks for (a much larger, unimplemented scope covering the whole
+Federal Register/CFR archive for large-file coverage) — it is a small, curated,
+already-verified set for a different, narrower purpose, and deliberately kept under its own
+source key (`govinfo-signed`, not `govinfo`) so the two do not collide when the bulk
+generator is eventually written.
+
 ## What is in it
 
-1,464 documents, ~4.24 GB (dominated by the seven `large` documents; everything else is
-~197 MB). Categories are assigned from each file's own bytes by
+1,497 documents, ~4.29 GB (dominated by the seven `large` documents at ~4.25 GB; everything
+else is ~363 MB). Categories are assigned from each file's own bytes by
 `build-manifest.py`'s `classify()`, not from the directory it arrived in, so a row says what
-the battery will actually meet.
+the battery will actually meet — except `signed` and `large` (both below), whose category is
+forced rather than derived: for `signed`, because the whole point of that row is the
+signature; for `large`, because the row is chosen to be large before it is ever fetched (see
+"Very large documents" below — a byte-size check in `classify()` would agree regardless).
 
 | category | count | what it is |
 |---|---:|---|
@@ -90,10 +123,11 @@ the battery will actually meet.
 | `report` | 264 | ordinary text documents, for extraction fidelity and reading order |
 | `malformed` | 150 | deliberately broken or deliberately non-conforming — crash/hang resistance only |
 | `scan` | 100 | image pages with no font resources |
+| `signed` | 33 | already carries a valid digital signature — for #471 part 1's measurement of what `megapdf_save()`'s full rewrite does to it |
 | `large` | 7 | 48.4 MB - 2.07 GB — the paging-in/performance path (#471 part 4, see below) |
 
-By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**, **HMRC 62**,
-**Home Office 22**, **DWP 24**, **govinfo 7**.
+By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**, **govinfo-signed 33**,
+**HMRC 62**, **Home Office 22**, **DWP 24**, **govinfo-large 7**.
 
 `form` is the one category taken **whole** — every one the sources contain — because it is
 what MegaPDF is for and the category #434 calls the private corpus thinnest on. The others
@@ -158,6 +192,57 @@ never silently re-fetched over" behaviour is exactly the right response to that,
 no changes to produce it. This is also why federal rows are **not** part of the default
 `build-manifest.py` rebuild (see "Extending"): a plain rebuild stays fully reproducible from
 a sandbox that cannot reach either host, exactly as it always has.
+
+## The signed category (#471 part 1) — and what it found
+
+33 documents from `www.govinfo.gov` (the U.S. Government Publishing Office), every one
+already carrying a valid digital signature: 11 Federal Register daily issues (2019-2024),
+7 Public Laws, 6 Congressional Record issues, 6 Code of Federal Regulations title/volumes,
+and 3 Statutes at Large excerpts. GPO signs essentially everything it publishes —
+Signature Field Name `USGPOSignature`, Signer CN `Government Publishing Office` or
+`U.S. Government Publishing Office` — so this is a real, independently-verifiable sample,
+not a synthetic fixture: **33/33 verified `Signature is Valid` with poppler's `pdfsig`**
+(kdocker3, 2026-09-28) before any MegaPDF code touched them. Same licence as IRS/USCIS —
+`US-PD-17-USC-105`, a federal government work, no copyright, no attribution required —
+recorded per row in `build-manifest.py`'s `GOVINFO_SIGNED_DOCS`.
+
+**Why this category exists.** MegaPDF saves by full rewrite: `megapdf_save()` calls
+PDFium's `FPDF_SaveAsCopy`, which re-serialises the entire document rather than patching
+it in place. #471 part 1 asked whether that silently invalidates a signature already on a
+document a user opens, edits and saves — the same silent-failure shape as the XFA wall
+(#456): a document that still *looks* signed and is not.
+
+**The measurement, run against all 33 (kdocker3, 2026-09-28, `pdfsig` as the independent
+verifier — never MegaPDF's own code):**
+
+| stage | result |
+|---|---|
+| before any MegaPDF processing | 33/33 `Signature is Valid` |
+| after `megapdf_save()` with **no edit calls at all** (open, save immediately) | 33/33 `Digest Mismatch` |
+| after `megapdf_save()` following one edit (see note) | 33/33 `Digest Mismatch` |
+
+None of the 33 has a fillable checkbox field to click — GPO's publications carry only the
+`USGPOSignature` field, no interactive AcroForm beyond it — so the "edit" row used
+`megapdf_page_rotate(doc, 0, 0)`, a rotation by zero degrees: a real edit call, visually a
+no-op. The result is identical either way, which is itself the finding: **the signature is
+invalidated by the act of saving, regardless of whether anything changed.** Inspecting one
+resave with `pdfsig` in detail shows why: the `/ByteRange` array is carried into the
+rewritten file with its original numeric bounds unchanged, but the file's own length
+changes (13,257,131 → 13,276,302 bytes for `FR-2024-01-02.pdf`, +19,171 bytes with no
+content edit), so those bounds no longer describe the whole file — `pdfsig` reports "Not
+total document signed" where the original said "Total document signed", on top of the
+digest mismatch.
+
+Filed as **#476** (behaviour only; `core/` was not touched, per the task brief — a gate
+corpus documents what is true, it does not get to also decide what should be done about
+it).
+
+The measurement harness (`sig_harness`, ad hoc, not part of the product or this repository)
+opened each document with `megapdf_open_file`, optionally called `megapdf_form_click` on
+the first `MEGAPDF_FIELD_CHECKBOX` found via `megapdf_form_fields_load` (falling back to
+the identity rotate when none exists, as above), then called `megapdf_save` and wrote the
+result to a temporary file for `pdfsig` to check — the same open/edit/save shape the apps
+use, with signature verification done entirely outside MegaPDF's own code.
 
 ## UK government forms (#471 part 3)
 
@@ -300,14 +385,30 @@ the three batteries below exercise more operations per document (page rotate/del
 the internal structure API, Markdown conversion) and are the fuller answer to the timeout
 question just below.
 
-**Battery timeouts and this category.** `structure-battery.sh` and `markdown-battery.sh`
-default `TIMEOUT` to 120s per document; `pages-battery.sh` to 300s. #442/#445 fixed how a
-battery *classifies* a timeout (bounded, counted separately, never silently stalling the
-whole run) but did not give the `large` category its own, longer value. See the measured
-times above and this PR's own text for whether the current default is enough headroom for a
-2 GB document or needs a category-specific override — **raised as a request in the PR, not
-changed here**: `tools/stress/*-battery.sh` is out of bounds for this change the same way it
-was out of bounds for #442/#445 (see those issues).
+**Battery results.** All three batteries were run against the `large` category separately
+(see TESTING.md, "Fourth run", for the full table): 0 crashes and 0 hangs across all three,
+on all 7 documents. `structure-battery`'s aggregate token-fidelity F1 (0.989, both through
+the internal API and through `megapdf-cli`) misses the corpus-wide 0.998 gate — these are
+largely pre-1995 OCR'd scans, and a scan-heavy population measuring differently from the
+mostly-born-digital rest of the corpus is exactly the kind of population-specific movement
+#471 expects rather than treats as a regression. Filed as #488; not fixed or gate-adjusted
+here.
+
+**Battery timeouts and this category: sufficient for every document tested, with real
+margin.** `structure-battery.sh` and `markdown-battery.sh` default `TIMEOUT` to 120s per
+document; `pages-battery.sh` to 300s. #442/#445 fixed how a battery *classifies* a timeout
+(bounded, counted separately, never silently stalling the whole run) but did not give the
+`large` category its own, longer value. Measured directly: **not one operation, across all
+three batteries and all 7 documents up to 2.07 GB, hit its timeout** — `pages-battery.sh`
+completed all 28 rotate/delete/move/extract operations (981s total, none individually
+timed out); `structure-battery.sh`'s `pdftotext --reference` call finished the 2.07 GB
+document inside 120s (the same call #442 found could hang indefinitely on a 2.5 KB
+adversarial fixture); `markdown-battery.sh` took 45s total for all 7. **No change requested
+for these sizes** — raised in the PR only as a note that this is 7 documents topping out at
+2.07 GB, and a meaningfully larger document or a slower host could still reach the existing
+limits, worth re-checking rather than assumed permanently settled if the category grows.
+Not changed here either way: `tools/stress/*-battery.sh` is out of bounds for this change
+the same way it was out of bounds for #442/#445 (see those issues).
 
 ## ⚠ The malformed set
 
@@ -335,6 +436,7 @@ and keep the file.
 | [PDFium](https://github.com/chromium/pdfium) `testing/resources` @ `a8432342` | BSD-3-Clause | notice retained |
 | IRS fillable forms (`www.irs.gov/pub/irs-pdf/`) | **public domain — 17 U.S.C. § 105** | no |
 | USCIS forms (`www.uscis.gov/.../document/forms/`) | **public domain — 17 U.S.C. § 105** | no |
+| GPO-signed documents (`www.govinfo.gov/content/pkg/`) | **public domain — 17 U.S.C. § 105** | no |
 | UK HMRC/Home Office/DWP forms (`assets.publishing.service.gov.uk`) | **Open Government Licence v3.0** | **yes** — see below |
 | govinfo.gov Federal Register volumes (`www.govinfo.gov`) | **public domain — 17 U.S.C. § 105** | no |
 
@@ -345,17 +447,18 @@ published. The required credit:
 > [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not modified.
 
 **Federal works: 17 U.S.C. § 105.** "Copyright protection under this title is not available
-for any work of the United States Government." An IRS or USCIS form, or a govinfo.gov
-Federal Register volume, is prepared by federal employees/agencies as part of their official
-duties, so no copyright ever attaches to it in the first place — there is no licence to
-comply with, and no attribution requirement, though the manifest records `source` (`irs` /
-`uscis` / `govinfo`) and a plain-English attribution string in `build-manifest.py` anyway, as
-a provenance trail rather than a legal obligation. This is a **stronger** position than any
-of the git sources above: those are copyrighted works licensed to permit redistribution;
-federal works are simply never copyrighted at all. (govinfo.gov's own policies page notes
-one caveat, checked and not applicable here: a government publication can incorporate
-copyrighted third-party material used with permission; the Federal Register issues fetched
-for #471 part 4 are the agency's own regulatory text, not a reprint of someone else's work.)
+for any work of the United States Government." An IRS or USCIS form, a GPO publication
+(signed or not), or a govinfo.gov Federal Register volume, is prepared by federal
+employees/agencies as part of their official duties, so no copyright ever attaches to it in
+the first place — there is no licence to comply with, and no attribution requirement, though
+the manifest records `source` (`irs` / `uscis` / `govinfo-signed` / `govinfo-large`) and a
+plain-English attribution string in `build-manifest.py` anyway, as a provenance trail rather
+than a legal obligation. This is a **stronger** position than any of the git sources above:
+those are copyrighted works licensed to permit redistribution; federal works are simply
+never copyrighted at all. (govinfo.gov's own policies page notes one caveat, checked and not
+applicable here: a government publication can incorporate copyrighted third-party material
+used with permission; the Federal Register issues fetched for #471 part 4 are the agency's
+own regulatory text, not a reprint of someone else's work.)
 
 **UK Crown copyright, under the Open Government Licence v3.0: attribution IS required**, the
 one real difference from every other source in this corpus. See "UK government forms" above
@@ -391,9 +494,9 @@ Each git source is pinned to a commit, never a branch — a branch would silentl
 every sha256 in the file. To add one: give it a licence that permits redistribution, add a
 `Source` row, pin the commit, and rebuild. **A plain rebuild never touches the network for
 any direct-URL source and never deletes their rows either** — it preserves whatever
-`irs`/`uscis`/`uk-hmrc`/`uk-homeoffice`/`uk-dwp`/`govinfo` rows are already in `--out` (see
-`NON_GIT_SOURCES` in `build-manifest.py`), so it stays exactly as reproducible from a blocked
-sandbox as it always was.
+`irs`/`uscis`/`govinfo-signed`/`uk-hmrc`/`uk-homeoffice`/`uk-dwp`/`govinfo-large` rows are
+already in `--out` (see `NON_GIT_SOURCES` in `build-manifest.py`), so it stays exactly as
+reproducible from a blocked sandbox as it always was.
 
 To (re)fetch a direct-URL source, from a machine that can reach its host — none of these are
 reachable from Anthropic's cloud sandbox, all reachable from an ordinary machine (see
@@ -401,31 +504,39 @@ reachable from Anthropic's cloud sandbox, all reachable from an ordinary machine
 
     tools/stress/public-corpus/build-manifest.py --add-source irs
     tools/stress/public-corpus/build-manifest.py --add-source uscis
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed
     tools/stress/public-corpus/build-manifest.py --add-source uk-hmrc
     tools/stress/public-corpus/build-manifest.py --add-source uk-homeoffice
     tools/stress/public-corpus/build-manifest.py --add-source uk-dwp
-    tools/stress/public-corpus/build-manifest.py --add-source govinfo
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-large
 
 Each merges its rows into the existing `manifest.tsv` (by URL: a matching sha256 is left
 alone, a changed one is refreshed, a new one is added) rather than rebuilding everything
-from nothing. `IRS_FORMS` / `USCIS_FORMS` / `HMRC_FORMS` / `HOME_OFFICE_FORMS` / `DWP_FORMS`
-/ `GOVINFO_DOCS` in `build-manifest.py` are the exact, grouped lists; add an entry to one
-(verified fetchable and `%PDF`-starting first) to extend it, or add a new `HttpSource` to
-`FEDERAL_SOURCES` (shared `base_url` + filename) or `DirectSource` to `DIRECT_SOURCES`
-(each item its own full URL — what UK forms and govinfo need, since neither shares one
-prefix) for a different agency or host under a licence that permits redistribution.
-`--add-source safedocs` still refuses outright — see `SOURCES_BLOCKED` — because nobody has
-yet written and verified a generator for it; that refusal is deliberate, the same way every
-source above used to refuse before its own generator was written, and should be resolved the
-same way: implement and verify it from a machine that can reach the host, don't just delete
-the refusal.
+from nothing. `IRS_FORMS` / `USCIS_FORMS` / `GOVINFO_SIGNED_DOCS` / `HMRC_FORMS` /
+`HOME_OFFICE_FORMS` / `DWP_FORMS` / `GOVINFO_DOCS` in `build-manifest.py` are the exact,
+grouped lists; add an entry to one (verified fetchable and `%PDF`-starting first, and — for
+`GOVINFO_SIGNED_DOCS` specifically — verified as genuinely signed with `pdfsig` before it
+goes in) to extend it, or add a new `HttpSource` to `FEDERAL_SOURCES` (shared `base_url` +
+filename; give it a `category=` only when its category should be forced rather than derived
+from `classify()`, as `govinfo-signed` does — leave it unset, as `irs`/`uscis` do, to
+classify normally) or `DirectSource` to `DIRECT_SOURCES` (each item its own full URL — what
+UK forms and govinfo need, since neither shares one prefix) for a different agency or host
+under a licence that permits redistribution. `--add-source safedocs` still refuses
+outright — see `SOURCES_BLOCKED` — because nobody has yet written and verified a generator
+for it; that refusal is deliberate, the same way every source above used to refuse before its
+own generator was written, and should be resolved the same way: implement and verify it from
+a machine that can reach the host, don't just delete the refusal.
 
-**`govinfo`'s scope, stated precisely.** This is a hand-picked list of 7 large Federal
-Register issues (`GOVINFO_DOCS`), not the *bulk* generator #434 originally named — CFR annual
-title volumes, also named there, turned out to be structurally incapable of being large
-(checked by HTTP HEAD across the biggest titles: every one tops out around 4-9 MB) and are
-not fetched at all. A bulk generator over govinfo's full holdings remains unbuilt and would
-be a separate, future extension.
+**`govinfo-signed` and `govinfo-large`'s scope, stated precisely.** Neither is the *bulk*
+generator #434 item 4 originally named (`--add-source govinfo` itself still refuses — see
+`SOURCES_BLOCKED`). `govinfo-signed` is a hand-picked set of 33 already-signed GPO documents
+(`GOVINFO_SIGNED_DOCS`) for the `signed` category (#471 part 1). `govinfo-large` is a
+hand-picked list of 7 large Federal Register issues (`GOVINFO_DOCS`) for the `large` category
+(#471 part 4) — CFR annual title volumes, also named in #434's original note, turned out to be
+structurally incapable of being large (checked by HTTP HEAD across the biggest titles: every
+one tops out around 4-9 MB) and are not fetched at all. A bulk generator over govinfo's full
+holdings remains unbuilt and would be a separate, future extension, under its own `govinfo`
+key once someone writes it.
 
 ## Files
 
