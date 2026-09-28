@@ -27,6 +27,16 @@ targets:
       # Dynamic libpdfium.dylib — must be embedded (and signed) in the bundle.
       - framework: Vendor/pdfium.xcframework
         embed: true
+    # How many MegaPDF patches the fetched PDFium carries (#469): the same value
+    # core/CMakeLists.txt and android/engine/src/main/cpp/CMakeLists.txt define on their own
+    # targets, generated here by fetch-pdfium.sh (which always runs before `xcodegen
+    # generate`) since XcodeGen's own YAML has no configure-time scripting to read
+    # Vendor/pdfium/VERSION itself. Without this, megapdf_core.cpp's `#ifndef
+    # MEGAPDF_PDFIUM_PATCHES` default of 0 applies and page extract/import refuse any
+    # /Parent field hierarchy regardless of what the linked PDFium can actually carry.
+    configFiles:
+      Debug: Vendor/pdfium/patches.xcconfig
+      Release: Vendor/pdfium/patches.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.megapdf.ios
