@@ -7082,23 +7082,19 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
 
         // Fields in a hierarchy (a /Parent field dictionary): PDFium's page copy carries the
         // chain across documents once the linked PDFium has the patch that fixes it (#452,
-        // tools/pdfium/patches/0033). Below that patch level, megapdf_pages_import and
-        // megapdf_pages_extract no longer refuse a non-clashing hierarchy either -- there is
-        // no reliable way for this core binary to tell at runtime whether the PDFium beside
-        // it carries the fix (a save-and-reopen probe was tried and rejected here: PDFium's
-        // own orphan-widget recovery, CPDFSDK_PageView::FixPageFields, papers over the very
-        // bug the probe was looking for, on some real documents but not others -- see the
-        // commit that added and then removed it, kept out of this file). Both calls are
-        // therefore correct only when the whole release pairs this core with a PDFium build
-        // carrying the patch, exactly as the other 32 entries in tools/pdfium/patches always
-        // have been: core.cpp and libs/pdfium/RELEASE move together, in the same commit, and
-        // this suite is built against one PDFium the way the app will be. MEGAPDF_PDFIUM_PATCHES
-        // (in scope for a different series, the content writer's, but counted from the same
-        // tools/pdfium/patches directory) says how many of its patches that build has, so 33 or
-        // more means this one: full correctness is asserted only there. Below it, the calls are
-        // exercised only for "does not crash" -- what they actually return on that unsupported
-        // pairing is not a contract this suite pins down. A delete and its undo — a copy within
-        // the same document — always kept the hierarchy either way, and still does below.
+        // tools/pdfium/patches/0033) -- megapdf_pages_import and megapdf_pages_extract are
+        // compiled with MEGAPDF_PDFIUM_PATCHES set to the count from that same PDFium's own
+        // VERSION file (core/CMakeLists.txt, android/engine/src/main/cpp/CMakeLists.txt), and
+        // gate their relaxed behaviour on it (>= 33) rather than trust it unconditionally: a
+        // save-and-reopen runtime probe was tried and rejected instead (PDFium's own
+        // orphan-widget recovery, CPDFSDK_PageView::FixPageFields, papers over the very bug
+        // such a probe looks for, on some real documents but not others -- see the commit
+        // that added and then removed it, kept out of this file). Below patch 33 both calls
+        // refuse a hierarchy exactly as every patch level always has (#174); this suite is
+        // built against one PDFium the way the app will be, so it asserts whichever of the
+        // two this build's own MEGAPDF_PDFIUM_PATCHES selects, precisely, in both branches. A
+        // delete and its undo — a copy within the same document — always kept the hierarchy
+        // either way, and still does below.
         const fs::path parents = dir / "parents.pdf";
         write(parents, parent_fields_pdf());
         Doc h(utf8(parents));
@@ -7139,11 +7135,8 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
                       "pages: the imported hierarchy survives a save and reopen", shots_str(field_shots(q0.page)));
             }
 #else
-            // Not a contract (see above): only that the document is left in some page-count-
-            // consistent state, never a crash.
-            check(import_rc == MEGAPDF_OK ? megapdf_page_count(d.doc) == before_import + hierarchy_imported
-                                          : megapdf_page_count(d.doc) == before_import,
-                  "pages: importing a non-clashing hierarchy does not crash on stock PDFium",
+            check(import_rc == MEGAPDF_ERR_FIELDS && hierarchy_imported == 0 && megapdf_page_count(d.doc) == before_import,
+                  "pages: importing a non-clashing hierarchy is still refused below patch 33",
                   std::to_string(import_rc) + " " + megapdf_last_error_message());
 #endif
 
@@ -7198,11 +7191,9 @@ void test_page_tools(const std::string& fixtures, const std::string& repo_fixtur
                 }
             }
 #else
-            // Not a contract (see above): only that a file exists iff the call reported
-            // success, never a crash.
-            check(fs::exists(parents_out, ec) == (extract_rc == MEGAPDF_OK),
-                  "pages: extracting such a page does not crash on stock PDFium",
-                  std::to_string(extract_rc) + " " + megapdf_last_error_message());
+            check(extract_rc == MEGAPDF_ERR_FIELDS, "pages: extracting such a page is still refused below patch 33",
+                  megapdf_last_error_message());
+            check(!fs::exists(parents_out, ec), "pages: and nothing was written");
 #endif
 
             check(megapdf_page_insert_blank(h.doc, 1, 612, 792) == MEGAPDF_OK, "pages: a blank page after the form page");

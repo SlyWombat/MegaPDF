@@ -52,6 +52,19 @@
 #include "fpdf_transformpage.h"  // FPDFPage_GetCropBox; FPDF_CreateClipPathFromRects (patch 0026)
 #include "fpdfview.h"
 
+// How many patches (tools/pdfium/patches) the PDFium this file is compiled against carries,
+// set by whichever build system built it: core/CMakeLists.txt (desktop and the core test
+// target) and android/engine/src/main/cpp/CMakeLists.txt both read it from the linked
+// PDFium's own VERSION file and pass it as this definition (#452). It has never been
+// possible to detect at runtime which PDFium sits beside this file (a save-and-reopen probe
+// was tried, and rejected: see docs/adr and the commit that added and removed it), so a
+// build that does not set it -- today, ios/project.yml's Xcode build compiles this file
+// with no such wiring, a follow-up (#452) -- gets the conservative default here: the
+// behaviour every patch level below the one it names has always had.
+#ifndef MEGAPDF_PDFIUM_PATCHES
+#define MEGAPDF_PDFIUM_PATCHES 0
+#endif
+
 // --------------------------------------------------------------------------
 // Internals
 // --------------------------------------------------------------------------
@@ -5922,6 +5935,11 @@ MEGAPDF_API int megapdf_pages_import(megapdf_document* d, const char* other_path
     }
     if (chosen.empty()) return MEGAPDF_OK;
     if (PagesCarryParentFields(other, &chosen)) {
+#if MEGAPDF_PDFIUM_PATCHES >= 33
+        // The linked PDFium carries a field's /Parent chain across the copy (#452): refuse
+        // only the one case RenameClashingFields, below, cannot get out of the way -- a
+        // hierarchy whose top-level name would clash, which it can rename a flat field's own
+        // /T out of but not a hierarchical widget's (it has none).
         bool ok = true;
         const bool clash = HierarchicalFieldsWouldClash(d, other, chosen, &ok);
         if (!ok) {
@@ -5933,6 +5951,13 @@ MEGAPDF_API int megapdf_pages_import(megapdf_document* d, const char* other_path
                         "in this document, and cannot be renamed");
             return MEGAPDF_ERR_FIELDS;
         }
+#else
+        // Below patch 0033, PDFium's page copy still leaves the widget's /Parent pointing
+        // into the other document (see the header): refuse the whole operation, as every
+        // patch level before this one always has.
+        SetError(0, "the pages carry form fields in a hierarchy PDFium cannot copy between documents");
+        return MEGAPDF_ERR_FIELDS;
+#endif
     }
     if (!RenameClashingFields(d, other, chosen)) {
         SetError(FPDF_ERR_UNKNOWN, "out of memory");
@@ -5976,11 +6001,29 @@ MEGAPDF_API int megapdf_pages_extract(const megapdf_document* d, const int* page
     }
     const int expected = count > 0 ? static_cast<int>(count) : page_count;
     if (cancel != nullptr && cancel->raised.load(std::memory_order_relaxed) != 0) return MEGAPDF_ERR_CANCELLED;
-    // A field in a /Parent hierarchy no longer needs a check here (#452): there is no
-    // pre-existing name in a brand new document for RenameClashingFields's problem
-    // (megapdf_pages_import's HierarchicalFieldsWouldClash) to arise from, and PDFium's
-    // page copy carries the hierarchy whole, registering its root in the new file's own
-    // /AcroForm as it does.
+#if MEGAPDF_PDFIUM_PATCHES >= 33
+    // A field in a /Parent hierarchy needs no check here (#452): there is no pre-existing
+    // name in a brand new document for RenameClashingFields's problem (megapdf_pages_import's
+    // HierarchicalFieldsWouldClash) to arise from, and the linked PDFium carries the
+    // hierarchy whole, registering its root in the new file's own /AcroForm as it does.
+#else
+    // Below patch 0033, PDFium's page copy still leaves the widget's /Parent pointing into
+    // this document (see the header): refuse the whole operation, as every patch level
+    // before this one always has.
+    {
+        std::vector<int> chosen;
+        try {
+            if (count > 0) chosen.assign(pages, pages + count);
+        } catch (...) {
+            SetError(FPDF_ERR_UNKNOWN, "out of memory");
+            return MEGAPDF_ERR_MEMORY;
+        }
+        if (PagesCarryParentFields(d, count > 0 ? &chosen : nullptr)) {
+            SetError(0, "the pages carry form fields in a hierarchy PDFium cannot copy between documents");
+            return MEGAPDF_ERR_FIELDS;
+        }
+    }
+#endif
     if (d->form != nullptr) FORM_ForceToKillFocus(d->form);
     FPDF_DOCUMENT out = FPDF_CreateNewDocument();
     if (out == nullptr) {

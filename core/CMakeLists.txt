@@ -171,6 +171,13 @@ if(EXISTS ${PDFIUM_VERSION_FILE})
     endif()
 endif()
 message(STATUS "pdfium: ${PDFIUM_LINK} (MegaPDF patches: ${MEGAPDF_PDFIUM_PATCHES})")
+# The core itself reads this, not only its tests (#452): megapdf_pages_import/extract's
+# field-hierarchy behaviour is only correct paired with the PDFium build that carries the
+# patch fixing it, and the core is compiled fresh against whatever PDFium sits beside it at
+# build time (never a vendored binary of its own, ADR-003), so the count belongs on
+# megapdf_core proper wherever this file builds it -- the same value megapdf_core_tests
+# already gets, below.
+target_compile_definitions(megapdf_core PRIVATE MEGAPDF_PDFIUM_PATCHES=${MEGAPDF_PDFIUM_PATCHES})
 
 if(MEGAPDF_ASAN AND NOT MSVC)
     target_compile_options(megapdf_core PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)

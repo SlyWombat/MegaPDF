@@ -71,9 +71,12 @@ enum {
     MEGAPDF_ERR_NOT_JUDGED = -8,  /* megapdf_page_regeneration_verdict_cached(): the page has no answer yet (#145) */
     MEGAPDF_ERR_FILE = -9,        /* a file could not be created, read or written (#147) */
     MEGAPDF_ERR_REDACT = -10,     /* a redaction could not remove everything it had to, so it removed nothing (#173) */
-    MEGAPDF_ERR_FIELDS = -11      /* megapdf_pages_import: a field in a /Parent hierarchy on the imported pages has the
-                                     same top-level name as one already in this document and cannot be renamed
-                                     (#174, #452); nothing was changed */
+    MEGAPDF_ERR_FIELDS = -11      /* the pages carry form fields in a /Parent hierarchy this build's PDFium cannot
+                                     carry across a page copy (#174), or (once it can, #452) megapdf_pages_import
+                                     found a field in such a hierarchy whose top-level name already exists in this
+                                     document and cannot be renamed; nothing was changed. Which of the two applies
+                                     is a compile-time property of this binary (MEGAPDF_PDFIUM_PATCHES), not
+                                     something a caller chooses -- see megapdf_pages_import()/megapdf_pages_extract() */
 };
 
 /**
@@ -1471,22 +1474,34 @@ MEGAPDF_API int megapdf_page_insert_blank(megapdf_document* document, int at, do
  * A form field in a hierarchy — a widget whose name, type or value lives on a /Parent
  * field dictionary, as LiveCycle and most authoring tools write them — used to arrive
  * without its name or type: PDFium's page copy left the widget's /Parent pointing into
- * the other document, and the saved file named an object that was not its parent. Fixed
- * by a PDFium patch (#452, tools/pdfium/patches): the /Parent chain and the field
- * dictionaries it names are copied too, pruned to the part of the hierarchy that came
- * across (a sibling widget on a page not imported is dropped from its parent's /Kids,
- * the way megapdf_page_delete drops a field left with no widgets), and the chain's root
- * is registered in this document's /AcroForm — the one case where an import *does* touch
- * the destination's AcroForm registration, forced by the copy itself rather than chosen
- * here. The rename above still can't reach such a field, though: it renames a clashing
- * widget's own /T, and a hierarchical widget has none (its name is its parent's). A
- * hierarchy whose top-level name would clash is therefore still refused whole, with
- * MEGAPDF_ERR_FIELDS, and nothing is changed; one that does not clash is imported and
- * keeps its name. A widget that is its own field (no /Parent), which is what simple
- * forms and MegaPDF's fixtures mostly have, imports and renames exactly as before. A
- * popup annotation's /Parent has the same shape and needs no equivalent fix: PDFium
- * reads the markup annotation's /Popup, never the popup's /Parent, and a reader that
- * does sees a link to the wrong object rather than a lost note.
+ * the other document, and the saved file named an object that was not its parent. Such
+ * pages are refused whole, with MEGAPDF_ERR_FIELDS, and nothing is changed.
+ *
+ * Fixed by a PDFium patch (#452, tools/pdfium/patches/0033): the /Parent chain and the
+ * field dictionaries it names are copied too, pruned to the part of the hierarchy that
+ * came across (a sibling widget on a page not imported is dropped from its parent's
+ * /Kids, the way megapdf_page_delete drops a field left with no widgets), and the
+ * chain's root is registered in this document's /AcroForm — the one case where an
+ * import *does* touch the destination's AcroForm registration, forced by the copy
+ * itself rather than chosen here. The rename above still can't reach such a field,
+ * though: it renames a clashing widget's own /T, and a hierarchical widget has none
+ * (its name is its parent's). A hierarchy whose top-level name would clash is
+ * therefore still refused whole, with MEGAPDF_ERR_FIELDS, and nothing is changed; one
+ * that does not clash is imported and keeps its name.
+ *
+ * Whether this document is built against a PDFium old enough to need the whole-page
+ * refusal, or new enough to need only the narrower clash refusal, is fixed at compile
+ * time (MEGAPDF_PDFIUM_PATCHES; core/CMakeLists.txt and
+ * android/engine/src/main/cpp/CMakeLists.txt both read it from the linked PDFium's own
+ * VERSION file) — not something a caller can ask for or detect except by trying the
+ * call, and not something this file can safely tell at runtime either: a save-and-reopen
+ * probe was tried and rejected (see git history around #452) because PDFium's own
+ * orphan-widget recovery can mask the very bug such a probe looks for. A widget that is
+ * its own field (no /Parent), which is what simple forms and MegaPDF's fixtures mostly
+ * have, imports and renames exactly as always, on any PDFium. A popup annotation's
+ * /Parent has the same shape and needs no equivalent fix, on any PDFium: PDFium reads
+ * the markup annotation's /Popup, never the popup's /Parent, and a reader that does sees
+ * a link to the wrong object rather than a lost note.
  *
  * The other document stays open inside this one until it is closed, so nothing an imported
  * page still refers to in it can be freed under the document. One PDFium call copies every
@@ -1515,14 +1530,19 @@ MEGAPDF_API int megapdf_pages_import(megapdf_document* document, const char* oth
  * The new file carries no security (a copy the user may make of a document whose security
  * permits copying), no outline and, for a field that is its own widget, no document-level
  * form dictionary: such a widget comes across with its appearance stream and is not
- * fillable in a reader that needs /AcroForm — extract does not build one. A field in a
- * /Parent hierarchy is different only because it has to be (#452): copying the hierarchy
- * at all means copying its root into *some* /AcroForm /Fields array, so the new file gets
- * a minimal one, carrying just the hierarchies extract copied, the moment the first such
- * page is extracted; it is fillable where a same-shaped flat field, on the same extract,
- * is not. There is no name to clash with in a brand new file, so unlike
- * megapdf_pages_import() this never refuses for MEGAPDF_ERR_FIELDS. The document itself
- * is unchanged.
+ * fillable in a reader that needs /AcroForm — extract does not build one.
+ *
+ * Pages with fields in a /Parent hierarchy are refused whole with MEGAPDF_ERR_FIELDS, for
+ * the reason megapdf_pages_import() gives, on a PDFium old enough that its page copy
+ * cannot carry the hierarchy (#174). On one new enough (#452, MEGAPDF_PDFIUM_PATCHES —
+ * see megapdf_pages_import() for what decides this and why it is fixed at compile time,
+ * not asked for), such a field is different from a flat one only because it has to be:
+ * copying the hierarchy at all means copying its root into *some* /AcroForm /Fields
+ * array, so the new file gets a minimal one, carrying just the hierarchies extract
+ * copied, the moment the first such page is extracted; it is fillable where a
+ * same-shaped flat field, on the same extract, is not. There is no name to clash with in
+ * a brand new file, so on that PDFium this never refuses for MEGAPDF_ERR_FIELDS at all.
+ * The document itself is unchanged.
  *
  * `cancel` may be NULL; raised, it stops the write and returns MEGAPDF_ERR_CANCELLED with
  * nothing left at `out_path_utf8`. MEGAPDF_ERR_ARGUMENT for a bad index or an empty path,
