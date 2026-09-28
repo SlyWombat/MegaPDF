@@ -5692,12 +5692,12 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         // fix taught BuildWords to recognise, so "vertical-cid" above and this share a code path
         // while only this one resembles a document anybody actually has. Before that fix the
         // 90-degree page here reads `A lp h a B ra v o C h a rlieD e lta` and measure 1 comes out
-        // 38 tokens against PDFium's 16 (F1 0.296); after it, 16/16 exactly. #453 -- two qpdf
+        // 44 tokens against PDFium's 16 (F1 0.267); after it, 16/16 exactly. #453 -- two qpdf
         // page-rotation fixtures over-counting 1.9-2.7x -- was this, reported from a build made
         // before the fix landed.
         //
         // The golden also PINS TWO KNOWN-WRONG BEHAVIOURS, both older than the #444 fix and both
-        // filed separately: /Rotate 180 and 270 emit the page's words in reverse order, and
+        // filed as #472: /Rotate 180 and 270 emit the page's words in reverse order, and
         // /Rotate 90 and 270 lose the inter-word gaps. poppler reads all four pages correctly.
         // Do not "correct" the golden by hand -- when the engine is fixed this golden SHOULD
         // change, and that diff is the proof it worked.
