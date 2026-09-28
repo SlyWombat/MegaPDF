@@ -5779,6 +5779,16 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
         // axis's baseline test on every consecutive pair, so this fixture's golden would show
         // ten one-glyph words/paragraphs instead of the two five-letter ones below.
         {"vertical-cid", repo + "/structure/vertical-cid.pdf", 0, 0, 0},
+        // #482: the same writing direction at the level ABOVE words -- seven columns of an
+        // ordinary simple font, read right to left (tools/gen_vertical_tbrl_fixture.py's own
+        // comment has the shape and why it is not vertical-cid.pdf again). #451 made BuildWords
+        // keep such a column whole; BuildLines and the XY-cut above it still sorted the columns
+        // by LEFT EDGE, so the page read left to right and this fixture's sentence came out
+        // backwards -- `TOPDOWN TOLEFT RIGHT READ ARE COLUMNS VERTICAL`. The golden below is the
+        // fix: the same words, in the order the page is actually read in. Not one character was
+        // ever lost, which is exactly why the corpus TOKEN-fidelity measure could not see this
+        // and #482 was filed against a number that turned out to be measuring something else.
+        {"vertical-tbrl", repo + "/structure/vertical-tbrl.pdf", 0, 0, 0},
         // #453/#444: the same BuildWords defect at its COMMON trigger -- an ordinary Type1
         // font on a rotated page, not a WMode-1 composite font. #363's matrix inversion leaves a
         // rotated page's characters advancing along their local +y, the very condition the #444
