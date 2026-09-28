@@ -1243,8 +1243,15 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as resp, \
                         open(tmp, "wb") as out:
-                    want_bytes = resp.headers.get("Content-Length")
-                    want_bytes = int(want_bytes) if want_bytes is not None else None
+                    want_bytes_raw = resp.headers.get("Content-Length")
+                    try:
+                        want_bytes = int(want_bytes_raw) if want_bytes_raw is not None else None
+                    except ValueError:
+                        # A malformed header (a misbehaving proxy/CDN, not a truncation) is
+                        # not a reason to abort the whole run -- treated the same as no
+                        # Content-Length at all: no size check, still fetched and verified
+                        # by %PDF-header and sha256 the same as everything else.
+                        want_bytes = None
                     got_bytes = 0
                     digest = hashlib.sha256()
                     for chunk in iter(lambda: resp.read(chunk_size), b""):
@@ -1291,6 +1298,21 @@ def fetch_direct(key, licence, items, cache_dir, request_gap, force_category=Non
             with open(cachefile, "rb") as fh:
                 for chunk in iter(lambda: fh.read(chunk_size), b""):
                     digest.update(chunk)
+
+        if force_category == "large" and size < LARGE_THRESHOLD_BYTES:
+            # The whole point of forcing "large" rather than classifying is that these
+            # items are known, by construction, to already be large (see this function's
+            # docstring) -- so if one ever isn't (the agency replaced the file with a
+            # smaller one, or GOVINFO_DOCS was miscurated), that contradicts the category's
+            # own documented invariant ("a property of the bytes... not a label only
+            # govinfo rows can carry") and is worth failing loudly on rather than silently
+            # recording a "large" row that classify() itself would never have called large.
+            skipped.append((relpath,
+                             f"forced category 'large' but only {size} bytes "
+                             f"(< {LARGE_THRESHOLD_BYTES}); not adding this row"))
+            print(f"  {key}: {relpath}: forced 'large' but only {size} bytes, skipping",
+                  file=sys.stderr)
+            continue
 
         if force_category is not None:
             category = force_category
