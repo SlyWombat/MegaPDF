@@ -105,6 +105,95 @@ SOURCES_BLOCKED = {
 }
 
 # --------------------------------------------------------------------------------------
+# UN parallel-language documents (#471 follow-up to part 2) -- investigated, NOT added.
+# This is a *licence* refusal, not a "no generator written yet" one like SOURCES_BLOCKED
+# above: the fetch mechanism was found and verified working (see below), but the licence
+# question it was built to answer came back negative, so nothing was fetched in bulk and
+# no rows exist to merge.
+#
+# The idea: #483/#484 measured 280 unrelated Wikipedia articles per script, so a fidelity
+# gap between e.g. Arabic and Korean could be the script or could be the content. The UN
+# publishes the same document (resolutions, reports) in all six official languages
+# (ar/zh/en/fr/ru/es), which would hold content constant and vary only the script -- worth
+# the extra effort standard #471 sets for exactly this reason. Investigated 2026-09-28,
+# kdocker3 not needed (no fetch was justified -- see below).
+#
+# **Licence: two primary sources conflict, so this does not clear #471's "if the terms
+# are unclear or restrict commercial use, stop and report" bar.**
+#
+# 1) www.un.org/en/about-us/terms-of-use (fetched 2026-09-28, currently live) -- the
+#    terms that govern using any un.org-family site, including documents.un.org, which
+#    is what actually serves the PDF bytes:
+#
+#      "The United Nations grants permission to Users to visit the Site and to download
+#      and copy the information, documents and materials ... from the Site for the
+#      User's personal, non-commercial use, without any right to resell or redistribute
+#      them or to compile or create derivative works therefrom"
+#
+#    www.un.org/en/about-us/copyright reinforces this: "Copyright (c) United Nations.
+#    All rights reserved." shop.un.org/rights-permissions (the page the copyright notice
+#    itself points to) confirms there is no blanket exception for research, testing or
+#    non-resale redistribution -- reproduction beyond narrow excerpt limits requires
+#    prior written permission. Read on its own, this rules MegaPDF out immediately:
+#    MegaPDF is a commercial product (same reasoning that kept Canadian Crown-copyright
+#    forms local-only, #456/#434's "Do NOT use" list), and a public, redistributable
+#    manifest is not "personal" use by construction.
+#
+# 2) ST/AI/189/Add.9/Rev.2 (17 September 1987), the UN Secretariat's own internal
+#    administrative instruction on copyright practice, fetched and read directly
+#    (documents.un.org/api/symbol/access?s=ST/AI/189/Add.9/Rev.2&l=en&t=pdf, 2026-09-28).
+#    Paragraph 2(b) lists "United Nations documents: written material officially issued
+#    under a United Nations document symbol" as a category the UN "will not seek
+#    copyright" for; paragraph 7: "The general rule for Official Records, United Nations
+#    documents and public information material is that these publications will be in the
+#    public domain." This is exactly what a resolution or Secretary-General report bears
+#    (a symbol like A/RES/... or A/74/...) -- read on its own, it would clear the
+#    commercial-use bar the same way 17 U.S.C. Sec 105 does for IRS/USCIS/govinfo above.
+#    It is also the current basis Wikimedia Commons cites for its {{PD-UN-doc}} licence
+#    tag (still in active, non-deprecated use), which is some evidence it is still
+#    treated as operative -- but it is a 34-years-old internal staff instruction whose
+#    own text frames itself as "experimental... until the end of 1989", and nothing
+#    reachable from here (digitallibrary.un.org's rights metadata returned an empty,
+#    bot-challenge response, HTTP 202 with a zero-byte body, both to a plain fetch and to
+#    curl) confirms how the Organization currently reconciles it with (1) for material
+#    served today from documents.un.org.
+#
+# Given a live, specific, currently-displayed restriction on the one hand and an old,
+# unconfirmed-as-still-controlling permission on the other, this is not a "clean" licence
+# the way IRS/USCIS/govinfo-signed (17 U.S.C. Sec 105, no conflicting source found) or
+# Wikipedia (CC BY-SA 4.0, no conflicting source found) are. Per #471: "If the terms are
+# unclear or restrict commercial use, stop and report rather than adding the rows; a
+# corpus whose licence column is guesswork is worth less than a smaller certain one."
+# Nothing was fetched in bulk and no manifest row exists under a `un-*` source key.
+#
+# **The fetch mechanism was verified working, in case a future session gets a written
+# licence clearance (permissions@un.org, or the Secretary of the Publications Board per
+# ST/AI/189/Add.9/Rev.2 para 20) and wants to implement this properly.** docs.un.org and
+# undocs.org serve a JS-looking symbol-select landing page, but it is plain, un-rendered
+# HTML that 302-redirects per language to a page whose <iframe src=...> is already the
+# real, static, no-JS-needed URL:
+#
+#   https://documents.un.org/api/symbol/access?s=<SYMBOL>&l=<ar|zh|en|fr|ru|es>&t=pdf
+#
+# which itself 302s to a stable-looking direct path, e.g.
+# https://documents.un.org/doc/undoc/gen/ns0/000/81/img/ns000081.pdf for
+# ST/AI/189/Add.9/Rev.2's English copy -- verified 2026-09-28 with plain curl, no
+# Playwright required after all for *this* part of the pipeline (Playwright would still
+# be the right tool for discovering which ~10 symbols exist in all six languages, e.g.
+# via docs.un.org's own search UI, which is genuinely JS-driven).
+SOURCES_BLOCKED_LICENCE = {
+    "un-parallel": (
+        "un.org's own Terms of Use ('personal, non-commercial use... without any right "
+        "to resell or redistribute') conflicts with ST/AI/189/Add.9/Rev.2 (UN document-"
+        "symbol material is public domain) and neither source resolves the conflict for "
+        "material served today; see the comment above SOURCES_BLOCKED_LICENCE for both "
+        "quotes in full and tools/stress/public-corpus/README.md, 'UN parallel-language "
+        "documents'. Not implemented: get a written answer from permissions@un.org "
+        "first."
+    ),
+}
+
+# --------------------------------------------------------------------------------------
 # US federal fillable forms (IRS, USCIS). Public domain: 17 U.S.C. Sec 105 -- "Copyright
 # protection... is not available for any work of the United States Government" -- so
 # every row from either source carries licence US-PD-17-USC-105, no attribution required
@@ -801,9 +890,11 @@ def main():
                                                   "manifest.tsv"))
     ap.add_argument("--add-source", metavar="KEY",
                     help="fetch and merge one opt-in HTTP source into --out (%s); or, "
-                         "for %s, refuse with why (no verified generator yet)"
+                         "for %s, refuse with why (no verified generator yet); or, "
+                         "for %s, refuse with why (licence, not a network/generator problem)"
                          % (", ".join(sorted(list(FEDERAL_SOURCES) + ["nonlatin-wiki"])),
-                            ", ".join(sorted(SOURCES_BLOCKED))))
+                            ", ".join(sorted(SOURCES_BLOCKED)),
+                            ", ".join(sorted(SOURCES_BLOCKED_LICENCE))))
     args = ap.parse_args()
 
     if args.add_source:
@@ -816,6 +907,14 @@ def main():
                 f"that has never produced a verified row does not belong in the repository.\n"
                 f"Add one from a machine that can reach {host}, following the shape of\n"
                 f"FEDERAL_SOURCES (irs, uscis) in this file, which is real and verified.")
+
+        if args.add_source in SOURCES_BLOCKED_LICENCE:
+            sys.exit(
+                f"--add-source {args.add_source} is blocked on licence, not on reachability or\n"
+                f"a missing generator -- the fetch mechanism was verified working (see the\n"
+                f"comment above SOURCES_BLOCKED_LICENCE in this file). "
+                f"{SOURCES_BLOCKED_LICENCE[args.add_source]}\n"
+                f"Do not implement a fetcher for this key until that is resolved in writing.")
 
         if args.add_source == "nonlatin-wiki":
             cache_dir = os.path.join(args.work, "nonlatin-wiki-fetch-cache")
@@ -833,8 +932,9 @@ def main():
 
         source = FEDERAL_SOURCES.get(args.add_source)
         if source is None:
-            sys.exit(f"unknown source {args.add_source!r}; known: "
-                      f"{', '.join(sorted(list(FEDERAL_SOURCES) + ['nonlatin-wiki'] + list(SOURCES_BLOCKED)))}")
+            known = sorted(list(FEDERAL_SOURCES) + ["nonlatin-wiki"]
+                            + list(SOURCES_BLOCKED) + list(SOURCES_BLOCKED_LICENCE))
+            sys.exit(f"unknown source {args.add_source!r}; known: {', '.join(known)}")
 
         cache_dir = os.path.join(args.work, f"{source.key}-fetch-cache")
         try:
