@@ -72,11 +72,23 @@ hashes — it just downloads and verifies bytes, it does not need to out-fingerp
 If `fetch.sh` itself is ever refused this way on some other machine, that is the same
 symptom and the same fix (a different HTTP client, or a newer curl/OpenSSL build).
 
+**#471 part 1 (2026-09-28, kdocker3)** used the already-reachable `www.govinfo.gov` (see
+the table above — reachable from kdocker3 since the #434 federal-forms extension, just not
+yet used for anything) to add the `govinfo-signed` source: no new network finding, the same
+host and the same `urllib`-vs-`curl` non-issue (plain `curl` was not refused by
+`www.govinfo.gov`, unlike `www.uscis.gov`). This is **not** the bulk `govinfo` generator
+#434 item 4 still asks for (a much larger, unimplemented scope covering the whole
+Federal Register/CFR archive for large-file coverage) — it is a small, curated,
+already-verified set for a different, narrower purpose, and deliberately kept under its own
+source key (`govinfo-signed`, not `govinfo`) so the two do not collide when the bulk
+generator is eventually written.
+
 ## What is in it
 
-1,349 documents, 140.2 MB. Categories are assigned from each file's own bytes by
+1,382 documents, 298.1 MB. Categories are assigned from each file's own bytes by
 `build-manifest.py`'s `classify()`, not from the directory it arrived in, so a row says what
-the battery will actually meet.
+the battery will actually meet — except `signed` (below), whose category is forced rather
+than derived, because the whole point of that row is the signature.
 
 | category | count | what it is |
 |---|---:|---|
@@ -85,8 +97,9 @@ the battery will actually meet.
 | `report` | 250 | ordinary text documents, for extraction fidelity and reading order |
 | `malformed` | 150 | deliberately broken or deliberately non-conforming — crash/hang resistance only |
 | `scan` | 100 | image pages with no font resources |
+| `signed` | 33 | already carries a valid digital signature — for #471 part 1's measurement of what `megapdf_save()`'s full rewrite does to it (see below) |
 
-By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**.
+By source: veraPDF 860, qpdf 181, PDFium 122, **IRS 136**, **USCIS 50**, **govinfo-signed 33**.
 
 `form` is the one category taken **whole** — every one the sources contain — because it is
 what MegaPDF is for and the category #434 calls the private corpus thinnest on. The others
@@ -152,6 +165,57 @@ no changes to produce it. This is also why federal rows are **not** part of the 
 `build-manifest.py` rebuild (see "Extending"): a plain rebuild stays fully reproducible from
 a sandbox that cannot reach either host, exactly as it always has.
 
+## The signed category (#471 part 1) — and what it found
+
+33 documents from `www.govinfo.gov` (the U.S. Government Publishing Office), every one
+already carrying a valid digital signature: 11 Federal Register daily issues (2019-2024),
+7 Public Laws, 6 Congressional Record issues, 6 Code of Federal Regulations title/volumes,
+and 3 Statutes at Large excerpts. GPO signs essentially everything it publishes —
+Signature Field Name `USGPOSignature`, Signer CN `Government Publishing Office` or
+`U.S. Government Publishing Office` — so this is a real, independently-verifiable sample,
+not a synthetic fixture: **33/33 verified `Signature is Valid` with poppler's `pdfsig`**
+(kdocker3, 2026-09-28) before any MegaPDF code touched them. Same licence as IRS/USCIS —
+`US-PD-17-USC-105`, a federal government work, no copyright, no attribution required —
+recorded per row in `build-manifest.py`'s `GOVINFO_SIGNED_DOCS`.
+
+**Why this category exists.** MegaPDF saves by full rewrite: `megapdf_save()` calls
+PDFium's `FPDF_SaveAsCopy`, which re-serialises the entire document rather than patching
+it in place. #471 part 1 asked whether that silently invalidates a signature already on a
+document a user opens, edits and saves — the same silent-failure shape as the XFA wall
+(#456): a document that still *looks* signed and is not.
+
+**The measurement, run against all 33 (kdocker3, 2026-09-28, `pdfsig` as the independent
+verifier — never MegaPDF's own code):**
+
+| stage | result |
+|---|---|
+| before any MegaPDF processing | 33/33 `Signature is Valid` |
+| after `megapdf_save()` with **no edit calls at all** (open, save immediately) | 33/33 `Digest Mismatch` |
+| after `megapdf_save()` following one edit (see note) | 33/33 `Digest Mismatch` |
+
+None of the 33 has a fillable checkbox field to click — GPO's publications carry only the
+`USGPOSignature` field, no interactive AcroForm beyond it — so the "edit" row used
+`megapdf_page_rotate(doc, 0, 0)`, a rotation by zero degrees: a real edit call, visually a
+no-op. The result is identical either way, which is itself the finding: **the signature is
+invalidated by the act of saving, regardless of whether anything changed.** Inspecting one
+resave with `pdfsig` in detail shows why: the `/ByteRange` array is carried into the
+rewritten file with its original numeric bounds unchanged, but the file's own length
+changes (13,257,131 → 13,276,302 bytes for `FR-2024-01-02.pdf`, +19,171 bytes with no
+content edit), so those bounds no longer describe the whole file — `pdfsig` reports "Not
+total document signed" where the original said "Total document signed", on top of the
+digest mismatch.
+
+Filed as **#476** (behaviour only; `core/` was not touched, per the task brief — a gate
+corpus documents what is true, it does not get to also decide what should be done about
+it).
+
+The measurement harness (`sig_harness`, ad hoc, not part of the product or this repository)
+opened each document with `megapdf_open_file`, optionally called `megapdf_form_click` on
+the first `MEGAPDF_FIELD_CHECKBOX` found via `megapdf_form_fields_load` (falling back to
+the identity rotate when none exists, as above), then called `megapdf_save` and wrote the
+result to a temporary file for `pdfsig` to check — the same open/edit/save shape the apps
+use, with signature verification done entirely outside MegaPDF's own code.
+
 ## ⚠ The malformed set
 
 The 150 documents under `malformed` are **deliberately broken by design**. They exist to prove
@@ -178,6 +242,7 @@ and keep the file.
 | [PDFium](https://github.com/chromium/pdfium) `testing/resources` @ `a8432342` | BSD-3-Clause | notice retained |
 | IRS fillable forms (`www.irs.gov/pub/irs-pdf/`) | **public domain — 17 U.S.C. § 105** | no |
 | USCIS forms (`www.uscis.gov/.../document/forms/`) | **public domain — 17 U.S.C. § 105** | no |
+| GPO-signed documents (`www.govinfo.gov/content/pkg/`) | **public domain — 17 U.S.C. § 105** | no |
 
 CC BY 4.0 requires attribution wherever these files or results derived from them are
 published. The required credit:
@@ -186,13 +251,14 @@ published. The required credit:
 > [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Not modified.
 
 **Federal works: 17 U.S.C. § 105.** "Copyright protection under this title is not available
-for any work of the United States Government." An IRS or USCIS form is prepared by federal
-employees as part of their official duties, so no copyright ever attaches to it in the first
-place — there is no licence to comply with, and no attribution requirement, though the
-manifest records `source` (`irs` / `uscis`) and a plain-English attribution string in
-`build-manifest.py` anyway, as a provenance trail rather than a legal obligation. This is a
-**stronger** position than any of the git sources above: those are copyrighted works
-licensed to permit redistribution; federal forms are simply never copyrighted at all.
+for any work of the United States Government." An IRS or USCIS form, or a GPO publication,
+is prepared by federal employees as part of their official duties, so no copyright ever
+attaches to it in the first place — there is no licence to comply with, and no attribution
+requirement, though the manifest records `source` (`irs` / `uscis` / `govinfo-signed`) and a
+plain-English attribution string in `build-manifest.py` anyway, as a provenance trail rather
+than a legal obligation. This is a **stronger** position than any of the git sources above:
+those are copyrighted works licensed to permit redistribution; federal works are simply
+never copyrighted at all.
 
 **One licence nuance, stated rather than buried.** 117 of the `malformed` rows are the
 **Isartor test files**, which arrive inside the veraPDF repository and are therefore covered
@@ -215,27 +281,34 @@ assembled:
 Each git source is pinned to a commit, never a branch — a branch would silently invalidate
 every sha256 in the file. To add one: give it a licence that permits redistribution, add a
 `Source` row, pin the commit, and rebuild. **A plain rebuild never touches the network for
-the federal-forms rows and never deletes them either** — it preserves whatever `irs`/`uscis`
-rows are already in `--out`, so it stays exactly as reproducible from a blocked sandbox as
-it always was.
+the federal-forms rows and never deletes them either** — it preserves whatever `irs`/`uscis`/
+`govinfo-signed` rows are already in `--out`, so it stays exactly as reproducible from a
+blocked sandbox as it always was.
 
-To (re)fetch the federal forms, from a machine that can reach the host — `www.irs.gov` and
-`www.uscis.gov` are both unreachable from Anthropic's cloud sandbox, reachable from an
-ordinary machine (see "Network reality" above):
+To (re)fetch the federal-sourced rows, from a machine that can reach the host — `www.irs.gov`,
+`www.uscis.gov` and `www.govinfo.gov` are all unreachable from Anthropic's cloud sandbox,
+reachable from an ordinary machine (see "Network reality" above):
 
     tools/stress/public-corpus/build-manifest.py --add-source irs
     tools/stress/public-corpus/build-manifest.py --add-source uscis
+    tools/stress/public-corpus/build-manifest.py --add-source govinfo-signed
 
 Each merges its rows into the existing `manifest.tsv` (by URL: a matching sha256 is left
 alone, a changed one is refreshed, a new one is added) rather than rebuilding everything
-from nothing. `IRS_FORMS` / `USCIS_FORMS` in `build-manifest.py` are the exact, grouped list;
-add a filename there (verified as `%PDF`-starting and fetchable first) to extend either set,
-or add a new `HttpSource` to `FEDERAL_SOURCES` for a different agency under the same public-
-domain licence. `--add-source govinfo` and `--add-source safedocs` still refuse outright —
-see `SOURCES_BLOCKED` — because nobody has yet written and verified a generator for either;
-that refusal is deliberate, the same way `irs`/`uscis` used to refuse before this change,
-and should be resolved the same way: implement and verify it from a machine that can reach
-the host, don't just delete the refusal.
+from nothing. `IRS_FORMS` / `USCIS_FORMS` / `GOVINFO_SIGNED_DOCS` in `build-manifest.py` are
+the exact, grouped lists; add an entry there (verified as `%PDF`-starting and fetchable
+first, and — for `GOVINFO_SIGNED_DOCS` specifically — verified as genuinely signed with
+`pdfsig` before it goes in) to extend any of the three, or add a new `HttpSource` to
+`FEDERAL_SOURCES` for a different agency under the same public-domain licence. Give an
+`HttpSource` a `category=` only when its category should be forced rather than derived from
+`classify()`, as `govinfo-signed` does — leave it unset (as `irs`/`uscis` do) to classify
+normally. `--add-source govinfo` and `--add-source safedocs` still refuse outright — see
+`SOURCES_BLOCKED` — because nobody has yet written and verified a generator for either (the
+*bulk* `govinfo` generator #434 item 4 asks for is a different, larger scope than
+`govinfo-signed`'s curated set, and is why the two are separate keys); that refusal is
+deliberate, the same way `irs`/`uscis`/`govinfo-signed` used to refuse before each was
+implemented, and should be resolved the same way: implement and verify it from a machine
+that can reach the host, don't just delete the refusal.
 
 ## Files
 
