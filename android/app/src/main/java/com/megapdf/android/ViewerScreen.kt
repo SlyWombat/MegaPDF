@@ -206,6 +206,16 @@ fun ViewerScreen(
      *  fill in. Drives the persistent banner below; everything else in this screen already
      *  reads the answer from [capabilities] instead (armed tools explain rather than act). */
     isDynamicXfa: Boolean = false,
+    /**
+     * #476/#481: the confirmation asked before a save overwrites a signed original — set by
+     * [ViewerViewModel.isSignedOverwritePending], reading [capabilities.isCertificationSigned]
+     * for which wording to show. Deliberately not a persistent banner (Dave's framing: the
+     * common fill-in-and-save-a-copy workflow is already safe and should see nothing extra) —
+     * only the one destructive moment asks.
+     */
+    isSignedOverwritePending: Boolean = false,
+    onConfirmSignedOverwrite: () -> Unit = {},
+    onCancelSignedOverwrite: () -> Unit = {},
     hasDocumentFile: Boolean = false,
     unlockPrompt: UnlockPrompt? = null,
     passwordPrompt: PasswordCommandMode? = null,
@@ -448,6 +458,47 @@ fun ViewerScreen(
             },
             dismissButton = {
                 TextButton(onClick = { onAnswerPageRewrite(false) }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    if (isSignedOverwritePending) {
+        // #476/#481: saving here rewrites the whole file, which always invalidates an existing
+        // signature (measured 33/33 on real GPO documents) — a certification signature says so
+        // more strongly, since a /DocMDP permission can forbid modification outright. Save a
+        // copy is the recommended, prominent choice (Dave's framing: it is already the safe,
+        // common path); overwriting is offered too — nothing here is refused — but needs the
+        // second, deliberate tap.
+        AlertDialog(
+            onDismissRequest = onCancelSignedOverwrite,
+            title = {
+                Text(
+                    stringResource(
+                        if (capabilities.isCertificationSigned) R.string.signed_overwrite_title_certified
+                        else R.string.signed_overwrite_title
+                    )
+                )
+            },
+            text = {
+                DialogBody {
+                    Text(
+                        stringResource(
+                            if (capabilities.isCertificationSigned) R.string.signed_overwrite_body_certified
+                            else R.string.signed_overwrite_body
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { onCancelSignedOverwrite(); onSaveAs() }) {
+                    Text(stringResource(R.string.save_a_copy))
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = onCancelSignedOverwrite) { Text(stringResource(R.string.cancel)) }
+                    TextButton(onClick = onConfirmSignedOverwrite) { Text(stringResource(R.string.redact_overwrite)) }
+                }
             },
         )
     }
