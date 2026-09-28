@@ -372,6 +372,38 @@ megapdf_rect InRect(const megapdf_page* p, double l, double b, double r, double 
     return SpaceRect(InPoint(p, l, b), InPoint(p, r, t));
 }
 
+// Content the core writes is built in the frame the caller is looking at — crop space, which
+// turns with the page's /Rotate (#439) — so it reads the right way up on a rotated page and
+// stays in the same frame as the page's own content whatever /Rotate becomes later (#446).
+// Below the two shapes of that; a path takes its vertices through InPoint one at a time.
+//
+// The unit square onto a crop-space box: the matrix's columns are that box's own axes, turned
+// back into user space, so the artwork fills exactly the rectangle the caller asked for and is
+// not squeezed into a box whose aspect the turn has swapped.
+FS_MATRIX PlacedMatrix(const megapdf_page* p, const megapdf_rect& box) {
+    const SpacePoint origin = InPoint(p, box.left, box.bottom);
+    const SpacePoint across = InVector(p, box.right - box.left, 0);
+    const SpacePoint up = InVector(p, 0, box.top - box.bottom);
+    return FS_MATRIX{static_cast<float>(across.x), static_cast<float>(across.y),
+                     static_cast<float>(up.x), static_cast<float>(up.y),
+                     static_cast<float>(origin.x), static_cast<float>(origin.y)};
+}
+
+// The page's turn alone, at a user-space point: for text, whose size is its font's and whose
+// matrix carries nothing but orientation. The quarter turns are the same ones InVector applies
+// to a crop-space direction — glyph x along what the reader sees as rightwards, glyph y along
+// what the reader sees as up.
+FS_MATRIX TurnedMatrix(const megapdf_page* p, double tx, double ty) {
+    const float x = static_cast<float>(tx);
+    const float y = static_cast<float>(ty);
+    switch (PageQuarterTurns(p)) {
+        case 1: return FS_MATRIX{0, 1, -1, 0, x, y};
+        case 2: return FS_MATRIX{-1, 0, 0, -1, x, y};
+        case 3: return FS_MATRIX{0, -1, 1, 0, x, y};
+        default: return FS_MATRIX{1, 0, 0, 1, x, y};
+    }
+}
+
 // --------------------------------------------------------------------------
 // Reading a document from its file (#147, #148)
 // --------------------------------------------------------------------------
@@ -1799,7 +1831,11 @@ megapdf_image* LoadStampImageUnlocked(const megapdf_page* p, int annot_index) {
 
 int AddImageStampUnlocked(const megapdf_page* p, const unsigned char* bgra, int width, int height,
                           const megapdf_rect* bounds, const unsigned short* id) {
-    const megapdf_rect box = InRect(p, bounds->left, bounds->bottom, bounds->right, bounds->top);
+    // The box as the caller drew it, in crop space, normalised: the image is placed in it, and
+    // the annotation's own rect is that box back in user space.
+    const megapdf_rect drawn = SpaceRect(SpacePoint{bounds->left, bounds->bottom},
+                                         SpacePoint{bounds->right, bounds->top});
+    const megapdf_rect box = InRect(p, drawn.left, drawn.bottom, drawn.right, drawn.top);
     const float left = static_cast<float>(box.left);
     const float right = static_cast<float>(box.right);
     const float bottom = static_cast<float>(box.bottom);
@@ -1827,7 +1863,9 @@ int AddImageStampUnlocked(const megapdf_page* p, const unsigned char* bgra, int 
     if (ok) {
         FPDF_PAGE pages[1] = {p->page};
         ok = FPDFImageObj_SetBitmap(pages, 1, img, bmp);
-        FS_MATRIX m{right - left, 0, 0, top - bottom, left, bottom};
+        // #446: the box's own axes, so the image is upright to whoever is looking at the page
+        // as its /Rotate says to show it, and fills the rectangle rather than a turned one.
+        FS_MATRIX m = PlacedMatrix(p, drawn);
         ok = ok && FPDFPageObj_SetMatrix(img, &m);
         if (ok) {
             ok = FPDFAnnot_AppendObject(annot, img);   // ownership moves to the annotation on success
@@ -1855,8 +1893,16 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* p, const megapdf_rect
     const double width = square->right - square->left;
     const double height = square->top - square->bottom;
     const double inset = (width > height ? width : height) * 0.10;
-    const megapdf_rect box = InRect(p, square->left + inset, square->bottom + inset,
-                                   square->right - inset, square->top - inset);
+    // The mark's box in the caller's own frame, and a vertex in it by fraction: a tick drawn
+    // from user-space corners would lie on its side on a rotated page (#446), so every vertex
+    // goes through the transform instead.
+    const megapdf_rect drawn = SpaceRect(SpacePoint{square->left + inset, square->bottom + inset},
+                                         SpacePoint{square->right - inset, square->top - inset});
+    const auto at = [&](double u, double v) {
+        return InPoint(p, drawn.left + (drawn.right - drawn.left) * u,
+                       drawn.bottom + (drawn.top - drawn.bottom) * v);
+    };
+    const megapdf_rect box = InRect(p, drawn.left, drawn.bottom, drawn.right, drawn.top);
     const float left = static_cast<float>(box.left);
     const float right = static_cast<float>(box.right);
     const float bottom = static_cast<float>(box.bottom);
@@ -1872,23 +1918,33 @@ MEGAPDF_API int megapdf_add_check_mark(const megapdf_page* p, const megapdf_rect
     FPDF_BOOL stroke = 1;
     switch (style) {
         case MEGAPDF_MARK_CHECK: {
-            const float w = right - left, h = top - bottom;
-            path = FPDFPageObj_CreateNewPath(left, bottom + h * 0.45f);
-            ok = ok && path && FPDFPath_LineTo(path, left + w * 0.38f, bottom) && FPDFPath_LineTo(path, right, top);
+            // Down to the low point at 38% across, then up to the far corner: a tick.
+            const SpacePoint start = at(0.0, 0.45), low = at(0.38, 0.0), end = at(1.0, 1.0);
+            path = FPDFPageObj_CreateNewPath(static_cast<float>(start.x), static_cast<float>(start.y));
+            ok = ok && path && FPDFPath_LineTo(path, static_cast<float>(low.x), static_cast<float>(low.y)) &&
+                 FPDFPath_LineTo(path, static_cast<float>(end.x), static_cast<float>(end.y));
             break;
         }
-        case MEGAPDF_MARK_FILLED_SQUARE:
-            path = FPDFPageObj_CreateNewPath(left, bottom);
-            ok = ok && path && FPDFPath_LineTo(path, right, bottom) && FPDFPath_LineTo(path, right, top) &&
-                 FPDFPath_LineTo(path, left, top) && FPDFPath_LineTo(path, left, bottom);
+        case MEGAPDF_MARK_FILLED_SQUARE: {
+            const SpacePoint bl = at(0.0, 0.0), br = at(1.0, 0.0), tr = at(1.0, 1.0), tl = at(0.0, 1.0);
+            path = FPDFPageObj_CreateNewPath(static_cast<float>(bl.x), static_cast<float>(bl.y));
+            ok = ok && path && FPDFPath_LineTo(path, static_cast<float>(br.x), static_cast<float>(br.y)) &&
+                 FPDFPath_LineTo(path, static_cast<float>(tr.x), static_cast<float>(tr.y)) &&
+                 FPDFPath_LineTo(path, static_cast<float>(tl.x), static_cast<float>(tl.y)) &&
+                 FPDFPath_LineTo(path, static_cast<float>(bl.x), static_cast<float>(bl.y));
             if (path) FPDFPageObj_SetFillColor(path, 0x20, 0x20, 0x20, 0xFF);
             fill = FPDF_FILLMODE_ALTERNATE;
             stroke = 0;
             break;
-        default:   // cross
-            path = FPDFPageObj_CreateNewPath(left, bottom);
-            ok = ok && path && FPDFPath_LineTo(path, right, top) && FPDFPath_MoveTo(path, left, top) && FPDFPath_LineTo(path, right, bottom);
+        }
+        default: {   // cross
+            const SpacePoint bl = at(0.0, 0.0), tr = at(1.0, 1.0), tl = at(0.0, 1.0), br = at(1.0, 0.0);
+            path = FPDFPageObj_CreateNewPath(static_cast<float>(bl.x), static_cast<float>(bl.y));
+            ok = ok && path && FPDFPath_LineTo(path, static_cast<float>(tr.x), static_cast<float>(tr.y)) &&
+                 FPDFPath_MoveTo(path, static_cast<float>(tl.x), static_cast<float>(tl.y)) &&
+                 FPDFPath_LineTo(path, static_cast<float>(br.x), static_cast<float>(br.y));
             break;
+        }
     }
     if (path != nullptr) {
         FPDFPageObj_SetStrokeColor(path, 0x20, 0x20, 0x20, 0xFF);
@@ -2911,8 +2967,9 @@ int AddTextBoxUnlocked(const megapdf_page* p, int object_index, const unsigned s
     FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size / p->unit));
     bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
     if (ok) {
+        // #446: the page's turn, so the text reads along the line the person typed it on.
         const SpacePoint at = InPoint(p, baseline_x, baseline_y);
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(at.x), static_cast<float>(at.y)};
+        FS_MATRIX m = TurnedMatrix(p, at.x, at.y);
         ok = FPDFPageObj_SetMatrix(obj, &m);
     }
     if (ok) {
@@ -3947,8 +4004,10 @@ MEGAPDF_API int megapdf_insert_text_run(const megapdf_page* p, int object_index,
     FPDF_PAGEOBJECT obj = FPDFPageObj_CreateTextObj(doc, font, static_cast<float>(font_size / p->unit));
     bool ok = obj != nullptr && FPDFText_SetText(obj, reinterpret_cast<FPDF_WIDESTRING>(text));
     if (ok) {
+        // #446: turned like the box above. This one replays a journalled restore, so what it
+        // owes is the line as it was on screen when the crash took it.
         const SpacePoint at = InPoint(p, left, baseline);
-        FS_MATRIX m{1, 0, 0, 1, static_cast<float>(at.x), static_cast<float>(at.y)};
+        FS_MATRIX m = TurnedMatrix(p, at.x, at.y);
         FPDFPageObj_SetMatrix(obj, &m);
         const int count = FPDFPage_CountObjects(p->page);
         ok = FPDFPage_InsertObjectAtIndex(p->page, obj, static_cast<size_t>(object_index > count ? count : object_index));
