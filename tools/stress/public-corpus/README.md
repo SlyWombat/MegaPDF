@@ -276,6 +276,30 @@ they are handled differently on purpose:
   count. Pinned, the diff is literally two added lines and nothing else: the two new `form`
   documents are appended (that category has no quota), the two new `report` documents are
   declined (that category is at 250/250), and not one of the 1,777 existing rows moves.
+
+**Lowering a `QUOTAS` entry keeps every pinned row — and now says so (#500).** The pin is
+one-directional by design: `pin_selection()` never evicts. So editing a quota *down* below
+what a category already holds changes nothing — `tagged` at 300 rows with its quota edited to
+100 rebuilds to 300 — and until #500 it changed nothing *silently*, with no message and no
+diff to tell a maintainer the edit had not taken. The asymmetry stays, because eviction on a
+quota edit is precisely the silent reshuffling this whole section exists to prevent; what was
+missing was the feedback. A rebuild whose pinned count for a category exceeds that category's
+quota now prints one line on stderr:
+
+    note: tagged keeps 300 pinned row(s), over QUOTAS['tagged'] = 100 -- #455 never evicts a
+    pinned row, so lowering a quota changes nothing on its own; shrinking a category means
+    retiring rows the deliberate, visible way, with --allow-removed <path> once each is gone
+    from this rebuild's pool
+
+It is a note, not a refusal: the rebuild proceeds and keeps all the pinned rows. Raising a
+quota needs no note (the extra room is filled from new candidates only, and no existing pick
+moves), and a quota left alone, a quota met exactly, an unlimited category (`form`, `large`,
+quota `None`) and a first build with nothing pinned yet all print nothing new. Shrinking a
+category for real is the `--allow-removed` route above — deliberate and visible, one named
+path at a time — and note what that means today: `--allow-removed` only takes effect on a row
+that has actually left the rebuild's pool, so a quota edit plus that flag will not by itself
+retire a row the sources still carry.
+
 ## UN parallel-language documents — investigated, not added (#471)
 
 #471's non-Latin-script sample above is 40 *unrelated* Wikipedia articles per script, so a

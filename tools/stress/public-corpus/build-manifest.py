@@ -1044,6 +1044,12 @@ def pin_selection(pool_by_path, existing_by_path, quota):
     any) is handed to spread(), and only over candidates that were not already selected --
     so spread() never sees, and can never reshuffle, an existing pick.
 
+    A quota LOWERED below what is already pinned therefore keeps every pinned row and
+    shrinks nothing: there is no unfilled room to hand to spread(), and eviction is the one
+    thing this function will not do. #500: that is deliberate, but it is not visible, so
+    main() prints a note naming the category, its pinned count and its quota whenever it
+    happens -- silence there used to read as "the QUOTAS edit took effect".
+
     Returns `(keep, dropped)`: `keep` is the set of paths selected (a subset of
     pool_by_path's keys, filled as above even when some previous picks were dropped, so a
     caller that decides to proceed anyway -- because every drop was acknowledged -- gets a
@@ -1718,7 +1724,8 @@ def main():
     for category in CATEGORIES:
         pool_by_path = {r["path"]: r for r in by_category[category]}
         existing_by_path = existing_by_category[category]
-        keep, dropped = pin_selection(pool_by_path, existing_by_path, QUOTAS[category])
+        quota = QUOTAS[category]
+        keep, dropped = pin_selection(pool_by_path, existing_by_path, quota)
         for path in dropped:
             all_dropped[path] = category
         selected.extend(pool_by_path[p] for p in keep)
@@ -1726,6 +1733,21 @@ def main():
         print(f"  {category:10s} {len(keep):5d} of {len(pool_by_path):5d} found "
               f"({pinned} pinned from the existing manifest, {len(keep) - pinned} new)",
               file=sys.stderr)
+        # #500: pin_selection() never evicts, so LOWERING a quota below what a category
+        # already holds keeps every row anyway -- and used to say nothing about it, which
+        # left whoever edited QUOTAS down with no message and no diff to tell them the
+        # edit had not taken. The asymmetry itself is right and stays: evicting on a quota
+        # edit is precisely the silent reshuffling #455 exists to stop. So this is
+        # feedback, not a refusal -- the rebuild proceeds and keeps all `pinned` rows.
+        # Fires only when a quota is actually exceeded, so an unchanged or raised quota
+        # (and every first build, where nothing is pinned yet) prints nothing new.
+        if quota is not None and pinned > quota:
+            print(f"  note: {category} keeps {pinned} pinned row(s), over "
+                  f"QUOTAS[{category!r}] = {quota} -- #455 never evicts a pinned row, so "
+                  f"lowering a quota changes nothing on its own; shrinking a category "
+                  f"means retiring rows the deliberate, visible way, with "
+                  f"--allow-removed <path> once each is gone from this rebuild's pool",
+                  file=sys.stderr)
 
     if all_dropped:
         allowed = set(args.allow_removed)
