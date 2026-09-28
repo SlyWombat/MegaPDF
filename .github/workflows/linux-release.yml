@@ -116,6 +116,8 @@ jobs:
         run: |
           python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
           python3 tools/gen_redaction_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
+          python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
 
       # A bundle that exists proves nothing: this installs it and drives the app inside
       # the sandbox, which is the same check ci.yml runs against the locally built one.
