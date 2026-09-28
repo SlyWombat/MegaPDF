@@ -2543,13 +2543,18 @@ public partial class MainWindow : Window
             _ => Strings.PasswordRemovedStatus,
         };
 
-        var file = OpenedFile!;
+        // #476, #481: changing security overwrites the document's own file exactly like
+        // SaveAsync — the same warning first, with Save a copy writing the changed
+        // security to a picked file instead of discarding it, so the signed original at
+        // `path` is never touched at all.
+        if (await ConfirmSecurityWriteTargetAsync(vm, Path.GetFileName(path)) is not var (file, targetPath))
+            return;
         var local = file.TryGetLocalPath();
         try
         {
             // The view model produces the verified bytes first, off the UI thread; the file is
             // written — and, under the sandbox, truncated — only then, and reopened after.
-            await vm.ChangeSecurityAsync(path, newPassword, done, async staged =>
+            if (await vm.ChangeSecurityAsync(targetPath, newPassword, done, async staged =>
             {
                 if (local is not null && !OperatingSystem.IsMacOS())
                 {
@@ -2558,15 +2563,62 @@ public partial class MainWindow : Window
                 else
                 {
                     // In place, over the file the document reads: it moves off it first (#147).
-                    await vm.KeepOpenDocumentOffFileAsync(local ?? path);
+                    await vm.KeepOpenDocumentOffFileAsync(local ?? targetPath);
                     await using var stream = await file.OpenWriteAsync();
                     await Task.Run(() => staged.WriteOver(stream));
                 }
-            });
+            }))
+            {
+                OpenedFile = file;
+            }
         }
         catch (Exception ex)
         {
             vm.ReportSaveFailure(ex);
+        }
+    }
+
+    /// <summary>
+    /// #476, #481: the same warning <see cref="ConfirmOverwriteSignedAsync"/> shows before
+    /// Save overwrites a signed original, reused here because changing security is also a
+    /// full-rewrite save over the document's own file. Save a copy picks a fresh file for
+    /// the changed security to go to, leaving the signed original at <paramref name="fileName"/>'s
+    /// path untouched. Returns null when the user cancelled.
+    /// </summary>
+    private async Task<(IStorageFile File, string TargetPath)?> ConfirmSecurityWriteTargetAsync(DocumentViewModel vm, string fileName)
+    {
+        if (OpenedFile is not { } current || vm.DocumentPath is not { } currentPath)
+            return null;
+        if (!vm.IsSigned)
+            return (current, currentPath);
+
+        var dialog = new ConfirmSignedSaveWindow();
+        dialog.SetCertification(vm.IsSignedCertification);
+        await dialog.ShowDialog(this);
+        switch (dialog.Choice)
+        {
+            case ConfirmSignedSaveWindow.Decision.SaveAsCopy:
+                var picked = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+                {
+                    Title = Strings.SaveACopy,
+                    SuggestedFileName = Strings.SuggestedCopyName(Path.GetFileNameWithoutExtension(fileName)) + ".pdf",
+                    DefaultExtension = "pdf",
+                    FileTypeChoices = [PdfFileType],
+                    ShowOverwritePrompt = true,
+                });
+                if (picked is null)
+                    return null;
+                var pickedLocal = picked.TryGetLocalPath();
+                if (pickedLocal is null)
+                {
+                    vm.Status = Strings.FileNotLocal;
+                    return null;
+                }
+                return (picked, pickedLocal);
+            case ConfirmSignedSaveWindow.Decision.Overwrite:
+                return (current, currentPath); // deliberate: overwrite the signed original anyway
+            default:
+                return null; // cancelled: nothing written, security unchanged
         }
     }
 

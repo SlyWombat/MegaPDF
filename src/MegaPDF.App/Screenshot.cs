@@ -111,7 +111,6 @@ internal static class Screenshot
                     return false;
                 }
                 vm.ShowSignedSaveWarningForScreenshot();
-                await Task.Delay(500);
                 return true;
 
             case "sign":

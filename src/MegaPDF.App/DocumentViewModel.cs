@@ -2503,11 +2503,55 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     }
 
     /// <summary>
+    /// #476, #481: setting, changing or removing security is a save (ADR-004 §6) that by
+    /// default overwrites the document's own file, exactly like <see cref="SaveAsync"/> —
+    /// so a signed document gets the same warning first, with the same Save-a-copy
+    /// alternative, this time writing the changed security to a picked file rather than
+    /// discarding it. Returns the path to write to, or null when the user cancelled.
+    /// </summary>
+    private async Task<string?> ConfirmSecurityWriteTargetAsync(string fileName)
+    {
+        if (DocumentPath is not { } current)
+            return null;
+        if (!IsSigned || window.Content?.XamlRoot is not { } xamlRoot)
+            return current;
+
+        var dialog = new ContentDialog
+        {
+            Title = IsSignedCertification ? Strings.CertifiedSaveWarningTitle : Strings.SignedSaveWarningTitle,
+            Content = IsSignedCertification ? Strings.CertifiedSaveWarningBody : Strings.SignedSaveWarningBody,
+            PrimaryButtonText = Strings.SaveACopyButton,
+            SecondaryButtonText = Strings.OverwriteSignedButton,
+            CloseButtonText = Strings.Cancel,
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = xamlRoot,
+        };
+        switch (await dialog.ShowOneAtATimeAsync())
+        {
+            case ContentDialogResult.Primary:
+                // Save a copy: the changed security goes to a picked file, so the signed
+                // original at `current` is never touched at all.
+                var picker = new FileSavePicker();
+                picker.FileTypeChoices.Add(Strings.PdfDocumentFilter, [".pdf"]);
+                picker.SuggestedFileName = Strings.EditedFileName(Path.GetFileNameWithoutExtension(fileName));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+                var file = await picker.PickSaveFileAsync();
+                return file?.Path;
+            case ContentDialogResult.Secondary:
+                return current;    // deliberate: overwrite the signed original anyway
+            default:
+                return null;        // cancelled: nothing written, security unchanged
+        }
+    }
+
+    /// <summary>
     /// Setting, changing or removing security is a save (ADR-004 §6): the document,
     /// unsaved edits included, goes to its own file through the same atomic, verified
     /// write Save uses — checked by opening the copy with the new password, or without one
     /// — and the saved file is reopened, so the open document matches what is on disk.
-    /// A refusal or failed write leaves the original untouched.
+    /// A refusal or failed write leaves the original untouched. #476, #481: `path` may be
+    /// a freshly picked file rather than the document's own, when a signed document's
+    /// warning was answered with Save a copy — <see cref="ConfirmSecurityWriteTargetAsync"/>.
     /// </summary>
     /// <param name="newPassword">The new password, or null to remove security.</param>
     private async Task ApplySecurityAsync(string? newPassword, string doneMessage)
@@ -2516,7 +2560,12 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
             return;
 
         var document = _document;
-        var path = DocumentPath;
+        if (await ConfirmSecurityWriteTargetAsync(Path.GetFileName(DocumentPath)) is not { } path)
+            return;
+        // The confirmation above awaited a dialog (and, for Save a copy, a file picker):
+        // another document may have opened in the meantime (#145's D3 shape).
+        if (!ReferenceEquals(document, _document) || Busy.IsBusy)
+            return;
         var flattened = false;
         try
         {

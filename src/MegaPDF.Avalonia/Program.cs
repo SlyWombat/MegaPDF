@@ -810,6 +810,7 @@ internal static class Program
 
                 using var plain = new DocumentViewModel(state);
                 plain.Open(Path.Combine(dir, "fixture.pdf"));
+                Check("fixture.pdf opens", plain.IsDocumentOpen);
                 Check("an unsigned document does NOT set IsSigned", !plain.IsSigned);
                 Check("an unsigned document does NOT set IsSignedCertification", !plain.IsSignedCertification);
             }
