@@ -109,10 +109,34 @@ final class ViewerZoomUITests: XCTestCase {
         // that the page landed on the exact frame it started on: a pinch in a scroll
         // view can leave it a few points from where it was, and a test that demanded
         // the same picture would fail on that rather than on the zoom.
+        //
+        // #436: the two checks below replace a single `difference(zoomed, closed) < 0.05`,
+        // which a pinch-in that does *nothing at all* also satisfies — `closed` and `zoomed`
+        // are then the same picture, difference 0, comfortably under the threshold. That is
+        // exactly how this test kept passing on iPad while the gesture was a no-op: the
+        // assertion never asked whether the page changed back, only whether it stayed near
+        // where the first pinch left it, which a page that never moved again also does.
         firstPage.pinch(withScale: 0.4, velocity: -2.0)
         Thread.sleep(forTimeInterval: 1.5)
         let closed = pixels(of: rect)
-        XCTAssertLessThan(difference(zoomed, closed), 0.05,
-                          "a pinch in left the page at the zoom the other way")
+        let zoomedVsClosed = difference(zoomed, closed)
+        let atOneVsZoomed = difference(atOne, zoomed)
+        let atOneVsClosed = difference(atOne, closed)
+
+        // The pinch-in must itself have changed the page. A no-op leaves `closed`
+        // pixel-identical to `zoomed` (difference 0), which is the one value this can
+        // never be satisfied by — unlike the old assertion, which that value satisfied
+        // trivially.
+        XCTAssertGreaterThan(zoomedVsClosed, 0.05,
+                             "a pinch in did not change the page at all — a no-op here is " +
+                             "exactly how #436 went unnoticed on iPad")
+        // And what it did has to be a move back toward the original picture, not sideways
+        // or further away: closing must not leave the page as far or farther from where it
+        // started as the fully zoomed-in picture already was. `pinch` rarely lands on the
+        // exact requested scale, so this is a directional check against `atOneVsZoomed`
+        // rather than a fixed distance from `atOne`.
+        XCTAssertLessThanOrEqual(atOneVsClosed, atOneVsZoomed + 0.05,
+                                 "closing left the page as far from the start as the zoomed-in " +
+                                 "picture was, or farther — that is not \"the zoom came back off\"")
     }
 }
