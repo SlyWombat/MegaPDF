@@ -550,6 +550,8 @@ public sealed partial class MainWindow : Window
         // The placement hint says "click"; a keyboard user places it with Enter (#2).
         if (active.PendingSignature is not null)
             Announce(Strings.PlaceSignatureKeyHint);
+        else if (active.IsDynamicXfa) // #457: explained via the reopened InfoBar, not silence
+            Announce(Strings.DynamicXfaCannotFill);
     }
 
     /// <summary>

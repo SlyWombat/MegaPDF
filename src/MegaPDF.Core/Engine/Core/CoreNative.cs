@@ -92,6 +92,24 @@ internal static class CoreNative
     [DllImport(Dll)]
     public static extern int megapdf_page_count(IntPtr document);
 
+    /// <summary>
+    /// MEGAPDF_DOC_* bits (megapdf_core.h) describing the document as a whole — available
+    /// right after <see cref="megapdf_open_file"/>/<see cref="megapdf_open"/>, cheap enough
+    /// to call every open (#457).
+    /// </summary>
+    [DllImport(Dll)]
+    public static extern uint megapdf_document_flags(IntPtr document);
+
+    /// <summary>
+    /// The document is dynamic XFA (#456, #457): its AcroForm's `/XFA` entry needs
+    /// rendering and the only page content PDFium can draw is Adobe's own "please wait,
+    /// install Adobe Reader" placeholder — there is no real form here for MegaPDF to fill.
+    /// A hybrid-XFA document (CRA, Service Canada, most of IRCC), an ordinary AcroForm, or
+    /// a document with no form at all never sets this bit. See megapdf_core.h for the
+    /// detection rule.
+    /// </summary>
+    public const uint DocFlagDynamicXfa = 1u << 0;
+
     // Pages ----------------------------------------------------------------
 
     [DllImport(Dll)]

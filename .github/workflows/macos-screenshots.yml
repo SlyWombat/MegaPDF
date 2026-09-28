@@ -31,7 +31,10 @@ jobs:
         run: tools/build-macos-app.sh osx-arm64 "$RUNNER_TEMP/app"
 
       - name: Fixtures
-        run: python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+        run: |
+          python3 tools/gen_test_fixtures.py "$RUNNER_TEMP/fixtures"
+          # #457: dynamic-xfa.pdf/hybrid-xfa.pdf, the self-test's "dynamic XFA" check.
+          python3 tools/gen_xfa_fixtures.py "$RUNNER_TEMP/fixtures"
 
       - name: Capture
         run: |

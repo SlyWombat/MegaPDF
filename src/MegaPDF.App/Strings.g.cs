@@ -16,6 +16,9 @@ public static partial class Strings
 {
     private static string Get(string key) => AppLanguage.GetString(key);
 
+    /// <summary>This form needs Adobe Reader to fill in.</summary>
+    public static string DynamicXfaCannotFill => Get("DynamicXfaCannotFill");
+
     /// <summary>A lightweight PDF editor — open, fix, save, done.</summary>
     public static string AppDescription => Get("AppDescription");
 

@@ -171,6 +171,18 @@
     <value>Crash recovery is off for password-protected documents, so unsaved changes can't be restored if MegaPDF closes unexpectedly.</value>
     <comment>#131, #135</comment>
   </data>
+  <data name="DynamicXfaNoticeBar.Message" xml:space="preserve">
+    <value>This form is built to be filled in with Adobe Reader. You can still view, print, save and share it here — only filling it in isn't possible.</value>
+    <comment>#456, #457: shown when megapdf_document_flags() reports MEGAPDF_DOC_DYNAMIC_XFA</comment>
+  </data>
+  <data name="GetAdobeReaderButton.Content" xml:space="preserve">
+    <value>Get Adobe Reader</value>
+    <comment>#457: opens the same reader-download page the document's own placeholder text names</comment>
+  </data>
+  <data name="DynamicXfaCannotFill" xml:space="preserve">
+    <value>This form needs Adobe Reader to fill in.</value>
+    <comment>#457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
+  </data>
 
   <!-- Find bar -->
   <data name="FindQuery.PlaceholderText" xml:space="preserve">

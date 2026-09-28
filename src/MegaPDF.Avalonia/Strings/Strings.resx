@@ -733,6 +733,18 @@
   <data name="RecoveryOffForProtected" xml:space="preserve">
     <value>Crash recovery is off for password-protected documents.</value>
   </data>
+  <data name="DynamicXfaBanner" xml:space="preserve">
+    <value>This form is built to be filled in with Adobe Reader. You can still view, print, save and share it here — only filling it in isn't possible.</value>
+    <comment>#456, #457: shown for the life of an open whose document.IsDynamicXfa is true</comment>
+  </data>
+  <data name="GetAdobeReader" xml:space="preserve">
+    <value>Get Adobe Reader</value>
+    <comment>#457: opens the same reader-download page the document's own placeholder text names</comment>
+  </data>
+  <data name="DynamicXfaCannotFill" xml:space="preserve">
+    <value>This form needs Adobe Reader to fill in.</value>
+    <comment>#457: said instead of arming signature/checkmark placement on a dynamic-XFA document</comment>
+  </data>
   <data name="UnsupportedProtection" xml:space="preserve">
     <value>This PDF uses a kind of protection MegaPDF can't open.</value>
     <comment>PdfLoadException FPDF_ERR_SECURITY</comment>

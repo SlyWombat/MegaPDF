@@ -731,6 +731,15 @@
   <data name="RecoveryOffForProtected" xml:space="preserve">
     <value>La récupération après une fermeture inattendue est désactivée pour les documents protégés par mot de passe.</value>
   </data>
+  <data name="DynamicXfaBanner" xml:space="preserve">
+    <value>Ce formulaire est conçu pour être rempli dans Adobe Reader. Vous pouvez tout de même l'afficher, l'imprimer, l'enregistrer et le partager ici — seul le remplir n'est pas possible.</value>
+  </data>
+  <data name="GetAdobeReader" xml:space="preserve">
+    <value>Obtenir Adobe Reader</value>
+  </data>
+  <data name="DynamicXfaCannotFill" xml:space="preserve">
+    <value>Ce formulaire doit être rempli dans Adobe Reader.</value>
+  </data>
   <data name="UnsupportedProtection" xml:space="preserve">
     <value>Ce PDF utilise un type de protection que MegaPDF ne peut pas ouvrir.</value>
     <comment>PdfLoadException FPDF_ERR_SECURITY</comment>
