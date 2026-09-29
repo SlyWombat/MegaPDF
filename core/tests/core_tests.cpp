@@ -6033,6 +6033,11 @@ void test_structure_goldens(const std::string& fixtures, const std::string& sche
          MEGAPDF_STRUCTURE_KEEP_FURNITURE | MEGAPDF_STRUCTURE_HEURISTIC_ONLY},
         {"tagged-wrong", repo + "/structure/tagged-wrong.pdf", 0, 0, MEGAPDF_STRUCTURE_KEEP_FURNITURE},
         {"tiny-font-size", repo + "/structure/tiny-font-size.pdf", 0, 0, 0},
+        // #496/#524: the same ink three ways -- the size in Tf, the size in Tm (10x
+        // understated), the size in Tm the other way (10x overstated). The golden pins all
+        // three pages to the same structure; test_structure_tm_scaled_size() below asserts
+        // they are equal to each other, which is the property rather than the numbers.
+        {"tm-scaled-size", repo + "/structure/tm-scaled-size.pdf", 0, 0, 0},
         // #444: two vertical-writing-mode (Identity-V) composite-font words, "Hello" and
         // "World" (tools/gen_vertical_cid_fixture.py's own comment has the full diagnosis).
         // Before the #444 fix, BuildWords always treated a character's LOCAL +x as its advance
@@ -6110,6 +6115,55 @@ long find_block(const megapdf_structure* s, int page, int kind, const std::strin
 }
 
 }  // namespace
+
+// #496/#524: what a page extracts must not depend on how its producer split the glyph size
+// between the `Tf` operand and the text matrix. tm-scaled-size.pdf draws the same three
+// lines and the same two-column pair on three pages at scales 1, 10 and 0.1 (see
+// gen_tm_scaled_size()'s comment) -- identical advances, identical boxes, identical
+// characters -- so anything that differs between the pages is the size bookkeeping and
+// nothing else.
+//
+// Before the fix, FPDFText_GetFontSize's raw operand was taken as the drawn size, and the
+// three pages came out as 7, 43 and 5 blocks: the understated page had BuildLines' threshold
+// 10x too small and split every word into its own block, and the overstated page had it 10x
+// too large and merged the two columns into one line. After it, all three are 3 blocks.
+//
+// The middle page is what #496's 190-page UN document does on every one of its 400,000+
+// characters. Note that page 0's own matrix is the identity and it STILL moved: body_size is
+// computed once over the whole load (ComputeBodySize takes every page), so one mis-sized page
+// perturbs the block structure of every other page in the same document.
+void test_structure_tm_scaled_size(const std::string& repo) {
+    Doc d(repo + "/structure/tm-scaled-size.pdf");
+    if (!d.doc) { check(false, "structure tm-scaled-size: opens"); return; }
+    megapdf_structure* s = megapdf_structure_load(d.doc, 0, 3, 0, nullptr);
+    check(s != nullptr, "structure tm-scaled-size: loads");
+    if (s == nullptr) return;
+
+    // Every page's blocks, in order, as "kind|text" -- the whole structure of the page
+    // reduced to something comparable between pages.
+    std::vector<std::vector<std::string>> per_page(3);
+    for (size_t i = 0; i < megapdf_block_count(s); i++) {
+        megapdf_block b{};
+        if (megapdf_block_get(s, i, &b) != MEGAPDF_OK) continue;
+        if (b.page < 0 || b.page > 2) continue;
+        per_page[static_cast<size_t>(b.page)].push_back(
+            std::to_string(static_cast<int>(b.kind)) + "|" + block_text_ascii(s, i, MEGAPDF_BLOCK_TEXT));
+    }
+
+    const char* kNames[3] = {"size in Tf (scale 1)", "size in Tm (scale 10)", "size in Tm (scale 0.1)"};
+    for (int p = 1; p < 3; p++) {
+        const bool same = per_page[static_cast<size_t>(p)] == per_page[0];
+        check(same, std::string("structure tm-scaled-size: ") + kNames[p] + " reads the same as " +
+                        kNames[0] + " (" + std::to_string(per_page[static_cast<size_t>(p)].size()) +
+                        " blocks vs " + std::to_string(per_page[0].size()) + ")");
+    }
+    // The shape itself, so a change that made all three pages equally wrong would still fail:
+    // three lines of prose as one paragraph, plus the two columns either side of the gutter.
+    check(per_page[0].size() == 3,
+          "structure tm-scaled-size: the size-in-Tf page is 3 blocks (got " +
+              std::to_string(per_page[0].size()) + ")");
+    megapdf_structure_free(s);
+}
 
 // #472: a page's text reads the same whatever its /Rotate. rotated-pages.pdf draws the same
 // four words on four pages that differ only in /Rotate, so anything that moves between them is
@@ -8419,6 +8473,7 @@ int main(int argc, char** argv) {
     test_structure_reading_order_jump(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_cancel(argv[2]);
     test_structure_rotated_pages(std::string(MEGAPDF_REPO_FIXTURES));
+    test_structure_tm_scaled_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tiny_font_size(std::string(MEGAPDF_REPO_FIXTURES));
     test_structure_tagged_mutations(std::string(MEGAPDF_REPO_FIXTURES));
