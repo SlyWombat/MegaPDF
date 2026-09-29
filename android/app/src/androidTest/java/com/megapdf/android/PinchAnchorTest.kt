@@ -80,19 +80,17 @@ class PinchAnchorTest {
         val yFrac = 0.30f
         val before = anchorOnScreen(xFrac, yFrac)
 
-        // The pinch is centred at that same point, in the page's own pre-pinch local
-        // coordinates: the two fingers move symmetrically apart around it, the shape a real
-        // two-finger zoom makes. The ratio this particular gesture asks for (≈1.8x) keeps the
-        // total zoom (2x already, before it starts) comfortably under MAX_ZOOM's 4x — the
-        // clamp case belongs to PinchAnchorMathTest, not this test.
-        val anchorLocal = Offset(
-            rule.page().fetchSemanticsNode().size.width * xFrac,
-            rule.page().fetchSemanticsNode().size.height * yFrac,
-        )
+        // The pinch is centred at that same point, computed from this touch scope's own
+        // width/height (the same node, read the same way `center` is) rather than a value
+        // captured outside it. The two fingers move symmetrically apart around it, the shape
+        // a real two-finger zoom makes. The ratio this particular gesture asks for (≈1.8x)
+        // keeps the total zoom (2x already, before it starts) comfortably under MAX_ZOOM's
+        // 4x — the clamp case belongs to PinchAnchorMathTest, not this test.
         rule.page().performTouchInput {
+            val anchor = Offset(width * xFrac, height * yFrac)
             pinch(
-                start0 = anchorLocal - Offset(60f, 40f), end0 = anchorLocal - Offset(110f, 70f),
-                start1 = anchorLocal + Offset(60f, 40f), end1 = anchorLocal + Offset(110f, 70f),
+                start0 = anchor - Offset(150f, 100f), end0 = anchor - Offset(275f, 175f),
+                start1 = anchor + Offset(150f, 100f), end1 = anchor + Offset(275f, 175f),
                 durationMillis = 400,
             )
         }
