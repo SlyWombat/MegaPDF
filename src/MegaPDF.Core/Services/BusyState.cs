@@ -37,7 +37,8 @@ public sealed class BusyState : INotifyPropertyChanged
     private readonly TimeSpan _showAfter;
     private readonly TimeSpan _minimumVisible;
     private readonly List<Operation> _operations = [];
-    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private readonly TimeProvider _time;
+    private readonly long _started;
     private List<TaskCompletionSource>? _idleWaiters;
 
     // Guarded by _gate.
@@ -65,11 +66,35 @@ public sealed class BusyState : INotifyPropertyChanged
     /// <param name="minimumVisible">How long a shown indicator stays.</param>
     /// <param name="context">Where property changes are raised; null raises them on whichever thread changed the state.</param>
     public BusyState(TimeSpan showAfter, TimeSpan minimumVisible, SynchronizationContext? context)
+        : this(showAfter, minimumVisible, context, TimeProvider.System)
+    {
+    }
+
+    /// <param name="showAfter">How long work runs before the indicator shows.</param>
+    /// <param name="minimumVisible">How long a shown indicator stays.</param>
+    /// <param name="context">Where property changes are raised; null raises them on whichever thread changed the state.</param>
+    /// <param name="time">
+    /// Where both the delays and the elapsed measurement come from. The app passes
+    /// <see cref="TimeProvider.System"/>; a test passes a provider it advances itself.
+    ///
+    /// #515: the minimum-visible window used to be measured off a private Stopwatch and
+    /// waited out with a bare Task.Delay, so a test could only assert on it by racing the
+    /// thread pool. It lost that race on a loaded CI runner and failed pull requests whose
+    /// diffs could not reach any of this code, which teaches everyone to re-run a red check
+    /// without reading it. One provider makes the whole window deterministic instead of
+    /// widening a margin and hoping.
+    /// </param>
+    public BusyState(TimeSpan showAfter, TimeSpan minimumVisible, SynchronizationContext? context, TimeProvider time)
     {
         _showAfter = showAfter;
         _minimumVisible = minimumVisible;
         _context = context;
+        _time = time;
+        _started = time.GetTimestamp();
     }
+
+    /// <summary>How long this state has been alive, by its own clock.</summary>
+    private TimeSpan Elapsed => _time.GetElapsedTime(_started);
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -148,13 +173,13 @@ public sealed class BusyState : INotifyPropertyChanged
 
     private async Task ShowLaterAsync(int generation)
     {
-        await Task.Delay(_showAfter).ConfigureAwait(false);
+        await Task.Delay(_showAfter, _time).ConfigureAwait(false);
         lock (_gate)
         {
             if (generation != _generation || _operations.Count == 0 || _indicatorShown)
                 return;
             _indicatorShown = true;
-            _shownAt = _clock.Elapsed;
+            _shownAt = Elapsed;
         }
         Publish();
     }
@@ -174,7 +199,7 @@ public sealed class BusyState : INotifyPropertyChanged
                 _lastShown = operation;
                 if (_indicatorShown)
                 {
-                    var shownFor = _clock.Elapsed - _shownAt;
+                    var shownFor = Elapsed - _shownAt;
                     if (shownFor >= _minimumVisible)
                         _indicatorShown = false;
                     else
@@ -193,7 +218,7 @@ public sealed class BusyState : INotifyPropertyChanged
 
     private async Task HideLaterAsync(int generation, TimeSpan delay)
     {
-        await Task.Delay(delay).ConfigureAwait(false);
+        await Task.Delay(delay, _time).ConfigureAwait(false);
         lock (_gate)
         {
             if (generation != _generation || _operations.Count > 0)
