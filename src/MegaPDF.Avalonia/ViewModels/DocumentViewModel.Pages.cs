@@ -274,7 +274,23 @@ public sealed partial class DocumentViewModel
         using var busy = Busy.Begin(Strings.BusySaving);
         try
         {
-            await OffUiThread(() => document.ExtractPages(wanted, path));
+            try
+            {
+                await OffUiThread(() => document.ExtractPages(wanted, path));
+            }
+            catch (PageToolException ex) when (ex.Reason == PageToolFailure.File)
+            {
+                // The engine writes through a *sibling* temporary file, read back and then
+                // renamed into place (SDD §3.4). Under the Snap's `home` plug that sibling is
+                // refused: the plug allows ~/pages.pdf and no hidden file beside it — the same
+                // #158 trap the save path already knows about, and it is what "Save Selected
+                // Pages As…" into your home folder hits. Staging inside our own writable area
+                // and copying the verified bytes over is the way through. The write is still
+                // staged and read back before anything is copied; only the last step becomes a
+                // copy rather than a rename, which is the trade the sandboxed save path makes.
+                await StagedExtractAsync(document, wanted,
+                    () => Task.FromResult<Stream>(File.Create(path)));
+            }
             Status = Strings.Plural(wanted.Count,
                 Strings.PageSavedAs(Path.GetFileName(path)),
                 Strings.PagesSavedAs(wanted.Count, Path.GetFileName(path)));
@@ -312,14 +328,10 @@ public sealed partial class DocumentViewModel
         if (wanted.Count == 0)
             return false;
 
-        var staged = Path.Combine(Path.GetTempPath(), $"megapdf-pages-{Guid.NewGuid():N}.pdf");
         using var busy = Busy.Begin(Strings.BusySaving);
         try
         {
-            await OffUiThread(() => document.ExtractPages(wanted, staged));
-            await using (var source = File.OpenRead(staged))
-            await using (var destination = await openDestination())
-                await source.CopyToAsync(destination);
+            await StagedExtractAsync(document, wanted, openDestination);
             Status = Strings.Plural(wanted.Count,
                 Strings.PageSavedAs(fileName), Strings.PagesSavedAs(wanted.Count, fileName));
             return true;
@@ -333,6 +345,25 @@ public sealed partial class DocumentViewModel
         {
             Status = Strings.WithDetail(Strings.CouldNotSave, ex.Message);
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Extracts into a private temporary file and copies the verified bytes to the destination.
+    /// The engine's own write is unchanged — staged, read back, page count checked — so nothing
+    /// is copied that has not already been proved to open; what this gives up is the atomic
+    /// rename *at the destination*, which is the trade a granted stream forces anyway.
+    /// </summary>
+    private async Task StagedExtractAsync(IPdfDocument document, IReadOnlyList<int> pages,
+                                          Func<Task<Stream>> openDestination)
+    {
+        var staged = Path.Combine(Path.GetTempPath(), $"megapdf-pages-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            await OffUiThread(() => document.ExtractPages(pages, staged));
+            await using var source = File.OpenRead(staged);
+            await using var destination = await openDestination();
+            await source.CopyToAsync(destination);
         }
         finally
         {

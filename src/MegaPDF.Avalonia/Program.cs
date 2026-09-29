@@ -2596,6 +2596,16 @@ internal static class Program
             using var engine = new PdfiumEngine();
             using var copy = engine.Open(extracted);
             check("  the new file holds exactly the pages that were selected", copy.PageCount == 1);
+            // As the save-in-place check asks of a save (#158): the engine stages its write in a
+            // sibling file, and under the Snap's `home` plug that sibling is refused — the plug
+            // allows ~/pages.pdf and no hidden file beside it. This check runs in --save-dir,
+            // which tools/linux/check-snap.sh points at the top of the home folder, so the snap
+            // leg is where it bites. Nothing may be left behind either way.
+            var prefix = Path.GetFileName(extracted);
+            check("  and nothing is left beside it",
+                  !Directory.EnumerateFiles(saveDir)
+                            .Any(f => Path.GetFileName(f).TrimStart('.')
+                                          .StartsWith(prefix + ".", StringComparison.Ordinal)));
         }
         finally
         {
