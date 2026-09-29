@@ -40,6 +40,11 @@ Writes:
                 hidden character by character rather than object by object (#136).
   softmask.pdf - paths, an image, a form and text under luminosity and alpha soft
                 masks beneath a scaled, flipped page CTM (#140).
+  pagecolours.pdf - the #509 page-tint fixture: every kind of pixel the sepia and
+                night post-passes have to get right, at coordinates a 1:1 612x792
+                render turns into exact pixel addresses. Page 612x792, one page,
+                everything black-on-white or a flat known colour so a pixel is a
+                value and not a sample of a gradient.
 
 Deterministic output; both platforms' engine tests assert against these.
 """
@@ -505,6 +510,63 @@ def gen_doubled_far():
     return build(objs)
 
 
+def gen_pagecolours():
+    """The #509 page-colour fixture: black, white, glyphs and images at known points.
+
+    Rendered at 612x792 the page is 1 pt to 1 px and device y is 792 - pdf y, so every
+    coordinate below is a pixel address the pixel tests can assert on directly. Nothing
+    here is a gradient, a blend or an antialiased interior: each region is a flat value,
+    so a pixel assertion is about the tint and never about how PDFium sampled something.
+
+    What each region is for, under MEGAPDF_RENDER_SEPIA and MEGAPDF_RENDER_NIGHT:
+
+      black bar   pdf (72,700)-(272,740), device rows 52..92, cols 72..272
+                  Pure black. Sepia must leave it black; night must make it light.
+      white gap   nothing is drawn in the page's top-right corner, so device (560, 40)
+                  -- pdf (560, 752) -- is bare page. Sepia must warm it to the paper
+                  colour; night must take it to #1A1A1A.
+      text        36 pt Helvetica black on white at pdf (72,620); stems at that size are
+                  several pixels wide, so the band has solid black glyph interiors. This
+                  is the one that says black-on-white text reads as light-on-dark.
+      blue image  a 1x1 DeviceRGB image of #1E5AC8 stretched over pdf (72,300)-(272,420).
+                  1x1 so there is nothing to interpolate: every interior pixel is exactly
+                  the source byte, whatever the scaler does at the edges. It carries the
+                  #168 decision -- night inverts pictures too -- and the hue check.
+      pale image  the same, #F0F0F0, over pdf (300,300)-(500,420): a photograph's
+                  highlight, which night must turn dark. A negative, deliberately.
+      blue path   a vector fill of the same #1E5AC8 over pdf (72,150)-(272,210). The
+                  post-pass cannot tell a path from an image, and this proves it: the
+                  path pixel and the image pixel come out identical. That is the whole
+                  content of the trade-off FPDF_COLORSCHEME was rejected over.
+    """
+    objs = []
+    add = lambda b: (objs.append(b), len(objs))[1]
+    font = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    # 1x1 images: a source pixel each, so scaling cannot change the interior colour.
+    blue = add(stream(b"/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB "
+                      b"/BitsPerComponent 8", b"\x1e\x5a\xc8"))
+    pale = add(stream(b"/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB "
+                      b"/BitsPerComponent 8", b"\xf0\xf0\xf0"))
+    content = add(stream(b"",
+                         b"0 g 72 700 200 40 re f\n"
+                         b"BT /F1 36 Tf 0 g 72 620 Td (Reading mode) Tj ET\n"
+                         b"q 200 0 0 120 72 300 cm /Im1 Do Q\n"
+                         b"q 200 0 0 120 300 300 cm /Im2 Do Q\n"
+                         # 30/90/200 over 255, the bytes /Im1 carries, so the path and the
+                         # image are the same colour before the tint and must stay the same
+                         # colour after it.
+                         b"0.117647 0.352941 0.784314 rg 72 150 200 60 re f\n"))
+    pages_num = len(objs) + 2
+    page = add(b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] "
+               b"/Resources << /Font << /F1 %d 0 R >> /XObject << /Im1 %d 0 R /Im2 %d 0 R >> >> "
+               b"/Contents %d 0 R >>"
+               % (pages_num, font, blue, pale, content))
+    pages = add(b"<< /Type /Pages /Kids [%d 0 R] /Count 1 >>" % page)
+    assert pages == pages_num
+    add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages)
+    return build(objs)
+
+
 def gen_softmask():
     """Objects drawn under soft masks beneath a scaled, flipped page CTM (#140).
 
@@ -790,6 +852,7 @@ def main():
                        ("doubled.pdf", gen_doubled()),
                        ("doubled-far.pdf", gen_doubled_far()),
                        ("softmask.pdf", gen_softmask()),
+                       ("pagecolours.pdf", gen_pagecolours()),
                        ("encrypted.pdf", gen_encrypted()),
                        ("secure-source.pdf", gen_secure_source()),
                        ("unused-tail.pdf", gen_unused_tail())):

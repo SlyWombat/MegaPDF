@@ -795,17 +795,61 @@ MEGAPDF_API void megapdf_render_size(double ideal_width, double ideal_height, in
 /** 1 when megapdf_render_size() would shrink this request. */
 MEGAPDF_API int megapdf_render_is_capped(double ideal_width, double ideal_height);
 
+/**
+ * megapdf_render() flags. Bit 0 is the buffer's byte order; the page tints (#509,
+ * #168's reading mode, docs/reading-mode-plan.md section 2 tier 2) are bits above it,
+ * so a caller ORs a tint onto the byte order it already passes. New flag values, not
+ * new parameters: the "frozen struct, grown by new fields/enum values, never new
+ * parameters" rule this header uses throughout (:218, :1328) is what keeps every
+ * existing binding compiling and behaving exactly as before, desktop, iOS and Android
+ * alike, with a platform opting in by setting a bit.
+ */
 enum {
     MEGAPDF_RENDER_BGRA = 0,   /* PDFium's native byte order (Windows, macOS, iOS) */
-    MEGAPDF_RENDER_RGBA = 1    /* byte-reversed, for Android's ARGB_8888 buffers */
+    MEGAPDF_RENDER_RGBA = 1,   /* byte-reversed, for Android's ARGB_8888 buffers */
+    /**
+     * Sepia: the rendered page multiplied toward a warm paper white. White becomes
+     * #F4ECD8, black stays black, and every value between keeps its ordering, so the
+     * page reads as paper while text keeps the contrast it needs to be read.
+     */
+    MEGAPDF_RENDER_SEPIA = 2,
+    /**
+     * Night: luminance inverted, hue kept. White becomes #1A1A1A and black becomes a
+     * light grey, so black-on-white text reads as light-on-dark, while a coloured
+     * element keeps its hue rather than turning into its RGB complement the way a flat
+     * invert would -- brand blue stays blue.
+     *
+     * This inverts everything the page drew, photographs included: a photo reads as a
+     * negative, and a scan inverts the way someone reading at night wants. That is the
+     * decision recorded on #168, not a defect to fix -- Edge's and Chrome's PDF dark
+     * modes do the same, and the apps' settings copy says so ("Night inverts the page,
+     * pictures included").
+     *
+     * The alternative, and why it is not this: FPDF_COLORSCHEME with
+     * FPDF_RenderPageBitmapWithColorScheme_Start (fpdfview.h, fpdf_progressive.h)
+     * recolours text and paths and leaves images alone, but it flattens every path to
+     * a single fill colour, so a diagram loses its colours, and there is no
+     * FPDF_FFLDraw variant taking a colour scheme, so form fields would draw in
+     * daylight colours over a night page. It stays the documented alternative if
+     * "leave images alone" is ever wanted; it is not offered as a toggle here.
+     */
+    MEGAPDF_RENDER_NIGHT = 4
 };
 
 /**
  * Renders the page into the caller's width × height buffer of `stride` bytes per
  * row (at least width × 4): white ground, page content with annotations and LCD
- * text, then live form-field values. MEGAPDF_ERR_ARGUMENT for a null page or
- * buffer, a non-positive size or a size past the clamp; MEGAPDF_ERR_PDFIUM when
- * PDFium refuses the bitmap. Never crashes on a refusal.
+ * text, then live form-field values, then the MEGAPDF_RENDER_SEPIA or
+ * MEGAPDF_RENDER_NIGHT tint when one is asked for. MEGAPDF_ERR_ARGUMENT for a null
+ * page or buffer, a non-positive size, a size past the clamp, or both tints at once
+ * (page colours are one choice of three, so both bits set is a caller bug worth
+ * catching rather than silently resolving); MEGAPDF_ERR_PDFIUM when PDFium refuses
+ * the bitmap. Never crashes on a refusal.
+ *
+ * A tint is a post-pass over the buffer, so it costs one linear pass over at most
+ * MEGAPDF_RENDER_MAX_PIXELS and changes nothing in the document: page colours are a
+ * way of looking at a page, never written to the file. Render caches must key on the
+ * tint, because the same page at the same size is now three different rasters.
  */
 MEGAPDF_API int megapdf_render(const megapdf_page* page, void* buffer, int width, int height, int stride,
                                unsigned int flags);
