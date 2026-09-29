@@ -660,7 +660,24 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
         recentFiles.Add(path);
         _ = JumpListRecents.RecordAsync(path); // the taskbar's Recent list (#165)
         if (rememberedView is not null)
-            ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
+        {
+            // The document's own remembered zoom (#528), not a zoom the user aimed
+            // anywhere in this window — the same reasoning the Avalonia leg's
+            // FitOnOpen guard uses. Correcting it at the viewport's centre would
+            // scroll a document that just (re)opened away from its own top. Pages
+            // here still belongs to whatever this tab showed before (Pages.Clear()
+            // is below), so there would be nothing meaningful to correct against
+            // even unguarded.
+            SuppressZoomAnchor = true;
+            try
+            {
+                ZoomPercent = Math.Clamp(rememberedView.ZoomPercent, MinZoom, MaxZoom);
+            }
+            finally
+            {
+                SuppressZoomAnchor = false;
+            }
+        }
         RecentFilesChanged?.Invoke(this, EventArgs.Empty);
         ResetPageFocus(); // keyboard focus and maps belong to the previous document (#2)
         Pages.Clear();
@@ -996,9 +1013,42 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
     private bool CanZoomIn() => IsDocumentOpen && ZoomPercent < MaxZoom;
     private bool CanZoomOut() => IsDocumentOpen && ZoomPercent > MinZoom;
 
+    /// <summary>
+    /// True while a <see cref="ZoomPercent"/> change should not be corrected at the
+    /// viewport's centre by <see cref="DocumentView"/> (#528) — either because the
+    /// caller already anchored the offset on something more specific itself (the
+    /// pointer, for Ctrl+wheel — see <c>DocumentView.ApplyAnchoredZoomAsync</c>) or
+    /// because this change is not a zoom the user aimed anywhere in this window (the
+    /// remembered zoom a freshly reopened document restores, below) — the same
+    /// reasoning the Avalonia leg's <c>_reanchoringZoom</c> guards <c>FitOnOpen</c>
+    /// with. <see cref="DocumentView"/> is the only other thing in this assembly that
+    /// reads or sets it.
+    /// </summary>
+    internal bool SuppressZoomAnchor { get; set; }
+
     private async Task SetZoomAsync(int percent)
     {
         ZoomPercent = Math.Clamp(percent, MinZoom, MaxZoom);
+        if (_document is null)
+            return;
+        await UpdateViewportAsync(_viewFirst, _viewLast);
+    }
+
+    /// <summary>
+    /// Resizes every page slot for the zoom <see cref="ZoomPercent"/>'s own generated
+    /// setter just committed (#528). Runs from that setter, before it raises
+    /// <c>PropertyChanged</c> — CommunityToolkit.Mvvm's source generator calls an
+    /// <c>On&lt;Property&gt;Changed</c> partial method before the notification, the
+    /// same ordering the Avalonia leg's own <c>OnZoomChanged</c> relies on — so by the
+    /// time <see cref="DocumentView"/>'s <c>PropertyChanged</c> handler runs its
+    /// zoom-anchor correction and forces a layout pass to read the new extent, these
+    /// sizes are already the ones that pass produces. Moved out of the old
+    /// <see cref="SetZoomAsync"/> rather than left there for exactly that reason: a
+    /// resize that happened after <c>ZoomPercent</c>'s own notification, as it used to,
+    /// is a resize the correction cannot see yet.
+    /// </summary>
+    partial void OnZoomPercentChanged(int value)
+    {
         if (_document is null)
             return;
         // Resize every slot and re-render just the viewport. A slot that already has
@@ -1017,7 +1067,6 @@ public partial class DocumentViewModel(Window window, AppSettings settings, Rece
                     Highlights = HighlightsFor(i, ZoomFactor),
                 };
         }
-        await UpdateViewportAsync(_viewFirst, _viewLast);
     }
 
     private async Task RefreshPageAsync(int pageIndex)

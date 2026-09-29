@@ -99,8 +99,13 @@ internal sealed class PdfiumDocument : IPdfDocument
     /// <summary>Cancelled when the document is disposed, so a page check in the background stops (#145).</summary>
     private readonly CancellationTokenSource _closing = new();
 
-    /// <summary>Page checks that have begun a native call; Dispose waits for them (#145). Guarded by <see cref="PdfiumLibrary.Lock"/>.</summary>
-    private int _checksInFlight;
+    /// <summary>
+    /// Everything currently holding a live handle into this document: a page handed out by
+    /// <see cref="GetPage"/> and not yet disposed, and a page check that has begun a native
+    /// call (#145). Dispose waits for every one of them before megapdf_close.
+    /// Guarded by <see cref="PdfiumLibrary.Lock"/>.
+    /// </summary>
+    private int _usesInFlight;
 
     internal PdfiumDocument(IntPtr core) => _core = core;
 
@@ -108,27 +113,31 @@ internal sealed class PdfiumDocument : IPdfDocument
 
     /// <summary>
     /// Registers a background page check about to call the core. False when the document is
-    /// already disposed. Dispose raises every check's flag and waits for <see cref="EndCheck"/>
+    /// already disposed. Dispose raises every check's flag and waits for <see cref="EndUse"/>
     /// before megapdf_close, so a check never reaches the core with a freed page (#145).
     /// </summary>
-    internal bool TryBeginCheck()
+    internal bool TryBeginUse()
     {
         lock (PdfiumLibrary.Lock)
         {
             if (_disposed)
                 return false;
-            _checksInFlight++;
+            _usesInFlight++;
             return true;
         }
     }
 
-    internal void EndCheck()
+    internal void EndUse()
     {
         lock (PdfiumLibrary.Lock)
-        {
-            _checksInFlight--;
-            Monitor.PulseAll(PdfiumLibrary.Lock);
-        }
+            ReleaseUse();
+    }
+
+    /// <summary>The same, for a caller that already holds <see cref="PdfiumLibrary.Lock"/>.</summary>
+    internal void ReleaseUse()
+    {
+        _usesInFlight--;
+        Monitor.PulseAll(PdfiumLibrary.Lock);
     }
 
     /// <summary>The core handle, for opening a saved copy like this document (#132).</summary>
@@ -160,7 +169,16 @@ internal sealed class PdfiumDocument : IPdfDocument
             var page = CoreNative.megapdf_load_page(_core, pageIndex);
             if (page == IntPtr.Zero)
                 throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page {pageIndex} could not be loaded.");
-            return new PdfiumPage(this, page, pageIndex);
+            var handle = new PdfiumPage(this, page, pageIndex);
+            // The handle itself is a use of this document, counted from here until the
+            // page is disposed (#536). A raster is produced on a thread pool thread from
+            // a page opened there, and before this the document could close in the middle
+            // of it: megapdf_close frees every page still open, and the render then drew
+            // through a freed one. A segfault, not an exception — the window went and took
+            // every other tab's unsaved work with it. Counted after the handle exists, so
+            // a constructor that threw could not leave a use nobody can ever end.
+            _usesInFlight++;
+            return handle;
         }
     }
 
@@ -537,7 +555,14 @@ internal sealed class PdfiumDocument : IPdfDocument
         _closing.Cancel();
         lock (PdfiumLibrary.Lock)
         {
-            while (_checksInFlight > 0)
+            // The lifetime rule (#145, #536): this document outlives every handle into it.
+            // Nothing new can begin — _disposed is already set, so GetPage and TryBeginUse
+            // both refuse — and what had already begun is waited out here. A render is not
+            // cancellable (megapdf_render takes no cancel flag, unlike the page checks), so
+            // this waits for it; the wait is bounded by the render clamp (#93) and by how
+            // many renders can be inside the core at once, not by how many are queued,
+            // because every queued one now bails at GetPage without touching the core.
+            while (_usesInFlight > 0)
                 Monitor.Wait(PdfiumLibrary.Lock);
             // Tears down the form environment and any page still open, then the document.
             CoreNative.megapdf_close(_core);
@@ -1003,7 +1028,7 @@ internal sealed class PdfiumPage : IPdfPage
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        if (!_owner.TryBeginCheck())
+        if (!_owner.TryBeginUse())
             throw new OperationCanceledException("The document was closed.");
         var cancel = CoreNative.megapdf_cancel_new();
         try
@@ -1026,7 +1051,7 @@ internal sealed class PdfiumPage : IPdfPage
         finally
         {
             CoreNative.megapdf_cancel_free(cancel);
-            _owner.EndCheck();
+            _owner.EndUse();
         }
     }
 
@@ -1362,11 +1387,17 @@ internal sealed class PdfiumPage : IPdfPage
         lock (PdfiumLibrary.Lock)
         {
             // A page still open when its document closed went with it: megapdf_close freed the
-            // handle, and closing it again would be a use after free (#145).
+            // handle, and closing it again would be a use after free (#145). Since #536 the
+            // document waits for every page it handed out, so this can only be a page whose
+            // use was never counted — it stays as the guard it always was rather than a claim
+            // that the window is gone.
             if (_owner.IsClosed)
                 return;
             // FORM_OnBeforeClosePage + FPDF_ClosePage, in the core.
             CoreNative.megapdf_close_page(_core);
+            // Under the same lock as the close, so the document's Dispose is never woken to
+            // find the page it was waiting for still open (#536).
+            _owner.ReleaseUse();
         }
     }
 
