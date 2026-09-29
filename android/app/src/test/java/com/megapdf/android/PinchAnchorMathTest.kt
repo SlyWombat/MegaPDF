@@ -74,6 +74,79 @@ class PinchAnchorMathTest {
         assertEquals(0f, anchoredScrollDelta(0f, 0f, 1f), 0f)
     }
 
+    /**
+     * The real bug found on the emulator: a fast pinch queues several of these steps before
+     * Compose ever re-lays the page out at the new width, and `ScrollState`/`LazyListState`
+     * both cap `dispatchRawDelta` to whatever the *last completed layout* measured — so a
+     * correct-in-isolation delta, computed step by step against the real (still-too-small)
+     * scroll position, gets cut down by that stale ceiling and the shortfall is simply gone.
+     * Over a fast multi-step pinch this does not average out: a first CI run of
+     * [PinchAnchorTest] against exactly this per-step design (no `shadow`/`pending`, deltas
+     * computed straight off the real, possibly-clamped offset) measured the pinched point
+     * drifting 323px off a page that had grown about 3.6x — most, but not all, of what an
+     * uncorrected zoom would have drifted it. `shadowH`/`pendingH` (and their vertical
+     * equivalents) in [ViewerScreen] are the fix: the shadow value is never clamped, so it is
+     * always exactly right, and whatever a step's request could not land waits in `pending`
+     * for the next one instead of being forgotten.
+     *
+     * This models that failure directly: a scrollable that refuses every `dispatchRawDelta`
+     * until layout "catches up" partway through a fast multi-step zoom.
+     */
+    @Test
+    fun `dropping an unconsumed delta loses it for good, but carrying it forward recovers it in full`() {
+        val centroid = 734.4f
+        val steps = List(20) { 1.07f } // compounds to roughly the 3.6x seen on the emulator
+        val catchUpAfterStep = 15
+
+        // The bug: each step computes its delta from the real (possibly still-clamped)
+        // scroll position, and whatever `dispatchRawDelta` refuses is simply dropped.
+        run {
+            var real = 0f
+            var roomAvailable = false
+            steps.forEachIndexed { index, ratio ->
+                val delta = anchoredScrollDelta(real, centroid, ratio)
+                val consumed = if (roomAvailable) delta else 0f
+                real += consumed
+                if (index + 1 == catchUpAfterStep) roomAvailable = true
+            }
+            val ideal = idealFinalOffset(centroid, steps)
+            assertTrue(
+                "the naive, unpatched approach should fall well short once some early " +
+                    "deltas were clamped away: real=$real, ideal=$ideal",
+                ideal - real > 200f,
+            )
+        }
+
+        // The fix: the shadow value accumulates the exact delta regardless of what the real
+        // scrollable could accept, and any shortfall is retried as `pending` on the next step.
+        run {
+            var shadow = 0f
+            var real = 0f
+            var pending = 0f
+            var roomAvailable = false
+            steps.forEachIndexed { index, ratio ->
+                val delta = anchoredScrollDelta(shadow, centroid, ratio)
+                shadow += delta
+                pending += delta
+                val consumed = if (roomAvailable) pending else 0f
+                real += consumed
+                pending -= consumed
+                if (index + 1 == catchUpAfterStep) roomAvailable = true
+            }
+            assertEquals("the patched approach recovers the full correction", shadow, real, 0.01f)
+            assertEquals(idealFinalOffset(centroid, steps), real, 0.01f)
+        }
+    }
+
+    /** The exact scroll offset a perfectly-applied sequence of [steps] ratios converges to,
+     *  starting from offset 0 — computed the same way [anchoredScrollDelta] is, applied with
+     *  nothing ever clamped, as a reference for what "fully corrected" means. */
+    private fun idealFinalOffset(centroid: Float, steps: List<Float>): Float {
+        var offset = 0f
+        for (ratio in steps) offset += anchoredScrollDelta(offset, centroid, ratio)
+        return offset
+    }
+
     companion object {
         private const val MAX_ZOOM_FOR_TEST = 4f
     }

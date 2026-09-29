@@ -806,6 +806,22 @@ fun ViewerScreen(
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        // Shadow copies of the two scroll positions, exact and never clamped,
+                        // kept alongside the real ones for this one gesture (#527). A fast
+                        // pinch can queue several of these events before Compose gets a
+                        // chance to re-lay the page out at the new width, and `ScrollState`/
+                        // `LazyListState` both cap `dispatchRawDelta` to whatever the *last*
+                        // completed layout measured — so a correction computed and requested
+                        // against a still-too-small ceiling gets silently cut down, and the
+                        // plain per-step version of this arithmetic has no memory of what it
+                        // was owed. `pendingH`/`pendingV` are that memory: whatever a step's
+                        // request could not land carries into the next one, and once layout
+                        // catches up it is paid out in full rather than lost.
+                        var shadowH = hScroll.value.toFloat()
+                        var pendingH = 0f
+                        var anchorItemIndex = -1
+                        var shadowItemOffset = 0f
+                        var pendingV = 0f
                         do {
                             val event = awaitPointerEvent(PointerEventPass.Initial)
                             if (event.changes.count { it.pressed } >= 2) {
@@ -834,26 +850,36 @@ fun ViewerScreen(
                                         // scroll on it too would show the page lurch into
                                         // place once that catches up.
                                         val centroid = event.calculateCentroid()
-                                        hScroll.dispatchRawDelta(
-                                            anchoredScrollDelta(hScroll.value.toFloat(), centroid.x, appliedRatio)
-                                        )
-                                        val visibleItems = listState.layoutInfo.visibleItemsInfo
-                                        // The item spanning the centroid vertically: its own
-                                        // top is what the page grows from (a LazyColumn places
-                                        // items in sequence, so an item's offset from the
-                                        // viewport does not move just because the item itself
-                                        // got taller), so distance from that top is what scales.
-                                        val anchorItem = visibleItems.firstOrNull {
-                                            it.offset <= centroid.y && it.offset + it.size > centroid.y
-                                        } ?: visibleItems.firstOrNull()
-                                        if (anchorItem != null) {
-                                            listState.dispatchRawDelta(
-                                                anchoredScrollDelta(
-                                                    -anchorItem.offset.toFloat(),
-                                                    centroid.y,
-                                                    appliedRatio,
-                                                )
+
+                                        val deltaH = anchoredScrollDelta(shadowH, centroid.x, appliedRatio)
+                                        shadowH += deltaH
+                                        pendingH += deltaH
+                                        pendingH -= hScroll.dispatchRawDelta(pendingH)
+
+                                        // The item spanning the centroid vertically, found once
+                                        // per gesture: its own top is what the page grows from
+                                        // (a LazyColumn places items in sequence, so an item's
+                                        // offset from the viewport does not move just because
+                                        // the item itself got taller), so distance from that
+                                        // top is what scales — tracked the same shadowed way
+                                        // for the rest of this gesture rather than re-read from
+                                        // `layoutInfo`, which lags exactly like `hScroll` does.
+                                        if (anchorItemIndex == -1) {
+                                            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                                it.offset <= centroid.y && it.offset + it.size > centroid.y
+                                            } ?: listState.layoutInfo.visibleItemsInfo.firstOrNull()
+                                            if (item != null) {
+                                                anchorItemIndex = item.index
+                                                shadowItemOffset = item.offset.toFloat()
+                                            }
+                                        }
+                                        if (anchorItemIndex != -1) {
+                                            val deltaV = anchoredScrollDelta(
+                                                -shadowItemOffset, centroid.y, appliedRatio,
                                             )
+                                            shadowItemOffset -= deltaV
+                                            pendingV += deltaV
+                                            pendingV -= listState.dispatchRawDelta(pendingV)
                                         }
                                     }
                                     // Claim the gesture: two fingers moving apart
