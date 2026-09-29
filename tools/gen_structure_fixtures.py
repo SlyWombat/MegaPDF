@@ -411,6 +411,46 @@ def gen_tagged_wrong(regular, bold):
     return d.finish()
 
 
+def gen_tm_scaled_size(regular, bold):
+    """#496/#524: the same ink three ways, so the only thing that differs between the pages is
+    how the producer split the glyph size between the `Tf` operand and the text matrix.
+
+    `/F1 (10/s) Tf  s 0 0 s x y Tm` draws the same 10 pt glyphs in the same place for every
+    `s` -- identical advances, identical boxes, identical extracted characters -- while
+    FPDFText_GetFontSize reports `10/s`. Page 0 is `s=1`, the producer that puts the size in
+    Tf and the only case the raw operand ever read correctly. Page 1 is `s=10` (`/F1 1 Tf`),
+    the shape of the 190-page UN document #496 was found on: the size reads 1 for 10 pt text,
+    so BuildLines' threshold came out 10x too small and every ordinary word gap split the
+    line. Page 2 is `s=0.1` (`/F1 100 Tf`), the opposite producer: the size reads 100, the
+    threshold comes out 10x too large, and text that should be two separate lines is merged
+    into one.
+
+    Each page carries a wrapped paragraph (which the too-small threshold shreds into one
+    block per word) and, below it, two short runs on shared baselines either side of a 60 pt
+    gutter -- wider than 2 em at 10 pt, narrower than 2 em at an overstated 100 pt, so the
+    too-large threshold merges them. The pages must come out identical; #524's test asserts
+    exactly that."""
+    d = Doc(regular, bold)
+    para = ["The quick brown fox jumps over the lazy dog and then",
+            "runs past the river bank where the heron stands",
+            "waiting for a fish to swim by in the morning light"]
+    for s in (1, 10, 0.1):
+        c = b""
+        for i, line in enumerate(para):
+            c += b"BT /F1 %s Tf %s 0 0 %s 72 %s Tm (%s) Tj ET\n" % (
+                repr(round(10.0 / s, 8)).encode(), repr(s).encode(), repr(s).encode(),
+                repr(700 - i * 14).encode(), winansi(line))
+        for i, (left, right) in enumerate((("Left cell one", "Right cell one"),
+                                            ("Left cell two", "Right cell two"))):
+            y = 600 - i * 14
+            for x, text in ((72, left), (252, right)):   # 60 pt of clear space between them
+                c += b"BT /F1 %s Tf %s 0 0 %s %s %s Tm (%s) Tj ET\n" % (
+                    repr(round(10.0 / s, 8)).encode(), repr(s).encode(), repr(s).encode(),
+                    repr(x).encode(), repr(y).encode(), winansi(text))
+        d.add_page(c)
+    return d.finish()
+
+
 def gen_tiny_font_size(regular, bold):
     """#382: the body-size-rounds-to-0 shape, as a fixture. An invisible OCR-style text layer
     (text render mode 3) drawn with `/F1 0.01 Tf` and a text matrix scaled by 1200 -- so
@@ -617,6 +657,7 @@ def main():
         ("tagged.pdf", gen_tagged),
         ("tagged-wrong.pdf", gen_tagged_wrong),
         ("tiny-font-size.pdf", gen_tiny_font_size),
+        ("tm-scaled-size.pdf", gen_tm_scaled_size),
     )
     for name, gen in generators:
         data = gen(regular, bold)
