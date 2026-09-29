@@ -3301,6 +3301,15 @@ internal static class Program
         check($"ZoomAnchor.Reanchor with no ratio change (a clamp) leaves the offset alone (got {pureReanchorAtClamp})",
               pureReanchorAtClamp == new Vector(100, 200));
 
+        // Every zoom step above queued a re-render on a thread pool thread
+        // (CheckToolbarMenus' own remark: "spinning the queue alone never
+        // reaches it"). CloseReadingWindow below waits the same way for the
+        // same reason before closing: a window closed — and vm disposed via
+        // the enclosing `using` — while PDFium is still mid-render on this
+        // document is exactly the kind of race a headless run's own timing can
+        // hide on one platform and not another, and this check changes Zoom
+        // more times in a row than any check before it did.
+        PumpUntil(() => vm.IsIdle && vm.Pages.All(p => !p.IsRenderPending), TimeSpan.FromSeconds(20));
         window.Close();
         Pump();
 
