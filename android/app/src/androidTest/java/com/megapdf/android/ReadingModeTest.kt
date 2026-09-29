@@ -72,8 +72,17 @@ class ReadingModeTest {
             "the bottom bar's Undo is still composed",
             rule.nodeExists(hasContentDescription(str(R.string.undo))),
         )
+        // Add text, not Search: the reading bar carries a magnifier of its own, labelled
+        // with the same word because it opens the same find bar, so Search is no longer a
+        // label that belongs to the bottom bar alone. CI caught this — the magnifier was
+        // added after the test was written.
         assertFalse(
-            "the bottom bar's Search is still composed",
+            "the bottom bar's Add text is still composed",
+            rule.nodeExists(hasContentDescription(str(R.string.add_text))),
+        )
+        // The magnifier that replaced it is on the bar, where Find is reached from now.
+        assertTrue(
+            "reading mode has no way to reach Find",
             rule.nodeExists(hasContentDescription(str(R.string.search))),
         )
 
