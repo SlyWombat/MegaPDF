@@ -81,6 +81,12 @@ public class StringCatalogueTests
         ["signatures"] = "same word",
         ["version_label"] = "\"Version %1$s\"",
         ["screenshot_signature_name"] = "the demo signature's library name",
+        // #174: the page tools' own three. "Pages" is the same word in both — it is the glossary
+        // entry, and the French for the grid's title is the English spelling of it — and a count
+        // of pages is written the same way, as "1 image" already is above.
+        ["pages"] = "\"Pages\" is the same word in both (#174)",
+        ["pages_count"] = "\"%1$d pages\" is the same in both (#174)",
+        ["pages_count_one"] = "\"1 page\" is the same in both (#174)",
         // iOS
         ["Document"] = "file name stem",
         ["Page %lld"] = "same",
