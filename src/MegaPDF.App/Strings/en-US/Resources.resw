@@ -1082,4 +1082,69 @@ Saved as {2} — ready to email.</value>
     <value>{0}, unsaved changes, tab</value>
     <comment>Narrator name for a tab header with the unsaved dot showing; {0} is the document's file name</comment>
   </data>
+  <!-- ===== Reading mode (#504 tier 1, #510 tier 2; docs/reading-mode-plan.md §4) ===== -->
+  <data name="ReadingMode" xml:space="preserve">
+    <value>Reading mode</value>
+    <comment>The zoom menu and the "…" overflow: the page and nothing else (#504, #168 decision 1)</comment>
+  </data>
+  <data name="ReadingModeTip" xml:space="preserve">
+    <value>Hide the tools and read the page (Ctrl+H)</value>
+    <comment>Tooltip of the Reading mode command (#504)</comment>
+  </data>
+  <data name="ReadingModeOn" xml:space="preserve">
+    <value>Reading mode on</value>
+    <comment>Announced through Narrator on entering reading mode (#504)</comment>
+  </data>
+  <data name="ReadingModeOff" xml:space="preserve">
+    <value>Reading mode off</value>
+    <comment>Announced through Narrator on leaving reading mode (#504)</comment>
+  </data>
+  <data name="ReadingControls" xml:space="preserve">
+    <value>Reading controls</value>
+    <comment>UIA name of the floating bar in reading mode (#504)</comment>
+  </data>
+  <data name="Exit" xml:space="preserve">
+    <value>Exit</value>
+    <comment>The floating bar's last button; its UIA name is the longer ExitReadingMode (#504)</comment>
+  </data>
+  <data name="ExitReadingMode" xml:space="preserve">
+    <value>Exit reading mode</value>
+    <comment>UIA name and tooltip of the floating bar's Exit button (#504)</comment>
+  </data>
+  <data name="PreviousPage" xml:space="preserve">
+    <value>Previous page</value>
+    <comment>Floating bar: the page before this one. Not the find bar's Previous, which is about matches (#504)</comment>
+  </data>
+  <data name="NextPage" xml:space="preserve">
+    <value>Next page</value>
+    <comment>Floating bar: the page after this one (#504)</comment>
+  </data>
+  <data name="GoToPage" xml:space="preserve">
+    <value>Go to page</value>
+    <comment>Floating bar: the page number opens a box to type one into (#504)</comment>
+  </data>
+  <data name="PageColoursHeading.Text" xml:space="preserve">
+    <value>Page colours</value>
+    <comment>Settings flyout: Normal / Sepia / Night, applied when the page is drawn and never written to the file (#510)</comment>
+  </data>
+  <data name="PageColoursNormal.Text" xml:space="preserve">
+    <value>Normal</value>
+    <comment>Page colours: the page as the document draws it (#510)</comment>
+  </data>
+  <data name="PageColoursSepia.Text" xml:space="preserve">
+    <value>Sepia</value>
+    <comment>Page colours: warm paper (#510)</comment>
+  </data>
+  <data name="PageColoursNight.Text" xml:space="preserve">
+    <value>Night</value>
+    <comment>Page colours: inverted luminance (#510)</comment>
+  </data>
+  <data name="NightInvertsNote.Text" xml:space="preserve">
+    <value>Night inverts the page, pictures included.</value>
+    <comment>Settings flyout, under Page colours: the trade-off decided on #168 — said plainly rather than left to be found (#510)</comment>
+  </data>
+  <data name="ReadingModeToggle.Header" xml:space="preserve">
+    <value>Open documents in reading mode</value>
+    <comment>Settings flyout: off by default (#168 decision 2, #510)</comment>
+  </data>
 </root>

@@ -28,6 +28,9 @@ public sealed partial class DocumentView
     /// <summary>MainWindow's hook: whether keyboard focus is currently on a toolbar control.</summary>
     internal Func<bool>? FocusIsInToolbar { get; set; }
 
+    /// <summary>The text last passed to <see cref="Announce"/>; for the self-test (#504).</summary>
+    internal string LastAnnouncement { get; private set; } = "";
+
     private void InitializePageKeyboard()
     {
         ViewModel.PropertyChanged += (_, e) =>
@@ -266,6 +269,11 @@ public sealed partial class DocumentView
     /// </summary>
     internal void Announce(string text)
     {
+        // What the app last asked Narrator to say, for --screenshot-state reading
+        // (#504). It proves the right words were raised on the right element, which is
+        // as far as a process can check its own announcements: whether a screen reader
+        // then spoke them is Narrator's business and a person's to confirm.
+        LastAnnouncement = text;
         var peer = FrameworkElementAutomationPeer.FromElement(PagesScroll)
                    ?? FrameworkElementAutomationPeer.CreatePeerForElement(PagesScroll);
         peer?.RaiseNotificationEvent(

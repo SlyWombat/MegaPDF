@@ -315,6 +315,12 @@ public sealed partial class MainWindow
         var active = Shell.Active;
         var open = active?.IsDocumentOpen ?? false;
         ActualSizeItem.IsEnabled = FitWidthItem.IsEnabled = FitPageItem.IsEnabled = open;
+        // Reading mode needs a tab, not a loaded one: a tab still opening is a document
+        // you can already choose to read. Its tick is set here rather than bound,
+        // because the mode is the window's and this item is only ever looked at when
+        // the flyout opens (#504).
+        ReadingModeItem.IsEnabled = Shell.HasDocuments;
+        ReadingModeItem.IsChecked = IsReadingMode;
         foreach (var preset in DocumentViewModel.ZoomPresets)
         {
             var item = new RadioMenuFlyoutItem
