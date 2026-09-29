@@ -1,3 +1,4 @@
+using MegaPDF.Core.Editing;
 using MegaPDF.Core.Engine;
 
 namespace MegaPDF.Core.Recovery;
@@ -206,6 +207,50 @@ public static class JournalReplayer
                     }
                     break;
                 }
+
+                case MoveWhiteoutEntry moveWhiteout:
+                {
+                    // Same resolution as MoveTextBoxEntry, for the same reason: a move
+                    // detaches and re-appends, so the object index is never stable (#3).
+                    var target = new PdfRect(moveWhiteout.FromX, moveWhiteout.FromY,
+                        moveWhiteout.FromWidth, moveWhiteout.FromHeight);
+                    var match = page.GetWhiteouts()
+                        .Where(w => Math.Abs(w.Bounds.X - target.X) < 1 && Math.Abs(w.Bounds.Y - target.Y) < 1
+                                 && Math.Abs(w.Bounds.Width - target.Width) < 2 && Math.Abs(w.Bounds.Height - target.Height) < 2)
+                        .OrderByDescending(w => w.ObjectIndex)
+                        .Select(w => ((int Index, PdfRect Bounds)?)w)
+                        .FirstOrDefault();
+                    if (match is { } found)
+                    {
+                        page.DetachObjectAt(found.Index);
+                        page.AppendWhiteout(new PdfRect(moveWhiteout.ToX, moveWhiteout.ToY,
+                            moveWhiteout.ToWidth, moveWhiteout.ToHeight));
+                        applied++;
+                    }
+                    break;
+                }
+
+                case TextBoxesAddEntry many:
+                {
+                    // Top to bottom, exactly as AddTextBoxesOperation's first Apply placed
+                    // them (#4): each line stands one line-height below the last.
+                    for (var i = 0; i < many.Lines.Length; i++)
+                    {
+                        var lineTop = new PdfPoint(many.X,
+                            many.Y + (i * many.FontSize * AddTextBoxesOperation.LineHeightFactor));
+                        page.AppendTextBox(many.Lines[i], many.FontSize, lineTop, many.FontName);
+                    }
+                    applied++;
+                    break;
+                }
+
+                case TextBoxesDeleteEntry manyGone:
+                    // Highest index first, same as AddTextBoxesOperation.Revert — recorded
+                    // indexes are only valid all together and in this order.
+                    foreach (var index in manyGone.ObjectIndexes.OrderByDescending(i => i))
+                        page.DetachObjectAt(index);
+                    applied++;
+                    break;
             }
         }
         return applied;

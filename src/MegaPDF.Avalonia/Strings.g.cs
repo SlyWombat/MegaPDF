@@ -215,6 +215,9 @@ public static partial class Strings
     /// <summary>Type, then press Enter</summary>
     public static string TypeThenEnter => Get("TypeThenEnter");
 
+    /// <summary>Type, Shift+Enter for a new line, Enter when done</summary>
+    public static string TypeThenEnterMultiline => Get("TypeThenEnterMultiline");
+
     /// <summary>Open a PDF to get started.</summary>
     public static string OpenToGetStarted => Get("OpenToGetStarted");
 
@@ -323,6 +326,9 @@ public static partial class Strings
     /// <summary>Cover removed.</summary>
     public static string CoverRemoved => Get("CoverRemoved");
 
+    /// <summary>Cover moved.</summary>
+    public static string CoverMoved => Get("CoverMoved");
+
     /// <summary>Signature moved.</summary>
     public static string SignatureMoved => Get("SignatureMoved");
 
@@ -338,8 +344,17 @@ public static partial class Strings
     /// <summary>Drag to move, double-click to edit, Delete to remove.</summary>
     public static string TextBoxSelectedHint => Get("TextBoxSelectedHint");
 
-    /// <summary>Press Delete to remove this cover.</summary>
+    /// <summary>Drag to move, corners to resize, Delete to remove.</summary>
     public static string CoverSelectedHint => Get("CoverSelectedHint");
+
+    /// <summary>Small</summary>
+    public static string TextSizeSmallName => Get("TextSizeSmallName");
+
+    /// <summary>Medium</summary>
+    public static string TextSizeMediumName => Get("TextSizeMediumName");
+
+    /// <summary>Large</summary>
+    public static string TextSizeLargeName => Get("TextSizeLargeName");
 
     /// <summary>Nothing on this document can be changed from the keyboard.</summary>
     public static string NothingKeyboardEditable => Get("NothingKeyboardEditable");

@@ -301,6 +301,10 @@
     <value>Type, then press Enter</value>
     <comment>Inline editor watermark</comment>
   </data>
+  <data name="TypeThenEnterMultiline" xml:space="preserve">
+    <value>Type, Shift+Enter for a new line, Enter when done</value>
+    <comment>#4 — inline editor watermark, added-text placement only (a note may have more than one line)</comment>
+  </data>
   <data name="OpenToGetStarted" xml:space="preserve">
     <value>Open a PDF to get started.</value>
     <comment>Initial status</comment>
@@ -425,6 +429,10 @@
   <data name="CoverRemoved" xml:space="preserve">
     <value>Cover removed.</value>
   </data>
+  <data name="CoverMoved" xml:space="preserve">
+    <value>Cover moved.</value>
+    <comment>Status after a whiteout is dragged or resized (#3)</comment>
+  </data>
   <data name="SignatureMoved" xml:space="preserve">
     <value>Signature moved.</value>
   </data>
@@ -443,7 +451,20 @@
     <value>Drag to move, double-click to edit, Delete to remove.</value>
   </data>
   <data name="CoverSelectedHint" xml:space="preserve">
-    <value>Press Delete to remove this cover.</value>
+    <value>Drag to move, corners to resize, Delete to remove.</value>
+    <comment>#3 — a cover used to be remove-only, hence the change from "Press Delete to remove this cover."</comment>
+  </data>
+  <data name="TextSizeSmallName" xml:space="preserve">
+    <value>Small</value>
+    <comment>#4 — the inline editor's persona-simple size choice</comment>
+  </data>
+  <data name="TextSizeMediumName" xml:space="preserve">
+    <value>Medium</value>
+    <comment>#4 — the inline editor's persona-simple size choice</comment>
+  </data>
+  <data name="TextSizeLargeName" xml:space="preserve">
+    <value>Large</value>
+    <comment>#4 — the inline editor's persona-simple size choice</comment>
   </data>
   <data name="NothingKeyboardEditable" xml:space="preserve">
     <value>Nothing on this document can be changed from the keyboard.</value>

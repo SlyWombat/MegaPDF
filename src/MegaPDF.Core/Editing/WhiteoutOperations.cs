@@ -59,6 +59,51 @@ public sealed class RemoveWhiteoutOperation(IPdfDocument document, int pageIndex
 }
 
 /// <summary>
+/// Reversible whiteout move/resize (drag or corner handle, SDD §3.3, #3).
+///
+/// A whiteout has no native "move in place" the way a signature or a redaction mark
+/// does — it is page content, not an annotation, and there is no primitive that
+/// repositions one without touching the object list. So a move is the same two
+/// primitives Add and Remove already use: detach the rectangle that is there, append
+/// a fresh one at the new bounds. That is also, byte for byte, what dragging this
+/// chrome replaced — "remove, then redraw it by hand" — so a move costs nothing a
+/// person could not already do, it just takes one gesture and one undo step instead
+/// of two. The object index changes every time, which is why callers re-read
+/// <see cref="CurrentObjectIndex"/> after Apply rather than assuming the one they
+/// passed in still points at anything.
+/// </summary>
+public sealed class MoveWhiteoutOperation(
+    IPdfDocument document, int pageIndex, int objectIndex, PdfRect oldBounds, PdfRect newBounds) : IPageEditOperation
+{
+    private int _currentIndex = objectIndex;
+
+    public int PageIndex { get; } = pageIndex;
+
+    public string Description => "move whiteout";
+
+    /// <summary>Where the rectangle landed after the last Apply/Revert — a fresh object each time.</summary>
+    public int CurrentObjectIndex => _currentIndex;
+
+    public void Apply() => Move(newBounds);
+
+    public void Revert() => Move(oldBounds);
+
+    private void Move(PdfRect bounds)
+    {
+        using var page = document.GetPage(PageIndex);
+        page.DetachObjectAt(_currentIndex);
+        _currentIndex = page.AppendWhiteout(bounds);
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse)
+    {
+        var (from, to) = inverse ? (newBounds, oldBounds) : (oldBounds, newBounds);
+        return new MoveWhiteoutEntry(PageIndex,
+            from.X, from.Y, from.Width, from.Height, to.X, to.Y, to.Width, to.Height);
+    }
+}
+
+/// <summary>
 /// Adds a new text box (standard font, appended above any whiteout). The result is a
 /// regular text run — subsequent edits go through the normal line machinery.
 /// </summary>
@@ -124,6 +169,73 @@ public sealed class MoveTextBoxOperation(
         return new MoveTextBoxEntry(PageIndex,
             from.X, from.Y, from.Width, from.Height, to.X, to.Y, to.Width, to.Height);
     }
+}
+
+/// <summary>
+/// Adds a Shift+Enter note of more than one line as one undo step (#4).
+///
+/// There is no multi-line text object in the format this app writes — a "line" of
+/// added text is already the whole of what <see cref="AddTextBoxOperation"/> places —
+/// so a note of several lines is that many objects, one per line, stacked top to
+/// bottom at the face's own line height. That is also what keeps each line
+/// individually editable afterwards: it never stopped being an ordinary text box,
+/// there are just more than one of them, and Undo takes the whole note rather than
+/// one line at a time because it is the gesture that made all of them.
+/// </summary>
+public sealed class AddTextBoxesOperation(
+    IPdfDocument document, int pageIndex, IReadOnlyList<string> lines, double fontSize,
+    PdfPoint topLeft, string fontName = StandardTextBoxFonts.Default) : IPageEditOperation
+{
+    /// <summary>Single spacing for the face's own size — the same rule a wrapped paragraph reads at.</summary>
+    public const double LineHeightFactor = 1.2;
+
+    private readonly int[] _objectIndexes = new int[lines.Count];
+    private readonly DetachedTextRun?[] _detached = new DetachedTextRun?[lines.Count];
+    private bool _everApplied;
+
+    public int PageIndex { get; } = pageIndex;
+
+    public string Description => "add text";
+
+    public void Apply()
+    {
+        using var page = document.GetPage(PageIndex);
+        if (!_everApplied)
+        {
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var lineTop = new PdfPoint(topLeft.X, topLeft.Y + (i * fontSize * LineHeightFactor));
+                _objectIndexes[i] = page.AppendTextBox(lines[i], fontSize, lineTop, fontName);
+            }
+            _everApplied = true;
+            return;
+        }
+
+        // Redo: put every detached line back at its own recorded index, lowest first —
+        // the exact reverse of the descending detach Revert() does below, and the order
+        // they were first created in.
+        foreach (var i in Enumerable.Range(0, lines.Count).OrderBy(i => _objectIndexes[i]))
+        {
+            page.RestoreTextRun(_detached[i]!, _objectIndexes[i]);
+            _detached[i] = null;
+        }
+    }
+
+    public void Revert()
+    {
+        using var page = document.GetPage(PageIndex);
+        // Highest index first: taking a lower one off first would shift every index
+        // still to come out from under this loop (the same rule LineDeleteEntry's
+        // descending order exists for).
+        foreach (var i in Enumerable.Range(0, lines.Count).OrderByDescending(i => _objectIndexes[i]))
+            _detached[i] = page.DetachObjectAt(_objectIndexes[i]);
+    }
+
+    public JournalEntry ToJournalEntry(bool inverse) => inverse
+        ? new TextBoxesDeleteEntry(PageIndex, [.. _objectIndexes])
+        // Replay re-adds through AppendTextBox, top to bottom, so every line keeps its
+        // movable tag (mirrors TextBoxAddEntry for the single-line case).
+        : new TextBoxesAddEntry(PageIndex, [.. lines], fontSize, topLeft.X, topLeft.Y, fontName);
 }
 
 /// <summary>

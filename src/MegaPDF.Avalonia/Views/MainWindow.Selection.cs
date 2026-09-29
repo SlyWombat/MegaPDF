@@ -339,6 +339,14 @@ public partial class MainWindow
     /// Editing an added text box in place. Committing goes through Restyle rather
     /// than a plain edit, because the box keeps its id across the change — that id
     /// is what the mobile apps address it by (SDD §6.2 contract 4).
+    ///
+    /// One line only (no <c>allowMultiline</c>): turning an existing single-line box
+    /// into a multi-line note here would mean replacing one object with several under
+    /// one undo step, which is a different shape of edit from Restyle's "same id, new
+    /// text" and is scoped out of #4 — a note becomes more than one line by being
+    /// placed that way (<see cref="MainWindow.ShowNewTextEditor"/>), not by growing one
+    /// after the fact. The size chips (#4) still apply: resizing an existing note is
+    /// exactly the ergonomics #4 is about, and needs none of that.
     /// </summary>
     private void ShowTextBoxEditor(int pageIndex, PdfTextRun box)
     {
@@ -363,7 +371,8 @@ public partial class MainWindow
                 // as itself, which marked a clean document dirty (#144).
                 else if (text != box.Text || vm.TextFont != face || Math.Abs(vm.TextSize - box.FontSize) > 0.01)
                     vm.RestyleTextBox(pageIndex, box, text, vm.TextFont, vm.TextSize);
-            });
+            },
+            showSizePicker: true);
         if (_inlineEditor is not null)
         {
             vm.IsEditingTextBox = true;

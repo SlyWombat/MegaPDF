@@ -297,6 +297,10 @@
     <value>Tapez, puis appuyez sur Entrée</value>
     <comment>Inline editor watermark</comment>
   </data>
+  <data name="TypeThenEnterMultiline" xml:space="preserve">
+    <value>Tapez, Maj+Entrée pour une nouvelle ligne, Entrée pour terminer</value>
+    <comment>#4 — inline editor watermark, added-text placement only. #4 — new French, for francophone review</comment>
+  </data>
   <data name="OpenToGetStarted" xml:space="preserve">
     <value>Ouvrez un PDF pour commencer.</value>
     <comment>Initial status</comment>
@@ -421,6 +425,10 @@
   <data name="CoverRemoved" xml:space="preserve">
     <value>Correcteur retiré.</value>
   </data>
+  <data name="CoverMoved" xml:space="preserve">
+    <value>Correcteur déplacé.</value>
+    <comment>Status after a whiteout is dragged or resized (#3). #3 — new French, for francophone review</comment>
+  </data>
   <data name="SignatureMoved" xml:space="preserve">
     <value>Signature déplacée.</value>
   </data>
@@ -439,7 +447,20 @@
     <value>Glissez pour déplacer, double-cliquez pour modifier, Supprimer pour retirer.</value>
   </data>
   <data name="CoverSelectedHint" xml:space="preserve">
-    <value>Appuyez sur Supprimer pour retirer ce correcteur.</value>
+    <value>Glissez pour déplacer, les coins pour redimensionner, Supprimer pour retirer.</value>
+    <comment>#3 — new French, for francophone review</comment>
+  </data>
+  <data name="TextSizeSmallName" xml:space="preserve">
+    <value>Petit</value>
+    <comment>#4 — the inline editor's persona-simple size choice. #4 — new French, for francophone review</comment>
+  </data>
+  <data name="TextSizeMediumName" xml:space="preserve">
+    <value>Moyen</value>
+    <comment>#4 — the inline editor's persona-simple size choice. #4 — new French, for francophone review</comment>
+  </data>
+  <data name="TextSizeLargeName" xml:space="preserve">
+    <value>Grand</value>
+    <comment>#4 — the inline editor's persona-simple size choice. #4 — new French, for francophone review</comment>
   </data>
   <data name="NothingKeyboardEditable" xml:space="preserve">
     <value>Rien dans ce document ne peut être modifié au clavier.</value>

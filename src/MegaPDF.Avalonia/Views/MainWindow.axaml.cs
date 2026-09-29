@@ -1,6 +1,8 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
 using Rectangle = Avalonia.Controls.Shapes.Rectangle;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -1034,10 +1036,18 @@ public partial class MainWindow : Window
     /// SDD §2.2 is against — you should see the words land where they will sit.
     /// Dismissed by <see cref="CancelTransientViewState"/> (via <see cref="DismissInlineEditor"/>)
     /// if the active tab changes while it is open — see there.
+    ///
+    /// <paramref name="allowMultiline"/> is Shift+Enter for a new line (#4) — added text
+    /// only: a document's own lines and a form field are each already exactly one line
+    /// in the format this app writes, so Shift+Enter has nothing to grow there.
+    /// <paramref name="showSizePicker"/> is the persona-simple S/M/L choice (#4), offered
+    /// wherever an added text box's size is being chosen, on top of what the toolbar's
+    /// full point-size list already offers.
     /// </summary>
     private void ShowInlineEditor(
         Control container, Point at, double fontSizePoints, string fontFamily,
-        string initialText, double minWidth, Action<string> commit)
+        string initialText, double minWidth, Action<string> commit,
+        bool allowMultiline = false, bool showSizePicker = false)
     {
         if (Active is not { } vm || container is not ContentPresenter presenter)
             return;
@@ -1059,7 +1069,10 @@ public partial class MainWindow : Window
             Margin = new Thickness(at.X, at.Y, 0, 0),
             HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
             VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
-            Watermark = Strings.TypeThenEnter,
+            // Semantic only: the newline itself is inserted by hand below, on Shift+Enter,
+            // never by the control's own Enter handling — see the tunnel handler.
+            AcceptsReturn = allowMultiline,
+            Watermark = allowMultiline ? Strings.TypeThenEnterMultiline : Strings.TypeThenEnter,
         };
 
         void Commit()
@@ -1069,9 +1082,21 @@ public partial class MainWindow : Window
             commit(text);
         }
 
-        editor.KeyDown += (_, e) =>
+        // Tunnel, not bubble (#4): with AcceptsReturn true, Avalonia's own TextBox would
+        // otherwise consume a plain Enter as a second newline before a bubbling handler
+        // on this same control ever saw it, and Shift could never be told apart from it.
+        // Seeing every key on the way down first, and marking it handled, is what keeps
+        // a single-line note's plain-Enter-commits behaviour identical either way.
+        editor.AddHandler(InputElement.KeyDownEvent, (_, e) =>
         {
-            if (e.Key == Key.Enter)
+            if (allowMultiline && e.Key == Key.Enter && e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            {
+                var caret = editor.CaretIndex;
+                editor.Text = (editor.Text ?? "").Insert(caret, "\n");
+                editor.CaretIndex = caret + 1;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
             {
                 Commit();
                 e.Handled = true;
@@ -1082,11 +1107,12 @@ public partial class MainWindow : Window
                 vm.CancelModes();
                 e.Handled = true;
             }
-        };
+        }, RoutingStrategies.Tunnel);
         // Clicking away commits rather than discarding: losing typing to a stray
         // click is the more annoying failure. Except into the font and size pickers
-        // on the toolbar (#144): choosing a face for the text being typed is part of
-        // typing it, and the picker hands focus back when it closes.
+        // on the toolbar (#144), or this editor's own size chips (#4): choosing a
+        // face or size for the text being typed is part of typing it, and each
+        // hands focus back once it is done with it.
         editor.LostFocus += (_, _) =>
         {
             if (_inlineEditor == editor && !IsInTextPicker(FocusManager?.GetFocusedElement()))
@@ -1104,10 +1130,12 @@ public partial class MainWindow : Window
             _inlineEditorOwner = vm;
             editor.Focus();
             editor.SelectAll();
+            if (showSizePicker)
+                ShowSizePicker(overlay, at, vm);
         }
     }
 
-    /// <summary>New text at the click point, in the toolbar's chosen face and size.</summary>
+    /// <summary>New text at the click point, in the toolbar's chosen face and size (#4: Shift+Enter for more than one line, plus the S/M/L size chips).</summary>
     private void ShowNewTextEditor(Control container, PageViewModel page, Point at, PdfPoint pagePoint)
     {
         if (Active is not { } vm)
@@ -1123,7 +1151,8 @@ public partial class MainWindow : Window
                     vm.AddTextBox(page.Index, pagePoint, text);
                 else
                     vm.CancelModes();
-            });
+            },
+            allowMultiline: true, showSizePicker: true);
         _editorFollowsPickers = _inlineEditor is not null;
     }
 
@@ -1137,6 +1166,84 @@ public partial class MainWindow : Window
             return;
         editor.FontFamily = new FontFamily(FamilyFor(vm.TextFont));
         editor.FontSize = vm.TextSize * PageBitmap.PointsToPixels * vm.Zoom;
+        RefreshSizePicker();
+    }
+
+    /// <summary>The S/M/L chips over an open editor, while one offers them (#4).</summary>
+    private Border? _sizePicker;
+
+    /// <summary>
+    /// The persona-simple size choice (#4): three chips, sitting just above the editor
+    /// they belong to. Each is <c>Focusable = false</c> so choosing one — unlike the
+    /// toolbar's SizeBox, a real focus target the LostFocus handler already knows to
+    /// wave through — never moves focus off the editor at all, and so never risks
+    /// committing the note early over a size that was only half-decided.
+    /// </summary>
+    private void ShowSizePicker(Panel overlay, Point at, DocumentViewModel vm)
+    {
+        var row = new StackPanel
+        {
+            Orientation = global::Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 2,
+        };
+        foreach (var (label, name, size) in new (string Label, string Name, double Size)[]
+                 {
+                     ("S", Strings.TextSizeSmallName, DocumentViewModel.TextSizeSmall),
+                     ("M", Strings.TextSizeMediumName, DocumentViewModel.TextSizeMedium),
+                     ("L", Strings.TextSizeLargeName, DocumentViewModel.TextSizeLarge),
+                 })
+        {
+            var chip = new ToggleButton
+            {
+                Content = label,
+                Tag = size,
+                Width = 22,
+                Height = 18,
+                Padding = new Thickness(0),
+                FontSize = 11,
+                Focusable = false,
+                IsChecked = Math.Abs(vm.TextSize - size) < 0.01,
+            };
+            AutomationProperties.SetName(chip, name);
+            ToolTip.SetTip(chip, name);
+            // The page beneath must not also read this press as a click of its own —
+            // the same reason RemoveChip marks its own press handled.
+            chip.PointerPressed += (_, e) => e.Handled = true;
+            chip.Click += (_, _) => vm.TextSize = size;
+            row.Children.Add(chip);
+        }
+
+        _sizePicker = new Border
+        {
+            Name = "TextSizePicker",
+            Child = row,
+            Background = Brushes.White,
+            BorderBrush = Brand.Brush("BrandAccent"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(2),
+            Margin = new Thickness(at.X, at.Y - 22, 0, 0),
+            HorizontalAlignment = global::Avalonia.Layout.HorizontalAlignment.Left,
+            VerticalAlignment = global::Avalonia.Layout.VerticalAlignment.Top,
+        };
+        overlay.Children.Add(_sizePicker);
+    }
+
+    private void RemoveSizePicker()
+    {
+        if (_sizePicker is not null)
+            (_sizePicker.Parent as Panel)?.Children.Remove(_sizePicker);
+        _sizePicker = null;
+    }
+
+    /// <summary>Keeps the size chips' pressed state honest when the size changes some other way
+    /// (the toolbar's SizeBox, or undo/redo landing on a selected box's own size).</summary>
+    private void RefreshSizePicker()
+    {
+        if (_sizePicker?.Child is not StackPanel row || Active is not { } vm)
+            return;
+        foreach (var chip in row.Children.OfType<ToggleButton>())
+            chip.IsChecked = chip.Tag is double size && Math.Abs(vm.TextSize - size) < 0.01;
     }
 
     /// <summary>
@@ -1197,6 +1304,7 @@ public partial class MainWindow : Window
 
     private void DismissInlineEditor()
     {
+        RemoveSizePicker();
         if (_inlineEditor is null)
             return;
         // Cleared first: removing a focused editor raises LostFocus, which must find it gone.
