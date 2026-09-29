@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Foundation;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 
@@ -155,6 +156,12 @@ internal static class Screenshot
             // has no desktop session). Needs a document; the exit code is the test.
             case "reading":
                 return await CheckReadingModeAsync(window);
+
+            // #528: zoom anchoring, in a real window, for the same reason "reading" is —
+            // CI cannot raise this (#462), so this is the by-hand gate. Needs a document;
+            // the exit code is the test.
+            case "zoom-anchor":
+                return await CheckZoomAnchorAsync(window);
 
             default:
                 Console.Error.WriteLine($"unknown --screenshot-state '{state}'");
@@ -469,6 +476,175 @@ internal static class Screenshot
                     + "open-in-reading-mode and two-tab checks were skipped.");
             }
         }
+    }
+
+    /// <summary>
+    /// Zoom anchoring (#528), in the real window this process already has open. Every
+    /// entry point used to grow the page from <c>PagesScroll</c>'s own origin (its own
+    /// top-left corner), so whatever you were looking at slid out from under the
+    /// pointer or the click that asked for the zoom. Mirrors <see cref="CheckReadingModeAsync"/>'s
+    /// own shape and the Avalonia leg's <c>CheckZoomAnchor</c> (#534) — the nearest
+    /// thing this app has to a self-test for a real window, for the same reason
+    /// reading mode needed one (#462: no headless platform, no CI desktop session).
+    /// Needs a document; the exit code is the test.
+    /// </summary>
+    private static async Task<bool> CheckZoomAnchorAsync(MainWindow window)
+    {
+        if (window.Shell.Active is not { IsDocumentOpen: true } vm
+            || vm.View is not { } view
+            || window.PageScroller is not { } scroll)
+        {
+            Console.Error.WriteLine("--screenshot-state zoom-anchor needs a document.");
+            return false;
+        }
+
+        var ok = true;
+        void Check(string what, bool passed)
+        {
+            Console.Error.WriteLine($"{(passed ? "PASS" : "FAIL")}: {what}");
+            ok &= passed;
+        }
+
+        try
+        {
+            await RunZoomAnchorChecksAsync(vm, view, scroll, Check);
+        }
+        catch (Exception ex)
+        {
+            // Same reasoning as CheckReadingModeAsync's own try/catch: an exception left
+            // to escape here is posted to the dispatcher and the process just hangs, with
+            // nothing said — worse than no check at all.
+            Console.Error.WriteLine($"FAIL: the zoom-anchor check threw: {ex}");
+            ok = false;
+        }
+        finally
+        {
+            // Left at a known zoom, not whatever the last check happened to leave it at —
+            // --window is the caller's to pick, this app's own settings are not touched.
+            await vm.SetZoomPercentAsync(100);
+        }
+        return ok;
+    }
+
+    /// <summary>
+    /// The checks themselves (#528). Each one reads the content point under an anchor
+    /// before a zoom step, computes independently — not by calling
+    /// <see cref="MegaPDF.App.ZoomAnchor.Reanchor"/> itself, which would only prove the
+    /// production code agrees with itself — where that point should land given the
+    /// zoom <see cref="DocumentViewModel"/> actually committed to, and asserts the
+    /// offset landed there rather than wherever an unfixed zoom would have left it (the
+    /// corner, unmoved, no matter the anchor).
+    ///
+    /// Run with a narrower window than the page at every zoom level used below, on
+    /// purpose (<c>--screenshot --window 900x700</c> in the by-hand recipe): at 100%,
+    /// with fit-to-window never triggered (a fresh fixture with no remembered view
+    /// opens at 100%, see <see cref="DocumentViewModel.SetZoomAsync"/>), there is
+    /// nothing yet to correct, and it is also the one place a check could not tell
+    /// "anchored correctly" from "never moved at all" — the corner an unfixed zoom
+    /// already sits at. Every check here first zooms past 100% and moves the offset off
+    /// (0,0) before it measures anything.
+    /// </summary>
+    private static async Task RunZoomAnchorChecksAsync(
+        DocumentViewModel vm, DocumentView view, ScrollViewer scroll, Action<string, bool> check)
+    {
+        // Layout rounding leaves a fraction of a DIP of slack; a real drift from the
+        // corner-anchoring bug is tens to hundreds of DIP, not this.
+        const double Epsilon = 1.5;
+
+        async Task SetOffsetAsync(double x, double y)
+        {
+            scroll.ChangeView(x, y, null, disableAnimation: true);
+            await Task.Delay(200);
+        }
+
+        // --- Menu, toolbar and keyboard: anchored on the viewport's centre ---
+        //
+        // vm.ZoomInCommand.ExecuteAsync(null) is exactly what the toolbar's zoom-in
+        // button (Command-bound in MainWindow.xaml), the keyboard accelerators
+        // (MainWindow.Toolbar.cs) and the reading-mode bar's own zoom button
+        // (DocumentView.ReadingMode.cs) all run.
+        await vm.SetZoomPercentAsync(200);
+        await Task.Delay(300);
+        await SetOffsetAsync(37, 210);
+
+        var viewport = new Point(scroll.ViewportWidth, scroll.ViewportHeight);
+        var centre = new Point(viewport.X / 2, viewport.Y / 2);
+        var centreBeforeOffset = new Point(scroll.HorizontalOffset, scroll.VerticalOffset);
+        var centreBeforeZoom = vm.ZoomFactor;
+        var contentAtCentreBefore = new Point(centreBeforeOffset.X + centre.X, centreBeforeOffset.Y + centre.Y);
+
+        await vm.ZoomInCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+
+        var centreRatio = vm.ZoomFactor / centreBeforeZoom;
+        var expectedAtCentre = new Point(contentAtCentreBefore.X * centreRatio, contentAtCentreBefore.Y * centreRatio);
+        var actualAtCentre = new Point(scroll.HorizontalOffset + centre.X, scroll.VerticalOffset + centre.Y);
+        check($"menu/keyboard zoom in ({centreBeforeZoom * 100:F0}% -> {vm.ZoomPercent}%) keeps the viewport "
+              + $"centre's content under it (expected {Describe(expectedAtCentre)}, got {Describe(actualAtCentre)})",
+              Math.Abs(actualAtCentre.X - expectedAtCentre.X) < Epsilon && Math.Abs(actualAtCentre.Y - expectedAtCentre.Y) < Epsilon);
+
+        // --- The clamp: correct by the ratio actually committed, not the ratio asked for ---
+        //
+        // ZoomInCommand asks for +25 (ZoomStep) every time; at 290% that asks for 315%,
+        // which SetZoomAsync clamps to MaxZoom (300%). The ratio actually applied is
+        // 300/290, not 315/290 — correcting by the requested ratio would land the
+        // anchor point somewhere the committed zoom does not put it.
+        await vm.SetZoomPercentAsync(290);
+        await Task.Delay(300);
+        await SetOffsetAsync(15, 90);
+
+        var clampBeforeOffset = new Point(scroll.HorizontalOffset, scroll.VerticalOffset);
+        var clampBeforeZoom = vm.ZoomFactor; // 2.90
+        var clampAnchor = new Point(viewport.X / 2, viewport.Y / 2);
+        var contentAtClampAnchorBefore = new Point(clampBeforeOffset.X + clampAnchor.X, clampBeforeOffset.Y + clampAnchor.Y);
+
+        await vm.ZoomInCommand.ExecuteAsync(null);
+        await Task.Delay(300);
+
+        check($"zooming in from 290% clamps to {vm.ZoomPercent}% (MaxZoom), not 315%", vm.ZoomPercent == 300);
+        var committedRatio = vm.ZoomFactor / clampBeforeZoom; // 300/290
+        var requestedRatio = 3.15 / clampBeforeZoom;          // 315/290 — what a naive correction would use
+        var expectedByCommitted = new Point(contentAtClampAnchorBefore.X * committedRatio, contentAtClampAnchorBefore.Y * committedRatio);
+        var expectedByRequested = new Point(contentAtClampAnchorBefore.X * requestedRatio, contentAtClampAnchorBefore.Y * requestedRatio);
+        var actualAtClampAnchor = new Point(scroll.HorizontalOffset + clampAnchor.X, scroll.VerticalOffset + clampAnchor.Y);
+        check($"  the correction uses the clamped ratio (expected {Describe(expectedByCommitted)}, got {Describe(actualAtClampAnchor)})",
+              Math.Abs(actualAtClampAnchor.X - expectedByCommitted.X) < Epsilon && Math.Abs(actualAtClampAnchor.Y - expectedByCommitted.Y) < Epsilon);
+        check("  not the requested one (would have landed at "
+              + $"{Describe(expectedByRequested)}, further off than {Epsilon} DIP from where it actually landed)",
+              Math.Abs(actualAtClampAnchor.X - expectedByRequested.X) >= Epsilon || Math.Abs(actualAtClampAnchor.Y - expectedByRequested.Y) >= Epsilon);
+
+        // --- Ctrl+wheel: anchored on the pointer ---
+        await vm.SetZoomPercentAsync(200);
+        await Task.Delay(300);
+        await SetOffsetAsync(20, 150);
+
+        var wheelAnchor = new Point(60, 40);
+        var wheelBeforeOffset = new Point(scroll.HorizontalOffset, scroll.VerticalOffset);
+        var wheelBeforeZoom = vm.ZoomFactor;
+        var contentUnderWheelBefore = new Point(wheelBeforeOffset.X + wheelAnchor.X, wheelBeforeOffset.Y + wheelAnchor.Y);
+
+        // ApplyWheelZoomAsync is exactly what OnPagesPointerWheel runs once it has read
+        // the pointer's position and the wheel's sign off a real PointerRoutedEventArgs
+        // — see that method's own remark on why this test cannot build one of those.
+        await view.ApplyWheelZoomAsync(wheelAnchor, wheelDelta: 120);
+        await Task.Delay(300);
+
+        check($"Ctrl+wheel zooms ({wheelBeforeZoom * 100:F0}% -> {vm.ZoomPercent}%)", vm.ZoomFactor > wheelBeforeZoom);
+        var wheelRatio = vm.ZoomFactor / wheelBeforeZoom;
+        var expectedUnderWheel = new Point(contentUnderWheelBefore.X * wheelRatio, contentUnderWheelBefore.Y * wheelRatio);
+        var actualUnderWheel = new Point(scroll.HorizontalOffset + wheelAnchor.X, scroll.VerticalOffset + wheelAnchor.Y);
+        check($"  anchored on the pointer, not the corner (expected {Describe(expectedUnderWheel)}, got {Describe(actualUnderWheel)})",
+              Math.Abs(actualUnderWheel.X - expectedUnderWheel.X) < Epsilon && Math.Abs(actualUnderWheel.Y - expectedUnderWheel.Y) < Epsilon);
+
+        // --- The pure arithmetic, independent of any window at all ---
+        var pureReanchor = MegaPDF.App.ZoomAnchor.Reanchor(new Point(100, 200), 1.0, 0.5, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor at 0.5x from (100,200) around (50,50) is (25,75) (got {Describe(pureReanchor)})",
+              Math.Abs(pureReanchor.X - 25) < 0.0001 && Math.Abs(pureReanchor.Y - 75) < 0.0001);
+        var pureReanchorAtClamp = MegaPDF.App.ZoomAnchor.Reanchor(new Point(100, 200), 4.0, 4.0, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor with no ratio change leaves the offset alone (got {Describe(pureReanchorAtClamp)})",
+              pureReanchorAtClamp.X == 100 && pureReanchorAtClamp.Y == 200);
+
+        static string Describe(Point p) => $"({p.X:F1}, {p.Y:F1})";
     }
 
     /// <summary>
