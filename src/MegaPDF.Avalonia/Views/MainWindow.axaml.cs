@@ -108,6 +108,7 @@ public partial class MainWindow : Window
         WireSignatures();
         WireFind();
         WireReadingMode();
+        WireZoom();
 
         // Only realised pages rasterise. ContainerPrepared/ContainerClearing are the
         // virtualization hooks — this is where "render what you can see" happens, and
@@ -297,6 +298,11 @@ public partial class MainWindow : Window
             vm.PrintDestinationRequested += ChoosePrinterAsync;
             vm.PropertyChanged += OnActiveDocumentPropertyChanged;
 
+            // The incoming tab's own zoom, so the first Zoom change this window sees
+            // for it corrects from the right "before" value (#528) rather than from
+            // whatever the outgoing tab's zoom happened to be — see MainWindow.Zoom.cs.
+            _lastKnownZoom = vm.Zoom;
+
             // Tried at once by UpdateViewport() below, and retried from there on every
             // ScrollChanged/SizeChanged until it succeeds — see TryRestoreScrollOffset.
             _scrollRestorePending = vm;
@@ -372,6 +378,34 @@ public partial class MainWindow : Window
     {
         if (sender is not DocumentViewModel vm)
             return;
+        // Zoom from the menu, the toolbar or the keyboard has no pointer or
+        // centroid to anchor on (#528), so it anchors on the viewport's centre —
+        // applied here, the one place every Zoom change is already observed,
+        // rather than at each of the several command call sites (a toolbar
+        // button's Command binding runs straight from XAML with no code-behind
+        // to hook). MainWindow.Zoom.cs's wheel and pinch paths already corrected
+        // themselves on their own anchor before this fires, which is exactly what
+        // _reanchoringZoom guards against redoing.
+        if (args.PropertyName is nameof(DocumentViewModel.Zoom))
+        {
+            // Snapshotted before UpdateLayout() below, not read from the field at
+            // the point of use: UpdateLayout() forces the pending layout pass now,
+            // which fires PageScroller's own ScrollChanged/SizeChanged synchronously,
+            // and both are wired straight to UpdateViewport() — which unconditionally
+            // sets _lastKnownZoom to vm.Zoom (see its own comment). Read the field
+            // after that re-entrant call and it is already the NEW zoom, not the one
+            // this correction is supposed to correct FROM, and every ratio computes
+            // as 1 — no error, no drift, and no correction either.
+            var oldZoom = _lastKnownZoom;
+            if (!_reanchoringZoom)
+            {
+                var centre = new Point(PageScroller.Viewport.Width / 2, PageScroller.Viewport.Height / 2);
+                var before = PageScroller.Offset;
+                PageScroller.UpdateLayout();
+                PageScroller.Offset = ZoomAnchor.Reanchor(before, oldZoom, vm.Zoom, centre);
+            }
+            _lastKnownZoom = vm.Zoom;
+        }
         // A card was clicked: placement is armed, so the library closes and
         // the next click goes to the page.
         if (args.PropertyName is nameof(DocumentViewModel.IsPlacingSignature) && vm.IsPlacingSignature)
@@ -1362,7 +1396,20 @@ public partial class MainWindow : Window
         vm.ViewportWidth = PageScroller.Viewport.Width;
         vm.ViewportHeight = PageScroller.Viewport.Height;
         // A document that opened before the window was laid out is fitted now (#143).
-        vm.FitOnOpen();
+        // Guarded the same way MainWindow.Zoom.cs's gestures are (#528): a freshly
+        // opened document choosing its own starting zoom is not a zoom the user
+        // aimed anywhere, and centre-anchoring it would scroll the document away
+        // from its own top the moment it opened.
+        _reanchoringZoom = true;
+        try
+        {
+            vm.FitOnOpen();
+        }
+        finally
+        {
+            _reanchoringZoom = false;
+        }
+        _lastKnownZoom = vm.Zoom;
 
         // Same deferral as FitOnOpen above, same reason: this can run before the
         // incoming tab's Pages have actually been laid out into PageScroller's

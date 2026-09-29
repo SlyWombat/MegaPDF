@@ -1876,6 +1876,25 @@ internal static class Program
             failures++;
         }
 
+        // --- Zoom anchoring, in one window (#528) ---
+        //
+        // Every zoom entry point used to grow the page from PageScroller's own
+        // origin, so whatever you were looking at slid out from under the pointer,
+        // the pinch or the click that asked for the zoom. This drives the menu's
+        // zoom-in, a Ctrl+wheel notch and a synthesised trackpad-magnify event and
+        // asserts, independently of MainWindow.Zoom.cs's own arithmetic, that the
+        // content under the anchor each one used is still there afterwards.
+        Console.WriteLine("zoom anchoring (#528):");
+        try
+        {
+            CheckZoomAnchor(dir, state, Check);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"::error::zoom anchoring: {ex.GetType().Name}: {ex.Message}");
+            failures++;
+        }
+
         // --- Tabs, in one window (#348 phase 1) ---
         //
         // Every check above (bar this file) drives a single document through a single
@@ -3139,6 +3158,158 @@ internal static class Program
         vm.ToggleAddTextCommand.Execute(null);
         Pump();
 
+        window.Close();
+        Pump();
+
+        static void Pump() => MenuProbe.Pump();
+    }
+
+    /// <summary>
+    /// Zoom anchoring (#528): every entry point used to grow the page from
+    /// PageScroller's own origin, so the thing you were looking at slid out from
+    /// under whatever asked for the zoom. Each check below reads the content point
+    /// under an anchor before the zoom, computes independently (not by calling
+    /// <see cref="Views.ZoomAnchor.Reanchor"/> — that would only prove the
+    /// production code agrees with itself) where that point should land given the
+    /// ratio the view model actually committed to, and asserts the offset landed
+    /// there rather than at wherever an unfixed zoom would have left it.
+    ///
+    /// Not provable headless: a real trackpad's pinch. Avalonia.Native's bridge
+    /// from NSMagnificationGestureRecognizer to PointerTouchPadGestureMagnifyEvent
+    /// (see MainWindow.Zoom.cs's remark on WireZoom) only exists in the macOS
+    /// native backend, which nothing here runs. The pinch check below proves only
+    /// the shared arithmetic (see its own remark on why it stops there rather
+    /// than raising the event) — the gesture reaching MainWindow.Zoom.cs's
+    /// handler at all, on real hardware, needs a real Mac.
+    /// </summary>
+    private static void CheckZoomAnchor(string dir, string state, Action<string, bool> check)
+    {
+        EnsureHeadlessPlatform();
+
+        using var shell = new ShellViewModel(state);
+        var vm = shell.CreateDocument();
+        vm.Open(Path.Combine(dir, "fixture.pdf"));
+        shell.AddTab(vm);
+        // Narrower than the page at the zooms below, on purpose: fit-to-window
+        // starts with nothing to correct, so every check here first zooms past
+        // 100% and moves off (0,0) — the corner an unfixed zoom already sits at,
+        // and so the one place a check could not tell "anchored" from "never
+        // moved".
+        var window = new Views.MainWindow { DataContext = shell, Width = 900, Height = 700 };
+        window.Show();
+        Pump();
+
+        // Layout rounding leaves a fraction of a DIP of slack; a real drift from
+        // the corner-anchoring bug is tens to hundreds of DIP, not this.
+        const double Epsilon = 1.0;
+
+        // --- Menu and keyboard: anchored on the viewport's centre ---
+        //
+        // vm.ZoomInCommand.Execute(null) is exactly what the menu bar
+        // (MainWindow.MenuBar.cs) and the toolbar's zoom-in button run.
+        vm.SetZoomCommand.Execute(2.0);
+        Pump();
+        window.PageScroller.Offset = new Vector(37, 210);
+        Pump();
+
+        var viewport = window.PageScroller.Viewport;
+        var centre = new Point(viewport.Width / 2, viewport.Height / 2);
+        var centreBeforeOffset = window.PageScroller.Offset;
+        var centreBeforeZoom = vm.Zoom;
+        var contentAtCentreBefore = new Point(centreBeforeOffset.X + centre.X, centreBeforeOffset.Y + centre.Y);
+
+        vm.ZoomInCommand.Execute(null);
+        Pump();
+
+        var centreRatio = vm.Zoom / centreBeforeZoom;
+        var expectedAtCentre = new Point(contentAtCentreBefore.X * centreRatio, contentAtCentreBefore.Y * centreRatio);
+        var actualAtCentre = new Point(window.PageScroller.Offset.X + centre.X, window.PageScroller.Offset.Y + centre.Y);
+        check($"menu/keyboard zoom in ({centreBeforeZoom:F2}x -> {vm.Zoom:F2}x) keeps the viewport centre's "
+              + $"content under it (expected {expectedAtCentre}, got {actualAtCentre})",
+              Math.Abs(actualAtCentre.X - expectedAtCentre.X) < Epsilon && Math.Abs(actualAtCentre.Y - expectedAtCentre.Y) < Epsilon);
+
+        // --- The clamp: correct by the ratio actually committed, not the ratio asked for ---
+        //
+        // At the top stop, ZoomIn clamps to the same value: the ratio actually
+        // applied is 1, so the offset must not move at all. Correcting by
+        // whatever ratio the click nominally asked for instead would drift the
+        // page while the zoom itself visibly sits still at 4.00x.
+        vm.SetZoomCommand.Execute(4.0);
+        Pump();
+        window.PageScroller.Offset = new Vector(15, 90);
+        Pump();
+        var clampedOffset = window.PageScroller.Offset;
+        vm.ZoomInCommand.Execute(null);
+        Pump();
+        check($"zooming in at the top stop ({vm.Zoom:F2}x, unchanged) does not move the offset "
+              + $"(was {clampedOffset}, now {window.PageScroller.Offset})",
+              vm.Zoom == 4.0 && window.PageScroller.Offset == clampedOffset);
+
+        // --- Ctrl+wheel: the Linux (and Windows) idiom, anchored on the pointer ---
+        vm.SetZoomCommand.Execute(2.0);
+        Pump();
+        window.PageScroller.Offset = new Vector(20, 150);
+        Pump();
+
+        var wheelAnchor = new Point(60, 40);
+        var wheelAnchorInWindow = window.PageScroller.TranslatePoint(wheelAnchor, window)
+                                  ?? throw new InvalidOperationException("PageScroller is not in the window");
+        var wheelBeforeOffset = window.PageScroller.Offset;
+        var wheelBeforeZoom = vm.Zoom;
+        var contentUnderWheelBefore = new Point(wheelBeforeOffset.X + wheelAnchor.X, wheelBeforeOffset.Y + wheelAnchor.Y);
+
+        HeadlessWindowExtensions.MouseWheel(window, wheelAnchorInWindow, new Vector(0, 1), RawInputModifiers.Control);
+        Pump();
+
+        check($"Ctrl+wheel zooms ({wheelBeforeZoom:F2}x -> {vm.Zoom:F2}x)", vm.Zoom > wheelBeforeZoom);
+        var wheelRatio = vm.Zoom / wheelBeforeZoom;
+        var expectedUnderWheel = new Point(contentUnderWheelBefore.X * wheelRatio, contentUnderWheelBefore.Y * wheelRatio);
+        var actualUnderWheel = new Point(window.PageScroller.Offset.X + wheelAnchor.X, window.PageScroller.Offset.Y + wheelAnchor.Y);
+        check($"  anchored on the pointer, not the corner (expected {expectedUnderWheel}, got {actualUnderWheel})",
+              Math.Abs(actualUnderWheel.X - expectedUnderWheel.X) < Epsilon && Math.Abs(actualUnderWheel.Y - expectedUnderWheel.Y) < Epsilon);
+
+        // A plain wheel notch, no Ctrl, must still scroll: the gesture must not
+        // steal every notch just because it now knows what Ctrl+wheel means.
+        var plainBeforeZoom = vm.Zoom;
+        var plainBeforeOffset = window.PageScroller.Offset;
+        HeadlessWindowExtensions.MouseWheel(window, wheelAnchorInWindow, new Vector(0, 1), RawInputModifiers.None);
+        Pump();
+        check("a plain wheel notch (no Ctrl) scrolls instead of zooming",
+              vm.Zoom == plainBeforeZoom && window.PageScroller.Offset != plainBeforeOffset);
+
+        // --- Trackpad pinch: the arithmetic only ---
+        //
+        // A first version of this check also raised a hand-built
+        // PointerTouchPadGestureMagnifyEvent (a real Pointer object constructed
+        // here, not one anything's input pipeline actually owns) straight at
+        // PageScroller with RaiseEvent, to drive OnPageScrollerMagnify end to end.
+        // It passed every assertion, on Linux and on both macOS bundle builds —
+        // and then the very next check (CheckTabs, which does nothing this check
+        // touches) segfaulted the process on both osx-arm64 and osx-x64, every
+        // time, never on Linux. A fabricated Pointer bypasses whatever real
+        // pointer/capture bookkeeping Avalonia's Skia/native layers keep, and
+        // this is the likely reason. Reverted to just the arithmetic:
+        // OnPageScrollerMagnify is two lines (read Delta.X as a factor, call
+        // ApplyAnchoredZoom with the pointer position), and ApplyAnchoredZoom
+        // itself is already driven end to end, safely, by the Ctrl+wheel check
+        // above through HeadlessWindowExtensions.MouseWheel — a real pointer the
+        // headless platform owns rather than one this test invents.
+        var pureReanchor = Views.ZoomAnchor.Reanchor(new Vector(100, 200), 1.0, 0.5, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor at 0.5x from (100,200) around (50,50) is (25,75) (got {pureReanchor})",
+              Math.Abs(pureReanchor.X - 25) < 0.0001 && Math.Abs(pureReanchor.Y - 75) < 0.0001);
+        var pureReanchorAtClamp = Views.ZoomAnchor.Reanchor(new Vector(100, 200), 4.0, 4.0, new Point(50, 50));
+        check($"ZoomAnchor.Reanchor with no ratio change (a clamp) leaves the offset alone (got {pureReanchorAtClamp})",
+              pureReanchorAtClamp == new Vector(100, 200));
+
+        // Every zoom step above queued a re-render on a thread pool thread
+        // (CheckToolbarMenus' own remark: "spinning the queue alone never
+        // reaches it"). CloseReadingWindow below waits the same way for the
+        // same reason before closing: a window closed — and vm disposed via
+        // the enclosing `using` — while PDFium is still mid-render on this
+        // document is exactly the kind of race a headless run's own timing can
+        // hide on one platform and not another, and this check changes Zoom
+        // more times in a row than any check before it did.
+        PumpUntil(() => vm.IsIdle && vm.Pages.All(p => !p.IsRenderPending), TimeSpan.FromSeconds(20));
         window.Close();
         Pump();
 
