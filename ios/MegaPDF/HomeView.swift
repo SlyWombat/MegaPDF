@@ -71,6 +71,7 @@ struct HomeView: View {
 
     @State private var importing = false
     @State private var aboutOpen = false
+    @State private var settingsOpen = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -127,7 +128,17 @@ struct HomeView: View {
         // whatever the idiom; only the iPad declares a command that reads it.
         .focusedSceneValue(\.openPDFCommand, OpenPDFCommandTarget { importing = true })
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                // #512: the second entry to the same sheet the ⋯ menu opens. *Open
+                // documents in reading mode* is a choice about what happens when a
+                // document is opened, so it has to be reachable before one is.
+                Button {
+                    settingsOpen = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("Settings")
+                .accessibilityIdentifier("homeSettings")
                 Button {
                     aboutOpen = true
                 } label: {
@@ -138,6 +149,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $aboutOpen) {
             AboutView()
+        }
+        .sheet(isPresented: $settingsOpen) {
+            SettingsView()
         }
     }
 }

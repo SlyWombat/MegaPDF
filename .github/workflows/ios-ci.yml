@@ -119,6 +119,7 @@ jobs:
             -destination "id=$SIM_UDID" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests.xcresult" \
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
+            -only-testing:MegaPDFUITests/ReadingModeUITests \
             -only-testing:MegaPDFUITests/BodyTextEditUITests \
             -only-testing:MegaPDFUITests/MarkdownExportUITests \
             -only-testing:MegaPDFUITests/RecentsAccessibilityUITests/testEveryRecentRowAnnouncesWhereItsFileLives \
@@ -126,10 +127,14 @@ jobs:
             -only-testing:MegaPDFUITests/RedactionUITests/testSaveIsReachableWithAMarkAndAsksBeforeRemoving \
             CODE_SIGNING_ALLOWED=NO
 
-      # The regular-width half of the zoom check (#465). No second build: an iOS
-      # Simulator build-for-testing is keyed to the platform, not to the device, so
-      # the products above run against an iPad destination unchanged.
-      - name: Run the zoom test on an iPad too
+      # The regular-width half of the zoom check (#465) and of reading mode (#506). No
+      # second build: an iOS Simulator build-for-testing is keyed to the platform, not to
+      # the device, so the products above run against an iPad destination unchanged.
+      # Reading mode is here as well as on the iPhone because the two layouts differ in
+      # exactly the chrome it hides -- the iPad's tools are a strip of its own (#172) and
+      # carry reading mode's second entry point, where compact width has only the bottom
+      # bar and the dot-dot-dot menu.
+      - name: Run the zoom and reading-mode tests on an iPad too
         run: |
           xcodebuild test-without-building \
             -project MegaPDF.xcodeproj \
@@ -137,6 +142,7 @@ jobs:
             -destination "platform=iOS Simulator,name=$IPAD_DEVICE" \
             -resultBundlePath "$RUNNER_TEMP/ui-tests-ipad.xcresult" \
             -only-testing:MegaPDFUITests/ViewerZoomUITests \
+            -only-testing:MegaPDFUITests/ReadingModeUITests \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Upload the UI test result bundle

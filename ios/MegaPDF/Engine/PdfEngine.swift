@@ -203,8 +203,14 @@ actor PdfEngine {
     /// content, then live form-field values — the shared render recipe, drawn by the
     /// core, which also applies the render clamp (#93/#111): a request past 16,384 px
     /// a side or 32 MP comes back smaller, aspect preserved, and the view scales it up.
+    ///
+    /// `tint` is reading mode's page colours (#512), and it is one more bit on the flags
+    /// the core already takes (#509, contract 7) — not a second render path and not
+    /// something this binding computes. The document is untouched: a tint is applied to
+    /// the caller's pixels and never written to the file.
     func render(_ document: PdfDocument, index: Int,
-                pixelWidth: Int, pixelHeight: Int) throws -> CGImage {
+                pixelWidth: Int, pixelHeight: Int,
+                tint: PageTint = .normal) throws -> CGImage {
         var width: Int32 = 0, height: Int32 = 0
         megapdf_render_size(Double(pixelWidth), Double(pixelHeight), &width, &height)
         let w = Int(width), h = Int(height)
@@ -213,7 +219,8 @@ actor PdfEngine {
             var pixels = Data(count: stride * h)
             let status = pixels.withUnsafeMutableBytes { raw -> Int32 in
                 guard let base = raw.baseAddress else { return Int32(MEGAPDF_ERR_PDFIUM) }
-                return megapdf_render(page, base, width, height, Int32(stride), UInt32(MEGAPDF_RENDER_BGRA))
+                return megapdf_render(page, base, width, height, Int32(stride),
+                                      UInt32(MEGAPDF_RENDER_BGRA) | tint.renderFlag)
             }
             guard status == MEGAPDF_OK,
                   let provider = CGDataProvider(data: pixels as CFData),

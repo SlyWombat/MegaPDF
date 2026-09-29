@@ -35,6 +35,33 @@ struct ViewerView: View {
     /// popover source or it crashes, and it has to point at wherever the button actually is
     /// rather than a guessed coordinate — `MoreMenuAnchorKey` below reports it here.
     @State private var moreMenuAnchor: CGRect = .zero
+    @State private var settingsOpen = false
+
+    // MARK: - reading mode's view state (#506, #512)
+
+    /// Whether the floating bar is on screen. It is *removed* when it is not, never merely
+    /// faded to nothing: an invisible bar left in place would still be a row of VoiceOver
+    /// stops over the page, which is the focus trap reading mode exists to avoid.
+    @State private var readingBarVisible = true
+    /// Bumped by every show, so a fade armed by an earlier tap cannot hide a bar a later
+    /// tap has just brought back.
+    @State private var readingFadeGeneration = 0
+    /// The "go to page" box the bar's page number opens.
+    @State private var goToPageOpen = false
+    @State private var goToPageText = ""
+    /// A page the bar has asked to scroll to; consumed by the `ScrollViewReader` inside
+    /// `document`, which is the only thing that holds a proxy.
+    @State private var pendingScrollTarget: Int?
+    /// Read once and then kept current from the notification, rather than asked for on
+    /// every layout pass: what it gates is whether a *timer* is armed, and a timer is
+    /// armed at a moment, not continuously.
+    @State private var voiceOverRunning = ViewerView.screenReaderRunning()
+
+    /// The page colours, as the Settings sheet stores them (#512); pushed into the model,
+    /// which is what actually renders, by `syncPageTint`.
+    @AppStorage(ReadingDefaults.pageColoursKey)
+    private var pageColours: String = PageTint.normal.rawValue
+
     @Environment(\.displayScale) private var displayScale
     /// Which layout this is (#172). Regular width — an iPad full screen, or the wider
     /// side of a Split View — gets its own toolbar, `regularToolStrip`; compact width,
@@ -44,7 +71,17 @@ struct ViewerView: View {
     private var isRegular: Bool { horizontalSizeClass == .regular }
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
-    private var effectiveZoom: CGFloat { min(max(zoom * gestureZoom, 1), 4) }
+    /// The floor the zoom is clamped to. 1 — fit width — for the whole of the app's life
+    /// before #512, and still 1 until *Fit page* is chosen: the phones' zoom is
+    /// width-relative, so a portrait page only fits the screen's height below 1, and a
+    /// preset that could not go there would not be a preset. Lowered only by Fit page
+    /// itself and put back by Fit width, so pinching in still stops at fit width unless
+    /// the person has asked for something smaller.
+    @State private var zoomFloor: CGFloat = ReadingZoom.fitWidth
+
+    private var effectiveZoom: CGFloat {
+        min(max(zoom * gestureZoom, zoomFloor), ReadingZoom.maximum)
+    }
 
     /// Identity of the zero-size view pinned to the current search match.
     private let matchAnchorID = "megapdf.current-match"
@@ -90,7 +127,11 @@ struct ViewerView: View {
                     .frame(minWidth: geo.size.width, minHeight: geo.size.height,
                            alignment: .center)
                 }
-                .background(Brand.backdrop)
+                // The wall the pages sit on follows the page colours, not the system
+                // appearance (#512, `Brand.Reading`): a sepia page framed in the dark
+                // grey this shows the rest of the time would be a sepia page in the
+                // wrong room.
+                .background(Brand.Reading.gutter(model.pageTint))
                 .overlay(alignment: .topLeading) { zoomProbes(geo: geo) }
                 // Simultaneous, not exclusive (#336): a plain .gesture on a ScrollView
                 // competes with the scroll view's own pan gesture, and the pinch was
@@ -109,14 +150,25 @@ struct ViewerView: View {
                     MagnificationGesture()
                         .onChanged { gestureZoom = $0 }
                         .onEnded { value in
-                            zoom = min(max(zoom * value, 1), 4)
+                            zoom = min(max(zoom * value, zoomFloor), ReadingZoom.maximum)
                             gestureZoom = 1
                             pushWindow(containerWidth: geo.size.width)
                         }
                 )
                 .safeAreaInset(edge: .top, spacing: 0) { topChrome }
+                // Reading mode's own chrome: the floating bar, the way out by the edge,
+                // and the box the page number opens (#506).
+                .overlay(alignment: .bottom) { readingChrome(geo: geo) }
                 .onChange(of: searchText) { term in
                     model.search(term: term)
+                }
+                // The reading bar's previous / next / go-to-page (#506). It is drawn in an
+                // overlay outside this reader, so it asks by setting a page here rather
+                // than by holding a proxy of its own.
+                .onChange(of: pendingScrollTarget) { target in
+                    guard let target else { return }
+                    withAnimation { proxy.scrollTo(target, anchor: .top) }
+                    pendingScrollTarget = nil
                 }
                 // Bring the current match's page on screen (wraps included).
                 // The screenshot launch skips this: its matches are already at
@@ -139,6 +191,153 @@ struct ViewerView: View {
                 }
             }
         }
+    }
+
+    // MARK: - reading mode (#506, #512)
+
+    /// Everything reading mode puts on screen, and nothing when it is off.
+    @ViewBuilder
+    private func readingChrome(geo: GeometryProxy) -> some View {
+        if model.readingMode {
+            ZStack(alignment: .bottom) {
+                // Takes no touch and no space of its own: its recogniser lives on the
+                // window, so the page keeps every pixel and every gesture it had.
+                ScreenEdgeBackGesture(isEnabled: true, onSwipe: stepBackFromReading)
+                    .frame(width: 0, height: 0)
+                    .allowsHitTesting(false)
+                if readingBarVisible {
+                    ReadingBar(page: currentPageIndex + 1,
+                               pageCount: max(pageSizes.count, 1),
+                               tint: model.pageTint,
+                               actions: readingBarActions(geo: geo))
+                        .padding(.bottom, 16)
+                        .transition(.opacity)
+                }
+            }
+        }
+    }
+
+    /// The page at the top of the viewport: what "previous", "next" and *fit page* are
+    /// about. `visible` is kept by the page rows themselves, so this is the same answer
+    /// the render window is built from.
+    private var currentPageIndex: Int {
+        min(max(visible.min() ?? 0, 0), max(pageSizes.count - 1, 0))
+    }
+
+    private func readingBarActions(geo: GeometryProxy) -> ReadingBarActions {
+        ReadingBarActions(
+            previousPage: { goToPage(currentPageIndex, containerWidth: geo.size.width) },
+            nextPage: { goToPage(currentPageIndex + 2, containerWidth: geo.size.width) },
+            goToPage: {
+                goToPageText = ""
+                goToPageOpen = true
+                showReadingBar()
+            },
+            fitWidth: {
+                zoomFloor = ReadingZoom.fitWidth
+                zoom = ReadingZoom.fitWidth
+                afterReadingBarAction(containerWidth: geo.size.width)
+            },
+            fitPage: {
+                let fit = ReadingZoom.fitPage(viewport: geo.size,
+                                              page: pageSizes[currentPageIndex])
+                // The floor comes down with it, or the clamp would undo the preset the
+                // moment it was applied on any page taller than it is wide.
+                zoomFloor = min(ReadingZoom.fitWidth, fit)
+                zoom = fit
+                afterReadingBarAction(containerWidth: geo.size.width)
+            },
+            zoomOut: {
+                zoom = min(max(zoom / 1.25, zoomFloor), ReadingZoom.maximum)
+                afterReadingBarAction(containerWidth: geo.size.width)
+            },
+            zoomIn: {
+                zoom = min(max(zoom * 1.25, zoomFloor), ReadingZoom.maximum)
+                afterReadingBarAction(containerWidth: geo.size.width)
+            },
+            // The find bar is the one piece of chrome the plan lets over the reading view
+            // (§2), and with the tool bar gone this is the only way to reach it on a phone.
+            find: {
+                if !searchOpen { searchOpen = true }
+                showReadingBar()
+            },
+            exit: { model.setReadingMode(false) }
+        )
+    }
+
+    private func afterReadingBarAction(containerWidth: CGFloat) {
+        pushWindow(containerWidth: containerWidth)
+        showReadingBar()
+    }
+
+    /// One step back, which is what both ways out ask for (plan §7, "Esc and Back
+    /// ordering"): the find bar first if it is open, then reading mode, and never both at
+    /// once. Getting this order wrong is how a user loses the thing they were using — the
+    /// desktop's ladder is four levels for the same reason.
+    private func stepBackFromReading() {
+        if searchOpen {
+            closeSearch()
+            return
+        }
+        model.setReadingMode(false)
+    }
+
+    /// Shows the bar and, unless a screen reader is running, arms the fade.
+    private func showReadingBar() {
+        withReadingAnimation { readingBarVisible = true }
+        armReadingBarFade()
+    }
+
+    /// Arms the idle fade, or deliberately does not (`ReadingBarFade`).
+    ///
+    /// The generation counter is what makes the timer safe to arm on every tap: a fade
+    /// from an earlier tap finds its generation stale and does nothing, so the bar hides
+    /// two seconds after the *last* tap rather than the first.
+    private func armReadingBarFade() {
+        readingFadeGeneration &+= 1
+        let generation = readingFadeGeneration
+        guard ReadingBarFade.armsTimer(voiceOverRunning: voiceOverRunning) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + ReadingBarFade.idle) {
+            guard generation == readingFadeGeneration, model.readingMode else { return }
+            withReadingAnimation { readingBarVisible = false }
+        }
+    }
+
+    /// Reduced motion is answered by not animating at all, rather than by a shorter
+    /// animation: the bar appearing and disappearing is the information, and the fade was
+    /// only ever decoration.
+    private func withReadingAnimation(_ body: () -> Void) {
+        if UIAccessibility.isReduceMotionEnabled {
+            body()
+        } else {
+            withAnimation(.easeInOut(duration: 0.2)) { body() }
+        }
+    }
+
+    /// Whether the bar must be pinned.
+    ///
+    /// `-uiTestPinReadingBar` is the same kind of lever as #531's `-uiTestZoomProbes`, and
+    /// exists for the same reason: VoiceOver cannot be turned on from inside a UI test, so
+    /// without it the one rule that matters most here — the bar never fades for the people
+    /// reading mode is for — could only be argued, never run. The flag substitutes the
+    /// *reading* of VoiceOver's state and nothing else; every line downstream of it is the
+    /// code a real screen reader takes.
+    static func screenReaderRunning() -> Bool {
+        if ProcessInfo.processInfo.arguments.contains("-uiTestPinReadingBar") { return true }
+        return UIAccessibility.isVoiceOverRunning
+    }
+
+    /// Scrolls to a one-based page number, if there is one there.
+    private func goToPage(_ oneBased: Int, containerWidth: CGFloat) {
+        let index = oneBased - 1
+        guard pageSizes.indices.contains(index) else { return }
+        pendingScrollTarget = index
+        showReadingBar()
+    }
+
+    /// Pushes the stored page colours into the model, which is what renders with them.
+    private func syncPageTint() {
+        model.setPageTint(PageTint(rawValue: pageColours) ?? .normal)
     }
 
     // MARK: - the zoom probes ViewerZoomUITests pinches at (#465)
@@ -175,6 +374,19 @@ struct ViewerView: View {
                     .font(.system(size: 6))
                     .foregroundColor(.clear)
                     .accessibilityIdentifier("viewerZoomProbe")
+                // Reading mode's own state, for the same reason (#506): "the chrome is
+                // gone" is a thing a screenshot can show, but "the app is in reading mode,
+                // the bar is up, and page 3 is still the page you were on" is not. Read
+                // together with `viewerZoomProbe`, this is what lets the UI tests assert
+                // that leaving reading mode came back to the *same place* rather than
+                // merely to a page.
+                Text("reading \(model.readingMode ? "on" : "off")"
+                     + " bar \(readingBarVisible ? "on" : "off")"
+                     + " page \(currentPageIndex)"
+                     + " tint \(model.pageTint.rawValue.isEmpty ? "Normal" : model.pageTint.rawValue)")
+                    .font(.system(size: 6))
+                    .foregroundColor(.clear)
+                    .accessibilityIdentifier("viewerReadingProbe")
                 Color.clear
                     .frame(width: max(geo.size.width * 0.7, 40),
                            height: max(geo.size.height * 0.4, 40))
@@ -189,7 +401,71 @@ struct ViewerView: View {
         }
     }
 
+    /// Reading mode's own presentations, sat on top of `presentations` rather than in it.
+    ///
+    /// Not a style choice: `presentations` was already at the Swift type-checker's
+    /// complexity ceiling before this issue — the comment on the redaction
+    /// `confirmationDialog` records the last time one more modifier tipped it — and adding
+    /// these five to that chain produced exactly the same "unable to type-check this
+    /// expression in reasonable time". Two chains of modifiers over one view is the same
+    /// view; one chain of thirty-five is a build failure.
     var body: some View {
+        presentations
+            .sheet(isPresented: $settingsOpen) {
+                SettingsView()
+            }
+            // The bar's page number, as a box to type one into (#506). An alert with a
+            // field, not a sheet: it is one number, and the page behind it should stay
+            // visible while it is asked for.
+            .alert("Go to page", isPresented: $goToPageOpen) {
+                TextField("Page", text: $goToPageText)
+                    .keyboardType(.numberPad)
+                    .accessibilityIdentifier("readingGoToPageField")
+                Button("Go") {
+                    if let wanted = Int(goToPageText.trimmingCharacters(in: .whitespaces)),
+                       pageSizes.indices.contains(wanted - 1) {
+                        pendingScrollTarget = wanted - 1
+                    }
+                    showReadingBar()
+                }
+                Button("Cancel", role: .cancel) { showReadingBar() }
+            }
+            // Reading mode's own lifecycle: the bar comes up with the mode, the stored
+            // page colours reach the model, and a screen reader turning on mid-session
+            // pins the bar where it is (#506, #512).
+            .onChange(of: model.readingMode) { on in
+                if on { showReadingBar() }
+            }
+            .onChange(of: pageColours) { _ in syncPageTint() }
+            .onReceive(NotificationCenter.default.publisher(
+                for: UIAccessibility.voiceOverStatusDidChangeNotification)) { _ in
+                voiceOverRunning = ViewerView.screenReaderRunning()
+                if voiceOverRunning { showReadingBar() }
+            }
+            // Escape on an iPad keyboard steps back one level, and only one (plan §7).
+            // The find bar's own Done already owns `.cancelAction` while it is open
+            // (`searchBar`), so this is attached only when it is not: two live
+            // `.cancelAction`s would make which one Escape reached a matter of luck, and
+            // the whole point of the ladder is that it is not.
+            //
+            // Zero-sized and hidden from assistive technology on purpose: it is a keyboard
+            // affordance, and reading mode's visible way out is the bar's Exit. A hidden
+            // *focusable* control over the page would be the focus trap this mode exists
+            // to avoid, which is why it is `accessibilityHidden` rather than merely clear.
+            .background {
+                if model.readingMode && isPad && !searchOpen {
+                    Button("Exit reading mode") { stepBackFromReading() }
+                        .keyboardShortcut(.cancelAction)
+                        .frame(width: 0, height: 0)
+                        .opacity(0)
+                        .accessibilityHidden(true)
+                }
+            }
+    }
+
+    /// Everything the viewer presents over the page: the toolbar, the sheets, the alerts
+    /// and the confirmations, in the order they were added.
+    private var presentations: some View {
         document
             .navigationTitle((model.isDirty ? "• " : "") + displayName)
             .navigationBarTitleDisplayMode(.inline)
@@ -207,6 +483,19 @@ struct ViewerView: View {
             // the HIG lays out an iPhone document viewer. Everything else stays in More,
             // so the page keeps the screen.
             .toolbar { viewerToolbar }
+            // Reading mode takes the chrome away, and takes it out of the accessibility
+            // tree with it (#506). Two things do that, on purpose:
+            //
+            // `.toolbar(.hidden, …)` is what the plan names, and it is what stops the bars
+            // being *drawn*. Not composing `viewerToolbar`'s items at all
+            // (`showsToolbarItems`) is what makes the promise about VoiceOver true by
+            // construction rather than by trusting a visibility modifier to reach the
+            // accessibility tree — reading mode is meant to be the screen-reader-friendly
+            // view, so a Close button still reachable by swipe under a hidden bar would be
+            // worse than not shipping it. `ReadingModeUITests` asserts the buttons are gone
+            // from the tree, which is the assertion that would catch either half failing.
+            .toolbar(model.readingMode ? .hidden : .visible,
+                     for: .navigationBar, .bottomBar)
             // The keyboard's commands (#172, `MegaPDFCommands`): what the buttons above do,
             // reachable from ⌘S, ⌘W, ⌘F and ⌘Z on an iPad keyboard.
             .focusedSceneValue(\.viewerCommands, commandTarget)
@@ -260,6 +549,10 @@ struct ViewerView: View {
                 signaturesLibrary
             }
             .onAppear {
+                // Before anything else: the first render of the first page should already
+                // be the colour that was asked for, not a white page that turns sepia.
+                syncPageTint()
+                if model.readingMode { showReadingBar() }
                 if model.screenshotSheet != nil { signaturesOpen = true }
                 // `-screenshot search`: open the find bar with the term already
                 // typed and start the scan here. This view only exists in the
@@ -378,6 +671,7 @@ struct ViewerView: View {
     private var viewerToolbar: some ToolbarContent {
         // #145: while a save, a password change or an open runs, Close and the file commands
         // are disabled; the model ignores them too while a change is being applied.
+        if showsToolbarItems {
         ToolbarItem(placement: .navigationBarLeading) {
             Button("Close", action: closeTapped)
                 .disabled(model.fileCommandsBlocked)
@@ -467,6 +761,16 @@ struct ViewerView: View {
                         .accessibilityIdentifier("viewerClearRedactionMarks")
                 }
                 Divider()
+                // #506: reading mode's entry point on every iPhone and iPad, beside Share
+                // and Export as Markdown as the plan's §4 asks. A Button, not a Toggle:
+                // once reading mode is on this menu is gone with the rest of the chrome,
+                // so this row can only ever turn it on, and a checkmark that is never seen
+                // ticked would be furniture. The way back is the bar's Exit or the edge
+                // swipe.
+                Button("Reading mode") { model.setReadingMode(true) }
+                    .accessibilityIdentifier("viewerReadingMode")
+                Button("Settings…") { settingsOpen = true }
+                    .accessibilityIdentifier("viewerSettings")
                 Button("About MegaPDF") { aboutOpen = true }
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
@@ -513,7 +817,15 @@ struct ViewerView: View {
                 .disabled(!model.canRedo || model.fileCommandsBlocked)
             }
         }
+        }
     }
+
+    /// Whether the navigation and tool bars have anything in them at all.
+    ///
+    /// False in reading mode, which is how the Close, Save, ⋯ and tool buttons leave the
+    /// accessibility tree rather than merely stop being drawn (#506, and `body`'s
+    /// `.toolbar(.hidden, …)` beside it).
+    private var showsToolbarItems: Bool { !model.readingMode }
 
     /// A bottom-toolbar label (#144).
     ///
@@ -535,7 +847,10 @@ struct ViewerView: View {
     /// (#145), in that order.
     private var topChrome: some View {
         VStack(spacing: 0) {
-            if isRegular { regularToolStrip }
+            // The iPad's tool strip goes with the rest of the chrome in reading mode
+            // (#506); the find bar below it is the one piece the plan lets stay, and it
+            // closes back into the chrome-free view.
+            if isRegular && !model.readingMode { regularToolStrip }
             if searchOpen { searchBar }
             // Calm and persistent, not a dialog and not the transient `NoticeBanner`
             // (below, over the page): up for as long as the document is open, in the same
@@ -762,6 +1077,15 @@ struct ViewerView: View {
             toolStripButton("Search", systemImage: "magnifyingglass", titled: titled,
                             accessibilityLabel: "Find in document", selected: searchOpen,
                             action: toggleSearch)
+            // #506: the iPad has a bar of its own since #172, so reading mode's entry
+            // point belongs on it and not only three taps down the ⋯ menu — that is what
+            // the issue means by an iPad-specific placement. The ⋯ row stays on both
+            // layouts, because compact width (an iPhone, or an iPad in Slide Over) has no
+            // strip to put this on.
+            toolStripButton("Reading mode", systemImage: "book", titled: titled) {
+                model.setReadingMode(true)
+            }
+            .accessibilityIdentifier("viewerReadingModeButton")
             Spacer(minLength: 24)
             toolStripButton("Undo", systemImage: "arrow.uturn.backward", titled: titled,
                             action: model.undo)
@@ -1101,6 +1425,24 @@ struct ViewerView: View {
                 }
                 .exclusively(before: SpatialTapGesture()
                     .onEnded { value in
+                        // Inside reading mode a single tap on the page shows and hides the
+                        // floating bar, and does nothing else (#168 decision 2, #506). It
+                        // is scoped to reading mode deliberately: the ordinary tap on a
+                        // field, a box or a mark is exactly as it was the rest of the time,
+                        // and the double-tap zoom above is untouched in both. The model
+                        // swallows the tap too (`onPageTapped`), so the page's dispatch
+                        // cannot fire even if this branch were ever got wrong.
+                        if model.readingMode {
+                            if readingBarVisible {
+                                withReadingAnimation { readingBarVisible = false }
+                                // Cancels a fade that would otherwise hide a bar the next
+                                // tap is about to show.
+                                readingFadeGeneration &+= 1
+                            } else {
+                                showReadingBar()
+                            }
+                            return
+                        }
                         model.onPageTapped(
                             index: index,
                             xFraction: Double(value.location.x / width),

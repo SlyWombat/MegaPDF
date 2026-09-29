@@ -268,6 +268,11 @@ Conventions (OQLF, Canadian French):
 | Normal / Sepia / Night | Normales / Sépia / Nuit | #511, the three page colours. *Normales* agrees with *couleurs*, the label above the list |
 | Night inverts the page, pictures included. | Le mode nuit inverse la page, images comprises. | #511, said in the settings copy because it is a decision (#168 decision 3), not a defect: a photograph reads as a negative at night |
 | Open documents in reading mode | Ouvrir les documents en mode lecture | #511, the Options checkbox; off by default (#168 decision 2) |
+| Page %lld of %lld | Page %1$lld sur %2$lld | #506, what VoiceOver hears on the phones' reading bar, whose page number shows as digits with no room for words |
+| Page | Page | #506, the field in the phones' *Go to page* box. The same word in French |
+| Go | Aller | #506, the button that goes to the typed page number. Shorter than *Aller à la page*, which is the box's own title above it |
+| Settings… | Paramètres… | #512, the iOS ⋯ menu row that opens the settings sheet. *Settings* itself (Paramètres) is already Windows' word for the same screen |
+| Reading | Lecture | #512, the section of reading preferences in the iOS settings sheet. The noun on its own, not *Mode lecture*: the section holds page colours, which apply whether or not reading mode is on |
 
 ## Français (France)
 
