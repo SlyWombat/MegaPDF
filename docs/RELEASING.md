@@ -109,6 +109,14 @@ sha256 is unchanged; fill a line, tick a box, place a signature, Save, reopen an
 result back **outside MegaPDF** (`pdftotext`, `qpdf --check`); **About** says the version;
 switch to **fr-CA** and read the chrome; close dirty and get the prompt, per tab.
 
+On Windows one part of this *is* automated, and has to be run by hand because CI cannot
+(#462): from a built tree on GPD-DAVE,
+`MegaPDF.exe --screenshot <out.png> --screenshot-state reading <fixture.pdf>` drives
+reading mode in a real window — Ctrl+H's command, the Escape ladder, the tab order,
+the floating bar's screen-reader rule, the page colours and the shared settings
+(#504/#510). It prints a PASS/FAIL line per check and **the exit code is the test**. Run
+it before the package checks below; it puts the settings it writes back as it found them.
+
 | Platform | Where | Build under test | Version read-back |
 |---|---|---|---|
 | Windows | GPD-DAVE | `gh run download <run> -n MegaPDF-store-packages` → `python3 tools/check-native-arch.py x64/arm64 <msix>`, identity and resource-map checks (`tools/Store-Submission.md` § Verify) → `Get-AppxPackage ElectricRV.MegaPDF \| Remove-AppxPackage; Add-AppxPackage <x64 msix>` | About; `Get-AppxPackage ElectricRV.MegaPDF` |

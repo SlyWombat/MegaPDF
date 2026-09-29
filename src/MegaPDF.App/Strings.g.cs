@@ -726,4 +726,34 @@ public static partial class Strings
 
     /// <summary>{0}, unsaved changes, tab</summary>
     public static string TabAccessibleNameUnsaved(object? arg0) => string.Format(CultureInfo.CurrentCulture, Get("TabAccessibleNameUnsaved"), arg0);
+
+    /// <summary>Reading mode</summary>
+    public static string ReadingMode => Get("ReadingMode");
+
+    /// <summary>Hide the tools and read the page (Ctrl+H)</summary>
+    public static string ReadingModeTip => Get("ReadingModeTip");
+
+    /// <summary>Reading mode on</summary>
+    public static string ReadingModeOn => Get("ReadingModeOn");
+
+    /// <summary>Reading mode off</summary>
+    public static string ReadingModeOff => Get("ReadingModeOff");
+
+    /// <summary>Reading controls</summary>
+    public static string ReadingControls => Get("ReadingControls");
+
+    /// <summary>Exit</summary>
+    public static string Exit => Get("Exit");
+
+    /// <summary>Exit reading mode</summary>
+    public static string ExitReadingMode => Get("ExitReadingMode");
+
+    /// <summary>Previous page</summary>
+    public static string PreviousPage => Get("PreviousPage");
+
+    /// <summary>Next page</summary>
+    public static string NextPage => Get("NextPage");
+
+    /// <summary>Go to page</summary>
+    public static string GoToPage => Get("GoToPage");
 }

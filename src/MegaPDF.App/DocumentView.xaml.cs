@@ -186,6 +186,16 @@ public sealed partial class DocumentView : UserControl
     /// </summary>
     private async Task RoutePageActivationAsync(Grid pageGrid, PageView pageView, PdfPoint pagePoint)
     {
+        // Reading mode is looking, not editing (#504): the click is swallowed here
+        // rather than rerouted, so nothing on the page is armed, opened or toggled.
+        // First, before the busy and placement branches, because it outranks both —
+        // and armed tools are disarmed on the way in, so PendingSignature and the
+        // modes are already clear by the time this is reached. This is the one route a
+        // tap, Enter and Space all take, so suppressing it here is the whole of
+        // "editing is off".
+        if (ViewModel.IsReadingMode)
+            return;
+
         // Taps while work runs — a change on its way, its page check, the text-edit check, a
         // save — are ignored rather than queued (#145).
         if (ViewModel.Busy.IsBusy)
@@ -899,6 +909,13 @@ public sealed partial class DocumentView : UserControl
         // on a line, a box or the signature line after any whiteout did nothing.
         _suppressNextTap = false;
 
+        // Belt and braces for reading mode (#504): entering it disarms both of these,
+        // so this branch should already be unreachable — but a band drawn on the page
+        // is the other way a press can change the document, and "editing is off" must
+        // not depend on the disarm having happened first.
+        if (ViewModel.IsReadingMode)
+            return;
+
         if ((!ViewModel.IsWhiteoutMode && !ViewModel.IsRedactMode) || ViewModel.Busy.IsBusy ||
             sender is not PageCanvas canvas)
         {
@@ -1306,6 +1323,13 @@ public sealed partial class DocumentView : UserControl
     /// Opens the find bar, or refocuses and reselects it when it is already open — it never toggles the bar
     /// shut, so the button and the accelerator behave identically. Returns false when there is no document.
     /// </summary>
+    /// <summary>
+    /// Whether the find bar is up. Reading mode's Escape ladder asks, because the find
+    /// bar is the one piece of chrome allowed over the reading view and is therefore
+    /// the first thing Escape takes back (#504, plan §7).
+    /// </summary>
+    internal bool IsFindBarOpen => FindBar.Visibility == Visibility.Visible;
+
     internal bool ShowFindBar()
     {
         if (!ViewModel.IsDocumentOpen)

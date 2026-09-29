@@ -268,6 +268,7 @@ Conventions (OQLF, Canadian French):
 | Normal / Sepia / Night | Normales / Sépia / Nuit | #511, the three page colours. *Normales* agrees with *couleurs*, the label above the list |
 | Night inverts the page, pictures included. | Le mode nuit inverse la page, images comprises. | #511, said in the settings copy because it is a decision (#168 decision 3), not a defect: a photograph reads as a negative at night |
 | Open documents in reading mode | Ouvrir les documents en mode lecture | #511, the Options checkbox; off by default (#168 decision 2) |
+| Hide the tools and read the page (Ctrl+H) | Masquer les outils et lire la page (Ctrl+H) | #504, the Windows-only tooltip on the Reading mode command. "The tools", not "the toolbar": on Windows the command also sits in the "…" overflow, where the row itself is not what goes |
 
 ## Français (France)
 

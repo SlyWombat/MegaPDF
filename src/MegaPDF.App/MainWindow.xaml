@@ -22,6 +22,11 @@
                  Ctrl+1…9 and Ctrl+F4 are left as built-in. -->
             <KeyboardAccelerator Modifiers="Control" Key="W" Invoked="OnCloseTabAccelerator" />
             <KeyboardAccelerator Modifiers="Control,Shift" Key="N" Invoked="OnNewWindowAccelerator" />
+            <!-- Reading mode (#504): Ctrl+H toggles it; F11 goes full screen, but only
+                 while it is on — full screen on its own is not offered (plan §2), so
+                 OnFullScreenAccelerator leaves the key unhandled outside the mode. -->
+            <KeyboardAccelerator Modifiers="Control" Key="H" Invoked="OnReadingModeAccelerator" />
+            <KeyboardAccelerator Key="F11" Invoked="OnFullScreenAccelerator" />
         </Grid.KeyboardAccelerators>
 
         <!-- Declared first and before any Grid.Row-tagged sibling: with a CommandBar
@@ -169,6 +174,12 @@
                             <MenuFlyoutItem x:Name="FitPageItem" AutomationProperties.AutomationId="FitPageItem" Click="OnFitPageClicked">
                                 <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE740;" /></MenuFlyoutItem.Icon>
                             </MenuFlyoutItem>
+                            <!-- Reading mode beside the two fits (#504, plan §4): all
+                                 three are ways of looking at the page rather than tools,
+                                 and this flyout is where a Windows user looks for those.
+                                 Declared before ZoomPresetsSeparator, which is where
+                                 OnZoomMenuOpening rebuilds the preset levels from. -->
+                            <ToggleMenuFlyoutItem x:Name="ReadingModeItem" AutomationProperties.AutomationId="ReadingModeItem" Click="OnReadingModeClicked" KeyboardAcceleratorTextOverride="Ctrl+H" />
                             <MenuFlyoutSeparator x:Name="ZoomPresetsSeparator" />
                         </MenuFlyout>
                     </DropDownButton.Flyout>
@@ -195,6 +206,13 @@
                 </AppBarButton>
                 <AppBarButton x:Name="FindButton" Click="OnFindClicked" IsEnabled="{x:Bind Shell.Active.IsDocumentOpen, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+F" AutomationProperties.AutomationId="FindButton">
                     <AppBarButton.Icon><FontIcon Glyph="&#xE721;" /></AppBarButton.Icon>
+                </AppBarButton>
+                <!-- The second home for Reading mode (#504): the zoom flyout is where it
+                     belongs among the view commands, and "…" is where a Windows user
+                     looks when the toolbar is narrow enough to have swallowed the zoom
+                     control altogether. -->
+                <AppBarButton x:Name="ReadingModeButton" Click="OnReadingModeClicked" IsEnabled="{x:Bind Shell.HasDocuments, Mode=OneWay}" KeyboardAcceleratorTextOverride="Ctrl+H" AutomationProperties.AutomationId="ReadingModeButton">
+                    <AppBarButton.Icon><FontIcon Glyph="&#xE890;" /></AppBarButton.Icon>
                 </AppBarButton>
                 <!-- Marks accumulate as you drag and are dropped as one step (#329), so the
                      tidying action is here rather than on the toolbar: it is not part of
@@ -267,6 +285,26 @@
                             </RadioButtons>
                             <TextBlock x:Uid="LanguageRestartNote" x:Name="LanguageRestartNote" Visibility="Collapsed" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
                         </StackPanel>
+                        <!-- Reading preferences (#510, tier 2). Page colours are applied
+                             when the page is drawn (MEGAPDF_RENDER_SEPIA / _NIGHT, #509)
+                             and never written to the file. The note under them is not a
+                             caveat about a defect: inverting photographs is the decision
+                             recorded on #168, and the copy says so rather than leaving it
+                             to be discovered on a page of family snapshots. -->
+                        <StackPanel Spacing="{ThemeResource SpaceS}">
+                            <TextBlock x:Uid="PageColoursHeading" x:Name="PageColoursHeading" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <RadioButtons x:Name="PageColoursChoice" SelectionChanged="OnPageColoursChanged" AutomationProperties.AutomationId="PageColoursChoice">
+                                <TextBlock x:Uid="PageColoursNormal" />
+                                <TextBlock x:Uid="PageColoursSepia" />
+                                <TextBlock x:Uid="PageColoursNight" />
+                            </RadioButtons>
+                            <TextBlock x:Uid="NightInvertsNote" x:Name="NightInvertsNote" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch
+                            x:Name="ReadingModeToggle"
+                            x:Uid="ReadingModeToggle"
+                            AutomationProperties.AutomationId="ReadingModeToggle"
+                            Toggled="OnOpenInReadingModeToggled" />
                         <ToggleSwitch
                             x:Name="ReopenToggle"
                             x:Uid="ReopenToggle"
