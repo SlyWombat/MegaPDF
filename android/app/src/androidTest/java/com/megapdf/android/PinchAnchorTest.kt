@@ -1,6 +1,7 @@
 package com.megapdf.android
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -22,6 +23,14 @@ import org.junit.runner.RunWith
  * point is still under the same spot on screen once the zoom settles. Run against the
  * pre-fix handler (reading only `calculateZoom()`), this fails — the anchor point drifts by
  * far more than [DRIFT_TOLERANCE_PX].
+ *
+ * The measured pinch starts from an already-zoomed page (a double tap to fit-width's own 2x,
+ * #336), not from fit-to-width itself: at fit-to-width the demo page is shorter than the
+ * viewport and `Arrangement.spacedBy(8.dp, Alignment.CenterVertically)` centres it (#48) —
+ * there is nothing to scroll yet either way, so no scroll-based correction (this fix or any
+ * other) has anything to act on until the page is tall enough to need scrolling at all. That
+ * is a separate, pre-existing piece of behaviour outside #527's scope; starting past it keeps
+ * this test on the actual bug, which is what happens once the page can be scrolled.
  */
 @RunWith(AndroidJUnit4::class)
 class PinchAnchorTest {
@@ -39,29 +48,37 @@ class PinchAnchorTest {
     fun pinchKeepsTheCentroidPointFixed() {
         val file = Fixtures.demo("zoom-anchor-527.pdf")
         rule.open(file)
+        val fittedWidth = rule.page().fetchSemanticsNode().size.width
+
+        // Double tap zooms to 2x (#336) — well past fit-to-width, so the page is already
+        // taller than the viewport and ordinary scrolling is in play.
+        rule.page().performTouchInput { doubleClick(center) }
+        rule.waitUntil(SETTLE_MS) { rule.page().fetchSemanticsNode().size.width > fittedWidth * 3 / 2 }
+        val zoomedWidth = rule.page().fetchSemanticsNode().size.width
 
         val xFrac = 0.68f
         val yFrac = 0.30f
         val before = anchorOnScreen(xFrac, yFrac)
-        val fittedWidth = rule.page().fetchSemanticsNode().size.width
 
-        // The pinch is centred at that same point, in the page's own pre-zoom local
-        // coordinates: the two fingers move symmetrically apart around it, the shape a
-        // real two-finger zoom makes.
+        // The pinch is centred at that same point, in the page's own pre-pinch local
+        // coordinates: the two fingers move symmetrically apart around it, the shape a real
+        // two-finger zoom makes. The ratio this particular gesture asks for (≈1.8x) keeps the
+        // total zoom (2x already, before it starts) comfortably under MAX_ZOOM's 4x — the
+        // clamp case belongs to PinchAnchorMathTest, not this test.
         val anchorLocal = Offset(
             rule.page().fetchSemanticsNode().size.width * xFrac,
             rule.page().fetchSemanticsNode().size.height * yFrac,
         )
         rule.page().performTouchInput {
             pinch(
-                start0 = anchorLocal - Offset(60f, 40f), end0 = anchorLocal - Offset(220f, 140f),
-                start1 = anchorLocal + Offset(60f, 40f), end1 = anchorLocal + Offset(220f, 140f),
+                start0 = anchorLocal - Offset(60f, 40f), end0 = anchorLocal - Offset(110f, 70f),
+                start1 = anchorLocal + Offset(60f, 40f), end1 = anchorLocal + Offset(110f, 70f),
                 durationMillis = 400,
             )
         }
 
         rule.waitUntil(SETTLE_MS) {
-            rule.page().fetchSemanticsNode().size.width > fittedWidth * 3 / 2
+            rule.page().fetchSemanticsNode().size.width > zoomedWidth * 5 / 4
         }
 
         val after = anchorOnScreen(xFrac, yFrac)
