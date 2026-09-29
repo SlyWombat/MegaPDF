@@ -1,9 +1,13 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using MegaPDF.Core.Engine;
 using MegaPDF.Core.Recovery;
 using MegaPDF.Core.Services;
 
 namespace MegaPDF.Avalonia.ViewModels;
+
+/// <summary>A page-colour choice with the name the Options flyout shows for it (#511).</summary>
+public sealed record PageColourChoice(PageTint Tint, string Label);
 
 /// <summary>
 /// One window's worth of tabs (#348 phase 1): <see cref="Documents"/> holds every
@@ -148,6 +152,77 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
+    // --- Reading preferences (#511, tier 2) ---
+    //
+    // App-level, not per document: one settings.json, shared with the WinUI app
+    // (AppSettings.PageColours / OpenInReadingMode). They live on the shell because
+    // that is what owns the shared AppSettings instance and what every tab in the
+    // window reads through — a per-tab copy would let two tabs disagree about a
+    // preference that is the application's.
+
+    /// <summary>Normal / Sepia / Night, in the order the Options flyout lists them.</summary>
+    public IReadOnlyList<PageColourChoice> PageColourChoices { get; } =
+    [
+        new(PageTint.Normal, Strings.PageColoursNormal),
+        new(PageTint.Sepia, Strings.PageColoursSepia),
+        new(PageTint.Night, Strings.PageColoursNight),
+    ];
+
+    /// <summary>The tint every tab in this window renders with.</summary>
+    public PageTint PageTint
+    {
+        get => _settings.PageTint;
+        set
+        {
+            if (_settings.PageTint == value)
+                return;
+            _settings.PageTint = value;
+            ApplyTint();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedPageColour));
+        }
+    }
+
+    /// <summary>What the Options flyout binds: the choice whose tint is current.</summary>
+    public PageColourChoice? SelectedPageColour
+    {
+        get => PageColourChoices.FirstOrDefault(c => c.Tint == PageTint);
+        set
+        {
+            if (value is null)
+                return;
+            PageTint = value.Tint;
+        }
+    }
+
+    /// <summary>
+    /// Whether a document opens straight into reading mode (#168 decision 2). Off by
+    /// default; read by the window when a tab is added.
+    /// </summary>
+    public bool OpenInReadingMode
+    {
+        get => _settings.OpenInReadingMode;
+        set
+        {
+            if (_settings.OpenInReadingMode == value)
+                return;
+            _settings.OpenInReadingMode = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// Pushes the current tint onto every tab. Called when the preference changes and
+    /// when a tab is added, so a document opened after the choice was made comes up in
+    /// it rather than in the document's own colours.
+    /// </summary>
+    private void ApplyTint()
+    {
+        var tint = _settings.PageTint;
+        foreach (var document in Documents)
+            document.Tint = tint;
+    }
+
     /// <summary>Whether this window has any tabs — drives the empty state (SDD §2.2).</summary>
     public bool HasDocuments => Documents.Count > 0;
 
@@ -189,6 +264,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             return;
         }
         Documents.Add(document);
+        // The app-level tint before the tab is active, so its first render is already
+        // in the chosen page colours rather than a flash of white followed by a
+        // re-render (#511).
+        document.Tint = _settings.PageTint;
         Active = document;
         OnPropertyChanged(nameof(HasDocuments));
         OnPropertyChanged(nameof(ShowEmptyState));

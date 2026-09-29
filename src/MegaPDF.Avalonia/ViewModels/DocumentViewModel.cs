@@ -434,6 +434,34 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         RerenderRealisedPages();
     }
 
+    /// <summary>
+    /// Reading mode's page colours (#511), pushed down to every page. The window sets
+    /// this from the shared <see cref="AppSettings.PageColours"/> — it is an app-level
+    /// preference, not a property of this document — and a page only re-renders if it
+    /// is realised, so switching tint costs the visible window and nothing else.
+    /// </summary>
+    [ObservableProperty]
+    private PageTint _tint;
+
+    partial void OnTintChanged(PageTint value)
+    {
+        foreach (var page in Pages)
+            page.Tint = value;
+    }
+
+    /// <summary>
+    /// Whether the window showing this tab is in reading mode (#505).
+    ///
+    /// The mode itself is the *window's* (the chrome it hides is the window's, and
+    /// ⌃Tab still switches tabs inside it — plan §2 tier 1), so the window owns it and
+    /// mirrors it onto every tab it holds. It lives here because what it changes is
+    /// what a click on the page means: <see cref="HandlePageClick"/> returns without
+    /// dispatching while it is on, which is the "suppressed, not rerouted" the plan
+    /// asks for. Nothing about the document changes, and undo/redo stay live.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isReadingMode;
+
     partial void OnDpiScaleChanged(double value) => RerenderRealisedPages();
 
     /// <summary>Raised when a document needs a password before it can be opened.</summary>
@@ -579,7 +607,7 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
         CurrentMatchIndex = -1;
         LoadSignatures();
         for (var i = 0; i < sizes.Count; i++)
-            Pages.Add(new PageViewModel(document, i, sizes[i].Width, sizes[i].Height) { Zoom = Zoom });
+            Pages.Add(new PageViewModel(document, i, sizes[i].Width, sizes[i].Height) { Zoom = Zoom, Tint = Tint });
 
         // Opens fitted to the window, not at whatever the last document was zoomed
         // to (#143). Before any page is realised, so nothing renders twice.
@@ -679,6 +707,14 @@ public sealed partial class DocumentViewModel : ObservableObject, IDisposable
     public void HandlePageClick(int pageIndex, PdfPoint point)
     {
         if (_document is null)
+            return;
+
+        // Reading mode is looking, not editing (#505): the click is swallowed here
+        // rather than rerouted, so nothing on the page is armed, opened or toggled.
+        // First, before the busy and placement branches, because it outranks both —
+        // and armed tools are disarmed on the way in, so PendingSignature/Mode are
+        // already clear by the time this is reached.
+        if (IsReadingMode)
             return;
 
         // A click while work runs — a change on its way, its page check, a save — is ignored

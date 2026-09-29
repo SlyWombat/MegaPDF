@@ -105,6 +105,7 @@ public partial class MainWindow : Window
         WireToolbar();
         WireSignatures();
         WireFind();
+        WireReadingMode();
 
         // Only realised pages rasterise. ContainerPrepared/ContainerClearing are the
         // virtualization hooks — this is where "render what you can see" happens, and
@@ -177,7 +178,40 @@ public partial class MainWindow : Window
             {
                 if (args.PropertyName == nameof(ShellViewModel.Active))
                     OnActiveDocumentChanged();
+                // The gutter and the floating pill follow the page's tint (#511): the
+                // engine tints the page, this tints the chrome around it.
+                if (args.PropertyName == nameof(ShellViewModel.PageTint))
+                    ApplyTintedChrome();
             };
+            // A tab arriving is where "Open documents in reading mode" is honoured
+            // (#511) and where a tab opened *while* the mode is on is told about it
+            // (#505). On Add only: a tab switch must not put a mode back that the
+            // person has just left, which is the ambiguity #168's decision 2 removed.
+            shell.Documents.CollectionChanged += (_, args) =>
+            {
+                if (args.Action != System.Collections.Specialized.NotifyCollectionChangedAction.Add)
+                    return;
+                // Posted, not run here: AddTab adds to the list and only then sets
+                // Active, so at this instant the window's active tab is still the
+                // previous one.
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (shell.OpenInReadingMode && !IsReadingMode)
+                        EnterReadingMode();
+                    ApplyReadingModeToTabs();
+                });
+            };
+            // And for a shell that already has tabs when the window is given it — a
+            // restored session, a second window onto the same shell, and the self-test
+            // all arrive that way round, with the tab added before the DataContext.
+            if (shell.OpenInReadingMode && shell.Documents.Count > 0)
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (shell.OpenInReadingMode && !IsReadingMode)
+                        EnterReadingMode();
+                });
+            // And once now, for a window opened with a tint already chosen.
+            ApplyTintedChrome();
             // The menu bar (#144) lists the view model's font and size choices; the
             // structure is the same for every tab, so it is built once per window.
             BuildMenuBar();
@@ -267,6 +301,10 @@ public partial class MainWindow : Window
         }
 
         ApplyToolbarLayout();
+        // The incoming tab is told about the window's reading mode, and the pill's file
+        // name follows it (#505). Reading mode is the window's, so switching tab inside
+        // it changes what is on the pill, never whether the chrome is there.
+        ApplyReadingModeToTabs();
         UpdateViewport();
         RefreshMenuBar();
     }
@@ -386,6 +424,21 @@ public partial class MainWindow : Window
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // Escape steps back exactly one level, and only one (#505; plan §7 names this as
+        // the risk worth testing). While reading mode — or the full screen reached from
+        // inside it — is on, the order is: the find bar, then full screen, then reading
+        // mode, and only then whatever Escape did before. Ahead of the branches below on
+        // purpose: in reading mode "give me the toolbar back" is what Escape means, and a
+        // selection or an armed tool must not swallow it first.
+        //
+        // Outside reading mode nothing changes: the guard is false and Escape behaves
+        // exactly as it did.
+        if (e.Key == Key.Escape && (IsReadingMode || IsFullScreen) && StepBackFromReadingMode())
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Delete takes off whatever is selected, and a redaction mark is one of those things
         // now (#329): it rides the same chrome as a signature, so it comes off the same way.
         if (e.Key is Key.Delete or Key.Back && Active is { Selection: not null } selected)
@@ -1300,6 +1353,13 @@ public partial class MainWindow : Window
 
     private void OnPagePointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        // Reading mode reads; it does not edit (#505). The press is dropped here, before
+        // anything is hit-tested, selected, banded or armed — the view model's own
+        // HandlePageClick guard is the second half of the same rule, for the routes that
+        // do not come through a pointer. Not marked handled: the scroller underneath
+        // still gets the press, so dragging to scroll keeps working.
+        if (IsReadingMode)
+            return;
         if (sender is not Control container || container.DataContext is not PageViewModel page)
             return;
         if (Active is not { } vm)
@@ -1443,6 +1503,14 @@ public partial class MainWindow : Window
 
     private void OnPagePointerMoved(object? sender, PointerEventArgs e)
     {
+        // In reading mode a pointer move means only one thing: bring the pill back
+        // (#505). No selection drag, and no cursor affordance — the cursor is the mode
+        // (SDD §2.2), and the mode is "looking".
+        if (IsReadingMode)
+        {
+            ShowReadingPill();
+            return;
+        }
         OnSelectionPointerMoved(e);
         UpdateCursor(sender, e);
 
@@ -1459,6 +1527,8 @@ public partial class MainWindow : Window
 
     private void OnPagePointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        if (IsReadingMode)
+            return;
         OnSelectionPointerReleased(e);
 
         if (_band is null || _bandHost is null || Active is not { } vm)
@@ -1770,7 +1840,8 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OpenFind()
+    /// <summary>Internal rather than private: the self-test opens find to check Escape's order (#505).</summary>
+    internal void OpenFind()
     {
         if (Active is not { } vm)
             return;
@@ -1963,6 +2034,14 @@ public partial class MainWindow : Window
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.PageDown, KeyModifiers.Control), Command = new RelayCommand(() => Shell?.ActivateNextTab()) });
         KeyBindings.Add(new KeyBinding { Gesture = new KeyGesture(Key.PageUp, KeyModifiers.Control), Command = new RelayCommand(() => Shell?.ActivatePreviousTab()) });
         KeyBindings.Add(new KeyBinding { Gesture = NewWindowGestureLinux, Command = new RelayCommand(NewWindow) });
+        // Reading mode and full screen (#505), for the same reason as Close and Quit
+        // above: MainWindow.axaml hosts no menu bar on X11, so the View menu's gestures
+        // are built and never heard here. Ctrl+H and F11 — the Linux desktop's own
+        // conventions, not the Mac's ⇧⌘R and ⌃⌘F, which the real menu bar answers there.
+        KeyBindings.Add(new KeyBinding { Gesture = ReadingModeGesture, Command = new RelayCommand(ToggleReadingMode) });
+        // F11 only means something inside reading mode; the command checks, rather than
+        // the binding being added and removed as the mode changes.
+        KeyBindings.Add(new KeyBinding { Gesture = FullScreenGesture, Command = new RelayCommand(ToggleFullScreen) });
     }
 
     /// <summary>⌘W (Mac) / Ctrl+W (Linux): closes the active tab, or the window itself when it is the last tab

@@ -1000,4 +1000,55 @@ public static partial class Strings
 
     /// <summary>Download page</summary>
     public static string LinuxDownloadPage => Get("LinuxDownloadPage");
+
+    /// <summary>Reading mode</summary>
+    public static string ReadingMode => Get("ReadingMode");
+
+    /// <summary>Enter Full Screen</summary>
+    public static string EnterFullScreen => Get("EnterFullScreen");
+
+    /// <summary>Exit Full Screen</summary>
+    public static string ExitFullScreen => Get("ExitFullScreen");
+
+    /// <summary>Reading mode on</summary>
+    public static string ReadingModeOn => Get("ReadingModeOn");
+
+    /// <summary>Reading mode off</summary>
+    public static string ReadingModeOff => Get("ReadingModeOff");
+
+    /// <summary>Exit</summary>
+    public static string Exit => Get("Exit");
+
+    /// <summary>Exit reading mode</summary>
+    public static string ExitReadingMode => Get("ExitReadingMode");
+
+    /// <summary>Reading controls</summary>
+    public static string ReadingControls => Get("ReadingControls");
+
+    /// <summary>Previous page</summary>
+    public static string PreviousPage => Get("PreviousPage");
+
+    /// <summary>Next page</summary>
+    public static string NextPage => Get("NextPage");
+
+    /// <summary>Go to page</summary>
+    public static string GoToPage => Get("GoToPage");
+
+    /// <summary>Page colours</summary>
+    public static string PageColours => Get("PageColours");
+
+    /// <summary>Normal</summary>
+    public static string PageColoursNormal => Get("PageColoursNormal");
+
+    /// <summary>Sepia</summary>
+    public static string PageColoursSepia => Get("PageColoursSepia");
+
+    /// <summary>Night</summary>
+    public static string PageColoursNight => Get("PageColoursNight");
+
+    /// <summary>Night inverts the page, pictures included.</summary>
+    public static string NightInvertsPictures => Get("NightInvertsPictures");
+
+    /// <summary>Open documents in reading mode</summary>
+    public static string OpenInReadingMode => Get("OpenInReadingMode");
 }
